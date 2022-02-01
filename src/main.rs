@@ -20,7 +20,16 @@ fn handle_connection(mut stream: TcpStream) {
 
     stream.read(&mut buffer).unwrap();
 
-    println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
+    let request_string = String::from_utf8_lossy(&buffer[..]).to_string();
+    println!("Request: {}", request_string);
+
+    let method_request_uri_http_version = get_method_request_uri_http_version(&request_string);
+    println!("method_request_uri_http_version: {}", method_request_uri_http_version);
+
+    let path = get_path_from_method_request_uri_http_version(&method_request_uri_http_version).unwrap();
+    println!("path: {}" , path);
+
+
 
     let get = b"GET / HTTP/1.1\r\n";
 
@@ -41,4 +50,20 @@ fn handle_connection(mut stream: TcpStream) {
 
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
+}
+
+
+fn get_method_request_uri_http_version(request: &str) -> String {
+    let strings: Vec<&str> = request.split("\n").collect();
+    strings[0].to_string()
+}
+
+fn get_path_from_method_request_uri_http_version(method_request_uri_http_version: &str) -> Result<String, String> {
+    let strings: Vec<&str> = method_request_uri_http_version.split(" ").collect();
+    let has_path_value = !strings.is_empty() && strings.len() > 2;
+    if has_path_value {
+        Ok(strings[1].to_string())
+    } else {
+        Err("unable to parse path".to_string())
+    }
 }
