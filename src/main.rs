@@ -21,14 +21,10 @@ fn handle_connection(mut stream: TcpStream) {
     stream.read(&mut buffer).unwrap();
 
     let request_string = String::from_utf8_lossy(&buffer[..]).to_string();
-    println!("Request: {}", request_string);
+    println!("Raw Request: {}", request_string);
 
-    let method_request_uri_http_version = get_method_request_uri_http_version(&request_string);
-    println!("method_request_uri_http_version: {}", method_request_uri_http_version);
-
-    let path = get_path_from_method_request_uri_http_version(&method_request_uri_http_version).unwrap();
-    println!("path: {}" , path);
-
+    let request: Request = parseRequest(request_string);
+    println!("{}" , request);
 
 
     let get = b"GET / HTTP/1.1\r\n";
@@ -52,18 +48,32 @@ fn handle_connection(mut stream: TcpStream) {
     stream.flush().unwrap();
 }
 
-
-fn get_method_request_uri_http_version(request: &str) -> String {
-    let strings: Vec<&str> = request.split("\n").collect();
-    strings[0].to_string()
+struct Request {
+    method: String,
+    request_uri: String,
+    http_version: String,
 }
 
-fn get_path_from_method_request_uri_http_version(method_request_uri_http_version: &str) -> Result<String, String> {
+impl std::fmt::Display for Request {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "HTTP request method {} and request uri {} and http_version {}", self.method, self.request_uri, self.http_version)
+    }
+}
+
+fn parseRequest(request: String) ->  Request {
+    let strings: Vec<&str> = request.split("\n").collect();
+
+
+    let method_request_uri_http_version = strings[0].to_string();
     let strings: Vec<&str> = method_request_uri_http_version.split(" ").collect();
-    let has_path_value = !strings.is_empty() && strings.len() > 2;
-    if has_path_value {
-        Ok(strings[1].to_string())
-    } else {
-        Err("unable to parse path".to_string())
+
+    let method = strings[0];
+    let request_uri = strings[1];
+    let http_version = strings[2];
+
+    Request {
+        method: method.to_string(),
+        request_uri: request_uri.to_string(),
+        http_version: http_version.to_string()
     }
 }
