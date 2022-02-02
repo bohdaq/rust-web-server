@@ -24,7 +24,12 @@ fn handle_connection(mut stream: TcpStream) {
     println!("Raw Request: {}", request_string);
 
     let request: Request = parse_request(request_string);
+
     println!("{}" , request);
+    for header in request.headers {
+        println!("{}" , header);
+
+    }
 
 
     let get = b"GET / HTTP/1.1\r\n";
@@ -52,7 +57,13 @@ struct Request {
     method: String,
     request_uri: String,
     http_version: String,
-    // header: Vec<Header>,
+    headers: Vec<Header>,
+}
+
+impl std::fmt::Display for Request {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "Request method {} and request uri {} and http_version {}", self.method, self.request_uri, self.http_version)
+    }
 }
 
 struct Header {
@@ -60,9 +71,9 @@ struct Header {
     header_value: String,
 }
 
-impl std::fmt::Display for Request {
+impl std::fmt::Display for Header {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(fmt, "HTTP request method {} and request uri {} and http_version {}", self.method, self.request_uri, self.http_version)
+        write!(fmt, "Header name {} and value {}", self.header_name, self.header_value)
     }
 }
 
@@ -77,6 +88,8 @@ fn parse_request(request: String) ->  Request {
     let request_uri = split_method_request_uri_http_version[1];
     let http_version = split_method_request_uri_http_version[2];
 
+
+    let mut headers = vec![];
     // parsing headers
     for (pos, e) in strings.iter().enumerate() {
         // stop when headers end
@@ -86,7 +99,15 @@ fn parse_request(request: String) ->  Request {
 
         // skip method_request_uri_http_version
         if pos != 0  {
-            println!("e.len: {} {}: {:?}", e.len(), pos, e);
+            let header_parts: Vec<&str> = e.split(": ").collect();
+
+            let header = Header {
+                header_name: header_parts[0].to_string(),
+                header_value: header_parts[1].to_string()
+            };
+
+            headers.push(header);
+
         }
     }
 
@@ -94,5 +115,6 @@ fn parse_request(request: String) ->  Request {
         method: method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: http_version.to_string(),
+        headers,
     }
 }
