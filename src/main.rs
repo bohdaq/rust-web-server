@@ -23,7 +23,7 @@ fn handle_connection(mut stream: TcpStream) {
     stream.read(&mut buffer).unwrap();
 
     let request_string = String::from_utf8_lossy(&buffer[..]).to_string();
-    println!("Raw Request: {}", request_string);
+    println!("{}", request_string);
 
     let request: Request = parse_request(request_string);
 
@@ -36,21 +36,16 @@ fn handle_connection(mut stream: TcpStream) {
     let is_get = request.method == "GET";
     let is_static_content_read_attempt = request.request_uri.starts_with("/static/");
 
-
-    let filepath_string_length = request.request_uri.len();
-    let filepath: String = request.request_uri.chars().skip(8).take(filepath_string_length).collect();
-
-    let dir = env::current_dir().unwrap();
-    let working_directory = dir.as_path().to_str().unwrap();
-    println!("working directory: {}", working_directory);
-
-    let static_filepath = [working_directory, "/static/", filepath.as_str()].join("");
-    println!("filepath: {}", static_filepath);
-
-    println!("is_get: {} is_static_content_read_attempt: {}", is_get, is_static_content_read_attempt);
-
-
     if  is_get && is_static_content_read_attempt {
+        println!("is_get: {} is_static_content_read_attempt: {}", is_get, is_static_content_read_attempt);
+
+        let dir = env::current_dir().unwrap();
+        let working_directory = dir.as_path().to_str().unwrap();
+        println!("working directory: {}", working_directory);
+
+        let static_filepath = [working_directory, request.request_uri.as_str()].join("");
+        println!("filepath: {}", static_filepath);
+
         let contents = fs::read_to_string(static_filepath).unwrap();
 
         let response = format!(
