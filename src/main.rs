@@ -1,7 +1,7 @@
 use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
-use std::fs;
+use std::{env, fs};
 
 fn main() {
     println!("Hello, rust-web-server!");
@@ -31,26 +31,37 @@ fn handle_connection(mut stream: TcpStream) {
 
     }
 
+    let is_get = request.method == "GET";
+    let is_static_content_read_attempt = request.request_uri.starts_with("/static/");
 
-    let get = b"GET / HTTP/1.1\r\n";
 
-    let (status_line, filename) = if buffer.starts_with(get) {
-        ("HTTP/1.1 200 OK", "index.html")
-    } else {
-        ("HTTP/1.1 404 NOT FOUND", "404.html")
-    };
+    let filepath_string_length = request.request_uri.len();
+    let filepath: String = request.request_uri.chars().skip(8).take(filepath_string_length).collect();
 
-    let contents = fs::read_to_string(filename).unwrap();
+    let dir = env::current_dir().unwrap();
+    let working_directory = dir.as_path().to_str().unwrap();
+    println!("working directory: {}", working_directory);
 
-    let response = format!(
-        "{}\r\nContent-Length: {}\r\n\r\n{}",
-        status_line,
-        contents.len(),
-        contents
-    );
+    let static_filepath = [working_directory, "/static/", filepath.as_str()].join("");
+    println!("filepath: {}", static_filepath);
 
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
+    println!("is_get: {} is_static_content_read_attempt: {}", is_get, is_static_content_read_attempt);
+
+
+    if  is_get && is_static_content_read_attempt {
+        let contents = fs::read_to_string(filepath).unwrap();
+
+        let response = format!(
+            "{}\r\nContent-Length: {}\r\n\r\n{}",
+            "HTTP/1.1 200 OK",
+            contents.len(),
+            contents
+        );
+
+        stream.write(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+    }
+
 }
 
 struct Request {
