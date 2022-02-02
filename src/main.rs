@@ -23,7 +23,7 @@ fn handle_connection(mut stream: TcpStream) {
     let request_string = String::from_utf8_lossy(&buffer[..]).to_string();
     println!("Raw Request: {}", request_string);
 
-    let request: Request = parseRequest(request_string);
+    let request: Request = parse_request(request_string);
     println!("{}" , request);
 
 
@@ -52,6 +52,12 @@ struct Request {
     method: String,
     request_uri: String,
     http_version: String,
+    // header: Vec<Header>,
+}
+
+struct Header {
+    header_name: String,
+    header_value: String,
 }
 
 impl std::fmt::Display for Request {
@@ -60,20 +66,31 @@ impl std::fmt::Display for Request {
     }
 }
 
-fn parseRequest(request: String) ->  Request {
+fn parse_request(request: String) ->  Request {
     let strings: Vec<&str> = request.split("\n").collect();
 
-
     let method_request_uri_http_version = strings[0].to_string();
-    let strings: Vec<&str> = method_request_uri_http_version.split(" ").collect();
+    let split_method_request_uri_http_version: Vec<&str> = method_request_uri_http_version.split(" ").collect();
 
-    let method = strings[0];
-    let request_uri = strings[1];
-    let http_version = strings[2];
+    let method = split_method_request_uri_http_version[0];
+    let request_uri = split_method_request_uri_http_version[1];
+    let http_version = split_method_request_uri_http_version[2];
+
+    for (pos, e) in strings.iter().enumerate() {
+        // stop when headers end
+        if e.len() == 1 {
+            break;
+        }
+
+        // skip method_request_uri_http_version
+        if pos != 0  {
+            println!("e.len: {} {}: {:?}", e.len(), pos, e);
+        }
+    }
 
     Request {
         method: method.to_string(),
         request_uri: request_uri.to_string(),
-        http_version: http_version.to_string()
+        http_version: http_version.to_string(),
     }
 }
