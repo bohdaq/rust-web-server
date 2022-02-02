@@ -69,6 +69,7 @@ impl std::fmt::Display for Request {
 fn parse_request(request: String) ->  Request {
     let strings: Vec<&str> = request.split("\n").collect();
 
+    // parsing method request_uri and http_version
     let method_request_uri_http_version = strings[0].to_string();
     let split_method_request_uri_http_version: Vec<&str> = method_request_uri_http_version.split(" ").collect();
 
@@ -76,6 +77,7 @@ fn parse_request(request: String) ->  Request {
     let request_uri = split_method_request_uri_http_version[1];
     let http_version = split_method_request_uri_http_version[2];
 
+    // parsing headers
     for (pos, e) in strings.iter().enumerate() {
         // stop when headers end
         if e.len() == 1 {
