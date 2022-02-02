@@ -2,6 +2,8 @@ use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
 use std::{env, fs};
+use std::fs::File;
+use std::path::Path;
 
 fn main() {
     println!("Hello, rust-web-server!");
@@ -49,7 +51,7 @@ fn handle_connection(mut stream: TcpStream) {
 
 
     if  is_get && is_static_content_read_attempt {
-        let contents = fs::read_to_string(filepath).unwrap();
+        let contents = fs::read_to_string(static_filepath).unwrap();
 
         let response = format!(
             "{}\r\nContent-Length: {}\r\n\r\n{}",
