@@ -191,7 +191,7 @@ fn parse_response(response: String) -> Response {
             break;
         }
 
-        // skip method_request_uri_http_version
+        // skip http_version, status_code and reason phrase
         if pos != 0  {
             let header_parts: Vec<&str> = e.split(": ").collect();
 
