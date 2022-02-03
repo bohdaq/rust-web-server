@@ -144,7 +144,7 @@ fn parse_request(request: String) ->  Request {
     // parsing headers
     for (pos, e) in strings.iter().enumerate() {
         // stop when headers end
-        if e.len() == 1 {
+        if e.len() <= 1 {
             break;
         }
 
@@ -186,7 +186,7 @@ fn parse_response(response: String) -> Response {
     let mut headers_end_position = 999999;
     for (pos, e) in strings.iter().enumerate() {
         // stop when headers end
-        if e.len() == 1 {
+        if e.len() <= 1 {
             headers_end_position = pos;
             break;
         }
