@@ -1,3 +1,6 @@
+extern crate core;
+
+use core::slice::heapsort;
 use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
@@ -95,6 +98,12 @@ struct Request {
     request_uri: String,
     http_version: String,
     headers: Vec<Header>,
+}
+
+impl Request {
+    fn getHeader(&self, name: String) -> Option<&Header> {
+        let header =  self.headers.iter().find(|&&x| x.header_name == name)
+    }
 }
 
 impl std::fmt::Display for Request {
@@ -246,6 +255,9 @@ mod tests {
         let status_code = "200";
         let reason_phrase = "OK";
         let http_version_status_code_reason_phrase = [http_version, status_code, reason_phrase].join(" ").to_string();
+
+        
+
 
         let raw_response =
             generate_response(http_version_status_code_reason_phrase, &html_file);
