@@ -2,8 +2,6 @@ use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
 use std::{env, fs};
-use std::fs::File;
-use std::path::Path;
 
 fn main() {
     println!("Hello, rust-web-server!");
@@ -36,6 +34,7 @@ fn handle_connection(mut stream: TcpStream) {
     let is_get = request.method == "GET";
     let is_static_content_read_attempt = request.request_uri.starts_with("/static/");
 
+    let mut response = String::from("");
     if  is_get && is_static_content_read_attempt {
         println!("is_get: {} is_static_content_read_attempt: {}", is_get, is_static_content_read_attempt);
 
@@ -46,18 +45,49 @@ fn handle_connection(mut stream: TcpStream) {
         let static_filepath = [working_directory, request.request_uri.as_str()].join("");
         println!("filepath: {}", static_filepath);
 
-        let contents = fs::read_to_string(static_filepath).unwrap();
+        let unwrapped_contents = fs::read_to_string(static_filepath);
 
-        let response = format!(
+        let contents = match unwrapped_contents {
+            Ok(file) => file,
+            Err(error) => {
+                println!("error {}", error);
+                error.to_string()
+            },
+        };
+
+        if contents.starts_with("No such file or directory") {
+            let contents = fs::read_to_string("404.html").unwrap();
+            response = format!(
+                "{}\r\nContent-Length: {}\r\n\r\n{}",
+                "HTTP/1.1 404 NOT FOUND",
+                contents.len(),
+                contents
+            );
+        } else {
+            response = format!(
+                "{}\r\nContent-Length: {}\r\n\r\n{}",
+                "HTTP/1.1 200 OK",
+                contents.len(),
+                contents
+            );
+        }
+
+
+    }
+
+    if request.request_uri == "/" {
+        let contents = fs::read_to_string("index.html").unwrap();
+
+        response = format!(
             "{}\r\nContent-Length: {}\r\n\r\n{}",
             "HTTP/1.1 200 OK",
             contents.len(),
             contents
         );
-
-        stream.write(response.as_bytes()).unwrap();
-        stream.flush().unwrap();
     }
+
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
 
 }
 
