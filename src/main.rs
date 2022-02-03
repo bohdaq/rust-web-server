@@ -4,8 +4,24 @@ use std::net::TcpStream;
 use std::{env, fs};
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    println!("{:?}", args);
+
+    let mut port = 7878;
+    if args.len() >= 2 {
+        port = (&args[1]).parse().unwrap();
+    }
+
+    let mut ip_addr = "127.0.0.1";
+    if args.len() >= 3 {
+        ip_addr = args[2].as_str();
+    }
+
+    let bind_addr = [ip_addr, ":", &port.to_string()].join("");
+
     println!("Hello, rust-web-server!");
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+
+    let listener = TcpListener::bind(bind_addr).unwrap();
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
@@ -50,7 +66,6 @@ fn handle_connection(mut stream: TcpStream) {
         let contents = match unwrapped_contents {
             Ok(file) => file,
             Err(error) => {
-                println!("error {}", error);
                 error.to_string()
             },
         };
