@@ -71,9 +71,9 @@ fn handle_connection(mut stream: TcpStream) {
 
         if contents.starts_with("No such file or directory") {
             let contents = fs::read_to_string("404.html").unwrap();
-            response = generate_response("HTTP/1.1 404 NOT FOUND".to_string(), contents);
+            response = generate_response("HTTP/1.1 404 NOT FOUND".to_string(), &contents);
         } else {
-            response = generate_response("HTTP/1.1 200 OK".to_string(), contents);
+            response = generate_response("HTTP/1.1 200 OK".to_string(), &contents);
         }
 
 
@@ -81,9 +81,10 @@ fn handle_connection(mut stream: TcpStream) {
 
     if request.request_uri == "/" {
         let contents = fs::read_to_string("index.html").unwrap();
-        response = generate_response("HTTP/1.1 200 OK".to_string(), contents);
+        response = generate_response("HTTP/1.1 200 OK".to_string(), &contents);
     }
 
+    println!("{}", response);
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 
@@ -99,6 +100,20 @@ struct Request {
 impl std::fmt::Display for Request {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "Request method {} and request uri {} and http_version {}", self.method, self.request_uri, self.http_version)
+    }
+}
+
+struct Response {
+    http_version: String,
+    status_code: String,
+    reason_phrase: String,
+    headers: Vec<Header>,
+    message_body: String
+}
+
+impl std::fmt::Display for Response {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "Response http version {} and status_code {} and reason_phrase {}", self.http_version, self.status_code, self.reason_phrase)
     }
 }
 
@@ -155,7 +170,60 @@ fn parse_request(request: String) ->  Request {
     }
 }
 
-fn generate_response(status: String, contents: String) -> String {
+fn parse_response(response: String) -> Response {
+    let strings: Vec<&str> = response.split("\n").collect();
+
+    // parsing http_version, status_code and reason phrase
+    let http_version_status_code_reason_phrase = strings[0].to_string();
+    let split_http_version_status_code_reason_phrase: Vec<&str> = http_version_status_code_reason_phrase.split(" ").collect();
+
+    let http_version = split_http_version_status_code_reason_phrase[0].to_string();
+    let status_code = split_http_version_status_code_reason_phrase[1].to_string();
+    let reason_phrase = split_http_version_status_code_reason_phrase[2].to_string();
+
+    // parsing headers
+    let mut headers = vec![];
+    let mut headers_end_position = 999999;
+    for (pos, e) in strings.iter().enumerate() {
+        // stop when headers end
+        if e.len() == 1 {
+            headers_end_position = pos;
+            break;
+        }
+
+        // skip method_request_uri_http_version
+        if pos != 0  {
+            let header_parts: Vec<&str> = e.split(": ").collect();
+
+            let header = Header {
+                header_name: header_parts[0].to_string(),
+                header_value: header_parts[1].to_string()
+            };
+
+            headers.push(header);
+
+        }
+    }
+
+    let mut message_body = "".to_string();
+    // parsing message body
+    for (pos, e) in strings.iter().enumerate() {
+        // start when headers end
+        if pos > headers_end_position {
+            message_body.push_str(e);
+        }
+    }
+
+    Response {
+        http_version,
+        status_code,
+        reason_phrase,
+        headers,
+        message_body,
+    }
+}
+
+fn generate_response(status: String, contents: &String) -> String {
     let response = format!(
         "{}\r\nContent-Length: {}\r\n\r\n{}",
         status,
@@ -163,4 +231,37 @@ fn generate_response(status: String, contents: String) -> String {
         contents
     );
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_generates_successful_response_with_index_html() {
+        let html_file= fs::read_to_string("index.html").unwrap();
+        let content_length = html_file.len();
+
+        let http_version = "HTTP/1.1";
+        let status_code = "200";
+        let reason_phrase = "OK";
+        let http_version_status_code_reason_phrase = [http_version, status_code, reason_phrase].join(" ").to_string();
+
+        let raw_response =
+            generate_response(http_version_status_code_reason_phrase, &html_file);
+
+        let response = parse_response(raw_response);
+        println!("{}", response);
+        for header in response.headers {
+            println!("{}" , header);
+        }
+        println!("{}", response.message_body);
+
+        assert_eq!(http_version, response.http_version);
+        assert_eq!(status_code, response.status_code);
+        assert_eq!(reason_phrase, response.reason_phrase);
+
+        assert_eq!(html_file, response.message_body);
+
+    }
 }
