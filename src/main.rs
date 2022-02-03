@@ -44,7 +44,6 @@ fn handle_connection(mut stream: TcpStream) {
     println!("{}" , request);
     for header in request.headers {
         println!("{}" , header);
-
     }
 
     let is_get = request.method == "GET";
@@ -72,19 +71,9 @@ fn handle_connection(mut stream: TcpStream) {
 
         if contents.starts_with("No such file or directory") {
             let contents = fs::read_to_string("404.html").unwrap();
-            response = format!(
-                "{}\r\nContent-Length: {}\r\n\r\n{}",
-                "HTTP/1.1 404 NOT FOUND",
-                contents.len(),
-                contents
-            );
+            response = generate_response("HTTP/1.1 404 NOT FOUND".to_string(), contents);
         } else {
-            response = format!(
-                "{}\r\nContent-Length: {}\r\n\r\n{}",
-                "HTTP/1.1 200 OK",
-                contents.len(),
-                contents
-            );
+            response = generate_response("HTTP/1.1 200 OK".to_string(), contents);
         }
 
 
@@ -92,13 +81,7 @@ fn handle_connection(mut stream: TcpStream) {
 
     if request.request_uri == "/" {
         let contents = fs::read_to_string("index.html").unwrap();
-
-        response = format!(
-            "{}\r\nContent-Length: {}\r\n\r\n{}",
-            "HTTP/1.1 200 OK",
-            contents.len(),
-            contents
-        );
+        response = generate_response("HTTP/1.1 200 OK".to_string(), contents);
     }
 
     stream.write(response.as_bytes()).unwrap();
@@ -170,4 +153,14 @@ fn parse_request(request: String) ->  Request {
         http_version: http_version.to_string(),
         headers,
     }
+}
+
+fn generate_response(status: String, contents: String) -> String {
+    let response = format!(
+        "{}\r\nContent-Length: {}\r\n\r\n{}",
+        status,
+        contents.len(),
+        contents
+    );
+    response
 }
