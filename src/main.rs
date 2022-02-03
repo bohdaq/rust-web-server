@@ -129,7 +129,7 @@ impl std::fmt::Display for Header {
 }
 
 fn parse_request(request: String) ->  Request {
-    let strings: Vec<&str> = request.split("\n").collect();
+    let strings: Vec<&str> = request.split("\r\n").collect();
 
     // parsing method request_uri and http_version
     let method_request_uri_http_version = strings[0].to_string();
@@ -171,7 +171,7 @@ fn parse_request(request: String) ->  Request {
 }
 
 fn parse_response(response: String) -> Response {
-    let strings: Vec<&str> = response.split("\n").collect();
+    let strings: Vec<&str> = response.split("\r\n").collect();
 
     // parsing http_version, status_code and reason phrase
     let http_version_status_code_reason_phrase = strings[0].to_string();
