@@ -126,6 +126,13 @@ struct Response {
     message_body: String
 }
 
+impl Response {
+    fn get_header(&self, name: String) -> Option<&Header> {
+        let header =  self.headers.iter().find(|x| x.header_name == name);
+        header
+    }
+}
+
 impl std::fmt::Display for Response {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "Response http version {} and status_code {} and reason_phrase {}", self.http_version, self.status_code, self.reason_phrase)
@@ -276,26 +283,35 @@ mod tests {
 
     #[test]
     fn it_generates_successful_response_with_index_html() {
+        // request test data
+        let request_host_header_name = "Host";
+        let request_host_header_value = "localhost:7777";
+
+        let request_method = "GET";
+        let request_uri = "/";
+        let request_http_version = "HTTP/1.1";
+
+
         // request part
         let host = Header {
-            header_name: "Host".to_string(),
-            header_value: "localhost:7777".to_string()
+            header_name: request_host_header_name.to_string(),
+            header_value: request_host_header_value.to_string()
         };
 
         let headers = vec![host];
         let request = Request {
-            method: "GET".to_string(),
-            request_uri: "/".to_string(),
-            http_version: "HTTP/1.1".to_string(),
+            method: request_method.to_string(),
+            request_uri: request_uri.to_string(),
+            http_version: request_http_version.to_string(),
             headers
         };
 
         let raw_request = generate_request(request);
 
         let request: Request = parse_request(&raw_request);
-        let host_header = request.get_header("Host".to_string()).unwrap();
+        let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
-        assert_eq!("localhost:7777".to_string(), host_header.header_value);
+        assert_eq!(request_host_header_value.to_string(), host_header.header_value);
 
         // response part
         let raw_response: String = process_request(raw_request);
@@ -306,7 +322,9 @@ mod tests {
         let http_version = "HTTP/1.1";
         let status_code = "200";
         let reason_phrase = "OK";
-        let html_file= fs::read_to_string("index.html").unwrap();
+        let filepath = "index.html";
+
+        let html_file= fs::read_to_string(filepath.to_string()).unwrap();
 
 
         println!("{}", response);
