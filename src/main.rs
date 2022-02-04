@@ -41,6 +41,15 @@ fn handle_connection(mut stream: TcpStream) {
     let request_string = String::from_utf8_lossy(&buffer[..]).to_string();
     println!("{}", request_string);
 
+    let response = process_request(request_string);
+    println!("{}", response);
+
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+
+}
+
+fn process_request(request_string: String) -> String {
     let request: Request = parse_request(request_string);
 
     println!("{}" , request);
@@ -86,10 +95,7 @@ fn handle_connection(mut stream: TcpStream) {
         response = generate_response("HTTP/1.1 200 OK".to_string(), &contents);
     }
 
-    println!("{}", response);
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
-
+    response
 }
 
 struct Request {
