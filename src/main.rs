@@ -50,7 +50,7 @@ fn handle_connection(mut stream: TcpStream) {
 }
 
 fn process_request(request_string: String) -> String {
-    let request: Request = parse_request(request_string);
+    let request: Request = parse_request(&request_string);
 
     println!("{}" , request);
     for header in request.headers {
@@ -165,7 +165,7 @@ fn generate_request(request: Request) -> String {
     request
 }
 
-fn parse_request(request: String) ->  Request {
+fn parse_request(request: &String) ->  Request {
     let strings: Vec<&str> = request.split("\r\n").collect();
 
     // parsing method request_uri and http_version
@@ -291,6 +291,11 @@ mod tests {
         };
 
         let raw_request = generate_request(request);
+
+        let request: Request = parse_request(&raw_request);
+        let host_header = request.get_header("Host".to_string()).unwrap();
+
+        assert_eq!("localhost:7777".to_string(), host_header.header_value);
 
         // response part
         let raw_response: String = process_request(raw_request);
