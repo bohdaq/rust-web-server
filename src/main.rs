@@ -1,6 +1,5 @@
 extern crate core;
 
-use core::slice::heapsort;
 use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
@@ -101,8 +100,9 @@ struct Request {
 }
 
 impl Request {
-    fn getHeader(&self, name: String) -> Option<&Header> {
-        let header =  self.headers.iter().find(|&&x| x.header_name == name)
+    fn get_header(&self, name: String) -> Option<&Header> {
+        let header =  self.headers.iter().find(|x| x.header_name == name);
+        header
     }
 }
 
@@ -135,6 +135,28 @@ impl std::fmt::Display for Header {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "Header name {} and value {}", self.header_name, self.header_value)
     }
+}
+
+fn generate_request(request: Request) -> String {
+    let status = [request.method, request.request_uri, request.http_version, "\r\n".to_string()].join(" ");
+
+    let mut headers = "".to_string();
+    for header in request.headers {
+        let mut header_string = "".to_string();
+        header_string.push_str(&header.header_name);
+        header_string.push_str(": ");
+        header_string.push_str(&header.header_value);
+        header_string.push_str("\r\n");
+        headers.push_str(&header_string);
+    }
+
+    let request = format!(
+        "{}{}\r\n",
+        status,
+        headers,
+    );
+
+    request
 }
 
 fn parse_request(request: String) ->  Request {
@@ -248,16 +270,31 @@ mod tests {
 
     #[test]
     fn it_generates_successful_response_with_index_html() {
+        // request part
+        let host = Header {
+            header_name: "Host".to_string(),
+            header_value: "localhost:7777".to_string()
+        };
+
+        let headers = vec![host];
+        let request = Request {
+            method: "GET".to_string(),
+            request_uri: "/".to_string(),
+            http_version: "HTTP/1.1".to_string(),
+            headers
+        };
+
+        let raw_request = generate_request(request);
+
+
+
+        // response part
         let html_file= fs::read_to_string("index.html").unwrap();
-        let content_length = html_file.len();
 
         let http_version = "HTTP/1.1";
         let status_code = "200";
         let reason_phrase = "OK";
         let http_version_status_code_reason_phrase = [http_version, status_code, reason_phrase].join(" ").to_string();
-
-        
-
 
         let raw_response =
             generate_response(http_version_status_code_reason_phrase, &html_file);
