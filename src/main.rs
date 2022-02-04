@@ -292,31 +292,28 @@ mod tests {
 
         let raw_request = generate_request(request);
 
-
-
         // response part
-        let html_file= fs::read_to_string("index.html").unwrap();
+        let raw_response: String = process_request(raw_request);
+        let response = parse_response(raw_response);
 
+
+        // checks
         let http_version = "HTTP/1.1";
         let status_code = "200";
         let reason_phrase = "OK";
-        let http_version_status_code_reason_phrase = [http_version, status_code, reason_phrase].join(" ").to_string();
+        let html_file= fs::read_to_string("index.html").unwrap();
 
-        let raw_response =
-            generate_response(http_version_status_code_reason_phrase, &html_file);
 
-        let response = parse_response(raw_response);
         println!("{}", response);
         for header in response.headers {
             println!("{}" , header);
         }
         println!("{}", response.message_body);
 
+
         assert_eq!(http_version, response.http_version);
         assert_eq!(status_code, response.status_code);
         assert_eq!(reason_phrase, response.reason_phrase);
-
         assert_eq!(html_file, response.message_body);
-
     }
 }
