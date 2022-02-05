@@ -286,7 +286,6 @@ mod tests {
         // request test data
         let request_host_header_name = "Host";
         let request_host_header_value = "localhost:7777";
-
         let request_method = "GET";
         let request_uri = "/";
         let request_http_version = "HTTP/1.1";
@@ -314,29 +313,22 @@ mod tests {
         assert_eq!(request_host_header_value.to_string(), host_header.header_value);
 
         // response part
+        let response_http_version = "HTTP/1.1";
+        let response_status_code = "200";
+        let response_reason_phrase = "OK";
+        let response_filepath = "index.html";
+        let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
+        let response_content_length_header_name = "Content-Length";
+        let response_content_length_header_value = response_html_file.len().to_string();
+
         let raw_response: String = process_request(raw_request);
         let response = parse_response(raw_response);
+        let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
-
-        // checks
-        let http_version = "HTTP/1.1";
-        let status_code = "200";
-        let reason_phrase = "OK";
-        let filepath = "index.html";
-
-        let html_file= fs::read_to_string(filepath.to_string()).unwrap();
-
-
-        println!("{}", response);
-        for header in response.headers {
-            println!("{}" , header);
-        }
-        println!("{}", response.message_body);
-
-
-        assert_eq!(http_version, response.http_version);
-        assert_eq!(status_code, response.status_code);
-        assert_eq!(reason_phrase, response.reason_phrase);
-        assert_eq!(html_file, response.message_body);
+        assert_eq!(response_content_length_header_value, header.header_value);
+        assert_eq!(response_http_version, response.http_version);
+        assert_eq!(response_status_code, response.status_code);
+        assert_eq!(response_reason_phrase, response.reason_phrase);
+        assert_eq!(response_html_file, response.message_body);
     }
 }
