@@ -1,5 +1,6 @@
 mod header;
 mod request;
+mod response;
 
 extern crate core;
 
@@ -7,8 +8,10 @@ use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
 use std::{env, fs};
+
 use crate::header::Header;
 use crate::request::Request;
+use crate::response::Response;
 
 
 fn main() {
@@ -104,26 +107,7 @@ fn process_request(request_string: String) -> String {
     response
 }
 
-struct Response {
-    http_version: String,
-    status_code: String,
-    reason_phrase: String,
-    headers: Vec<Header>,
-    message_body: String
-}
 
-impl Response {
-    fn get_header(&self, name: String) -> Option<&Header> {
-        let header =  self.headers.iter().find(|x| x.header_name == name);
-        header
-    }
-}
-
-impl std::fmt::Display for Response {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(fmt, "Response http version {} and status_code {} and reason_phrase {}", self.http_version, self.status_code, self.reason_phrase)
-    }
-}
 
 fn generate_request(request: Request) -> String {
     let status = [request.method, request.request_uri, request.http_version, "\r\n".to_string()].join(" ");
