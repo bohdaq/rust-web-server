@@ -1,9 +1,15 @@
+mod header;
+mod request;
+
 extern crate core;
 
 use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
 use std::{env, fs};
+use crate::header::Header;
+use crate::request::Request;
+
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -98,26 +104,6 @@ fn process_request(request_string: String) -> String {
     response
 }
 
-struct Request {
-    method: String,
-    request_uri: String,
-    http_version: String,
-    headers: Vec<Header>,
-}
-
-impl Request {
-    fn get_header(&self, name: String) -> Option<&Header> {
-        let header =  self.headers.iter().find(|x| x.header_name == name);
-        header
-    }
-}
-
-impl std::fmt::Display for Request {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(fmt, "Request method {} and request uri {} and http_version {}", self.method, self.request_uri, self.http_version)
-    }
-}
-
 struct Response {
     http_version: String,
     status_code: String,
@@ -136,17 +122,6 @@ impl Response {
 impl std::fmt::Display for Response {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "Response http version {} and status_code {} and reason_phrase {}", self.http_version, self.status_code, self.reason_phrase)
-    }
-}
-
-struct Header {
-    header_name: String,
-    header_value: String,
-}
-
-impl std::fmt::Display for Header {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(fmt, "Header name {} and value {}", self.header_name, self.header_value)
     }
 }
 
