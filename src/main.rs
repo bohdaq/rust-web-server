@@ -311,6 +311,9 @@ mod tests {
         let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
         assert_eq!(request_host_header_value.to_string(), host_header.header_value);
+        assert_eq!(request_method.to_string(), request.method);
+        assert_eq!(request_uri.to_string(), request.request_uri);
+        assert_eq!(request_http_version.to_string(), request.http_version);
 
         // response part
         let response_http_version = "HTTP/1.1";
