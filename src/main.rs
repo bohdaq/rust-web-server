@@ -59,7 +59,7 @@ fn handle_connection(mut stream: TcpStream) {
 }
 
 fn process_request(request_string: String) -> String {
-    let request: Request = parse_request(&request_string);
+    let request: Request = Request::parse_request(&request_string);
 
     println!("{}" , request);
     for header in request.headers {
@@ -91,9 +91,9 @@ fn process_request(request_string: String) -> String {
 
         if contents.starts_with("No such file or directory") {
             let contents = fs::read_to_string("404.html").unwrap();
-            response = generate_response("HTTP/1.1 404 NOT FOUND".to_string(), &contents);
+            response = Response::generate_response("HTTP/1.1 404 NOT FOUND".to_string(), &contents);
         } else {
-            response = generate_response("HTTP/1.1 200 OK".to_string(), &contents);
+            response = Response::generate_response("HTTP/1.1 200 OK".to_string(), &contents);
         }
 
 
@@ -101,7 +101,7 @@ fn process_request(request_string: String) -> String {
 
     if request.request_uri == "/" {
         let contents = fs::read_to_string("index.html").unwrap();
-        response = generate_response("HTTP/1.1 200 OK".to_string(), &contents);
+        response = Response::generate_response("HTTP/1.1 200 OK".to_string(), &contents);
     }
 
     response
@@ -109,132 +109,7 @@ fn process_request(request_string: String) -> String {
 
 
 
-fn generate_request(request: Request) -> String {
-    let status = [request.method, request.request_uri, request.http_version, "\r\n".to_string()].join(" ");
 
-    let mut headers = "".to_string();
-    for header in request.headers {
-        let mut header_string = "".to_string();
-        header_string.push_str(&header.header_name);
-        header_string.push_str(": ");
-        header_string.push_str(&header.header_value);
-        header_string.push_str("\r\n");
-        headers.push_str(&header_string);
-    }
-
-    let request = format!(
-        "{}{}\r\n",
-        status,
-        headers,
-    );
-
-    request
-}
-
-fn parse_request(request: &String) ->  Request {
-    let strings: Vec<&str> = request.split("\r\n").collect();
-
-    // parsing method request_uri and http_version
-    let method_request_uri_http_version = strings[0].to_string();
-    let split_method_request_uri_http_version: Vec<&str> = method_request_uri_http_version.split(" ").collect();
-
-    let method = split_method_request_uri_http_version[0];
-    let request_uri = split_method_request_uri_http_version[1];
-    let http_version = split_method_request_uri_http_version[2];
-
-
-    let mut headers = vec![];
-    // parsing headers
-    for (pos, e) in strings.iter().enumerate() {
-        // stop when headers end
-        if e.len() <= 1 {
-            break;
-        }
-
-        // skip method_request_uri_http_version
-        if pos != 0  {
-            let header_parts: Vec<&str> = e.split(": ").collect();
-
-            let header = Header {
-                header_name: header_parts[0].to_string(),
-                header_value: header_parts[1].to_string()
-            };
-
-            headers.push(header);
-
-        }
-    }
-
-    Request {
-        method: method.to_string(),
-        request_uri: request_uri.to_string(),
-        http_version: http_version.to_string(),
-        headers,
-    }
-}
-
-fn parse_response(response: String) -> Response {
-    let strings: Vec<&str> = response.split("\r\n").collect();
-
-    // parsing http_version, status_code and reason phrase
-    let http_version_status_code_reason_phrase = strings[0].to_string();
-    let split_http_version_status_code_reason_phrase: Vec<&str> = http_version_status_code_reason_phrase.split(" ").collect();
-
-    let http_version = split_http_version_status_code_reason_phrase[0].to_string();
-    let status_code = split_http_version_status_code_reason_phrase[1].to_string();
-    let reason_phrase = split_http_version_status_code_reason_phrase[2].to_string();
-
-    // parsing headers
-    let mut headers = vec![];
-    let mut headers_end_position = 999999;
-    for (pos, e) in strings.iter().enumerate() {
-        // stop when headers end
-        if e.len() <= 1 {
-            headers_end_position = pos;
-            break;
-        }
-
-        // skip http_version, status_code and reason phrase
-        if pos != 0  {
-            let header_parts: Vec<&str> = e.split(": ").collect();
-
-            let header = Header {
-                header_name: header_parts[0].to_string(),
-                header_value: header_parts[1].to_string()
-            };
-
-            headers.push(header);
-
-        }
-    }
-
-    let mut message_body = "".to_string();
-    // parsing message body
-    for (pos, e) in strings.iter().enumerate() {
-        // start when headers end
-        if pos > headers_end_position {
-            message_body.push_str(e);
-        }
-    }
-
-    Response {
-        http_version,
-        status_code,
-        reason_phrase,
-        headers,
-        message_body,
-    }
-}
-
-fn generate_response(status: String, contents: &String) -> String {
-    let response = format!(
-        "{}\r\nContent-Length: {}\r\n\r\n{}",
-        status,
-        contents.len(),
-        contents
-    );
-    response
-}
 
 #[cfg(test)]
 mod tests {
@@ -264,9 +139,9 @@ mod tests {
             headers
         };
 
-        let raw_request = generate_request(request);
+        let raw_request = Request::generate_request(request);
 
-        let request: Request = parse_request(&raw_request);
+        let request: Request = Request::parse_request(&raw_request);
         let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
         assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -284,7 +159,7 @@ mod tests {
         let response_content_length_header_value = response_html_file.len().to_string();
 
         let raw_response: String = process_request(raw_request);
-        let response = parse_response(raw_response);
+        let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
         assert_eq!(response_content_length_header_value, header.header_value);
