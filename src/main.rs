@@ -13,7 +13,7 @@ use std::{env, fs};
 
 use crate::request::Request;
 use crate::response::Response;
-use crate::server::Server;
+use crate::server::{HandleConnection, Server};
 
 
 fn main() {
@@ -25,26 +25,26 @@ fn main() {
         port = (&args[1]).parse().unwrap();
     }
 
-    let mut ip_addr = "127.0.0.1";
+    let mut ip = "127.0.0.1";
     if args.len() >= 3 {
-        ip_addr = args[2].as_str();
+        ip = &args[2];
     }
 
-    let bind_addr = [ip_addr, ":", &port.to_string()].join("");
+    let ip_addr = ip.to_string();
+    let bind_addr = [ip, ":", &port.to_string()].join("");
 
-    println!("Hello, rust-web-server!");
-
+    println!("Hello, rust-web-server! {}", bind_addr);
     let listener = TcpListener::bind(bind_addr).unwrap();
 
     let server = Server {
-        bind_addr: String::from(ip_addr),
+        ip_addr,
         port
     };
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-
         println!("Connection established!");
-        Server::handle_connection(stream);
+
+        server.handle_connection(stream);
     }
 }

@@ -10,28 +10,40 @@ use crate::response::Response;
 
 
 pub struct Server {
-    pub(crate) bind_addr: String,
+    pub(crate) ip_addr: String,
     pub(crate) port: i32,
 }
 
-impl Server {
-    pub(crate) fn handle_connection(mut stream: TcpStream) {
+pub trait HandleConnection {
+    fn handle_connection(&self, s: TcpStream);
+}
+
+pub trait ProcessRequest {
+    fn process_request(&self, request_string: String) -> String;
+}
+
+impl HandleConnection for Server {
+    fn handle_connection(&self, s: TcpStream) {
         let mut buffer = [0; 1024];
+
+        let mut stream = s;
 
         stream.read(&mut buffer).unwrap();
 
         let request_string = String::from_utf8_lossy(&buffer[..]).to_string();
         println!("{}", request_string);
 
-        let response = Server::process_request(request_string);
+        let response = self.process_request(request_string);
         println!("{}", response);
 
         stream.write(response.as_bytes()).unwrap();
         stream.flush().unwrap();
 
     }
+}
 
-    pub(crate) fn process_request(request_string: String) -> String {
+impl ProcessRequest for Server {
+    fn process_request(&self, request_string: String) -> String {
         let request: Request = Request::parse_request(&request_string);
 
         println!("{}" , request);
@@ -80,6 +92,5 @@ impl Server {
         response
     }
 }
-
 
 

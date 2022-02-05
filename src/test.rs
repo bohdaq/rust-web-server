@@ -1,12 +1,12 @@
 use std::fs;
 
-use crate::header::Header;
-use crate::request::Request;
-use crate::response::Response;
-use crate::server::Server;
-
 #[cfg(test)]
 mod tests {
+    use crate::header::Header;
+    use crate::request::Request;
+    use crate::response::Response;
+    use crate::server::Server;
+    use crate::server::ProcessRequest;
     use super::*;
 
     #[test]
@@ -52,7 +52,15 @@ mod tests {
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();
 
-        let raw_response: String = Server::process_request(raw_request);
+        let ip_addr= "127.0.0.1".to_string();
+        let port = "8787".parse().unwrap();
+        let server = Server {
+            ip_addr,
+            port
+        };
+
+
+        let raw_response: String = server.process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
