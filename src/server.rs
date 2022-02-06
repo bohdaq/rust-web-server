@@ -60,14 +60,17 @@ impl ProcessRequest for Server {
 
             let unwrapped_contents = fs::read_to_string(static_filepath);
 
+            let mut is_content_readable = true;
             let contents = match unwrapped_contents {
                 Ok(file) => file,
                 Err(error) => {
+                    // 'No such file or directory' or 'Is a directory' errors etc.
+                    is_content_readable = false;
                     error.to_string()
                 },
             };
 
-            if !contents.starts_with("No such file or directory") {
+            if is_content_readable {
                 response = Response::generate_response("HTTP/1.1 200 OK".to_string(), &contents);
             }
 
