@@ -1,4 +1,5 @@
 use crate::header::Header;
+use regex::Regex;
 
 pub struct Response {
     pub(crate) http_version: String,
@@ -29,11 +30,13 @@ impl Response {
 
         // parsing http_version, status_code and reason phrase
         let http_version_status_code_reason_phrase = strings[0].to_string();
-        let split_http_version_status_code_reason_phrase: Vec<&str> = http_version_status_code_reason_phrase.split(" ").collect();
 
-        let http_version = split_http_version_status_code_reason_phrase[0].to_string();
-        let status_code = split_http_version_status_code_reason_phrase[1].to_string();
-        let reason_phrase = split_http_version_status_code_reason_phrase[2].to_string();
+        let re = Regex::new(r"(?P<http_version>\w+/\w+.\w)\s(?P<status_code>\w+)\s(?P<reason_phrase>.+)").unwrap();
+        let caps = re.captures(&http_version_status_code_reason_phrase).unwrap();
+
+        let http_version= String::from(&caps["http_version"]);
+        let status_code = String::from(&caps["status_code"]);
+        let reason_phrase = String::from(&caps["reason_phrase"]);
 
         // parsing headers
         let mut headers = vec![];
