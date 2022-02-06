@@ -54,16 +54,15 @@ impl ProcessRequest for Server {
         let is_get = request.method == "GET";
         let is_static_content_read_attempt = request.request_uri.starts_with("/static/");
 
-        let mut response = String::from("");
-        if  is_get && is_static_content_read_attempt {
-            println!("is_get: {} is_static_content_read_attempt: {}", is_get, is_static_content_read_attempt);
 
+        // by default we assume route or static asset is not found
+        let contents = fs::read_to_string("404.html").unwrap();
+        let mut response = Response::generate_response("HTTP/1.1 404 NOT FOUND".to_string(), &contents);
+
+        if  is_get && is_static_content_read_attempt {
             let dir = env::current_dir().unwrap();
             let working_directory = dir.as_path().to_str().unwrap();
-            println!("working directory: {}", working_directory);
-
             let static_filepath = [working_directory, request.request_uri.as_str()].join("");
-            println!("filepath: {}", static_filepath);
 
             let unwrapped_contents = fs::read_to_string(static_filepath);
 
@@ -74,13 +73,9 @@ impl ProcessRequest for Server {
                 },
             };
 
-            if contents.starts_with("No such file or directory") {
-                let contents = fs::read_to_string("404.html").unwrap();
-                response = Response::generate_response("HTTP/1.1 404 NOT FOUND".to_string(), &contents);
-            } else {
+            if !contents.starts_with("No such file or directory") {
                 response = Response::generate_response("HTTP/1.1 200 OK".to_string(), &contents);
             }
-
 
         }
 
