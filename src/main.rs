@@ -33,12 +33,19 @@ fn main() {
     let ip_addr = ip.to_string();
     let bind_addr = [ip, ":", &port.to_string()].join("");
 
+    if args.len() >= 4 {
+
+    }
+
+
     println!("Hello, rust-web-server! {}", bind_addr);
     let listener = TcpListener::bind(bind_addr).unwrap();
 
+    let static_directories = vec!["/static/".to_string()];
     let server = Server {
         ip_addr,
-        port
+        port,
+        static_directories
     };
 
     for stream in listener.incoming() {

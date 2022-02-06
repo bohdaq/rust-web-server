@@ -75,9 +75,11 @@ mod tests {
 
         let ip_addr= "127.0.0.1".to_string();
         let port = "8787".parse().unwrap();
+        let static_directories = vec!["/static/".to_string()];
         let server = Server {
             ip_addr,
-            port
+            port,
+            static_directories,
         };
 
 
@@ -142,9 +144,11 @@ mod tests {
 
         let ip_addr= "127.0.0.1".to_string();
         let port = "8787".parse().unwrap();
+        let static_directories = vec!["/static/".to_string()];
         let server = Server {
             ip_addr,
-            port
+            port,
+            static_directories,
         };
 
 
@@ -210,9 +214,11 @@ mod tests {
 
         let ip_addr= "127.0.0.1".to_string();
         let port = "8787".parse().unwrap();
+        let static_directories = vec!["/static/".to_string()];
         let server = Server {
             ip_addr,
-            port
+            port,
+            static_directories,
         };
 
 
@@ -278,9 +284,11 @@ mod tests {
 
         let ip_addr= "127.0.0.1".to_string();
         let port = "8787".parse().unwrap();
+        let static_directories = vec!["/static/".to_string()];
         let server = Server {
             ip_addr,
-            port
+            port,
+            static_directories,
         };
 
 
@@ -346,9 +354,11 @@ mod tests {
 
         let ip_addr= "127.0.0.1".to_string();
         let port = "8787".parse().unwrap();
+        let static_directories = vec!["/static/".to_string()];
         let server = Server {
             ip_addr,
-            port
+            port,
+            static_directories,
         };
 
 
@@ -414,9 +424,11 @@ mod tests {
 
         let ip_addr= "127.0.0.1".to_string();
         let port = "8787".parse().unwrap();
+        let static_directories = vec!["/static/".to_string()];
         let server = Server {
             ip_addr,
-            port
+            port,
+            static_directories,
         };
 
 
@@ -481,9 +493,11 @@ mod tests {
 
         let ip_addr= "127.0.0.1".to_string();
         let port = "8787".parse().unwrap();
+        let static_directories = vec!["/static/".to_string()];
         let server = Server {
             ip_addr,
-            port
+            port,
+            static_directories,
         };
 
 
