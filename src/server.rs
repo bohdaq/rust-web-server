@@ -46,14 +46,8 @@ impl ProcessRequest for Server {
     fn process_request(&self, request_string: String) -> String {
         let request: Request = Request::parse_request(&request_string);
 
-        println!("{}" , request);
-        for header in request.headers {
-            println!("{}" , header);
-        }
-
         let is_get = request.method == "GET";
         let is_static_content_read_attempt = request.request_uri.starts_with("/static/");
-
 
         // by default we assume route or static asset is not found
         let contents = fs::read_to_string("404.html").unwrap();
