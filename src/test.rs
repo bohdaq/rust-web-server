@@ -12,10 +12,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn debugging_regex() {
-        // /(?P<http_version>\w+/\w+.\w)\s(?P<status_code>\w+)\s(?P<reason_phrase>.+)/g
-
-        let re = Regex::new(r"(?P<http_version>\w+/\w+.\w)\s(?P<status_code>\w+)\s(?P<reason_phrase>.+)").unwrap();
+    fn http_version_and_status_code_and_reason_phrase_regex() {
+        let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
         let caps = re.captures("HTTP/1.1 404 NOT FOUND").unwrap();
 
         assert_eq!("HTTP/1.1", &caps["http_version"]);
@@ -23,7 +21,7 @@ mod tests {
         assert_eq!("NOT FOUND", &caps["reason_phrase"]);
 
 
-        let re = Regex::new(r"(?P<http_version>\w+/\w+.\w)\s(?P<status_code>\w+)\s(?P<reason_phrase>.+)").unwrap();
+        let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
         let caps = re.captures("HTTP/1.1 200 OK").unwrap();
 
         assert_eq!("HTTP/1.1", &caps["http_version"]);
