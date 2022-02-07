@@ -56,11 +56,6 @@ impl Request {
         let request_uri = String::from(&caps["request_uri"]);
         let http_version = String::from(&caps["http_version"]);
 
-        println!("method: \n{}", method);
-        println!("request_uri: \n{}", request_uri);
-        println!("http_version: \n{}", http_version);
-
-
         let mut headers = vec![];
         // parsing headers
         for (pos, e) in strings.iter().enumerate() {

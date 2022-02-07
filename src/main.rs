@@ -35,7 +35,7 @@ fn main() {
     // 6 --> thread count
 
     // alternatively you can run built executable 12
-    // rws 8888 127.0.0.1 /images,/assets
+    // rws 8888 127.0.0.1 /images,/assets 12
     // where
     // 8888 --> port
     // 127.0.0.1 --> ip
