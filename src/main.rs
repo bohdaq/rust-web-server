@@ -70,6 +70,7 @@ fn main() {
 
     let bind_addr = [CONFIG.ip, ":", CONFIG.port.to_string().as_str()].join("");
     println!("Hello, rust-web-server! {}", bind_addr);
+
     let listener = TcpListener::bind(bind_addr).unwrap();
     let pool = ThreadPool::new(CONFIG.thread_count);
 

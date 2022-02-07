@@ -34,7 +34,7 @@ impl Server {
 
         let is_get = request.method == "GET";
 
-        let mut static_directories = vec!["/static/".to_string()];
+        let mut static_directories = vec![];
         let static_directories_vec_str: Vec<&str> = config.static_dirs.split(",").collect();
         for dir in &static_directories_vec_str {
             &static_directories.push(dir.to_string());
