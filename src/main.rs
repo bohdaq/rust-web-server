@@ -3,6 +3,7 @@ mod request;
 mod response;
 mod server;
 mod test;
+mod app;
 
 extern crate core;
 

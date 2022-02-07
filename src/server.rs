@@ -1,5 +1,3 @@
-
-
 use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
@@ -7,6 +5,7 @@ use std::{env, fs};
 
 use crate::request::Request;
 use crate::response::Response;
+use crate::app::App;
 
 
 pub struct Server {
@@ -32,10 +31,8 @@ impl HandleConnection for Server {
         stream.read(&mut buffer).unwrap();
 
         let request_string = String::from_utf8_lossy(&buffer[..]).to_string();
-        println!("{}", request_string);
 
         let response = self.process_request(request_string);
-        println!("{}", response);
 
         stream.write(response.as_bytes()).unwrap();
         stream.flush().unwrap();
@@ -55,7 +52,6 @@ impl ProcessRequest for Server {
                 is_static_content_read_attempt = true;
             }
         }
-
 
         // by default we assume route or static asset is not found
         let contents = fs::read_to_string("404.html").unwrap();
@@ -98,15 +94,8 @@ impl ProcessRequest for Server {
 
         }
 
-        if request.request_uri == "/" {
-            let contents = fs::read_to_string("index.html").unwrap();
-            let response = Response {
-                http_version: "HTTP/1.1".to_string(),
-                status_code: "200".to_string(),
-                reason_phrase: "OK".to_string(),
-                headers: vec![],
-                message_body: contents
-            };
+        if !is_static_content_read_attempt {
+            let response = App::handle_request(request);
             raw_response = Response::generate_response(response);
         }
 
