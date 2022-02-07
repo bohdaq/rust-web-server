@@ -78,7 +78,7 @@ fn main() {
         println!("Connection established!");
 
         pool.execute(move ||  {
-            Server::handle_connection(stream, CONFIG.static_dirs);
+            Server::handle_connection(stream, CONFIG);
         });
     }
 }

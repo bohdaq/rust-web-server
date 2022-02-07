@@ -6,13 +6,14 @@ use std::{env, fs};
 use crate::request::Request;
 use crate::response::Response;
 use crate::app::App;
+use crate::Config;
 
 
 pub struct Server {}
 
 
 impl Server {
-    pub(crate) fn handle_connection(s: TcpStream, static_directories_args: &str) {
+    pub(crate) fn handle_connection(s: TcpStream, config: Config) {
         let mut buffer = [0; 1024];
 
         let mut stream = s;
@@ -21,20 +22,20 @@ impl Server {
 
         let request_string = String::from_utf8_lossy(&buffer[..]).to_string();
 
-        let response = Server::process_request(request_string, static_directories_args);
+        let response = Server::process_request(request_string, config);
 
         stream.write(response.as_bytes()).unwrap();
         stream.flush().unwrap();
 
     }
 
-    pub(crate) fn process_request(request_string: String, static_directories_args: &str) -> String {
+    pub(crate) fn process_request(request_string: String, config: Config) -> String {
         let request: Request = Request::parse_request(&request_string);
 
         let is_get = request.method == "GET";
 
         let mut static_directories = vec!["/static/".to_string()];
-        let static_directories_vec_str: Vec<&str> = static_directories_args.split(",").collect();
+        let static_directories_vec_str: Vec<&str> = config.static_dirs.split(",").collect();
         for dir in &static_directories_vec_str {
             &static_directories.push(dir.to_string());
         }
