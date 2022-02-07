@@ -706,12 +706,55 @@ mod tests {
 
     #[test]
     fn it_generates_successful_response_with_additional_headers_and_file() {
-        //TODO:
-    }
+        let response_http_version = "HTTP/1.1";
+        let response_status_code = "200";
+        let response_reason_phrase = "OK";
+        let filepath = "/static/test.txt";
 
-    #[test]
-    fn it_generates_successful_response_with_additional_headers_and_without_file() {
-        //TODO:
+        let dir = env::current_dir().unwrap();
+        let working_directory = dir.as_path().to_str().unwrap();
+
+        let response_filepath = [working_directory, filepath].join("");
+        let message_body= fs::read_to_string(response_filepath.to_string()).unwrap();
+
+        let response_user_agent_header_name = "User-Agent";
+        let response_user_agent_value = "rws/0.0.1";
+
+        let user_agent = Header {
+            header_name: response_user_agent_header_name.to_string(),
+            header_value: response_user_agent_value.to_string()
+        };
+
+
+        let headers = vec![user_agent];
+        let response = Response {
+            http_version: response_http_version.to_string(),
+            status_code: response_status_code.to_string(),
+            reason_phrase: response_reason_phrase.to_string(),
+            headers,
+            message_body: message_body.to_string()
+        };
+
+
+        let response_content_length_header_name = "Content-Length";
+        let response_content_length_header_value = message_body.len().to_string();
+
+
+        let raw_response = Response::generate_response(response);
+        let response = Response::parse_response(raw_response);
+
+
+        let content_length_header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+        assert_eq!(response_content_length_header_value, content_length_header.header_value);
+
+        let response_user_agent_header = response.get_header(response_user_agent_header_name.to_string()).unwrap();
+        assert_eq!(response_user_agent_header.header_value, response_user_agent_value);
+
+
+        assert_eq!(response_http_version, response.http_version);
+        assert_eq!(response_status_code, response.status_code);
+        assert_eq!(response_reason_phrase, response.reason_phrase);
+        assert_eq!(message_body, response.message_body);
     }
 
 }
