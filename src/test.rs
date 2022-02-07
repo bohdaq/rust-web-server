@@ -8,7 +8,6 @@ mod tests {
     use crate::request::Request;
     use crate::response::Response;
     use crate::server::Server;
-    use crate::server::ProcessRequest;
     use super::*;
 
     #[test]
@@ -83,7 +82,7 @@ mod tests {
         };
 
 
-        let raw_response: String = server.process_request(raw_request);
+        let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -152,7 +151,7 @@ mod tests {
         };
 
 
-        let raw_response: String = server.process_request(raw_request);
+        let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -222,7 +221,7 @@ mod tests {
         };
 
 
-        let raw_response: String = server.process_request(raw_request);
+        let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -292,7 +291,7 @@ mod tests {
         };
 
 
-        let raw_response: String = server.process_request(raw_request);
+        let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -362,7 +361,7 @@ mod tests {
         };
 
 
-        let raw_response: String = server.process_request(raw_request);
+        let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -432,7 +431,7 @@ mod tests {
         };
 
 
-        let raw_response: String = server.process_request(raw_request);
+        let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -501,7 +500,7 @@ mod tests {
         };
 
 
-        let raw_response: String = server.process_request(raw_request);
+        let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -573,7 +572,7 @@ mod tests {
         };
 
 
-        let raw_response: String = server.process_request(raw_request);
+        let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -644,7 +643,7 @@ mod tests {
             static_directories,
         };
 
-        let raw_response: String = server.process_request(raw_request);
+        let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 

@@ -14,16 +14,9 @@ pub struct Server {
     pub(crate) static_directories: Vec<String>,
 }
 
-pub trait HandleConnection {
-    fn handle_connection(&self, s: TcpStream);
-}
 
-pub trait ProcessRequest {
-    fn process_request(&self, request_string: String) -> String;
-}
-
-impl HandleConnection for Server {
-    fn handle_connection(&self, s: TcpStream) {
+impl Server {
+    pub(crate) fn handle_connection(s: TcpStream, static_directories_args: &str) {
         let mut buffer = [0; 1024];
 
         let mut stream = s;
@@ -32,23 +25,27 @@ impl HandleConnection for Server {
 
         let request_string = String::from_utf8_lossy(&buffer[..]).to_string();
 
-        let response = self.process_request(request_string);
+        let response = Server::process_request(request_string, static_directories_args);
 
         stream.write(response.as_bytes()).unwrap();
         stream.flush().unwrap();
 
     }
-}
 
-impl ProcessRequest for Server {
-    fn process_request(&self, request_string: String) -> String {
+    pub(crate) fn process_request(request_string: String, static_directories_args: &str) -> String {
         let request: Request = Request::parse_request(&request_string);
 
         let is_get = request.method == "GET";
 
+        let mut static_directories = vec!["/static/".to_string()];
+        let static_directories_vec_str: Vec<&str> = static_directories_args.split(",").collect();
+        for dir in &static_directories_vec_str {
+            &static_directories.push(dir.to_string());
+        }
+
         let mut is_static_content_read_attempt = false;
-        for static_dir in &self.static_directories {
-            if request.request_uri.starts_with(static_dir) {
+        for static_dir in static_directories {
+            if request.request_uri.starts_with(&static_dir) {
                 is_static_content_read_attempt = true;
             }
         }

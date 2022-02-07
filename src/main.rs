@@ -4,6 +4,7 @@ mod response;
 mod server;
 mod test;
 mod app;
+mod thread_pool;
 
 extern crate core;
 
@@ -14,7 +15,8 @@ use std::{env, fs};
 
 use crate::request::Request;
 use crate::response::Response;
-use crate::server::{HandleConnection, Server};
+use crate::server::Server;
+use crate::thread_pool::ThreadPool;
 
 
 fn main() {
@@ -49,6 +51,8 @@ fn main() {
     let bind_addr = [ip, ":", &port.to_string()].join("");
 
     let mut static_directories = vec!["/static/".to_string()];
+    let mut static_directories_args = "";
+
     if args.len() >= 4 {
         let static_directories_args = &args[3];
         &static_directories.clear();
@@ -63,6 +67,7 @@ fn main() {
 
     println!("Hello, rust-web-server! {}", bind_addr);
     let listener = TcpListener::bind(bind_addr).unwrap();
+    let pool = ThreadPool::new(4);
 
 
     let server = Server {
@@ -75,6 +80,8 @@ fn main() {
         let stream = stream.unwrap();
         println!("Connection established!");
 
-        server.handle_connection(stream);
+        pool.execute(move || {
+            Server::handle_connection(stream, static_directories_args);
+        });
     }
 }
