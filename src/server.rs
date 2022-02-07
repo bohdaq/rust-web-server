@@ -7,7 +7,7 @@ use crate::request::Request;
 use crate::response::Response;
 use crate::app::App;
 use crate::Config;
-use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS};
+use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 
 
 pub struct Server {}
@@ -79,7 +79,7 @@ impl Server {
             if is_content_readable {
                 let response = Response {
                     http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
-                    status_code: "200".to_string(),
+                    status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE.to_string(),
                     reason_phrase: "OK".to_string(),
                     headers: vec![],
                     message_body: contents

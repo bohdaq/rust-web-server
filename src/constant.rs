@@ -37,3 +37,20 @@ pub const HTTP_VERSIONS: HTTPVersion = HTTPVersion {
     HTTP_VERSION_1_1 : "HTTP/1.1",
     HTTP_VERSION_2_0 : "HTTP/2.0",
 };
+
+pub struct StatusCodeReasonPhrase {
+    pub(crate) STATUS_CODE: &'static str,
+    pub(crate) REASON_PHRASE: &'static str,
+}
+
+pub struct ResponseStatusCodeReasonPhrase {
+    pub(crate) N200_OK: &'static StatusCodeReasonPhrase,
+}
+
+pub const RESPONSE_STATUS_CODE_REASON_PHRASES: ResponseStatusCodeReasonPhrase = ResponseStatusCodeReasonPhrase {
+    N200_OK: &StatusCodeReasonPhrase {
+        STATUS_CODE: "200",
+        REASON_PHRASE: "OK"
+    },
+
+};

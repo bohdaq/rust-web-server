@@ -5,7 +5,7 @@ use regex::Regex;
 #[cfg(test)]
 mod tests {
     use crate::Config;
-    use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS};
+    use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
     use crate::header::Header;
     use crate::request::Request;
     use crate::response::Response;
@@ -33,7 +33,7 @@ mod tests {
         let caps = re.captures("HTTP/1.1 200 OK").unwrap();
 
         assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1.to_string().as_str(), &caps["http_version"]);
-        assert_eq!("200", &caps["status_code"]);
+        assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE, &caps["status_code"]);
         assert_eq!("OK", &caps["reason_phrase"]);
 
     }
@@ -74,7 +74,7 @@ mod tests {
 
         // response part
         let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-        let response_status_code = "200";
+        let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
         let response_reason_phrase = "OK";
         let response_filepath = "index.html";
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
@@ -132,7 +132,7 @@ mod tests {
 
         // response part
         let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-        let response_status_code = "200";
+        let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
         let response_reason_phrase = "OK";
         let response_filepath = &request.request_uri;
 
@@ -451,7 +451,7 @@ mod tests {
 
         // response part
         let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-        let response_status_code = "200";
+        let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
         let response_reason_phrase = "OK";
         let response_filepath = &request.request_uri;
 
@@ -518,7 +518,7 @@ mod tests {
 
         // response part
         let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-        let response_status_code = "200";
+        let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
         let response_reason_phrase = "OK";
         let response_filepath = &request.request_uri;
 
@@ -584,7 +584,7 @@ mod tests {
 
         // response part
         let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-        let response_status_code = "200";
+        let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
         let response_reason_phrase = "OK";
         let response_filepath = &request.request_uri;
 
@@ -663,7 +663,7 @@ mod tests {
     #[test]
     fn it_generates_successful_response_with_additional_headers_and_file() {
         let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-        let response_status_code = "200";
+        let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
         let response_reason_phrase = "OK";
         let filepath = "/static/test.txt";
 
