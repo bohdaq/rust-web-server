@@ -24,7 +24,7 @@ mod tests {
         let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
         let caps = re.captures("HTTP/1.1 404 NOT FOUND").unwrap();
 
-        assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1.to_string().as_str(), &caps["http_version"]);
+        assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, &caps["http_version"]);
         assert_eq!("404", &caps["status_code"]);
         assert_eq!("NOT FOUND", &caps["reason_phrase"]);
 
@@ -32,7 +32,7 @@ mod tests {
         let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
         let caps = re.captures("HTTP/1.1 200 OK").unwrap();
 
-        assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1.to_string().as_str(), &caps["http_version"]);
+        assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, &caps["http_version"]);
         assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE, &caps["status_code"]);
         assert_eq!("OK", &caps["reason_phrase"]);
 
