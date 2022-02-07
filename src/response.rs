@@ -19,12 +19,33 @@ impl Response {
 
     pub(crate) fn generate_response(response: Response) -> String {
         let status = [response.http_version, response.status_code, response.reason_phrase].join(" ");
+
+        let mut headers = "\r\n".to_string();
+        for header in response.headers {
+            let mut header_string = "".to_string();
+            header_string.push_str(&header.header_name);
+            header_string.push_str(": ");
+            header_string.push_str(&header.header_value);
+            header_string.push_str("\r\n");
+            headers.push_str(&header_string);
+        }
+
+        let mut content_length_header_string = "".to_string();
+        content_length_header_string.push_str("Content-Length");
+        content_length_header_string.push_str(": ");
+        content_length_header_string.push_str(response.message_body.len().to_string().as_str());
+        content_length_header_string.push_str("\r\n");
+        headers.push_str(&content_length_header_string);
+
         let response = format!(
-            "{}\r\nContent-Length: {}\r\n\r\n{}",
+            "{}{}\r\n{}",
             status,
-            response.message_body.len(),
+            headers,
             response.message_body
         );
+
+        println!("_____RESPONSE______\n{}", response);
+
         response
     }
 

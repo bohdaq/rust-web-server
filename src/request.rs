@@ -1,4 +1,5 @@
 use crate::header::Header;
+use regex::Regex;
 
 pub struct Request {
     pub(crate) method: String,
@@ -8,6 +9,8 @@ pub struct Request {
 }
 
 impl Request {
+    pub(crate) const METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX: &'static str = "(?P<method>\\w+)\\s(?P<request_uri>[./A-Za-z0-9]+)\\s(?P<http_version>[/.A-Za-z0-9]+)";
+
     pub(crate) fn get_header(&self, name: String) -> Option<&Header> {
         let header =  self.headers.iter().find(|x| x.header_name == name);
         header
@@ -32,6 +35,8 @@ impl Request {
             headers,
         );
 
+        println!("_____REQUEST______\n{}", request);
+
         request
     }
 
@@ -40,12 +45,14 @@ impl Request {
 
         // parsing method request_uri and http_version
         let method_request_uri_http_version = strings[0].to_string();
-        let split_method_request_uri_http_version: Vec<&str> = method_request_uri_http_version.split(" ").collect();
 
-        let method = split_method_request_uri_http_version[0];
-        let request_uri = split_method_request_uri_http_version[1];
-        let http_version = split_method_request_uri_http_version[2];
+        let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
+        let caps = re.captures(&method_request_uri_http_version).unwrap();
 
+
+        let method = String::from(&caps["method"]);
+        let request_uri = String::from(&caps["request_uri"]);
+        let http_version = String::from(&caps["http_version"]);
 
         let mut headers = vec![];
         // parsing headers
