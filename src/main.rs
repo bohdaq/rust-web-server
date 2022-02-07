@@ -5,6 +5,7 @@ mod server;
 mod test;
 mod app;
 mod thread_pool;
+mod constant;
 
 extern crate core;
 

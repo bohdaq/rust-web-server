@@ -5,6 +5,7 @@ use regex::Regex;
 #[cfg(test)]
 mod tests {
     use crate::Config;
+    use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS};
     use crate::header::Header;
     use crate::request::Request;
     use crate::response::Response;
@@ -23,7 +24,7 @@ mod tests {
         let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
         let caps = re.captures("HTTP/1.1 404 NOT FOUND").unwrap();
 
-        assert_eq!("HTTP/1.1", &caps["http_version"]);
+        assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1.to_string().as_str(), &caps["http_version"]);
         assert_eq!("404", &caps["status_code"]);
         assert_eq!("NOT FOUND", &caps["reason_phrase"]);
 
@@ -31,7 +32,7 @@ mod tests {
         let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
         let caps = re.captures("HTTP/1.1 200 OK").unwrap();
 
-        assert_eq!("HTTP/1.1", &caps["http_version"]);
+        assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1.to_string().as_str(), &caps["http_version"]);
         assert_eq!("200", &caps["status_code"]);
         assert_eq!("OK", &caps["reason_phrase"]);
 
@@ -42,9 +43,9 @@ mod tests {
         // request test data
         let request_host_header_name = "Host";
         let request_host_header_value = "localhost:7777";
-        let request_method = "GET";
+        let request_method = REQUEST_METHODS.GET;
         let request_uri = "/";
-        let request_http_version = "HTTP/1.1";
+        let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
 
 
         // request part
@@ -72,7 +73,7 @@ mod tests {
         assert_eq!(request_http_version.to_string(), request.http_version);
 
         // response part
-        let response_http_version = "HTTP/1.1";
+        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = "200";
         let response_reason_phrase = "OK";
         let response_filepath = "index.html";
@@ -100,9 +101,9 @@ mod tests {
         // request test data
         let request_host_header_name = "Host";
         let request_host_header_value = "localhost:7777";
-        let request_method = "GET";
+        let request_method = REQUEST_METHODS.GET;
         let request_uri = "/static/test.txt";
-        let request_http_version = "HTTP/1.1";
+        let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
 
 
         // request part
@@ -130,7 +131,7 @@ mod tests {
         assert_eq!(request_http_version.to_string(), request.http_version);
 
         // response part
-        let response_http_version = "HTTP/1.1";
+        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = "200";
         let response_reason_phrase = "OK";
         let response_filepath = &request.request_uri;
@@ -163,9 +164,9 @@ mod tests {
         // request test data
         let request_host_header_name = "Host";
         let request_host_header_value = "localhost:7777";
-        let request_method = "GET";
+        let request_method = REQUEST_METHODS.GET;
         let request_uri = "/static/nonexistingfile";
-        let request_http_version = "HTTP/1.1";
+        let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
 
 
         // request part
@@ -193,7 +194,7 @@ mod tests {
         assert_eq!(request_http_version.to_string(), request.http_version);
 
         // response part
-        let response_http_version = "HTTP/1.1";
+        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = "404";
         let response_reason_phrase = "NOT FOUND";
         let response_filepath = &request.request_uri;
@@ -227,9 +228,9 @@ mod tests {
         // request test data
         let request_host_header_name = "Host";
         let request_host_header_value = "localhost:7777";
-        let request_method = "GET";
+        let request_method = REQUEST_METHODS.GET;
         let request_uri = "/nonexistingroute";
-        let request_http_version = "HTTP/1.1";
+        let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
 
 
         // request part
@@ -257,7 +258,7 @@ mod tests {
         assert_eq!(request_http_version.to_string(), request.http_version);
 
         // response part
-        let response_http_version = "HTTP/1.1";
+        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = "404";
         let response_reason_phrase = "NOT FOUND";
         let response_filepath = &request.request_uri;
@@ -291,9 +292,9 @@ mod tests {
         // request test data
         let request_host_header_name = "Host";
         let request_host_header_value = "localhost:7777";
-        let request_method = "GET";
+        let request_method = REQUEST_METHODS.GET;
         let request_uri = "/static/";
-        let request_http_version = "HTTP/1.1";
+        let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
 
 
         // request part
@@ -321,7 +322,7 @@ mod tests {
         assert_eq!(request_http_version.to_string(), request.http_version);
 
         // response part
-        let response_http_version = "HTTP/1.1";
+        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = "404";
         let response_reason_phrase = "NOT FOUND";
         let response_filepath = &request.request_uri;
@@ -355,9 +356,9 @@ mod tests {
         // request test data
         let request_host_header_name = "Host";
         let request_host_header_value = "localhost:7777";
-        let request_method = "GET";
+        let request_method = REQUEST_METHODS.GET;
         let request_uri = "/static/subdir/";
-        let request_http_version = "HTTP/1.1";
+        let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
 
 
         // request part
@@ -385,7 +386,7 @@ mod tests {
         assert_eq!(request_http_version.to_string(), request.http_version);
 
         // response part
-        let response_http_version = "HTTP/1.1";
+        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = "404";
         let response_reason_phrase = "NOT FOUND";
         let response_filepath = &request.request_uri;
@@ -419,9 +420,9 @@ mod tests {
         // request test data
         let request_host_header_name = "Host";
         let request_host_header_value = "localhost:7777";
-        let request_method = "GET";
+        let request_method = REQUEST_METHODS.GET;
         let request_uri = "/static/test.txt";
-        let request_http_version = "HTTP/1.1";
+        let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
 
 
         // request part
@@ -449,7 +450,7 @@ mod tests {
         assert_eq!(request_http_version.to_string(), request.http_version);
 
         // response part
-        let response_http_version = "HTTP/1.1";
+        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = "200";
         let response_reason_phrase = "OK";
         let response_filepath = &request.request_uri;
@@ -486,9 +487,9 @@ mod tests {
         // request test data
         let request_host_header_name = "Host";
         let request_host_header_value = "localhost:7777";
-        let request_method = "GET";
+        let request_method = REQUEST_METHODS.GET;
         let request_uri = "/static/test.txt";
-        let request_http_version = "HTTP/1.1";
+        let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
 
 
         // request part
@@ -516,7 +517,7 @@ mod tests {
         assert_eq!(request_http_version.to_string(), request.http_version);
 
         // response part
-        let response_http_version = "HTTP/1.1";
+        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = "200";
         let response_reason_phrase = "OK";
         let response_filepath = &request.request_uri;
@@ -552,9 +553,9 @@ mod tests {
 
         let request_host_header_name = "Host";
         let request_host_header_value = "localhost:7777";
-        let request_method = "GET";
+        let request_method = REQUEST_METHODS.GET;
         let request_uri = "/assets/test.txt";
-        let request_http_version = "HTTP/1.1";
+        let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
 
 
         // request part
@@ -582,7 +583,7 @@ mod tests {
         assert_eq!(request_http_version.to_string(), request.http_version);
 
         // response part
-        let response_http_version = "HTTP/1.1";
+        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = "200";
         let response_reason_phrase = "OK";
         let response_filepath = &request.request_uri;
@@ -612,7 +613,7 @@ mod tests {
 
     #[test]
     fn it_generates_successful_response_with_additional_headers() {
-        let response_http_version = "HTTP/1.1";
+        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = "401";
         let response_reason_phrase = "Unauthorized";
         let message_body = "";
@@ -661,7 +662,7 @@ mod tests {
 
     #[test]
     fn it_generates_successful_response_with_additional_headers_and_file() {
-        let response_http_version = "HTTP/1.1";
+        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = "200";
         let response_reason_phrase = "OK";
         let filepath = "/static/test.txt";

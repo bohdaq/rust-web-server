@@ -7,6 +7,7 @@ use crate::request::Request;
 use crate::response::Response;
 use crate::app::App;
 use crate::Config;
+use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS};
 
 
 pub struct Server {}
@@ -32,7 +33,7 @@ impl Server {
     pub(crate) fn process_request(request_string: String, config: Config) -> String {
         let request: Request = Request::parse_request(&request_string);
 
-        let is_get = request.method == "GET";
+        let is_get = request.method == REQUEST_METHODS.GET;
 
         let mut static_directories = vec![];
         let static_directories_vec_str: Vec<&str> = config.static_dirs.split(",").collect();
@@ -50,7 +51,7 @@ impl Server {
         // by default we assume route or static asset is not found
         let contents = fs::read_to_string("404.html").unwrap();
         let response = Response {
-            http_version: "HTTP/1.1".to_string(),
+            http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
             status_code: "404".to_string(),
             reason_phrase: "NOT FOUND".to_string(),
             headers: vec![],
@@ -77,7 +78,7 @@ impl Server {
 
             if is_content_readable {
                 let response = Response {
-                    http_version: "HTTP/1.1".to_string(),
+                    http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
                     status_code: "200".to_string(),
                     reason_phrase: "OK".to_string(),
                     headers: vec![],
