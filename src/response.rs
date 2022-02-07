@@ -17,12 +17,13 @@ impl Response {
         header
     }
 
-    pub(crate) fn generate_response(status: String, contents: &String) -> String {
+    pub(crate) fn generate_response(response: Response) -> String {
+        let status = [response.http_version, response.status_code, response.reason_phrase].join(" ");
         let response = format!(
             "{}\r\nContent-Length: {}\r\n\r\n{}",
             status,
-            contents.len(),
-            contents
+            response.message_body.len(),
+            response.message_body
         );
         response
     }

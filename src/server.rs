@@ -59,7 +59,14 @@ impl ProcessRequest for Server {
 
         // by default we assume route or static asset is not found
         let contents = fs::read_to_string("404.html").unwrap();
-        let mut response = Response::generate_response("HTTP/1.1 404 NOT FOUND".to_string(), &contents);
+        let response = Response {
+            http_version: "HTTP/1.1".to_string(),
+            status_code: "404".to_string(),
+            reason_phrase: "NOT FOUND".to_string(),
+            headers: vec![],
+            message_body: contents
+        };
+        let mut raw_response = Response::generate_response(response);
 
         if  is_get && is_static_content_read_attempt {
             let dir = env::current_dir().unwrap();
@@ -79,17 +86,31 @@ impl ProcessRequest for Server {
             };
 
             if is_content_readable {
-                response = Response::generate_response("HTTP/1.1 200 OK".to_string(), &contents);
+                let response = Response {
+                    http_version: "HTTP/1.1".to_string(),
+                    status_code: "200".to_string(),
+                    reason_phrase: "OK".to_string(),
+                    headers: vec![],
+                    message_body: contents
+                };
+                raw_response = Response::generate_response(response);
             }
 
         }
 
         if request.request_uri == "/" {
             let contents = fs::read_to_string("index.html").unwrap();
-            response = Response::generate_response("HTTP/1.1 200 OK".to_string(), &contents);
+            let response = Response {
+                http_version: "HTTP/1.1".to_string(),
+                status_code: "200".to_string(),
+                reason_phrase: "OK".to_string(),
+                headers: vec![],
+                message_body: contents
+            };
+            raw_response = Response::generate_response(response);
         }
 
-        response
+        raw_response
     }
 }
 
