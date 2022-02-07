@@ -73,14 +73,8 @@ mod tests {
         let response_content_length_header_value = response_html_file.len().to_string();
 
         let ip_addr= "127.0.0.1".to_string();
-        let port = "8787".parse().unwrap();
+        let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
-        let server = Server {
-            ip_addr,
-            port,
-            static_directories,
-        };
-
 
         let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
@@ -142,14 +136,8 @@ mod tests {
         let response_content_length_header_value = response_html_file.len().to_string();
 
         let ip_addr= "127.0.0.1".to_string();
-        let port = "8787".parse().unwrap();
+        let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
-        let server = Server {
-            ip_addr,
-            port,
-            static_directories,
-        };
-
 
         let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
@@ -212,14 +200,8 @@ mod tests {
         let response_content_length_header_value = response_html_file.len().to_string();
 
         let ip_addr= "127.0.0.1".to_string();
-        let port = "8787".parse().unwrap();
+        let port: usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
-        let server = Server {
-            ip_addr,
-            port,
-            static_directories,
-        };
-
 
         let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
@@ -282,14 +264,8 @@ mod tests {
         let response_content_length_header_value = response_html_file.len().to_string();
 
         let ip_addr= "127.0.0.1".to_string();
-        let port = "8787".parse().unwrap();
+        let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
-        let server = Server {
-            ip_addr,
-            port,
-            static_directories,
-        };
-
 
         let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
@@ -352,14 +328,8 @@ mod tests {
         let response_content_length_header_value = response_html_file.len().to_string();
 
         let ip_addr= "127.0.0.1".to_string();
-        let port = "8787".parse().unwrap();
+        let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
-        let server = Server {
-            ip_addr,
-            port,
-            static_directories,
-        };
-
 
         let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
@@ -422,14 +392,8 @@ mod tests {
         let response_content_length_header_value = response_html_file.len().to_string();
 
         let ip_addr= "127.0.0.1".to_string();
-        let port = "8787".parse().unwrap();
+        let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
-        let server = Server {
-            ip_addr,
-            port,
-            static_directories,
-        };
-
 
         let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
@@ -491,13 +455,8 @@ mod tests {
         let response_content_length_header_value = response_html_file.len().to_string();
 
         let ip_addr= "127.0.0.1".to_string();
-        let port = "8787".parse().unwrap();
+        let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
-        let server = Server {
-            ip_addr,
-            port,
-            static_directories,
-        };
 
 
         let raw_response: String = Server::process_request(raw_request, "/static,/assets");
@@ -563,14 +522,8 @@ mod tests {
         let response_content_length_header_value = response_html_file.len().to_string();
 
         let ip_addr= "127.0.0.1".to_string();
-        let port = "8787".parse().unwrap();
+        let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string(), "/assets".to_string()];
-        let server = Server {
-            ip_addr,
-            port,
-            static_directories,
-        };
-
 
         let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);
@@ -635,13 +588,8 @@ mod tests {
         let response_content_length_header_value = response_html_file.len().to_string();
 
         let ip_addr= "127.0.0.1".to_string();
-        let port = "8787".parse().unwrap();
+        let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string(), "/assets".to_string()];
-        let server = Server {
-            ip_addr,
-            port,
-            static_directories,
-        };
 
         let raw_response: String = Server::process_request(raw_request, "/static,/assets");
         let response = Response::parse_response(raw_response);

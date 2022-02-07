@@ -46,35 +46,22 @@ fn main() {
     if args.len() >= 3 {
         ip = &args[2];
     }
-
-    let ip_addr = ip.to_string();
     let bind_addr = [ip, ":", &port.to_string()].join("");
 
-    let mut static_directories = vec!["/static/".to_string()];
-    let mut static_directories_args = "";
-
+    let mut static_directories_args = "/static,/assets";
     if args.len() >= 4 {
-        let static_directories_args = &args[3];
-        &static_directories.clear();
+        //static_directories_args = &args[3];
+    }
 
-        let static_directories_vec_str: Vec<&str> = static_directories_args.split(",").collect();
-        for dir in &static_directories_vec_str {
-            &static_directories.push(dir.to_string());
-        }
-
+    let mut threads_count = 4;
+    if args.len() >= 5 {
+        threads_count = (&args[4]).parse().unwrap();
     }
 
 
     println!("Hello, rust-web-server! {}", bind_addr);
     let listener = TcpListener::bind(bind_addr).unwrap();
-    let pool = ThreadPool::new(4);
-
-
-    let server = Server {
-        ip_addr,
-        port,
-        static_directories
-    };
+    let pool = ThreadPool::new(threads_count);
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();

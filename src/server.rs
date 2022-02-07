@@ -8,11 +8,7 @@ use crate::response::Response;
 use crate::app::App;
 
 
-pub struct Server {
-    pub(crate) ip_addr: String,
-    pub(crate) port: i32,
-    pub(crate) static_directories: Vec<String>,
-}
+pub struct Server {}
 
 
 impl Server {

@@ -8,7 +8,6 @@ pub struct App {}
 
 impl App {
     pub(crate) fn handle_request(request: Request) -> Response {
-
         let mut contents = fs::read_to_string("404.html").unwrap();
         let mut response = Response {
             http_version: "HTTP/1.1".to_string(),

@@ -41,6 +41,8 @@ impl Request {
     }
 
     pub(crate) fn parse_request(request: &String) ->  Request {
+        println!("_____REQUEST______\n{}", request);
+
         let strings: Vec<&str> = request.split("\r\n").collect();
 
         // parsing method request_uri and http_version
@@ -53,6 +55,11 @@ impl Request {
         let method = String::from(&caps["method"]);
         let request_uri = String::from(&caps["request_uri"]);
         let http_version = String::from(&caps["http_version"]);
+
+        println!("method: \n{}", method);
+        println!("request_uri: \n{}", request_uri);
+        println!("http_version: \n{}", http_version);
+
 
         let mut headers = vec![];
         // parsing headers
