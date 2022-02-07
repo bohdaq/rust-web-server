@@ -25,8 +25,8 @@ mod tests {
         let caps = re.captures("HTTP/1.1 404 NOT FOUND").unwrap();
 
         assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, &caps["http_version"]);
-        assert_eq!("404", &caps["status_code"]);
-        assert_eq!("NOT FOUND", &caps["reason_phrase"]);
+        assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE, &caps["status_code"]);
+        assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE, &caps["reason_phrase"]);
 
 
         let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
@@ -194,9 +194,9 @@ mod tests {
         assert_eq!(request_http_version.to_string(), request.http_version);
 
         // response part
-        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-        let response_status_code = "404";
-        let response_reason_phrase = "NOT FOUND";
+        let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1;
+        let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE;
+        let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE;
         let response_filepath = &request.request_uri;
 
         let dir = env::current_dir().unwrap();
@@ -259,8 +259,8 @@ mod tests {
 
         // response part
         let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-        let response_status_code = "404";
-        let response_reason_phrase = "NOT FOUND";
+        let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE;
+        let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE;
         let response_filepath = &request.request_uri;
 
         let dir = env::current_dir().unwrap();
@@ -323,8 +323,8 @@ mod tests {
 
         // response part
         let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-        let response_status_code = "404";
-        let response_reason_phrase = "NOT FOUND";
+        let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE;
+        let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE;
         let response_filepath = &request.request_uri;
 
         let dir = env::current_dir().unwrap();
@@ -387,8 +387,8 @@ mod tests {
 
         // response part
         let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-        let response_status_code = "404";
-        let response_reason_phrase = "NOT FOUND";
+        let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE;
+        let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE;
         let response_filepath = &request.request_uri;
 
         let dir = env::current_dir().unwrap();

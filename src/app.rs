@@ -12,8 +12,8 @@ impl App {
         let mut contents = fs::read_to_string("404.html").unwrap();
         let mut response = Response {
             http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
-            status_code: "404".to_string(),
-            reason_phrase: "NOT FOUND".to_string(),
+            status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE.to_string(),
+            reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE.to_string(),
             headers: vec![],
             message_body: contents
         };

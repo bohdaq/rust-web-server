@@ -45,6 +45,7 @@ pub struct StatusCodeReasonPhrase {
 
 pub struct ResponseStatusCodeReasonPhrase {
     pub(crate) N200_OK: &'static StatusCodeReasonPhrase,
+    pub(crate) N404_NOT_FOUND: &'static StatusCodeReasonPhrase,
 }
 
 pub const RESPONSE_STATUS_CODE_REASON_PHRASES: ResponseStatusCodeReasonPhrase = ResponseStatusCodeReasonPhrase {
@@ -53,4 +54,8 @@ pub const RESPONSE_STATUS_CODE_REASON_PHRASES: ResponseStatusCodeReasonPhrase = 
         REASON_PHRASE: "OK"
     },
 
+    N404_NOT_FOUND: &StatusCodeReasonPhrase {
+        STATUS_CODE: "404",
+        REASON_PHRASE: "NOT FOUND"
+    },
 };
