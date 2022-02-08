@@ -48,7 +48,7 @@ If you want to build rust-web-server on your own, make sure you have [Rust insta
 
 > $ cargo build --release
 > 
-> $ cd target/debug
+> $ cd target/release
 > 
 > $ ./rws --ip=127.0.0.1 --port=8888 --threads=5
 
