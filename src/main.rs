@@ -20,60 +20,84 @@ use crate::response::Response;
 use crate::server::Server;
 use crate::thread_pool::ThreadPool;
 
-struct Config<'a> {
-    port: usize,
-    ip: &'a str,
-    thread_count: usize,
-}
+use clap::{Arg, App};
 
 fn main() {
-    // to run execute following:
-    // cargo run 7777 localhost 6
-    // where
-    // 7777 --> port
-    // localhost --> ip
-    // 6 --> thread count
+    let mut ip = "127.0.0.1";
+    let mut port = 7878;
+    let mut thread_count = 4;
 
-    // alternatively you can run built executable 12
-    // rws 8888 127.0.0.1 12
-    // where
-    // 8888 --> port
-    // 127.0.0.1 --> ip
-    // 12 --> thread count
+    let matches = App::new("rws rust-web-server")
+        .version("0.0.1")
+        .author("Bohdan Tsap <bohdan.tsap@tutanota.com>")
+        .about("Hi, rust-web-server (rws) is a simple web-server written in Rust. The rws server can serve static content inside the directory it is started.")
+        .arg(Arg::new("port")
+            .short('p')
+            .long("port")
+            .takes_value(true)
+            .help("Port"))
+        .arg(Arg::new("ip")
+            .short('i')
+            .long("ip")
+            .takes_value(true)
+            .help("IP or domain"))
+        .arg(Arg::new("threads")
+            .short('t')
+            .long("threads")
+            .takes_value(true)
+            .help("Number of threads"))
+        .get_matches();
 
-    const CONFIG: Config<'static> = Config {
-        port: 7878,
-        ip: "127.0.0.1",
-        thread_count: 4
-    };
-
-    let args: Vec<String> = env::args().collect();
-    println!("{:?}", args);
-
-    if args.len() >= 2 {
-        CONFIG.port = (&args[1]).parse().unwrap();
+    let port_match = matches.value_of("port");
+    match port_match {
+        None => println!("Port is not provided from command line. Using default value: {}", 0),
+        Some(s) => {
+            match s.parse::<i32>() {
+                Ok(n) => {
+                    port = n;
+                    println!("Port: {}", n)
+                },
+                Err(_) => println!("That's not a number! {}", s),
+            }
+        }
     }
 
-    if args.len() >= 3 {
-        CONFIG.ip = &args[2];
+    let ip_match = matches.value_of("ip");
+    match ip_match {
+        None => println!("IP is not provided from command line. . Using default value: {}", 0),
+        Some(s) => {
+            ip = s;
+            println!("IP: {}", s)
+        }
     }
 
-    if args.len() >= 4 {
-        CONFIG.thread_count = (&args[3]).parse().unwrap();
+    let threads_match = matches.value_of("threads");
+    match threads_match {
+        None => println!("Thread count is not provided from command line. Using default value: {}", 0),
+        Some(s) => {
+            match s.parse::<i32>() {
+                Ok(n) => {
+                    thread_count = n;
+                    println!("Thread count: {}", n)
+                },
+                Err(_) => println!("That's not a number! {}", s),
+            }
+        }
     }
 
-    let bind_addr = [CONFIG.ip, ":", CONFIG.port.to_string().as_str()].join(CONSTANTS.EMPTY_STRING);
-    println!("Hello, rust-web-server!\naddress: {}, thread count: {}", bind_addr, CONFIG.thread_count);
+
+    let bind_addr = [ip, ":", port.to_string().as_str()].join(CONSTANTS.EMPTY_STRING);
+    println!("Hello, rust-web-server is up and running: {}", bind_addr);
 
     let listener = TcpListener::bind(bind_addr).unwrap();
-    let pool = ThreadPool::new(CONFIG.thread_count);
+    let pool = ThreadPool::new(thread_count as usize);
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
         println!("Connection established!");
 
         pool.execute(move ||  {
-            Server::handle_connection(stream, CONFIG);
+            Server::handle_connection(stream);
         });
     }
 }
