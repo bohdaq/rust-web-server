@@ -22,7 +22,7 @@ impl App {
         };
 
 
-        if request.request_uri == "/" {
+        if request.request_uri == CONSTANTS.SLASH {
             contents = fs::read_to_string("index.html").unwrap();
             response = Response {
                 http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),

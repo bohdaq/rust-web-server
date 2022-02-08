@@ -37,7 +37,7 @@ mod tests {
         let request_host_header_name = "Host";
         let request_host_header_value = "localhost:7777";
         let request_method = REQUEST_METHODS.GET;
-        let request_uri = "/";
+        let request_uri = CONSTANTS.SLASH;
         let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
 
 
@@ -196,7 +196,7 @@ mod tests {
         let working_directory = dir.as_path().to_str().unwrap();
         let not_found_page_path = "404.html";
 
-        let response_filepath = [working_directory, "/", not_found_page_path].join(CONSTANTS.EMPTY_STRING);
+        let response_filepath = [working_directory, CONSTANTS.SLASH, not_found_page_path].join(CONSTANTS.EMPTY_STRING);
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();
@@ -260,7 +260,7 @@ mod tests {
         let working_directory = dir.as_path().to_str().unwrap();
         let not_found_page_path = "404.html";
 
-        let response_filepath = [working_directory, "/", not_found_page_path].join(CONSTANTS.EMPTY_STRING);
+        let response_filepath = [working_directory, CONSTANTS.SLASH, not_found_page_path].join(CONSTANTS.EMPTY_STRING);
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();
@@ -324,7 +324,7 @@ mod tests {
         let working_directory = dir.as_path().to_str().unwrap();
         let not_found_page_path = "404.html";
 
-        let response_filepath = [working_directory, "/", not_found_page_path].join(CONSTANTS.EMPTY_STRING);
+        let response_filepath = [working_directory, CONSTANTS.SLASH, not_found_page_path].join(CONSTANTS.EMPTY_STRING);
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();
@@ -388,7 +388,7 @@ mod tests {
         let working_directory = dir.as_path().to_str().unwrap();
         let not_found_page_path = "404.html";
 
-        let response_filepath = [working_directory, "/", not_found_page_path].join(CONSTANTS.EMPTY_STRING);
+        let response_filepath = [working_directory, CONSTANTS.SLASH, not_found_page_path].join(CONSTANTS.EMPTY_STRING);
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();

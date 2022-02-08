@@ -3,6 +3,7 @@ pub struct Constants {
     pub(crate) EMPTY_STRING: &'static str,
     pub(crate) WHITESPACE: &'static str,
     pub(crate) HEADER_NAME_VALUE_SEPARATOR: &'static str,
+    pub(crate) SLASH: &'static str,
 }
 
 pub const CONSTANTS: Constants = Constants {
@@ -10,6 +11,7 @@ pub const CONSTANTS: Constants = Constants {
     EMPTY_STRING: "",
     WHITESPACE: " ",
     HEADER_NAME_VALUE_SEPARATOR: ": ",
+    SLASH: "/",
 };
 
 
