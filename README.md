@@ -5,15 +5,42 @@ Hi, rust-web-server (**rws**) is a simple web-server written in Rust. The **rws*
 ## Download
 Currently, you can download binary for [x86_64-unknown-linux-gnu](https://cv.bohdaq.name/rust-web-server/0.0.1/x86_64-unknown-linux-gnu/rws) or [x86_64-apple-darwin](https://cv.bohdaq.name/rust-web-server/0.0.1/x86_64-apple-darwin/rws) platforms. Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
 
+## Installation
+Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PATH_%28variable%29). Then check installation by asking version.
+
+> $ rws --help
+ 
+You will see similar output:
+
+> rws rust-web-server 0.0.1
+> 
+> Bohdan Tsap <bohdan.tsap@tutanota.com>
+> 
+> Hi, rust-web-server (rws) is a simple web-server written in Rust. The rws server can serve static
+> content inside the directory it is started.
+>
+> USAGE:
+> 
+> rws [OPTIONS]
+> 
+>
+> OPTIONS:
+> 
+> -h, --help                 Print help information
+> 
+> -i, --ip <ip>              IP or domain
+> 
+> -p, --port <port>          Port
+> 
+> -t, --threads <threads>    Number of threads
+> 
+> -V, --version              Print version information
+
 ## Run
-Once **rws** binary is added to [$PATH](https://en.wikipedia.org/wiki/PATH_%28variable%29) you can simply run the following from command line
-> $ ./rws
+Simply run the following from command line
 
-or
+> $ rws --ip=127.0.0.1 --port=8888 --threads=5
 
-> $ ./rws 7777 localhost  6
-
-where *7777* is *port*, *localhost* is *ip* and *6* is the *number of threads*
 
 ## Build
 
@@ -23,13 +50,19 @@ If you want to build rust-web-server on your own, make sure you have [Rust insta
 > 
 > $ cd target/debug
 > 
-> $ ./rws
+> $ ./rws --ip=127.0.0.1 --port=8888 --threads=5
 
 You will see similar output:
 
 >["rws"]
 >Hello, rust-web-server!
+>
+>Port: 8888
 > 
->address: 127.0.0.1:7878, thread count: 4
+>IP: 127.0.0.1
+> 
+>Thread count: 5
+> 
+>Hello, rust-web-server is up and running: 127.0.0.1:8888
 
 
