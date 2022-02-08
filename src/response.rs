@@ -19,7 +19,7 @@ impl Response {
     }
 
     pub(crate) fn generate_response(response: Response) -> String {
-        let status = [response.http_version, response.status_code, response.reason_phrase].join(" ");
+        let status = [response.http_version, response.status_code, response.reason_phrase].join(CONSTANTS.WHITESPACE);
 
         let mut headers = CONSTANTS.NEW_LINE_SEPARATOR.to_string();
         for header in response.headers {

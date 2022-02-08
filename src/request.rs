@@ -18,7 +18,7 @@ impl Request {
     }
 
     pub(crate) fn generate_request(request: Request) -> String {
-        let status = [request.method, request.request_uri, request.http_version, CONSTANTS.NEW_LINE_SEPARATOR.to_string()].join(" ");
+        let status = [request.method, request.request_uri, request.http_version, CONSTANTS.NEW_LINE_SEPARATOR.to_string()].join(CONSTANTS.WHITESPACE);
 
         let mut headers = CONSTANTS.EMPTY_STRING.to_string();
         for header in request.headers {
