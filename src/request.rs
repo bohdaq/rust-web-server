@@ -24,7 +24,7 @@ impl Request {
         for header in request.headers {
             let mut header_string = CONSTANTS.EMPTY_STRING.to_string();
             header_string.push_str(&header.header_name);
-            header_string.push_str(": ");
+            header_string.push_str(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR);
             header_string.push_str(&header.header_value);
             header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
             headers.push_str(&header_string);
@@ -68,7 +68,7 @@ impl Request {
 
             // skip method_request_uri_http_version
             if pos != 0  {
-                let header_parts: Vec<&str> = e.split(": ").collect();
+                let header_parts: Vec<&str> = e.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
 
                 let header = Header {
                     header_name: header_parts[0].to_string(),

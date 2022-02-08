@@ -2,12 +2,14 @@ pub struct Constants {
     pub(crate) NEW_LINE_SEPARATOR: &'static str,
     pub(crate) EMPTY_STRING: &'static str,
     pub(crate) WHITESPACE: &'static str,
+    pub(crate) HEADER_NAME_VALUE_SEPARATOR: &'static str,
 }
 
 pub const CONSTANTS: Constants = Constants {
     NEW_LINE_SEPARATOR: "\r\n",
     EMPTY_STRING: "",
     WHITESPACE: " ",
+    HEADER_NAME_VALUE_SEPARATOR: ": ",
 };
 
 

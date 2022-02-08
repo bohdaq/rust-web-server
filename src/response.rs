@@ -25,7 +25,7 @@ impl Response {
         for header in response.headers {
             let mut header_string = CONSTANTS.EMPTY_STRING.to_string();
             header_string.push_str(&header.header_name);
-            header_string.push_str(": ");
+            header_string.push_str(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR);
             header_string.push_str(&header.header_value);
             header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
             headers.push_str(&header_string);
@@ -33,7 +33,7 @@ impl Response {
 
         let mut content_length_header_string = CONSTANTS.EMPTY_STRING.to_string();
         content_length_header_string.push_str("Content-Length");
-        content_length_header_string.push_str(": ");
+        content_length_header_string.push_str(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR);
         content_length_header_string.push_str(response.message_body.len().to_string().as_str());
         content_length_header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
         headers.push_str(&content_length_header_string);
@@ -76,7 +76,7 @@ impl Response {
 
             // skip http_version, status_code and reason phrase
             if pos != 0  {
-                let header_parts: Vec<&str> = e.split(": ").collect();
+                let header_parts: Vec<&str> = e.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
 
                 let header = Header {
                     header_name: header_parts[0].to_string(),
