@@ -4,7 +4,7 @@ use regex::Regex;
 
 #[cfg(test)]
 mod tests {
-    use crate::Config;
+    use crate::{Config, CONSTANTS};
     use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
     use crate::header::Header;
     use crate::request::Request;
@@ -139,7 +139,7 @@ mod tests {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
 
-        let response_filepath = [working_directory, request.request_uri.as_str()].join("");
+        let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();
@@ -203,7 +203,7 @@ mod tests {
         let working_directory = dir.as_path().to_str().unwrap();
         let not_found_page_path = "404.html";
 
-        let response_filepath = [working_directory, "/", not_found_page_path].join("");
+        let response_filepath = [working_directory, "/", not_found_page_path].join(CONSTANTS.EMPTY_STRING);
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();
@@ -267,7 +267,7 @@ mod tests {
         let working_directory = dir.as_path().to_str().unwrap();
         let not_found_page_path = "404.html";
 
-        let response_filepath = [working_directory, "/", not_found_page_path].join("");
+        let response_filepath = [working_directory, "/", not_found_page_path].join(CONSTANTS.EMPTY_STRING);
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();
@@ -331,7 +331,7 @@ mod tests {
         let working_directory = dir.as_path().to_str().unwrap();
         let not_found_page_path = "404.html";
 
-        let response_filepath = [working_directory, "/", not_found_page_path].join("");
+        let response_filepath = [working_directory, "/", not_found_page_path].join(CONSTANTS.EMPTY_STRING);
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();
@@ -395,7 +395,7 @@ mod tests {
         let working_directory = dir.as_path().to_str().unwrap();
         let not_found_page_path = "404.html";
 
-        let response_filepath = [working_directory, "/", not_found_page_path].join("");
+        let response_filepath = [working_directory, "/", not_found_page_path].join(CONSTANTS.EMPTY_STRING);
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();
@@ -458,7 +458,7 @@ mod tests {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
 
-        let response_filepath = [working_directory, request.request_uri.as_str()].join("");
+        let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();
@@ -525,7 +525,7 @@ mod tests {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
 
-        let response_filepath = [working_directory, request.request_uri.as_str()].join("");
+        let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();
@@ -591,7 +591,7 @@ mod tests {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
 
-        let response_filepath = [working_directory, request.request_uri.as_str()].join("");
+        let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
         let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = response_html_file.len().to_string();
@@ -616,7 +616,7 @@ mod tests {
         let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = "401";
         let response_reason_phrase = "Unauthorized";
-        let message_body = "";
+        let message_body = CONSTANTS.EMPTY_STRING;
 
         let response_user_agent_header_name = "User-Agent";
         let response_user_agent_value = "rws/0.0.1";
@@ -670,7 +670,7 @@ mod tests {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
 
-        let response_filepath = [working_directory, filepath].join("");
+        let response_filepath = [working_directory, filepath].join(CONSTANTS.EMPTY_STRING);
         let message_body= fs::read_to_string(response_filepath.to_string()).unwrap();
 
         let response_user_agent_header_name = "User-Agent";

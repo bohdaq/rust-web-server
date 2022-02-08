@@ -5,7 +5,7 @@ use std::{env, fs};
 use crate::request::Request;
 use crate::response::Response;
 use crate::app::App;
-use crate::Config;
+use crate::{Config, CONSTANTS};
 use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 
 
@@ -61,7 +61,7 @@ impl Server {
         if  is_get && is_static_content_read_attempt {
             let dir = env::current_dir().unwrap();
             let working_directory = dir.as_path().to_str().unwrap();
-            let static_filepath = [working_directory, request.request_uri.as_str()].join("");
+            let static_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
 
             let unwrapped_contents = fs::read_to_string(static_filepath);
 

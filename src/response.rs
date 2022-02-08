@@ -23,7 +23,7 @@ impl Response {
 
         let mut headers = CONSTANTS.NEW_LINE_SEPARATOR.to_string();
         for header in response.headers {
-            let mut header_string = "".to_string();
+            let mut header_string = CONSTANTS.EMPTY_STRING.to_string();
             header_string.push_str(&header.header_name);
             header_string.push_str(": ");
             header_string.push_str(&header.header_value);
@@ -31,7 +31,7 @@ impl Response {
             headers.push_str(&header_string);
         }
 
-        let mut content_length_header_string = "".to_string();
+        let mut content_length_header_string = CONSTANTS.EMPTY_STRING.to_string();
         content_length_header_string.push_str("Content-Length");
         content_length_header_string.push_str(": ");
         content_length_header_string.push_str(response.message_body.len().to_string().as_str());
@@ -88,7 +88,7 @@ impl Response {
             }
         }
 
-        let mut message_body = "".to_string();
+        let mut message_body = CONSTANTS.EMPTY_STRING.to_string();
         // parsing message body
         for (pos, e) in strings.iter().enumerate() {
             // start when headers end

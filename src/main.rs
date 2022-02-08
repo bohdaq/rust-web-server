@@ -13,6 +13,7 @@ use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
 use std::{env, fs};
+use crate::constant::CONSTANTS;
 
 use crate::request::Request;
 use crate::response::Response;
@@ -69,7 +70,7 @@ fn main() {
         CONFIG.thread_count = (&args[4]).parse().unwrap();
     }
 
-    let bind_addr = [CONFIG.ip, ":", CONFIG.port.to_string().as_str()].join("");
+    let bind_addr = [CONFIG.ip, ":", CONFIG.port.to_string().as_str()].join(CONSTANTS.EMPTY_STRING);
     println!("Hello, rust-web-server! {}", bind_addr);
 
     let listener = TcpListener::bind(bind_addr).unwrap();
