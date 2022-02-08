@@ -1,5 +1,6 @@
 use crate::header::Header;
 use regex::Regex;
+use crate::constant::CONSTANTS;
 
 pub struct Request {
     pub(crate) method: String,
@@ -17,7 +18,7 @@ impl Request {
     }
 
     pub(crate) fn generate_request(request: Request) -> String {
-        let status = [request.method, request.request_uri, request.http_version, "\r\n".to_string()].join(" ");
+        let status = [request.method, request.request_uri, request.http_version, CONSTANTS.NEW_LINE_SEPARATOR.to_string()].join(" ");
 
         let mut headers = "".to_string();
         for header in request.headers {
@@ -25,14 +26,15 @@ impl Request {
             header_string.push_str(&header.header_name);
             header_string.push_str(": ");
             header_string.push_str(&header.header_value);
-            header_string.push_str("\r\n");
+            header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
             headers.push_str(&header_string);
         }
 
         let request = format!(
-            "{}{}\r\n",
+            "{}{}{}",
             status,
             headers,
+            CONSTANTS.NEW_LINE_SEPARATOR
         );
 
         println!("_____REQUEST______\n{}", request);
@@ -43,7 +45,7 @@ impl Request {
     pub(crate) fn parse_request(request: &String) ->  Request {
         println!("_____REQUEST______\n{}", request);
 
-        let strings: Vec<&str> = request.split("\r\n").collect();
+        let strings: Vec<&str> = request.split(CONSTANTS.NEW_LINE_SEPARATOR).collect();
 
         // parsing method request_uri and http_version
         let method_request_uri_http_version = strings[0].to_string();

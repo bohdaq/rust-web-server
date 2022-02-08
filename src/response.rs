@@ -1,5 +1,6 @@
 use crate::header::Header;
 use regex::Regex;
+use crate::constant::CONSTANTS;
 
 pub struct Response {
     pub(crate) http_version: String,
@@ -20,13 +21,13 @@ impl Response {
     pub(crate) fn generate_response(response: Response) -> String {
         let status = [response.http_version, response.status_code, response.reason_phrase].join(" ");
 
-        let mut headers = "\r\n".to_string();
+        let mut headers = CONSTANTS.NEW_LINE_SEPARATOR.to_string();
         for header in response.headers {
             let mut header_string = "".to_string();
             header_string.push_str(&header.header_name);
             header_string.push_str(": ");
             header_string.push_str(&header.header_value);
-            header_string.push_str("\r\n");
+            header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
             headers.push_str(&header_string);
         }
 
@@ -34,14 +35,15 @@ impl Response {
         content_length_header_string.push_str("Content-Length");
         content_length_header_string.push_str(": ");
         content_length_header_string.push_str(response.message_body.len().to_string().as_str());
-        content_length_header_string.push_str("\r\n");
+        content_length_header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
         headers.push_str(&content_length_header_string);
 
         let response = format!(
-            "{}{}\r\n{}",
+            "{}{}{}{}",
             status,
             headers,
-            response.message_body
+            CONSTANTS.NEW_LINE_SEPARATOR,
+            response.message_body,
         );
 
         println!("_____RESPONSE______\n{}", response);
@@ -50,7 +52,7 @@ impl Response {
     }
 
     pub(crate) fn parse_response(response: String) -> Response {
-        let strings: Vec<&str> = response.split("\r\n").collect();
+        let strings: Vec<&str> = response.split(CONSTANTS.NEW_LINE_SEPARATOR).collect();
 
         // parsing http_version, status_code and reason phrase
         let http_version_status_code_reason_phrase = strings[0].to_string();

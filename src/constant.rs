@@ -1,6 +1,11 @@
 pub struct Constants {
-
+    pub(crate) NEW_LINE_SEPARATOR: &'static str,
 }
+
+pub const CONSTANTS: Constants = Constants {
+    NEW_LINE_SEPARATOR: "\r\n",
+};
+
 
 pub struct RequestMethod {
     pub(crate) GET: &'static str,
