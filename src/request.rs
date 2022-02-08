@@ -10,7 +10,7 @@ pub struct Request {
 }
 
 impl Request {
-    pub(crate) const METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX: &'static str = "(?P<method>\\w+)\\s(?P<request_uri>[./A-Za-z0-9]+)\\s(?P<http_version>[/.A-Za-z0-9]+)";
+    pub(crate) const METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX: &'static str = "(?P<method>\\w+)\\s(?P<request_uri>[._/A-Za-z0-9]+)\\s(?P<http_version>[/.A-Za-z0-9]+)";
 
     pub(crate) fn get_header(&self, name: String) -> Option<&Header> {
         let header =  self.headers.iter().find(|x| x.header_name == name);
