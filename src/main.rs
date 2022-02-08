@@ -50,7 +50,7 @@ fn main() {
 
     let port_match = matches.value_of("port");
     match port_match {
-        None => println!("Port is not provided from command line. Using default value: {}", 0),
+        None => println!("Port is not provided from command line. Using default value: {}", port),
         Some(s) => {
             match s.parse::<i32>() {
                 Ok(n) => {
@@ -64,7 +64,7 @@ fn main() {
 
     let ip_match = matches.value_of("ip");
     match ip_match {
-        None => println!("IP is not provided from command line. . Using default value: {}", 0),
+        None => println!("IP is not provided from command line. . Using default value: {}", ip),
         Some(s) => {
             ip = s;
             println!("IP: {}", s)
@@ -73,7 +73,7 @@ fn main() {
 
     let threads_match = matches.value_of("threads");
     match threads_match {
-        None => println!("Thread count is not provided from command line. Using default value: {}", 0),
+        None => println!("Thread count is not provided from command line. Using default value: {}", thread_count),
         Some(s) => {
             match s.parse::<i32>() {
                 Ok(n) => {

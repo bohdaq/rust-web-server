@@ -4,19 +4,13 @@ use regex::Regex;
 
 #[cfg(test)]
 mod tests {
-    use crate::{Config, CONSTANTS};
+    use crate::CONSTANTS;
     use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
     use crate::header::Header;
     use crate::request::Request;
     use crate::response::Response;
     use crate::server::Server;
     use super::*;
-
-    const CONFIG: Config<'static> = Config {
-        port: 7878,
-        ip: "127.0.0.1",
-        thread_count: 4
-    };
 
     #[test]
     fn http_version_and_status_code_and_reason_phrase_regex() {
@@ -84,7 +78,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request, CONFIG);
+        let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -147,7 +141,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request, CONFIG);
+        let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -211,7 +205,7 @@ mod tests {
         let port: usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request, CONFIG);
+        let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -275,7 +269,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request, CONFIG);
+        let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -339,7 +333,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request, CONFIG);
+        let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -403,7 +397,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request, CONFIG);
+        let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -467,7 +461,7 @@ mod tests {
         let static_directories = vec!["/static".to_string()];
 
 
-        let raw_response: String = Server::process_request(raw_request, CONFIG);
+        let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -533,7 +527,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string(), "/assets".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request, CONFIG);
+        let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -599,7 +593,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string(), "/assets".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request, CONFIG);
+        let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
