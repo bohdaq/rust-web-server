@@ -13,7 +13,6 @@ mod tests {
     use super::*;
 
     const CONFIG: Config<'static> = Config {
-        static_dirs: "/static,/assets",
         port: 7878,
         ip: "127.0.0.1",
         thread_count: 4

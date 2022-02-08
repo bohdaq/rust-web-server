@@ -21,7 +21,6 @@ use crate::server::Server;
 use crate::thread_pool::ThreadPool;
 
 struct Config<'a> {
-    static_dirs: &'a str,
     port: usize,
     ip: &'a str,
     thread_count: usize,
@@ -29,23 +28,20 @@ struct Config<'a> {
 
 fn main() {
     // to run execute following:
-    // cargo run 7777 localhost /static,/assets 6
+    // cargo run 7777 localhost 6
     // where
     // 7777 --> port
     // localhost --> ip
-    // /static,/assets --> list of directories in root with static assets
     // 6 --> thread count
 
     // alternatively you can run built executable 12
-    // rws 8888 127.0.0.1 /images,/assets 12
+    // rws 8888 127.0.0.1 12
     // where
     // 8888 --> port
     // 127.0.0.1 --> ip
-    // /images,/assets --> list of directories in root with static assets
     // 12 --> thread count
 
     const CONFIG: Config<'static> = Config {
-        static_dirs: "/static,/assets",
         port: 7878,
         ip: "127.0.0.1",
         thread_count: 4
@@ -63,15 +59,11 @@ fn main() {
     }
 
     if args.len() >= 4 {
-        CONFIG.static_dirs = &args[3];
-    }
-
-    if args.len() >= 5 {
-        CONFIG.thread_count = (&args[4]).parse().unwrap();
+        CONFIG.thread_count = (&args[3]).parse().unwrap();
     }
 
     let bind_addr = [CONFIG.ip, ":", CONFIG.port.to_string().as_str()].join(CONSTANTS.EMPTY_STRING);
-    println!("Hello, rust-web-server! {}", bind_addr);
+    println!("Hello, rust-web-server!\naddress: {}, thread count: {}", bind_addr, CONFIG.thread_count);
 
     let listener = TcpListener::bind(bind_addr).unwrap();
     let pool = ThreadPool::new(CONFIG.thread_count);
