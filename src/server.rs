@@ -80,7 +80,7 @@ impl Server {
                 let response = Response {
                     http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
                     status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE.to_string(),
-                    reason_phrase: "OK".to_string(),
+                    reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE.to_string(),
                     headers: vec![],
                     message_body: contents
                 };
