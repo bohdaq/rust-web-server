@@ -52,17 +52,14 @@ If you want to build rust-web-server on your own, make sure you have [Rust insta
 > 
 > $ ./rws --ip=127.0.0.1 --port=8888 --threads=5
 
-You will see similar output:
-
->["rws"]
->Hello, rust-web-server!
+>You will see similar output:
 >
 >Port: 8888
-> 
+>
 >IP: 127.0.0.1
-> 
+>
 >Thread count: 5
-> 
+>
 >Hello, rust-web-server is up and running: 127.0.0.1:8888
 
 
