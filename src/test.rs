@@ -15,7 +15,7 @@ mod tests {
 
     #[test]
     fn detect_mime_type_for_mp4_file() {
-        let expected_mime_type = "video/mp4";
+        let expected_mime_type = MimeType::VIDEO_MP4;
         let request_uri = "/drahobrat_pt2/drahobrat_pt2_ver2.mp4";
 
         let actual_mime_type = MimeType::detect_mime_type(request_uri);
@@ -25,7 +25,7 @@ mod tests {
 
     #[test]
     fn detect_mime_type_for_binary_file() {
-        let expected_mime_type = "application/octet-stream";
+        let expected_mime_type = MimeType::APPLICATION_OCTET_STREAM;
         let request_uri = "/rust-web-server/0.0.2/x86_64-unknown-linux-gnu/rws";
 
         let actual_mime_type = MimeType::detect_mime_type(request_uri);
