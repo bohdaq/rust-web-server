@@ -30,6 +30,7 @@ impl MimeType {
     pub(crate) const VIDEO_MP4: &'static str = "video/mp4";
     pub(crate) const VIDEO_OGG: &'static str = "video/ogg";
     pub(crate) const VIDEO_QUICKTIME: &'static str = "video/quicktime";
+    pub(crate) const VIDEO_WEBM: &'static str = "video/webm";
 
 
     const TXT_SUFFIX: &'static str = ".txt";
@@ -66,6 +67,7 @@ impl MimeType {
     const OGG_SUFFIX: &'static str = ".ogg";
     const OGV_SUFFIX: &'static str = ".ogv";
     const MOV_SUFFIX: &'static str = ".mov";
+    const WEBM_SUFFIX: &'static str = ".webm";
 
 
 
@@ -237,6 +239,11 @@ impl MimeType {
         let is_mov_suffix = request_uri.ends_with(MimeType::MOV_SUFFIX);
         if is_mov_suffix {
             return MimeType::VIDEO_QUICKTIME.to_string();
+        }
+
+        let is_webm_suffix = request_uri.ends_with(MimeType::WEBM_SUFFIX);
+        if is_webm_suffix {
+            return MimeType::VIDEO_WEBM.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
