@@ -24,6 +24,7 @@ impl MimeType {
     pub(crate) const AUDIO_FLAC: &'static str = "audio/flac";
     pub(crate) const AUDIO_WAV: &'static str = "audio/wav";
     pub(crate) const AUDIO_MP4: &'static str = "audio/mp4";
+    pub(crate) const AUDIO_OGG: &'static str = "audio/oga";
     pub(crate) const VIDEO_3GP: &'static str = "video/3gpp";
     pub(crate) const VIDEO_MPEG: &'static str = "video/mpeg";
     pub(crate) const VIDEO_MP4: &'static str = "video/mp4";
@@ -57,6 +58,7 @@ impl MimeType {
     const MPG_SUFFIX: &'static str = ".mpg";
     const MPEG_SUFFIX: &'static str = ".mpeg";
     const MP4_SUFFIX: &'static str = ".mp4";
+    const OGA_SUFFIX: &'static str = ".oga";
 
 
 
@@ -179,6 +181,11 @@ impl MimeType {
         let is_m4a_suffix = request_uri.ends_with(MimeType::M4A_SUFFIX);
         if is_m4a_suffix {
             return MimeType::AUDIO_MP4.to_string();
+        }
+
+        let is_oga_suffix = request_uri.ends_with(MimeType::OGA_SUFFIX);
+        if is_oga_suffix {
+            return MimeType::AUDIO_OGG.to_string();
         }
 
         let is_3gp_suffix = request_uri.ends_with(MimeType::N3GP_SUFFIX);
