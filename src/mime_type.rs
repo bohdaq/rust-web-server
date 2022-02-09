@@ -30,8 +30,8 @@ impl MimeType {
             return MimeType::TEXT_CSS.to_string();
         }
 
-        let is_css_suffix = request_uri.ends_with(MimeType::HTML_SUFFIX);
-        if is_css_suffix {
+        let is_html_suffix = request_uri.ends_with(MimeType::HTML_SUFFIX);
+        if is_html_suffix {
             return MimeType::TEXT_HTML.to_string();
         }
 
