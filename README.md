@@ -3,7 +3,7 @@
 Hi, rust-web-server (**rws**) is a simple web-server written in Rust. The **rws** server can serve static content inside the directory it is started.
 
 ## Download
-Currently, you can download binary for [x86_64-unknown-linux-gnu](https://cv.bohdaq.name/rust-web-server/0.0.1/x86_64-unknown-linux-gnu/rws) or [x86_64-apple-darwin](https://cv.bohdaq.name/rust-web-server/0.0.1/x86_64-apple-darwin/rws) platforms. Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
+Currently, you can download binary for [x86_64-unknown-linux-gnu](https://cv.bohdaq.name/rust-web-server/0.0.2/x86_64-unknown-linux-gnu/rws) or [x86_64-apple-darwin](https://cv.bohdaq.name/rust-web-server/0.0.2/x86_64-apple-darwin/rws) platforms. Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
 
 ## Installation
 Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PATH_%28variable%29). To check installation execute the following code:
