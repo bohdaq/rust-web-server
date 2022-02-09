@@ -1,3 +1,6 @@
+use std::ffi::OsStr;
+use std::path::Path;
+
 pub struct MimeType {}
 
 
@@ -11,6 +14,9 @@ impl MimeType {
     pub(crate) const IMAGE_APNG: &'static str = "image/apng";
     pub(crate) const IMAGE_AVIF: &'static str = "image/avif";
     pub(crate) const IMAGE_GIF: &'static str = "image/gif";
+    pub(crate) const IMAGE_JPEG: &'static str = "image/jpeg";
+
+    const FILE_EXTENSION_SEPARATOR: &'static str = ".";
 
     const MP4_SUFFIX: &'static str = ".mp4";
     const TXT_SUFFIX: &'static str = ".txt";
@@ -20,6 +26,11 @@ impl MimeType {
     const APNG_SUFFIX: &'static str = ".apng";
     const AVIF_SUFFIX: &'static str = ".avif";
     const GIF_SUFFIX: &'static str = ".gif";
+    const JPG_SUFFIX: &'static str = ".jpg";
+    const JPEG_SUFFIX: &'static str = ".jpeg";
+    const JPE_SUFFIX: &'static str = ".jpe";
+    const JIF_SUFFIX: &'static str = ".jif";
+    const JFIF_SUFFIX: &'static str = ".jfif";
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
 
@@ -63,7 +74,24 @@ impl MimeType {
             return MimeType::IMAGE_GIF.to_string();
         }
 
+        let mut is_jpeg_suffix = false;
+        let boxed_extension = MimeType::get_extension_from_filename(request_uri);
+        if !boxed_extension.is_none() {
+            let JPEG_SUFFIXES = vec![MimeType::JPG_SUFFIX, MimeType::JPEG_SUFFIX, MimeType::JPE_SUFFIX, MimeType::JIF_SUFFIX, MimeType::JFIF_SUFFIX];
+            let extension = boxed_extension.unwrap();
+            let suffix = [".", extension].join("");
+            is_jpeg_suffix = JPEG_SUFFIXES.contains(&suffix.as_str())
+        }
+
+        if is_jpeg_suffix {
+            return MimeType::IMAGE_JPEG.to_string();
+        }
+
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
+    }
+
+    pub(crate) fn get_extension_from_filename(filename: &str) -> Option<&str> {
+        Path::new(filename).extension().and_then(OsStr::to_str)
     }
 
 }

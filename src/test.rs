@@ -104,6 +104,56 @@ mod tests {
     }
 
     #[test]
+    fn detect_mime_type_for_image_jpg_file() {
+        let expected_mime_type = MimeType::IMAGE_JPEG;
+        let request_uri = "/dir/test.jpg";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_image_jpeg_file() {
+        let expected_mime_type = MimeType::IMAGE_JPEG;
+        let request_uri = "/dir/test.jpeg";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_image_jpe_file() {
+        let expected_mime_type = MimeType::IMAGE_JPEG;
+        let request_uri = "/dir/test.jpe";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_image_jif_file() {
+        let expected_mime_type = MimeType::IMAGE_JPEG;
+        let request_uri = "/dir/test.jif";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_image_jfif_file() {
+        let expected_mime_type = MimeType::IMAGE_JPEG;
+        let request_uri = "/dir/test.jfif";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
     fn method_and_request_uri_and_http_version_regex() {
         let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
         let caps = re.captures("GET / HTTP/1.1").unwrap();
