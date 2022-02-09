@@ -15,8 +15,7 @@ impl MimeType {
     pub(crate) const IMAGE_AVIF: &'static str = "image/avif";
     pub(crate) const IMAGE_GIF: &'static str = "image/gif";
     pub(crate) const IMAGE_JPEG: &'static str = "image/jpeg";
-
-    const FILE_EXTENSION_SEPARATOR: &'static str = ".";
+    pub(crate) const IMAGE_PNG: &'static str = "image/png";
 
     const MP4_SUFFIX: &'static str = ".mp4";
     const TXT_SUFFIX: &'static str = ".txt";
@@ -31,6 +30,7 @@ impl MimeType {
     const JPE_SUFFIX: &'static str = ".jpe";
     const JIF_SUFFIX: &'static str = ".jif";
     const JFIF_SUFFIX: &'static str = ".jfif";
+    const PNG_SUFFIX: &'static str = ".png";
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
 
@@ -86,6 +86,13 @@ impl MimeType {
         if is_jpeg_suffix {
             return MimeType::IMAGE_JPEG.to_string();
         }
+
+        let is_png_suffix = request_uri.ends_with(MimeType::PNG_SUFFIX);
+        if is_png_suffix {
+            return MimeType::IMAGE_PNG.to_string();
+        }
+
+
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
     }
