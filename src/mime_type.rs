@@ -24,6 +24,7 @@ impl MimeType {
     pub(crate) const AUDIO_AAC: &'static str = "audio/aac";
     pub(crate) const AUDIO_FLAC: &'static str = "audio/flac";
     pub(crate) const AUDIO_WAV: &'static str = "audio/wav";
+    pub(crate) const VIDEO_3GP: &'static str = "video/3gpp";
 
     const MP4_SUFFIX: &'static str = ".mp4";
     const TXT_SUFFIX: &'static str = ".txt";
@@ -49,6 +50,7 @@ impl MimeType {
     const AAC_SUFFIX: &'static str = ".aac";
     const FLAC_SUFFIX: &'static str = ".flac";
     const WAV_SUFFIX: &'static str = ".wav";
+    const N3GP_SUFFIX: &'static str = ".3gp";
 
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
@@ -165,6 +167,11 @@ impl MimeType {
         let is_wav_suffix = request_uri.ends_with(MimeType::WAV_SUFFIX);
         if is_wav_suffix {
             return MimeType::AUDIO_WAV.to_string();
+        }
+
+        let is_3gp_suffix = request_uri.ends_with(MimeType::N3GP_SUFFIX);
+        if is_3gp_suffix {
+            return MimeType::VIDEO_3GP.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
