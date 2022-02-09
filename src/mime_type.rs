@@ -6,7 +6,6 @@ pub struct MimeType {}
 
 impl MimeType {
     pub(crate) const APPLICATION_OCTET_STREAM: &'static str = "application/octet-stream";
-    pub(crate) const VIDEO_MP4: &'static str = "video/mp4";
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
     pub(crate) const TEXT_CSS: &'static str = "text/css";
     pub(crate) const TEXT_HTML: &'static str = "text/html";
@@ -24,10 +23,12 @@ impl MimeType {
     pub(crate) const AUDIO_AAC: &'static str = "audio/aac";
     pub(crate) const AUDIO_FLAC: &'static str = "audio/flac";
     pub(crate) const AUDIO_WAV: &'static str = "audio/wav";
+    pub(crate) const AUDIO_MP4: &'static str = "audio/mp4";
     pub(crate) const VIDEO_3GP: &'static str = "video/3gpp";
     pub(crate) const VIDEO_MPEG: &'static str = "video/mpeg";
+    pub(crate) const VIDEO_MP4: &'static str = "video/mp4";
 
-    const MP4_SUFFIX: &'static str = ".mp4";
+
     const TXT_SUFFIX: &'static str = ".txt";
     const CSS_SUFFIX: &'static str = ".css";
     const HTML_SUFFIX: &'static str = ".html";
@@ -51,9 +52,12 @@ impl MimeType {
     const AAC_SUFFIX: &'static str = ".aac";
     const FLAC_SUFFIX: &'static str = ".flac";
     const WAV_SUFFIX: &'static str = ".wav";
+    const M4A_SUFFIX: &'static str = ".m4a";
     const N3GP_SUFFIX: &'static str = ".3gp";
     const MPG_SUFFIX: &'static str = ".mpg";
     const MPEG_SUFFIX: &'static str = ".mpeg";
+    const MP4_SUFFIX: &'static str = ".mp4";
+
 
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
@@ -170,6 +174,11 @@ impl MimeType {
         let is_wav_suffix = request_uri.ends_with(MimeType::WAV_SUFFIX);
         if is_wav_suffix {
             return MimeType::AUDIO_WAV.to_string();
+        }
+
+        let is_m4a_suffix = request_uri.ends_with(MimeType::M4A_SUFFIX);
+        if is_m4a_suffix {
+            return MimeType::AUDIO_MP4.to_string();
         }
 
         let is_3gp_suffix = request_uri.ends_with(MimeType::N3GP_SUFFIX);
