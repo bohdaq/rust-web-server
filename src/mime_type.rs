@@ -21,6 +21,7 @@ impl MimeType {
     pub(crate) const IMAGE_BMP: &'static str = "image/bmp";
     pub(crate) const IMAGE_ICO: &'static str = "image/x-icon";
     pub(crate) const IMAGE_TIFF: &'static str = "image/tiff";
+    pub(crate) const AUDIO_AAC: &'static str = "audio/aac";
 
     const MP4_SUFFIX: &'static str = ".mp4";
     const TXT_SUFFIX: &'static str = ".txt";
@@ -43,6 +44,7 @@ impl MimeType {
     const CUR_SUFFIX: &'static str = ".cur";
     const TIF_SUFFIX: &'static str = ".tif";
     const TIFF_SUFFIX: &'static str = ".tiff";
+    const AAC_SUFFIX: &'static str = ".aac";
 
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
@@ -144,6 +146,11 @@ impl MimeType {
 
         if is_tiff_suffix {
             return MimeType::IMAGE_TIFF.to_string();
+        }
+
+        let is_aac_suffix = request_uri.ends_with(MimeType::AAC_SUFFIX);
+        if is_aac_suffix {
+            return MimeType::AUDIO_AAC.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
