@@ -304,6 +304,36 @@ mod tests {
     }
 
     #[test]
+    fn detect_mime_type_for_video_mp4_file() {
+        let expected_mime_type = MimeType::VIDEO_MP4;
+        let request_uri = "/dir/test.mp4";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_video_m4v_file() {
+        let expected_mime_type = MimeType::VIDEO_MP4;
+        let request_uri = "/dir/test.m4v";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_video_m4p_file() {
+        let expected_mime_type = MimeType::VIDEO_MP4;
+        let request_uri = "/dir/test.m4p";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
     fn method_and_request_uri_and_http_version_regex() {
         let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
         let caps = re.captures("GET / HTTP/1.1").unwrap();

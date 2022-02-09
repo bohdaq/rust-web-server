@@ -58,16 +58,13 @@ impl MimeType {
     const MPG_SUFFIX: &'static str = ".mpg";
     const MPEG_SUFFIX: &'static str = ".mpeg";
     const MP4_SUFFIX: &'static str = ".mp4";
+    const M4V_SUFFIX: &'static str = ".m4v";
+    const M4P_SUFFIX: &'static str = ".m4p";
     const OGA_SUFFIX: &'static str = ".oga";
 
 
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
-
-        let is_video_mp4 = request_uri.ends_with(MimeType::MP4_SUFFIX);
-        if is_video_mp4 {
-            return MimeType::VIDEO_MP4.to_string();
-        }
 
         let is_txt_suffix = request_uri.ends_with(MimeType::TXT_SUFFIX);
         if is_txt_suffix {
@@ -204,6 +201,19 @@ impl MimeType {
 
         if is_mpeg_suffix {
             return MimeType::VIDEO_MPEG.to_string();
+        }
+
+        let mut is_video_mp4_suffix = false;
+        let boxed_extension = MimeType::get_extension_from_filename(request_uri);
+        if !boxed_extension.is_none() {
+            let MP4_SUFFIXES = vec![MimeType::MP4_SUFFIX, MimeType::M4V_SUFFIX, MimeType::M4P_SUFFIX];
+            let extension = boxed_extension.unwrap();
+            let suffix = [".", extension].join("");
+            is_video_mp4_suffix = MP4_SUFFIXES.contains(&suffix.as_str())
+        }
+
+        if is_video_mp4_suffix {
+            return MimeType::VIDEO_MP4.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
