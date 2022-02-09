@@ -25,6 +25,7 @@ impl MimeType {
     pub(crate) const AUDIO_FLAC: &'static str = "audio/flac";
     pub(crate) const AUDIO_WAV: &'static str = "audio/wav";
     pub(crate) const VIDEO_3GP: &'static str = "video/3gpp";
+    pub(crate) const VIDEO_MPEG: &'static str = "video/mpeg";
 
     const MP4_SUFFIX: &'static str = ".mp4";
     const TXT_SUFFIX: &'static str = ".txt";
@@ -51,6 +52,8 @@ impl MimeType {
     const FLAC_SUFFIX: &'static str = ".flac";
     const WAV_SUFFIX: &'static str = ".wav";
     const N3GP_SUFFIX: &'static str = ".3gp";
+    const MPG_SUFFIX: &'static str = ".mpg";
+    const MPEG_SUFFIX: &'static str = ".mpeg";
 
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
@@ -172,6 +175,19 @@ impl MimeType {
         let is_3gp_suffix = request_uri.ends_with(MimeType::N3GP_SUFFIX);
         if is_3gp_suffix {
             return MimeType::VIDEO_3GP.to_string();
+        }
+
+        let mut is_mpeg_suffix = false;
+        let boxed_extension = MimeType::get_extension_from_filename(request_uri);
+        if !boxed_extension.is_none() {
+            let MPEG_SUFFIXES = vec![MimeType::MPG_SUFFIX, MimeType::MPEG_SUFFIX];
+            let extension = boxed_extension.unwrap();
+            let suffix = [".", extension].join("");
+            is_mpeg_suffix = MPEG_SUFFIXES.contains(&suffix.as_str())
+        }
+
+        if is_mpeg_suffix {
+            return MimeType::VIDEO_MPEG.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
