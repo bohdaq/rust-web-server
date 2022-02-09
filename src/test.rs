@@ -7,10 +7,31 @@ mod tests {
     use crate::CONSTANTS;
     use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
     use crate::header::Header;
+    use crate::mime_type::MimeType;
     use crate::request::Request;
     use crate::response::Response;
     use crate::server::Server;
     use super::*;
+
+    #[test]
+    fn detect_mime_type_for_mp4_file() {
+        let expected_mime_type = "video/mp4";
+        let request_uri = "/drahobrat_pt2/drahobrat_pt2_ver2.mp4";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_binary_file() {
+        let expected_mime_type = "application/octet-stream";
+        let request_uri = "/rust-web-server/0.0.2/x86_64-unknown-linux-gnu/rws";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
 
     #[test]
     fn method_and_request_uri_and_http_version_regex() {

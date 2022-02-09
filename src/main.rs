@@ -6,6 +6,7 @@ mod test;
 mod app;
 mod thread_pool;
 mod constant;
+mod mime_type;
 
 extern crate core;
 
