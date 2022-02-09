@@ -8,12 +8,14 @@ impl MimeType {
     pub(crate) const TEXT_CSS: &'static str = "text/css";
     pub(crate) const TEXT_HTML: &'static str = "text/html";
     pub(crate) const TEXT_JAVASCRIPT: &'static str = "text/javascript";
+    pub(crate) const IMAGE_APNG: &'static str = "image/apng";
 
     const MP4_SUFFIX: &'static str = ".mp4";
     const TXT_SUFFIX: &'static str = ".txt";
     const CSS_SUFFIX: &'static str = ".css";
     const HTML_SUFFIX: &'static str = ".html";
     const JS_SUFFIX: &'static str = ".js";
+    const APNG_SUFFIX: &'static str = ".apng";
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
 
@@ -40,6 +42,11 @@ impl MimeType {
         let is_js_suffix = request_uri.ends_with(MimeType::JS_SUFFIX);
         if is_js_suffix {
             return MimeType::TEXT_JAVASCRIPT.to_string();
+        }
+
+        let is_apng_suffix = request_uri.ends_with(MimeType::APNG_SUFFIX);
+        if is_apng_suffix {
+            return MimeType::IMAGE_APNG.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
