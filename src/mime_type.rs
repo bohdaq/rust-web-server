@@ -19,6 +19,7 @@ impl MimeType {
     pub(crate) const IMAGE_SVG: &'static str = "image/svg+xml";
     pub(crate) const IMAGE_WEBP: &'static str = "image/webp";
     pub(crate) const IMAGE_BMP: &'static str = "image/bmp";
+    pub(crate) const IMAGE_ICO: &'static str = "image/x-icon";
 
     const MP4_SUFFIX: &'static str = ".mp4";
     const TXT_SUFFIX: &'static str = ".txt";
@@ -37,6 +38,8 @@ impl MimeType {
     const SVG_SUFFIX: &'static str = ".svg";
     const WEBP_SUFFIX: &'static str = ".webp";
     const BMP_SUFFIX: &'static str = ".bmp";
+    const ICO_SUFFIX: &'static str = ".ico";
+    const CUR_SUFFIX: &'static str = ".cur";
 
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
@@ -112,6 +115,19 @@ impl MimeType {
         let is_bmp_suffix = request_uri.ends_with(MimeType::BMP_SUFFIX);
         if is_bmp_suffix {
             return MimeType::IMAGE_BMP.to_string();
+        }
+
+        let mut is_ico_suffix = false;
+        let boxed_extension = MimeType::get_extension_from_filename(request_uri);
+        if !boxed_extension.is_none() {
+            let ICO_SUFFIXES = vec![MimeType::ICO_SUFFIX, MimeType::CUR_SUFFIX];
+            let extension = boxed_extension.unwrap();
+            let suffix = [".", extension].join("");
+            is_ico_suffix = ICO_SUFFIXES.contains(&suffix.as_str())
+        }
+
+        if is_ico_suffix {
+            return MimeType::IMAGE_ICO.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
