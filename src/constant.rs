@@ -4,6 +4,8 @@ pub struct Constants {
     pub(crate) WHITESPACE: &'static str,
     pub(crate) HEADER_NAME_VALUE_SEPARATOR: &'static str,
     pub(crate) SLASH: &'static str,
+    pub(crate) CHARSET: &'static str,
+    pub(crate) UTF_8: &'static str,
 }
 
 pub const CONSTANTS: Constants = Constants {
@@ -12,6 +14,8 @@ pub const CONSTANTS: Constants = Constants {
     WHITESPACE: " ",
     HEADER_NAME_VALUE_SEPARATOR: ": ",
     SLASH: "/",
+    CHARSET: "charset",
+    UTF_8: "UTF-8",
 };
 
 
@@ -71,4 +75,12 @@ pub const RESPONSE_STATUS_CODE_REASON_PHRASES: ResponseStatusCodeReasonPhrase = 
         STATUS_CODE: "404",
         REASON_PHRASE: "NOT FOUND"
     },
+};
+
+pub struct HTTPHeader {
+    pub(crate) CONTENT_TYPE: &'static str,
+}
+
+pub const HTTP_HEADERS: HTTPHeader = HTTPHeader {
+    CONTENT_TYPE: "Content-Type",
 };
