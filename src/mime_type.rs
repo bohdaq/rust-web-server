@@ -9,6 +9,7 @@ impl MimeType {
     pub(crate) const TEXT_HTML: &'static str = "text/html";
     pub(crate) const TEXT_JAVASCRIPT: &'static str = "text/javascript";
     pub(crate) const IMAGE_APNG: &'static str = "image/apng";
+    pub(crate) const IMAGE_AVIF: &'static str = "image/avif";
 
     const MP4_SUFFIX: &'static str = ".mp4";
     const TXT_SUFFIX: &'static str = ".txt";
@@ -16,6 +17,7 @@ impl MimeType {
     const HTML_SUFFIX: &'static str = ".html";
     const JS_SUFFIX: &'static str = ".js";
     const APNG_SUFFIX: &'static str = ".apng";
+    const AVIF_SUFFIX: &'static str = ".avif";
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
 
@@ -47,6 +49,11 @@ impl MimeType {
         let is_apng_suffix = request_uri.ends_with(MimeType::APNG_SUFFIX);
         if is_apng_suffix {
             return MimeType::IMAGE_APNG.to_string();
+        }
+
+        let is_avif_suffix = request_uri.ends_with(MimeType::AVIF_SUFFIX);
+        if is_avif_suffix {
+            return MimeType::IMAGE_AVIF.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
