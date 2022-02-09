@@ -6,10 +6,12 @@ impl MimeType {
     pub(crate) const VIDEO_MP4: &'static str = "video/mp4";
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
     pub(crate) const TEXT_CSS: &'static str = "text/css";
+    pub(crate) const TEXT_HTML: &'static str = "text/html";
 
     const MP4_SUFFIX: &'static str = ".mp4";
     const TXT_SUFFIX: &'static str = ".txt";
     const CSS_SUFFIX: &'static str = ".css";
+    const HTML_SUFFIX: &'static str = ".html";
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
 
@@ -26,6 +28,11 @@ impl MimeType {
         let is_css_suffix = request_uri.ends_with(MimeType::CSS_SUFFIX);
         if is_css_suffix {
             return MimeType::TEXT_CSS.to_string();
+        }
+
+        let is_css_suffix = request_uri.ends_with(MimeType::HTML_SUFFIX);
+        if is_css_suffix {
+            return MimeType::TEXT_HTML.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
