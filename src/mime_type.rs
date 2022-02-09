@@ -18,6 +18,7 @@ impl MimeType {
     pub(crate) const IMAGE_PNG: &'static str = "image/png";
     pub(crate) const IMAGE_SVG: &'static str = "image/svg+xml";
     pub(crate) const IMAGE_WEBP: &'static str = "image/webp";
+    pub(crate) const IMAGE_BMP: &'static str = "image/bmp";
 
     const MP4_SUFFIX: &'static str = ".mp4";
     const TXT_SUFFIX: &'static str = ".txt";
@@ -35,6 +36,7 @@ impl MimeType {
     const PNG_SUFFIX: &'static str = ".png";
     const SVG_SUFFIX: &'static str = ".svg";
     const WEBP_SUFFIX: &'static str = ".webp";
+    const BMP_SUFFIX: &'static str = ".bmp";
 
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
@@ -105,6 +107,11 @@ impl MimeType {
         let is_webp_suffix = request_uri.ends_with(MimeType::WEBP_SUFFIX);
         if is_webp_suffix {
             return MimeType::IMAGE_WEBP.to_string();
+        }
+
+        let is_bmp_suffix = request_uri.ends_with(MimeType::BMP_SUFFIX);
+        if is_bmp_suffix {
+            return MimeType::IMAGE_BMP.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
