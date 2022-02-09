@@ -16,6 +16,7 @@ impl MimeType {
     pub(crate) const IMAGE_GIF: &'static str = "image/gif";
     pub(crate) const IMAGE_JPEG: &'static str = "image/jpeg";
     pub(crate) const IMAGE_PNG: &'static str = "image/png";
+    pub(crate) const IMAGE_SVG: &'static str = "image/svg+xml";
 
     const MP4_SUFFIX: &'static str = ".mp4";
     const TXT_SUFFIX: &'static str = ".txt";
@@ -31,6 +32,7 @@ impl MimeType {
     const JIF_SUFFIX: &'static str = ".jif";
     const JFIF_SUFFIX: &'static str = ".jfif";
     const PNG_SUFFIX: &'static str = ".png";
+    const SVG_SUFFIX: &'static str = ".svg";
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
 
@@ -72,6 +74,11 @@ impl MimeType {
         let is_gif_suffix = request_uri.ends_with(MimeType::GIF_SUFFIX);
         if is_gif_suffix {
             return MimeType::IMAGE_GIF.to_string();
+        }
+
+        let is_svg_suffix = request_uri.ends_with(MimeType::SVG_SUFFIX);
+        if is_svg_suffix {
+            return MimeType::IMAGE_SVG.to_string();
         }
 
         let mut is_jpeg_suffix = false;

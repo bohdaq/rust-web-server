@@ -1,6 +1,7 @@
 use std::{env, fs};
 use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::CONSTANTS;
+use crate::header::Header;
 
 use crate::request::Request;
 use crate::response::Response;
