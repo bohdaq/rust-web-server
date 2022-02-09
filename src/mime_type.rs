@@ -28,6 +28,7 @@ impl MimeType {
     pub(crate) const VIDEO_3GP: &'static str = "video/3gpp";
     pub(crate) const VIDEO_MPEG: &'static str = "video/mpeg";
     pub(crate) const VIDEO_MP4: &'static str = "video/mp4";
+    pub(crate) const VIDEO_OGG: &'static str = "video/ogg";
 
 
     const TXT_SUFFIX: &'static str = ".txt";
@@ -61,6 +62,8 @@ impl MimeType {
     const M4V_SUFFIX: &'static str = ".m4v";
     const M4P_SUFFIX: &'static str = ".m4p";
     const OGA_SUFFIX: &'static str = ".oga";
+    const OGG_SUFFIX: &'static str = ".ogg";
+    const OGV_SUFFIX: &'static str = ".ogv";
 
 
 
@@ -214,6 +217,19 @@ impl MimeType {
 
         if is_video_mp4_suffix {
             return MimeType::VIDEO_MP4.to_string();
+        }
+
+        let mut is_video_ogg_suffix = false;
+        let boxed_extension = MimeType::get_extension_from_filename(request_uri);
+        if !boxed_extension.is_none() {
+            let OGG_SUFFIXES = vec![MimeType::OGG_SUFFIX, MimeType::OGV_SUFFIX];
+            let extension = boxed_extension.unwrap();
+            let suffix = [".", extension].join("");
+            is_video_ogg_suffix = OGG_SUFFIXES.contains(&suffix.as_str())
+        }
+
+        if is_video_ogg_suffix {
+            return MimeType::VIDEO_OGG.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();

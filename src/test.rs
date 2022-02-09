@@ -324,6 +324,26 @@ mod tests {
     }
 
     #[test]
+    fn detect_mime_type_for_video_ogg_file() {
+        let expected_mime_type = MimeType::VIDEO_OGG;
+        let request_uri = "/dir/test.ogg";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_video_ogv_file() {
+        let expected_mime_type = MimeType::VIDEO_OGG;
+        let request_uri = "/dir/test.ogv";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
     fn detect_mime_type_for_video_m4p_file() {
         let expected_mime_type = MimeType::VIDEO_MP4;
         let request_uri = "/dir/test.m4p";
