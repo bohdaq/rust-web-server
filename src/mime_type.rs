@@ -7,6 +7,7 @@ pub struct MimeType {}
 impl MimeType {
     pub(crate) const APPLICATION_OCTET_STREAM: &'static str = "application/octet-stream";
     pub(crate) const APPLICATION_ABIWORD: &'static str = "application/x-abiword";
+    pub(crate) const APPLICATION_VND_AMAZON_EBOOK: &'static str = "application/vnd.amazon.ebook";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -80,6 +81,7 @@ impl MimeType {
     const WEBM_SUFFIX: &'static str = ".webm";
     const ABW_SUFFIX: &'static str = ".abw";
     const AVI_SUFFIX: &'static str = ".avi";
+    const AZV_SUFFIX: &'static str = ".azw";
 
 
 
@@ -266,6 +268,11 @@ impl MimeType {
         let is_avi_suffix = request_uri.ends_with(MimeType::AVI_SUFFIX);
         if is_avi_suffix {
             return MimeType::VIDEO_X_MSVIDEO.to_string();
+        }
+
+        let is_azv_suffix = request_uri.ends_with(MimeType::AZV_SUFFIX);
+        if is_azv_suffix {
+            return MimeType::APPLICATION_VND_AMAZON_EBOOK.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
