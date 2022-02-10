@@ -25,6 +25,7 @@ impl MimeType {
     pub(crate) const APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET: &'static str = "application/vnd.oasis.opendocument.spreadsheet";
     pub(crate) const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT: &'static str = "application/vnd.oasis.opendocument.text";
     pub(crate) const APPLICATION_OGG: &'static str = "application/ogg";
+    pub(crate) const APPLICATION_PDF: &'static str = "application/pdf";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -135,6 +136,7 @@ impl MimeType {
     const OGX_SUFFIX: &'static str = ".ogx";
     const OPUS_SUFFIX: &'static str = ".opus";
     const OTF_SUFFIX: &'static str = ".otf";
+    const PDF_SUFFIX: &'static str = ".pdf";
 
 
 
@@ -471,6 +473,11 @@ impl MimeType {
         let is_otf_suffix = request_uri.ends_with(MimeType::OTF_SUFFIX);
         if is_otf_suffix {
             return MimeType::FONT_OTF.to_string();
+        }
+
+        let is_pdf_suffix = request_uri.ends_with(MimeType::PDF_SUFFIX);
+        if is_pdf_suffix {
+            return MimeType::APPLICATION_PDF.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
