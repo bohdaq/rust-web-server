@@ -604,6 +604,36 @@ mod tests {
     }
 
     #[test]
+    fn detect_mime_type_for_odp_file() {
+        let expected_mime_type = MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION;
+        let request_uri = "/dir/test.odp";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_ods_file() {
+        let expected_mime_type = MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET;
+        let request_uri = "/dir/test.ods";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_odt_file() {
+        let expected_mime_type = MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT;
+        let request_uri = "/dir/test.odt";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
     fn method_and_request_uri_and_http_version_regex() {
         let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
         let caps = re.captures("GET / HTTP/1.1").unwrap();

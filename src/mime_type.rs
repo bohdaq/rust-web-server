@@ -21,6 +21,9 @@ impl MimeType {
     pub(crate) const APPLICATION_JSON: &'static str = "application/json";
     pub(crate) const APPLICATION_JSONLD: &'static str = "application/ld+json";
     pub(crate) const APPLICATION_VND_APPLE_INSTALLER_XML: &'static str = "application/vnd.apple.installer+xml";
+    pub(crate) const APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION: &'static str = "application/vnd.oasis.opendocument.presentation";
+    pub(crate) const APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET: &'static str = "application/vnd.oasis.opendocument.spreadsheet";
+    pub(crate) const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT: &'static str = "application/vnd.oasis.opendocument.text";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -121,6 +124,9 @@ impl MimeType {
     const MID_SUFFIX: &'static str = ".mid";
     const MP3_SUFFIX: &'static str = ".mp3";
     const MPKG_SUFFIX: &'static str = ".mpkg";
+    const ODP_SUFFIX: &'static str = ".odp";
+    const ODS_SUFFIX: &'static str = ".ods";
+    const ODT_SUFFIX: &'static str = ".odt";
 
 
 
@@ -427,6 +433,21 @@ impl MimeType {
         let is_mpkg_suffix = request_uri.ends_with(MimeType::MPKG_SUFFIX);
         if is_mpkg_suffix {
             return MimeType::APPLICATION_VND_APPLE_INSTALLER_XML.to_string();
+        }
+
+        let is_odp_suffix = request_uri.ends_with(MimeType::ODP_SUFFIX);
+        if is_odp_suffix {
+            return MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION.to_string();
+        }
+
+        let is_ods_suffix = request_uri.ends_with(MimeType::ODS_SUFFIX);
+        if is_ods_suffix {
+            return MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET.to_string();
+        }
+
+        let is_odt_suffix = request_uri.ends_with(MimeType::ODT_SUFFIX);
+        if is_odt_suffix {
+            return MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
