@@ -32,6 +32,8 @@ impl MimeType {
     pub(crate) const APPLICATION_VND_RAR: &'static str = "application/vnd.rar";
     pub(crate) const APPLICATION_RTF: &'static str = "application/rtf";
     pub(crate) const APPLICATION_X_SH: &'static str = "application/x-sh";
+    pub(crate) const APPLICATION_X_SHOCKWAVE_FLASH: &'static str = "application/x-shockwave-flash";
+    pub(crate) const APPLICATION_X_TAR: &'static str = "application/x-tar";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -72,6 +74,7 @@ impl MimeType {
     pub(crate) const VIDEO_QUICKTIME: &'static str = "video/quicktime";
     pub(crate) const VIDEO_WEBM: &'static str = "video/webm";
     pub(crate) const VIDEO_X_MSVIDEO: &'static str = "video/x-msvideo";
+    pub(crate) const VIDEO_MP2T: &'static str = "video/mp2t";
 
     pub(crate) const FONT_OTF: &'static str = "font/otf";
 
@@ -149,6 +152,9 @@ impl MimeType {
     const RAR_SUFFIX: &'static str = ".rar";
     const RTF_SUFFIX: &'static str = ".rtf";
     const SH_SUFFIX: &'static str = ".sh";
+    const SWF_SUFFIX: &'static str = ".swf";
+    const TAR_SUFFIX: &'static str = ".tar";
+    const TS_SUFFIX: &'static str = ".ts";
 
 
 
@@ -520,6 +526,21 @@ impl MimeType {
         let is_sh_suffix = request_uri.ends_with(MimeType::SH_SUFFIX);
         if is_sh_suffix {
             return MimeType::APPLICATION_X_SH.to_string();
+        }
+
+        let is_swf_suffix = request_uri.ends_with(MimeType::SWF_SUFFIX);
+        if is_swf_suffix {
+            return MimeType::APPLICATION_X_SHOCKWAVE_FLASH.to_string();
+        }
+
+        let is_tar_suffix = request_uri.ends_with(MimeType::TAR_SUFFIX);
+        if is_tar_suffix {
+            return MimeType::APPLICATION_X_TAR.to_string();
+        }
+
+        let is_ts_suffix = request_uri.ends_with(MimeType::TS_SUFFIX);
+        if is_ts_suffix {
+            return MimeType::VIDEO_MP2T.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
