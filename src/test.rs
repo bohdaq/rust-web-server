@@ -674,6 +674,46 @@ mod tests {
     }
 
     #[test]
+    fn detect_mime_type_for_php_file() {
+        let expected_mime_type = MimeType::APPLICATION_X_HTTPD_PHP;
+        let request_uri = "/dir/test.php";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_ppt_file() {
+        let expected_mime_type = MimeType::APPLICATION_VND_MS_POWERPOINT;
+        let request_uri = "/dir/test.ppt";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_pptx_file() {
+        let expected_mime_type = MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION;
+        let request_uri = "/dir/test.pptx";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_rar_file() {
+        let expected_mime_type = MimeType::APPLICATION_VND_RAR;
+        let request_uri = "/dir/test.rar";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
     fn method_and_request_uri_and_http_version_regex() {
         let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
         let caps = re.captures("GET / HTTP/1.1").unwrap();

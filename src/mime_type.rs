@@ -26,6 +26,10 @@ impl MimeType {
     pub(crate) const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT: &'static str = "application/vnd.oasis.opendocument.text";
     pub(crate) const APPLICATION_OGG: &'static str = "application/ogg";
     pub(crate) const APPLICATION_PDF: &'static str = "application/pdf";
+    pub(crate) const APPLICATION_X_HTTPD_PHP: &'static str = "application/x-httpd-php";
+    pub(crate) const APPLICATION_VND_MS_POWERPOINT: &'static str = "application/vnd.ms-powerpoint";
+    pub(crate) const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION: &'static str = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    pub(crate) const APPLICATION_VND_RAR: &'static str = "application/vnd.rar";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -137,6 +141,10 @@ impl MimeType {
     const OPUS_SUFFIX: &'static str = ".opus";
     const OTF_SUFFIX: &'static str = ".otf";
     const PDF_SUFFIX: &'static str = ".pdf";
+    const PHP_SUFFIX: &'static str = ".php";
+    const PPT_SUFFIX: &'static str = ".ppt";
+    const PPTX_SUFFIX: &'static str = ".pptx";
+    const RAR_SUFFIX: &'static str = ".rar";
 
 
 
@@ -478,6 +486,26 @@ impl MimeType {
         let is_pdf_suffix = request_uri.ends_with(MimeType::PDF_SUFFIX);
         if is_pdf_suffix {
             return MimeType::APPLICATION_PDF.to_string();
+        }
+
+        let is_php_suffix = request_uri.ends_with(MimeType::PHP_SUFFIX);
+        if is_php_suffix {
+            return MimeType::APPLICATION_X_HTTPD_PHP.to_string();
+        }
+
+        let is_ppt_suffix = request_uri.ends_with(MimeType::PPT_SUFFIX);
+        if is_ppt_suffix {
+            return MimeType::APPLICATION_VND_MS_POWERPOINT.to_string();
+        }
+
+        let is_pptx_suffix = request_uri.ends_with(MimeType::PPTX_SUFFIX);
+        if is_pptx_suffix {
+            return MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION.to_string();
+        }
+
+        let is_rar_suffix = request_uri.ends_with(MimeType::RAR_SUFFIX);
+        if is_rar_suffix {
+            return MimeType::APPLICATION_VND_RAR.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
