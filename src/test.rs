@@ -64,6 +64,16 @@ mod tests {
     }
 
     #[test]
+    fn detect_mime_type_for_htm_file() {
+        let expected_mime_type = MimeType::TEXT_HTML;
+        let request_uri = "/dir/test.htm";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
     fn detect_mime_type_for_js_file() {
         let expected_mime_type = MimeType::TEXT_JAVASCRIPT;
         let request_uri = "/dir/test.js";
@@ -497,6 +507,36 @@ mod tests {
     fn detect_mime_type_for_gz_file() {
         let expected_mime_type = MimeType::APPLICATION_GZIP;
         let request_uri = "/dir/test.gz";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_ics_file() {
+        let expected_mime_type = MimeType::TEXT_CALENDAR;
+        let request_uri = "/dir/test.ics";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_jar_file() {
+        let expected_mime_type = MimeType::APPLICATION_JAVA_ARCHIVE;
+        let request_uri = "/dir/test.jar";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_json_file() {
+        let expected_mime_type = MimeType::APPLICATION_JSON;
+        let request_uri = "/dir/test.json";
 
         let actual_mime_type = MimeType::detect_mime_type(request_uri);
 

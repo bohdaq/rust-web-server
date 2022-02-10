@@ -17,6 +17,8 @@ impl MimeType {
     pub(crate) const APPLICATION_VND_MS_FONTOBJECT: &'static str = "application/vnd.ms-fontobject";
     pub(crate) const APPLICATION_EPUB_ZIP: &'static str = "application/epub+zip";
     pub(crate) const APPLICATION_GZIP: &'static str = "application/gzip";
+    pub(crate) const APPLICATION_JAVA_ARCHIVE: &'static str = "application/java-archive";
+    pub(crate) const APPLICATION_JSON: &'static str = "application/json";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -24,6 +26,7 @@ impl MimeType {
     pub(crate) const TEXT_CSV: &'static str = "text/csv";
     pub(crate) const TEXT_HTML: &'static str = "text/html";
     pub(crate) const TEXT_JAVASCRIPT: &'static str = "text/javascript";
+    pub(crate) const TEXT_CALENDAR: &'static str = "text/calendar";
 
 
     pub(crate) const IMAGE_APNG: &'static str = "image/apng";
@@ -57,6 +60,7 @@ impl MimeType {
     const TXT_SUFFIX: &'static str = ".txt";
     const CSS_SUFFIX: &'static str = ".css";
     const HTML_SUFFIX: &'static str = ".html";
+    const HTM_SUFFIX: &'static str = ".htm";
     const JS_SUFFIX: &'static str = ".js";
     const APNG_SUFFIX: &'static str = ".apng";
     const AVIF_SUFFIX: &'static str = ".avif";
@@ -103,6 +107,9 @@ impl MimeType {
     const EOT_SUFFIX: &'static str = ".eot";
     const EPUB_SUFFIX: &'static str = ".epub";
     const GZ_SUFFIX: &'static str = ".gz";
+    const ICS_SUFFIX: &'static str = ".ics";
+    const JAR_SUFFIX: &'static str = ".jar";
+    const JSON_SUFFIX: &'static str = ".json";
 
 
 
@@ -118,7 +125,15 @@ impl MimeType {
             return MimeType::TEXT_CSS.to_string();
         }
 
-        let is_html_suffix = request_uri.ends_with(MimeType::HTML_SUFFIX);
+        let mut is_html_suffix = false;
+        let boxed_extension = MimeType::get_extension_from_filename(request_uri);
+        if !boxed_extension.is_none() {
+            let HTML_SUFFIXES = vec![MimeType::HTML_SUFFIX, MimeType::HTM_SUFFIX];
+            let extension = boxed_extension.unwrap();
+            let suffix = [".", extension].join("");
+            is_html_suffix = HTML_SUFFIXES.contains(&suffix.as_str())
+        }
+
         if is_html_suffix {
             return MimeType::TEXT_HTML.to_string();
         }
@@ -349,6 +364,21 @@ impl MimeType {
         let is_gz_suffix = request_uri.ends_with(MimeType::GZ_SUFFIX);
         if is_gz_suffix {
             return MimeType::APPLICATION_GZIP.to_string();
+        }
+
+        let is_ics_suffix = request_uri.ends_with(MimeType::ICS_SUFFIX);
+        if is_ics_suffix {
+            return MimeType::TEXT_CALENDAR.to_string();
+        }
+
+        let is_jar_suffix = request_uri.ends_with(MimeType::JAR_SUFFIX);
+        if is_jar_suffix {
+            return MimeType::APPLICATION_JAVA_ARCHIVE.to_string();
+        }
+
+        let is_json_suffix = request_uri.ends_with(MimeType::JSON_SUFFIX);
+        if is_json_suffix {
+            return MimeType::APPLICATION_JSON.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
