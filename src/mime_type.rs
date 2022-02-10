@@ -14,6 +14,9 @@ impl MimeType {
     pub(crate) const APPLICATION_X_CSH: &'static str = "application/x-csh";
     pub(crate) const APPLICATION_MSWORD: &'static str = "application/msword";
     pub(crate) const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENTS_WORDPROCESSINGIMPL_DOCUMENT: &'static str = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    pub(crate) const APPLICATION_VND_MS_FONTOBJECT: &'static str = "application/vnd.ms-fontobject";
+    pub(crate) const APPLICATION_EPUB_ZIP: &'static str = "application/epub+zip";
+    pub(crate) const APPLICATION_GZIP: &'static str = "application/gzip";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -97,6 +100,9 @@ impl MimeType {
     const CSV_SUFFIX: &'static str = ".csv";
     const DOC_SUFFIX: &'static str = ".doc";
     const DOCX_SUFFIX: &'static str = ".docx";
+    const EOT_SUFFIX: &'static str = ".eot";
+    const EPUB_SUFFIX: &'static str = ".epub";
+    const GZ_SUFFIX: &'static str = ".gz";
 
 
 
@@ -328,6 +334,21 @@ impl MimeType {
         let is_docx_suffix = request_uri.ends_with(MimeType::DOCX_SUFFIX);
         if is_docx_suffix {
             return MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENTS_WORDPROCESSINGIMPL_DOCUMENT.to_string();
+        }
+
+        let is_eot_suffix = request_uri.ends_with(MimeType::EOT_SUFFIX);
+        if is_eot_suffix {
+            return MimeType::APPLICATION_VND_MS_FONTOBJECT.to_string();
+        }
+
+        let is_epub_suffix = request_uri.ends_with(MimeType::EPUB_SUFFIX);
+        if is_epub_suffix {
+            return MimeType::APPLICATION_EPUB_ZIP.to_string();
+        }
+
+        let is_gz_suffix = request_uri.ends_with(MimeType::GZ_SUFFIX);
+        if is_gz_suffix {
+            return MimeType::APPLICATION_GZIP.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();

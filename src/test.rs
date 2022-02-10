@@ -484,6 +484,26 @@ mod tests {
     }
 
     #[test]
+    fn detect_mime_type_for_eot_file() {
+        let expected_mime_type = MimeType::APPLICATION_VND_MS_FONTOBJECT;
+        let request_uri = "/dir/test.eot";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_gz_file() {
+        let expected_mime_type = MimeType::APPLICATION_GZIP;
+        let request_uri = "/dir/test.gz";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
     fn method_and_request_uri_and_http_version_regex() {
         let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
         let caps = re.captures("GET / HTTP/1.1").unwrap();
