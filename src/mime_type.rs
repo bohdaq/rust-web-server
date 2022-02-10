@@ -24,6 +24,7 @@ impl MimeType {
     pub(crate) const APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION: &'static str = "application/vnd.oasis.opendocument.presentation";
     pub(crate) const APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET: &'static str = "application/vnd.oasis.opendocument.spreadsheet";
     pub(crate) const APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT: &'static str = "application/vnd.oasis.opendocument.text";
+    pub(crate) const APPLICATION_OGG: &'static str = "application/ogg";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -53,6 +54,7 @@ impl MimeType {
     pub(crate) const AUDIO_OGG: &'static str = "audio/oga";
     pub(crate) const AUDIO_MIDI: &'static str = "audio/midi";
     pub(crate) const AUDIO_MPEG: &'static str = "audio/mpeg";
+    pub(crate) const AUDIO_OPUS: &'static str = "audio/opus";
 
 
 
@@ -63,6 +65,9 @@ impl MimeType {
     pub(crate) const VIDEO_QUICKTIME: &'static str = "video/quicktime";
     pub(crate) const VIDEO_WEBM: &'static str = "video/webm";
     pub(crate) const VIDEO_X_MSVIDEO: &'static str = "video/x-msvideo";
+
+    pub(crate) const FONT_OTF: &'static str = "font/otf";
+
 
 
     const TXT_SUFFIX: &'static str = ".txt";
@@ -127,6 +132,9 @@ impl MimeType {
     const ODP_SUFFIX: &'static str = ".odp";
     const ODS_SUFFIX: &'static str = ".ods";
     const ODT_SUFFIX: &'static str = ".odt";
+    const OGX_SUFFIX: &'static str = ".ogx";
+    const OPUS_SUFFIX: &'static str = ".opus";
+    const OTF_SUFFIX: &'static str = ".otf";
 
 
 
@@ -448,6 +456,21 @@ impl MimeType {
         let is_odt_suffix = request_uri.ends_with(MimeType::ODT_SUFFIX);
         if is_odt_suffix {
             return MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT.to_string();
+        }
+
+        let is_ogx_suffix = request_uri.ends_with(MimeType::OGX_SUFFIX);
+        if is_ogx_suffix {
+            return MimeType::APPLICATION_OGG.to_string();
+        }
+
+        let is_opus_suffix = request_uri.ends_with(MimeType::OPUS_SUFFIX);
+        if is_opus_suffix {
+            return MimeType::AUDIO_OPUS.to_string();
+        }
+
+        let is_otf_suffix = request_uri.ends_with(MimeType::OTF_SUFFIX);
+        if is_otf_suffix {
+            return MimeType::FONT_OTF.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
