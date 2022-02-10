@@ -404,6 +404,56 @@ mod tests {
     }
 
     #[test]
+    fn detect_mime_type_for_bin_file() {
+        let expected_mime_type = MimeType::APPLICATION_OCTET_STREAM;
+        let request_uri = "/dir/test.bin";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_bz_file() {
+        let expected_mime_type = MimeType::APPLICATION_X_BZIP;
+        let request_uri = "/dir/test.bz";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_bz2_file() {
+        let expected_mime_type = MimeType::APPLICATION_X_BZIP2;
+        let request_uri = "/dir/test.bz2";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_cda_file() {
+        let expected_mime_type = MimeType::APPLICATION_X_CDF;
+        let request_uri = "/dir/test.cda";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_csh_file() {
+        let expected_mime_type = MimeType::APPLICATION_X_CSH;
+        let request_uri = "/dir/test.csh";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
     fn method_and_request_uri_and_http_version_regex() {
         let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
         let caps = re.captures("GET / HTTP/1.1").unwrap();

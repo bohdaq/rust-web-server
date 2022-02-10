@@ -8,6 +8,10 @@ impl MimeType {
     pub(crate) const APPLICATION_OCTET_STREAM: &'static str = "application/octet-stream";
     pub(crate) const APPLICATION_ABIWORD: &'static str = "application/x-abiword";
     pub(crate) const APPLICATION_VND_AMAZON_EBOOK: &'static str = "application/vnd.amazon.ebook";
+    pub(crate) const APPLICATION_X_BZIP: &'static str = "application/x-bzip";
+    pub(crate) const APPLICATION_X_BZIP2: &'static str = "application/x-bzip2";
+    pub(crate) const APPLICATION_X_CDF: &'static str = "application/x-cdf";
+    pub(crate) const APPLICATION_X_CSH: &'static str = "application/x-csh";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -82,6 +86,11 @@ impl MimeType {
     const ABW_SUFFIX: &'static str = ".abw";
     const AVI_SUFFIX: &'static str = ".avi";
     const AZV_SUFFIX: &'static str = ".azw";
+    const BIN_SUFFIX: &'static str = ".bin";
+    const BZ_SUFFIX: &'static str = ".bz";
+    const BZ2_SUFFIX: &'static str = ".bz2";
+    const CDA_SUFFIX: &'static str = ".cda";
+    const CSH_SUFFIX: &'static str = ".csh";
 
 
 
@@ -273,6 +282,31 @@ impl MimeType {
         let is_azv_suffix = request_uri.ends_with(MimeType::AZV_SUFFIX);
         if is_azv_suffix {
             return MimeType::APPLICATION_VND_AMAZON_EBOOK.to_string();
+        }
+
+        let is_bin_suffix = request_uri.ends_with(MimeType::BIN_SUFFIX);
+        if is_bin_suffix {
+            return MimeType::APPLICATION_OCTET_STREAM.to_string();
+        }
+
+        let is_bz_suffix = request_uri.ends_with(MimeType::BZ_SUFFIX);
+        if is_bz_suffix {
+            return MimeType::APPLICATION_X_BZIP.to_string();
+        }
+
+        let is_bz2_suffix = request_uri.ends_with(MimeType::BZ2_SUFFIX);
+        if is_bz2_suffix {
+            return MimeType::APPLICATION_X_BZIP2.to_string();
+        }
+
+        let is_cda_suffix = request_uri.ends_with(MimeType::CDA_SUFFIX);
+        if is_cda_suffix {
+            return MimeType::APPLICATION_X_CDF.to_string();
+        }
+
+        let is_csh_suffix = request_uri.ends_with(MimeType::CSH_SUFFIX);
+        if is_csh_suffix {
+            return MimeType::APPLICATION_X_CSH.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
