@@ -19,6 +19,7 @@ impl MimeType {
     pub(crate) const APPLICATION_GZIP: &'static str = "application/gzip";
     pub(crate) const APPLICATION_JAVA_ARCHIVE: &'static str = "application/java-archive";
     pub(crate) const APPLICATION_JSON: &'static str = "application/json";
+    pub(crate) const APPLICATION_JSONLD: &'static str = "application/ld+json";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -46,6 +47,8 @@ impl MimeType {
     pub(crate) const AUDIO_WAV: &'static str = "audio/wav";
     pub(crate) const AUDIO_MP4: &'static str = "audio/mp4";
     pub(crate) const AUDIO_OGG: &'static str = "audio/oga";
+    pub(crate) const AUDIO_MIDI: &'static str = "audio/midi";
+
 
 
     pub(crate) const VIDEO_3GP: &'static str = "video/3gpp";
@@ -110,6 +113,9 @@ impl MimeType {
     const ICS_SUFFIX: &'static str = ".ics";
     const JAR_SUFFIX: &'static str = ".jar";
     const JSON_SUFFIX: &'static str = ".json";
+    const JSONLD_SUFFIX: &'static str = ".jsonld";
+    const MIDI_SUFFIX: &'static str = ".midi";
+    const MID_SUFFIX: &'static str = ".mid";
 
 
 
@@ -379,6 +385,25 @@ impl MimeType {
         let is_json_suffix = request_uri.ends_with(MimeType::JSON_SUFFIX);
         if is_json_suffix {
             return MimeType::APPLICATION_JSON.to_string();
+        }
+
+        let is_jsonld_suffix = request_uri.ends_with(MimeType::JSONLD_SUFFIX);
+        if is_jsonld_suffix {
+            return MimeType::APPLICATION_JSONLD.to_string();
+        }
+
+
+        let mut is_midi_suffix = false;
+        let boxed_extension = MimeType::get_extension_from_filename(request_uri);
+        if !boxed_extension.is_none() {
+            let MIDI_SUFFIXES = vec![MimeType::MIDI_SUFFIX, MimeType::MID_SUFFIX];
+            let extension = boxed_extension.unwrap();
+            let suffix = [".", extension].join("");
+            is_midi_suffix = MIDI_SUFFIXES.contains(&suffix.as_str())
+        }
+
+        if is_midi_suffix {
+            return MimeType::AUDIO_MIDI.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();

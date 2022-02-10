@@ -544,6 +544,36 @@ mod tests {
     }
 
     #[test]
+    fn detect_mime_type_for_jsonld_file() {
+        let expected_mime_type = MimeType::APPLICATION_JSONLD;
+        let request_uri = "/dir/test.jsonld";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_midi_file() {
+        let expected_mime_type = MimeType::AUDIO_MIDI;
+        let request_uri = "/dir/test.midi";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_mid_file() {
+        let expected_mime_type = MimeType::AUDIO_MIDI;
+        let request_uri = "/dir/test.mid";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
     fn method_and_request_uri_and_http_version_regex() {
         let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
         let caps = re.captures("GET / HTTP/1.1").unwrap();
