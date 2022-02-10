@@ -30,6 +30,8 @@ impl MimeType {
     pub(crate) const APPLICATION_VND_MS_POWERPOINT: &'static str = "application/vnd.ms-powerpoint";
     pub(crate) const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION: &'static str = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
     pub(crate) const APPLICATION_VND_RAR: &'static str = "application/vnd.rar";
+    pub(crate) const APPLICATION_RTF: &'static str = "application/rtf";
+    pub(crate) const APPLICATION_X_SH: &'static str = "application/x-sh";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -145,6 +147,8 @@ impl MimeType {
     const PPT_SUFFIX: &'static str = ".ppt";
     const PPTX_SUFFIX: &'static str = ".pptx";
     const RAR_SUFFIX: &'static str = ".rar";
+    const RTF_SUFFIX: &'static str = ".rtf";
+    const SH_SUFFIX: &'static str = ".sh";
 
 
 
@@ -506,6 +510,16 @@ impl MimeType {
         let is_rar_suffix = request_uri.ends_with(MimeType::RAR_SUFFIX);
         if is_rar_suffix {
             return MimeType::APPLICATION_VND_RAR.to_string();
+        }
+
+        let is_rtf_suffix = request_uri.ends_with(MimeType::RTF_SUFFIX);
+        if is_rtf_suffix {
+            return MimeType::APPLICATION_RTF.to_string();
+        }
+
+        let is_sh_suffix = request_uri.ends_with(MimeType::SH_SUFFIX);
+        if is_sh_suffix {
+            return MimeType::APPLICATION_X_SH.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
