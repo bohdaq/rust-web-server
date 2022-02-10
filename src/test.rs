@@ -84,6 +84,16 @@ mod tests {
     }
 
     #[test]
+    fn detect_mime_type_for_mjs_file() {
+        let expected_mime_type = MimeType::TEXT_JAVASCRIPT;
+        let request_uri = "/dir/test.mjs";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
     fn detect_mime_type_for_image_apng_file() {
         let expected_mime_type = MimeType::IMAGE_APNG;
         let request_uri = "/dir/test.apng";

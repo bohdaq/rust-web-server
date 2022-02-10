@@ -65,6 +65,7 @@ impl MimeType {
     const HTML_SUFFIX: &'static str = ".html";
     const HTM_SUFFIX: &'static str = ".htm";
     const JS_SUFFIX: &'static str = ".js";
+    const MJS_SUFFIX: &'static str = ".mjs";
     const APNG_SUFFIX: &'static str = ".apng";
     const AVIF_SUFFIX: &'static str = ".avif";
     const GIF_SUFFIX: &'static str = ".gif";
@@ -144,7 +145,15 @@ impl MimeType {
             return MimeType::TEXT_HTML.to_string();
         }
 
-        let is_js_suffix = request_uri.ends_with(MimeType::JS_SUFFIX);
+        let mut is_js_suffix = false;
+        let boxed_extension = MimeType::get_extension_from_filename(request_uri);
+        if !boxed_extension.is_none() {
+            let JS_SUFFIXES = vec![MimeType::MJS_SUFFIX, MimeType::JS_SUFFIX];
+            let extension = boxed_extension.unwrap();
+            let suffix = [".", extension].join("");
+            is_js_suffix = JS_SUFFIXES.contains(&suffix.as_str())
+        }
+
         if is_js_suffix {
             return MimeType::TEXT_JAVASCRIPT.to_string();
         }
