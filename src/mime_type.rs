@@ -20,6 +20,7 @@ impl MimeType {
     pub(crate) const APPLICATION_JAVA_ARCHIVE: &'static str = "application/java-archive";
     pub(crate) const APPLICATION_JSON: &'static str = "application/json";
     pub(crate) const APPLICATION_JSONLD: &'static str = "application/ld+json";
+    pub(crate) const APPLICATION_VND_APPLE_INSTALLER_XML: &'static str = "application/vnd.apple.installer+xml";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -48,6 +49,7 @@ impl MimeType {
     pub(crate) const AUDIO_MP4: &'static str = "audio/mp4";
     pub(crate) const AUDIO_OGG: &'static str = "audio/oga";
     pub(crate) const AUDIO_MIDI: &'static str = "audio/midi";
+    pub(crate) const AUDIO_MPEG: &'static str = "audio/mpeg";
 
 
 
@@ -117,6 +119,8 @@ impl MimeType {
     const JSONLD_SUFFIX: &'static str = ".jsonld";
     const MIDI_SUFFIX: &'static str = ".midi";
     const MID_SUFFIX: &'static str = ".mid";
+    const MP3_SUFFIX: &'static str = ".mp3";
+    const MPKG_SUFFIX: &'static str = ".mpkg";
 
 
 
@@ -413,6 +417,16 @@ impl MimeType {
 
         if is_midi_suffix {
             return MimeType::AUDIO_MIDI.to_string();
+        }
+
+        let is_mp3_suffix = request_uri.ends_with(MimeType::MP3_SUFFIX);
+        if is_mp3_suffix {
+            return MimeType::AUDIO_MPEG.to_string();
+        }
+
+        let is_mpkg_suffix = request_uri.ends_with(MimeType::MPKG_SUFFIX);
+        if is_mpkg_suffix {
+            return MimeType::APPLICATION_VND_APPLE_INSTALLER_XML.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
