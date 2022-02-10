@@ -454,6 +454,36 @@ mod tests {
     }
 
     #[test]
+    fn detect_mime_type_for_csv_file() {
+        let expected_mime_type = MimeType::TEXT_CSV;
+        let request_uri = "/dir/test.csv";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_doc_file() {
+        let expected_mime_type = MimeType::APPLICATION_MSWORD;
+        let request_uri = "/dir/test.doc";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_docx_file() {
+        let expected_mime_type = MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENTS_WORDPROCESSINGIMPL_DOCUMENT;
+        let request_uri = "/dir/test.docx";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
     fn method_and_request_uri_and_http_version_regex() {
         let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
         let caps = re.captures("GET / HTTP/1.1").unwrap();

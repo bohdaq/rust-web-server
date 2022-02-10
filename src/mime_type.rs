@@ -12,10 +12,13 @@ impl MimeType {
     pub(crate) const APPLICATION_X_BZIP2: &'static str = "application/x-bzip2";
     pub(crate) const APPLICATION_X_CDF: &'static str = "application/x-cdf";
     pub(crate) const APPLICATION_X_CSH: &'static str = "application/x-csh";
+    pub(crate) const APPLICATION_MSWORD: &'static str = "application/msword";
+    pub(crate) const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENTS_WORDPROCESSINGIMPL_DOCUMENT: &'static str = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
     pub(crate) const TEXT_CSS: &'static str = "text/css";
+    pub(crate) const TEXT_CSV: &'static str = "text/csv";
     pub(crate) const TEXT_HTML: &'static str = "text/html";
     pub(crate) const TEXT_JAVASCRIPT: &'static str = "text/javascript";
 
@@ -91,6 +94,9 @@ impl MimeType {
     const BZ2_SUFFIX: &'static str = ".bz2";
     const CDA_SUFFIX: &'static str = ".cda";
     const CSH_SUFFIX: &'static str = ".csh";
+    const CSV_SUFFIX: &'static str = ".csv";
+    const DOC_SUFFIX: &'static str = ".doc";
+    const DOCX_SUFFIX: &'static str = ".docx";
 
 
 
@@ -307,6 +313,21 @@ impl MimeType {
         let is_csh_suffix = request_uri.ends_with(MimeType::CSH_SUFFIX);
         if is_csh_suffix {
             return MimeType::APPLICATION_X_CSH.to_string();
+        }
+
+        let is_csv_suffix = request_uri.ends_with(MimeType::CSV_SUFFIX);
+        if is_csv_suffix {
+            return MimeType::TEXT_CSV.to_string();
+        }
+
+        let is_doc_suffix = request_uri.ends_with(MimeType::DOC_SUFFIX);
+        if is_doc_suffix {
+            return MimeType::APPLICATION_MSWORD.to_string();
+        }
+
+        let is_docx_suffix = request_uri.ends_with(MimeType::DOCX_SUFFIX);
+        if is_docx_suffix {
+            return MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENTS_WORDPROCESSINGIMPL_DOCUMENT.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
