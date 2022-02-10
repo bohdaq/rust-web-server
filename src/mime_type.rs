@@ -6,10 +6,15 @@ pub struct MimeType {}
 
 impl MimeType {
     pub(crate) const APPLICATION_OCTET_STREAM: &'static str = "application/octet-stream";
+    pub(crate) const APPLICATION_ABIWORD: &'static str = "application/x-abiword";
+
+
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
     pub(crate) const TEXT_CSS: &'static str = "text/css";
     pub(crate) const TEXT_HTML: &'static str = "text/html";
     pub(crate) const TEXT_JAVASCRIPT: &'static str = "text/javascript";
+
+
     pub(crate) const IMAGE_APNG: &'static str = "image/apng";
     pub(crate) const IMAGE_AVIF: &'static str = "image/avif";
     pub(crate) const IMAGE_GIF: &'static str = "image/gif";
@@ -20,11 +25,15 @@ impl MimeType {
     pub(crate) const IMAGE_BMP: &'static str = "image/bmp";
     pub(crate) const IMAGE_ICO: &'static str = "image/x-icon";
     pub(crate) const IMAGE_TIFF: &'static str = "image/tiff";
+
+
     pub(crate) const AUDIO_AAC: &'static str = "audio/aac";
     pub(crate) const AUDIO_FLAC: &'static str = "audio/flac";
     pub(crate) const AUDIO_WAV: &'static str = "audio/wav";
     pub(crate) const AUDIO_MP4: &'static str = "audio/mp4";
     pub(crate) const AUDIO_OGG: &'static str = "audio/oga";
+
+
     pub(crate) const VIDEO_3GP: &'static str = "video/3gpp";
     pub(crate) const VIDEO_MPEG: &'static str = "video/mpeg";
     pub(crate) const VIDEO_MP4: &'static str = "video/mp4";
@@ -68,6 +77,7 @@ impl MimeType {
     const OGV_SUFFIX: &'static str = ".ogv";
     const MOV_SUFFIX: &'static str = ".mov";
     const WEBM_SUFFIX: &'static str = ".webm";
+    const ABW_SUFFIX: &'static str = ".abw";
 
 
 
@@ -244,6 +254,11 @@ impl MimeType {
         let is_webm_suffix = request_uri.ends_with(MimeType::WEBM_SUFFIX);
         if is_webm_suffix {
             return MimeType::VIDEO_WEBM.to_string();
+        }
+
+        let is_abw_suffix = request_uri.ends_with(MimeType::ABW_SUFFIX);
+        if is_abw_suffix {
+            return MimeType::APPLICATION_ABIWORD.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
