@@ -764,6 +764,56 @@ mod tests {
     }
 
     #[test]
+    fn detect_mime_type_for_ttf_file() {
+        let expected_mime_type = MimeType::FONT_TTF;
+        let request_uri = "/dir/test.ttf";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_vsd_file() {
+        let expected_mime_type = MimeType::APPLICATION_VND_VISIO;
+        let request_uri = "/dir/test.vsd";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_webm_file() {
+        let expected_mime_type = MimeType::AUDIO_WEBM;
+        let request_uri = "/dir/test.weba";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_woff_file() {
+        let expected_mime_type = MimeType::FONT_WOFF;
+        let request_uri = "/dir/test.woff";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
+    fn detect_mime_type_for_woff2_file() {
+        let expected_mime_type = MimeType::FONT_WOFF2;
+        let request_uri = "/dir/test.woff2";
+
+        let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+        assert_eq!(expected_mime_type, actual_mime_type);
+    }
+
+    #[test]
     fn method_and_request_uri_and_http_version_regex() {
         let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
         let caps = re.captures("GET / HTTP/1.1").unwrap();

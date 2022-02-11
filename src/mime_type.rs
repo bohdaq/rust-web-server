@@ -34,6 +34,7 @@ impl MimeType {
     pub(crate) const APPLICATION_X_SH: &'static str = "application/x-sh";
     pub(crate) const APPLICATION_X_SHOCKWAVE_FLASH: &'static str = "application/x-shockwave-flash";
     pub(crate) const APPLICATION_X_TAR: &'static str = "application/x-tar";
+    pub(crate) const APPLICATION_VND_VISIO: &'static str = "application/vnd.visio";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -64,6 +65,7 @@ impl MimeType {
     pub(crate) const AUDIO_MIDI: &'static str = "audio/midi";
     pub(crate) const AUDIO_MPEG: &'static str = "audio/mpeg";
     pub(crate) const AUDIO_OPUS: &'static str = "audio/opus";
+    pub(crate) const AUDIO_WEBM: &'static str = "audio/webm";
 
 
 
@@ -77,6 +79,9 @@ impl MimeType {
     pub(crate) const VIDEO_MP2T: &'static str = "video/mp2t";
 
     pub(crate) const FONT_OTF: &'static str = "font/otf";
+    pub(crate) const FONT_TTF: &'static str = "font/ttf";
+    pub(crate) const FONT_WOFF: &'static str = "font/woff";
+    pub(crate) const FONT_WOFF2: &'static str = "font/woff2";
 
 
 
@@ -155,6 +160,11 @@ impl MimeType {
     const SWF_SUFFIX: &'static str = ".swf";
     const TAR_SUFFIX: &'static str = ".tar";
     const TS_SUFFIX: &'static str = ".ts";
+    const TTF_SUFFIX: &'static str = ".ttf";
+    const VSD_SUFFIX: &'static str = ".vsd";
+    const WEBA_SUFFIX: &'static str = ".weba";
+    const WOFF_SUFFIX: &'static str = ".woff";
+    const WOFF2_SUFFIX: &'static str = ".woff2";
 
 
 
@@ -541,6 +551,31 @@ impl MimeType {
         let is_ts_suffix = request_uri.ends_with(MimeType::TS_SUFFIX);
         if is_ts_suffix {
             return MimeType::VIDEO_MP2T.to_string();
+        }
+
+        let is_ttf_suffix = request_uri.ends_with(MimeType::TTF_SUFFIX);
+        if is_ttf_suffix {
+            return MimeType::FONT_TTF.to_string();
+        }
+
+        let is_vsd_suffix = request_uri.ends_with(MimeType::VSD_SUFFIX);
+        if is_vsd_suffix {
+            return MimeType::APPLICATION_VND_VISIO.to_string();
+        }
+
+        let is_weba_suffix = request_uri.ends_with(MimeType::WEBA_SUFFIX);
+        if is_weba_suffix {
+            return MimeType::AUDIO_WEBM.to_string();
+        }
+
+        let is_woff_suffix = request_uri.ends_with(MimeType::WOFF_SUFFIX);
+        if is_woff_suffix {
+            return MimeType::FONT_WOFF.to_string();
+        }
+
+        let is_woff2_suffix = request_uri.ends_with(MimeType::WOFF2_SUFFIX);
+        if is_woff2_suffix {
+            return MimeType::FONT_WOFF2.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
