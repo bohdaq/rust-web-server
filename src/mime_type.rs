@@ -84,6 +84,7 @@ impl MimeType {
     pub(crate) const VIDEO_WEBM: &'static str = "video/webm";
     pub(crate) const VIDEO_X_MSVIDEO: &'static str = "video/x-msvideo";
     pub(crate) const VIDEO_MP2T: &'static str = "video/mp2t";
+    pub(crate) const VIDEO_3GPP2: &'static str = "video/3gpp2";
 
     pub(crate) const FONT_OTF: &'static str = "font/otf";
     pub(crate) const FONT_TTF: &'static str = "font/ttf";
@@ -179,6 +180,7 @@ impl MimeType {
     const XUL_SUFFIX: &'static str = ".xul";
     const ZIP_SUFFIX: &'static str = ".zip";
     const N7Z_SUFFIX: &'static str = ".7z";
+    const N3G2_SUFFIX: &'static str = ".3g2";
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
 
@@ -623,6 +625,11 @@ impl MimeType {
         let is_zip_suffix = request_uri.ends_with(MimeType::N7Z_SUFFIX);
         if is_zip_suffix {
             return MimeType::APPLICATION_X_7Z_COMPRESSED.to_string();
+        }
+
+        let is_zip_suffix = request_uri.ends_with(MimeType::N3G2_SUFFIX);
+        if is_zip_suffix {
+            return MimeType::VIDEO_3GPP2.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
