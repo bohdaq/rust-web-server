@@ -38,6 +38,10 @@ impl MimeType {
     pub(crate) const APPLICATION_XHTML_XML: &'static str = "application/xhtml+xml";
     pub(crate) const APPLICATION_VND_MS_EXCEL: &'static str = "application/vnd.ms-excel";
     pub(crate) const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET: &'static str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    pub(crate) const APPLICATION_XML: &'static str = "application/xml";
+    pub(crate) const APPLICATION_VND_MOZILLA_XUL_XML: &'static str = "application/vnd.mozilla.xul+xml";
+    pub(crate) const APPLICATION_ZIP: &'static str = "application/zip";
+    pub(crate) const APPLICATION_X_7Z_COMPRESSED: &'static str = "application/x-7z-compressed";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -171,8 +175,10 @@ impl MimeType {
     const XHTML_SUFFIX: &'static str = ".xhtml";
     const XLS_SUFFIX: &'static str = ".xls";
     const XLSX_SUFFIX: &'static str = ".xlsx";
-
-
+    const XML_SUFFIX: &'static str = ".xml";
+    const XUL_SUFFIX: &'static str = ".xul";
+    const ZIP_SUFFIX: &'static str = ".zip";
+    const N7Z_SUFFIX: &'static str = ".7z";
 
     pub(crate) fn detect_mime_type(request_uri: &str) -> String {
 
@@ -597,6 +603,26 @@ impl MimeType {
         let is_xlsx_suffix = request_uri.ends_with(MimeType::XLSX_SUFFIX);
         if is_xlsx_suffix {
             return MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET.to_string();
+        }
+
+        let is_xml_suffix = request_uri.ends_with(MimeType::XML_SUFFIX);
+        if is_xml_suffix {
+            return MimeType::APPLICATION_XML.to_string();
+        }
+
+        let is_xul_suffix = request_uri.ends_with(MimeType::XUL_SUFFIX);
+        if is_xul_suffix {
+            return MimeType::APPLICATION_VND_MOZILLA_XUL_XML.to_string();
+        }
+
+        let is_zip_suffix = request_uri.ends_with(MimeType::ZIP_SUFFIX);
+        if is_zip_suffix {
+            return MimeType::APPLICATION_ZIP.to_string();
+        }
+
+        let is_zip_suffix = request_uri.ends_with(MimeType::N7Z_SUFFIX);
+        if is_zip_suffix {
+            return MimeType::APPLICATION_X_7Z_COMPRESSED.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
