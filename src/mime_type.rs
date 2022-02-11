@@ -37,6 +37,7 @@ impl MimeType {
     pub(crate) const APPLICATION_VND_VISIO: &'static str = "application/vnd.visio";
     pub(crate) const APPLICATION_XHTML_XML: &'static str = "application/xhtml+xml";
     pub(crate) const APPLICATION_VND_MS_EXCEL: &'static str = "application/vnd.ms-excel";
+    pub(crate) const APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET: &'static str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -169,6 +170,7 @@ impl MimeType {
     const WOFF2_SUFFIX: &'static str = ".woff2";
     const XHTML_SUFFIX: &'static str = ".xhtml";
     const XLS_SUFFIX: &'static str = ".xls";
+    const XLSX_SUFFIX: &'static str = ".xlsx";
 
 
 
@@ -590,6 +592,11 @@ impl MimeType {
         let is_xls_suffix = request_uri.ends_with(MimeType::XLS_SUFFIX);
         if is_xls_suffix {
             return MimeType::APPLICATION_VND_MS_EXCEL.to_string();
+        }
+
+        let is_xlsx_suffix = request_uri.ends_with(MimeType::XLSX_SUFFIX);
+        if is_xlsx_suffix {
+            return MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
