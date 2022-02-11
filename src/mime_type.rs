@@ -35,6 +35,8 @@ impl MimeType {
     pub(crate) const APPLICATION_X_SHOCKWAVE_FLASH: &'static str = "application/x-shockwave-flash";
     pub(crate) const APPLICATION_X_TAR: &'static str = "application/x-tar";
     pub(crate) const APPLICATION_VND_VISIO: &'static str = "application/vnd.visio";
+    pub(crate) const APPLICATION_XHTML_XML: &'static str = "application/xhtml+xml";
+    pub(crate) const APPLICATION_VND_MS_EXCEL: &'static str = "application/vnd.ms-excel";
 
 
     pub(crate) const TEXT_PLAIN: &'static str = "text/plain";
@@ -165,6 +167,8 @@ impl MimeType {
     const WEBA_SUFFIX: &'static str = ".weba";
     const WOFF_SUFFIX: &'static str = ".woff";
     const WOFF2_SUFFIX: &'static str = ".woff2";
+    const XHTML_SUFFIX: &'static str = ".xhtml";
+    const XLS_SUFFIX: &'static str = ".xls";
 
 
 
@@ -576,6 +580,16 @@ impl MimeType {
         let is_woff2_suffix = request_uri.ends_with(MimeType::WOFF2_SUFFIX);
         if is_woff2_suffix {
             return MimeType::FONT_WOFF2.to_string();
+        }
+
+        let is_xhtml_suffix = request_uri.ends_with(MimeType::XHTML_SUFFIX);
+        if is_xhtml_suffix {
+            return MimeType::APPLICATION_XHTML_XML.to_string();
+        }
+
+        let is_xls_suffix = request_uri.ends_with(MimeType::XLS_SUFFIX);
+        if is_xls_suffix {
+            return MimeType::APPLICATION_VND_MS_EXCEL.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
