@@ -6,6 +6,7 @@ pub struct Constants {
     pub(crate) SLASH: &'static str,
     pub(crate) CHARSET: &'static str,
     pub(crate) UTF_8: &'static str,
+    pub(crate) NOSNIFF: &'static str,
 }
 
 pub const CONSTANTS: Constants = Constants {
@@ -16,6 +17,7 @@ pub const CONSTANTS: Constants = Constants {
     SLASH: "/",
     CHARSET: "charset",
     UTF_8: "UTF-8",
+    NOSNIFF: "nosniff",
 };
 
 
@@ -79,8 +81,10 @@ pub const RESPONSE_STATUS_CODE_REASON_PHRASES: ResponseStatusCodeReasonPhrase = 
 
 pub struct HTTPHeader {
     pub(crate) CONTENT_TYPE: &'static str,
+    pub(crate) X_CONTENT_TYPE_OPTIONS: &'static str,
 }
 
 pub const HTTP_HEADERS: HTTPHeader = HTTPHeader {
     CONTENT_TYPE: "Content-Type",
+    X_CONTENT_TYPE_OPTIONS: "X-Content-Type-Options",
 };

@@ -5,7 +5,7 @@ use regex::Regex;
 #[cfg(test)]
 mod tests {
     use crate::CONSTANTS;
-    use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+    use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
     use crate::header::Header;
     use crate::mime_type::MimeType;
     use crate::request::Request;
@@ -982,6 +982,11 @@ mod tests {
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
+        let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+        let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+        assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+        assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
         assert_eq!(response_content_length_header_value, header.header_value);
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
@@ -1044,6 +1049,12 @@ mod tests {
         let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+
+        let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+        let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+        assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+        assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
 
         assert_eq!(response_content_length_header_value, header.header_value);
         assert_eq!(response_http_version, response.http_version);
@@ -1109,6 +1120,12 @@ mod tests {
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
+        let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+        let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+        assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+        assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
+
         assert_eq!(response_content_length_header_value, header.header_value);
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
@@ -1172,6 +1189,12 @@ mod tests {
         let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+
+        let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+        let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+        assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+        assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
 
         assert_eq!(response_content_length_header_value, header.header_value);
         assert_eq!(response_http_version, response.http_version);
@@ -1237,6 +1260,12 @@ mod tests {
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
+        let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+        let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+        assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+        assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
+
         assert_eq!(response_content_length_header_value, header.header_value);
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
@@ -1301,6 +1330,12 @@ mod tests {
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
+        let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+        let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+        assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+        assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
+
         assert_eq!(response_content_length_header_value, header.header_value);
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
@@ -1364,6 +1399,12 @@ mod tests {
         let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+
+        let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+        let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+        assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+        assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
 
         assert_eq!(response_content_length_header_value, header.header_value);
         assert_eq!(response_http_version, response.http_version);
@@ -1431,6 +1472,12 @@ mod tests {
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
+        let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+        let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+        assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+        assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
+
         assert_eq!(response_content_length_header_value, header.header_value);
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
@@ -1496,6 +1543,12 @@ mod tests {
         let raw_response: String = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+
+        let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+        let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+
+        assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+        assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
 
         assert_eq!(response_content_length_header_value, header.header_value);
         assert_eq!(response_http_version, response.http_version);

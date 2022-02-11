@@ -29,7 +29,7 @@ impl App {
             http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
             status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE.to_string(),
             reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE.to_string(),
-            headers: vec![content_type_header],
+            headers: vec![content_type_header, App::get_x_content_type_options_header()],
             message_body: contents
         };
 
@@ -46,7 +46,7 @@ impl App {
                 http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
                 status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE.to_string(),
                 reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE.to_string(),
-                headers: vec![content_type_header],
+                headers: vec![content_type_header, App::get_x_content_type_options_header()],
                 message_body: contents
             };
         }
@@ -67,7 +67,7 @@ impl App {
                         http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
                         status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE.to_string(),
                         reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE.to_string(),
-                        headers: vec![content_type_header],
+                        headers: vec![content_type_header, App::get_x_content_type_options_header()],
                         message_body: contents
                     };
 
@@ -89,5 +89,12 @@ impl App {
 
         let unwrapped_contents = fs::read_to_string(static_filepath);
         unwrapped_contents
+    }
+
+    pub(crate) fn get_x_content_type_options_header() -> Header {
+        Header {
+            header_name: HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string(),
+            header_value: CONSTANTS.NOSNIFF.to_string(),
+        }
     }
 }
