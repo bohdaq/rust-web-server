@@ -80,6 +80,7 @@ impl Response {
 
                 if last_new_line_position == 0 {
                     let (http_version, status_code, reason_phrase) = Response::parse_http_version_status_code_reason_phrase_string(&string);
+                    println!("http_version: {} status_code: {} reason_phrase: {}", http_version, status_code, reason_phrase);
                 }
 
                 Response::parse_http_response_header_string(&string);
