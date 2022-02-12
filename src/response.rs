@@ -75,9 +75,9 @@ impl Response {
                 let string_as_bytes_u8 = response[last_new_line_position..i];
                 let string = String::from(string_as_bytes_u8);
 
-                println!("{}", string);
-                println!("Last new line position: {}", last_new_line_position);
-                println!("Current new line position: {}", i);
+                println!("String:\n{}", string);
+                println!("Last new line position:\n{}", last_new_line_position);
+                println!("Current new line position:\n{}", i);
 
                 if last_new_line_position == 0 {
                     let (http_version, status_code, reason_phrase) = Response::parse_http_version_status_code_reason_phrase_string(&string);
