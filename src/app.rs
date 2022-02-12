@@ -1,4 +1,6 @@
 use std::{env, fs};
+use std::fs::File;
+use std::io::Read;
 use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::CONSTANTS;
 use crate::header::Header;
@@ -17,7 +19,11 @@ impl App {
     pub(crate) fn handle_request(request: Request) -> Response {
 
         // by default we assume route or static asset is not found
-        let mut contents = fs::read_to_string(App::NOT_FOUND_PAGE_FILEPATH).unwrap();
+        let mut file_content = Vec::new();
+        let mut file = File::open(&App::NOT_FOUND_PAGE_FILEPATH).expect("Unable to open file");
+        file.read_to_end(&mut file_content).expect("Unable to read");
+
+        let mut contents = file_content;
         let content_type = MimeType::detect_mime_type(App::NOT_FOUND_PAGE_FILEPATH);
 
         let content_type_header = Header {
@@ -34,7 +40,11 @@ impl App {
         };
 
         if request.request_uri == CONSTANTS.SLASH {
-            contents = fs::read_to_string(App::INDEX_FILEPATH).unwrap();
+            let mut file_content = Vec::new();
+            let mut file = File::open(&App::INDEX_FILEPATH).expect("Unable to open file");
+            file.read_to_end(&mut file_content).expect("Unable to read");
+
+            let mut contents = file_content;
             let content_type = MimeType::detect_mime_type(App::INDEX_FILEPATH);
 
             let content_type_header = Header {
@@ -51,44 +61,41 @@ impl App {
             };
         }
 
-        if request.method == REQUEST_METHODS.GET {
+        if request.method == REQUEST_METHODS.GET && request.request_uri != CONSTANTS.SLASH {
             let result = App::process_static_resources(&request);
 
-            match result {
-                Ok(contents) => {
-                    let content_type = MimeType::detect_mime_type(&request.request_uri);
+            let content_type = MimeType::detect_mime_type(&request.request_uri);
 
-                    let content_type_header = Header {
-                        header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
-                        header_value: content_type,
-                    };
+            let content_type_header = Header {
+                header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
+                header_value: content_type,
+            };
 
-                    response = Response {
-                        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
-                        status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE.to_string(),
-                        reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE.to_string(),
-                        headers: vec![content_type_header, App::get_x_content_type_options_header()],
-                        message_body: contents
-                    };
+            response = Response {
+                http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+                status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE.to_string(),
+                reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE.to_string(),
+                headers: vec![content_type_header, App::get_x_content_type_options_header()],
+                message_body: result
+            };
 
-                },
-                Err(error) => {
-                    // 'No such file or directory' or 'Is a directory' errors etc.
-                    println!("{}", error.to_string());
-                },
-            }
         }
 
         response
     }
 
-    pub(crate) fn process_static_resources(request: &Request) -> std::io::Result<String> {
+    pub(crate) fn process_static_resources(request: &Request) -> Vec<u8> {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
         let static_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
 
-        let unwrapped_contents = fs::read_to_string(static_filepath);
-        unwrapped_contents
+        let mut file_content = Vec::new();
+        let mut file = File::open(&static_filepath).expect("Unable to open file");
+        file.read_to_end(&mut file_content).expect("Unable to read");
+
+        let mut contents = file_content;
+
+        contents
     }
 
     pub(crate) fn get_x_content_type_options_header() -> Header {

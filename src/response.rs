@@ -7,7 +7,7 @@ pub struct Response {
     pub(crate) status_code: String,
     pub(crate) reason_phrase: String,
     pub(crate) headers: Vec<Header>,
-    pub(crate) message_body: String
+    pub(crate) message_body: Vec<u8>
 }
 
 impl Response {
@@ -18,7 +18,7 @@ impl Response {
         header
     }
 
-    pub(crate) fn generate_response(response: Response) -> String {
+    pub(crate) fn generate_response(response: Response) -> Vec<u8> {
         let status = [response.http_version, response.status_code, response.reason_phrase].join(CONSTANTS.WHITESPACE);
 
         let mut headers = CONSTANTS.NEW_LINE_SEPARATOR.to_string();
@@ -38,15 +38,17 @@ impl Response {
         content_length_header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
         headers.push_str(&content_length_header_string);
 
-        let response = format!(
-            "{}{}{}{}",
+        let response_without_body = format!(
+            "{}{}{}",
             status,
             headers,
             CONSTANTS.NEW_LINE_SEPARATOR,
-            response.message_body,
         );
 
-        println!("_____RESPONSE______\n{}", response);
+        println!("_____RESPONSE w/o body______\n{}", &response_without_body);
+
+        let mut response :Vec<u8> = Vec::from([response_without_body.into_bytes(), response.message_body].concat());
+
 
         response
     }
@@ -96,19 +98,14 @@ impl Response {
                 message_body.push_str(e);
             }
         }
+        let u8_message_body = message_body.as_bytes();
 
         Response {
             http_version,
             status_code,
             reason_phrase,
             headers,
-            message_body,
+            message_body: Vec::from(u8_message_body),
         }
-    }
-}
-
-impl std::fmt::Display for Response {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(fmt, "Response http version {} and status_code {} and reason_phrase {}", self.http_version, self.status_code, self.reason_phrase)
     }
 }

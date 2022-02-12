@@ -1,6 +1,7 @@
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::{env, fs};
+use std::borrow::Borrow;
 
 use crate::request::Request;
 use crate::response::Response;
@@ -24,12 +25,12 @@ impl Server {
 
         let response = Server::process_request(request_string);
 
-        stream.write(response.as_bytes()).unwrap();
+        stream.write(response.borrow()).unwrap();
         stream.flush().unwrap();
 
     }
 
-    pub(crate) fn process_request(request_string: String) -> String {
+    pub(crate) fn process_request(request_string: String) -> Vec<u8> {
         let request: Request = Request::parse_request(&request_string);
         let response = App::handle_request(request);
         let raw_response = Response::generate_response(response);
