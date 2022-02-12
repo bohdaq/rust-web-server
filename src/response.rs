@@ -61,6 +61,14 @@ impl Response {
         let mut last_new_line_position: usize = 0;
         let mut content_length : usize = 0;
 
+        let mut response = Response {
+            http_version: "".to_string(),
+            status_code: "".to_string(),
+            reason_phrase: "".to_string(),
+            headers: vec![],
+            message_body: vec![],
+        };
+
         for i in 0..iteration_end_position {
             let first_byte = response[i];
             let second_byte = response[i+1];
@@ -82,6 +90,10 @@ impl Response {
                 if last_new_line_position == 0 {
                     let (http_version, status_code, reason_phrase) = Response::parse_http_version_status_code_reason_phrase_string(&string);
                     println!("http_version: {} status_code: {} reason_phrase: {}", http_version, status_code, reason_phrase);
+
+                    response.http_version = http_version;
+                    response.status_code = status_code;
+                    response.reason_phrase = reason_phrase;
                 }
 
                 if last_new_line_position != 0 {
@@ -97,12 +109,19 @@ impl Response {
                         }
 
                         println!("{}", header);
+
+                        response.headers.push(header);
                     }
 
                 }
 
-                last_new_line_position = i + 1; // start from new line
+                last_new_line_position = i + 1; // start from new line, next char after '/n'
 
+            }
+
+            if content_length > 0 {
+                let message_body = response[last_new_line_position..content_length];
+                response.message_body = message_body;
             }
 
         }
