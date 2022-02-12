@@ -88,7 +88,7 @@ impl Response {
                         println!("detected end of headers part");
                         break;
                     } else {
-                        Response::parse_http_response_header_string(&string);
+                        let header: Header = Response::parse_http_response_header_string(&string);
                     }
 
                 }
@@ -156,30 +156,12 @@ impl Response {
         return (http_version, status_code, reason_phrase)
     }
 
-    pub(crate)  fn parse_http_response_header_string(header: &str) {
+    pub(crate)  fn parse_http_response_header_string(header_string: &str) -> Header {
+        let header_parts: Vec<&str> = header_string.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
 
-        // parsing headers
-        let mut headers = vec![];
-        let mut headers_end_position = 999999;
-        for (pos, e) in strings.iter().enumerate() {
-            // stop when headers end
-            if e.len() <= 1 {
-                headers_end_position = pos;
-                break;
-            }
-
-            // skip http_version, status_code and reason phrase
-            if pos != 0  {
-                let header_parts: Vec<&str> = e.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
-
-                let header = Header {
-                    header_name: header_parts[0].to_string(),
-                    header_value: header_parts[1].to_string()
-                };
-
-                headers.push(header);
-
-            }
+        Header {
+            header_name: header_parts[0].to_string(),
+            header_value: header_parts[1].to_string()
         }
     }
 
