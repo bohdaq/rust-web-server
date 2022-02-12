@@ -78,8 +78,13 @@ impl Response {
                 println!("Last new line position: {}", last_new_line_position);
                 println!("Current new line position: {}", i);
 
-                last_new_line_position = i;
+                if last_new_line_position == 0 {
+                    let (http_version, status_code, reason_phrase) = Response::parse_http_version_status_code_reason_phrase_string(&string);
+                }
 
+                Response::parse_http_response_header_string(&string);
+
+                last_new_line_position = i;
 
             }
 
@@ -87,16 +92,6 @@ impl Response {
 
 
         let strings: Vec<&str> = response.split(CONSTANTS.NEW_LINE_SEPARATOR).collect();
-
-        // parsing http_version, status_code and reason phrase
-        let http_version_status_code_reason_phrase = strings[0].to_string();
-
-        let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
-        let caps = re.captures(&http_version_status_code_reason_phrase).unwrap();
-
-        let http_version= String::from(&caps["http_version"]);
-        let status_code = String::from(&caps["status_code"]);
-        let reason_phrase = String::from(&caps["reason_phrase"]);
 
         // parsing headers
         let mut headers = vec![];
@@ -138,6 +133,44 @@ impl Response {
             reason_phrase,
             headers,
             message_body: Vec::from(u8_message_body),
+        }
+    }
+
+    pub(crate)  fn parse_http_version_status_code_reason_phrase_string(http_version_status_code_reason_phrase: &str) -> (String, String, String) {
+        let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
+        let caps = re.captures(&http_version_status_code_reason_phrase).unwrap();
+
+        let http_version= String::from(&caps["http_version"]);
+        let status_code = String::from(&caps["status_code"]);
+        let reason_phrase = String::from(&caps["reason_phrase"]);
+
+        return (http_version, status_code, reason_phrase)
+    }
+
+    pub(crate)  fn parse_http_response_header_string(header: &str) {
+
+        // parsing headers
+        let mut headers = vec![];
+        let mut headers_end_position = 999999;
+        for (pos, e) in strings.iter().enumerate() {
+            // stop when headers end
+            if e.len() <= 1 {
+                headers_end_position = pos;
+                break;
+            }
+
+            // skip http_version, status_code and reason phrase
+            if pos != 0  {
+                let header_parts: Vec<&str> = e.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
+
+                let header = Header {
+                    header_name: header_parts[0].to_string(),
+                    header_value: header_parts[1].to_string()
+                };
+
+                headers.push(header);
+
+            }
         }
     }
 
