@@ -53,7 +53,8 @@ impl Response {
         response
     }
 
-    pub(crate) fn parse_response(response: String) -> Response {
+    pub(crate) fn parse_response(response: Vec<u8>) -> Response {
+
         let strings: Vec<&str> = response.split(CONSTANTS.NEW_LINE_SEPARATOR).collect();
 
         // parsing http_version, status_code and reason phrase
@@ -107,5 +108,12 @@ impl Response {
             headers,
             message_body: Vec::from(u8_message_body),
         }
+    }
+
+    pub(crate) fn as_u32_be(array: &[u8; 4]) -> u32 {
+            ((array[0] as u32) << 24 )  |
+            ((array[1] as u32) << 16)   |
+            ((array[2] as u32) << 8)    |
+            ((array[3] as u32) << 0)
     }
 }

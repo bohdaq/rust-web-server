@@ -978,7 +978,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request);
+        let raw_response: Vec<u8> = Server::process_request(raw_request);
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
