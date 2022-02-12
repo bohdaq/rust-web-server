@@ -89,6 +89,7 @@ impl Response {
                         break;
                     } else {
                         let header: Header = Response::parse_http_response_header_string(&string);
+                        println!("{}", header);
                     }
 
                 }
