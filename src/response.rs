@@ -83,7 +83,15 @@ impl Response {
                     println!("http_version: {} status_code: {} reason_phrase: {}", http_version, status_code, reason_phrase);
                 }
 
-                Response::parse_http_response_header_string(&string);
+                if last_new_line_position != 0 {
+                    if string.len() <= 1 {
+                        println!("detected end of headers part");
+                        break;
+                    } else {
+                        Response::parse_http_response_header_string(&string);
+                    }
+
+                }
 
                 last_new_line_position = i;
 
