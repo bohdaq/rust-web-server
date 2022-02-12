@@ -76,8 +76,11 @@ impl Response {
 
                 println!("{}", string);
                 println!("Last new line position: {}", last_new_line_position);
+                println!("Current new line position: {}", i);
 
                 last_new_line_position = i;
+
+
             }
 
         }
