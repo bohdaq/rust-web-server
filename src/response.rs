@@ -53,10 +53,10 @@ impl Response {
         response
     }
 
-    pub(crate) fn parse_response(response: Vec<u8>) -> Response {
-        println!("Vec<u8> length: {}", response.len());
+    pub(crate) fn parse_response(response_vec_u8: Vec<u8>) -> Response {
+        println!("Vec<u8> length: {}", response_vec_u8.len());
 
-        let len : usize = response.len();
+        let len : usize = response_vec_u8.len();
         let iteration_end_position : usize = len - 4;
         let mut last_new_line_position: usize = 0;
         let mut content_length : usize = 0;
@@ -70,18 +70,18 @@ impl Response {
         };
 
         for i in 0..iteration_end_position {
-            let first_byte = response[i];
-            let second_byte = response[i+1];
-            let third_byte = response[i+2];
-            let fourth_byte = response[i+3];
+            let first_byte = response_vec_u8[i];
+            let second_byte = response_vec_u8[i+1];
+            let third_byte = response_vec_u8[i+2];
+            let fourth_byte = response_vec_u8[i+3];
 
             let char_as_u8_4 = [first_byte, second_byte, third_byte, fourth_byte];
             let char_as_u32 = Response::as_u32_be(&char_as_u8_4);
             let char = char::from_u32(char_as_u32).unwrap();
 
             if char == '\n' {
-                let string_as_bytes_u8 = response[last_new_line_position..i];
-                let string = String::from(string_as_bytes_u8);
+                let string_as_bytes_u8 = &response_vec_u8[last_new_line_position..i];
+                let string = String::from_utf8(string_as_bytes_u8.to_vec()).unwrap();
 
                 println!("String:\n{}", string);
                 println!("Last new line position:\n{}", last_new_line_position);
@@ -120,8 +120,8 @@ impl Response {
             }
 
             if content_length > 0 {
-                let message_body = response[last_new_line_position..content_length];
-                response.message_body = message_body;
+                let message_body = &response_vec_u8[last_new_line_position..content_length];
+                response.message_body = message_body.to_owned();
             }
 
         }

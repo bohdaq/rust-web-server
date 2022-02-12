@@ -991,7 +991,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file, response.message_body);
+        assert_eq!(response_html_file.as_bytes().to_vec(), response.message_body);
     }
 
     #[test]

@@ -42,7 +42,7 @@ impl Request {
         request
     }
 
-    pub(crate) fn parse_request(request: &String) ->  Request {
+    pub(crate) fn parse_request(request: &[u8]) ->  Request {
         println!("_____REQUEST______\n{}", request);
 
         let strings: Vec<&str> = request.split(CONSTANTS.NEW_LINE_SEPARATOR).collect();

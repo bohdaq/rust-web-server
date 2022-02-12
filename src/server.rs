@@ -21,17 +21,16 @@ impl Server {
 
         stream.read(&mut buffer).unwrap();
 
-        let request_string = String::from_utf8_lossy(&buffer[..]).to_string();
 
-        let response = Server::process_request(request_string);
+        let response = Server::process_request(&buffer[..]);
 
         stream.write(response.borrow()).unwrap();
         stream.flush().unwrap();
 
     }
 
-    pub(crate) fn process_request(request_string: String) -> Vec<u8> {
-        let request: Request = Request::parse_request(&request_string);
+    pub(crate) fn process_request(request: &[u8]) -> Vec<u8> {
+        let request: Request = Request::parse_request(request);
         let response = App::handle_request(request);
         let raw_response = Response::generate_response(response);
 
