@@ -101,7 +101,7 @@ impl Response {
 
                 }
 
-                last_new_line_position = i;
+                last_new_line_position = i + 1; // start from new line
 
             }
 
