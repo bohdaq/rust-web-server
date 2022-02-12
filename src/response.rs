@@ -54,6 +54,34 @@ impl Response {
     }
 
     pub(crate) fn parse_response(response: Vec<u8>) -> Response {
+        println!("Vec<u8> length: {}", response.len());
+
+        let len : usize = response.len();
+        let iteration_end_position : usize = len - 4;
+        let mut last_new_line_position: usize = 0;
+
+        for i in 0..iteration_end_position {
+            let first_byte = response[i];
+            let second_byte = response[i+1];
+            let third_byte = response[i+2];
+            let fourth_byte = response[i+3];
+
+            let char_as_u8_4 = [first_byte, second_byte, third_byte, fourth_byte];
+            let char_as_u32 = Response::as_u32_be(&char_as_u8_4);
+            let char = char::from_u32(char_as_u32).unwrap();
+
+            if char == '\n' {
+                let string_as_bytes_u8 = response[last_new_line_position..i];
+                let string = String::from(string_as_bytes_u8);
+
+                println!("{}", string);
+                println!("Last new line position: {}", last_new_line_position);
+
+                last_new_line_position = i;
+            }
+
+        }
+
 
         let strings: Vec<&str> = response.split(CONSTANTS.NEW_LINE_SEPARATOR).collect();
 
