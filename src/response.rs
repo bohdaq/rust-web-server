@@ -126,50 +126,7 @@ impl Response {
 
         }
 
-
-        let strings: Vec<&str> = response.split(CONSTANTS.NEW_LINE_SEPARATOR).collect();
-
-        // parsing headers
-        let mut headers = vec![];
-        let mut headers_end_position = 999999;
-        for (pos, e) in strings.iter().enumerate() {
-            // stop when headers end
-            if e.len() <= 1 {
-                headers_end_position = pos;
-                break;
-            }
-
-            // skip http_version, status_code and reason phrase
-            if pos != 0  {
-                let header_parts: Vec<&str> = e.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
-
-                let header = Header {
-                    header_name: header_parts[0].to_string(),
-                    header_value: header_parts[1].to_string()
-                };
-
-                headers.push(header);
-
-            }
-        }
-
-        let mut message_body = CONSTANTS.EMPTY_STRING.to_string();
-        // parsing message body
-        for (pos, e) in strings.iter().enumerate() {
-            // start when headers end
-            if pos > headers_end_position {
-                message_body.push_str(e);
-            }
-        }
-        let u8_message_body = message_body.as_bytes();
-
-        Response {
-            http_version,
-            status_code,
-            reason_phrase,
-            headers,
-            message_body: Vec::from(u8_message_body),
-        }
+        return response;
     }
 
     pub(crate)  fn parse_http_version_status_code_reason_phrase_string(http_version_status_code_reason_phrase: &str) -> (String, String, String) {
