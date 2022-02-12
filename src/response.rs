@@ -1,6 +1,6 @@
 use crate::header::Header;
 use regex::Regex;
-use crate::constant::CONSTANTS;
+use crate::constant::{CONSTANTS, HTTP_HEADERS};
 
 pub struct Response {
     pub(crate) http_version: String,
@@ -59,6 +59,7 @@ impl Response {
         let len : usize = response.len();
         let iteration_end_position : usize = len - 4;
         let mut last_new_line_position: usize = 0;
+        let mut content_length : usize = 0;
 
         for i in 0..iteration_end_position {
             let first_byte = response[i];
@@ -89,6 +90,12 @@ impl Response {
                         break;
                     } else {
                         let header: Header = Response::parse_http_response_header_string(&string);
+
+                        if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
+                            content_length = header.header_value.parse().unwrap();
+                            println!("content_length: {}", content_length);
+                        }
+
                         println!("{}", header);
                     }
 
