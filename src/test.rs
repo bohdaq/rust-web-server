@@ -958,7 +958,7 @@ mod tests {
 
         let raw_request = Request::generate_request(request);
 
-        let request: Request = Request::parse_request(&raw_request);
+        let request: Request = Request::parse_request(&raw_request.as_bytes());
         let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
         assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -979,7 +979,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: Vec<u8> = Server::process_request(raw_request.borrow());
+        let raw_response: Vec<u8> = Server::process_request(raw_request.as_bytes());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1021,7 +1021,7 @@ mod tests {
 
         let raw_request = Request::generate_request(request);
 
-        let request: Request = Request::parse_request(&raw_request);
+        let request: Request = Request::parse_request(&raw_request.as_bytes());
         let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
         assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -1047,7 +1047,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response  = Server::process_request(raw_request.borrow());
+        let raw_response  = Server::process_request(raw_request.as_bytes());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1090,7 +1090,7 @@ mod tests {
 
         let raw_request = Request::generate_request(request);
 
-        let request: Request = Request::parse_request(&raw_request);
+        let request: Request = Request::parse_request(&raw_request.as_bytes());
         let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
         assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -1117,7 +1117,7 @@ mod tests {
         let port: usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response = Server::process_request(raw_request.borrow());
+        let raw_response = Server::process_request(raw_request.as_bytes());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1160,7 +1160,7 @@ mod tests {
 
         let raw_request = Request::generate_request(request);
 
-        let request: Request = Request::parse_request(&raw_request);
+        let request: Request = Request::parse_request(&raw_request.as_bytes());
         let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
         assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -1187,7 +1187,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response = Server::process_request(raw_request.borrow());
+        let raw_response = Server::process_request(raw_request.as_bytes());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1230,7 +1230,7 @@ mod tests {
 
         let raw_request = Request::generate_request(request);
 
-        let request: Request = Request::parse_request(&raw_request);
+        let request: Request = Request::parse_request(&raw_request.as_bytes());
         let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
         assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -1257,7 +1257,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response = Server::process_request(raw_request.borrow());
+        let raw_response = Server::process_request(raw_request.as_bytes());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1300,7 +1300,7 @@ mod tests {
 
         let raw_request = Request::generate_request(request);
 
-        let request: Request = Request::parse_request(&raw_request);
+        let request: Request = Request::parse_request(&raw_request.as_bytes());
         let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
         assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -1327,7 +1327,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response = Server::process_request(raw_request.borrow());
+        let raw_response = Server::process_request(raw_request.as_bytes());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1370,7 +1370,7 @@ mod tests {
 
         let raw_request = Request::generate_request(request);
 
-        let request: Request = Request::parse_request(&raw_request);
+        let request: Request = Request::parse_request(&raw_request.as_bytes());
         let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
         assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -1397,7 +1397,7 @@ mod tests {
         let static_directories = vec!["/static".to_string()];
 
 
-        let raw_response = Server::process_request(raw_request.borrow());
+        let raw_response = Server::process_request(raw_request.as_bytes());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1443,7 +1443,7 @@ mod tests {
 
         let raw_request = Request::generate_request(request);
 
-        let request: Request = Request::parse_request(&raw_request);
+        let request: Request = Request::parse_request(&raw_request.as_bytes());
         let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
         assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -1469,7 +1469,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string(), "/assets".to_string()];
 
-        let raw_response = Server::process_request(raw_request.borrow());
+        let raw_response = Server::process_request(raw_request.as_bytes());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1515,7 +1515,7 @@ mod tests {
 
         let raw_request = Request::generate_request(request);
 
-        let request: Request = Request::parse_request(&raw_request);
+        let request: Request = Request::parse_request(&raw_request.as_bytes());
         let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
         assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -1541,7 +1541,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string(), "/assets".to_string()];
 
-        let raw_response = Server::process_request(raw_request.borrow());
+        let raw_response = Server::process_request(raw_request.as_bytes());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 

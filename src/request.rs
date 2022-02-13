@@ -1,3 +1,5 @@
+use std::io;
+use std::io::BufRead;
 use crate::header::Header;
 use regex::Regex;
 use crate::constant::{CONSTANTS, HTTP_HEADERS};
@@ -17,7 +19,7 @@ impl Request {
         header
     }
 
-    pub(crate) fn generate_request(request: Request) -> Vec<u8> {
+    pub(crate) fn generate_request(request: Request) -> String {
         let status = [request.method, request.request_uri, request.http_version, CONSTANTS.NEW_LINE_SEPARATOR.to_string()].join(CONSTANTS.WHITESPACE);
 
         let mut headers = CONSTANTS.EMPTY_STRING.to_string();
@@ -39,11 +41,20 @@ impl Request {
 
         println!("_____REQUEST______\n{}", request);
 
-        request.as_bytes().to_vec()
+        request
     }
 
-    pub(crate) fn parse_request(request_vec_u8: &Vec<u8>) ->  Request {
-        println!("Vec<u8> length: {}", request_vec_u8.len());
+    pub(crate) fn parse_request(request_vec_u8: &[u8]) ->  Request {
+        let mut cursor = io::Cursor::new(request_vec_u8);
+        let mut buf = vec![];
+
+        let num_bytes = cursor.read_until(b'\n', &mut buf)
+            .expect("reading from cursor won't fail");
+        println!("{}", String::from_utf8(buf).unwrap());
+        buf = vec![];
+
+
+        println!("offset in bytes: {}", num_bytes);
 
         let len : usize = request_vec_u8.len();
         let iteration_end_position : usize = len - 4;
