@@ -1,6 +1,6 @@
 use crate::header::Header;
 use regex::Regex;
-use crate::constant::CONSTANTS;
+use crate::constant::{CONSTANTS, HTTP_HEADERS};
 
 pub struct Request {
     pub(crate) method: String,
@@ -42,8 +42,13 @@ impl Request {
         request.as_bytes().to_vec()
     }
 
-    pub(crate) fn parse_request(request: &Vec<u8>) ->  Request {
+    pub(crate) fn parse_request(request_vec_u8: &Vec<u8>) ->  Request {
+        println!("Vec<u8> length: {}", request_vec_u8.len());
 
+        let len : usize = request_vec_u8.len();
+        let iteration_end_position : usize = len - 4;
+        let mut last_new_line_position: usize = 0;
+        let mut content_length : usize = 0;
 
         let mut request = Request {
             method: "".to_string(),
@@ -51,6 +56,58 @@ impl Request {
             http_version: "".to_string(),
             headers: vec![]
         };
+
+        for i in 0..iteration_end_position {
+            let first_byte = request_vec_u8[i];
+            let second_byte = request_vec_u8[i+1];
+            let third_byte = request_vec_u8[i+2];
+            let fourth_byte = request_vec_u8[i+3];
+
+            let char_as_u8_4 = [first_byte, second_byte, third_byte, fourth_byte];
+            let char_as_u32 = Request::as_u32_be(&char_as_u8_4);
+            let char = char::from_u32(char_as_u32).unwrap();
+
+            if char == '\n' {
+                let string_as_bytes_u8 = &request_vec_u8[last_new_line_position..i];
+                let string = String::from_utf8(string_as_bytes_u8.to_vec()).unwrap();
+
+                println!("String:\n{}", string);
+                println!("Last new line position:\n{}", last_new_line_position);
+                println!("Current new line position:\n{}", i);
+
+                if last_new_line_position == 0 {
+                    let (method, request_uri, http_version) = Request::parse_method_and_request_uri_and_http_version_string(&string);
+                    println!("method: {} request_uri: {} http_version: {}", method, request_uri, http_version);
+
+                    request.method = method;
+                    request.request_uri = request_uri;
+                    request.http_version = http_version;
+                }
+
+                if last_new_line_position != 0 {
+                    if string.len() <= 1 {
+                        println!("detected end of headers part");
+                        break;
+                    } else {
+                        let header: Header = Request::parse_http_request_header_string(&string);
+
+                        if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
+                            content_length = header.header_value.parse().unwrap();
+                            println!("content_length: {}", content_length);
+                        }
+
+                        println!("{}", header);
+
+                        request.headers.push(header);
+                    }
+
+                }
+
+                last_new_line_position = i + 1; // start from new line, next char after '/n'
+
+            }
+
+        }
 
         request
         //
@@ -97,6 +154,33 @@ impl Request {
         //     http_version: http_version.to_string(),
         //     headers,
         // }
+    }
+
+    pub(crate)  fn parse_method_and_request_uri_and_http_version_string(http_version_status_code_reason_phrase: &str) -> (String, String, String) {
+        let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
+        let caps = re.captures(&http_version_status_code_reason_phrase).unwrap();
+
+        let method= String::from(&caps["method"]);
+        let request_uri = String::from(&caps["request_uri"]);
+        let http_version = String::from(&caps["http_version"]);
+
+        return (method, request_uri, http_version)
+    }
+
+    pub(crate)  fn parse_http_request_header_string(header_string: &str) -> Header {
+        let header_parts: Vec<&str> = header_string.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
+
+        Header {
+            header_name: header_parts[0].to_string(),
+            header_value: header_parts[1].to_string()
+        }
+    }
+
+    pub(crate) fn as_u32_be(array: &[u8; 4]) -> u32 {
+        ((array[0] as u32) << 24 )  |
+            ((array[1] as u32) << 16)   |
+            ((array[2] as u32) << 8)    |
+            ((array[3] as u32) << 0)
     }
 
 }
