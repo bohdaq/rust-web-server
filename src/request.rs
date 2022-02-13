@@ -17,7 +17,7 @@ impl Request {
         header
     }
 
-    pub(crate) fn generate_request(request: Request) -> String {
+    pub(crate) fn generate_request(request: Request) -> Vec<u8> {
         let status = [request.method, request.request_uri, request.http_version, CONSTANTS.NEW_LINE_SEPARATOR.to_string()].join(CONSTANTS.WHITESPACE);
 
         let mut headers = CONSTANTS.EMPTY_STRING.to_string();
@@ -39,53 +39,64 @@ impl Request {
 
         println!("_____REQUEST______\n{}", request);
 
-        request
+        request.as_bytes().to_vec()
     }
 
-    pub(crate) fn parse_request(request: &[u8]) ->  Request {
-        println!("_____REQUEST______\n{}", request);
-
-        let strings: Vec<&str> = request.split(CONSTANTS.NEW_LINE_SEPARATOR).collect();
-
-        // parsing method request_uri and http_version
-        let method_request_uri_http_version = strings[0].to_string();
-
-        let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
-        let caps = re.captures(&method_request_uri_http_version).unwrap();
+    pub(crate) fn parse_request(request: &Vec<u8>) ->  Request {
 
 
-        let method = String::from(&caps["method"]);
-        let request_uri = String::from(&caps["request_uri"]);
-        let http_version = String::from(&caps["http_version"]);
+        let mut request = Request {
+            method: "".to_string(),
+            request_uri: "".to_string(),
+            http_version: "".to_string(),
+            headers: vec![]
+        };
 
-        let mut headers = vec![];
-        // parsing headers
-        for (pos, e) in strings.iter().enumerate() {
-            // stop when headers end
-            if e.len() <= 1 {
-                break;
-            }
-
-            // skip method_request_uri_http_version
-            if pos != 0  {
-                let header_parts: Vec<&str> = e.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
-
-                let header = Header {
-                    header_name: header_parts[0].to_string(),
-                    header_value: header_parts[1].to_string()
-                };
-
-                headers.push(header);
-
-            }
-        }
-
-        Request {
-            method: method.to_string(),
-            request_uri: request_uri.to_string(),
-            http_version: http_version.to_string(),
-            headers,
-        }
+        request
+        //
+        // println!("_____REQUEST______\n{}", request);
+        //
+        // let strings: Vec<&str> = request.split(CONSTANTS.NEW_LINE_SEPARATOR).collect();
+        //
+        // // parsing method request_uri and http_version
+        // let method_request_uri_http_version = strings[0].to_string();
+        //
+        // let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
+        // let caps = re.captures(&method_request_uri_http_version).unwrap();
+        //
+        //
+        // let method = String::from(&caps["method"]);
+        // let request_uri = String::from(&caps["request_uri"]);
+        // let http_version = String::from(&caps["http_version"]);
+        //
+        // let mut headers = vec![];
+        // // parsing headers
+        // for (pos, e) in strings.iter().enumerate() {
+        //     // stop when headers end
+        //     if e.len() <= 1 {
+        //         break;
+        //     }
+        //
+        //     // skip method_request_uri_http_version
+        //     if pos != 0  {
+        //         let header_parts: Vec<&str> = e.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
+        //
+        //         let header = Header {
+        //             header_name: header_parts[0].to_string(),
+        //             header_value: header_parts[1].to_string()
+        //         };
+        //
+        //         headers.push(header);
+        //
+        //     }
+        // }
+        //
+        // Request {
+        //     method: method.to_string(),
+        //     request_uri: request_uri.to_string(),
+        //     http_version: http_version.to_string(),
+        //     headers,
+        // }
     }
 
 }

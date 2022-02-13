@@ -4,6 +4,7 @@ use regex::Regex;
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Borrow;
     use crate::CONSTANTS;
     use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
     use crate::header::Header;
@@ -978,7 +979,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: Vec<u8> = Server::process_request(raw_request);
+        let raw_response: Vec<u8> = Server::process_request(raw_request.borrow());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1046,7 +1047,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request);
+        let raw_response  = Server::process_request(raw_request.borrow());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1060,7 +1061,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file, response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.message_body);
     }
 
     #[test]
@@ -1116,7 +1117,7 @@ mod tests {
         let port: usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request);
+        let raw_response = Server::process_request(raw_request.borrow());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1130,7 +1131,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file, response.message_body);
+        assert_eq!(response_html_file.as_bytes().to_vec(), response.message_body);
     }
 
     #[test]
@@ -1186,7 +1187,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request);
+        let raw_response = Server::process_request(raw_request.borrow());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1200,7 +1201,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file, response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.message_body);
     }
 
     #[test]
@@ -1256,7 +1257,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request);
+        let raw_response = Server::process_request(raw_request.borrow());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1270,7 +1271,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file, response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.message_body);
     }
 
     #[test]
@@ -1326,7 +1327,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request);
+        let raw_response = Server::process_request(raw_request.borrow());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1340,7 +1341,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file, response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.message_body);
     }
 
     #[test]
@@ -1396,7 +1397,7 @@ mod tests {
         let static_directories = vec!["/static".to_string()];
 
 
-        let raw_response: String = Server::process_request(raw_request);
+        let raw_response = Server::process_request(raw_request.borrow());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1410,7 +1411,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file, response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.message_body);
     }
 
     #[test]
@@ -1468,7 +1469,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string(), "/assets".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request);
+        let raw_response = Server::process_request(raw_request.borrow());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1482,7 +1483,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file, response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.message_body);
 
 
 
@@ -1540,7 +1541,7 @@ mod tests {
         let port : usize = "8787".parse().unwrap();
         let static_directories = vec!["/static".to_string(), "/assets".to_string()];
 
-        let raw_response: String = Server::process_request(raw_request);
+        let raw_response = Server::process_request(raw_request.borrow());
         let response = Response::parse_response(raw_response);
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -1554,7 +1555,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file, response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.message_body);
     }
 
     #[test]
@@ -1579,7 +1580,7 @@ mod tests {
             status_code: response_status_code.to_string(),
             reason_phrase: response_reason_phrase.to_string(),
             headers,
-            message_body: message_body.to_string()
+            message_body: message_body.as_bytes().to_vec()
         };
 
 
@@ -1601,7 +1602,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(message_body, response.message_body);
+        assert_eq!(message_body.as_bytes().to_vec(), response.message_body);
 
 
     }
@@ -1634,7 +1635,7 @@ mod tests {
             status_code: response_status_code.to_string(),
             reason_phrase: response_reason_phrase.to_string(),
             headers,
-            message_body: message_body.to_string()
+            message_body: message_body.as_bytes().to_vec()
         };
 
 
@@ -1656,7 +1657,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(message_body, response.message_body);
+        assert_eq!(message_body.as_bytes().to_vec(), response.message_body);
     }
 
 }

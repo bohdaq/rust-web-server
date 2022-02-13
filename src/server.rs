@@ -30,7 +30,7 @@ impl Server {
     }
 
     pub(crate) fn process_request(request: &[u8]) -> Vec<u8> {
-        let request: Request = Request::parse_request(request);
+        let request: Request = Request::parse_request(&request.to_vec());
         let response = App::handle_request(request);
         let raw_response = Response::generate_response(response);
 
