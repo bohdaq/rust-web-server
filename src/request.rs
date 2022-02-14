@@ -86,19 +86,29 @@ impl Request {
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let b : &[u8] = &buf;
         let string = String::from_utf8(Vec::from(b)).unwrap();
-        println!("{}\n Length: {} Iteration:  {}", string.trim(), string.trim().len(), iteration_number);
+        let is_first_iteration = iteration_number == 0;
+        let no_more_new_line_chars_found = bytes_offset == 0;
+        let new_line_char_found = bytes_offset != 0;
+        let current_string_is_empty = string.trim().len() == 0;
+        println!("{}\n Length: {} Iteration:  {}, is_first_iteration: {}", string.trim(), string.trim().len(), iteration_number, is_first_iteration);
 
-        if iteration_number == 0 {
+
+        if is_first_iteration {
+            println!("parse method, request_uri, http_version");
             let (method, request_uri, http_version) = Request::parse_method_and_request_uri_and_http_version_string(&string);
+            println!("parse method: {}, request_uri: {}, http_version: {}", method, request_uri, http_version);
+
             request.method = method;
             request.request_uri = request_uri;
             request.http_version = http_version;
         }
 
-        if bytes_offset == 0 && string.trim().len() == 0 {
+        if no_more_new_line_chars_found && current_string_is_empty {
             println!("!!!end of headers...parse message body here");
             return;
-        } else {
+        }
+
+        if new_line_char_found && !current_string_is_empty  && !is_first_iteration {
             let header: Header = Request::parse_http_request_header_string(&string);
             if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
                 content_length = header.header_value.parse().unwrap();
