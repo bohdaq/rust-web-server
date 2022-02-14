@@ -1,5 +1,5 @@
 use std::io;
-use std::io::BufRead;
+use std::io::{BufRead, Cursor};
 use crate::header::Header;
 use regex::Regex;
 use crate::constant::{CONSTANTS, HTTP_HEADERS};
@@ -47,19 +47,26 @@ impl Request {
     pub(crate) fn parse_request(request_vec_u8: &[u8]) ->  Request {
         let mut cursor = io::Cursor::new(request_vec_u8);
 
-        let mut iteration_number : usize = 0;
-        let mut bytes_offset : usize = 0;
-        let end_of_headers = false;
+        // let mut iteration_number : usize = 0;
+        // let mut bytes_offset : usize = 0;
+        // let end_of_headers = false;
 
-        while !end_of_headers {
-            let mut buf = vec![];
-            bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
-            let string = String::from_utf8(buf).unwrap();
-            println!("{}", string);
-            println!("offset in bytes: {}", bytes_offset);
 
-        }
+        // bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
+        // let b : &[u8] = &buf;
+        // let string = String::from_utf8(Vec::from(b)).unwrap();
+        // println!("{}", string);
+        // println!("offset in bytes: {}", bytes_offset);
+        // buf.clear();
+        //
+        // bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
+        // let b : &[u8] = &buf;
+        // let string = String::from_utf8(Vec::from(b)).unwrap();
+        // println!("{}", string);
+        // println!("offset in bytes: {}", bytes_offset);
+        // buf.clear();
 
+        Request::cursor_read(&mut cursor);
 
 
         let len : usize = request_vec_u8.len();
@@ -159,6 +166,22 @@ impl Request {
             ((array[1] as u32) << 16)   |
             ((array[2] as u32) << 8)    |
             ((array[3] as u32) << 0)
+    }
+
+    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>) {
+        let mut buf = vec![];
+        let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
+        let b : &[u8] = &buf;
+        let string = String::from_utf8(Vec::from(b)).unwrap();
+        println!("{}, \n Length: {}", string.trim(), string.trim().len());
+        buf.clear();
+
+        if bytes_offset == 0 {
+            println!("!!!end of \\n");
+            return;
+        } else {
+            Request::cursor_read(cursor);
+        }
     }
 
 }
