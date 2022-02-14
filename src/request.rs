@@ -47,33 +47,6 @@ impl Request {
     pub(crate) fn parse_request(request_vec_u8: &[u8]) ->  Request {
         let mut cursor = io::Cursor::new(request_vec_u8);
 
-        // let mut iteration_number : usize = 0;
-        // let mut bytes_offset : usize = 0;
-        // let end_of_headers = false;
-
-
-        // bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
-        // let b : &[u8] = &buf;
-        // let string = String::from_utf8(Vec::from(b)).unwrap();
-        // println!("{}", string);
-        // println!("offset in bytes: {}", bytes_offset);
-        // buf.clear();
-        //
-        // bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
-        // let b : &[u8] = &buf;
-        // let string = String::from_utf8(Vec::from(b)).unwrap();
-        // println!("{}", string);
-        // println!("offset in bytes: {}", bytes_offset);
-        // buf.clear();
-
-        Request::cursor_read(&mut cursor);
-
-
-        let len : usize = request_vec_u8.len();
-        let iteration_end_position : usize = len - 4;
-        let mut last_new_line_position: usize = 0;
-        let mut content_length : usize = 0;
-
         let mut request = Request {
             method: "".to_string(),
             request_uri: "".to_string(),
@@ -81,63 +54,10 @@ impl Request {
             headers: vec![]
         };
 
-        for i in 0..iteration_end_position {
-            let first_byte = request_vec_u8[i];
-            let second_byte = request_vec_u8[i+1];
-            let third_byte = request_vec_u8[i+2];
-            let fourth_byte = request_vec_u8[i+3];
+        let mut content_length: usize = 0;
+        let mut iteration_number : usize = 0;
+        Request::cursor_read(&mut cursor, iteration_number, &mut request, content_length);
 
-            let char_as_u8_4 = [first_byte, second_byte, third_byte, fourth_byte];
-            let char_as_u32 = Request::as_u32_be(&char_as_u8_4);
-            let char = char::from_u32(char_as_u32).unwrap();
-
-            if char == '\n' {
-                let string_as_bytes_u8 = &request_vec_u8[last_new_line_position..i];
-                let string = String::from_utf8(string_as_bytes_u8.to_vec()).unwrap();
-
-                println!("String:\n{}", string);
-                println!("Last new line position:\n{}", last_new_line_position);
-                println!("Current new line position:\n{}", i);
-
-                if last_new_line_position == 0 {
-                    let (method, request_uri, http_version) = Request::parse_method_and_request_uri_and_http_version_string(&string);
-                    println!("method: {} request_uri: {} http_version: {}", method, request_uri, http_version);
-
-                    request.method = method;
-                    request.request_uri = request_uri;
-                    request.http_version = http_version;
-                }
-
-                if last_new_line_position != 0 {
-                    if string.len() <= 1 {
-                        println!("detected end of headers part");
-                        break;
-                    } else {
-                        let header: Header = Request::parse_http_request_header_string(&string);
-
-                        if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
-                            content_length = header.header_value.parse().unwrap();
-                            println!("content_length: {}", content_length);
-                        }
-
-                        println!("{}", header);
-
-                        request.headers.push(header);
-                    }
-
-                }
-
-                last_new_line_position = i + 1; // start from new line, next char after '/n'
-
-            }
-
-        }
-        let request = Request {
-            method: "".to_string(),
-            request_uri: "".to_string(),
-            http_version: "".to_string(),
-            headers: vec![]
-        };
         request
     }
 
@@ -161,26 +81,33 @@ impl Request {
         }
     }
 
-    pub(crate) fn as_u32_be(array: &[u8; 4]) -> u32 {
-        ((array[0] as u32) << 24 )  |
-            ((array[1] as u32) << 16)   |
-            ((array[2] as u32) << 8)    |
-            ((array[3] as u32) << 0)
-    }
-
-    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>) {
+    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, request: &mut Request, mut content_length: usize) {
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let b : &[u8] = &buf;
         let string = String::from_utf8(Vec::from(b)).unwrap();
-        println!("{}, \n Length: {}", string.trim(), string.trim().len());
-        buf.clear();
+        println!("{}\n Length: {} Iteration:  {}", string.trim(), string.trim().len(), iteration_number);
 
-        if bytes_offset == 0 {
-            println!("!!!end of \\n");
+        if iteration_number == 0 {
+            let (method, request_uri, http_version) = Request::parse_method_and_request_uri_and_http_version_string(&string);
+            request.method = method;
+            request.request_uri = request_uri;
+            request.http_version = http_version;
+        }
+
+        if bytes_offset == 0 && string.trim().len() == 0 {
+            println!("!!!end of headers...parse message body here");
             return;
         } else {
-            Request::cursor_read(cursor);
+            let header: Header = Request::parse_http_request_header_string(&string);
+            if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
+                content_length = header.header_value.parse().unwrap();
+                println!("content_length: {}", content_length);
+            }
+
+            request.headers.push(header);
+            iteration_number += 1;
+            Request::cursor_read(cursor, iteration_number, request, content_length);
         }
     }
 
