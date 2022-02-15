@@ -69,8 +69,7 @@ impl Response {
 
         let mut content_length: usize = 0;
         let mut iteration_number : usize = 0;
-        let mut bytes_offset : usize = 0;
-        Response::cursor_read(&mut cursor, iteration_number, &mut response, content_length, bytes_offset);
+        Response::cursor_read(&mut cursor, iteration_number, &mut response, content_length);
 
         return response;
     }
@@ -103,27 +102,19 @@ impl Response {
 
 
 
-    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize, mut bytes_offset: usize) {
-        let last_offset = bytes_offset;
-        println!("last_offset: {}", last_offset);
+    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize) {
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let mut b : &[u8] = &buf;
         let string = String::from_utf8(Vec::from(b)).unwrap();
 
         let is_first_iteration = iteration_number == 0;
-        let no_more_new_line_chars_found = bytes_offset == 0;
         let new_line_char_found = bytes_offset != 0;
         let current_string_is_empty = string.trim().len() == 0;
 
-        println!("is_first_iteration: {}", is_first_iteration);
-        println!("no_more_new_line_chars_found: {}", no_more_new_line_chars_found);
-        println!("new_line_char_found: {}", new_line_char_found);
-        println!("current_string_is_empty: {}", current_string_is_empty);
-
         if is_first_iteration {
             let (http_version, status_code, reason_phrase) = Response::parse_http_version_status_code_reason_phrase_string(&string);
-            println!("http_version: {} status_code: {} reason_phrase: {}", http_version, status_code, reason_phrase);
+            println!("{} {} {}", http_version, status_code, reason_phrase);
 
             response.http_version = http_version;
             response.status_code = status_code;
@@ -131,7 +122,7 @@ impl Response {
         }
 
         if current_string_is_empty {
-            println!("!!!end of headers...parse message body here, length: {}", content_length);
+            println!("end of headers... parse message length: {}", content_length);
             buf = vec![];
             cursor.read_to_end(&mut buf);
             b = &buf;
@@ -146,14 +137,12 @@ impl Response {
                 println!("{}: {}", &header.header_name, &header.header_value);
                 if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
                     content_length = header.header_value.parse().unwrap();
-                    println!("content_length: {}", content_length);
                 }
             }
 
-            println!("{}: {}", header.header_name, header.header_value);
             response.headers.push(header);
             iteration_number += 1;
-            Response::cursor_read(cursor, iteration_number, response, content_length, bytes_offset);
+            Response::cursor_read(cursor, iteration_number, response, content_length);
         }
     }
 }

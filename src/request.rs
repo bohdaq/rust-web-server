@@ -92,11 +92,6 @@ impl Request {
         let new_line_char_found = bytes_offset != 0;
         let current_string_is_empty = string.trim().len() == 0;
 
-        println!("is_first_iteration: {}", is_first_iteration);
-        println!("no_more_new_line_chars_found: {}", no_more_new_line_chars_found);
-        println!("new_line_char_found: {}", new_line_char_found);
-        println!("current_string_is_empty: {}", current_string_is_empty);
-
         if is_first_iteration {
             let (method, request_uri, http_version) = Request::parse_method_and_request_uri_and_http_version_string(&string);
 
@@ -104,11 +99,11 @@ impl Request {
             request.request_uri = request_uri;
             request.http_version = http_version;
 
-            println!("method: {} request_uri: {} http_version: {}", request.method, request.request_uri, request.http_version);
+            println!("{} {} {}", request.method, request.request_uri, request.http_version);
         }
 
-        if no_more_new_line_chars_found && current_string_is_empty {
-            println!("!!!end of headers...parse message body here");
+        if current_string_is_empty {
+            println!("end of headers... parse message with length: {}", content_length);
             return;
         }
 
