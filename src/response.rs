@@ -1,5 +1,5 @@
 use std::io;
-use std::io::{BufRead, Cursor};
+use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use regex::Regex;
 use crate::constant::{CONSTANTS, HTTP_HEADERS};
@@ -69,7 +69,8 @@ impl Response {
 
         let mut content_length: usize = 0;
         let mut iteration_number : usize = 0;
-        Response::cursor_read(&mut cursor, iteration_number, &mut response, content_length);
+        let mut bytes_offset : usize = 0;
+        Response::cursor_read(&mut cursor, iteration_number, &mut response, content_length, bytes_offset);
 
         return response;
     }
@@ -80,7 +81,8 @@ impl Response {
 
         let http_version= String::from(&caps["http_version"]);
         let status_code = String::from(&caps["status_code"]);
-        let reason_phrase = String::from(&caps["reason_phrase"]);
+        let mut reason_phrase = String::from(&caps["reason_phrase"]);
+        reason_phrase = Server::truncate_new_line_carriage_return(reason_phrase);
 
         return (http_version, status_code, reason_phrase)
     }
@@ -101,10 +103,12 @@ impl Response {
 
 
 
-    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize) {
+    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize, mut bytes_offset: usize) {
+        let last_offset = bytes_offset;
+        println!("last_offset: {}", last_offset);
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
-        let b : &[u8] = &buf;
+        let mut b : &[u8] = &buf;
         let string = String::from_utf8(Vec::from(b)).unwrap();
 
         let is_first_iteration = iteration_number == 0;
@@ -126,8 +130,12 @@ impl Response {
             response.reason_phrase = reason_phrase;
         }
 
-        if no_more_new_line_chars_found && current_string_is_empty {
-            println!("!!!end of headers...parse message body here");
+        if current_string_is_empty {
+            println!("!!!end of headers...parse message body here, length: {}", content_length);
+            buf = vec![];
+            cursor.read_to_end(&mut buf);
+            b = &buf;
+            response.message_body = Vec::from(b);
             return;
         }
 
@@ -135,10 +143,8 @@ impl Response {
             let mut header = Header { header_name: "".to_string(), header_value: "".to_string() };
             if !is_first_iteration {
                 header = Response::parse_http_response_header_string(&string);
+                println!("{}: {}", &header.header_name, &header.header_value);
                 if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
-                    println!("!!!! \n{}", &header.header_name);
-                    println!("!!!! \n{}", &header.header_value);
-                    println!("!!!! \n{}", &string);
                     content_length = header.header_value.parse().unwrap();
                     println!("content_length: {}", content_length);
                 }
@@ -147,7 +153,7 @@ impl Response {
             println!("{}: {}", header.header_name, header.header_value);
             response.headers.push(header);
             iteration_number += 1;
-            Response::cursor_read(cursor, iteration_number, response, content_length);
+            Response::cursor_read(cursor, iteration_number, response, content_length, bytes_offset);
         }
     }
 }
