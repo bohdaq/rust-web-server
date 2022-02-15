@@ -7,6 +7,8 @@ pub struct Constants {
     pub(crate) CHARSET: &'static str,
     pub(crate) UTF_8: &'static str,
     pub(crate) NOSNIFF: &'static str,
+    pub(crate) BYTES: &'static str,
+    pub(crate) NONE: &'static str,
 }
 
 pub const CONSTANTS: Constants = Constants {
@@ -18,6 +20,8 @@ pub const CONSTANTS: Constants = Constants {
     CHARSET: "charset",
     UTF_8: "UTF-8",
     NOSNIFF: "nosniff",
+    BYTES: "bytes",
+    NONE: "none",
 };
 
 
@@ -96,10 +100,14 @@ pub struct HTTPHeader {
     pub(crate) CONTENT_TYPE: &'static str,
     pub(crate) CONTENT_LENGTH: &'static str,
     pub(crate) X_CONTENT_TYPE_OPTIONS: &'static str,
+    pub(crate) RANGE: &'static str,
+    pub(crate) ACCEPT_RANGES: &'static str,
 }
 
 pub const HTTP_HEADERS: HTTPHeader = HTTPHeader {
     CONTENT_TYPE: "Content-Type",
     X_CONTENT_TYPE_OPTIONS: "X-Content-Type-Options",
     CONTENT_LENGTH: "Content-Length",
+    RANGE: "Range",
+    ACCEPT_RANGES: "Accept-Ranges",
 };
