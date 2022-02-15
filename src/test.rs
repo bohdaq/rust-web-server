@@ -5,6 +5,8 @@ use regex::Regex;
 #[cfg(test)]
 mod tests {
     use std::borrow::Borrow;
+    use std::fs::File;
+    use std::io::Read;
     use crate::CONSTANTS;
     use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
     use crate::header::Header;
@@ -1608,17 +1610,19 @@ mod tests {
     }
 
     #[test]
-    fn it_generates_successful_response_with_additional_headers_and_file() {
+    fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() {
         let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
         let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
         let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
-        let filepath = "/static/test.txt";
+        let filepath = "/static/content.png";
 
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
 
-        let response_filepath = [working_directory, filepath].join(CONSTANTS.EMPTY_STRING);
-        let message_body= fs::read_to_string(response_filepath.to_string()).unwrap();
+        let mut response_filepath = [working_directory, filepath].join(CONSTANTS.EMPTY_STRING);
+        let mut contents = Vec::new();
+        let mut file = File::open(response_filepath).unwrap();
+        file.read_to_end(&mut contents).expect("Unable to read");
 
         let response_user_agent_header_name = "User-Agent";
         let response_user_agent_value = "rws/0.0.1";
@@ -1628,6 +1632,8 @@ mod tests {
             header_value: response_user_agent_value.to_string()
         };
 
+        let response_content_length_header_name = "Content-Length";
+        let response_content_length_header_value = contents.len().to_string();
 
         let headers = vec![user_agent];
         let response = Response {
@@ -1635,13 +1641,8 @@ mod tests {
             status_code: response_status_code.to_string(),
             reason_phrase: response_reason_phrase.to_string(),
             headers,
-            message_body: message_body.as_bytes().to_vec()
+            message_body: contents
         };
-
-
-        let response_content_length_header_name = "Content-Length";
-        let response_content_length_header_value = message_body.len().to_string();
-
 
         let raw_response = Response::generate_response(response);
         let response = Response::parse_response(raw_response.borrow());
@@ -1657,7 +1658,12 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(message_body.as_bytes().to_vec(), response.message_body);
+
+        contents = Vec::new();
+        response_filepath = [working_directory, filepath].join(CONSTANTS.EMPTY_STRING);
+        file = File::open(response_filepath).unwrap();
+        file.read_to_end(&mut contents).expect("Unable to read");
+        assert_eq!(contents, response.message_body);
     }
 
 }
