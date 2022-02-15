@@ -102,6 +102,7 @@ pub struct HTTPHeader {
     pub(crate) X_CONTENT_TYPE_OPTIONS: &'static str,
     pub(crate) RANGE: &'static str,
     pub(crate) ACCEPT_RANGES: &'static str,
+    pub(crate) CONTENT_RANGE: &'static str,
 }
 
 pub const HTTP_HEADERS: HTTPHeader = HTTPHeader {
@@ -110,4 +111,5 @@ pub const HTTP_HEADERS: HTTPHeader = HTTPHeader {
     CONTENT_LENGTH: "Content-Length",
     RANGE: "Range",
     ACCEPT_RANGES: "Accept-Ranges",
+    CONTENT_RANGE: "Content-Range",
 };
