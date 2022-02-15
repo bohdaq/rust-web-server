@@ -980,7 +980,7 @@ mod tests {
         let static_directories = vec!["/static".to_string()];
 
         let raw_response: Vec<u8> = Server::process_request(raw_request.as_bytes());
-        let response = Response::parse_response(raw_response);
+        let response = Response::parse_response(raw_response.borrow());
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
         let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
@@ -1048,7 +1048,7 @@ mod tests {
         let static_directories = vec!["/static".to_string()];
 
         let raw_response  = Server::process_request(raw_request.as_bytes());
-        let response = Response::parse_response(raw_response);
+        let response = Response::parse_response(raw_response.borrow());
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
         let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
@@ -1118,7 +1118,7 @@ mod tests {
         let static_directories = vec!["/static".to_string()];
 
         let raw_response = Server::process_request(raw_request.as_bytes());
-        let response = Response::parse_response(raw_response);
+        let response = Response::parse_response(raw_response.borrow());
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
         let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
@@ -1188,7 +1188,7 @@ mod tests {
         let static_directories = vec!["/static".to_string()];
 
         let raw_response = Server::process_request(raw_request.as_bytes());
-        let response = Response::parse_response(raw_response);
+        let response = Response::parse_response(raw_response.borrow());
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
         let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
@@ -1258,7 +1258,7 @@ mod tests {
         let static_directories = vec!["/static".to_string()];
 
         let raw_response = Server::process_request(raw_request.as_bytes());
-        let response = Response::parse_response(raw_response);
+        let response = Response::parse_response(raw_response.borrow());
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
         let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
@@ -1328,7 +1328,7 @@ mod tests {
         let static_directories = vec!["/static".to_string()];
 
         let raw_response = Server::process_request(raw_request.as_bytes());
-        let response = Response::parse_response(raw_response);
+        let response = Response::parse_response(raw_response.borrow());
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
         let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
@@ -1398,7 +1398,7 @@ mod tests {
 
 
         let raw_response = Server::process_request(raw_request.as_bytes());
-        let response = Response::parse_response(raw_response);
+        let response = Response::parse_response(raw_response.borrow());
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
         let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
@@ -1470,7 +1470,7 @@ mod tests {
         let static_directories = vec!["/static".to_string(), "/assets".to_string()];
 
         let raw_response = Server::process_request(raw_request.as_bytes());
-        let response = Response::parse_response(raw_response);
+        let response = Response::parse_response(raw_response.borrow());
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
         let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
@@ -1542,7 +1542,7 @@ mod tests {
         let static_directories = vec!["/static".to_string(), "/assets".to_string()];
 
         let raw_response = Server::process_request(raw_request.as_bytes());
-        let response = Response::parse_response(raw_response);
+        let response = Response::parse_response(raw_response.borrow());
         let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
         let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
@@ -1589,7 +1589,7 @@ mod tests {
 
 
         let raw_response = Response::generate_response(response);
-        let response = Response::parse_response(raw_response);
+        let response = Response::parse_response(raw_response.borrow());
 
 
         let content_length_header = response.get_header(response_content_length_header_name.to_string()).unwrap();
@@ -1644,7 +1644,7 @@ mod tests {
 
 
         let raw_response = Response::generate_response(response);
-        let response = Response::parse_response(raw_response);
+        let response = Response::parse_response(raw_response.borrow());
 
 
         let content_length_header = response.get_header(response_content_length_header_name.to_string()).unwrap();

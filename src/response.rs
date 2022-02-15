@@ -1,3 +1,5 @@
+use std::io;
+use std::io::{BufRead, Cursor};
 use crate::header::Header;
 use regex::Regex;
 use crate::constant::{CONSTANTS, HTTP_HEADERS};
@@ -47,19 +49,14 @@ impl Response {
 
         println!("_____RESPONSE w/o body______\n{}", &response_without_body);
 
-        let mut response :Vec<u8> = Vec::from([response_without_body.into_bytes(), response.message_body].concat());
+        let mut response  = [response_without_body.into_bytes(), response.message_body].concat();
 
 
         response
     }
 
-    pub(crate) fn parse_response(response_vec_u8: Vec<u8>) -> Response {
-        println!("Vec<u8> length: {}", response_vec_u8.len());
-
-        let len : usize = response_vec_u8.len();
-        let iteration_end_position : usize = len - 4;
-        let mut last_new_line_position: usize = 0;
-        let mut content_length : usize = 0;
+    pub(crate) fn parse_response(response_vec_u8: &[u8]) -> Response {
+        let mut cursor = io::Cursor::new(response_vec_u8);
 
         let mut response = Response {
             http_version: "".to_string(),
@@ -69,62 +66,9 @@ impl Response {
             message_body: vec![],
         };
 
-        for i in 0..iteration_end_position {
-            let first_byte = response_vec_u8[i];
-            let second_byte = response_vec_u8[i+1];
-            let third_byte = response_vec_u8[i+2];
-            let fourth_byte = response_vec_u8[i+3];
-
-            let char_as_u8_4 = [first_byte, second_byte, third_byte, fourth_byte];
-            let char_as_u32 = Response::as_u32_be(&char_as_u8_4);
-            let char = char::from_u32(char_as_u32).unwrap();
-
-            if char == '\n' {
-                let string_as_bytes_u8 = &response_vec_u8[last_new_line_position..i];
-                let string = String::from_utf8(string_as_bytes_u8.to_vec()).unwrap();
-
-                println!("String:\n{}", string);
-                println!("Last new line position:\n{}", last_new_line_position);
-                println!("Current new line position:\n{}", i);
-
-                if last_new_line_position == 0 {
-                    let (http_version, status_code, reason_phrase) = Response::parse_http_version_status_code_reason_phrase_string(&string);
-                    println!("http_version: {} status_code: {} reason_phrase: {}", http_version, status_code, reason_phrase);
-
-                    response.http_version = http_version;
-                    response.status_code = status_code;
-                    response.reason_phrase = reason_phrase;
-                }
-
-                if last_new_line_position != 0 {
-                    if string.len() <= 1 {
-                        println!("detected end of headers part");
-                        break;
-                    } else {
-                        let header: Header = Response::parse_http_response_header_string(&string);
-
-                        if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
-                            content_length = header.header_value.parse().unwrap();
-                            println!("content_length: {}", content_length);
-                        }
-
-                        println!("{}", header);
-
-                        response.headers.push(header);
-                    }
-
-                }
-
-                last_new_line_position = i + 1; // start from new line, next char after '/n'
-
-            }
-
-            if content_length > 0 {
-                let message_body = &response_vec_u8[last_new_line_position..content_length];
-                response.message_body = message_body.to_owned();
-            }
-
-        }
+        let mut content_length: usize = 0;
+        let mut iteration_number : usize = 0;
+        Response::cursor_read(&mut cursor, iteration_number, &mut response, content_length);
 
         return response;
     }
@@ -141,18 +85,65 @@ impl Response {
     }
 
     pub(crate)  fn parse_http_response_header_string(header_string: &str) -> Header {
-        let header_parts: Vec<&str> = header_string.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
+        let mut header_parts: Vec<&str> = header_string.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
+        let mut header_name = header_parts[0].replace("\r", "").replace("\n", "");
+        let mut header_value = header_parts[1].replace("\r", "").replace("\n", "");
 
         Header {
-            header_name: header_parts[0].to_string(),
-            header_value: header_parts[1].to_string()
+            header_name: header_name.to_string(),
+            header_value: header_value.to_string()
         }
     }
 
-    pub(crate) fn as_u32_be(array: &[u8; 4]) -> u32 {
-            ((array[0] as u32) << 24 )  |
-            ((array[1] as u32) << 16)   |
-            ((array[2] as u32) << 8)    |
-            ((array[3] as u32) << 0)
+
+
+    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize) {
+        let mut buf = vec![];
+        let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
+        let b : &[u8] = &buf;
+        let string = String::from_utf8(Vec::from(b)).unwrap();
+
+        let is_first_iteration = iteration_number == 0;
+        let no_more_new_line_chars_found = bytes_offset == 0;
+        let new_line_char_found = bytes_offset != 0;
+        let current_string_is_empty = string.trim().len() == 0;
+
+        println!("is_first_iteration: {}", is_first_iteration);
+        println!("no_more_new_line_chars_found: {}", no_more_new_line_chars_found);
+        println!("new_line_char_found: {}", new_line_char_found);
+        println!("current_string_is_empty: {}", current_string_is_empty);
+
+        if is_first_iteration {
+            let (http_version, status_code, reason_phrase) = Response::parse_http_version_status_code_reason_phrase_string(&string);
+            println!("http_version: {} status_code: {} reason_phrase: {}", http_version, status_code, reason_phrase);
+
+            response.http_version = http_version;
+            response.status_code = status_code;
+            response.reason_phrase = reason_phrase;
+        }
+
+        if no_more_new_line_chars_found && current_string_is_empty {
+            println!("!!!end of headers...parse message body here");
+            return;
+        }
+
+        if new_line_char_found && !current_string_is_empty {
+            let mut header = Header { header_name: "".to_string(), header_value: "".to_string() };
+            if !is_first_iteration {
+                header = Response::parse_http_response_header_string(&string);
+                if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
+                    println!("!!!! \n{}", &header.header_name);
+                    println!("!!!! \n{}", &header.header_value);
+                    println!("!!!! \n{}", &string);
+                    content_length = header.header_value.parse().unwrap();
+                    println!("content_length: {}", content_length);
+                }
+            }
+
+            println!("{}: {}", header.header_name, header.header_value);
+            response.headers.push(header);
+            iteration_number += 1;
+            Response::cursor_read(cursor, iteration_number, response, content_length);
+        }
     }
 }
