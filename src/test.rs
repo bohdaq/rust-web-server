@@ -918,7 +918,7 @@ mod tests {
     #[test]
     fn http_version_and_status_code_and_reason_phrase_regex() {
         let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
-        let caps = re.captures("HTTP/1.1 404 NOT FOUND").unwrap();
+        let caps = re.captures("HTTP/1.1 404 Not Found").unwrap();
 
         assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, &caps["http_version"]);
         assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE, &caps["status_code"]);

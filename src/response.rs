@@ -35,7 +35,7 @@ impl Response {
         }
 
         let mut content_length_header_string = CONSTANTS.EMPTY_STRING.to_string();
-        content_length_header_string.push_str("Content-Length");
+        content_length_header_string.push_str(HTTP_HEADERS.CONTENT_LENGTH);
         content_length_header_string.push_str(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR);
         content_length_header_string.push_str(response.message_body.len().to_string().as_str());
         content_length_header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
