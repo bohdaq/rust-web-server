@@ -1,5 +1,5 @@
 use std::{env, fs};
-use std::fs::File;
+use std::fs::{File, metadata};
 use std::io::Read;
 use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::CONSTANTS;
@@ -97,8 +97,11 @@ impl App {
 
         let boxed_file = File::open(&static_filepath);
         if boxed_file.is_ok()  {
-            let mut file = boxed_file.unwrap();
-            file.read_to_end(&mut contents).expect("Unable to read");
+            let md = metadata(&static_filepath).unwrap();
+            if md.is_file() {
+                let mut file = boxed_file.unwrap();
+                file.read_to_end(&mut contents).expect("Unable to read");
+            }
         }
 
         contents
