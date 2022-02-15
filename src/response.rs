@@ -3,6 +3,7 @@ use std::io::{BufRead, Cursor};
 use crate::header::Header;
 use regex::Regex;
 use crate::constant::{CONSTANTS, HTTP_HEADERS};
+use crate::Server;
 
 pub struct Response {
     pub(crate) http_version: String,
@@ -86,8 +87,11 @@ impl Response {
 
     pub(crate)  fn parse_http_response_header_string(header_string: &str) -> Header {
         let mut header_parts: Vec<&str> = header_string.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
-        let mut header_name = header_parts[0].replace("\r", "").replace("\n", "");
-        let mut header_value = header_parts[1].replace("\r", "").replace("\n", "");
+        let mut raw_header_name = header_parts[0].to_string();
+        let mut header_name = Server::truncate_new_line_carriage_return(raw_header_name);
+        let mut raw_header_value = header_parts[1].to_string();
+        let mut header_value = Server::truncate_new_line_carriage_return(raw_header_value);
+
 
         Header {
             header_name: header_name.to_string(),
