@@ -76,8 +76,8 @@ impl Request {
         let header_parts: Vec<&str> = header_string.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
 
         Header {
-            header_name: header_parts[0].to_string(),
-            header_value: header_parts[1].to_string()
+            header_name: header_parts[0].trim().to_string(),
+            header_value: header_parts[1].trim().to_string()
         }
     }
 
@@ -92,9 +92,10 @@ impl Request {
         let new_line_char_found = bytes_offset != 0;
         let current_string_is_empty = string.trim().len() == 0;
 
-
-        println!("{}\n Length: {} Iteration:  {}, is_first_iteration: {}", string.trim(), string.trim().len(), iteration_number, is_first_iteration);
-
+        println!("is_first_iteration: {}", is_first_iteration);
+        println!("no_more_new_line_chars_found: {}", no_more_new_line_chars_found);
+        println!("new_line_char_found: {}", new_line_char_found);
+        println!("current_string_is_empty: {}", current_string_is_empty);
 
         if is_first_iteration {
             let (method, request_uri, http_version) = Request::parse_method_and_request_uri_and_http_version_string(&string);
@@ -102,6 +103,8 @@ impl Request {
             request.method = method;
             request.request_uri = request_uri;
             request.http_version = http_version;
+
+            println!("method: {} request_uri: {} http_version: {}", request.method, request.request_uri, request.http_version);
         }
 
         if no_more_new_line_chars_found && current_string_is_empty {
@@ -109,13 +112,17 @@ impl Request {
             return;
         }
 
-        if new_line_char_found && !current_string_is_empty  && !is_first_iteration {
-            let header: Header = Request::parse_http_request_header_string(&string);
-            if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
-                content_length = header.header_value.parse().unwrap();
-                println!("content_length: {}", content_length);
+        if new_line_char_found && !current_string_is_empty {
+            let mut header = Header { header_name: "".to_string(), header_value: "".to_string() };
+            if !is_first_iteration {
+                header = Request::parse_http_request_header_string(&string);
+                if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
+                    content_length = header.header_value.parse().unwrap();
+                    println!("content_length: {}", content_length);
+                }
             }
 
+            println!("{}: {}", header.header_name, header.header_value);
             request.headers.push(header);
             iteration_number += 1;
             Request::cursor_read(cursor, iteration_number, request, content_length);
