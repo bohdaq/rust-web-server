@@ -94,14 +94,9 @@ impl App {
         let static_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
 
         let mut contents = Vec::new();
-        let mut is_file_readable = true;
 
         let boxed_file = File::open(&static_filepath);
-        if boxed_file.is_err()  {
-            is_file_readable = false;
-        }
-
-        if is_file_readable {
+        if boxed_file.is_ok()  {
             let mut file = boxed_file.unwrap();
             file.read_to_end(&mut contents).expect("Unable to read");
         }
