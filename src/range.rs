@@ -28,8 +28,8 @@ pub struct ContentRange {
 
 impl Range {
 
-    pub(crate) fn parse_range(range_str: &str) -> Range {
-        let mut range = Range { start: 0, end: 0 };
+    pub(crate) fn parse_range(filelength: usize, range_str: &str) -> Range {
+        let mut range = Range { start: 0, end: filelength };
         let parts: Vec<&str> = range_str.split(CONSTANTS.HYPHEN).collect();
         for (i, part) in parts.iter().enumerate() {
             let num = part.trim();
@@ -39,6 +39,11 @@ impl Range {
             }
             if i == 1 && length != 0 {
                 range.end = num.parse().unwrap();
+            }
+            if i == 1 && length != 0 && range.start == 0 {
+                let num_usize : usize = num.parse().unwrap();
+                range.start = filelength - num_usize;
+                range.end = filelength;
             }
         }
         range
@@ -59,7 +64,7 @@ impl Range {
 
         let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.COMMA).collect();
         for byte in bytes {
-            let range = Range::parse_range(byte);
+            let range = Range::parse_range(filelength, byte);
             println!("range: {} - {}", range.start, range.end);
 
         }
