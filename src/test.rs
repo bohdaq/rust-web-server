@@ -11,7 +11,7 @@ mod tests {
     use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
     use crate::header::Header;
     use crate::mime_type::MimeType;
-    use crate::range::Range;
+    use crate::range::{ContentRange, Range};
     use crate::request::Request;
     use crate::response::Response;
     use crate::server::Server;
@@ -1683,7 +1683,7 @@ mod tests {
             headers: vec![header]
         };
 
-        let (start, end, length) = Range::get_exact_start_and_end_of_file(&request.request_uri, &request.headers[0]);
+        let content_range_list : Vec<ContentRange> = Range::get_exact_start_and_end_of_file(&request.request_uri, &request.headers[0]);
     }
 
 }

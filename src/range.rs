@@ -52,7 +52,7 @@ impl Range {
         range
     }
 
-    pub(crate) fn parse_content_range(filelength: usize, raw_range_value: &str) {
+    pub(crate) fn parse_content_range(filelength: usize, raw_range_value: &str) -> Vec<ContentRange> {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
@@ -72,36 +72,25 @@ impl Range {
             println!("unit: {} range: {} - {} size: {}", content_range.unit, content_range.range.start, content_range.range.end, content_range.size);
             content_range_list.push(content_range);
         }
+        content_range_list
     }
 
-    pub(crate) fn get_exact_start_and_end_of_file(request_uri: &str, range: &Header) -> (usize, usize, usize) {
-        let mut start: usize = 0;
-        let mut end: usize = 0;
-        let mut length: usize = 0;
-
-        let mut contents = Vec::new();
+    pub(crate) fn get_exact_start_and_end_of_file(request_uri: &str, range: &Header) -> Vec<ContentRange> {
+        let mut content_range_list : Vec<ContentRange> = vec![];
         let static_filepath = Server::get_static_filepath(request_uri);
         let boxed_file = File::open(&static_filepath);
         if boxed_file.is_ok()  {
             let md = metadata(&static_filepath).unwrap();
             if md.is_file() {
                 let mut file = boxed_file.unwrap();
+                let length = md.len() as usize;
+                content_range_list = Range::parse_content_range(length, &range.header_value);
 
-
-                length = md.len() as usize;
-                let raw_range_value = &range.header_value;
-                let content_range = Range::parse_content_range(length, raw_range_value);
-
-
-
-
+                let mut contents = Vec::new();
                 file.read_to_end(&mut contents).expect("Unable to read");
             }
         }
-
-
-
-        return (start, end, length)
+        content_range_list
     }
 }
 
