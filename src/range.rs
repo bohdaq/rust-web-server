@@ -53,7 +53,7 @@ impl Range {
         range
     }
 
-    pub(crate) fn parse_content_range(file: &mut File, raw_range_value: &str) -> Vec<ContentRange> {
+    pub(crate) fn parse_content_range(filepath: &str, filelength: u64, raw_range_value: &str) -> Vec<ContentRange> {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
@@ -64,22 +64,23 @@ impl Range {
 
         let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.COMMA).collect();
         for byte in bytes {
-            let filelength : u64 = file.metadata().unwrap().len();
             let range = Range::parse_range(filelength, byte);
-
-            let mut contents = Vec::new();
             let buff_length = range.end - range.start;
-            let mut reader = BufReader::new(&*file);
+
+            let mut file = File::open(filepath).unwrap();
+            let mut reader = BufReader::new(file);
+
             reader.seek(SeekFrom::Start(range.start));
             reader.take(buff_length);
-            reader.read_to_end(&mut contents).expect("Unable to read");
+            let mut buffer = Vec::new();
+            reader.read_to_end(&mut buffer).expect("Unable to read");
 
 
             let content_range = ContentRange {
                 unit: CONSTANTS.BYTES.to_string(),
                 range,
                 size: filelength.to_string(),
-                body: contents,
+                body: buffer,
             };
 
             println!("unit: {} range: {} - {} size: {}", content_range.unit, content_range.range.start, content_range.range.end, content_range.size);
@@ -91,14 +92,12 @@ impl Range {
     pub(crate) fn get_exact_start_and_end_of_file(request_uri: &str, range: &Header) -> Vec<ContentRange> {
         let mut content_range_list : Vec<ContentRange> = vec![];
         let static_filepath = Server::get_static_filepath(request_uri);
-        let boxed_file = File::open(&static_filepath);
-        if boxed_file.is_ok()  {
-            let md = metadata(&static_filepath).unwrap();
-            if md.is_file() {
-                let mut file = boxed_file.unwrap();
-                content_range_list = Range::parse_content_range(&mut file, &range.header_value);
-            }
+
+        let md = metadata(&static_filepath).unwrap();
+        if md.is_file() {
+            content_range_list = Range::parse_content_range(&static_filepath, md.len(), &range.header_value);
         }
+
         content_range_list
     }
 }
