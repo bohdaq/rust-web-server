@@ -29,11 +29,11 @@ pub struct ContentRange {
 
 impl Range {
 
-    pub(crate) fn parse_range(filelength: &u64, range_str: &str) -> Range {
+    pub(crate) fn parse_range(filelength: u64, range_str: &str) -> Range {
         const START_INDEX: usize = 0;
         const END_INDEX: usize = 1;
 
-        let mut range = Range { start: 0, end: *filelength };
+        let mut range = Range { start: 0, end: filelength };
         let parts: Vec<&str> = range_str.split(CONSTANTS.HYPHEN).collect();
         for (i, part) in parts.iter().enumerate() {
             let num = part.trim();
@@ -47,7 +47,7 @@ impl Range {
             if i == END_INDEX && length != 0 && range.start == 0 {
                 let num_usize : u64 = num.parse().unwrap();
                 range.start = filelength - num_usize;
-                range.end = *filelength;
+                range.end = filelength;
             }
         }
         range
@@ -64,12 +64,12 @@ impl Range {
 
         let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.COMMA).collect();
         for byte in bytes {
-            let filelength : &u64 = &file.metadata().unwrap().len();
+            let filelength : u64 = file.metadata().unwrap().len();
             let range = Range::parse_range(filelength, byte);
 
             let mut contents = Vec::new();
             let buff_length = range.end - range.start;
-            let mut reader = BufReader::new(file);
+            let mut reader = BufReader::new(&*file);
             reader.seek(SeekFrom::Start(range.start));
             reader.take(buff_length);
             reader.read_to_end(&mut contents).expect("Unable to read");
