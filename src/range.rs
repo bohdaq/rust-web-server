@@ -53,11 +53,11 @@ impl Range {
     }
 
     pub(crate) fn parse_content_range(filelength: usize, raw_range_value: &str) {
+        const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
         println!("raw_range_value: {}", raw_range_value);
         let split_raw_range_value: Vec<&str> = raw_range_value.split(CONSTANTS.EQUALS).collect();
-        let INDEX_AFTER_UNIT_DECLARATION = 1;
         let raw_bytes = split_raw_range_value.get(INDEX_AFTER_UNIT_DECLARATION).unwrap();
         println!("split_raw_range_value: {}", raw_bytes);
 
