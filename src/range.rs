@@ -29,18 +29,21 @@ pub struct ContentRange {
 impl Range {
 
     pub(crate) fn parse_range(filelength: usize, range_str: &str) -> Range {
+        const START_INDEX: usize = 0;
+        const END_INDEX: usize = 1;
+
         let mut range = Range { start: 0, end: filelength };
         let parts: Vec<&str> = range_str.split(CONSTANTS.HYPHEN).collect();
         for (i, part) in parts.iter().enumerate() {
             let num = part.trim();
             let length = num.len();
-            if i == 0 && length != 0 {
+            if i == START_INDEX && length != 0 {
                 range.start = num.parse().unwrap();
             }
-            if i == 1 && length != 0 {
+            if i == END_INDEX && length != 0 {
                 range.end = num.parse().unwrap();
             }
-            if i == 1 && length != 0 && range.start == 0 {
+            if i == END_INDEX && length != 0 && range.start == 0 {
                 let num_usize : usize = num.parse().unwrap();
                 range.start = filelength - num_usize;
                 range.end = filelength;
@@ -50,11 +53,7 @@ impl Range {
     }
 
     pub(crate) fn parse_content_range(filelength: usize, raw_range_value: &str) {
-        let content_range = ContentRange {
-            unit: CONSTANTS.BYTES.to_string(),
-            range: Range { start: 0, end: 0 },
-            size: filelength.to_string()
-        };
+        let mut content_range_list: Vec<ContentRange> = vec![];
 
         println!("raw_range_value: {}", raw_range_value);
         let split_raw_range_value: Vec<&str> = raw_range_value.split(CONSTANTS.EQUALS).collect();
@@ -71,6 +70,7 @@ impl Range {
                 size: filelength.to_string()
             };
             println!("unit: {} range: {} - {} size: {}", content_range.unit, content_range.range.start, content_range.range.end, content_range.size);
+            content_range_list.push(content_range);
         }
     }
 
