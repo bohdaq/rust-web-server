@@ -15,14 +15,14 @@ use crate::header::Header;
 
 
 pub struct Range {
-    start: usize,
-    end: usize,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
 }
 
 pub struct ContentRange {
-    unit: str,
-    range: Range,
-    size: str
+    pub(crate) unit: str,
+    pub(crate) range: Range,
+    pub(crate) size: str
 }
 
 
