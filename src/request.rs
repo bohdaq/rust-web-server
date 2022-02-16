@@ -3,6 +3,7 @@ use std::io::{BufRead, Cursor};
 use crate::header::Header;
 use regex::Regex;
 use crate::constant::{CONSTANTS, HTTP_HEADERS};
+use crate::Server;
 
 pub struct Request {
     pub(crate) method: String,
@@ -74,10 +75,12 @@ impl Request {
 
     pub(crate)  fn parse_http_request_header_string(header_string: &str) -> Header {
         let header_parts: Vec<&str> = header_string.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
+        let header_name = Server::truncate_new_line_carriage_return(header_parts[0]);
+        let header_value = Server::truncate_new_line_carriage_return(header_parts[1]);
 
         Header {
-            header_name: header_parts[0].trim().to_string(),
-            header_value: header_parts[1].trim().to_string()
+            header_name: header_name,
+            header_value: header_value,
         }
     }
 

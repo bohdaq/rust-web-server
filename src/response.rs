@@ -81,7 +81,7 @@ impl Response {
         let http_version= String::from(&caps["http_version"]);
         let status_code = String::from(&caps["status_code"]);
         let mut reason_phrase = String::from(&caps["reason_phrase"]);
-        reason_phrase = Server::truncate_new_line_carriage_return(reason_phrase);
+        reason_phrase = Server::truncate_new_line_carriage_return(&reason_phrase);
 
         return (http_version, status_code, reason_phrase)
     }
@@ -89,9 +89,9 @@ impl Response {
     pub(crate)  fn parse_http_response_header_string(header_string: &str) -> Header {
         let mut header_parts: Vec<&str> = header_string.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
         let mut raw_header_name = header_parts[0].to_string();
-        let mut header_name = Server::truncate_new_line_carriage_return(raw_header_name);
+        let mut header_name = Server::truncate_new_line_carriage_return(&raw_header_name);
         let mut raw_header_value = header_parts[1].to_string();
-        let mut header_value = Server::truncate_new_line_carriage_return(raw_header_value);
+        let mut header_value = Server::truncate_new_line_carriage_return(&raw_header_value);
 
 
         Header {
