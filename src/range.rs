@@ -71,10 +71,8 @@ impl Range {
             let mut reader = BufReader::new(file);
 
             reader.seek(SeekFrom::Start(range.start));
-            reader.take(buff_length);
             let mut buffer = Vec::new();
-            reader.read_to_end(&mut buffer).expect("Unable to read");
-
+            reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
 
             let content_range = ContentRange {
                 unit: CONSTANTS.BYTES.to_string(),
@@ -83,7 +81,7 @@ impl Range {
                 body: buffer,
             };
 
-            println!("unit: {} range: {} - {} size: {}", content_range.unit, content_range.range.start, content_range.range.end, content_range.size);
+            println!("unit: {} range: {} - {} size: {} body len: {}", content_range.unit, content_range.range.start, content_range.range.end, content_range.size, content_range.body.len());
             content_range_list.push(content_range);
         }
         content_range_list
