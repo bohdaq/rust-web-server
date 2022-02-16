@@ -23,9 +23,14 @@ impl Range {
         let raw_range_value = &range.header_value;
         println!("raw_range_value: {}", raw_range_value);
         let split_raw_range_value: Vec<&str> = raw_range_value.split(CONSTANTS.EQUALS).collect();
-        let raw_bytes = split_raw_range_value.get(1).unwrap();
-
+        let INDEX_AFTER_UNIT_DECLARATION = 1;
+        let raw_bytes = split_raw_range_value.get(INDEX_AFTER_UNIT_DECLARATION).unwrap();
         println!("split_raw_range_value: {}", raw_bytes);
+
+        let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.COMMA).collect();
+        for byte in bytes {
+            println!("bytes: {}", byte.trim());
+        }
 
 
         let mut start: usize = 0;
