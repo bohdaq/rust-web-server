@@ -70,8 +70,8 @@ impl Range {
             let mut contents = Vec::new();
             let buff_length = range.end - range.start;
             let mut reader = BufReader::new(file);
-            reader.seek(SeekFrom::Start(range.start as u64));
-            reader.take(buff_length as u64);
+            reader.seek(SeekFrom::Start(range.start));
+            reader.take(buff_length);
             reader.read_to_end(&mut contents).expect("Unable to read");
 
 
