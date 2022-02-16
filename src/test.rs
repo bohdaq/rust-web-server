@@ -1673,7 +1673,7 @@ mod tests {
 
         let header = Header {
             header_name: "Range".to_string(),
-            header_value: "bytes=200-1000".to_string()
+            header_value: "bytes=200-1000, 1200-1400, 2000-2300".to_string()
         };
 
         let request = Request {
