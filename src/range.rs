@@ -50,7 +50,7 @@ impl Range {
     }
 
     pub(crate) fn parse_content_range(filelength: usize, raw_range_value: &str) {
-        let mut content_range = ContentRange {
+        let content_range = ContentRange {
             unit: CONSTANTS.BYTES.to_string(),
             range: Range { start: 0, end: 0 },
             size: filelength.to_string()
@@ -65,8 +65,12 @@ impl Range {
         let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.COMMA).collect();
         for byte in bytes {
             let range = Range::parse_range(filelength, byte);
-            println!("range: {} - {}", range.start, range.end);
-
+            let content_range = ContentRange {
+                unit: CONSTANTS.BYTES.to_string(),
+                range,
+                size: filelength.to_string()
+            };
+            println!("unit: {} range: {} - {} size: {}", content_range.unit, content_range.range.start, content_range.range.end, content_range.size);
         }
     }
 
