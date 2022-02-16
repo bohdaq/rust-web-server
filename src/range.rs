@@ -4,7 +4,7 @@ use std::{env, fs, io};
 use std::borrow::Borrow;
 use std::char::MAX;
 use std::fs::{File, metadata};
-use std::io::BufReader;
+use std::io::{BufReader, SeekFrom};
 
 use crate::request::Request;
 use crate::response::Response;
@@ -15,24 +15,25 @@ use crate::header::Header;
 
 
 pub struct Range {
-    pub(crate) start: usize,
-    pub(crate) end: usize,
+    pub(crate) start: u64,
+    pub(crate) end: u64,
 }
 
 pub struct ContentRange {
     pub(crate) unit: String,
     pub(crate) range: Range,
-    pub(crate) size: String
+    pub(crate) size: String,
+    pub(crate) body: Vec<u8>,
 }
 
 
 impl Range {
 
-    pub(crate) fn parse_range(filelength: usize, range_str: &str) -> Range {
+    pub(crate) fn parse_range(filelength: &u64, range_str: &str) -> Range {
         const START_INDEX: usize = 0;
         const END_INDEX: usize = 1;
 
-        let mut range = Range { start: 0, end: filelength };
+        let mut range = Range { start: 0, end: *filelength };
         let parts: Vec<&str> = range_str.split(CONSTANTS.HYPHEN).collect();
         for (i, part) in parts.iter().enumerate() {
             let num = part.trim();
@@ -44,15 +45,15 @@ impl Range {
                 range.end = num.parse().unwrap();
             }
             if i == END_INDEX && length != 0 && range.start == 0 {
-                let num_usize : usize = num.parse().unwrap();
+                let num_usize : u64 = num.parse().unwrap();
                 range.start = filelength - num_usize;
-                range.end = filelength;
+                range.end = *filelength;
             }
         }
         range
     }
 
-    pub(crate) fn parse_content_range(filelength: usize, raw_range_value: &str) -> Vec<ContentRange> {
+    pub(crate) fn parse_content_range(file: &mut File, raw_range_value: &str) -> Vec<ContentRange> {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
@@ -63,12 +64,24 @@ impl Range {
 
         let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.COMMA).collect();
         for byte in bytes {
+            let filelength : &u64 = &file.metadata().unwrap().len();
             let range = Range::parse_range(filelength, byte);
+
+            let mut contents = Vec::new();
+            let buff_length = range.end - range.start;
+            let mut reader = BufReader::new(file);
+            reader.seek(SeekFrom::Start(range.start as u64));
+            reader.take(buff_length as u64);
+            reader.read_to_end(&mut contents).expect("Unable to read");
+
+
             let content_range = ContentRange {
                 unit: CONSTANTS.BYTES.to_string(),
                 range,
-                size: filelength.to_string()
+                size: filelength.to_string(),
+                body: contents,
             };
+
             println!("unit: {} range: {} - {} size: {}", content_range.unit, content_range.range.start, content_range.range.end, content_range.size);
             content_range_list.push(content_range);
         }
@@ -83,11 +96,7 @@ impl Range {
             let md = metadata(&static_filepath).unwrap();
             if md.is_file() {
                 let mut file = boxed_file.unwrap();
-                let length = md.len() as usize;
-                content_range_list = Range::parse_content_range(length, &range.header_value);
-
-                let mut contents = Vec::new();
-                file.read_to_end(&mut contents).expect("Unable to read");
+                content_range_list = Range::parse_content_range(&mut file, &range.header_value);
             }
         }
         content_range_list
