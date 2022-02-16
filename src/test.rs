@@ -11,6 +11,7 @@ mod tests {
     use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
     use crate::header::Header;
     use crate::mime_type::MimeType;
+    use crate::range::Range;
     use crate::request::Request;
     use crate::response::Response;
     use crate::server::Server;
@@ -1664,6 +1665,25 @@ mod tests {
         file = File::open(response_filepath).unwrap();
         file.read_to_end(&mut contents).expect("Unable to read");
         assert_eq!(contents, response.message_body);
+    }
+
+    #[test]
+    fn get_right_start_end_length_of_a_file() {
+        let image_path = "/static/content.png";
+
+        let header = Header {
+            header_name: "Range".to_string(),
+            header_value: "bytes=200-1000".to_string()
+        };
+
+        let request = Request {
+            method: REQUEST_METHODS.GET.to_string(),
+            request_uri: image_path.to_string(),
+            http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+            headers: vec![header]
+        };
+
+        let (start, end, length) = Range::get_exact_start_and_end_of_file(&request.request_uri, &request.headers[0]);
     }
 
 }
