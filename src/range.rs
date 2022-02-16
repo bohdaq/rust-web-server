@@ -14,7 +14,16 @@ use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASO
 use crate::header::Header;
 
 
-pub struct Range {}
+pub struct Range {
+    start: usize,
+    end: usize,
+}
+
+pub struct ContentRange {
+    unit: str,
+    range: Range,
+    size: str
+}
 
 
 impl Range {
