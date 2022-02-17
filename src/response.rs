@@ -2,7 +2,9 @@ use std::io;
 use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use regex::Regex;
+use crate::app::App;
 use crate::constant::{CONSTANTS, HTTP_HEADERS};
+use crate::range::ContentRange;
 use crate::Server;
 
 pub struct Response {
@@ -10,7 +12,7 @@ pub struct Response {
     pub(crate) status_code: String,
     pub(crate) reason_phrase: String,
     pub(crate) headers: Vec<Header>,
-    pub(crate) message_body: Vec<u8>
+    pub(crate) content_range_list: Vec<ContentRange>
 }
 
 impl Response {
@@ -21,11 +23,57 @@ impl Response {
         header
     }
 
-    pub(crate) fn generate_response(response: Response) -> Vec<u8> {
+    pub(crate) fn generate_response(mut response: Response) -> Vec<u8> {
         let status = [response.http_version, response.status_code, response.reason_phrase].join(CONSTANTS.WHITESPACE);
+        let mut headers = vec![
+            App::get_x_content_type_options_header(),
+            App::get_accept_ranges_header(),
+        ];
+
+        if response.content_range_list.len() == 1 {
+            let content_range_index = 0;
+            let content_range = response.content_range_list.get(content_range_index).unwrap();
+            headers.push(Header {
+                header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
+                header_value: content_range.content_type.to_string()
+            });
+
+            let content_range_header_value = [
+                CONSTANTS.BYTES,
+                CONSTANTS.WHITESPACE,
+                &content_range.range.start,
+                CONSTANTS.HYPHEN,
+                &content_range.range.end,
+                CONSTANTS.SLASH,
+                &content_range.size
+            ].join("");
+            headers.push(Header {
+                header_name: HTTP_HEADERS.CONTENT_RANGE.to_string(),
+                header_value: content_range_header_value.to_string()
+            });
+
+
+        }
+
+        if response.content_range_list.len() > 1 {
+            let content_range_header_value = [
+                CONSTANTS.MULTIPART,
+                CONSTANTS.SLASH,
+                CONSTANTS.BYTERANGES,
+                CONSTANTS.SEMICOLON,
+                CONSTANTS.WHITESPACE,
+                CONSTANTS.BOUNDARY,
+                CONSTANTS.EQUALS,
+                CONSTANTS.STRING_SEPARATOR
+            ].join("");
+            headers.push(Header {
+                header_name: HTTP_HEADERS.CONTENT_RANGE.to_string(),
+                header_value: content_range_header_value,
+            });
+        }
 
         let mut headers = CONSTANTS.NEW_LINE_SEPARATOR.to_string();
-        for header in response.headers {
+        for header in headers {
             let mut header_string = CONSTANTS.EMPTY_STRING.to_string();
             header_string.push_str(&header.header_name);
             header_string.push_str(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR);

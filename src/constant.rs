@@ -12,6 +12,11 @@ pub struct Constants {
     pub(crate) NOSNIFF: &'static str,
     pub(crate) BYTES: &'static str,
     pub(crate) NONE: &'static str,
+    pub(crate) MULTIPART: &'static str,
+    pub(crate) BYTERANGES: &'static str,
+    pub(crate) SEMICOLON: &'static str,
+    pub(crate) BOUNDARY: &'static str,
+    pub(crate) STRING_SEPARATOR: &'static str,
 }
 
 pub const CONSTANTS: Constants = Constants {
@@ -28,6 +33,11 @@ pub const CONSTANTS: Constants = Constants {
     NOSNIFF: "nosniff",
     BYTES: "bytes",
     NONE: "none",
+    MULTIPART: "multipart",
+    BYTERANGES: "byteranges",
+    SEMICOLON: ";",
+    BOUNDARY: "boundary",
+    STRING_SEPARATOR: "String_separator"
 };
 
 

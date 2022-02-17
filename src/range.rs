@@ -12,6 +12,7 @@ use crate::app::App;
 use crate::{CONSTANTS, Server};
 use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::header::Header;
+use crate::mime_type::MimeType;
 
 
 pub struct Range {
@@ -24,6 +25,7 @@ pub struct ContentRange {
     pub(crate) range: Range,
     pub(crate) size: String,
     pub(crate) body: Vec<u8>,
+    pub(crate) content_type: String,
 }
 
 
@@ -74,14 +76,17 @@ impl Range {
             let mut buffer = Vec::new();
             reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
 
+            let content_type = MimeType::detect_mime_type(filepath);
+
             let content_range = ContentRange {
                 unit: CONSTANTS.BYTES.to_string(),
                 range,
                 size: filelength.to_string(),
                 body: buffer,
+                content_type,
             };
 
-            println!("unit: {} range: {} - {} size: {} body len: {}", content_range.unit, content_range.range.start, content_range.range.end, content_range.size, content_range.body.len());
+            println!("unit: {} range: {} - {} size: {} body len: {} mime type: {}" , content_range.unit, content_range.range.start, content_range.range.end, content_range.size, content_range.body.len(), content_range.content_type);
             content_range_list.push(content_range);
         }
         content_range_list

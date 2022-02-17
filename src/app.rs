@@ -5,7 +5,7 @@ use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STA
 use crate::CONSTANTS;
 use crate::header::Header;
 use crate::mime_type::MimeType;
-use crate::range::Range;
+use crate::range::{ContentRange, Range};
 
 use crate::request::Request;
 use crate::response::Response;
@@ -27,21 +27,22 @@ impl App {
         let mut contents = file_content;
         let content_type = MimeType::detect_mime_type(App::NOT_FOUND_PAGE_FILEPATH);
 
-        let content_type_header = Header {
-            header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
-            header_value: content_type,
+        let length = contents.len() as u64;
+        let content_range = ContentRange {
+            unit: CONSTANTS.BYTES.to_string(),
+            range: Range { start: 0, end: length },
+            size: length.to_string(),
+            body: contents,
+            content_type
         };
+
 
         let mut response = Response {
             http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
             status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE.to_string(),
             reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE.to_string(),
-            headers: vec![
-                content_type_header,
-                App::get_x_content_type_options_header(),
-                App::get_accept_ranges_header(),
-            ],
-            message_body: contents
+            headers: vec![],
+            content_range_list: vec![content_range]
         };
 
         if request.request_uri == CONSTANTS.SLASH {
@@ -52,34 +53,38 @@ impl App {
             let mut contents = file_content;
             let content_type = MimeType::detect_mime_type(App::INDEX_FILEPATH);
 
-            let content_type_header = Header {
-                header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
-                header_value: content_type,
+
+            let length = contents.len() as u64;
+            let content_range = ContentRange {
+                unit: CONSTANTS.BYTES.to_string(),
+                range: Range { start: 0, end: length },
+                size: length.to_string(),
+                body: contents,
+                content_type
             };
+
+            let content_range_list = vec![content_range];
 
             response = Response {
                 http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
                 status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE.to_string(),
                 reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE.to_string(),
-                headers: vec![
-                    content_type_header,
-                    App::get_x_content_type_options_header(),
-                    App::get_accept_ranges_header(),
-                ],
-                message_body: contents
+                headers: vec![],
+                content_range_list,
             };
         }
 
         if request.method == REQUEST_METHODS.GET && request.request_uri != CONSTANTS.SLASH {
-            let result = App::process_static_resources(&request);
+            let content_range_list = App::process_static_resources(&request);
 
-            if result.len() != 0 {
+            if content_range_list.len() != 0 {
                 let content_type = MimeType::detect_mime_type(&request.request_uri);
 
                 let content_type_header = Header {
                     header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
                     header_value: content_type,
                 };
+
 
                 response = Response {
                     http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
@@ -90,7 +95,7 @@ impl App {
                         App::get_x_content_type_options_header(),
                         App::get_accept_ranges_header(),
                     ],
-                    message_body: result
+                    content_range_list,
                 };
             }
 
@@ -101,12 +106,12 @@ impl App {
         response
     }
 
-    pub(crate) fn process_static_resources(request: &Request) -> Vec<u8> {
+    pub(crate) fn process_static_resources(request: &Request) -> Vec<ContentRange> {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
         let static_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
 
-        let mut contents = Vec::new();
+        let mut content_range_list = Vec::new();
 
         let boxed_file = File::open(&static_filepath);
         if boxed_file.is_ok()  {
@@ -122,15 +127,11 @@ impl App {
                     range_header = boxed_header.unwrap();
                 }
 
-                let content_range_list = Range::get_content_range_list(&request.request_uri, range_header);
-                if content_range_list.len() == 1 {
-
-                }
-
+                content_range_list = Range::get_content_range_list(&request.request_uri, range_header);
             }
         }
 
-        contents
+        content_range_list
     }
 
     pub(crate) fn get_x_content_type_options_header() -> Header {
