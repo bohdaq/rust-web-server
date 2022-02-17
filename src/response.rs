@@ -70,7 +70,7 @@ impl Response {
                 CONSTANTS.STRING_SEPARATOR
             ].join("");
             headers.push(Header {
-                header_name: HTTP_HEADERS.CONTENT_RANGE.to_string(),
+                header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
                 header_value: content_range_header_value,
             });
         }
