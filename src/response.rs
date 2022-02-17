@@ -52,7 +52,10 @@ impl Response {
                 header_value: content_range_header_value.to_string()
             });
 
-
+            headers.push(Header {
+                header_name: HTTP_HEADERS.CONTENT_LENGTH.to_string(),
+                header_value: content_range.body.len().to_string()
+            });
         }
 
         if response.content_range_list.len() > 1 {
