@@ -5,6 +5,7 @@ use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STA
 use crate::CONSTANTS;
 use crate::header::Header;
 use crate::mime_type::MimeType;
+use crate::range::Range;
 
 use crate::request::Request;
 use crate::response::Response;
@@ -111,8 +112,19 @@ impl App {
         if boxed_file.is_ok()  {
             let md = metadata(&static_filepath).unwrap();
             if md.is_file() {
-                let mut file = boxed_file.unwrap();
-                file.read_to_end(&mut contents).expect("Unable to read");
+                let boxed_header = request.get_header(HTTP_HEADERS.RANGE.to_string());
+                if boxed_header.is_some() {
+                    let range_header = boxed_header.unwrap();
+                    let content_range_list = Range::get_content_range_list(&request.request_uri, range_header);
+
+
+
+                }
+
+                if boxed_header.is_none() {
+                    let mut file = boxed_file.unwrap();
+                    file.read_to_end(&mut contents).expect("Unable to read");
+                }
             }
         }
 
