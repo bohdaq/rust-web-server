@@ -112,19 +112,21 @@ impl App {
         if boxed_file.is_ok()  {
             let md = metadata(&static_filepath).unwrap();
             if md.is_file() {
+                let mut range_header = &Header {
+                    header_name: HTTP_HEADERS.RANGE.to_string(),
+                    header_value: "bytes=0-".to_string()
+                };
+
                 let boxed_header = request.get_header(HTTP_HEADERS.RANGE.to_string());
                 if boxed_header.is_some() {
-                    let range_header = boxed_header.unwrap();
-                    let content_range_list = Range::get_content_range_list(&request.request_uri, range_header);
+                    range_header = boxed_header.unwrap();
+                }
 
-
+                let content_range_list = Range::get_content_range_list(&request.request_uri, range_header);
+                if content_range_list.len() == 1 {
 
                 }
 
-                if boxed_header.is_none() {
-                    let mut file = boxed_file.unwrap();
-                    file.read_to_end(&mut contents).expect("Unable to read");
-                }
             }
         }
 
