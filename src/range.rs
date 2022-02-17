@@ -87,7 +87,7 @@ impl Range {
         content_range_list
     }
 
-    pub(crate) fn get_exact_start_and_end_of_file(request_uri: &str, range: &Header) -> Vec<ContentRange> {
+    pub(crate) fn get_content_range_list(request_uri: &str, range: &Header) -> Vec<ContentRange> {
         let mut content_range_list : Vec<ContentRange> = vec![];
         let static_filepath = Server::get_static_filepath(request_uri);
 

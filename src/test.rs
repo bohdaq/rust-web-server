@@ -1672,7 +1672,7 @@ mod tests {
         let image_path = "/static/content.png";
 
         let header = Header {
-            header_name: "Range".to_string(),
+            header_name: HTTP_HEADERS.RANGE.to_string(),
             header_value: "bytes=200-1000, 1200-1400, 2000-2300, 11000-, -500, 0-".to_string()
         };
 
@@ -1683,7 +1683,7 @@ mod tests {
             headers: vec![header]
         };
 
-        let content_range_list : Vec<ContentRange> = Range::get_exact_start_and_end_of_file(&request.request_uri, &request.headers[0]);
+        let content_range_list : Vec<ContentRange> = Range::get_content_range_list(&request.request_uri, &request.headers[0]);
     }
 
 }
