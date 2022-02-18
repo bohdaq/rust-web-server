@@ -114,33 +114,31 @@ impl Response {
 
         let mut body = Response::generate_body(response.content_range_list);
 
-        let mut headers = CONSTANTS.NEW_LINE_SEPARATOR.to_string();
+        headers.push(Header {
+            header_name: HTTP_HEADERS.CONTENT_LENGTH.to_string(),
+            header_value: body.len().to_string(),
+        });
+
+        let mut headers_str = CONSTANTS.NEW_LINE_SEPARATOR.to_string();
         for header in headers {
             let mut header_string = CONSTANTS.EMPTY_STRING.to_string();
             header_string.push_str(&header.header_name);
             header_string.push_str(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR);
             header_string.push_str(&header.header_value);
             header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
-            headers.push_str(&header_string);
+            headers_str.push_str(&header_string);
         }
-
-        let mut content_length_header_string = CONSTANTS.EMPTY_STRING.to_string();
-        content_length_header_string.push_str(HTTP_HEADERS.CONTENT_LENGTH);
-        content_length_header_string.push_str(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR);
-        content_length_header_string.push_str(response.message_body.len().to_string().as_str());
-        content_length_header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
-        headers.push_str(&content_length_header_string);
 
         let response_without_body = format!(
             "{}{}{}",
             status,
-            headers,
+            headers_str,
             CONSTANTS.NEW_LINE_SEPARATOR,
         );
 
         println!("_____RESPONSE w/o body______\n{}", &response_without_body);
 
-        let mut response  = [response_without_body.into_bytes(), response.message_body].concat();
+        let mut response  = [response_without_body.into_bytes(), body].concat();
 
 
         response
