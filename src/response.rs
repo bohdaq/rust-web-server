@@ -23,6 +23,43 @@ impl Response {
         header
     }
 
+    pub(crate) fn generate_body(content_range_list: Vec<ContentRange>) -> Vec<u8> {
+        let mut body = vec![];
+        let ONE = 1;
+
+        if content_range_list.len() == ONE {
+            let index = 0;
+            let content_range = content_range_list.get(index).unwrap();
+            body = content_range.body.to_vec();
+        }
+
+        if content_range_list.len() > ONE {
+            for content_range in content_range_list {
+                let mut body_str = CONSTANTS.EMPTY_STRING.to_string();
+                body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
+                let mut body_str = CONSTANTS.EMPTY_STRING.to_string();
+                body_str.push_str(CONSTANTS.STRING_SEPARATOR);
+                body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
+                let content_type = [HTTP_HEADERS.CONTENT_TYPE, CONSTANTS.HEADER_NAME_VALUE_SEPARATOR, CONSTANTS.WHITESPACE, &content_range.content_type.to_string()].join("");
+                body_str.push_str(content_type.as_str());
+                body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
+                let content_range_header = [HTTP_HEADERS.CONTENT_RANGE, CONSTANTS.HEADER_NAME_VALUE_SEPARATOR, CONSTANTS.WHITESPACE, CONSTANTS.BYTES, CONSTANTS.WHITESPACE, &content_range.range.start.to_string(), CONSTANTS.HYPHEN, &content_range.range.end.to_string(), CONSTANTS.SLASH, &content_range.size].join("");
+                body_str.push_str(content_range_header.as_str());
+                body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
+                body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
+
+                let inner_body = [body_str.as_bytes(), &content_range.body].concat();
+                body = [body, inner_body].concat();
+            }
+            let mut trailing_separator = CONSTANTS.EMPTY_STRING.to_string();
+            trailing_separator.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
+            trailing_separator.push_str(CONSTANTS.STRING_SEPARATOR);
+            body = [&body, trailing_separator.as_bytes()].concat();
+        }
+
+        body
+    }
+
     pub(crate) fn generate_response(mut response: Response) -> Vec<u8> {
         let status = [response.http_version, response.status_code, response.reason_phrase].join(CONSTANTS.WHITESPACE);
         let mut headers = vec![
@@ -41,9 +78,9 @@ impl Response {
             let content_range_header_value = [
                 CONSTANTS.BYTES,
                 CONSTANTS.WHITESPACE,
-                &content_range.range.start,
+                &content_range.range.start.to_string(),
                 CONSTANTS.HYPHEN,
-                &content_range.range.end,
+                &content_range.range.end.to_string(),
                 CONSTANTS.SLASH,
                 &content_range.size
             ].join("");
@@ -74,6 +111,8 @@ impl Response {
                 header_value: content_range_header_value,
             });
         }
+
+        let mut body = Response::generate_body(response.content_range_list);
 
         let mut headers = CONSTANTS.NEW_LINE_SEPARATOR.to_string();
         for header in headers {
