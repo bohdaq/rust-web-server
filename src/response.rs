@@ -152,7 +152,7 @@ impl Response {
             status_code: "".to_string(),
             reason_phrase: "".to_string(),
             headers: vec![],
-            message_body: vec![],
+            content_range_list: vec![],
         };
 
         let mut content_length: usize = 0;
