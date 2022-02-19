@@ -233,4 +233,10 @@ impl Response {
             Response::cursor_read(cursor, iteration_number, response, content_length);
         }
     }
+
+    pub(crate) fn is_multipart_byteranges_content_type(content_type: Header) -> bool {
+        let multipart_byteranges = [CONSTANTS.MULTIPART, CONSTANTS.SLASH, CONSTANTS.BYTERANGES].join("");
+        let is_multipart_byteranges = content_type.header_value.starts_with(multipart_byteranges);
+        is_multipart_byteranges;
+    };
 }
