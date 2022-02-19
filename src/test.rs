@@ -1702,6 +1702,12 @@ mod tests {
         assert_eq!(range.start, 0);
         assert_eq!(range.end, file_length);
 
+        let byte = ["0-", file_length.to_string().as_str()].join("");
+        let range = Range::parse_range(file_length, &byte);
+        assert_eq!(range.start, 0);
+        assert_eq!(range.end, file_length);
+
+
     }
 
     #[test]

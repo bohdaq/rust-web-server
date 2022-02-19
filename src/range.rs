@@ -54,6 +54,12 @@ impl Range {
                 range.start = filelength - num_usize;
                 range.end = filelength;
             }
+
+            let buffer_length = range.end - range.start;
+            if buffer_length > Range::MAX_BUFFER_LENGTH {
+                let end = range.start + Range::MAX_BUFFER_LENGTH;
+                range.end = end;
+            }
         }
         range
     }
@@ -71,8 +77,8 @@ impl Range {
         for byte in bytes {
             let range = Range::parse_range(filelength, byte);
             let mut buff_length = range.end - range.start;
-            if buff_length > MAX_BUFFER_LENGTH {
-                buff_length = MAX_BUFFER_LENGTH;
+            if buff_length > Range::MAX_BUFFER_LENGTH {
+                buff_length = Range::MAX_BUFFER_LENGTH;
             }
 
             let mut file = File::open(filepath).unwrap();
