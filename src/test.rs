@@ -1647,12 +1647,24 @@ mod tests {
         let response_content_length_header_value = contents.len().to_string();
 
         let headers = vec![user_agent];
+
+        let content_range = ContentRange {
+            unit: CONSTANTS.BYTES.to_string(),
+            range: Range {
+                start: 0,
+                end: contents.len() as u64
+            },
+            size: contents.len().to_string(),
+            body: contents.to_vec(),
+            content_type: MimeType::IMAGE_PNG.to_string()
+        };
+
         let response = Response {
             http_version: response_http_version.to_string(),
             status_code: response_status_code.to_string(),
             reason_phrase: response_reason_phrase.to_string(),
             headers,
-            message_body: contents
+            content_range_list: vec![content_range],
         };
 
         let raw_response = Response::generate_response(response);
