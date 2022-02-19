@@ -995,7 +995,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file.as_bytes().to_vec(), response.message_body);
+        assert_eq!(response_html_file.as_bytes().to_vec(), response.content_range_list.get(0).unwrap().body);
     }
 
     #[test]
@@ -1064,7 +1064,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file.into_bytes(), response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
     }
 
     #[test]
@@ -1134,7 +1134,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file.as_bytes().to_vec(), response.message_body);
+        assert_eq!(response_html_file.as_bytes().to_vec(), response.content_range_list.get(0).unwrap().body);
     }
 
     #[test]
@@ -1204,7 +1204,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file.into_bytes(), response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
     }
 
     #[test]
@@ -1274,7 +1274,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file.into_bytes(), response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
     }
 
     #[test]
@@ -1344,7 +1344,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file.into_bytes(), response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
     }
 
     #[test]
@@ -1414,7 +1414,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file.into_bytes(), response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
     }
 
     #[test]
@@ -1486,7 +1486,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file.into_bytes(), response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
 
 
 
@@ -1558,7 +1558,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(response_html_file.into_bytes(), response.message_body);
+        assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
     }
 
     #[test]
@@ -1576,6 +1576,16 @@ mod tests {
             header_value: response_user_agent_value.to_string()
         };
 
+        let content_range = ContentRange {
+            unit: CONSTANTS.BYTES.to_string(),
+            range: Range {
+                start: 0,
+                end: message_body.as_bytes().len() as u64
+            },
+            size: message_body.as_bytes().len().to_string(),
+            body: message_body.as_bytes().to_vec(),
+            content_type: MimeType::TEXT_PLAIN.to_string()
+        };
 
         let headers = vec![user_agent];
         let response = Response {
@@ -1583,7 +1593,7 @@ mod tests {
             status_code: response_status_code.to_string(),
             reason_phrase: response_reason_phrase.to_string(),
             headers,
-            message_body: message_body.as_bytes().to_vec()
+            content_range_list: vec![content_range],
         };
 
 
@@ -1605,7 +1615,7 @@ mod tests {
         assert_eq!(response_http_version, response.http_version);
         assert_eq!(response_status_code, response.status_code);
         assert_eq!(response_reason_phrase, response.reason_phrase);
-        assert_eq!(message_body.as_bytes().to_vec(), response.message_body);
+        assert_eq!(message_body.as_bytes().to_vec(), response.content_range_list.get(0).unwrap().body);
 
 
     }
@@ -1664,7 +1674,7 @@ mod tests {
         response_filepath = [working_directory, filepath].join(CONSTANTS.EMPTY_STRING);
         file = File::open(response_filepath).unwrap();
         file.read_to_end(&mut contents).expect("Unable to read");
-        assert_eq!(contents, response.message_body);
+        assert_eq!(contents, response.content_range_list.get(0).unwrap().body);
     }
 
     #[test]
