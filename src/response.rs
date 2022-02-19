@@ -114,11 +114,6 @@ impl Response {
 
         let mut body = Response::generate_body(response.content_range_list);
 
-        headers.push(Header {
-            header_name: HTTP_HEADERS.CONTENT_LENGTH.to_string(),
-            header_value: body.len().to_string(),
-        });
-
         let mut headers_str = CONSTANTS.NEW_LINE_SEPARATOR.to_string();
         for header in headers {
             let mut header_string = CONSTANTS.EMPTY_STRING.to_string();
