@@ -1568,13 +1568,6 @@ mod tests {
         let response_reason_phrase = "Unauthorized";
         let message_body = CONSTANTS.EMPTY_STRING;
 
-        let response_user_agent_header_name = "User-Agent";
-        let response_user_agent_value = "rws/0.0.1";
-
-        let user_agent = Header {
-            header_name: response_user_agent_header_name.to_string(),
-            header_value: response_user_agent_value.to_string()
-        };
 
         let content_range = ContentRange {
             unit: CONSTANTS.BYTES.to_string(),
@@ -1587,7 +1580,7 @@ mod tests {
             content_type: MimeType::TEXT_PLAIN.to_string()
         };
 
-        let headers = vec![user_agent];
+        let headers = vec![];
         let response = Response {
             http_version: response_http_version.to_string(),
             status_code: response_status_code.to_string(),
@@ -1607,9 +1600,6 @@ mod tests {
 
         let content_length_header = response.get_header(response_content_length_header_name.to_string()).unwrap();
         assert_eq!(response_content_length_header_value, content_length_header.header_value);
-
-        let response_user_agent_header = response.get_header(response_user_agent_header_name.to_string()).unwrap();
-        assert_eq!(response_user_agent_header.header_value, response_user_agent_value);
 
 
         assert_eq!(response_http_version, response.http_version);
@@ -1635,18 +1625,10 @@ mod tests {
         let mut file = File::open(response_filepath).unwrap();
         file.read_to_end(&mut contents).expect("Unable to read");
 
-        let response_user_agent_header_name = "User-Agent";
-        let response_user_agent_value = "rws/0.0.1";
-
-        let user_agent = Header {
-            header_name: response_user_agent_header_name.to_string(),
-            header_value: response_user_agent_value.to_string()
-        };
-
         let response_content_length_header_name = "Content-Length";
         let response_content_length_header_value = contents.len().to_string();
 
-        let headers = vec![user_agent];
+        let headers = vec![];
 
         let content_range = ContentRange {
             unit: CONSTANTS.BYTES.to_string(),
@@ -1673,9 +1655,6 @@ mod tests {
 
         let content_length_header = response.get_header(response_content_length_header_name.to_string()).unwrap();
         assert_eq!(response_content_length_header_value, content_length_header.header_value);
-
-        let response_user_agent_header = response.get_header(response_user_agent_header_name.to_string()).unwrap();
-        assert_eq!(response_user_agent_header.header_value, response_user_agent_value);
 
 
         assert_eq!(response_http_version, response.http_version);
