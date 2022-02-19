@@ -31,6 +31,9 @@ pub struct ContentRange {
 
 impl Range {
 
+    pub(crate) const MAX_BUFFER_LENGTH: u64 = 100000000; // 100 mb is max buffer size
+
+
     pub(crate) fn parse_range(filelength: u64, range_str: &str) -> Range {
         const START_INDEX: usize = 0;
         const END_INDEX: usize = 1;
@@ -58,7 +61,6 @@ impl Range {
     pub(crate) fn parse_content_range(filepath: &str, filelength: u64, raw_range_value: &str) -> Vec<ContentRange> {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
-        let max_buffer_length = 100000000; // 100 mb is max buffer size
 
         println!("raw_range_value: {}", raw_range_value);
         let split_raw_range_value: Vec<&str> = raw_range_value.split(CONSTANTS.EQUALS).collect();
@@ -69,8 +71,8 @@ impl Range {
         for byte in bytes {
             let range = Range::parse_range(filelength, byte);
             let mut buff_length = range.end - range.start;
-            if buff_length > max_buffer_length {
-                buff_length = max_buffer_length;
+            if buff_length > MAX_BUFFER_LENGTH {
+                buff_length = MAX_BUFFER_LENGTH;
             }
 
             let mut file = File::open(filepath).unwrap();
