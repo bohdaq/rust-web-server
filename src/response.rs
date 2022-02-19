@@ -214,7 +214,7 @@ impl Response {
             buf = vec![];
             cursor.read_to_end(&mut buf);
             b = &buf;
-            response.message_body = Vec::from(b);
+            response.content_range_list = Vec::new();
             return;
         }
 
