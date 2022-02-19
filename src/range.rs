@@ -40,16 +40,23 @@ impl Range {
 
         let mut range = Range { start: 0, end: filelength };
         let parts: Vec<&str> = range_str.split(CONSTANTS.HYPHEN).collect();
+
+        let mut start_range_not_provided = true;
         for (i, part) in parts.iter().enumerate() {
+
             let num = part.trim();
             let length = num.len();
+            println!("i: {} num: {} length: {}", i, num, length);
+            if i == START_INDEX && length != 0 {
+                start_range_not_provided = false;
+            }
             if i == START_INDEX && length != 0 {
                 range.start = num.parse().unwrap();
             }
             if i == END_INDEX && length != 0 {
                 range.end = num.parse().unwrap();
             }
-            if i == END_INDEX && length != 0 && range.start == 0 {
+            if i == END_INDEX && length != 0 && start_range_not_provided {
                 let num_usize : u64 = num.parse().unwrap();
                 range.start = filelength - num_usize;
                 range.end = filelength;
