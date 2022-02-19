@@ -4,8 +4,8 @@ use crate::header::Header;
 use regex::Regex;
 use crate::app::App;
 use crate::constant::{CONSTANTS, HTTP_HEADERS};
-use crate::range::ContentRange;
-use crate::Server;
+use crate::range::{ContentRange, Range};
+use crate::{Request, Server};
 
 pub struct Response {
     pub(crate) http_version: String,
@@ -211,10 +211,29 @@ impl Response {
 
         if current_string_is_empty {
             println!("end of headers... parse message length: {}", content_length);
-            buf = vec![];
-            cursor.read_to_end(&mut buf);
-            b = &buf;
-            response.content_range_list = Vec::new();
+            let content_type = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+            let is_multipart = Response::is_multipart_byteranges_content_type(&content_type);
+
+            if is_multipart {
+
+            } else {
+                buf = vec![];
+                cursor.read_to_end(&mut buf);
+                b = &buf;
+
+                let content_range = ContentRange {
+                    unit: CONSTANTS.BYTES.to_string(),
+                    range: Range {
+                        start: 0,
+                        end: b.len() as u64
+                    },
+                    size: b.len().to_string(),
+                    body: Vec::from(b),
+                    content_type: content_type.header_value.to_string()
+                };
+                response.content_range_list = vec![content_range];
+            }
+
             return;
         }
 
@@ -234,9 +253,9 @@ impl Response {
         }
     }
 
-    pub(crate) fn is_multipart_byteranges_content_type(content_type: Header) -> bool {
+    pub(crate) fn is_multipart_byteranges_content_type(content_type: &Header) -> bool {
         let multipart_byteranges = [CONSTANTS.MULTIPART, CONSTANTS.SLASH, CONSTANTS.BYTERANGES].join("");
-        let is_multipart_byteranges = content_type.header_value.starts_with(multipart_byteranges);
-        is_multipart_byteranges;
-    };
+        let is_multipart_byteranges = content_type.header_value.starts_with(&multipart_byteranges);
+        is_multipart_byteranges
+    }
 }

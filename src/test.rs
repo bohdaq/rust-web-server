@@ -1722,4 +1722,15 @@ mod tests {
         let content_range_list : Vec<ContentRange> = Range::get_content_range_list(&request.request_uri, &request.headers[0]);
     }
 
+    #[test]
+    fn check_is_multipart_byteranges_content_type() {
+        let content_type = Header {
+            header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
+            header_value: "multipart/byteranges; boundary=String_separator".to_string(),
+        };
+
+        let is_multipart = Response::is_multipart_byteranges_content_type(&content_type);
+        assert_eq!(true, is_multipart);
+    }
+
 }
