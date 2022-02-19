@@ -88,8 +88,8 @@ impl App {
 
                 response = Response {
                     http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
-                    status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE.to_string(),
-                    reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE.to_string(),
+                    status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.STATUS_CODE.to_string(),
+                    reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE.to_string(),
                     headers: vec![
                         content_type_header,
                         App::get_x_content_type_options_header(),
