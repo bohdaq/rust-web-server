@@ -92,8 +92,8 @@ impl App {
                 let boxed_range_header = request.get_header(HTTP_HEADERS.RANGE.to_string());
                 if boxed_range_header.is_some() {
                     let range_header = boxed_range_header.unwrap();
-                    status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.STATUS_CODE;
-                    reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE;
+                    // status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.STATUS_CODE;
+                    // reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE;
                 }
 
                 response = Response {
