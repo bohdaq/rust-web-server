@@ -25,8 +25,13 @@ impl Server {
 
         let response = Server::process_request(&buffer);
 
-        stream.write(response.borrow()).unwrap();
-        stream.flush().unwrap();
+        let boxed_stream = stream.write(response.borrow());
+        if boxed_stream.is_ok() {
+            stream.flush().unwrap();
+        } else {
+            println!("error with stream: {}", boxed_stream.err().unwrap().to_string());
+        }
+
 
     }
 
