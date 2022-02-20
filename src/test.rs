@@ -1716,7 +1716,7 @@ mod tests {
     }
 
     #[test]
-    fn get_right_start_end_length_of_a_file() {
+    fn get_right_content_range_of_a_file() {
         let image_path = "/static/content.png";
         let static_filepath = Server::get_static_filepath(image_path);
         let md = metadata(&static_filepath).unwrap();
@@ -1844,6 +1844,13 @@ mod tests {
         assert_eq!(content_range.body, buffer);
 
 
+    }
+
+    #[test]
+    fn check_range_response_is_ok() {
+        let uri = "/static/test.txt";
+        let range_header_value = "bytes=8-10, 1-6, 10-15";
+        
     }
 
     #[test]
