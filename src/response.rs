@@ -188,7 +188,21 @@ impl Response {
     pub(crate) fn parse_multipart_body(cursor: &mut Cursor<&[u8]>) -> Vec<ContentRange> {
         let mut content_range_list : Vec<ContentRange> = vec![];
 
+        let mut buf = vec![];
+        let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
+        let mut b : &[u8] = &buf;
+        let string = String::from_utf8(Vec::from(b)).unwrap();
 
+        let new_line_char_found = bytes_offset != 0;
+        let current_string_is_empty = string.trim().len() == 0;
+
+        println!("string: {} new_line_char_found: {} current_string_is_empty: {}", string, new_line_char_found, current_string_is_empty);
+
+        if !new_line_char_found {
+            return content_range_list
+        };
+
+        content_range_list = Response::parse_multipart_body(cursor);
 
         content_range_list
     }

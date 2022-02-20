@@ -1876,8 +1876,12 @@ mod tests {
         let request: Request = Request::parse_request(&raw_request.as_bytes());
         let raw_response = Server::process_request(raw_request.as_bytes());
 
+        let response = Response::parse_response(raw_response.borrow());
+
         let response_string = String::from_utf8(raw_response).unwrap();
         println!("{}", response_string);
+
+
 
     }
 
