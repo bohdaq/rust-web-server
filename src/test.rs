@@ -1850,7 +1850,7 @@ mod tests {
     fn check_range_response_is_ok() {
         let uri = "/static/test.txt";
         let range_header_value = "bytes=8-10, 1-6, 10-15";
-        
+
     }
 
     #[test]
