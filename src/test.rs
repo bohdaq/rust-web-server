@@ -5,7 +5,7 @@ use regex::Regex;
 #[cfg(test)]
 mod tests {
     use std::borrow::Borrow;
-    use std::fs::File;
+    use std::fs::{File, metadata};
     use std::io::Read;
     use crate::CONSTANTS;
     use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
@@ -1718,20 +1718,68 @@ mod tests {
     #[test]
     fn get_right_start_end_length_of_a_file() {
         let image_path = "/static/content.png";
+        let static_filepath = Server::get_static_filepath(image_path);
+        let md = metadata(&static_filepath).unwrap();
+        let file_size = md.len();
 
         let header = Header {
             header_name: HTTP_HEADERS.RANGE.to_string(),
-            header_value: "bytes=200-1000, 1200-1400, 2000-2300, 11000-, -500, 0-".to_string()
+            header_value: "bytes=200-1000, 1200-1400, 2000-2300, 11000-, -500, 0-, 0-1".to_string()
         };
 
-        let request = Request {
-            method: REQUEST_METHODS.GET.to_string(),
-            request_uri: image_path.to_string(),
-            http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
-            headers: vec![header]
-        };
+        let content_range_list : Vec<ContentRange> = Range::get_content_range_list(image_path, &header);
 
-        let content_range_list : Vec<ContentRange> = Range::get_content_range_list(&request.request_uri, &request.headers[0]);
+        let content_range = content_range_list.get(0).unwrap();
+        assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
+        assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
+        assert_eq!(content_range.unit, CONSTANTS.BYTES);
+        assert_eq!(content_range.range.start, 200);
+        assert_eq!(content_range.range.end, 1000);
+
+        let content_range = content_range_list.get(1).unwrap();
+        assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
+        assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
+        assert_eq!(content_range.unit, CONSTANTS.BYTES);
+        assert_eq!(content_range.range.start, 1200);
+        assert_eq!(content_range.range.end, 1400);
+
+        let content_range = content_range_list.get(2).unwrap();
+        assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
+        assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
+        assert_eq!(content_range.unit, CONSTANTS.BYTES);
+        assert_eq!(content_range.range.start, 2000);
+        assert_eq!(content_range.range.end, 2300);
+
+        let content_range = content_range_list.get(3).unwrap();
+        assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
+        assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
+        assert_eq!(content_range.unit, CONSTANTS.BYTES);
+        assert_eq!(content_range.range.start, 11000);
+        assert_eq!(content_range.range.end, file_size);
+
+        let content_range = content_range_list.get(4).unwrap();
+        assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
+        assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
+        assert_eq!(content_range.unit, CONSTANTS.BYTES);
+        let start = file_size - 500;
+        assert_eq!(content_range.range.start, start);
+        assert_eq!(content_range.range.end, file_size);
+
+        let content_range = content_range_list.get(5).unwrap();
+        assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
+        assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
+        assert_eq!(content_range.unit, CONSTANTS.BYTES);
+        assert_eq!(content_range.range.start, 0);
+        assert_eq!(content_range.range.end, file_size);
+
+        let content_range = content_range_list.get(6).unwrap();
+        assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
+        assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
+        assert_eq!(content_range.unit, CONSTANTS.BYTES);
+        assert_eq!(content_range.range.start, 0);
+        assert_eq!(content_range.range.end, 1);
+
+
     }
 
     #[test]
