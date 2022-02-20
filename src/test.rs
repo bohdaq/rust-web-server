@@ -1851,6 +1851,34 @@ mod tests {
         let uri = "/static/test.txt";
         let range_header_value = "bytes=8-10, 1-6, 10-15";
 
+
+        let request_host_header_name = "Host";
+        let request_host_header_value = "localhost:7777";
+        let host = Header {
+            header_name: request_host_header_name.to_string(),
+            header_value: request_host_header_value.to_string()
+        };
+
+        let range = Header {
+            header_name: HTTP_HEADERS.RANGE.to_string(),
+            header_value: range_header_value.to_string()
+        };
+
+        let headers = vec![host, range];
+        let request = Request {
+            method: REQUEST_METHODS.GET.to_string(),
+            request_uri: uri.to_string(),
+            http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+            headers
+        };
+
+        let raw_request = Request::generate_request(request);
+        let request: Request = Request::parse_request(&raw_request.as_bytes());
+        let raw_response = Server::process_request(raw_request.as_bytes());
+
+        let response_string = String::from_utf8(raw_response).unwrap();
+        println!("{}", response_string);
+
     }
 
     #[test]

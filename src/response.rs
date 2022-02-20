@@ -36,9 +36,11 @@ impl Response {
         let SEPARATOR : String = [CONSTANTS.HYPHEN, CONSTANTS.HYPHEN, CONSTANTS.STRING_SEPARATOR].join("");
 
         if content_range_list.len() > ONE {
-            for content_range in content_range_list {
+            for (i, content_range) in content_range_list.iter().enumerate() {
                 let mut body_str = CONSTANTS.EMPTY_STRING.to_string();
-                body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
+                if i != 0 {
+                    body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
+                }
                 body_str.push_str(SEPARATOR.as_str());
                 body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
                 let content_type = [HTTP_HEADERS.CONTENT_TYPE, CONSTANTS.HEADER_NAME_VALUE_SEPARATOR, CONSTANTS.WHITESPACE, &content_range.content_type.to_string()].join("");
@@ -53,7 +55,6 @@ impl Response {
                 body = [body, inner_body].concat();
             }
             let mut trailing_separator = CONSTANTS.EMPTY_STRING.to_string();
-            trailing_separator.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
             trailing_separator.push_str(SEPARATOR.as_str());
             body = [&body, trailing_separator.as_bytes()].concat();
         }
