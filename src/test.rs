@@ -6,7 +6,7 @@ use regex::Regex;
 mod tests {
     use std::borrow::Borrow;
     use std::fs::{File, metadata};
-    use std::io::Read;
+    use std::io::{BufReader, Read, Seek, SeekFrom};
     use crate::CONSTANTS;
     use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
     use crate::header::Header;
@@ -1729,12 +1729,21 @@ mod tests {
 
         let content_range_list : Vec<ContentRange> = Range::get_content_range_list(image_path, &header);
 
+        let start = 200;
+        let end = 1000;
         let content_range = content_range_list.get(0).unwrap();
         assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
         assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
         assert_eq!(content_range.unit, CONSTANTS.BYTES);
-        assert_eq!(content_range.range.start, 200);
-        assert_eq!(content_range.range.end, 1000);
+        assert_eq!(content_range.range.start, start);
+        assert_eq!(content_range.range.end, end);
+        let mut file = File::open(static_filepath).unwrap();
+        let mut reader = BufReader::new(file);
+        reader.seek(SeekFrom::Start(start));
+        let mut buff_length = end - start;
+        let mut buffer = Vec::new();
+        reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
+        assert_eq!(content_range.body, buffer);
 
         let content_range = content_range_list.get(1).unwrap();
         assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
