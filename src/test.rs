@@ -1752,8 +1752,8 @@ mod tests {
         assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
         assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
         assert_eq!(content_range.unit, CONSTANTS.BYTES);
-        assert_eq!(content_range.range.start, 1200);
-        assert_eq!(content_range.range.end, 1400);
+        assert_eq!(content_range.range.start, start);
+        assert_eq!(content_range.range.end, end);
         let mut file = File::open(&static_filepath).unwrap();
         let mut reader = BufReader::new(file);
         reader.seek(SeekFrom::Start(start));
@@ -1762,41 +1762,86 @@ mod tests {
         reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
         assert_eq!(content_range.body, buffer);
 
+        let start = 2000;
+        let end = 2300;
         let content_range = content_range_list.get(2).unwrap();
         assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
         assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
         assert_eq!(content_range.unit, CONSTANTS.BYTES);
-        assert_eq!(content_range.range.start, 2000);
-        assert_eq!(content_range.range.end, 2300);
+        assert_eq!(content_range.range.start, start);
+        assert_eq!(content_range.range.end, end);
+        let mut file = File::open(&static_filepath).unwrap();
+        let mut reader = BufReader::new(file);
+        reader.seek(SeekFrom::Start(start));
+        let mut buff_length = end - start;
+        let mut buffer = Vec::new();
+        reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
+        assert_eq!(content_range.body, buffer);
 
+        let start = 11000;
+        let end = file_size;
         let content_range = content_range_list.get(3).unwrap();
         assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
         assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
         assert_eq!(content_range.unit, CONSTANTS.BYTES);
-        assert_eq!(content_range.range.start, 11000);
-        assert_eq!(content_range.range.end, file_size);
+        assert_eq!(content_range.range.start, start);
+        assert_eq!(content_range.range.end, end);
+        let mut file = File::open(&static_filepath).unwrap();
+        let mut reader = BufReader::new(file);
+        reader.seek(SeekFrom::Start(start));
+        let mut buff_length = end - start;
+        let mut buffer = Vec::new();
+        reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
+        assert_eq!(content_range.body, buffer);
 
         let content_range = content_range_list.get(4).unwrap();
         assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
         assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
         assert_eq!(content_range.unit, CONSTANTS.BYTES);
         let start = file_size - 500;
+        let end = file_size;
         assert_eq!(content_range.range.start, start);
-        assert_eq!(content_range.range.end, file_size);
+        assert_eq!(content_range.range.end, end);
+        let mut file = File::open(&static_filepath).unwrap();
+        let mut reader = BufReader::new(file);
+        reader.seek(SeekFrom::Start(start));
+        let mut buff_length = end - start;
+        let mut buffer = Vec::new();
+        reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
+        assert_eq!(content_range.body, buffer);
 
+        let start = 0;
+        let end = file_size;
         let content_range = content_range_list.get(5).unwrap();
         assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
         assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
         assert_eq!(content_range.unit, CONSTANTS.BYTES);
-        assert_eq!(content_range.range.start, 0);
-        assert_eq!(content_range.range.end, file_size);
+        assert_eq!(content_range.range.start, start);
+        assert_eq!(content_range.range.end, end);
+        let mut file = File::open(&static_filepath).unwrap();
+        let mut reader = BufReader::new(file);
+        reader.seek(SeekFrom::Start(start));
+        let mut buff_length = end - start;
+        let mut buffer = Vec::new();
+        reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
+        assert_eq!(content_range.body, buffer);
 
+
+        let start = 0;
+        let end = 1;
         let content_range = content_range_list.get(6).unwrap();
         assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
         assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
         assert_eq!(content_range.unit, CONSTANTS.BYTES);
-        assert_eq!(content_range.range.start, 0);
-        assert_eq!(content_range.range.end, 1);
+        assert_eq!(content_range.range.start, start);
+        assert_eq!(content_range.range.end, end);
+        let mut file = File::open(&static_filepath).unwrap();
+        let mut reader = BufReader::new(file);
+        reader.seek(SeekFrom::Start(start));
+        let mut buff_length = end - start;
+        let mut buffer = Vec::new();
+        reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
+        assert_eq!(content_range.body, buffer);
 
 
     }
