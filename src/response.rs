@@ -185,6 +185,14 @@ impl Response {
         }
     }
 
+    pub(crate) fn parse_multipart_body(cursor: &mut Cursor<&[u8]>) -> Vec<ContentRange> {
+        let mut content_range_list : Vec<ContentRange> = vec![];
+
+
+
+        content_range_list
+    }
+
 
 
     pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize) {
@@ -212,7 +220,7 @@ impl Response {
             let is_multipart = Response::is_multipart_byteranges_content_type(&content_type);
 
             if is_multipart {
-
+                response.content_range_list = Response::parse_multipart_body(cursor)
             } else {
                 buf = vec![];
                 cursor.read_to_end(&mut buf);
