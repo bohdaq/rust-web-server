@@ -189,7 +189,7 @@ impl Response {
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let mut b : &[u8] = &buf;
-        let string = String::from_utf8(Vec::from(b)).unwrap();
+        let mut string = String::from_utf8(Vec::from(b)).unwrap();
 
         let new_line_char_found = bytes_offset != 0;
         let current_string_is_empty = string.trim().len() == 0;
@@ -199,6 +199,46 @@ impl Response {
         if !new_line_char_found {
             return content_range_list
         };
+
+        let mut content_range: ContentRange = ContentRange {
+            unit: "".to_string(),
+            range: Range { start: 0, end: 0 },
+            size: "".to_string(),
+            body: vec![],
+            content_type: "".to_string()
+        };
+
+        let content_range_is_not_parsed = content_range.body.len() == 0;
+        if string.starts_with(Response::SEPARATOR) && content_range_is_not_parsed {
+            buf = vec![];
+            cursor.read_until(b'\n', &mut buf).unwrap();
+            b : &[u8] = &buf;
+            string = String::from_utf8(Vec::from(b)).unwrap();
+        }
+
+        if string.starts_with(HTTP_HEADERS.CONTENT_TYPE) {
+            let content_type = Response::parse_http_response_header_string(string.as_str());
+            content_range.content_type = content_type.header_value;
+
+            buf = vec![];
+            cursor.read_until(b'\n', &mut buf).unwrap();
+            b : &[u8] = &buf;
+            string = String::from_utf8(Vec::from(b)).unwrap();
+        }
+
+        if string.starts_with(HTTP_HEADERS.CONTENT_RANGE) {
+            let content_range_header = Response::parse_http_response_header_string(string.as_str());
+            //parse header value ...
+
+            buf = vec![];
+            cursor.read_until(b'\n', &mut buf).unwrap();
+            b : &[u8] = &buf;
+            string = String::from_utf8(Vec::from(b)).unwrap();
+        }
+
+
+
+
 
         //1. find separator, read next line until empty string found with following checks:
         //2. check is it Content-Type header
