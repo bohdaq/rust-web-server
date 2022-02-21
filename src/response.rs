@@ -17,6 +17,7 @@ pub struct Response {
 
 impl Response {
     pub(crate) const HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX: &'static str = "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)";
+    pub(crate) const SEPARATOR : &'static str = [CONSTANTS.HYPHEN, CONSTANTS.HYPHEN, CONSTANTS.STRING_SEPARATOR].join("").as_str();
 
     pub(crate) fn get_header(&self, name: String) -> Option<&Header> {
         let header =  self.headers.iter().find(|x| x.header_name == name);
@@ -33,15 +34,13 @@ impl Response {
             body = content_range.body.to_vec();
         }
 
-        let SEPARATOR : String = [CONSTANTS.HYPHEN, CONSTANTS.HYPHEN, CONSTANTS.STRING_SEPARATOR].join("");
-
         if content_range_list.len() > ONE {
             for (i, content_range) in content_range_list.iter().enumerate() {
                 let mut body_str = CONSTANTS.EMPTY_STRING.to_string();
                 if i != 0 {
                     body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
                 }
-                body_str.push_str(SEPARATOR.as_str());
+                body_str.push_str(Response::SEPARATOR.as_str());
                 body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
                 let content_type = [HTTP_HEADERS.CONTENT_TYPE, CONSTANTS.HEADER_NAME_VALUE_SEPARATOR, CONSTANTS.WHITESPACE, &content_range.content_type.to_string()].join("");
                 body_str.push_str(content_type.as_str());
@@ -55,7 +54,7 @@ impl Response {
                 body = [body, inner_body].concat();
             }
             let mut trailing_separator = CONSTANTS.EMPTY_STRING.to_string();
-            trailing_separator.push_str(SEPARATOR.as_str());
+            trailing_separator.push_str(Response::SEPARATOR.as_str());
             body = [&body, trailing_separator.as_bytes()].concat();
         }
 
@@ -185,8 +184,7 @@ impl Response {
         }
     }
 
-    pub(crate) fn parse_multipart_body(cursor: &mut Cursor<&[u8]>) -> Vec<ContentRange> {
-        let mut content_range_list : Vec<ContentRange> = vec![];
+    pub(crate) fn parse_multipart_body(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>) -> Vec<ContentRange> {
 
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
@@ -202,7 +200,14 @@ impl Response {
             return content_range_list
         };
 
-        content_range_list = Response::parse_multipart_body(cursor);
+        //1. find separator, read next line until empty string found with following checks:
+        //2. check is it Content-Type header
+        //3. check is it Content-Range header
+        //4. check is it empty line
+        //5. create vec![], append bytes line by line until string separator found
+        //6. recursively call parse_multipart_body with cursor and content range list
+
+        content_range_list = Response::parse_multipart_body(cursor, content_range_list);
 
         content_range_list
     }
@@ -234,7 +239,9 @@ impl Response {
             let is_multipart = Response::is_multipart_byteranges_content_type(&content_type);
 
             if is_multipart {
-                response.content_range_list = Response::parse_multipart_body(cursor)
+                let mut content_range_list : Vec<ContentRange> = vec![];
+                content_range_list = Response::parse_multipart_body(cursor, content_range_list);
+                response.content_range_list = content_range_list;
             } else {
                 buf = vec![];
                 cursor.read_to_end(&mut buf);
