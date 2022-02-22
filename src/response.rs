@@ -17,7 +17,6 @@ pub struct Response {
 
 impl Response {
     pub(crate) const HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX: &'static str = "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)";
-    pub(crate) const SEPARATOR : &'static str = [CONSTANTS.HYPHEN, CONSTANTS.HYPHEN, CONSTANTS.STRING_SEPARATOR].join("").as_str();
 
     pub(crate) fn get_header(&self, name: String) -> Option<&Header> {
         let header =  self.headers.iter().find(|x| x.header_name == name);
@@ -40,7 +39,7 @@ impl Response {
                 if i != 0 {
                     body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
                 }
-                body_str.push_str(Response::SEPARATOR.as_str());
+                body_str.push_str(CONSTANTS.SEPARATOR);
                 body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
                 let content_type = [HTTP_HEADERS.CONTENT_TYPE, CONSTANTS.HEADER_NAME_VALUE_SEPARATOR, CONSTANTS.WHITESPACE, &content_range.content_type.to_string()].join("");
                 body_str.push_str(content_type.as_str());
@@ -54,7 +53,7 @@ impl Response {
                 body = [body, inner_body].concat();
             }
             let mut trailing_separator = CONSTANTS.EMPTY_STRING.to_string();
-            trailing_separator.push_str(Response::SEPARATOR.as_str());
+            trailing_separator.push_str(CONSTANTS.SEPARATOR);
             body = [&body, trailing_separator.as_bytes()].concat();
         }
 
@@ -209,10 +208,10 @@ impl Response {
         };
 
         let content_range_is_not_parsed = content_range.body.len() == 0;
-        if string.starts_with(Response::SEPARATOR) && content_range_is_not_parsed {
+        if string.starts_with(CONSTANTS.SEPARATOR) && content_range_is_not_parsed {
             buf = vec![];
             cursor.read_until(b'\n', &mut buf).unwrap();
-            b : &[u8] = &buf;
+            b = &buf;
             string = String::from_utf8(Vec::from(b)).unwrap();
         }
 
@@ -222,17 +221,32 @@ impl Response {
 
             buf = vec![];
             cursor.read_until(b'\n', &mut buf).unwrap();
-            b : &[u8] = &buf;
+            b = &buf;
             string = String::from_utf8(Vec::from(b)).unwrap();
         }
 
         if string.starts_with(HTTP_HEADERS.CONTENT_RANGE) {
             let content_range_header = Response::parse_http_response_header_string(string.as_str());
             //parse header value ...
+            let split_token = [CONSTANTS.BYTES, CONSTANTS.WHITESPACE].join("");
+            let first_split: Vec<&str> = content_range_header.header_value.split(&split_token).collect();
+
+            let value_index = 1;
+            let first_split_string = first_split.get(value_index).unwrap().trim();
+            println!(": {}", &first_split_string);
+
+            let split_token = CONSTANTS.SLASH;
+            let second_split: Vec<&str> = first_split_string.split(split_token).collect();
+
+            let second_split_first_value = second_split.get(0).unwrap().trim();
+            let second_split_second_value = second_split.get(1).unwrap().trim();
+            println!(": {} : {}", &second_split_first_value, &second_split_second_value);
+
+
 
             buf = vec![];
             cursor.read_until(b'\n', &mut buf).unwrap();
-            b : &[u8] = &buf;
+            b = &buf;
             string = String::from_utf8(Vec::from(b)).unwrap();
         }
 

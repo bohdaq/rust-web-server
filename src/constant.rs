@@ -17,6 +17,7 @@ pub struct Constants {
     pub(crate) SEMICOLON: &'static str,
     pub(crate) BOUNDARY: &'static str,
     pub(crate) STRING_SEPARATOR: &'static str,
+    pub(crate) SEPARATOR: &'static str,
 }
 
 pub const CONSTANTS: Constants = Constants {
@@ -37,7 +38,8 @@ pub const CONSTANTS: Constants = Constants {
     BYTERANGES: "byteranges",
     SEMICOLON: ";",
     BOUNDARY: "boundary",
-    STRING_SEPARATOR: "String_separator"
+    STRING_SEPARATOR: "String_separator",
+    SEPARATOR: "--String_separator"
 };
 
 
