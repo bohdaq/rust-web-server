@@ -217,7 +217,7 @@ impl Response {
 
             let new_line_char_found = bytes_offset != 0;
             let current_string_is_empty = string.trim().len() == 0;
-            println!("string: {} new_line_char_found: {} current_string_is_empty: {}", string, new_line_char_found, current_string_is_empty);
+            println!("string.starts_with(CONSTANTS.SEPARATOR) && content_range_is_not_parsed");
         }
 
         let content_type_is_not_parsed = content_range.content_type.len() == 0;
@@ -233,10 +233,11 @@ impl Response {
 
             let new_line_char_found = bytes_offset != 0;
             let current_string_is_empty = string.trim().len() == 0;
-            println!("string: {} new_line_char_found: {} current_string_is_empty: {}", string, new_line_char_found, current_string_is_empty);
+            println!("string.starts_with(HTTP_HEADERS.CONTENT_TYPE) && content_type_is_not_parsed");
         }
 
-        if string.starts_with(HTTP_HEADERS.CONTENT_RANGE) {
+        let content_range_is_not_parsed = content_range.size.len() == 0;
+        if string.starts_with(HTTP_HEADERS.CONTENT_RANGE) && content_range_is_not_parsed {
             let content_range_header = Response::parse_http_response_header_string(string.as_str());
             //parse header value ...
             let split_token = [CONSTANTS.BYTES, CONSTANTS.WHITESPACE].join("");
@@ -272,7 +273,7 @@ impl Response {
 
             let new_line_char_found = bytes_offset != 0;
             let current_string_is_empty = string.trim().len() == 0;
-            println!("string: {} new_line_char_found: {} current_string_is_empty: {}", string, new_line_char_found, current_string_is_empty);
+            println!("string.starts_with(HTTP_HEADERS.CONTENT_RANGE) && content_range_is_not_parsed");
         }
 
 
@@ -291,7 +292,7 @@ impl Response {
 
                 body = [body, string.as_bytes().to_vec()].concat();
             }
-
+            println!("!current_string_is_empty && content_range_is_parsed && content_type_is_parsed");
         }
 
         println!("!!! {} {} {} {} {}", content_range.unit, content_range.content_type, content_range.size, content_range.range.start, content_range.range.end);
