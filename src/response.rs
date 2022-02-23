@@ -213,9 +213,15 @@ impl Response {
             cursor.read_until(b'\n', &mut buf).unwrap();
             b = &buf;
             string = String::from_utf8(Vec::from(b)).unwrap();
+
+
+            let new_line_char_found = bytes_offset != 0;
+            let current_string_is_empty = string.trim().len() == 0;
+            println!("string: {} new_line_char_found: {} current_string_is_empty: {}", string, new_line_char_found, current_string_is_empty);
         }
 
-        if string.starts_with(HTTP_HEADERS.CONTENT_TYPE) {
+        let content_type_is_not_parsed = content_range.content_type.len() == 0;
+        if string.starts_with(HTTP_HEADERS.CONTENT_TYPE) && content_type_is_not_parsed {
             let content_type = Response::parse_http_response_header_string(string.as_str());
             content_range.content_type = content_type.header_value;
 
@@ -223,6 +229,11 @@ impl Response {
             cursor.read_until(b'\n', &mut buf).unwrap();
             b = &buf;
             string = String::from_utf8(Vec::from(b)).unwrap();
+
+
+            let new_line_char_found = bytes_offset != 0;
+            let current_string_is_empty = string.trim().len() == 0;
+            println!("string: {} new_line_char_found: {} current_string_is_empty: {}", string, new_line_char_found, current_string_is_empty);
         }
 
         if string.starts_with(HTTP_HEADERS.CONTENT_RANGE) {
@@ -233,14 +244,23 @@ impl Response {
 
             let value_index = 1;
             let first_split_string = first_split.get(value_index).unwrap().trim();
-            println!(": {}", &first_split_string);
+            //println!(": {}", &first_split_string);
 
             let split_token = CONSTANTS.SLASH;
             let second_split: Vec<&str> = first_split_string.split(split_token).collect();
 
             let second_split_first_value = second_split.get(0).unwrap().trim();
             let second_split_second_value = second_split.get(1).unwrap().trim();
-            println!(": {} : {}", &second_split_first_value, &second_split_second_value);
+            content_range.size = second_split_second_value.to_string();
+            //println!(": {} : {}", &second_split_first_value, &second_split_second_value);
+
+            let split_token = CONSTANTS.HYPHEN;
+            let third_split : Vec<&str> = second_split_first_value.split(split_token).collect();
+            let third_split_first_value =  third_split.get(0).unwrap().trim();
+            let third_split_second_value =  third_split.get(1).unwrap().trim();
+            content_range.range.start = third_split_first_value.parse().unwrap();
+            content_range.range.start = third_split_second_value.parse().unwrap();
+            //println!(": {} : {}", &third_split_first_value, &third_split_second_value);
 
 
 
@@ -248,6 +268,15 @@ impl Response {
             cursor.read_until(b'\n', &mut buf).unwrap();
             b = &buf;
             string = String::from_utf8(Vec::from(b)).unwrap();
+
+
+            let new_line_char_found = bytes_offset != 0;
+            let current_string_is_empty = string.trim().len() == 0;
+            println!("string: {} new_line_char_found: {} current_string_is_empty: {}", string, new_line_char_found, current_string_is_empty);
+        }
+
+        if string.trim().len() == 0 {
+
         }
 
 
