@@ -200,7 +200,7 @@ impl Response {
         };
 
         let mut content_range: ContentRange = ContentRange {
-            unit: "".to_string(),
+            unit: CONSTANTS.BYTES.to_string(),
             range: Range { start: 0, end: 0 },
             size: "".to_string(),
             body: vec![],
@@ -223,7 +223,7 @@ impl Response {
         let content_type_is_not_parsed = content_range.content_type.len() == 0;
         if string.starts_with(HTTP_HEADERS.CONTENT_TYPE) && content_type_is_not_parsed {
             let content_type = Response::parse_http_response_header_string(string.as_str());
-            content_range.content_type = content_type.header_value;
+            content_range.content_type = content_type.header_value.trim().to_string();
 
             buf = vec![];
             cursor.read_until(b'\n', &mut buf).unwrap();
@@ -259,7 +259,7 @@ impl Response {
             let third_split_first_value =  third_split.get(0).unwrap().trim();
             let third_split_second_value =  third_split.get(1).unwrap().trim();
             content_range.range.start = third_split_first_value.parse().unwrap();
-            content_range.range.start = third_split_second_value.parse().unwrap();
+            content_range.range.end = third_split_second_value.parse().unwrap();
             //println!(": {} : {}", &third_split_first_value, &third_split_second_value);
 
 
@@ -275,9 +275,26 @@ impl Response {
             println!("string: {} new_line_char_found: {} current_string_is_empty: {}", string, new_line_char_found, current_string_is_empty);
         }
 
-        if string.trim().len() == 0 {
+
+        let content_range_is_parsed = content_range.size.len() != 0;
+        let content_type_is_parsed = content_range.content_type.len() != 0;
+        let current_string_is_empty = string.trim().len() == 0;
+        if !current_string_is_empty && content_range_is_parsed && content_type_is_parsed {
+            let mut body : Vec<u8> = vec![];
+            body = [body, string.as_bytes().to_vec()].concat();
+
+            while !string.starts_with(CONSTANTS.SEPARATOR) {
+                buf = vec![];
+                cursor.read_until(b'\n', &mut buf).unwrap();
+                b = &buf;
+                string = String::from_utf8(Vec::from(b)).unwrap();
+
+                body = [body, string.as_bytes().to_vec()].concat();
+            }
 
         }
+
+        println!("!!! {} {} {} {} {}", content_range.unit, content_range.content_type, content_range.size, content_range.range.start, content_range.range.end);
 
 
 
@@ -323,7 +340,14 @@ impl Response {
 
             if is_multipart {
                 let mut content_range_list : Vec<ContentRange> = vec![];
+
+                let mut buf = vec![];
+                let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
+                let mut b : &[u8] = &buf;
+                let mut string = String::from_utf8(Vec::from(b)).unwrap();
                 content_range_list = Response::parse_multipart_body(cursor, content_range_list);
+
+
                 response.content_range_list = content_range_list;
             } else {
                 buf = vec![];
