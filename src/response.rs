@@ -193,7 +193,8 @@ impl Response {
         let new_line_char_found = bytes_offset != 0;
         let current_string_is_empty = string.trim().len() == 0;
 
-        println!("string: {} new_line_char_found: {} current_string_is_empty: {}", string, new_line_char_found, current_string_is_empty);
+        // println!("string: {} new_line_char_found: {} current_string_is_empty: {}", string, new_line_char_found, current_string_is_empty);
+        println!("string: {}", string);
 
         if !new_line_char_found {
             return content_range_list
@@ -215,9 +216,7 @@ impl Response {
             string = String::from_utf8(Vec::from(b)).unwrap();
 
 
-            let new_line_char_found = bytes_offset != 0;
-            let current_string_is_empty = string.trim().len() == 0;
-            println!("string.starts_with(CONSTANTS.SEPARATOR) && content_range_is_not_parsed");
+            println!("string: {}", string);
         }
 
         let content_type_is_not_parsed = content_range.content_type.len() == 0;
@@ -231,9 +230,8 @@ impl Response {
             string = String::from_utf8(Vec::from(b)).unwrap();
 
 
-            let new_line_char_found = bytes_offset != 0;
-            let current_string_is_empty = string.trim().len() == 0;
-            println!("string.starts_with(HTTP_HEADERS.CONTENT_TYPE) && content_type_is_not_parsed");
+            println!("content type is {}", &content_range.content_type);
+            println!("string: {}", string);
         }
 
         let content_range_is_not_parsed = content_range.size.len() == 0;
@@ -270,18 +268,28 @@ impl Response {
             b = &buf;
             string = String::from_utf8(Vec::from(b)).unwrap();
 
-
-            let new_line_char_found = bytes_offset != 0;
-            let current_string_is_empty = string.trim().len() == 0;
-            println!("string.starts_with(HTTP_HEADERS.CONTENT_RANGE) && content_range_is_not_parsed");
+            println!("content range start is {} and end {}, size is {}", content_range.range.start, content_range.range.end, content_range.size);
+            println!("string: {}", string);
         }
 
+        let current_string_is_empty = string.trim().len() == 0;
+        if current_string_is_empty {
+            buf = vec![];
+            cursor.read_until(b'\n', &mut buf).unwrap();
+            b = &buf;
+            string = String::from_utf8(Vec::from(b)).unwrap();
 
+            println!("empty string, next line");
+            println!("string: {}", string);
+        }
+
+        let current_string_is_empty = string.trim().len() == 0;
         let content_range_is_parsed = content_range.size.len() != 0;
         let content_type_is_parsed = content_range.content_type.len() != 0;
-        let current_string_is_empty = string.trim().len() == 0;
+        println!("# {} {} {} {}", content_range_is_parsed, content_type_is_parsed, current_string_is_empty, string);
         if !current_string_is_empty && content_range_is_parsed && content_type_is_parsed {
             let mut body : Vec<u8> = vec![];
+            println!("before while {} body.len: {} string len: {}", string, body.len(), string.len());
             body = [body, string.as_bytes().to_vec()].concat();
 
             while !string.starts_with(CONSTANTS.SEPARATOR) {
@@ -289,13 +297,19 @@ impl Response {
                 cursor.read_until(b'\n', &mut buf).unwrap();
                 b = &buf;
                 string = String::from_utf8(Vec::from(b)).unwrap();
+                println!("in while {}", string);
 
-                body = [body, string.as_bytes().to_vec()].concat();
+                if !string.starts_with(CONSTANTS.SEPARATOR) {
+                    body = [body, string.as_bytes().to_vec()].concat();
+                }
+
             }
-            println!("!current_string_is_empty && content_range_is_parsed && content_type_is_parsed");
+            let mut debug_body : &[u8]  = &body;
+            println!("content range body is {}", String::from_utf8(debug_body.to_vec()).unwrap());
+            content_range.body = body;
         }
 
-        println!("!!! {} {} {} {} {}", content_range.unit, content_range.content_type, content_range.size, content_range.range.start, content_range.range.end);
+        println!("!!! {} {} {} {} {} {}", content_range.unit, content_range.content_type, content_range.size, content_range.range.start, content_range.range.end, content_range.body.len());
 
 
 
