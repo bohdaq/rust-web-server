@@ -1879,7 +1879,27 @@ mod tests {
         let response = Response::parse_response(raw_response.borrow());
 
         let response_string = String::from_utf8(raw_response).unwrap();
-        println!("{}", response_string);
+        println!("\n\n\n{}", &raw_request);
+        println!("\n\n\n{}", &response_string);
+
+        assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
+        let header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+        assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
+        let header = response.get_header(HTTP_HEADERS.ACCEPT_RANGES.to_string()).unwrap();
+        assert_eq!(CONSTANTS.BYTES, header.header_value);
+        let header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+        let value = [
+            CONSTANTS.MULTIPART,
+            CONSTANTS.SLASH,
+            CONSTANTS.BYTERANGES,
+            CONSTANTS.SEMICOLON,
+            CONSTANTS.WHITESPACE,
+            CONSTANTS.BOUNDARY,
+            CONSTANTS.EQUALS,
+            CONSTANTS.STRING_SEPARATOR
+        ].join("");
+        assert_eq!(value, header.header_value)
+
 
 
 
