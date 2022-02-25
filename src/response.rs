@@ -286,10 +286,9 @@ impl Response {
         let current_string_is_empty = string.trim().len() == 0;
         let content_range_is_parsed = content_range.size.len() != 0;
         let content_type_is_parsed = content_range.content_type.len() != 0;
-        println!("# {} {} {} {}", content_range_is_parsed, content_type_is_parsed, current_string_is_empty, string);
         if !current_string_is_empty && content_range_is_parsed && content_type_is_parsed {
             let mut body : Vec<u8> = vec![];
-            println!("before while {} body.len: {} string len: {}", string, body.len(), string.len());
+            // println!("before while {} body.len: {} string len: {}", string, body.len(), string.len());
             body = [body, string.as_bytes().to_vec()].concat();
 
             while !string.starts_with(CONSTANTS.SEPARATOR) {
@@ -297,30 +296,22 @@ impl Response {
                 cursor.read_until(b'\n', &mut buf).unwrap();
                 b = &buf;
                 string = String::from_utf8(Vec::from(b)).unwrap();
-                println!("in while {}", string);
+                // println!("in while {}", string);
 
                 if !string.starts_with(CONSTANTS.SEPARATOR) {
                     body = [body, string.as_bytes().to_vec()].concat();
                 }
-
             }
+            //remove new line '\n' char from content range body
+            //body.pop();
+
+
             let mut debug_body : &[u8]  = &body;
-            println!("content range body is {}", String::from_utf8(debug_body.to_vec()).unwrap());
+            println!("content range body is {} length is {}", String::from_utf8(debug_body.to_vec()).unwrap(), debug_body.len());
             content_range.body = body;
         }
 
-        println!("!!! {} {} {} {} {} {}", content_range.unit, content_range.content_type, content_range.size, content_range.range.start, content_range.range.end, content_range.body.len());
-
-
-
-
-
-        //1. find separator, read next line until empty string found with following checks:
-        //2. check is it Content-Type header
-        //3. check is it Content-Range header
-        //4. check is it empty line
-        //5. create vec![], append bytes line by line until string separator found
-        //6. recursively call parse_multipart_body with cursor and content range list
+        // println!("!!! {} {} {} {} {} {}", content_range.unit, content_range.content_type, content_range.size, content_range.range.start, content_range.range.end, content_range.body.len());
 
         content_range_list = Response::parse_multipart_body(cursor, content_range_list);
 
@@ -357,9 +348,7 @@ impl Response {
                 let mut content_range_list : Vec<ContentRange> = vec![];
 
                 let mut buf = vec![];
-                let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
-                let mut b : &[u8] = &buf;
-                let mut string = String::from_utf8(Vec::from(b)).unwrap();
+                cursor.read_until(b'\n', &mut buf).unwrap();
                 content_range_list = Response::parse_multipart_body(cursor, content_range_list);
 
 
