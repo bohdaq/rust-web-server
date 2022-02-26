@@ -1899,10 +1899,6 @@ mod tests {
             CONSTANTS.STRING_SEPARATOR
         ].join("");
         assert_eq!(value, header.header_value)
-
-
-
-
     }
 
     #[test]
