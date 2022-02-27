@@ -1850,18 +1850,20 @@ mod tests {
     #[test]
     fn check_range_response_is_ok() {
         let uri = "/static/test.txt";
-
         let url = Server::get_static_filepath(uri);
-        let contents = fs::read_to_string(url)
-            .expect("Something went wrong reading the file");
-        let length = contents.len();
+
+        let file = File::open(url).unwrap();
+        let mut reader = BufReader::new(file);
+        let mut buffer = Vec::new();
+
+        reader.read_to_end(&mut buffer).unwrap();
+
+        let length = buffer.len();
         let mid = length / 2;
         let end_of_first_range = mid;
         let start_of_second_range = mid + 1;
 
-        let range_header_value = format!("bytes=0-{}, {}-{}", end_of_first_range, start_of_second_range ,contents.len());
-
-
+        let range_header_value = format!("bytes=0-{}, {}-{}", end_of_first_range, start_of_second_range ,buffer.len());
 
         let request_host_header_name = "Host";
         let request_host_header_value = "localhost:7777";
@@ -1927,15 +1929,10 @@ mod tests {
         response_result_body = [first_body, second_body].concat();
         println!("concatenated ranges :\n{:?}", &response_result_body);
 
+        assert_eq!(buffer, response_result_body);
 
         let result_string = String::from_utf8(response_result_body).unwrap();
         println!("result_string:\n{}", result_string);
-
-
-
-
-        assert_eq!(contents, result_string);
-
     }
 
     #[test]
