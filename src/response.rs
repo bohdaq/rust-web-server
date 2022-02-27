@@ -279,10 +279,9 @@ impl Response {
             string = String::from_utf8(Vec::from(b)).unwrap();
         }
 
-        let current_string_is_empty = string.trim().len() == 0;
         let content_range_is_parsed = content_range.size.len() != 0;
         let content_type_is_parsed = content_range.content_type.len() != 0;
-        if !current_string_is_empty && content_range_is_parsed && content_type_is_parsed {
+        if content_range_is_parsed && content_type_is_parsed {
             let mut body : Vec<u8> = vec![];
             // println!("before while {} body.len: {} string len: {}", string, body.len(), string.len());
             body = [body, string.as_bytes().to_vec()].concat();
