@@ -1850,7 +1850,17 @@ mod tests {
     #[test]
     fn check_range_response_is_ok() {
         let uri = "/static/test.txt";
-        let range_header_value = "bytes=0-7, 8-15";
+
+        let url = Server::get_static_filepath(uri);
+        let contents = fs::read_to_string(url)
+            .expect("Something went wrong reading the file");
+        let length = contents.len();
+        let mid = length / 2;
+        let end_of_first_range = mid;
+        let start_of_second_range = mid + 1;
+
+        let range_header_value = format!("bytes=0-{}, {}-{}", end_of_first_range, start_of_second_range ,contents.len());
+
 
 
         let request_host_header_name = "Host";
@@ -1922,9 +1932,7 @@ mod tests {
         println!("result_string:\n{}", result_string);
 
 
-        let url = Server::get_static_filepath(uri);
-        let contents = fs::read_to_string(url)
-            .expect("Something went wrong reading the file");
+
 
         assert_eq!(contents, result_string);
 
