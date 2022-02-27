@@ -1917,6 +1917,13 @@ mod tests {
         let result_string = String::from_utf8(response_result_body).unwrap();
         println!("result_string:\n{}", result_string);
 
+
+        let url = Server::get_static_filepath(uri);
+        let contents = fs::read_to_string(url)
+            .expect("Something went wrong reading the file");
+
+        assert_eq!(contents, result_string);
+
     }
 
     #[test]
