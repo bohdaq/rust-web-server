@@ -303,6 +303,13 @@ impl Response {
             println!("content range body is {} length is {}", String::from_utf8(debug_body.to_vec()).unwrap(), debug_body.len());
 
             content_range.body = body;
+
+            let size_is_known = content_range.size != "*";
+            let range_end_is_bigger_than_filesize = size_is_known && content_range.range.end <= content_range.size.parse().unwrap();
+            if range_end_is_bigger_than_filesize {
+                //TODO: return error
+            }
+
             content_range_list.push(content_range);
         }
 
