@@ -83,7 +83,7 @@ impl Range {
         let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.COMMA).collect();
         for byte in bytes {
             let range = Range::parse_range(filelength, byte);
-            let mut buff_length = range.end - range.start;
+            let mut buff_length = (range.end - range.start) + 1;
             // if buff_length > Range::MAX_BUFFER_LENGTH {
             //     buff_length = Range::MAX_BUFFER_LENGTH;
             // }

@@ -1844,12 +1844,13 @@ mod tests {
         assert_eq!(content_range.body, buffer);
 
 
+
     }
 
     #[test]
     fn check_range_response_is_ok() {
         let uri = "/static/test.txt";
-        let range_header_value = "bytes=8-10, 1-6, 10-15";
+        let range_header_value = "bytes=0-7, 8-15";
 
 
         let request_host_header_name = "Host";
@@ -1898,7 +1899,20 @@ mod tests {
             CONSTANTS.EQUALS,
             CONSTANTS.STRING_SEPARATOR
         ].join("");
-        assert_eq!(value, header.header_value)
+        assert_eq!(value, header.header_value);
+
+        let mut response_result_body : Vec<u8> = vec![];
+        let range = response.content_range_list.get(0).unwrap();
+        let body = range.body.clone();
+        response_result_body = [response_result_body, body].concat();
+
+        let range = response.content_range_list.get(1).unwrap();
+        let body = range.body.clone();
+        response_result_body = [response_result_body, body].concat();
+
+        let result_string = String::from_utf8(response_result_body).unwrap();
+        println!("result_string:\n{}", result_string);
+
     }
 
     #[test]

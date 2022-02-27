@@ -197,6 +197,7 @@ impl Response {
         println!("string: {}", string);
 
         if !new_line_char_found {
+            println!("return content_range_list length: {}", content_range_list.len());
             return content_range_list
         };
 
@@ -309,10 +310,13 @@ impl Response {
             let mut debug_body : &[u8]  = &body;
             println!("content range body is {} length is {}", String::from_utf8(debug_body.to_vec()).unwrap(), debug_body.len());
             content_range.body = body;
+
+            content_range_list.push(content_range);
         }
 
         // println!("!!! {} {} {} {} {} {}", content_range.unit, content_range.content_type, content_range.size, content_range.range.start, content_range.range.end, content_range.body.len());
 
+        println!("content_range_list length: {}", content_range_list.len());
         content_range_list = Response::parse_multipart_body(cursor, content_range_list);
 
         content_range_list
