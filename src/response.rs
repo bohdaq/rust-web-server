@@ -272,17 +272,11 @@ impl Response {
 
             println!("content range start is {} and end {}, size is {}", content_range.range.start, content_range.range.end, content_range.size);
             println!("string: {}", string);
-        }
 
-        let current_string_is_empty = string.trim().len() == 0;
-        if current_string_is_empty {
             buf = vec![];
             cursor.read_until(b'\n', &mut buf).unwrap();
             b = &buf;
             string = String::from_utf8(Vec::from(b)).unwrap();
-
-            println!("empty string, next line");
-            println!("string: {}", string);
         }
 
         let current_string_is_empty = string.trim().len() == 0;
