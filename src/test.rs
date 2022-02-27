@@ -1902,13 +1902,17 @@ mod tests {
         assert_eq!(value, header.header_value);
 
         let mut response_result_body : Vec<u8> = vec![];
-        let range = response.content_range_list.get(0).unwrap();
-        let body = range.body.clone();
-        response_result_body = [response_result_body, body].concat();
+        let first_range = response.content_range_list.get(0).unwrap();
+        let first_body = first_range.body.clone();
+        println!("first range:\n{:?}", &first_body);
 
-        let range = response.content_range_list.get(1).unwrap();
-        let body = range.body.clone();
-        response_result_body = [response_result_body, body].concat();
+        let second_range = response.content_range_list.get(1).unwrap();
+        let second_body = second_range.body.clone();
+        println!("second range:\n{:?}", &second_body);
+
+        response_result_body = [first_body, second_body].concat();
+        println!("concatenated ranges :\n{:?}", &response_result_body);
+
 
         let result_string = String::from_utf8(response_result_body).unwrap();
         println!("result_string:\n{}", result_string);

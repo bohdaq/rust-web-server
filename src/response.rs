@@ -297,20 +297,39 @@ impl Response {
                 cursor.read_until(b'\n', &mut buf).unwrap();
                 b = &buf;
                 string = String::from_utf8(Vec::from(b)).unwrap();
-                // println!("in while {}", string);
 
                 if !string.starts_with(CONSTANTS.SEPARATOR) {
                     body = [body, string.as_bytes().to_vec()].concat();
                 }
             }
-            //remove new line '\n' char from content range body
-            //body.pop();
+
 
 
             let mut debug_body : &[u8]  = &body;
             println!("content range body is {} length is {}", String::from_utf8(debug_body.to_vec()).unwrap(), debug_body.len());
-            content_range.body = body;
 
+
+            let mut debug_body = body.clone();
+            println!("!!!!!!!!!!!!");
+            println!("RESULTING BODY IS:");
+            let mut last_element = debug_body.last().unwrap();
+            let is_new_line = *last_element == b'\n';
+            if is_new_line {
+                debug_body.pop(); //drop '\n' 10 in output
+            }
+
+            last_element = debug_body.last().unwrap();
+            let is_carriage_return = *last_element == b'\r';
+            if is_carriage_return {
+                debug_body.pop(); //drop '\n' 13 in output
+            }
+
+            println!("{:?}", debug_body);
+            println!("RESULTING BODY LENGTH IS: {}", debug_body.len());
+            println!("!!!!!!!!!!!!");
+
+
+            content_range.body = debug_body;
             content_range_list.push(content_range);
         }
 
