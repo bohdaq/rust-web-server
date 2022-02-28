@@ -3,9 +3,10 @@ use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use regex::Regex;
 use crate::app::App;
-use crate::constant::{CONSTANTS, HTTP_HEADERS};
+use crate::constant::{CONSTANTS, HTTP_HEADERS, HTTP_VERSIONS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::range::{ContentRange, Range};
 use crate::{Request, Server};
+use crate::mime_type::MimeType;
 
 pub struct Response {
     pub(crate) http_version: String,
@@ -307,7 +308,7 @@ impl Response {
             let size_is_known = content_range.size != "*";
             let range_end_is_bigger_than_filesize = size_is_known && content_range.range.end <= content_range.size.parse().unwrap();
             if range_end_is_bigger_than_filesize {
-                //TODO: return error
+                //return Err("content range end is bigger than filesize".to_string())
             }
 
             content_range_list.push(content_range);
@@ -354,8 +355,30 @@ impl Response {
                 cursor.read_until(b'\n', &mut buf).unwrap();
                 content_range_list = Response::parse_multipart_body(cursor, content_range_list);
 
+                let is_ok = true;
+                if is_ok {
+                    response.content_range_list = content_range_list;
+                } else {
+                    response.status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE.to_string();
+                    response.reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE.to_string();
+                    response.http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
 
-                response.content_range_list = content_range_list;
+                    let error = ""; //TODO
+                    let content_range = ContentRange {
+                        unit: CONSTANTS.BYTES.to_string(),
+                        range: Range {
+                            start: 0,
+                            end: error.len() as u64
+                        },
+                        size: error.len().to_string(),
+                        body: error.as_bytes().to_vec(),
+                        content_type: MimeType::TEXT_PLAIN.to_string(),
+                    };
+                    response.content_range_list = vec![content_range];
+                    return;
+                }
+
+
             } else {
                 buf = vec![];
                 cursor.read_to_end(&mut buf);
