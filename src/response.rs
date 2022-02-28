@@ -1,5 +1,6 @@
 use std::io;
 use std::io::{BufRead, Cursor, Read};
+use std::os::macos::raw::stat;
 use crate::header::Header;
 use regex::Regex;
 use crate::app::App;
@@ -14,6 +15,11 @@ pub struct Response {
     pub(crate) reason_phrase: String,
     pub(crate) headers: Vec<Header>,
     pub(crate) content_range_list: Vec<ContentRange>
+}
+
+pub struct Status {
+    pub is_ok: bool,
+    pub message: String,
 }
 
 impl Response {
@@ -154,7 +160,13 @@ impl Response {
 
         let mut content_length: usize = 0;
         let mut iteration_number : usize = 0;
-        Response::cursor_read(&mut cursor, iteration_number, &mut response, content_length);
+
+        let mut status = Status {
+            is_ok: true,
+            message: "ok".to_string()
+        };
+
+        Response::cursor_read(&mut cursor, iteration_number, &mut response, content_length, status);
 
         return response;
     }
@@ -185,7 +197,7 @@ impl Response {
         }
     }
 
-    pub(crate) fn parse_multipart_body(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>) -> Vec<ContentRange> {
+    pub(crate) fn parse_multipart_body(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>, status: &mut Status) -> Vec<ContentRange> {
 
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
@@ -308,7 +320,8 @@ impl Response {
             let size_is_known = content_range.size != "*";
             let range_end_is_bigger_than_filesize = size_is_known && content_range.range.end <= content_range.size.parse().unwrap();
             if range_end_is_bigger_than_filesize {
-                //return Err("content range end is bigger than filesize".to_string())
+                status.is_ok = false;
+                status.message = "content range end is bigger than filesize".to_string();
             }
 
             content_range_list.push(content_range);
@@ -317,14 +330,14 @@ impl Response {
         // println!("!!! {} {} {} {} {} {}", content_range.unit, content_range.content_type, content_range.size, content_range.range.start, content_range.range.end, content_range.body.len());
 
         println!("content_range_list length: {}", content_range_list.len());
-        content_range_list = Response::parse_multipart_body(cursor, content_range_list);
+        content_range_list = Response::parse_multipart_body(cursor, content_range_list, status);
 
         content_range_list
     }
 
 
 
-    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize) {
+    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize, mut status: Status) {
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let mut b : &[u8] = &buf;
@@ -353,30 +366,29 @@ impl Response {
 
                 let mut buf = vec![];
                 cursor.read_until(b'\n', &mut buf).unwrap();
-                content_range_list = Response::parse_multipart_body(cursor, content_range_list);
+                content_range_list = Response::parse_multipart_body(cursor, content_range_list, &mut status);
 
-                let is_ok = true;
-                if is_ok {
+                //if status.is_ok {
                     response.content_range_list = content_range_list;
-                } else {
-                    response.status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE.to_string();
-                    response.reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE.to_string();
-                    response.http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-
-                    let error = ""; //TODO
-                    let content_range = ContentRange {
-                        unit: CONSTANTS.BYTES.to_string(),
-                        range: Range {
-                            start: 0,
-                            end: error.len() as u64
-                        },
-                        size: error.len().to_string(),
-                        body: error.as_bytes().to_vec(),
-                        content_type: MimeType::TEXT_PLAIN.to_string(),
-                    };
-                    response.content_range_list = vec![content_range];
-                    return;
-                }
+                // } else {
+                //     response.status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE.to_string();
+                //     response.reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE.to_string();
+                //     response.http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+                //
+                //     let error = status.message;
+                //     let content_range = ContentRange {
+                //         unit: CONSTANTS.BYTES.to_string(),
+                //         range: Range {
+                //             start: 0,
+                //             end: error.len() as u64
+                //         },
+                //         size: error.len().to_string(),
+                //         body: error.as_bytes().to_vec(),
+                //         content_type: MimeType::TEXT_PLAIN.to_string(),
+                //     };
+                //     response.content_range_list = vec![content_range];
+                //     return;
+                // }
 
 
             } else {
@@ -412,7 +424,7 @@ impl Response {
 
             response.headers.push(header);
             iteration_number += 1;
-            Response::cursor_read(cursor, iteration_number, response, content_length);
+            Response::cursor_read(cursor, iteration_number, response, content_length, status);
         }
     }
 
