@@ -46,7 +46,7 @@ impl Range {
 
             let num = part.trim();
             let length = num.len();
-            println!("i: {} num: {} length: {}", i, num, length);
+
             if i == START_INDEX && length != 0 {
                 start_range_not_provided = false;
             }
@@ -70,10 +70,8 @@ impl Range {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
-        println!("raw_range_value: {}", raw_range_value);
         let split_raw_range_value: Vec<&str> = raw_range_value.split(CONSTANTS.EQUALS).collect();
         let raw_bytes = split_raw_range_value.get(INDEX_AFTER_UNIT_DECLARATION).unwrap();
-        println!("split_raw_range_value: {}", raw_bytes);
 
         let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.COMMA).collect();
         for byte in bytes {
@@ -121,13 +119,9 @@ impl Range {
         let new_line_char_found = buffer.len() != 0;
         let mut string = Range::convert_bytes_array_to_string(buffer);
 
-        let mut buf = vec![];
-        let mut b : &[u8] = &buf;
-
         println!("string: {}", string);
 
         if !new_line_char_found {
-            println!("return content_range_list length: {}", content_range_list.len());
             return content_range_list
         };
 
@@ -141,10 +135,9 @@ impl Range {
 
         let content_range_is_not_parsed = content_range.body.len() == 0;
         if string.starts_with(CONSTANTS.SEPARATOR) && content_range_is_not_parsed {
+            //read next line - Content-Type
             buffer = Range::parse_line_as_bytes(cursor);
             string = Range::convert_bytes_array_to_string(buffer);
-
-            println!("string: {}", string);
         }
 
         let content_type_is_not_parsed = content_range.content_type.len() == 0;
@@ -152,24 +145,21 @@ impl Range {
             let content_type = Response::parse_http_response_header_string(string.as_str());
             content_range.content_type = content_type.header_value.trim().to_string();
 
+            //read next line - Content-Range
             buffer = Range::parse_line_as_bytes(cursor);
             string = Range::convert_bytes_array_to_string(buffer);
-
-
-            println!("content type is {}", &content_range.content_type);
-            println!("string: {}", string);
         }
 
         let content_range_is_not_parsed = content_range.size.len() == 0;
         if string.starts_with(HTTP_HEADERS.CONTENT_RANGE) && content_range_is_not_parsed {
             let content_range_header = Response::parse_http_response_header_string(string.as_str());
+
             //parse header value ...
             let split_token = [CONSTANTS.BYTES, CONSTANTS.WHITESPACE].join("");
             let first_split: Vec<&str> = content_range_header.header_value.split(&split_token).collect();
 
             let value_index = 1;
             let first_split_string = first_split.get(value_index).unwrap().trim();
-            //println!(": {}", &first_split_string);
 
             let split_token = CONSTANTS.SLASH;
             let second_split: Vec<&str> = first_split_string.split(split_token).collect();
@@ -177,7 +167,6 @@ impl Range {
             let second_split_first_value = second_split.get(0).unwrap().trim();
             let second_split_second_value = second_split.get(1).unwrap().trim();
             content_range.size = second_split_second_value.to_string();
-            //println!(": {} : {}", &second_split_first_value, &second_split_second_value);
 
             let split_token = CONSTANTS.HYPHEN;
             let third_split : Vec<&str> = second_split_first_value.split(split_token).collect();
@@ -185,14 +174,12 @@ impl Range {
             let third_split_second_value =  third_split.get(1).unwrap().trim();
             content_range.range.start = third_split_first_value.parse().unwrap();
             content_range.range.end = third_split_second_value.parse().unwrap();
-            //println!(": {} : {}", &third_split_first_value, &third_split_second_value);
 
+            // read next line - empty line
             buffer = Range::parse_line_as_bytes(cursor);
             string = Range::convert_bytes_array_to_string(buffer);
 
-            println!("content range start is {} and end {}, size is {}", content_range.range.start, content_range.range.end, content_range.size);
-            println!("string: {}", string);
-
+            // read next line - separator between content ranges
             buffer = Range::parse_line_as_bytes(cursor);
             string = Range::convert_bytes_array_to_string(buffer);
         }
@@ -202,8 +189,8 @@ impl Range {
         if content_range_is_parsed && content_type_is_parsed {
             let mut body : Vec<u8> = vec![];
             body = [body, string.as_bytes().to_vec()].concat();
-            buf = Vec::from(string.as_bytes());
 
+            let mut buf = Vec::from(string.as_bytes());
             while !buf.starts_with(CONSTANTS.SEPARATOR.as_bytes()) {
                 buf = vec![];
                 cursor.read_until(b'\n', &mut buf).unwrap();
@@ -212,8 +199,6 @@ impl Range {
                     body = [body, buf.to_vec()].concat();
                 }
             }
-
-
 
             let mut debug_body : &[u8]  = &body;
             println!("content range body is {} length is {}", String::from_utf8(debug_body.to_vec()).unwrap(), debug_body.len());
