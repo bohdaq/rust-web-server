@@ -160,7 +160,7 @@ impl Response {
         let mut content_length: usize = 0;
         let mut iteration_number : usize = 0;
 
-        Response::cursor_read(&mut cursor, iteration_number, &mut response, content_length);
+        Response::parse_raw_response_via_cursor(&mut cursor, iteration_number, &mut response, content_length);
 
         return response;
     }
@@ -191,7 +191,7 @@ impl Response {
         }
     }
 
-    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize) {
+    pub(crate) fn parse_raw_response_via_cursor(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize) {
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let mut b : &[u8] = &buf;
@@ -256,7 +256,7 @@ impl Response {
 
             response.headers.push(header);
             iteration_number += 1;
-            Response::cursor_read(cursor, iteration_number, response, content_length);
+            Response::parse_raw_response_via_cursor(cursor, iteration_number, response, content_length);
         }
     }
 
