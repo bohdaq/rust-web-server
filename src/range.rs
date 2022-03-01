@@ -218,8 +218,8 @@ impl Range {
                 b = &buf;
                 string = String::from_utf8(Vec::from(b)).unwrap();
 
-                if !string.starts_with(CONSTANTS.SEPARATOR) {
-                    body = [body, string.as_bytes().to_vec()].concat();
+                if !buf.starts_with(CONSTANTS.SEPARATOR.as_bytes()) {
+                    body = [body, buf.to_vec()].concat();
                 }
             }
 
