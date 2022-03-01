@@ -1,5 +1,6 @@
 mod range_test;
 mod response_test;
+mod request_test;
 
 use std::{env, fs};
 use regex::Regex;
@@ -900,43 +901,8 @@ mod tests {
         assert_eq!(expected_mime_type, actual_mime_type);
     }
 
-    #[test]
-    fn method_and_request_uri_and_http_version_regex() {
-        let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
-        let caps = re.captures("GET / HTTP/1.1").unwrap();
-
-        assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, &caps["http_version"]);
-        assert_eq!(REQUEST_METHODS.GET, &caps["method"]);
-        assert_eq!(CONSTANTS.SLASH, &caps["request_uri"]);
 
 
-        let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
-        let caps = re.captures("GET /drahobrat_pt2/drahobrat_pt2_ver2.mp4 HTTP/1.1").unwrap();
-
-        assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, &caps["http_version"]);
-        assert_eq!(REQUEST_METHODS.GET, &caps["method"]);
-        assert_eq!("/drahobrat_pt2/drahobrat_pt2_ver2.mp4", &caps["request_uri"]);
-
-    }
-
-    #[test]
-    fn http_version_and_status_code_and_reason_phrase_regex() {
-        let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
-        let caps = re.captures("HTTP/1.1 404 Not Found").unwrap();
-
-        assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, &caps["http_version"]);
-        assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE, &caps["status_code"]);
-        assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE, &caps["reason_phrase"]);
-
-
-        let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
-        let caps = re.captures("HTTP/1.1 200 OK").unwrap();
-
-        assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, &caps["http_version"]);
-        assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE, &caps["status_code"]);
-        assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE, &caps["reason_phrase"]);
-
-    }
 
     #[test]
     fn it_generates_successful_response_with_index_html() {
@@ -1563,7 +1529,7 @@ mod tests {
         assert_eq!(response_reason_phrase, response.reason_phrase);
         assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
     }
-    
+
     #[test]
     fn check_range_response_for_not_proper_range_header() {
         let uri = "/static/test.txt";

@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use regex::Regex;
 use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::header::Header;
 use crate::{CONSTANTS, Response};
@@ -18,6 +19,26 @@ fn check_is_multipart_byteranges_content_type() {
     let is_multipart = Response::is_multipart_byteranges_content_type(&content_type);
     assert_eq!(true, is_multipart);
 }
+
+#[test]
+fn http_version_and_status_code_and_reason_phrase_regex() {
+    let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
+    let caps = re.captures("HTTP/1.1 404 Not Found").unwrap();
+
+    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, &caps["http_version"]);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE, &caps["status_code"]);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE, &caps["reason_phrase"]);
+
+
+    let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
+    let caps = re.captures("HTTP/1.1 200 OK").unwrap();
+
+    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, &caps["http_version"]);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE, &caps["status_code"]);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE, &caps["reason_phrase"]);
+
+}
+
 
 #[test]
 fn it_generates_successful_response_with_additional_headers() {
