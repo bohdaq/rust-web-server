@@ -191,17 +191,8 @@ impl Range {
 
             content_range.body = body;
 
-            let size_is_known = content_range.size != "*";
-            let range_end_is_bigger_than_filesize = size_is_known && content_range.range.end <= content_range.size.parse().unwrap();
-            if range_end_is_bigger_than_filesize {
-                //status.is_ok = false;
-                //status.message = "content range end is bigger than filesize".to_string();
-            }
-
             content_range_list.push(content_range);
         }
-
-        // println!("!!! {} {} {} {} {} {}", content_range.unit, content_range.content_type, content_range.size, content_range.range.start, content_range.range.end, content_range.body.len());
 
         println!("content_range_list length: {}", content_range_list.len());
         content_range_list = Range::parse_multipart_body(cursor, content_range_list);
