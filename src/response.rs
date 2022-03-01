@@ -160,12 +160,7 @@ impl Response {
         let mut content_length: usize = 0;
         let mut iteration_number : usize = 0;
 
-        let mut status = Status {
-            is_ok: true,
-            message: "ok".to_string()
-        };
-
-        Response::cursor_read(&mut cursor, iteration_number, &mut response, content_length, status);
+        Response::cursor_read(&mut cursor, iteration_number, &mut response, content_length);
 
         return response;
     }
@@ -196,7 +191,7 @@ impl Response {
         }
     }
 
-    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize, mut status: Status) {
+    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize) {
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let mut b : &[u8] = &buf;
@@ -261,7 +256,7 @@ impl Response {
 
             response.headers.push(header);
             iteration_number += 1;
-            Response::cursor_read(cursor, iteration_number, response, content_length, status);
+            Response::cursor_read(cursor, iteration_number, response, content_length);
         }
     }
 
