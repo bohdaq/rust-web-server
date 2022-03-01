@@ -149,11 +149,8 @@ impl Range {
 
         let content_range_is_not_parsed = content_range.body.len() == 0;
         if string.starts_with(CONSTANTS.SEPARATOR) && content_range_is_not_parsed {
-            buf = vec![];
-            cursor.read_until(b'\n', &mut buf).unwrap();
-            b = &buf;
-            string = String::from_utf8(Vec::from(b)).unwrap();
-
+            buffer = Range::parse_line_as_bytes(cursor);
+            string = Range::convert_bytes_array_to_string(buffer);
 
             println!("string: {}", string);
         }
@@ -163,10 +160,8 @@ impl Range {
             let content_type = Response::parse_http_response_header_string(string.as_str());
             content_range.content_type = content_type.header_value.trim().to_string();
 
-            buf = vec![];
-            cursor.read_until(b'\n', &mut buf).unwrap();
-            b = &buf;
-            string = String::from_utf8(Vec::from(b)).unwrap();
+            buffer = Range::parse_line_as_bytes(cursor);
+            string = Range::convert_bytes_array_to_string(buffer);
 
 
             println!("content type is {}", &content_range.content_type);
@@ -200,20 +195,14 @@ impl Range {
             content_range.range.end = third_split_second_value.parse().unwrap();
             //println!(": {} : {}", &third_split_first_value, &third_split_second_value);
 
-
-
-            buf = vec![];
-            cursor.read_until(b'\n', &mut buf).unwrap();
-            b = &buf;
-            string = String::from_utf8(Vec::from(b)).unwrap();
+            buffer = Range::parse_line_as_bytes(cursor);
+            string = Range::convert_bytes_array_to_string(buffer);
 
             println!("content range start is {} and end {}, size is {}", content_range.range.start, content_range.range.end, content_range.size);
             println!("string: {}", string);
 
-            buf = vec![];
-            cursor.read_until(b'\n', &mut buf).unwrap();
-            b = &buf;
-            string = String::from_utf8(Vec::from(b)).unwrap();
+            buffer = Range::parse_line_as_bytes(cursor);
+            string = Range::convert_bytes_array_to_string(buffer);
         }
 
         let content_range_is_parsed = content_range.size.len() != 0;
