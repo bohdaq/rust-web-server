@@ -125,15 +125,13 @@ impl Range {
 
     pub(crate) fn parse_multipart_body(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>) -> Vec<ContentRange> {
 
+        let mut buffer = Range::parse_line_as_bytes(cursor);
+        let new_line_char_found = buffer.len() != 0;
+        let mut string = Range::convert_bytes_array_to_string(buffer);
+
         let mut buf = vec![];
-        let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let mut b : &[u8] = &buf;
-        let mut string = String::from_utf8(Vec::from(b)).unwrap();
 
-        let new_line_char_found = bytes_offset != 0;
-        let current_string_is_empty = string.trim().len() == 0;
-
-        // println!("string: {} new_line_char_found: {} current_string_is_empty: {}", string, new_line_char_found, current_string_is_empty);
         println!("string: {}", string);
 
         if !new_line_char_found {
@@ -259,6 +257,17 @@ impl Range {
         content_range_list = Range::parse_multipart_body(cursor, content_range_list);
 
         content_range_list
+    }
+
+    pub(crate) fn parse_line_as_bytes(mut cursor: &mut Cursor<&[u8]>) -> Vec<u8> {
+        let mut buffer = vec![];
+        cursor.read_until(b'\n', &mut buffer).unwrap();
+        buffer
+    }
+
+    pub(crate) fn convert_bytes_array_to_string(buffer: Vec<u8>) -> String {
+        let mut b : &[u8] = &buffer;
+        String::from_utf8(Vec::from(b)).unwrap()
     }
 }
 
