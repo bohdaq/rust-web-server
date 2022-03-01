@@ -1740,7 +1740,7 @@ mod tests {
         let mut file = File::open(&static_filepath).unwrap();
         let mut reader = BufReader::new(file);
         reader.seek(SeekFrom::Start(start));
-        let mut buff_length = end - start;
+        let mut buff_length = (end - start) + 1;
         let mut buffer = Vec::new();
         reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
         assert_eq!(content_range.body, buffer);
@@ -1757,7 +1757,7 @@ mod tests {
         let mut file = File::open(&static_filepath).unwrap();
         let mut reader = BufReader::new(file);
         reader.seek(SeekFrom::Start(start));
-        let mut buff_length = end - start;
+        let mut buff_length = (end - start) + 1;
         let mut buffer = Vec::new();
         reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
         assert_eq!(content_range.body, buffer);
@@ -1773,7 +1773,7 @@ mod tests {
         let mut file = File::open(&static_filepath).unwrap();
         let mut reader = BufReader::new(file);
         reader.seek(SeekFrom::Start(start));
-        let mut buff_length = end - start;
+        let mut buff_length = (end - start) + 1;
         let mut buffer = Vec::new();
         reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
         assert_eq!(content_range.body, buffer);
@@ -1789,7 +1789,7 @@ mod tests {
         let mut file = File::open(&static_filepath).unwrap();
         let mut reader = BufReader::new(file);
         reader.seek(SeekFrom::Start(start));
-        let mut buff_length = end - start;
+        let mut buff_length = (end - start) + 1;
         let mut buffer = Vec::new();
         reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
         assert_eq!(content_range.body, buffer);
@@ -1805,7 +1805,7 @@ mod tests {
         let mut file = File::open(&static_filepath).unwrap();
         let mut reader = BufReader::new(file);
         reader.seek(SeekFrom::Start(start));
-        let mut buff_length = end - start;
+        let mut buff_length = (end - start) + 1;
         let mut buffer = Vec::new();
         reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
         assert_eq!(content_range.body, buffer);
@@ -1821,7 +1821,7 @@ mod tests {
         let mut file = File::open(&static_filepath).unwrap();
         let mut reader = BufReader::new(file);
         reader.seek(SeekFrom::Start(start));
-        let mut buff_length = end - start;
+        let mut buff_length = (end - start) + 1;
         let mut buffer = Vec::new();
         reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
         assert_eq!(content_range.body, buffer);
@@ -1838,7 +1838,7 @@ mod tests {
         let mut file = File::open(&static_filepath).unwrap();
         let mut reader = BufReader::new(file);
         reader.seek(SeekFrom::Start(start));
-        let mut buff_length = end - start;
+        let mut buff_length = (end - start) + 1;
         let mut buffer = Vec::new();
         reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
         assert_eq!(content_range.body, buffer);

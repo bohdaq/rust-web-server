@@ -5,6 +5,7 @@ use std::borrow::Borrow;
 use std::char::MAX;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Cursor, SeekFrom};
+use std::os::macos::raw::stat;
 
 use crate::request::Request;
 use crate::response::Response;
@@ -154,26 +155,11 @@ impl Range {
         if string.starts_with(HTTP_HEADERS.CONTENT_RANGE) && content_range_is_not_parsed {
             let content_range_header = Response::parse_http_response_header_string(string.as_str());
 
-            //parse header value ...
-            let split_token = [CONSTANTS.BYTES, CONSTANTS.WHITESPACE].join("");
-            let first_split: Vec<&str> = content_range_header.header_value.split(&split_token).collect();
+            let (size, start, end) = Range::parse_content_range_header_value(content_range_header.header_value);
 
-            let value_index = 1;
-            let first_split_string = first_split.get(value_index).unwrap().trim();
-
-            let split_token = CONSTANTS.SLASH;
-            let second_split: Vec<&str> = first_split_string.split(split_token).collect();
-
-            let second_split_first_value = second_split.get(0).unwrap().trim();
-            let second_split_second_value = second_split.get(1).unwrap().trim();
-            content_range.size = second_split_second_value.to_string();
-
-            let split_token = CONSTANTS.HYPHEN;
-            let third_split : Vec<&str> = second_split_first_value.split(split_token).collect();
-            let third_split_first_value =  third_split.get(0).unwrap().trim();
-            let third_split_second_value =  third_split.get(1).unwrap().trim();
-            content_range.range.start = third_split_first_value.parse().unwrap();
-            content_range.range.end = third_split_second_value.parse().unwrap();
+            content_range.size = size;
+            content_range.range.start = start;
+            content_range.range.end = end;
 
             // read next line - empty line
             buffer = Range::parse_line_as_bytes(cursor);
@@ -221,6 +207,30 @@ impl Range {
         content_range_list = Range::parse_multipart_body(cursor, content_range_list);
 
         content_range_list
+    }
+
+    pub(crate)  fn parse_content_range_header_value(header_value: String) -> (String, u64, u64) {
+        let split_token = [CONSTANTS.BYTES, CONSTANTS.WHITESPACE].join("");
+        let first_split: Vec<&str> = header_value.split(&split_token).collect();
+
+        let value_index = 1;
+        let first_split_string = first_split.get(value_index).unwrap().trim();
+
+        let split_token = CONSTANTS.SLASH;
+        let second_split: Vec<&str> = first_split_string.split(split_token).collect();
+
+        let second_split_first_value = second_split.get(0).unwrap().trim();
+        let second_split_second_value = second_split.get(1).unwrap().trim();
+        let size = second_split_second_value.to_string();
+
+        let split_token = CONSTANTS.HYPHEN;
+        let third_split : Vec<&str> = second_split_first_value.split(split_token).collect();
+        let third_split_first_value =  third_split.get(0).unwrap().trim();
+        let third_split_second_value =  third_split.get(1).unwrap().trim();
+        let start = third_split_first_value.parse().unwrap();
+        let end = third_split_second_value.parse().unwrap();
+
+        (size, start, end)
     }
 
     pub(crate) fn parse_line_as_bytes(mut cursor: &mut Cursor<&[u8]>) -> Vec<u8> {
