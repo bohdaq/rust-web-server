@@ -62,11 +62,6 @@ impl Range {
                 range.end = filelength;
             }
 
-            // let buffer_length = range.end - range.start;
-            // if buffer_length > Range::MAX_BUFFER_LENGTH {
-            //     let end = range.start + Range::MAX_BUFFER_LENGTH;
-            //     range.end = end;
-            // }
         }
         range
     }
@@ -84,9 +79,6 @@ impl Range {
         for byte in bytes {
             let range = Range::parse_range(filelength, byte);
             let mut buff_length = (range.end - range.start) + 1;
-            // if buff_length > Range::MAX_BUFFER_LENGTH {
-            //     buff_length = Range::MAX_BUFFER_LENGTH;
-            // }
 
             let mut file = File::open(filepath).unwrap();
             let mut reader = BufReader::new(file);
@@ -209,14 +201,12 @@ impl Range {
         let content_type_is_parsed = content_range.content_type.len() != 0;
         if content_range_is_parsed && content_type_is_parsed {
             let mut body : Vec<u8> = vec![];
-            // println!("before while {} body.len: {} string len: {}", string, body.len(), string.len());
             body = [body, string.as_bytes().to_vec()].concat();
+            buf = Vec::from(string.as_bytes());
 
-            while !string.starts_with(CONSTANTS.SEPARATOR) {
+            while !buf.starts_with(CONSTANTS.SEPARATOR.as_bytes()) {
                 buf = vec![];
                 cursor.read_until(b'\n', &mut buf).unwrap();
-                b = &buf;
-                string = String::from_utf8(Vec::from(b)).unwrap();
 
                 if !buf.starts_with(CONSTANTS.SEPARATOR.as_bytes()) {
                     body = [body, buf.to_vec()].concat();

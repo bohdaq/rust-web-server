@@ -1,6 +1,5 @@
 use std::io;
 use std::io::{BufRead, Cursor, Read};
-use std::os::macos::raw::stat;
 use crate::header::Header;
 use regex::Regex;
 use crate::app::App;
