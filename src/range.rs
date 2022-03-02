@@ -198,10 +198,12 @@ impl Range {
                 }
             }
 
-            let mut debug_body : &[u8]  = &body;
-            println!("content range body is {} length is {}", String::from_utf8(debug_body.to_vec()).unwrap(), debug_body.len());
+            let mut mutable_body : Vec<u8>  = body;
+            mutable_body.pop(); // remove /r
+            mutable_body.pop(); // remove /n
 
-            content_range.body = body;
+
+            content_range.body = mutable_body;
 
             content_range_list.push(content_range);
         }

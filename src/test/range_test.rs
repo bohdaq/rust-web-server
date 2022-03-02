@@ -408,8 +408,6 @@ fn parse_multipart_body() {
     assert_eq!(first_range.range.end, first_range_end);
 
     let mut first_body = first_range.body.clone();
-    first_body.pop(); // remove \n
-    first_body.pop(); // remove \r
     assert_eq!(first_body, first_range_body.as_bytes().to_vec());
 
     let second_range = content_range_list.get(1).unwrap();
@@ -418,8 +416,6 @@ fn parse_multipart_body() {
     assert_eq!(second_range.range.end, second_range_end);
 
     let mut second_body = second_range.body.clone();
-    second_body.pop(); // remove \n
-    second_body.pop(); // remove \r
     assert_eq!(second_body, second_range_body.as_bytes().to_vec());
 }
 
