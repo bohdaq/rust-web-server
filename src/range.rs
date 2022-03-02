@@ -219,7 +219,8 @@ impl Range {
         if boxed_result.is_ok() {
             range_list = boxed_result.unwrap();
         } else {
-            panic!("unable to parse!!!");
+            let error = boxed_result.err().unwrap();
+            return Err(error);
         }
 
         Ok(range_list)
