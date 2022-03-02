@@ -308,7 +308,52 @@ fn parse_content_range_header_value() {
 }
 
 #[test]
-fn not_ok_parse_content_range_header_value() {
+fn start_after_end_parse_content_range_header_value() {
+    let start_num = 3212350;
+    let end_num = 123;
+    let size_num = 191238270;
+
+    let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
+    let boxed_value = Range::parse_content_range_header_value(string);
+    assert_eq!(false, boxed_value.is_ok());
+
+    let err = boxed_value.err().unwrap();
+
+    assert_eq!(Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.to_string().to_string(), err);
+}
+
+#[test]
+fn start_bigger_than_filesize_parse_content_range_header_value() {
+    let start_num = 32000;
+    let end_num = 32001;
+    let size_num = 31000;
+
+    let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
+    let boxed_value = Range::parse_content_range_header_value(string);
+    assert_eq!(false, boxed_value.is_ok());
+
+    let err = boxed_value.err().unwrap();
+
+    assert_eq!(Range::ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string().to_string(), err);
+}
+
+#[test]
+fn end_bigger_than_filesize_parse_content_range_header_value() {
+    let start_num = 32000;
+    let end_num = 32005;
+    let size_num = 32001;
+
+    let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
+    let boxed_value = Range::parse_content_range_header_value(string);
+    assert_eq!(false, boxed_value.is_ok());
+
+    let err = boxed_value.err().unwrap();
+
+    assert_eq!(Range::ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string().to_string(), err);
+}
+
+#[test]
+fn malformed_header_parse_content_range_header_value() {
     let string = format!("abracadabra");
     let boxed_value = Range::parse_content_range_header_value(string);
     assert_eq!(false, boxed_value.is_ok());

@@ -35,6 +35,9 @@ impl Range {
 
     pub(crate) const CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})";
     pub(crate) const ERROR_UNABLE_TO_PARSE_CONTENT_RANGE: &'static str = "unable to parse content-range";
+    pub(crate) const ERROR_START_IS_AFTER_END_CONTENT_RANGE: &'static str = "start is after end in content range";
+    pub(crate) const ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE: &'static str = "start is bigger than filesize in content range";
+    pub(crate) const ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE: &'static str = "end is bigger than filesize in content range";
 
 
     pub(crate) fn parse_range(filelength: u64, range_str: &str) -> Range {
@@ -231,6 +234,18 @@ impl Range {
         let size = size.to_string();
         let start = start.parse().unwrap();
         let end = end.parse().unwrap();
+
+        if start > end {
+            return Err(Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.to_string())
+        }
+
+        let size_num: u64 = size.parse().unwrap();;
+        if start > size_num {
+            return Err(Range::ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string());
+        }
+        if end > size_num {
+            return  Err(Range::ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string());
+        }
 
         Ok((size, start, end))
     }
