@@ -77,14 +77,10 @@ fn check_range_response_is_ok() {
     let mut response_result_body : Vec<u8> = vec![];
     let first_range = response.content_range_list.get(0).unwrap();
     let mut first_body = first_range.body.clone();
-    first_body.pop(); // remove \n
-    first_body.pop(); // remove \r
     println!("first range:\n{:?}", &first_body);
 
     let second_range = response.content_range_list.get(1).unwrap();
     let mut second_body = second_range.body.clone();
-    second_body.pop(); // remove \n
-    second_body.pop(); // remove \r
     println!("second range:\n{:?}", &second_body);
 
     response_result_body = [first_body, second_body].concat();
