@@ -421,31 +421,24 @@ fn no_empty_string_between_header_and_body_in_parse_multipart_body() {
 
     let first_range_start = 0;
     let first_range_end = 13;
+    let first_range_body = "some text data";
     let first_range_content_type = MimeType::TEXT_PLAIN.to_string();
 
     let second_range_start = 14;
     let second_range_end = 27;
+    let second_range_body = "\najlkdasjdasd";
     let second_range_content_type = MimeType::TEXT_PLAIN.to_string();
 
 
     let data = [
-        "--String_separator",
-        "\n",
-        format!("Content-Type: {}", first_range_content_type).as_str(),
-        "\n",
-        format!("Content-Range: bytes {}-{}/{}", first_range_start, first_range_end, size).as_str(),
-        "\n",
-        "some text data",
-        "\n",
-        "--String_separator",
-        "\n",
-        format!("Content-Type: {}", second_range_content_type).as_str(),
-        "\n",
-        format!("Content-Range: bytes {}-{}/{}", second_range_start, second_range_end, size).as_str(),
-        "\n",
-        "\n", // this new line is part of the content range body
-        "ajlkdasjdasd",
-        "\n",
+        "--String_separator\n",
+        format!("Content-Type: {}\n", first_range_content_type).as_str(),
+        format!("Content-Range: bytes {}-{}/{}\n", first_range_start, first_range_end, size).as_str(),
+        format!("{}\r\n", first_range_body).as_str(),
+        "--String_separator\n",
+        format!("Content-Type: {}\n", second_range_content_type).as_str(),
+        format!("Content-Range: bytes {}-{}/{}\n", second_range_start, second_range_end, size).as_str(),
+        format!("{}\r\n", second_range_body).as_str(),
         "--String_separator"
     ].join("").to_string();
 
@@ -454,18 +447,8 @@ fn no_empty_string_between_header_and_body_in_parse_multipart_body() {
     let mut content_range_list: Vec<ContentRange> = vec![];
 
     let boxed_result = Range::parse_multipart_body(&mut buff, content_range_list);
-    assert!(boxed_result.is_ok());
-    content_range_list = boxed_result.unwrap();
+    assert!(boxed_result.is_err());
+    let error = boxed_result.err().unwrap();
+    assert_eq!(error, Range::ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY);
 
-    assert_eq!(2, content_range_list.len());
-
-    let first_range = content_range_list.get(0).unwrap();
-    assert_eq!(first_range.size, size.to_string());
-    assert_eq!(first_range.range.start, first_range_start);
-    assert_eq!(first_range.range.end, first_range_end);
-
-    let second_range = content_range_list.get(1).unwrap();
-    assert_eq!(second_range.size, size.to_string());
-    assert_eq!(second_range.range.start, second_range_start);
-    assert_eq!(second_range.range.end, second_range_end);
 }

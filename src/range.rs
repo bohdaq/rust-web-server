@@ -38,6 +38,7 @@ impl Range {
     pub(crate) const ERROR_START_IS_AFTER_END_CONTENT_RANGE: &'static str = "start is after end in content range";
     pub(crate) const ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE: &'static str = "start is bigger than filesize in content range";
     pub(crate) const ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE: &'static str = "end is bigger than filesize in content range";
+    pub(crate) const ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";
 
 
     pub(crate) fn parse_range(filelength: u64, range_str: &str) -> Range {
@@ -168,7 +169,7 @@ impl Range {
                 content_range.range.start = start;
                 content_range.range.end = end;
             } else {
-                panic!("unable to parse!!!")
+                return Err(boxed_result.err().unwrap())
             }
 
 
@@ -176,6 +177,10 @@ impl Range {
             // read next line - empty line
             buffer = Range::parse_line_as_bytes(cursor);
             string = Range::convert_bytes_array_to_string(buffer);
+
+            if string.trim().len() > 0 {
+                return Err(Range::ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY.to_string());
+            }
 
             // read next line - separator between content ranges
             buffer = Range::parse_line_as_bytes(cursor);
