@@ -6,6 +6,7 @@ use std::char::MAX;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Cursor, SeekFrom};
 use std::os::macos::raw::stat;
+use regex::Regex;
 
 use crate::request::Request;
 use crate::response::Response;
@@ -32,7 +33,7 @@ pub struct ContentRange {
 
 impl Range {
 
-    pub(crate) const MAX_BUFFER_LENGTH: u64 = 100000000; // 100 mb is max buffer size
+    pub(crate) const CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d){1,}-(?P<end>\\d){1,}/(?P<size>\\d){1,}";
 
 
     pub(crate) fn parse_range(filelength: u64, range_str: &str) -> Range {
@@ -201,25 +202,16 @@ impl Range {
     }
 
     pub(crate)  fn parse_content_range_header_value(header_value: String) -> (String, u64, u64) {
-        let split_token = [CONSTANTS.BYTES, CONSTANTS.WHITESPACE].join("");
-        let first_split: Vec<&str> = header_value.split(&split_token).collect();
+        let re = Regex::new(Range::CONTENT_RANGE_REGEX).unwrap();
+        let caps = re.captures(&header_value).unwrap();
 
-        let value_index = 1;
-        let first_split_string = first_split.get(value_index).unwrap().trim();
+        let start= &caps["start"];
+        let end = &caps["end"];
+        let size = &caps["size"];
 
-        let split_token = CONSTANTS.SLASH;
-        let second_split: Vec<&str> = first_split_string.split(split_token).collect();
-
-        let second_split_first_value = second_split.get(0).unwrap().trim();
-        let second_split_second_value = second_split.get(1).unwrap().trim();
-        let size = second_split_second_value.to_string();
-
-        let split_token = CONSTANTS.HYPHEN;
-        let third_split : Vec<&str> = second_split_first_value.split(split_token).collect();
-        let third_split_first_value =  third_split.get(0).unwrap().trim();
-        let third_split_second_value =  third_split.get(1).unwrap().trim();
-        let start = third_split_first_value.parse().unwrap();
-        let end = third_split_second_value.parse().unwrap();
+        let size = size.to_string();
+        let start = start.parse().unwrap();
+        let end = end.parse().unwrap();
 
         (size, start, end)
     }
