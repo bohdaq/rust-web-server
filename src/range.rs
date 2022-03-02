@@ -115,7 +115,7 @@ impl Range {
         content_range_list
     }
 
-    pub(crate) fn parse_multipart_body(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>) -> Vec<ContentRange> {
+    pub(crate) fn parse_multipart_body(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>) -> Result<Vec<ContentRange>, String> {
 
         let mut buffer = Range::parse_line_as_bytes(cursor);
         let new_line_char_found = buffer.len() != 0;
@@ -124,7 +124,7 @@ impl Range {
         println!("string: {}", string);
 
         if !new_line_char_found {
-            return content_range_list
+            return Ok(content_range_list)
         };
 
         let mut content_range: ContentRange = ContentRange {
@@ -203,9 +203,15 @@ impl Range {
         }
 
         println!("content_range_list length: {}", content_range_list.len());
-        content_range_list = Range::parse_multipart_body(cursor, content_range_list);
+        let boxed_result = Range::parse_multipart_body(cursor, content_range_list);
+        let mut range_list = vec![];
+        if boxed_result.is_ok() {
+            range_list = boxed_result.unwrap();
+        } else {
+            panic!("unable to parse!!!");
+        }
 
-        content_range_list
+        Ok(range_list)
     }
 
     pub(crate)  fn parse_content_range_header_value(header_value: String) -> Result<(String, u64, u64), String> {

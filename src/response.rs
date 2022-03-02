@@ -220,9 +220,13 @@ impl Response {
 
                 let mut buf = vec![];
                 cursor.read_until(b'\n', &mut buf).unwrap();
-                content_range_list = Range::parse_multipart_body(cursor, content_range_list);
+                let boxed_value = Range::parse_multipart_body(cursor, content_range_list);
+                let mut range_list = vec![];
+                if boxed_value.is_ok() {
+                    range_list = boxed_value.unwrap();
+                }
 
-                response.content_range_list = content_range_list;
+                response.content_range_list = range_list;
             } else {
                 buf = vec![];
                 cursor.read_to_end(&mut buf);
