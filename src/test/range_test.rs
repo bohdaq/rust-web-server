@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Read, Seek, SeekFrom};
+use regex::Regex;
 use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS};
 use crate::{CONSTANTS, Request, Response, Server};
 use crate::header::Header;
@@ -267,5 +268,28 @@ fn parse_range_test() {
     let range = Range::parse_range(file_length, byte);
     assert_eq!(range.start, 0);
     assert_eq!(range.end, 1);
+}
+
+#[test]
+fn content_range_regex() {
+    let start_num = 123;
+    let end_num = 3212350;
+    let size_num = 191238270;
+
+    let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
+    let re = Regex::new(Range::CONTENT_RANGE_REGEX).unwrap();
+    let caps = re.captures(string.as_str()).unwrap();
+
+    let start= &caps["start"];
+    let end = &caps["end"];
+    let size = &caps["size"];
+
+    let size = size.parse().unwrap();
+    let start = start.parse().unwrap();
+    let end = end.parse().unwrap();
+
+    assert_eq!(start_num, start);
+    assert_eq!(end_num, end);
+    assert_eq!(size_num, size);
 }
 

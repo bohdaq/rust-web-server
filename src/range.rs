@@ -33,7 +33,7 @@ pub struct ContentRange {
 
 impl Range {
 
-    pub(crate) const CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d){1,}-(?P<end>\\d){1,}/(?P<size>\\d){1,}";
+    pub(crate) const CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})";
 
 
     pub(crate) fn parse_range(filelength: u64, range_str: &str) -> Range {
