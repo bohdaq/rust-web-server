@@ -363,3 +363,17 @@ fn malformed_header_parse_content_range_header_value() {
     assert_eq!(Range::ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string().to_string(), err);
 }
 
+#[test]
+fn parse_multipart_body() {
+    let test_multipart_data =
+        "--String_separator\nContent-Type:  text/plain\nContent-Range:  bytes 0-13/27\n\nsome text data\n--String_separator\nContent-Type:  text/plain\nContent-Range:  bytes 14-27/27\n\n\najlkdasjdasd\n--String_separator".as_bytes();
+    use std::io::Cursor;
+    let mut buff = Cursor::new(test_multipart_data);
+    let mut content_range_list: Vec<ContentRange> = vec![];
+
+    let boxed_result = Range::parse_multipart_body(&mut buff, content_range_list);
+    assert!(boxed_result.is_ok());
+    content_range_list = boxed_result.unwrap();
+
+    assert_eq!(2, content_range_list.len());
+}
