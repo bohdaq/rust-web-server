@@ -413,4 +413,9 @@ fn parse_multipart_body() {
     assert_eq!(first_range.size, size.to_string());
     assert_eq!(first_range.range.start, first_range_start);
     assert_eq!(first_range.range.end, first_range_end);
+
+    let second_range = content_range_list.get(1).unwrap();
+    assert_eq!(second_range.size, size.to_string());
+    assert_eq!(second_range.range.start, second_range_start);
+    assert_eq!(second_range.range.end, second_range_end);
 }
