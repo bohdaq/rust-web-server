@@ -156,11 +156,18 @@ impl Range {
         if string.starts_with(HTTP_HEADERS.CONTENT_RANGE) && content_range_is_not_parsed {
             let content_range_header = Response::parse_http_response_header_string(string.as_str());
 
-            let (size, start, end) = Range::parse_content_range_header_value(content_range_header.header_value);
+            let boxed_result = Range::parse_content_range_header_value(content_range_header.header_value);
+            if boxed_result.is_ok() {
+                let (size, start, end) = boxed_result.unwrap();
 
-            content_range.size = size;
-            content_range.range.start = start;
-            content_range.range.end = end;
+                content_range.size = size;
+                content_range.range.start = start;
+                content_range.range.end = end;
+            } else {
+                panic!("unable to parse!!!")
+            }
+
+
 
             // read next line - empty line
             buffer = Range::parse_line_as_bytes(cursor);
@@ -201,7 +208,7 @@ impl Range {
         content_range_list
     }
 
-    pub(crate)  fn parse_content_range_header_value(header_value: String) -> (String, u64, u64) {
+    pub(crate)  fn parse_content_range_header_value(header_value: String) -> Result<(String, u64, u64), String> {
         let re = Regex::new(Range::CONTENT_RANGE_REGEX).unwrap();
         let caps = re.captures(&header_value).unwrap();
 
@@ -213,7 +220,7 @@ impl Range {
         let start = start.parse().unwrap();
         let end = end.parse().unwrap();
 
-        (size, start, end)
+        Ok((size, start, end))
     }
 
     pub(crate) fn parse_line_as_bytes(mut cursor: &mut Cursor<&[u8]>) -> Vec<u8> {
