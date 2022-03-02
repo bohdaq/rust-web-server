@@ -34,6 +34,7 @@ pub struct ContentRange {
 impl Range {
 
     pub(crate) const CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})";
+    pub(crate) const ERROR_UNABLE_TO_PARSE_CONTENT_RANGE: &'static str = "unable to parse content-range";
 
 
     pub(crate) fn parse_range(filelength: u64, range_str: &str) -> Range {
@@ -216,7 +217,12 @@ impl Range {
 
     pub(crate)  fn parse_content_range_header_value(header_value: String) -> Result<(String, u64, u64), String> {
         let re = Regex::new(Range::CONTENT_RANGE_REGEX).unwrap();
-        let caps = re.captures(&header_value).unwrap();
+        let boxed_caps = re.captures(&header_value);
+        if boxed_caps.is_none() {
+            return Err(Range::ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
+        }
+
+        let caps = boxed_caps.unwrap();
 
         let start= &caps["start"];
         let end = &caps["end"];

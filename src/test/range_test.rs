@@ -293,5 +293,28 @@ fn content_range_regex() {
     assert_eq!(size_num, size);
 }
 
+#[test]
+fn parse_content_range_header_value() {
+    let start_num = 123;
+    let end_num = 3212350;
+    let size_num = 191238270;
 
+    let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
+    let (size, start, end) = Range::parse_content_range_header_value(string).unwrap();
+
+    assert_eq!(start_num, start);
+    assert_eq!(end_num, end);
+    assert_eq!(size_num, size.parse().unwrap());
+}
+
+#[test]
+fn not_ok_parse_content_range_header_value() {
+    let string = format!("abracadabra");
+    let boxed_value = Range::parse_content_range_header_value(string);
+    assert_eq!(false, boxed_value.is_ok());
+
+    let err = boxed_value.err().unwrap();
+
+    assert_eq!(Range::ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string().to_string(), err);
+}
 
