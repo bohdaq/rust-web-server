@@ -224,11 +224,11 @@ impl Response {
                 let mut range_list = vec![];
                 if boxed_value.is_ok() {
                     range_list = boxed_value.unwrap();
+                    response.content_range_list = range_list;
                 } else {
-                    panic!("unable to parse!")
+                    response.status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE.to_string();
+                    response.reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE.to_string();
                 }
-
-                response.content_range_list = range_list;
             } else {
                 buf = vec![];
                 cursor.read_to_end(&mut buf);
