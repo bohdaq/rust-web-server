@@ -369,6 +369,66 @@ fn parse_multipart_body() {
 
     let first_range_start = 0;
     let first_range_end = 13;
+    let first_range_body = "some text data";
+    let first_range_content_type = MimeType::TEXT_PLAIN.to_string();
+
+    let second_range_start = 14;
+    let second_range_end = 27;
+    let second_range_body = "\najlkdasjdasd";
+    let second_range_content_type = MimeType::TEXT_PLAIN.to_string();
+
+
+    let data = [
+        "--String_separator\n",
+        format!("Content-Type: {}\n", first_range_content_type).as_str(),
+        format!("Content-Range: bytes {}-{}/{}\n", first_range_start, first_range_end, size).as_str(),
+        "\n", // empty line - separator between header and body
+        format!("{}\r\n", first_range_body).as_str(),
+        "--String_separator\n",
+        format!("Content-Type: {}\n", second_range_content_type).as_str(),
+        format!("Content-Range: bytes {}-{}/{}\n", second_range_start, second_range_end, size).as_str(),
+        "\n", // empty line - separator between header and body
+        format!("{}\r\n", second_range_body).as_str(),
+        "--String_separator"
+    ].join("").to_string();
+
+    use std::io::Cursor;
+    let mut buff = Cursor::new(data.as_bytes());
+    let mut content_range_list: Vec<ContentRange> = vec![];
+
+    let boxed_result = Range::parse_multipart_body(&mut buff, content_range_list);
+    assert!(boxed_result.is_ok());
+    content_range_list = boxed_result.unwrap();
+
+    assert_eq!(2, content_range_list.len());
+
+    let first_range = content_range_list.get(0).unwrap();
+    assert_eq!(first_range.size, size.to_string());
+    assert_eq!(first_range.range.start, first_range_start);
+    assert_eq!(first_range.range.end, first_range_end);
+
+    let mut first_body = first_range.body.clone();
+    first_body.pop(); // remove \n
+    first_body.pop(); // remove \r
+    assert_eq!(first_body, first_range_body.as_bytes().to_vec());
+
+    let second_range = content_range_list.get(1).unwrap();
+    assert_eq!(second_range.size, size.to_string());
+    assert_eq!(second_range.range.start, second_range_start);
+    assert_eq!(second_range.range.end, second_range_end);
+
+    let mut second_body = second_range.body.clone();
+    second_body.pop(); // remove \n
+    second_body.pop(); // remove \r
+    assert_eq!(second_body, second_range_body.as_bytes().to_vec());
+}
+
+#[test]
+fn no_empty_string_between_header_and_body_in_parse_multipart_body() {
+    let size = 27;
+
+    let first_range_start = 0;
+    let first_range_end = 13;
     let first_range_content_type = MimeType::TEXT_PLAIN.to_string();
 
     let second_range_start = 14;
@@ -383,7 +443,6 @@ fn parse_multipart_body() {
         "\n",
         format!("Content-Range: bytes {}-{}/{}", first_range_start, first_range_end, size).as_str(),
         "\n",
-        "\n", // empty line - separator between header and body
         "some text data",
         "\n",
         "--String_separator",
@@ -392,7 +451,6 @@ fn parse_multipart_body() {
         "\n",
         format!("Content-Range: bytes {}-{}/{}", second_range_start, second_range_end, size).as_str(),
         "\n",
-        "\n", // empty line - separator between header and body
         "\n", // this new line is part of the content range body
         "ajlkdasjdasd",
         "\n",
