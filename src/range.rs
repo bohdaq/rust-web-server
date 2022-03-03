@@ -102,7 +102,6 @@ impl Range {
                 content_type,
             };
 
-            println!("unit: {} range: {} - {} size: {} body len: {} mime type: {}" , content_range.unit, content_range.range.start, content_range.range.end, content_range.size, content_range.body.len(), content_range.content_type);
             content_range_list.push(content_range);
         }
         content_range_list
@@ -125,8 +124,6 @@ impl Range {
         let mut buffer = Range::parse_line_as_bytes(cursor);
         let new_line_char_found = buffer.len() != 0;
         let mut string = Range::convert_bytes_array_to_string(buffer);
-
-        println!("string: {}", string);
 
         if !new_line_char_found {
             return Ok(content_range_list)
@@ -213,7 +210,6 @@ impl Range {
             content_range_list.push(content_range);
         }
 
-        println!("content_range_list length: {}", content_range_list.len());
         let boxed_result = Range::parse_multipart_body(cursor, content_range_list);
         let mut range_list = vec![];
         if boxed_result.is_ok() {

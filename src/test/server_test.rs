@@ -690,4 +690,7 @@ fn check_range_response_for_not_proper_range_header() {
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE, response.reason_phrase);
+
+    let content_range = response.content_range_list.get(0).unwrap();
+    assert_eq!(content_range.body, "qwerty".as_bytes());
 }
