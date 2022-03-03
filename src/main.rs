@@ -88,6 +88,10 @@ fn main() {
     }
 
 
+    create_tcp_listener_with_thread_listener(ip, port, thread_count);
+}
+
+fn create_tcp_listener_with_thread_listener(ip: &str, port: i32, thread_count: i32) {
     let bind_addr = [ip, ":", port.to_string().as_str()].join(CONSTANTS.EMPTY_STRING);
     println!("Hello, rust-web-server is up and running: {}", bind_addr);
 
