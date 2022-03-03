@@ -9,37 +9,20 @@ use crate::response::Response;
 use crate::app::App;
 use crate::CONSTANTS;
 use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
-
-
 pub struct Server {}
-
-
 impl Server {
-    pub(crate) fn handle_connection(s: TcpStream) {
+    pub(crate) fn process_request(mut s: impl Read + Write + Unpin) -> Vec<u8> {
         let mut buffer :[u8; 1024] = [0; 1024];
-
         let mut stream = s;
-
         stream.read(&mut buffer).unwrap();
-
-
-        let response = Server::process_request(&buffer);
-
-        let boxed_stream = stream.write(response.borrow());
-        if boxed_stream.is_ok() {
-            stream.flush().unwrap();
-        } else {
-            println!("error with stream: {}", boxed_stream.err().unwrap().to_string());
-        }
-
-
-    }
-
-    pub(crate) fn process_request(request: &[u8]) -> Vec<u8> {
+        let request :  &[u8] = &buffer;
         let request: Request = Request::parse_request(request);
         let response = App::handle_request(request);
         let raw_response = Response::generate_response(response);
-
+        let boxed_stream = stream.write(raw_response.borrow());
+        if boxed_stream.is_ok() {
+            stream.flush().unwrap();
+        };
         raw_response
     }
 
@@ -50,10 +33,6 @@ impl Server {
     pub(crate) fn get_static_filepath(request_uri: &str) -> String {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
-        let static_filepath = [working_directory, request_uri].join(CONSTANTS.EMPTY_STRING);
-
-        static_filepath
+        [working_directory, request_uri].join(CONSTANTS.EMPTY_STRING)
     }
 }
-
-

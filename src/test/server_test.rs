@@ -1,11 +1,44 @@
 use std::borrow::Borrow;
 use std::{env, fs};
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, IoSlice, Read, Write};
+
+use super::*;
+
+use std::cmp::min;
+use std::pin::Pin;
+
 use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::{CONSTANTS, Request, Response, Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
+
+pub struct MockTcpStream {
+    pub(crate) read_data: Vec<u8>,
+    pub(crate) write_data: Vec<u8>,
+}
+
+impl Read for MockTcpStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let size : usize = min(self.read_data.len(), buf.len());
+        buf[..size].copy_from_slice(&self.read_data[..size]);
+        Ok(size)
+    }
+}
+
+impl Write for MockTcpStream {
+
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.write_data = Vec::from(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Unpin for MockTcpStream {}
 
 #[test]
 fn it_generates_successful_response_with_index_html() {
@@ -54,7 +87,11 @@ fn it_generates_successful_response_with_index_html() {
     let port : usize = "8787".parse().unwrap();
     let static_directories = vec!["/static".to_string()];
 
-    let raw_response: Vec<u8> = Server::process_request(raw_request.as_bytes());
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -122,7 +159,11 @@ fn it_generates_successful_response_with_static_file() {
     let port : usize = "8787".parse().unwrap();
     let static_directories = vec!["/static".to_string()];
 
-    let raw_response  = Server::process_request(raw_request.as_bytes());
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -192,7 +233,11 @@ fn it_generates_not_found_page_for_absent_static_file() {
     let port: usize = "8787".parse().unwrap();
     let static_directories = vec!["/static".to_string()];
 
-    let raw_response = Server::process_request(raw_request.as_bytes());
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -262,7 +307,11 @@ fn it_generates_not_found_page_for_absent_route() {
     let port : usize = "8787".parse().unwrap();
     let static_directories = vec!["/static".to_string()];
 
-    let raw_response = Server::process_request(raw_request.as_bytes());
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -332,7 +381,11 @@ fn it_generates_not_found_page_for_static_directory() {
     let port : usize = "8787".parse().unwrap();
     let static_directories = vec!["/static".to_string()];
 
-    let raw_response = Server::process_request(raw_request.as_bytes());
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -402,7 +455,11 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     let port : usize = "8787".parse().unwrap();
     let static_directories = vec!["/static".to_string()];
 
-    let raw_response = Server::process_request(raw_request.as_bytes());
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -472,7 +529,11 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     let static_directories = vec!["/static".to_string()];
 
 
-    let raw_response = Server::process_request(raw_request.as_bytes());
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -544,7 +605,11 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let port : usize = "8787".parse().unwrap();
     let static_directories = vec!["/static".to_string(), "/assets".to_string()];
 
-    let raw_response = Server::process_request(raw_request.as_bytes());
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -616,7 +681,11 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let port : usize = "8787".parse().unwrap();
     let static_directories = vec!["/static".to_string(), "/assets".to_string()];
 
-    let raw_response = Server::process_request(raw_request.as_bytes());
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -674,7 +743,11 @@ fn check_range_response_for_not_proper_range_header() {
 
     let raw_request = Request::generate_request(request);
     let request: Request = Request::parse_request(&raw_request.as_bytes());
-    let raw_response = Server::process_request(raw_request.as_bytes());
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
 
     let response = Response::parse_response(raw_response.borrow());
 

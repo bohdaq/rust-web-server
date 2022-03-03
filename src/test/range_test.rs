@@ -7,6 +7,7 @@ use crate::{CONSTANTS, Request, Response, Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
+use crate::test::server_test::MockTcpStream;
 
 #[test]
 fn check_range_response_is_ok() {
@@ -48,7 +49,12 @@ fn check_range_response_is_ok() {
 
     let raw_request = Request::generate_request(request);
     let request: Request = Request::parse_request(&raw_request.as_bytes());
-    let raw_response = Server::process_request(raw_request.as_bytes());
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
 
     let response = Response::parse_response(raw_response.borrow());
 

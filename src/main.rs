@@ -99,7 +99,7 @@ fn main() {
         println!("Connection established!");
 
         pool.execute(move ||  {
-            Server::handle_connection(stream);
+            Server::process_request(stream);
         });
     }
 }
