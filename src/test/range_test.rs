@@ -110,7 +110,7 @@ fn get_right_content_range_of_a_file() {
         header_value: "bytes=200-1000, 1200-1400, 2000-2300, 11000-, -500, 0-, 0-1".to_string()
     };
 
-    let content_range_list : Vec<ContentRange> = Range::get_content_range_list(image_path, &header);
+    let content_range_list : Vec<ContentRange> = Range::get_content_range_list(image_path, &header).unwrap();
 
     let start = 200;
     let end = 1000;

@@ -107,7 +107,7 @@ impl Range {
         Ok(content_range_list)
     }
 
-    pub(crate) fn get_content_range_list(request_uri: &str, range: &Header) -> Vec<ContentRange> {
+    pub(crate) fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, String> {
         let mut content_range_list : Vec<ContentRange> = vec![];
         let static_filepath = Server::get_static_filepath(request_uri);
 
@@ -119,7 +119,7 @@ impl Range {
             }
         }
 
-        content_range_list
+        Ok(content_range_list)
     }
 
     pub(crate) fn parse_multipart_body(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>) -> Result<Vec<ContentRange>, String> {

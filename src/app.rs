@@ -137,7 +137,10 @@ impl App {
                     range_header = boxed_header.unwrap();
                 }
 
-                content_range_list = Range::get_content_range_list(&request.request_uri, range_header);
+                let boxed_content_range_list = Range::get_content_range_list(&request.request_uri, range_header);
+                if boxed_content_range_list.is_ok() {
+                    content_range_list = boxed_content_range_list.unwrap();
+                }
             }
         }
 
