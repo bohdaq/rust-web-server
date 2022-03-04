@@ -32,13 +32,13 @@ pub struct ContentRange {
 
 
 impl Range {
-
     pub(crate) const CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})";
     pub(crate) const ERROR_UNABLE_TO_PARSE_CONTENT_RANGE: &'static str = "unable to parse content-range";
     pub(crate) const ERROR_START_IS_AFTER_END_CONTENT_RANGE: &'static str = "start is after end in content range";
     pub(crate) const ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE: &'static str = "start is bigger than filesize in content range";
     pub(crate) const ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE: &'static str = "end is bigger than filesize in content range";
     pub(crate) const ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";
+    pub(crate) const ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT: &'static str = "range header malformed, most likely you have an error in unit statement";
 
 
     pub(crate) fn parse_range_in_content_range(filelength: u64, range_str: &str) -> Result<Range, HTTPError> {
@@ -108,7 +108,7 @@ impl Range {
 
         let prefix = [CONSTANTS.BYTES, CONSTANTS.EQUALS].join("");
         if !raw_range_value.starts_with(prefix.as_str()) {
-            let message = "range header malformed, most likely you have an error in unit statement".to_string();
+            let message = Range::ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT.to_string();
             let error = HTTPError {
                 STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
                 MESSAGE: message,

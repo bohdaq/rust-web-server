@@ -12,6 +12,7 @@ use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STA
 use crate::{CONSTANTS, Request, Response, Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
+use crate::range::Range;
 
 pub struct MockTcpStream {
     pub(crate) read_data: Vec<u8>,
@@ -765,5 +766,5 @@ fn check_range_response_for_not_proper_range_header() {
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
-    assert_eq!(content_range.body, "qwerty".as_bytes());
+    assert_eq!(content_range.body, Range::ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT.as_bytes());
 }

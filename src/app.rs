@@ -75,34 +75,58 @@ impl App {
         }
 
         if request.method == REQUEST_METHODS.GET && request.request_uri != CONSTANTS.SLASH {
+
+
             let boxed_content_range_list = App::process_static_resources(&request);
-            let content_range_list = boxed_content_range_list.unwrap();
+            if boxed_content_range_list.is_ok() {
+                let content_range_list = boxed_content_range_list.unwrap();
 
-            if content_range_list.len() != 0 {
-                let content_type = MimeType::detect_mime_type(&request.request_uri);
+                if content_range_list.len() != 0 {
+                    let content_type = MimeType::detect_mime_type(&request.request_uri);
 
-                let content_type_header = Header {
-                    header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
-                    header_value: content_type,
-                };
+                    let content_type_header = Header {
+                        header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
+                        header_value: content_type,
+                    };
 
-                let mut status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
-                let mut reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
+                    let mut status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
+                    let mut reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
+
+                    response = Response {
+                        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+                        status_code: status_code.to_string(),
+                        reason_phrase: reason_phrase.to_string(),
+                        headers: vec![
+                            content_type_header,
+                            App::get_x_content_type_options_header(),
+                            App::get_accept_ranges_header(),
+                        ],
+                        content_range_list,
+                    };
+                }
+            } else {
+                let error : HTTPError = boxed_content_range_list.err().unwrap();
+                let body = error.MESSAGE;
+                let body_length = body.len() as u64;
+
+                let content_range_list = vec![
+                    ContentRange {
+                        unit: CONSTANTS.BYTES.to_string(),
+                        range: Range { start: 0, end: body_length },
+                        size: body_length.to_string(),
+                        body: body.as_bytes().to_vec(),
+                        content_type: MimeType::TEXT_PLAIN.to_string(),
+                    }
+                ];
 
                 response = Response {
                     http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
-                    status_code: status_code.to_string(),
-                    reason_phrase: reason_phrase.to_string(),
-                    headers: vec![
-                        content_type_header,
-                        App::get_x_content_type_options_header(),
-                        App::get_accept_ranges_header(),
-                    ],
+                    status_code: error.STATUS_CODE_REASON_PHRASE.STATUS_CODE.to_string(),
+                    reason_phrase: error.STATUS_CODE_REASON_PHRASE.REASON_PHRASE.to_string(),
+                    headers: vec![],
                     content_range_list,
                 };
             }
-
-
 
         }
 
