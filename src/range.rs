@@ -41,7 +41,7 @@ impl Range {
     pub(crate) const ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";
 
 
-    pub(crate) fn parse_range(filelength: u64, range_str: &str) -> Range {
+    pub(crate) fn parse_range_in_content_range(filelength: u64, range_str: &str) -> Range {
         const START_INDEX: usize = 0;
         const END_INDEX: usize = 1;
 
@@ -82,7 +82,7 @@ impl Range {
 
         let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.COMMA).collect();
         for byte in bytes {
-            let range = Range::parse_range(filelength, byte);
+            let range = Range::parse_range_in_content_range(filelength, byte);
             let mut buff_length = (range.end - range.start) + 1;
 
             let mut file = File::open(filepath).unwrap();
