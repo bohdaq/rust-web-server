@@ -106,6 +106,16 @@ impl Range {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
+        let prefix = [CONSTANTS.BYTES, CONSTANTS.EQUALS].join("");
+        if !raw_range_value.starts_with(prefix.as_str()) {
+            let message = "range header malformed, most likely you have an error in unit statement".to_string();
+            let error = HTTPError {
+                STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
+                MESSAGE: message,
+            };
+            return Err(error);
+        }
+
         let split_raw_range_value: Vec<&str> = raw_range_value.split(CONSTANTS.EQUALS).collect();
         let raw_bytes = split_raw_range_value.get(INDEX_AFTER_UNIT_DECLARATION).unwrap();
 
