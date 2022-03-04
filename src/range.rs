@@ -73,7 +73,7 @@ impl Range {
         range
     }
 
-    pub(crate) fn parse_content_range(filepath: &str, filelength: u64, raw_range_value: &str) -> Vec<ContentRange> {
+    pub(crate) fn parse_content_range(filepath: &str, filelength: u64, raw_range_value: &str) -> Result<Vec<ContentRange>, String> {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
@@ -104,7 +104,7 @@ impl Range {
 
             content_range_list.push(content_range);
         }
-        content_range_list
+        Ok(content_range_list)
     }
 
     pub(crate) fn get_content_range_list(request_uri: &str, range: &Header) -> Vec<ContentRange> {
@@ -113,7 +113,10 @@ impl Range {
 
         let md = metadata(&static_filepath).unwrap();
         if md.is_file() {
-            content_range_list = Range::parse_content_range(&static_filepath, md.len(), &range.header_value);
+            let boxed_content_range_list = Range::parse_content_range(&static_filepath, md.len(), &range.header_value);
+            if boxed_content_range_list.is_ok() {
+                content_range_list = boxed_content_range_list.unwrap();
+            }
         }
 
         content_range_list
