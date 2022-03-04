@@ -12,7 +12,7 @@ use crate::request::Request;
 use crate::response::Response;
 use crate::app::App;
 use crate::{CONSTANTS, Server};
-use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, HTTPError, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES, StatusCodeReasonPhrase};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 
@@ -41,7 +41,7 @@ impl Range {
     pub(crate) const ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";
 
 
-    pub(crate) fn parse_range_in_content_range(filelength: u64, range_str: &str) -> Range {
+    pub(crate) fn parse_range_in_content_range(filelength: u64, range_str: &str) -> Result<Range, HTTPError> {
         const START_INDEX: usize = 0;
         const END_INDEX: usize = 1;
 
@@ -69,11 +69,40 @@ impl Range {
                 range.end = filelength;
             }
 
+            if range.end > filelength {
+                let message = Range::ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string();
+                let error = HTTPError {
+                    STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
+                    MESSAGE: message,
+                };
+                return Err(error);
+            }
+
+            if range.start > filelength {
+                let message = Range::ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string();
+                let error = HTTPError {
+                    STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
+                    MESSAGE: message,
+                };
+                return Err(error);
+            }
+
+            if range.start > range.end {
+                let message = Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.to_string();
+                let error = HTTPError {
+                    STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
+                    MESSAGE: message,
+                };
+                return Err(error);
+            }
+
+
+
         }
-        range
+        Ok(range)
     }
 
-    pub(crate) fn parse_content_range(filepath: &str, filelength: u64, raw_range_value: &str) -> Result<Vec<ContentRange>, String> {
+    pub(crate) fn parse_content_range(filepath: &str, filelength: u64, raw_range_value: &str) -> Result<Vec<ContentRange>, HTTPError> {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
@@ -82,27 +111,33 @@ impl Range {
 
         let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.COMMA).collect();
         for byte in bytes {
-            let range = Range::parse_range_in_content_range(filelength, byte);
-            let mut buff_length = (range.end - range.start) + 1;
+            let boxed_range = Range::parse_range_in_content_range(filelength, byte);
+            if boxed_range.is_ok() {
+                let range = boxed_range.unwrap();
+                let mut buff_length = (range.end - range.start) + 1;
 
-            let mut file = File::open(filepath).unwrap();
-            let mut reader = BufReader::new(file);
+                let mut file = File::open(filepath).unwrap();
+                let mut reader = BufReader::new(file);
 
-            reader.seek(SeekFrom::Start(range.start));
-            let mut buffer = Vec::new();
-            reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
+                reader.seek(SeekFrom::Start(range.start));
+                let mut buffer = Vec::new();
+                reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
 
-            let content_type = MimeType::detect_mime_type(filepath);
+                let content_type = MimeType::detect_mime_type(filepath);
 
-            let content_range = ContentRange {
-                unit: CONSTANTS.BYTES.to_string(),
-                range,
-                size: filelength.to_string(),
-                body: buffer,
-                content_type,
-            };
+                let content_range = ContentRange {
+                    unit: CONSTANTS.BYTES.to_string(),
+                    range,
+                    size: filelength.to_string(),
+                    body: buffer,
+                    content_type,
+                };
 
-            content_range_list.push(content_range);
+                content_range_list.push(content_range);
+            } else {
+                let error : HTTPError = boxed_range.err().unwrap();
+                return Err(error);
+            }
         }
         Ok(content_range_list)
     }

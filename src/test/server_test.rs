@@ -719,7 +719,7 @@ fn check_range_response_for_not_proper_range_header() {
     let start_of_second_range = mid + 1;
     let not_proper_end_of_second_range = length + 10;
 
-    let range_header_value = format!("bytes=0-{}, {}-{}", end_of_first_range, start_of_second_range, not_proper_end_of_second_range);
+    let range_header_value = format!("bytdgdes=0-{}, tfh {}-{}", end_of_first_range, start_of_second_range, not_proper_end_of_second_range);
 
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";

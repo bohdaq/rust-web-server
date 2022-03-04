@@ -81,6 +81,7 @@ pub const HTTP_VERSIONS: HTTPVersion = HTTPVersion {
     HTTP_VERSION_2_0 : "HTTP/2.0",
 };
 
+#[derive(Debug)]
 pub struct StatusCodeReasonPhrase {
     pub(crate) STATUS_CODE: &'static str,
     pub(crate) REASON_PHRASE: &'static str,
@@ -133,3 +134,9 @@ pub const HTTP_HEADERS: HTTPHeader = HTTPHeader {
     ACCEPT_RANGES: "Accept-Ranges",
     CONTENT_RANGE: "Content-Range",
 };
+
+#[derive(Debug)]
+pub struct HTTPError {
+    pub(crate) STATUS_CODE_REASON_PHRASE: &'static StatusCodeReasonPhrase,
+    pub(crate) MESSAGE: String,
+}

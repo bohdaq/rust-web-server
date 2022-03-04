@@ -232,42 +232,42 @@ fn parse_range_test() {
     let file_length = 2504382;
 
     let byte = "200-1000";
-    let range = Range::parse_range_in_content_range(file_length, byte);
+    let range = Range::parse_range_in_content_range(file_length, byte).unwrap();
     assert_eq!(range.start, 200);
     assert_eq!(range.end, 1000);
 
     let byte = " 1200-1400";
-    let range = Range::parse_range_in_content_range(file_length, byte);
+    let range = Range::parse_range_in_content_range(file_length, byte).unwrap();
     assert_eq!(range.start, 1200);
     assert_eq!(range.end, 1400);
 
     let byte = " 2000-2300 ";
-    let range = Range::parse_range_in_content_range(file_length, byte);
+    let range = Range::parse_range_in_content_range(file_length, byte).unwrap();
     assert_eq!(range.start, 2000);
     assert_eq!(range.end, 2300);
 
     let byte = "  11000- ";
-    let range = Range::parse_range_in_content_range(file_length, byte);
+    let range = Range::parse_range_in_content_range(file_length, byte).unwrap();
     assert_eq!(range.start, 11000);
     assert_eq!(range.end, file_length);
 
     let byte = " -500 ";
-    let range = Range::parse_range_in_content_range(file_length, byte);
+    let range = Range::parse_range_in_content_range(file_length, byte).unwrap();
     assert_eq!(range.start, file_length - 500);
     assert_eq!(range.end, file_length);
 
     let byte = " 0- ";
-    let range = Range::parse_range_in_content_range(file_length, byte);
+    let range = Range::parse_range_in_content_range(file_length, byte).unwrap();
     assert_eq!(range.start, 0);
     assert_eq!(range.end, file_length);
 
     let byte = ["0-", file_length.to_string().as_str()].join("");
-    let range = Range::parse_range_in_content_range(file_length, &byte);
+    let range = Range::parse_range_in_content_range(file_length, &byte).unwrap();
     assert_eq!(range.start, 0);
     assert_eq!(range.end, file_length);
 
     let byte = " 0-1 ";
-    let range = Range::parse_range_in_content_range(file_length, byte);
+    let range = Range::parse_range_in_content_range(file_length, byte).unwrap();
     assert_eq!(range.start, 0);
     assert_eq!(range.end, 1);
 }
