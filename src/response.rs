@@ -224,7 +224,7 @@ impl Response {
                 let mut range_list = vec![];
                 if boxed_value.is_ok() {
                     range_list = boxed_value.unwrap();
-                } 
+                }
                 response.content_range_list = range_list;
             } else {
                 buf = vec![];
