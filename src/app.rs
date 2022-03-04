@@ -88,14 +88,6 @@ impl App {
                 let mut status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
                 let mut reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
 
-
-                let boxed_range_header = request.get_header(HTTP_HEADERS.RANGE.to_string());
-                if boxed_range_header.is_some() {
-                    let range_header = boxed_range_header.unwrap();
-                    // status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.STATUS_CODE;
-                    // reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE;
-                }
-
                 response = Response {
                     http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
                     status_code: status_code.to_string(),
