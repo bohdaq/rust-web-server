@@ -1,3 +1,4 @@
+#[cfg(test)]
 mod range_test;
 mod response_test;
 mod request_test;

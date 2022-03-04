@@ -1,4 +1,4 @@
-use std::{env, fs, thread};
+use std::{thread};
 use std::sync::{Arc, mpsc, Mutex};
 
 pub struct ThreadPool {

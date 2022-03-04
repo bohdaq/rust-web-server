@@ -1,18 +1,11 @@
 use std::io::prelude::*;
-use std::net::TcpStream;
-use std::{env, fs, io};
-use std::borrow::Borrow;
-use std::char::MAX;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Cursor, SeekFrom};
-use std::os::macos::raw::stat;
 use regex::Regex;
 
-use crate::request::Request;
 use crate::response::Response;
-use crate::app::App;
 use crate::{CONSTANTS, Server};
-use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, HTTPError, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES, StatusCodeReasonPhrase};
+use crate::constant::{HTTP_HEADERS, HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 

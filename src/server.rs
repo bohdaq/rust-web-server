@@ -1,14 +1,11 @@
 use std::io::prelude::*;
-use std::net::TcpStream;
-use std::{env, fs, io};
+use std::{env};
 use std::borrow::Borrow;
-use std::io::BufReader;
 
 use crate::request::Request;
 use crate::response::Response;
 use crate::app::App;
 use crate::CONSTANTS;
-use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 pub struct Server {}
 impl Server {
     pub(crate) fn process_request(mut s: impl Read + Write + Unpin) -> Vec<u8> {

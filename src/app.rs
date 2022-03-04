@@ -1,4 +1,4 @@
-use std::{env, fs};
+use std::{env};
 use std::fs::{File, metadata};
 use std::io::Read;
 use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, HTTPError, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};

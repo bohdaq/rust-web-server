@@ -3,10 +3,9 @@ use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use regex::Regex;
 use crate::app::App;
-use crate::constant::{CONSTANTS, HTTP_HEADERS, HTTP_VERSIONS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{CONSTANTS, HTTP_HEADERS};
 use crate::range::{ContentRange, Range};
-use crate::{Request, Server};
-use crate::mime_type::MimeType;
+use crate::{Server};
 
 pub struct Response {
     pub(crate) http_version: String,
