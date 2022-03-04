@@ -224,22 +224,7 @@ impl Response {
                 let mut range_list = vec![];
                 if boxed_value.is_ok() {
                     range_list = boxed_value.unwrap();
-                } else {
-                    let error = boxed_value.err().unwrap();
-                    let content_range = ContentRange {
-                        unit: CONSTANTS.BYTES.to_string(),
-                        range: Range {
-                            start: 0,
-                            end: error.len() as u64
-                        },
-                        size: error.len().to_string(),
-                        body: Vec::from(error),
-                        content_type: content_type.header_value.to_string()
-                    };
-                    range_list.push(content_range);
-                    response.status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE.to_string();
-                    response.reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE.to_string();
-                }
+                } 
                 response.content_range_list = range_list;
             } else {
                 buf = vec![];
