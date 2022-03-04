@@ -91,7 +91,6 @@ impl Request {
         let string = String::from_utf8(Vec::from(b)).unwrap();
 
         let is_first_iteration = iteration_number == 0;
-        let no_more_new_line_chars_found = bytes_offset == 0;
         let new_line_char_found = bytes_offset != 0;
         let current_string_is_empty = string.trim().len() == 0;
 

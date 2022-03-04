@@ -48,7 +48,6 @@ fn check_range_response_is_ok() {
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -122,7 +121,7 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start));
+    reader.seek(SeekFrom::Start(start)).unwrap();
     let mut buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
@@ -139,7 +138,7 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start));
+    reader.seek(SeekFrom::Start(start)).unwrap();
     let mut buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
@@ -155,7 +154,7 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start));
+    reader.seek(SeekFrom::Start(start)).unwrap();
     let mut buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
@@ -171,7 +170,7 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start));
+    reader.seek(SeekFrom::Start(start)).unwrap();
     let mut buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
@@ -187,7 +186,7 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start));
+    reader.seek(SeekFrom::Start(start)).unwrap();
     let mut buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
@@ -203,7 +202,7 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start));
+    reader.seek(SeekFrom::Start(start)).unwrap();
     let mut buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
@@ -220,7 +219,7 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start));
+    reader.seek(SeekFrom::Start(start)).unwrap();
     let mut buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
@@ -450,7 +449,7 @@ fn no_empty_string_between_header_and_body_in_parse_multipart_body() {
 
     use std::io::Cursor;
     let mut buff = Cursor::new(data.as_bytes());
-    let mut content_range_list: Vec<ContentRange> = vec![];
+    let content_range_list: Vec<ContentRange> = vec![];
 
     let boxed_result = Range::parse_multipart_body(&mut buff, content_range_list);
     assert!(boxed_result.is_err());

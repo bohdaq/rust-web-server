@@ -15,11 +15,6 @@ pub struct Response {
     pub(crate) content_range_list: Vec<ContentRange>
 }
 
-pub struct Status {
-    pub is_ok: bool,
-    pub message: String,
-}
-
 impl Response {
     pub(crate) const HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX: &'static str = "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)";
 

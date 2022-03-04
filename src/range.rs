@@ -288,7 +288,7 @@ impl Range {
             return Err(Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.to_string())
         }
 
-        let size_num: u64 = size.parse().unwrap();;
+        let size_num: u64 = size.parse().unwrap();
         if start > size_num {
             return Err(Range::ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string());
         }

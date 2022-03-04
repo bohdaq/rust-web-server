@@ -11,10 +11,7 @@ mod range;
 
 extern crate core;
 
-use std::io::prelude::*;
 use std::net::TcpListener;
-use std::net::TcpStream;
-use std::{env, fs};
 use crate::constant::CONSTANTS;
 
 use crate::request::Request;
