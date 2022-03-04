@@ -152,7 +152,7 @@ impl Range {
         Ok(content_range_list)
     }
 
-    pub(crate) fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, String> {
+    pub(crate) fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, HTTPError> {
         let mut content_range_list : Vec<ContentRange> = vec![];
         let static_filepath = Server::get_static_filepath(request_uri);
 
@@ -161,6 +161,9 @@ impl Range {
             let boxed_content_range_list = Range::parse_content_range(&static_filepath, md.len(), &range.header_value);
             if boxed_content_range_list.is_ok() {
                 content_range_list = boxed_content_range_list.unwrap();
+            } else {
+                let error = boxed_content_range_list.err().unwrap();
+                return Err(error)
             }
         }
 
