@@ -1,7 +1,7 @@
 use std::{env, fs};
 use std::fs::{File, metadata};
 use std::io::Read;
-use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, HTTPError, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::CONSTANTS;
 use crate::header::Header;
 use crate::mime_type::MimeType;
@@ -75,7 +75,8 @@ impl App {
         }
 
         if request.method == REQUEST_METHODS.GET && request.request_uri != CONSTANTS.SLASH {
-            let content_range_list = App::process_static_resources(&request);
+            let boxed_content_range_list = App::process_static_resources(&request);
+            let content_range_list = boxed_content_range_list.unwrap();
 
             if content_range_list.len() != 0 {
                 let content_type = MimeType::detect_mime_type(&request.request_uri);
@@ -108,7 +109,7 @@ impl App {
         response
     }
 
-    pub(crate) fn process_static_resources(request: &Request) -> Vec<ContentRange> {
+    pub(crate) fn process_static_resources(request: &Request) -> Result<Vec<ContentRange>, HTTPError> {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
         let static_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
@@ -132,11 +133,14 @@ impl App {
                 let boxed_content_range_list = Range::get_content_range_list(&request.request_uri, range_header);
                 if boxed_content_range_list.is_ok() {
                     content_range_list = boxed_content_range_list.unwrap();
+                } else {
+                    let error = boxed_content_range_list.err().unwrap();
+                    return Err(error)
                 }
             }
         }
 
-        content_range_list
+        Ok(content_range_list)
     }
 
     pub(crate) fn get_x_content_type_options_header() -> Header {
