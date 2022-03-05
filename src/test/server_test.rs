@@ -915,7 +915,7 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     let start_of_second_range = length + 10;
     let not_proper_end_of_second_range = mid;
 
-    let range_header_value = format!("bytes=0-{}zaksd, {}-{}", end_of_first_range, start_of_second_range, not_proper_end_of_second_range);
+    let range_header_value = format!("bytes=0-{}, {}zaksd-{}", end_of_first_range, start_of_second_range, not_proper_end_of_second_range);
 
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
@@ -961,7 +961,7 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
-    assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_END.as_bytes());
+    assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_START.as_bytes());
 }
 
 #[test]
