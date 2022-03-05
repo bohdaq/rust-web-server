@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use regex::Regex;
-use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS};
+use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::{CONSTANTS, Request, Response, Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
@@ -60,6 +60,9 @@ fn check_range_response_is_ok_two_part() {
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
+
+    assert_eq!(response.status_code, RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.STATUS_CODE);
+    assert_eq!(response.reason_phrase, RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE);
 
     assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
     let header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
@@ -152,6 +155,9 @@ fn check_range_response_is_ok_single_part() {
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
+
+    assert_eq!(response.status_code, RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.STATUS_CODE);
+    assert_eq!(response.reason_phrase, RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE);
 
     assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
     let header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
