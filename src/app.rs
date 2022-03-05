@@ -17,7 +17,7 @@ impl App {
     pub(crate) const NOT_FOUND_PAGE_FILEPATH: &'static str = "404.html";
     pub(crate) const INDEX_FILEPATH: &'static str = "index.html";
 
-    pub(crate) fn handle_request(request: Request) -> Response {
+    pub(crate) fn handle_request(request: Request) -> (Response, Request) {
 
         // by default we assume route or static asset is not found
         let mut file_content = Vec::new();
@@ -74,9 +74,8 @@ impl App {
             };
         }
 
-        if request.method == REQUEST_METHODS.GET && request.request_uri != CONSTANTS.SLASH {
-
-
+        let is_get_or_head = request.method == REQUEST_METHODS.GET || request.method == REQUEST_METHODS.HEAD;
+        if is_get_or_head && request.request_uri != CONSTANTS.SLASH {
             let boxed_content_range_list = App::process_static_resources(&request);
             if boxed_content_range_list.is_ok() {
                 let content_range_list = boxed_content_range_list.unwrap();
@@ -130,7 +129,7 @@ impl App {
 
         }
 
-        response
+        (response, request)
     }
 
     pub(crate) fn process_static_resources(request: &Request) -> Result<Vec<ContentRange>, HTTPError> {

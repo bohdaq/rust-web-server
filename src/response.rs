@@ -3,9 +3,9 @@ use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use regex::Regex;
 use crate::app::App;
-use crate::constant::{CONSTANTS, HTTP_HEADERS};
+use crate::constant::{CONSTANTS, HTTP_HEADERS, REQUEST_METHODS};
 use crate::range::{ContentRange, Range};
-use crate::{Server};
+use crate::{Request, Server};
 
 pub struct Response {
     pub(crate) http_version: String,
@@ -61,7 +61,7 @@ impl Response {
         body
     }
 
-    pub(crate) fn generate_response(mut response: Response) -> Vec<u8> {
+    pub(crate) fn generate_response(mut response: Response, request: Request) -> Vec<u8> {
         let status = [response.http_version, response.status_code, response.reason_phrase].join(CONSTANTS.WHITESPACE);
         let mut headers = vec![
             App::get_x_content_type_options_header(),
@@ -134,10 +134,14 @@ impl Response {
 
         println!("_____RESPONSE w/o body______\n{}", &response_without_body);
 
-        let mut response  = [response_without_body.into_bytes(), body].concat();
+        let mut response_as_vector : Vec<u8> = vec![];
+        if request.method == REQUEST_METHODS.HEAD {
+            response_as_vector = response_without_body.into_bytes();
+        } else {
+            response_as_vector = [response_without_body.into_bytes(), body].concat();
+        }
 
-
-        response
+        response_as_vector
     }
 
     pub(crate) fn parse_response(response_vec_u8: &[u8]) -> Response {
