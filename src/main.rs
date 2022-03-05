@@ -8,6 +8,7 @@ mod thread_pool;
 mod constant;
 mod mime_type;
 mod range;
+mod cors;
 
 extern crate core;
 
