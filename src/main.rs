@@ -27,7 +27,7 @@ fn main() {
     let mut thread_count = 4;
 
     let matches = App::new("rws rust-web-server")
-        .version("0.0.1")
+        .version("0.0.5")
         .author("Bohdan Tsap <bohdan.tsap@tutanota.com>")
         .about("Hi, rust-web-server (rws) is a simple web-server written in Rust. The rws server can serve static content inside the directory it is started.")
         .arg(Arg::new("port")
