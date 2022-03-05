@@ -1029,3 +1029,69 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_END.as_bytes());
 }
+
+#[test]
+fn check_range_response_for_not_proper_range_header_malformed() {
+    let uri = "/static/test.txt";
+    let url = Server::get_static_filepath(uri);
+
+    let file = File::open(url).unwrap();
+    let mut reader = BufReader::new(file);
+    let mut buffer = Vec::new();
+
+    reader.read_to_end(&mut buffer).unwrap();
+
+    let length = buffer.len();
+    let mid = length / 2;
+    let end_of_first_range = mid;
+    let start_of_second_range = length + 10;
+    let not_proper_end_of_second_range = mid;
+
+    let range_header_value = format!("bytes=zaksd");
+
+    let request_host_header_name = "Host";
+    let request_host_header_value = "localhost:7777";
+    let host = Header {
+        header_name: request_host_header_name.to_string(),
+        header_value: request_host_header_value.to_string()
+    };
+
+    let range = Header {
+        header_name: HTTP_HEADERS.RANGE.to_string(),
+        header_value: range_header_value.to_string()
+    };
+
+    let headers = vec![host, range];
+    let request = Request {
+        method: REQUEST_METHODS.GET.to_string(),
+        request_uri: uri.to_string(),
+        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+        headers
+    };
+
+    let raw_request = Request::generate_request(request);
+    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let mock_tcp_stream = MockTcpStream {
+        read_data: raw_request.as_bytes().to_vec(),
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+
+    let response = Response::parse_response(raw_response.borrow());
+
+    let response_string = String::from_utf8(raw_response).unwrap();
+    println!("\n\n\n{}", &raw_request);
+    println!("\n\n\n{}", &response_string);
+
+    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
+    let header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
+    let header = response.get_header(HTTP_HEADERS.ACCEPT_RANGES.to_string()).unwrap();
+    assert_eq!(CONSTANTS.BYTES, header.header_value);
+
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE, response.reason_phrase);
+
+    let content_range = response.content_range_list.get(0).unwrap();
+    assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_START.as_bytes());
+}
