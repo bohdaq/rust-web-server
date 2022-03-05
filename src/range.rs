@@ -5,7 +5,7 @@ use regex::Regex;
 
 use crate::response::Response;
 use crate::{CONSTANTS, Server};
-use crate::constant::{HTTP_HEADERS, HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_HEADERS, HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES, StatusCodeReasonPhrase};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 
@@ -34,6 +34,9 @@ impl Range {
     pub(crate) const ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE: &'static str = "end is bigger than filesize in content range";
     pub(crate) const ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT: &'static str = "range header malformed, most likely you have an error in unit statement";
 
+    pub(crate) const ERROR_UNABLE_TO_PARSE_RANGE_START: &'static str = "unable to parse range start";
+    pub(crate) const ERROR_UNABLE_TO_PARSE_RANGE_END: &'static str = "unable to parse range end";
+
 
     pub(crate) fn parse_range_in_content_range(filelength: u64, range_str: &str) -> Result<Range, HTTPError> {
         const START_INDEX: usize = 0;
@@ -52,10 +55,30 @@ impl Range {
                 start_range_not_provided = false;
             }
             if i == START_INDEX && length != 0 {
-                range.start = num.parse().unwrap();
+                let boxed_start  = num.parse();
+                if boxed_start.is_ok() {
+                    range.start = boxed_start.unwrap()
+                } else {
+                    let message = Range::ERROR_UNABLE_TO_PARSE_RANGE_START.to_string();
+                    let error = HTTPError {
+                        STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
+                        MESSAGE: message.to_string()
+                    };
+                    return Err(error)
+                }
             }
             if i == END_INDEX && length != 0 {
-                range.end = num.parse().unwrap();
+                let boxed_end  = num.parse();
+                if boxed_end.is_ok() {
+                    range.end = boxed_end.unwrap()
+                } else {
+                    let message = Range::ERROR_UNABLE_TO_PARSE_RANGE_END.to_string();
+                    let error = HTTPError {
+                        STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
+                        MESSAGE: message.to_string()
+                    };
+                    return Err(error)
+                }
             }
             if i == END_INDEX && length != 0 && start_range_not_provided {
                 let num_usize : u64 = num.parse().unwrap();
