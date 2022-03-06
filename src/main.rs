@@ -27,8 +27,10 @@ fn main() {
     let mut port = 7878;
     let mut thread_count = 4;
 
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+
     let matches = App::new("rws rust-web-server")
-        .version("0.0.5")
+        .version(VERSION)
         .author("Bohdan Tsap <bohdan.tsap@tutanota.com>")
         .about("Hi, rust-web-server (rws) is a simple web-server written in Rust. The rws server can serve static content inside the directory it is started.")
         .arg(Arg::new("port")
