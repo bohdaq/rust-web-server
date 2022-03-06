@@ -6,6 +6,7 @@ use crate::app::App;
 use crate::constant::{CONSTANTS, REQUEST_METHODS};
 use crate::range::{ContentRange, Range};
 use crate::{Request, Server};
+use crate::cors::Cors;
 
 pub struct Response {
     pub(crate) http_version: String,
@@ -63,10 +64,16 @@ impl Response {
 
     pub(crate) fn generate_response(mut response: Response, request: Request) -> Vec<u8> {
         let status = [response.http_version, response.status_code, response.reason_phrase].join(CONSTANTS.WHITESPACE);
+
+        let is_options = request.method == REQUEST_METHODS.OPTIONS;
+        if is_options {
+            (request, response) = Cors::allow_all(request, response).unwrap();
+        }
+
         let mut headers = vec![
             App::get_x_content_type_options_header(),
             App::get_accept_ranges_header(),
-        ];
+        ].join(response.headers);
 
         if response.content_range_list.len() == 1 {
             let content_range_index = 0;
@@ -137,7 +144,6 @@ impl Response {
         let mut response_as_vector : Vec<u8> = vec![];
 
         let is_head = request.method == REQUEST_METHODS.HEAD;
-        let is_options = request.method == REQUEST_METHODS.OPTIONS;
         if is_head || is_options {
             response_as_vector = response_without_body.into_bytes();
         } else {
