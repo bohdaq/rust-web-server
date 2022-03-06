@@ -5,7 +5,7 @@ use std::io::{BufReader, Read, Write};
 
 use std::cmp::min;
 
-use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::{CONSTANTS, Request, Response, Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
@@ -93,8 +93,8 @@ fn it_generates_successful_response_with_index_html() {
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
@@ -165,8 +165,8 @@ fn it_generates_successful_response_with_static_file() {
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
@@ -239,8 +239,8 @@ fn it_generates_not_found_page_for_absent_static_file() {
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
@@ -313,8 +313,8 @@ fn it_generates_not_found_page_for_absent_route() {
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
@@ -387,8 +387,8 @@ fn it_generates_not_found_page_for_static_directory() {
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
@@ -461,8 +461,8 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
@@ -535,8 +535,8 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
@@ -609,8 +609,8 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
@@ -686,8 +686,8 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
@@ -762,8 +762,8 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
@@ -802,7 +802,7 @@ fn check_range_response_for_not_proper_range_header() {
     };
 
     let range = Header {
-        header_name: HTTP_HEADERS.RANGE.to_string(),
+        header_name: Header::RANGE.to_string(),
         header_value: range_header_value.to_string()
     };
 
@@ -829,9 +829,9 @@ fn check_range_response_for_not_proper_range_header() {
     println!("\n\n\n{}", &response_string);
 
     assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
-    let header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
-    let header = response.get_header(HTTP_HEADERS.ACCEPT_RANGES.to_string()).unwrap();
+    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.BYTES, header.header_value);
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
@@ -868,7 +868,7 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
     };
 
     let range = Header {
-        header_name: HTTP_HEADERS.RANGE.to_string(),
+        header_name: Header::RANGE.to_string(),
         header_value: range_header_value.to_string()
     };
 
@@ -895,9 +895,9 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
     println!("\n\n\n{}", &response_string);
 
     assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
-    let header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
-    let header = response.get_header(HTTP_HEADERS.ACCEPT_RANGES.to_string()).unwrap();
+    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.BYTES, header.header_value);
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
@@ -934,7 +934,7 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     };
 
     let range = Header {
-        header_name: HTTP_HEADERS.RANGE.to_string(),
+        header_name: Header::RANGE.to_string(),
         header_value: range_header_value.to_string()
     };
 
@@ -961,9 +961,9 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     println!("\n\n\n{}", &response_string);
 
     assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
-    let header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
-    let header = response.get_header(HTTP_HEADERS.ACCEPT_RANGES.to_string()).unwrap();
+    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.BYTES, header.header_value);
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
@@ -1000,7 +1000,7 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     };
 
     let range = Header {
-        header_name: HTTP_HEADERS.RANGE.to_string(),
+        header_name: Header::RANGE.to_string(),
         header_value: range_header_value.to_string()
     };
 
@@ -1027,9 +1027,9 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     println!("\n\n\n{}", &response_string);
 
     assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
-    let header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
-    let header = response.get_header(HTTP_HEADERS.ACCEPT_RANGES.to_string()).unwrap();
+    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.BYTES, header.header_value);
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
@@ -1066,7 +1066,7 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     };
 
     let range = Header {
-        header_name: HTTP_HEADERS.RANGE.to_string(),
+        header_name: Header::RANGE.to_string(),
         header_value: range_header_value.to_string()
     };
 
@@ -1093,9 +1093,9 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     println!("\n\n\n{}", &response_string);
 
     assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
-    let header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
-    let header = response.get_header(HTTP_HEADERS.ACCEPT_RANGES.to_string()).unwrap();
+    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.BYTES, header.header_value);
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
@@ -1132,7 +1132,7 @@ fn check_range_response_for_not_proper_range_header_malformed() {
     };
 
     let range = Header {
-        header_name: HTTP_HEADERS.RANGE.to_string(),
+        header_name: Header::RANGE.to_string(),
         header_value: range_header_value.to_string()
     };
 
@@ -1159,9 +1159,9 @@ fn check_range_response_for_not_proper_range_header_malformed() {
     println!("\n\n\n{}", &response_string);
 
     assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
-    let header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
-    let header = response.get_header(HTTP_HEADERS.ACCEPT_RANGES.to_string()).unwrap();
+    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.BYTES, header.header_value);
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);

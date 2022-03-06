@@ -3,7 +3,7 @@ use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use regex::Regex;
 use crate::app::App;
-use crate::constant::{CONSTANTS, HTTP_HEADERS, REQUEST_METHODS};
+use crate::constant::{CONSTANTS, REQUEST_METHODS};
 use crate::range::{ContentRange, Range};
 use crate::{Request, Server};
 
@@ -41,10 +41,10 @@ impl Response {
                 }
                 body_str.push_str(CONSTANTS.SEPARATOR);
                 body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
-                let content_type = [HTTP_HEADERS.CONTENT_TYPE, CONSTANTS.HEADER_NAME_VALUE_SEPARATOR, CONSTANTS.WHITESPACE, &content_range.content_type.to_string()].join("");
+                let content_type = [Header::CONTENT_TYPE, CONSTANTS.HEADER_NAME_VALUE_SEPARATOR, CONSTANTS.WHITESPACE, &content_range.content_type.to_string()].join("");
                 body_str.push_str(content_type.as_str());
                 body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
-                let content_range_header = [HTTP_HEADERS.CONTENT_RANGE, CONSTANTS.HEADER_NAME_VALUE_SEPARATOR, CONSTANTS.WHITESPACE, CONSTANTS.BYTES, CONSTANTS.WHITESPACE, &content_range.range.start.to_string(), CONSTANTS.HYPHEN, &content_range.range.end.to_string(), CONSTANTS.SLASH, &content_range.size].join("");
+                let content_range_header = [Header::CONTENT_RANGE, CONSTANTS.HEADER_NAME_VALUE_SEPARATOR, CONSTANTS.WHITESPACE, CONSTANTS.BYTES, CONSTANTS.WHITESPACE, &content_range.range.start.to_string(), CONSTANTS.HYPHEN, &content_range.range.end.to_string(), CONSTANTS.SLASH, &content_range.size].join("");
                 body_str.push_str(content_range_header.as_str());
                 body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
                 body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
@@ -72,7 +72,7 @@ impl Response {
             let content_range_index = 0;
             let content_range = response.content_range_list.get(content_range_index).unwrap();
             headers.push(Header {
-                header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
+                header_name: Header::CONTENT_TYPE.to_string(),
                 header_value: content_range.content_type.to_string()
             });
 
@@ -86,12 +86,12 @@ impl Response {
                 &content_range.size
             ].join("");
             headers.push(Header {
-                header_name: HTTP_HEADERS.CONTENT_RANGE.to_string(),
+                header_name: Header::CONTENT_RANGE.to_string(),
                 header_value: content_range_header_value.to_string()
             });
 
             headers.push(Header {
-                header_name: HTTP_HEADERS.CONTENT_LENGTH.to_string(),
+                header_name: Header::CONTENT_LENGTH.to_string(),
                 header_value: content_range.body.len().to_string()
             });
         }
@@ -108,7 +108,7 @@ impl Response {
                 CONSTANTS.STRING_SEPARATOR
             ].join("");
             headers.push(Header {
-                header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
+                header_name: Header::CONTENT_TYPE.to_string(),
                 header_value: content_range_header_value,
             });
         }
@@ -213,7 +213,7 @@ impl Response {
 
         if current_string_is_empty {
             println!("end of headers... parse message length: {}", content_length);
-            let content_type = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+            let content_type = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
             let is_multipart = Response::is_multipart_byteranges_content_type(&content_type);
 
             if is_multipart {
@@ -253,7 +253,7 @@ impl Response {
             if !is_first_iteration {
                 header = Response::parse_http_response_header_string(&string);
                 println!("{}: {}", &header.header_name, &header.header_value);
-                if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
+                if header.header_name == Header::CONTENT_LENGTH {
                     content_length = header.header_value.parse().unwrap();
                 }
             }

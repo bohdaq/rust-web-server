@@ -1,6 +1,6 @@
 use std::{env, fs};
 use std::borrow::Borrow;
-use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::header::Header;
 use crate::{CONSTANTS, Request, Response, Server};
 use crate::mime_type::MimeType;
@@ -88,10 +88,10 @@ fn cors_options_preflight_request() {
     let content_length_header = response.get_header(response_content_length_header_name.to_string()).unwrap();
     assert_eq!(response_content_length_header_value, content_length_header.header_value);
 
-    let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     assert_eq!(MimeType::APPLICATION_JSON, content_type_header.header_value);
 
-    let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
 
 
@@ -157,8 +157,8 @@ fn it_generates_successful_response_with_static_file() {
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
     assert_eq!(MimeType::APPLICATION_JSON, content_type_header.header_value);

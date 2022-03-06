@@ -3,7 +3,7 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use regex::Regex;
-use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::header::Header;
 use crate::{CONSTANTS, Request, Response};
 use crate::mime_type::MimeType;
@@ -12,7 +12,7 @@ use crate::range::{ContentRange, Range};
 #[test]
 fn check_is_multipart_byteranges_content_type() {
     let content_type = Header {
-        header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
+        header_name: Header::CONTENT_TYPE.to_string(),
         header_value: "multipart/byteranges; boundary=String_separator".to_string(),
     };
 

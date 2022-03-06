@@ -2,7 +2,7 @@ use std::io;
 use std::io::{BufRead, Cursor};
 use crate::header::Header;
 use regex::Regex;
-use crate::constant::{CONSTANTS, HTTP_HEADERS};
+use crate::constant::{CONSTANTS};
 use crate::Server;
 
 pub struct Request {
@@ -113,7 +113,7 @@ impl Request {
             let mut header = Header { header_name: "".to_string(), header_value: "".to_string() };
             if !is_first_iteration {
                 header = Request::parse_http_request_header_string(&string);
-                if header.header_name == HTTP_HEADERS.CONTENT_LENGTH {
+                if header.header_name == Header::CONTENT_LENGTH {
                     content_length = header.header_value.parse().unwrap();
                     println!("content_length: {}", content_length);
                 }

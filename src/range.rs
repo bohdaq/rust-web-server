@@ -5,7 +5,7 @@ use regex::Regex;
 
 use crate::response::Response;
 use crate::{CONSTANTS, Server};
-use crate::constant::{HTTP_HEADERS, HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES, StatusCodeReasonPhrase};
+use crate::constant::{HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES, StatusCodeReasonPhrase};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 
@@ -213,7 +213,7 @@ impl Range {
         }
 
         let content_type_is_not_parsed = content_range.content_type.len() == 0;
-        if string.starts_with(HTTP_HEADERS.CONTENT_TYPE) && content_type_is_not_parsed {
+        if string.starts_with(Header::CONTENT_TYPE) && content_type_is_not_parsed {
             let content_type = Response::parse_http_response_header_string(string.as_str());
             content_range.content_type = content_type.header_value.trim().to_string();
 
@@ -223,7 +223,7 @@ impl Range {
         }
 
         let content_range_is_not_parsed = content_range.size.len() == 0;
-        if string.starts_with(HTTP_HEADERS.CONTENT_RANGE) && content_range_is_not_parsed {
+        if string.starts_with(Header::CONTENT_RANGE) && content_range_is_not_parsed {
             let content_range_header = Response::parse_http_response_header_string(string.as_str());
 
             let boxed_result = Range::parse_content_range_header_value(content_range_header.header_value);

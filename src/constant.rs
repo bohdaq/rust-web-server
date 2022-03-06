@@ -123,24 +123,6 @@ pub const RESPONSE_STATUS_CODE_REASON_PHRASES: ResponseStatusCodeReasonPhrase = 
 
 };
 
-pub struct HTTPHeader {
-    pub(crate) CONTENT_TYPE: &'static str,
-    pub(crate) CONTENT_LENGTH: &'static str,
-    pub(crate) X_CONTENT_TYPE_OPTIONS: &'static str,
-    pub(crate) RANGE: &'static str,
-    pub(crate) ACCEPT_RANGES: &'static str,
-    pub(crate) CONTENT_RANGE: &'static str,
-}
-
-pub const HTTP_HEADERS: HTTPHeader = HTTPHeader {
-    CONTENT_TYPE: "Content-Type",
-    X_CONTENT_TYPE_OPTIONS: "X-Content-Type-Options",
-    CONTENT_LENGTH: "Content-Length",
-    RANGE: "Range",
-    ACCEPT_RANGES: "Accept-Ranges",
-    CONTENT_RANGE: "Content-Range",
-};
-
 #[derive(Debug)]
 pub struct HTTPError {
     pub(crate) STATUS_CODE_REASON_PHRASE: &'static StatusCodeReasonPhrase,

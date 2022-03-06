@@ -1,7 +1,7 @@
 use std::{env};
 use std::fs::{File, metadata};
 use std::io::Read;
-use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, HTTPError, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_VERSIONS, HTTPError, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::CONSTANTS;
 use crate::header::Header;
 use crate::mime_type::MimeType;
@@ -86,14 +86,14 @@ impl App {
                     let content_type = MimeType::detect_mime_type(&request.request_uri);
 
                     let content_type_header = Header {
-                        header_name: HTTP_HEADERS.CONTENT_TYPE.to_string(),
+                        header_name: Header::CONTENT_TYPE.to_string(),
                         header_value: content_type,
                     };
 
                     let mut status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
                     let mut reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
 
-                    let does_request_include_range_header = request.get_header(HTTP_HEADERS.RANGE.to_string()).is_some();
+                    let does_request_include_range_header = request.get_header(Header::RANGE.to_string()).is_some();
                     if does_request_include_range_header {
                         status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.STATUS_CODE;
                         reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE;
@@ -158,11 +158,11 @@ impl App {
             let md = metadata(&static_filepath).unwrap();
             if md.is_file() {
                 let mut range_header = &Header {
-                    header_name: HTTP_HEADERS.RANGE.to_string(),
+                    header_name: Header::RANGE.to_string(),
                     header_value: "bytes=0-".to_string()
                 };
 
-                let boxed_header = request.get_header(HTTP_HEADERS.RANGE.to_string());
+                let boxed_header = request.get_header(Header::RANGE.to_string());
                 if boxed_header.is_some() {
                     range_header = boxed_header.unwrap();
                 }
@@ -182,14 +182,14 @@ impl App {
 
     pub(crate) fn get_x_content_type_options_header() -> Header {
         Header {
-            header_name: HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string(),
+            header_name: Header::X_CONTENT_TYPE_OPTIONS.to_string(),
             header_value: CONSTANTS.NOSNIFF.to_string(),
         }
     }
 
     pub(crate) fn get_accept_ranges_header() -> Header {
         Header {
-            header_name: HTTP_HEADERS.ACCEPT_RANGES.to_string(),
+            header_name: Header::ACCEPT_RANGES.to_string(),
             header_value: CONSTANTS.BYTES.to_string(),
         }
     }

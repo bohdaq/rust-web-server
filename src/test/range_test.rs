@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use regex::Regex;
-use crate::constant::{HTTP_HEADERS, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::{CONSTANTS, Request, Response, Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
@@ -35,7 +35,7 @@ fn check_range_response_is_ok_two_part() {
     };
 
     let range = Header {
-        header_name: HTTP_HEADERS.RANGE.to_string(),
+        header_name: Header::RANGE.to_string(),
         header_value: range_header_value.to_string()
     };
 
@@ -65,11 +65,11 @@ fn check_range_response_is_ok_two_part() {
     assert_eq!(response.reason_phrase, RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE);
 
     assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
-    let header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
-    let header = response.get_header(HTTP_HEADERS.ACCEPT_RANGES.to_string()).unwrap();
+    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.BYTES, header.header_value);
-    let header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+    let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let value = [
         CONSTANTS.MULTIPART,
         CONSTANTS.SLASH,
@@ -130,7 +130,7 @@ fn check_range_response_is_ok_single_part() {
     };
 
     let range = Header {
-        header_name: HTTP_HEADERS.RANGE.to_string(),
+        header_name: Header::RANGE.to_string(),
         header_value: range_header_value.to_string()
     };
 
@@ -160,11 +160,11 @@ fn check_range_response_is_ok_single_part() {
     assert_eq!(response.reason_phrase, RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE);
 
     assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
-    let header = response.get_header(HTTP_HEADERS.X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
-    let header = response.get_header(HTTP_HEADERS.ACCEPT_RANGES.to_string()).unwrap();
+    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.BYTES, header.header_value);
-    let header = response.get_header(HTTP_HEADERS.CONTENT_TYPE.to_string()).unwrap();
+    let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let value = MimeType::TEXT_PLAIN.to_string();
     assert_eq!(value, header.header_value);
 
@@ -185,7 +185,7 @@ fn get_right_content_range_of_a_file() {
     let file_size = md.len();
 
     let header = Header {
-        header_name: HTTP_HEADERS.RANGE.to_string(),
+        header_name: Header::RANGE.to_string(),
         header_value: "bytes=200-1000, 1200-1400, 2000-2300, 11000-, -500, 0-, 0-1".to_string()
     };
 
