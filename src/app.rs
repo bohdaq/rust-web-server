@@ -84,12 +84,6 @@ impl App {
                 let content_range_list = boxed_content_range_list.unwrap();
 
                 if content_range_list.len() != 0 {
-                    let content_type = MimeType::detect_mime_type(&request.request_uri);
-
-                    let content_type_header = Header {
-                        header_name: Header::CONTENT_TYPE.to_string(),
-                        header_value: content_type,
-                    };
 
                     let mut status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
                     let mut reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
@@ -110,9 +104,7 @@ impl App {
                         http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
                         status_code: status_code.to_string(),
                         reason_phrase: reason_phrase.to_string(),
-                        headers: vec![
-                            content_type_header,
-                        ],
+                        headers: vec![],
                         content_range_list,
                     };
 

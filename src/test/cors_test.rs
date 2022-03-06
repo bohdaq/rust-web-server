@@ -120,7 +120,7 @@ fn cors_options_preflight_request() {
 #[test]
 fn it_generates_successful_response_with_static_file() {
     // request test data
-    let request_host_header_name = "Host";
+    let request_host_header_name = Header::HOST;
     let request_host_header_value = "localhost:7777";
     let request_method = REQUEST_METHODS.GET;
     let request_uri = "/static/test.json";
