@@ -19,6 +19,18 @@ impl Cors {
             response.headers.push(allow_origin);
         }
 
+        let allow_credentials = Header {
+            header_name: Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
+            header_value: "true".to_string()
+        };
+        response.headers.push(allow_credentials);
+
+        let vary = Header {
+            header_name: Header::VARY.to_string(),
+            header_value: Header::ORIGIN.to_string()
+        };
+        response.headers.push(vary);
+
         let is_options = request.method == REQUEST_METHODS.OPTIONS;
         if is_options {
             let method = request.get_header(Header::ACCESS_CONTROL_REQUEST_METHOD.to_string());
@@ -51,18 +63,6 @@ impl Cors {
                 header_value: Cors::MAX_AGE.to_string()
             };
             response.headers.push(max_age);
-
-            let allow_credentials = Header {
-                header_name: Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
-                header_value: "true".to_string()
-            };
-            response.headers.push(allow_credentials);
-
-            let vary = Header {
-                header_name: Header::VARY.to_string(),
-                header_value: Header::ORIGIN.to_string()
-            };
-            response.headers.push(vary);
         }
 
         Ok((request, response))
