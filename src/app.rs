@@ -3,6 +3,7 @@ use std::fs::{File, metadata};
 use std::io::Read;
 use crate::constant::{HTTP_VERSIONS, HTTPError, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::CONSTANTS;
+use crate::cors::Cors;
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
@@ -17,7 +18,7 @@ impl App {
     pub(crate) const NOT_FOUND_PAGE_FILEPATH: &'static str = "404.html";
     pub(crate) const INDEX_FILEPATH: &'static str = "index.html";
 
-    pub(crate) fn handle_request(request: Request) -> (Response, Request) {
+    pub(crate) fn handle_request(mut request: Request) -> (Response, Request) {
 
         // by default we assume route or static asset is not found
         let mut file_content = Vec::new();
@@ -114,6 +115,8 @@ impl App {
                         ],
                         content_range_list,
                     };
+
+                    (request, response) = Cors::allow_all(request, response).unwrap();
                 }
             } else {
                 let error : HTTPError = boxed_content_range_list.err().unwrap();

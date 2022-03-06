@@ -63,11 +63,6 @@ impl Response {
     }
 
     pub(crate) fn generate_response(mut response: Response, mut request: Request) -> Vec<u8> {
-        let is_options = request.method == REQUEST_METHODS.OPTIONS;
-        if is_options {
-            (request, response) = Cors::allow_all(request, response).unwrap();
-        }
-
         let mut headers = vec![
             App::get_x_content_type_options_header(),
             App::get_accept_ranges_header(),
@@ -144,6 +139,7 @@ impl Response {
         let mut response_as_vector : Vec<u8> = vec![];
 
         let is_head = request.method == REQUEST_METHODS.HEAD;
+        let is_options = request.method == REQUEST_METHODS.OPTIONS;
         if is_head || is_options {
             response_as_vector = response_without_body.into_bytes();
         } else {
