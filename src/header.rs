@@ -13,8 +13,15 @@ impl Header {
     pub(crate) const ACCEPT_RANGES: &'static str = "Accept-Ranges";
     pub(crate) const CONTENT_RANGE: &'static str = "Content-Range";
     pub(crate) const HOST: &'static str = "Host";
+    pub(crate) const VARY: &'static str = "Vary";
     pub(crate) const ORIGIN: &'static str = "Origin";
+
     pub(crate) const ACCESS_CONTROL_REQUEST_METHOD: &'static str = "Access-Control-Request-Method";
     pub(crate) const ACCESS_CONTROL_REQUEST_HEADERS: &'static str = "Access-Control-Request-Headers";
+    pub(crate) const ACCESS_CONTROL_ALLOW_ORIGIN: &'static str = "Access-Control-Allow-Origin";
+    pub(crate) const ACCESS_CONTROL_ALLOW_METHODS: &'static str = "Access-Control-Allow-Methods";
+    pub(crate) const ACCESS_CONTROL_ALLOW_HEADERS: &'static str = "Access-Control-Allow-Headers";
+    pub(crate) const ACCESS_CONTROL_MAX_AGE: &'static str = "Access-Control-Max-Age";
+
 }
 
