@@ -3,6 +3,7 @@ use std::borrow::Borrow;
 use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::header::Header;
 use crate::{CONSTANTS, Request, Response, Server};
+use crate::cors::Cors;
 use crate::mime_type::MimeType;
 use crate::test::server_test::MockTcpStream;
 
@@ -94,7 +95,17 @@ fn cors_options_preflight_request() {
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
 
+    let access_control_allow_origin_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
+    assert_eq!(request_origin_header_value, access_control_allow_origin_header.header_value);
 
+    let access_control_allow_methods_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
+    assert!(access_control_allow_methods_header.header_value.contains(request_access_control_request_method_header_value));
+
+    let access_control_allow_headers_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
+    assert_eq!(request_access_control_request_headers_header_value, access_control_allow_headers_header.header_value);
+
+    let access_control_max_age_header = response.get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
+    assert_eq!(Cors::MAX_AGE, access_control_max_age_header.header_value);
 }
 
 #[test]
