@@ -21,7 +21,9 @@ impl Header {
     pub(crate) const ACCESS_CONTROL_ALLOW_ORIGIN: &'static str = "Access-Control-Allow-Origin";
     pub(crate) const ACCESS_CONTROL_ALLOW_METHODS: &'static str = "Access-Control-Allow-Methods";
     pub(crate) const ACCESS_CONTROL_ALLOW_HEADERS: &'static str = "Access-Control-Allow-Headers";
+    pub(crate) const ACCESS_CONTROL_ALLOW_CREDENTIALS: &'static str = "Access-Control-Allow-Credentials";
     pub(crate) const ACCESS_CONTROL_MAX_AGE: &'static str = "Access-Control-Max-Age";
+    pub(crate) const ACCESS_CONTROL_EXPOSE_HEADERS: &'static str = "Access-Control-Expose-Headers";
 
 }
 

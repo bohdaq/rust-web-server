@@ -104,8 +104,17 @@ fn cors_options_preflight_request() {
     let access_control_allow_headers_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
     assert_eq!(request_access_control_request_headers_header_value, access_control_allow_headers_header.header_value);
 
+    let access_control_allow_credentials_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
+    assert_eq!("true", access_control_allow_credentials_header.header_value);
+
+    let access_control_expose_headers_header = response.get_header(Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string()).unwrap();
+    assert_eq!(request_access_control_request_headers_header_value, access_control_expose_headers_header.header_value);
+
     let access_control_max_age_header = response.get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
     assert_eq!(Cors::MAX_AGE, access_control_max_age_header.header_value);
+
+    let vary_header = response.get_header(Header::VARY.to_string()).unwrap();
+    assert_eq!(Header::ORIGIN, vary_header.header_value);
 }
 
 #[test]
