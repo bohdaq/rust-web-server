@@ -14,28 +14,28 @@ fn cors_options_preflight_request() {
     let request_uri = "/static/test.json";
     let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
 
-    let request_host_header_name = "Host";
+    let request_host_header_name = Header::HOST;
     let request_host_header_value = "localhost:7777";
     let host = Header {
         header_name: request_host_header_name.to_string(),
         header_value: request_host_header_value.to_string()
     };
 
-    let request_origin_header_name = "Origin";
+    let request_origin_header_name = Header::ORIGIN;
     let request_origin_header_value = "https://foo.example";
     let origin = Header {
         header_name: request_origin_header_name.to_string(),
         header_value: request_origin_header_value.to_string()
     };
 
-    let request_access_control_request_method_header_name = "Access-Control-Request-Method";
+    let request_access_control_request_method_header_name = Header::ACCESS_CONTROL_REQUEST_METHOD;
     let request_access_control_request_method_header_value = "POST";
     let access_control_request_method = Header {
         header_name: request_access_control_request_method_header_name.to_string(),
         header_value: request_access_control_request_method_header_value.to_string()
     };
 
-    let request_access_control_request_headers_header_name = "Access-Control-Request-Headers";
+    let request_access_control_request_headers_header_name = Header::ACCESS_CONTROL_REQUEST_HEADERS;
     let request_access_control_request_headers_header_value = "X-PINGOTHER, Content-Type";
     let access_control_request_headers = Header {
         header_name: request_access_control_request_headers_header_name.to_string(),
@@ -70,7 +70,7 @@ fn cors_options_preflight_request() {
 
     let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
-    let response_content_length_header_name = "Content-Length";
+    let response_content_length_header_name = Header::CONTENT_LENGTH;
     let response_content_length_header_value = response_html_file.len().to_string();
 
     let mock_tcp_stream = MockTcpStream {
