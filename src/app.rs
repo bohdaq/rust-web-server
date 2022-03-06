@@ -74,8 +74,10 @@ impl App {
             };
         }
 
-        let is_get_or_head = request.method == REQUEST_METHODS.GET || request.method == REQUEST_METHODS.HEAD;
-        if is_get_or_head && request.request_uri != CONSTANTS.SLASH {
+        let is_get = request.method == REQUEST_METHODS.GET;
+        let is_head = request.method == REQUEST_METHODS.HEAD;
+        let is_options = request.method == REQUEST_METHODS.OPTIONS;
+        if is_get || is_head || is_options && request.request_uri != CONSTANTS.SLASH {
             let boxed_content_range_list = App::process_static_resources(&request);
             if boxed_content_range_list.is_ok() {
                 let content_range_list = boxed_content_range_list.unwrap();
@@ -95,6 +97,12 @@ impl App {
                     if does_request_include_range_header {
                         status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.STATUS_CODE;
                         reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE;
+                    }
+
+                    let is_options_request = request.method == REQUEST_METHODS.OPTIONS;
+                    if is_options_request {
+                        status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N204_NO_CONTENT.STATUS_CODE;
+                        reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N204_NO_CONTENT.REASON_PHRASE;
                     }
 
                     response = Response {

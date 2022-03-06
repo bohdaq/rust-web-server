@@ -89,6 +89,7 @@ pub struct StatusCodeReasonPhrase {
 
 pub struct ResponseStatusCodeReasonPhrase {
     pub(crate) N200_OK: &'static StatusCodeReasonPhrase,
+    pub(crate) N204_NO_CONTENT: &'static StatusCodeReasonPhrase,
     pub(crate) N206_PARTIAL_CONTENT: &'static StatusCodeReasonPhrase,
     pub(crate) N404_NOT_FOUND: &'static StatusCodeReasonPhrase,
     pub(crate) N416_RANGE_NOT_SATISFIABLE: &'static StatusCodeReasonPhrase,
@@ -98,6 +99,11 @@ pub const RESPONSE_STATUS_CODE_REASON_PHRASES: ResponseStatusCodeReasonPhrase = 
     N200_OK: &StatusCodeReasonPhrase {
         STATUS_CODE: "200",
         REASON_PHRASE: "OK"
+    },
+
+    N204_NO_CONTENT: &StatusCodeReasonPhrase {
+        STATUS_CODE: "204",
+        REASON_PHRASE: "No Content"
     },
 
     N206_PARTIAL_CONTENT: &StatusCodeReasonPhrase {

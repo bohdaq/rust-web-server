@@ -135,7 +135,10 @@ impl Response {
         println!("_____RESPONSE w/o body______\n{}", &response_without_body);
 
         let mut response_as_vector : Vec<u8> = vec![];
-        if request.method == REQUEST_METHODS.HEAD {
+
+        let is_head = request.method == REQUEST_METHODS.HEAD;
+        let is_options = request.method == REQUEST_METHODS.OPTIONS;
+        if is_head || is_options {
             response_as_vector = response_without_body.into_bytes();
         } else {
             response_as_vector = [response_without_body.into_bytes(), body].concat();
