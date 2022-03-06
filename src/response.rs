@@ -62,9 +62,7 @@ impl Response {
         body
     }
 
-    pub(crate) fn generate_response(mut response: Response, request: Request) -> Vec<u8> {
-        let status = [response.http_version, response.status_code, response.reason_phrase].join(CONSTANTS.WHITESPACE);
-
+    pub(crate) fn generate_response(mut response: Response, mut request: Request) -> Vec<u8> {
         let is_options = request.method == REQUEST_METHODS.OPTIONS;
         if is_options {
             (request, response) = Cors::allow_all(request, response).unwrap();
@@ -73,7 +71,9 @@ impl Response {
         let mut headers = vec![
             App::get_x_content_type_options_header(),
             App::get_accept_ranges_header(),
-        ].join(response.headers);
+        ];
+
+        headers.append(&mut response.headers);
 
         if response.content_range_list.len() == 1 {
             let content_range_index = 0;
@@ -131,7 +131,7 @@ impl Response {
             header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
             headers_str.push_str(&header_string);
         }
-
+        let status = [response.http_version, response.status_code, response.reason_phrase].join(CONSTANTS.WHITESPACE);
         let response_without_body = format!(
             "{}{}{}",
             status,

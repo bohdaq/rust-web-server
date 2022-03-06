@@ -111,8 +111,6 @@ impl App {
                         reason_phrase: reason_phrase.to_string(),
                         headers: vec![
                             content_type_header,
-                            App::get_x_content_type_options_header(),
-                            App::get_accept_ranges_header(),
                         ],
                         content_range_list,
                     };

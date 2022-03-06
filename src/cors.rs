@@ -14,7 +14,7 @@ impl Cors {
         if origin.is_some() {
             let allow_origin = Header {
                 header_name: Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
-                header_value: origin.unwrap().to_string()
+                header_value: origin.unwrap().header_value.to_string()
             };
             response.headers.push(allow_origin);
         }
@@ -23,7 +23,7 @@ impl Cors {
         if method.is_some() {
             let allow_method = Header {
                 header_name: Header::ACCESS_CONTROL_ALLOW_METHODS.to_string(),
-                header_value: method.unwrap().to_string()
+                header_value: method.unwrap().header_value.to_string()
             };
             response.headers.push(allow_method);
         }
@@ -33,13 +33,13 @@ impl Cors {
             let request_headers = headers.unwrap();
             let allow_headers = Header {
                 header_name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
-                header_value: request_headers.to_string()
+                header_value: request_headers.header_value.to_string()
             };
             response.headers.push(allow_headers);
 
             let expose_headers = Header {
                 header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
-                header_value: request_headers.to_string()
+                header_value: request_headers.header_value.to_string()
             };
             response.headers.push(expose_headers);
         }
@@ -54,6 +54,13 @@ impl Cors {
             header_name: Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
             header_value: "true".to_string()
         };
+        response.headers.push(allow_credentials);
+
+        let vary = Header {
+            header_name: Header::VARY.to_string(),
+            header_value: Header::ORIGIN.to_string()
+        };
+        response.headers.push(vary);
 
 
         Ok((request, response))
