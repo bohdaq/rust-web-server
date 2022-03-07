@@ -219,7 +219,67 @@ fn actual_request_after_preflight() {
 
 #[test]
 fn cors_allow_all() {
-    //TODO:
+    let origin_value = "origin-value.com";
+    let custom_header = "X-CUSTOM-HEADER";
+
+    let expected_allow_headers = format!("{}, {}", Header::CONTENT_TYPE, custom_header);
+
+    let mut request = Request {
+        method: REQUEST_METHODS.OPTIONS.to_string(),
+        request_uri: "".to_string(),
+        http_version: "".to_string(),
+        headers: vec![
+            Header {
+                header_name: Header::ORIGIN.to_string(),
+                header_value: origin_value.to_string()
+            },
+            Header {
+                header_name: Header::ACCESS_CONTROL_REQUEST_METHOD.to_string(),
+                header_value: REQUEST_METHODS.POST.to_string()
+            },
+            Header {
+                header_name: Header::ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
+                header_value: expected_allow_headers
+            },
+        ],
+    };
+
+    let mut response = Response {
+        http_version: "".to_string(),
+        status_code: "".to_string(),
+        reason_phrase: "".to_string(),
+        headers: vec![],
+        content_range_list: vec![]
+    };
+
+    (request, response) = Cors::allow_all(request, response).unwrap();
+
+    let allow_origins = response.get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
+    assert_eq!(origin_value, allow_origins.header_value);
+
+    let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
+    assert_eq!(REQUEST_METHODS.POST, allow_methods.header_value);
+
+    let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
+    let expected_allow_headers = format!("{}, {}", Header::CONTENT_TYPE, custom_header);
+    assert_eq!(expected_allow_headers, allow_headers.header_value);
+
+    let allow_credentials = response.get_header(Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
+    assert_eq!("true", allow_credentials.header_value);
+
+    let expose_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
+    let expected_expose_headers = format!("{}, {}", Header::CONTENT_TYPE, custom_header);
+    assert_eq!(expected_expose_headers, expose_headers.header_value);
+
+    let max_age = response.get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
+    assert_eq!(Cors::MAX_AGE, max_age.header_value);
+
+    let vary = response.get_header(Header::VARY.to_string()).unwrap();
+    assert_eq!(Header::ORIGIN.to_string(), vary.header_value);
+
+    let raw_response = Response::generate_response(response, request);
+    let response_string = String::from_utf8(raw_response).unwrap();
+    println!("{}", response_string);
 }
 
 #[test]
