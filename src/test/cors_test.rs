@@ -216,3 +216,13 @@ fn actual_request_after_preflight() {
     assert_eq!("true", access_control_allow_credentials_header.header_value);
 
 }
+
+#[test]
+fn cors_allow_all() {
+    //TODO:
+}
+
+#[test]
+fn cors_process() {
+    //TODO:
+}
