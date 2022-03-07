@@ -119,7 +119,7 @@ impl Cors {
 
         let max_age = Header {
             header_name: Header::ACCESS_CONTROL_MAX_AGE.to_string(),
-            header_value: Cors::MAX_AGE.to_string()
+            header_value: cors.max_age.to_string()
         };
         response.headers.push(max_age);
 
