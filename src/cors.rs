@@ -75,7 +75,7 @@ impl Cors {
         Ok((request, response))
     }
 
-    pub(crate) fn process(request: Request, mut response: Response, cors: Cors) -> Result<(Request, Response), HTTPError> {
+    pub(crate) fn process(request: Request, mut response: Response, cors: &Cors) -> Result<(Request, Response), HTTPError> {
 
         let origin = cors.allow_origins.join(", ");
         let allow_origin = Header {
