@@ -84,11 +84,13 @@ impl Cors {
         };
         response.headers.push(allow_origin);
 
-        let allow_credentials = Header {
-            header_name: Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
-            header_value: cors.allow_credentials.to_string()
-        };
-        response.headers.push(allow_credentials);
+        if cors.allow_credentials {
+            let allow_credentials = Header {
+                header_name: Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
+                header_value: cors.allow_credentials.to_string()
+            };
+            response.headers.push(allow_credentials);
+        }
 
         let vary = Header {
             header_name: Header::VARY.to_string(),
