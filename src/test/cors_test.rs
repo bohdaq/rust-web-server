@@ -124,7 +124,7 @@ fn cors_options_preflight_request() {
 }
 
 #[test]
-fn it_generates_successful_response_with_static_file() {
+fn actual_request_after_preflight() {
     // request test data
 
     let request_method = REQUEST_METHODS.GET;
