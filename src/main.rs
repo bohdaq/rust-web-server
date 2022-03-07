@@ -21,13 +21,39 @@ use crate::server::Server;
 use crate::thread_pool::ThreadPool;
 
 use clap::{Arg, App};
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Config {
+    ip: Option<String>,
+    port: Option<i32>,
+    thread_count: Option<i32>,
+}
+
 
 fn main() {
-    let mut ip = "127.0.0.1";
+    let mut ip :String = "127.0.0.1".to_string();
     let mut port = 7878;
     let mut thread_count = 4;
 
     const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+    let content = std::fs::read_to_string("config.toml");
+    if content.is_ok() {
+        let config: Config = toml::from_str(content.unwrap().as_str()).unwrap();
+        if config.ip.is_some() {
+            ip = config.ip.unwrap();
+        }
+
+        if config.port.is_some() {
+            port = config.port.unwrap();
+        }
+
+        if config.thread_count.is_some() {
+            thread_count = config.thread_count.unwrap();
+        }
+
+    }
 
     let matches = App::new("rws rust-web-server")
         .version(VERSION)
@@ -52,7 +78,7 @@ fn main() {
 
     let port_match = matches.value_of("port");
     match port_match {
-        None => println!("Port is not provided from command line. Using default value: {}", port),
+        None => println!("Port: {}", port),
         Some(s) => {
             match s.parse::<i32>() {
                 Ok(n) => {
@@ -66,21 +92,21 @@ fn main() {
 
     let ip_match = matches.value_of("ip");
     match ip_match {
-        None => println!("IP is not provided from command line. . Using default value: {}", ip),
+        None => println!("IP: {}", ip),
         Some(s) => {
-            ip = s;
-            println!("IP: {}", s)
+            ip = s.to_string();
+            println!("IP: {}", ip)
         }
     }
 
     let threads_match = matches.value_of("threads");
     match threads_match {
-        None => println!("Thread count is not provided from command line. Using default value: {}", thread_count),
+        None => println!("Threads: {}", thread_count),
         Some(s) => {
             match s.parse::<i32>() {
                 Ok(n) => {
                     thread_count = n;
-                    println!("Thread count: {}", n)
+                    println!("Threads: {}", n)
                 },
                 Err(_) => println!("That's not a number! {}", s),
             }
@@ -88,7 +114,7 @@ fn main() {
     }
 
 
-    create_tcp_listener_with_thread_pool(ip, port, thread_count);
+    create_tcp_listener_with_thread_pool(ip.as_str(), port, thread_count);
 }
 
 fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
