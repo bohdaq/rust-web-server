@@ -212,4 +212,7 @@ fn it_generates_successful_response_with_static_file() {
     let access_control_allow_origin_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
     assert_eq!(request_origin_header_value, access_control_allow_origin_header.header_value);
 
+    let access_control_allow_credentials_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
+    assert_eq!("true", access_control_allow_credentials_header.header_value);
+
 }
