@@ -77,10 +77,10 @@ impl Cors {
 
     pub(crate) fn process(request: Request, mut response: Response, cors: &Cors) -> Result<(Request, Response), HTTPError> {
 
-        let origin = cors.allow_origins.join(", ");
+        let allow_origins = cors.allow_origins.join(", ");
         let allow_origin = Header {
             header_name: Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
-            header_value: origin
+            header_value: allow_origins
         };
         response.headers.push(allow_origin);
 
@@ -92,7 +92,7 @@ impl Cors {
 
         let vary = Header {
             header_name: Header::VARY.to_string(),
-            header_value: Header::ORIGIN.to_string()
+            header_value: Header::ORIGIN.to_string(),
         };
         response.headers.push(vary);
 

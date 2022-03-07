@@ -224,11 +224,19 @@ fn cors_allow_all() {
 
 #[test]
 fn cors_process() {
+
+    // Origin header indicates it is CORS request
+    let origin_value = "origin-value.com";
     let mut request = Request {
         method: "".to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
-        headers: vec![],
+        headers: vec![
+            Header {
+                header_name: Header::ORIGIN.to_string(),
+                header_value: origin_value.to_string()
+            }
+        ],
     };
 
     let mut response = Response {
@@ -274,4 +282,7 @@ fn cors_process() {
 
     let max_age = response.get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
     assert_eq!(cors_config.max_age, max_age.header_value);
+
+    let vary = response.get_header(Header::VARY.to_string()).unwrap();
+    assert_eq!(Header::ORIGIN.to_string(), vary.header_value);
 }
