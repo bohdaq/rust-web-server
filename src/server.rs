@@ -5,7 +5,7 @@ use std::borrow::Borrow;
 use crate::request::Request;
 use crate::response::Response;
 use crate::app::App;
-use crate::CONSTANTS;
+use crate::{Config, CONSTANTS};
 pub struct Server {}
 impl Server {
     pub(crate) fn process_request(mut s: impl Read + Write + Unpin) -> Vec<u8> {
@@ -20,6 +20,7 @@ impl Server {
         if boxed_stream.is_ok() {
             stream.flush().unwrap();
         };
+
         raw_response
     }
 
