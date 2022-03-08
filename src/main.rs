@@ -116,23 +116,23 @@ fn main() {
 
     setup_environment_variables(config);
 
-    let ip : String = env::var("config.ip").unwrap();
-    let port : i32 = env::var("config.port").unwrap().parse().unwrap();
-    let thread_count : i32 = env::var("config.thread_count").unwrap().parse().unwrap();
+    let ip : String = env::var("rws.config.ip").unwrap();
+    let port : i32 = env::var("rws.config.port").unwrap().parse().unwrap();
+    let thread_count : i32 = env::var("rws.config.thread_count").unwrap().parse().unwrap();
 
     create_tcp_listener_with_thread_pool(ip.as_str(), port, thread_count);
 }
 
 fn setup_environment_variables(config: Config) {
-    env::set_var("config.ip", config.ip.to_string());
-    env::set_var("config.port", config.port.to_string());
-    env::set_var("config.thread_count", config.thread_count.to_string());
-    env::set_var("config.cors.allow_origins", config.cors.allow_origins.join(", "));
-    env::set_var("config.cors.allow_credentials", config.cors.allow_credentials.to_string());
-    env::set_var("config.cors.cors.allow_headers", config.cors.allow_headers.join(", "));
-    env::set_var("config.cors.cors.allow_methods", config.cors.allow_methods.join(", "));
-    env::set_var("config.cors.cors.expose_headers", config.cors.expose_headers.join(", "));
-    env::set_var("config.cors.cors.max_age", config.cors.max_age);
+    env::set_var("rws.config.ip", config.ip.to_string());
+    env::set_var("rws.config.port", config.port.to_string());
+    env::set_var("rws.config.thread_count", config.thread_count.to_string());
+    env::set_var("rws.config.cors.allow_origins", config.cors.allow_origins.join(", "));
+    env::set_var("rws.config.cors.allow_credentials", config.cors.allow_credentials.to_string());
+    env::set_var("rws.config.cors.allow_headers", config.cors.allow_headers.join(", "));
+    env::set_var("rws.config.cors.allow_methods", config.cors.allow_methods.join(", "));
+    env::set_var("rws.config.cors.expose_headers", config.cors.expose_headers.join(", "));
+    env::set_var("rws.config.cors.max_age", config.cors.max_age);
 }
 
 fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {

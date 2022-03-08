@@ -1,3 +1,4 @@
+use std::env;
 use crate::{Request, Response};
 use crate::constant::{HTTPError, REQUEST_METHODS};
 use crate::header::Header;
@@ -125,6 +126,61 @@ impl Cors {
         let max_age = Header {
             header_name: Header::ACCESS_CONTROL_MAX_AGE.to_string(),
             header_value: cors.max_age.to_string()
+        };
+        response.headers.push(max_age);
+
+        Ok((request, response))
+    }
+
+    pub(crate) fn process_using_default_config(request: Request, mut response: Response) -> Result<(Request, Response), HTTPError> {
+
+        let allow_origins : String = env::var("rws.config.cors.allow_origins").unwrap();
+        let allow_origin = Header {
+            header_name: Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
+            header_value: allow_origins
+        };
+        response.headers.push(allow_origin);
+
+        let is_allow_credentials : bool = env::var("rws.config.cors.allow_credentials").unwrap().parse().unwrap();
+        if is_allow_credentials {
+            let allow_credentials = Header {
+                header_name: Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
+                header_value: is_allow_credentials.to_string()
+            };
+            response.headers.push(allow_credentials);
+        }
+
+        let vary = Header {
+            header_name: Header::VARY.to_string(),
+            header_value: Header::ORIGIN.to_string(),
+        };
+        response.headers.push(vary);
+
+        let methods = env::var("rws.config.cors.allow_methods").unwrap();
+        let allow_methods = Header {
+            header_name: Header::ACCESS_CONTROL_ALLOW_METHODS.to_string(),
+            header_value: methods
+        };
+        response.headers.push(allow_methods);
+
+        let headers = env::var("rws.config.cors.allow_headers").unwrap();
+        let allow_headers = Header {
+            header_name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
+            header_value: headers
+        };
+        response.headers.push(allow_headers);
+
+        let allow_expose_headers  = env::var("rws.config.cors.expose_headers").unwrap();
+        let expose_headers = Header {
+            header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
+            header_value: allow_expose_headers
+        };
+        response.headers.push(expose_headers);
+
+        let max_age_value  = env::var("rws.config.cors.max_age").unwrap();
+        let max_age = Header {
+            header_name: Header::ACCESS_CONTROL_MAX_AGE.to_string(),
+            header_value: max_age_value
         };
         response.headers.push(max_age);
 
