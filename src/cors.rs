@@ -7,6 +7,7 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Cors {
+    pub(crate) allow_all: bool,
     pub(crate) allow_origins: Vec<String>,
     pub(crate) allow_methods: Vec<String>,
     pub(crate) allow_headers: Vec<String>,

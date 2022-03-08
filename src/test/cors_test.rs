@@ -314,6 +314,7 @@ fn cors_process() {
     let second_domain = "bar.example";
     let custom_header = "X-CUSTOM-HEADER";
     let cors_config = Cors {
+        allow_all: false,
         allow_origins: vec![first_domain.to_string(), second_domain.to_string()],
         allow_methods: vec![REQUEST_METHODS.GET.to_string(), REQUEST_METHODS.POST.to_string(), REQUEST_METHODS.PUT.to_string()],
         allow_headers: vec![Header::CONTENT_TYPE.to_string(), custom_header.to_string()],
@@ -380,6 +381,7 @@ fn cors_process_empty_config() {
     };
 
     let cors_config = Cors {
+        allow_all: false,
         allow_origins: vec![],
         allow_methods: vec![],
         allow_headers: vec![],

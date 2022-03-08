@@ -108,7 +108,12 @@ impl App {
                         content_range_list,
                     };
 
-                    (request, response) = Cors::process_using_default_config(request, response).unwrap();
+                    let is_cors_set_to_allow_all_requests : bool = env::var("rws.config.cors.allow_all").unwrap().parse().unwrap();
+                    if is_cors_set_to_allow_all_requests {
+                        (request, response) = Cors::allow_all(request, response).unwrap();
+                    } else {
+                        (request, response) = Cors::process_using_default_config(request, response).unwrap();
+                    }
                 }
             } else {
                 let error : HTTPError = boxed_content_range_list.err().unwrap();

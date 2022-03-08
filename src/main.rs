@@ -112,6 +112,7 @@ fn read_config(is_test_mode: bool) -> Config {
         port: 0,
         thread_count: 0,
         cors: Cors {
+            allow_all: false,
             allow_origins: vec![],
             allow_methods: vec![],
             allow_headers: vec![],
@@ -136,6 +137,7 @@ fn setup_environment_variables(config: Config) {
     env::set_var("rws.config.ip", config.ip.to_string());
     env::set_var("rws.config.port", config.port.to_string());
     env::set_var("rws.config.thread_count", config.thread_count.to_string());
+    env::set_var("rws.config.cors.allow_all", config.cors.allow_all.to_string());
     env::set_var("rws.config.cors.allow_origins", config.cors.allow_origins.join(", "));
     env::set_var("rws.config.cors.allow_credentials", config.cors.allow_credentials.to_string());
     env::set_var("rws.config.cors.allow_headers", config.cors.allow_headers.join(", "));
