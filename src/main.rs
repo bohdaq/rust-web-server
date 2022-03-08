@@ -37,24 +37,7 @@ struct Config {
 fn main() {
     const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-    let mut config: Config = Config{
-        ip: "".to_string(),
-        port: 0,
-        thread_count: 0,
-        cors: Cors {
-            allow_origins: vec![],
-            allow_methods: vec![],
-            allow_headers: vec![],
-            allow_credentials: false,
-            expose_headers: vec![],
-            max_age: "".to_string()
-        }
-    };
-
-    let content = std::fs::read_to_string("config.toml");
-    if content.is_ok() {
-        config = toml::from_str(content.unwrap().as_str()).unwrap();
-    }
+    let mut config: Config = read_config(false);
 
     let matches = App::new("rws rust-web-server")
         .version(VERSION)
@@ -121,6 +104,32 @@ fn main() {
     let thread_count : i32 = env::var("rws.config.thread_count").unwrap().parse().unwrap();
 
     create_tcp_listener_with_thread_pool(ip.as_str(), port, thread_count);
+}
+
+fn read_config(is_test_mode: bool) -> Config {
+    let mut config: Config = Config {
+        ip: "".to_string(),
+        port: 0,
+        thread_count: 0,
+        cors: Cors {
+            allow_origins: vec![],
+            allow_methods: vec![],
+            allow_headers: vec![],
+            allow_credentials: false,
+            expose_headers: vec![],
+            max_age: "".to_string()
+        }
+    };
+    let mut filepath = "config.toml";
+    if is_test_mode {
+        filepath = "src/test/config.toml"
+    }
+
+    let content = std::fs::read_to_string(filepath);
+    if content.is_ok() {
+        config = toml::from_str(content.unwrap().as_str()).unwrap();
+    }
+    config
 }
 
 fn setup_environment_variables(config: Config) {

@@ -108,7 +108,7 @@ impl App {
                         content_range_list,
                     };
 
-                    (request, response) = Cors::allow_all(request, response).unwrap();
+                    (request, response) = Cors::process_using_default_config(request, response).unwrap();
                 }
             } else {
                 let error : HTTPError = boxed_content_range_list.err().unwrap();

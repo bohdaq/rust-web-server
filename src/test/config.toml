@@ -1,0 +1,11 @@
+ip = 'localhost'
+port = 7888
+thread_count = 2
+
+[cors]
+allow_origins = ["https://foo.example", "https://bar.example"]
+allow_methods = ["POST", "PUT"]
+allow_headers = ["Content-Type", "X-PINGOTHER"]
+allow_credentials = true
+expose_headers = ["Content-Type", "X-PINGOTHER"]
+max_age = "523452"

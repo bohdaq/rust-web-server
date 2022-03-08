@@ -2,7 +2,7 @@ use std::{env, fs};
 use std::borrow::Borrow;
 use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::header::Header;
-use crate::{CONSTANTS, Request, Response, Server};
+use crate::{CONSTANTS, read_config, Request, Response, Server, setup_environment_variables};
 use crate::cors::Cors;
 use crate::mime_type::MimeType;
 use crate::test::server_test::MockTcpStream;
@@ -37,7 +37,7 @@ fn cors_options_preflight_request() {
     };
 
     let request_access_control_request_headers_header_name = Header::ACCESS_CONTROL_REQUEST_HEADERS;
-    let request_access_control_request_headers_header_value = "X-PINGOTHER, Content-Type";
+    let request_access_control_request_headers_header_value = "Content-Type, X-PINGOTHER";
     let access_control_request_headers = Header {
         header_name: request_access_control_request_headers_header_name.to_string(),
         header_value: request_access_control_request_headers_header_value.to_string()
@@ -102,7 +102,8 @@ fn cors_options_preflight_request() {
     assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
 
     let access_control_allow_origin_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
-    assert_eq!(request_origin_header_value, access_control_allow_origin_header.header_value);
+    let allow_origins = format!("{}", access_control_allow_origin_header.header_value);
+    assert!(allow_origins.contains(request_origin_header_value));
 
     let access_control_allow_methods_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
     assert!(access_control_allow_methods_header.header_value.contains(request_access_control_request_method_header_value));
@@ -117,7 +118,7 @@ fn cors_options_preflight_request() {
     assert_eq!(request_access_control_request_headers_header_value, access_control_expose_headers_header.header_value);
 
     let access_control_max_age_header = response.get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
-    assert_eq!(Cors::MAX_AGE, access_control_max_age_header.header_value);
+    assert_eq!("523452", access_control_max_age_header.header_value);
 
     let vary_header = response.get_header(Header::VARY.to_string()).unwrap();
     assert_eq!(Header::ORIGIN, vary_header.header_value);
@@ -125,7 +126,8 @@ fn cors_options_preflight_request() {
 
 #[test]
 fn actual_request_after_preflight() {
-    // request test data
+    let config = read_config(true);
+    setup_environment_variables(config);
 
     let request_method = REQUEST_METHODS.GET;
     let request_uri = "/static/test.json";
@@ -210,7 +212,8 @@ fn actual_request_after_preflight() {
     assert_eq!(Header::ORIGIN, vary_header.header_value);
 
     let access_control_allow_origin_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
-    assert_eq!(request_origin_header_value, access_control_allow_origin_header.header_value);
+    let allow_origins = format!("{}", access_control_allow_origin_header.header_value);
+    assert!(allow_origins.contains(request_origin_header_value));
 
     let access_control_allow_credentials_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
     assert_eq!("true", access_control_allow_credentials_header.header_value);
