@@ -2,6 +2,9 @@ use crate::{Request, Response};
 use crate::constant::{HTTPError, REQUEST_METHODS};
 use crate::header::Header;
 
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Cors {
     pub(crate) allow_origins: Vec<String>,
     pub(crate) allow_methods: Vec<String>,

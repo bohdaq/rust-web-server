@@ -22,37 +22,36 @@ use crate::thread_pool::ThreadPool;
 
 use clap::{Arg, App};
 use serde::{Serialize, Deserialize};
+use crate::cors::Cors;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Config {
-    ip: Option<String>,
-    port: Option<i32>,
-    thread_count: Option<i32>,
+    ip: String,
+    port: i32,
+    thread_count: i32,
+    cors: Cors,
 }
 
-
 fn main() {
-    let mut ip :String = "127.0.0.1".to_string();
-    let mut port = 7878;
-    let mut thread_count = 4;
-
     const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+    let mut config: Config = Config{
+        ip: "".to_string(),
+        port: 0,
+        thread_count: 0,
+        cors: Cors {
+            allow_origins: vec![],
+            allow_methods: vec![],
+            allow_headers: vec![],
+            allow_credentials: false,
+            expose_headers: vec![],
+            max_age: "".to_string()
+        }
+    };
 
     let content = std::fs::read_to_string("config.toml");
     if content.is_ok() {
-        let config: Config = toml::from_str(content.unwrap().as_str()).unwrap();
-        if config.ip.is_some() {
-            ip = config.ip.unwrap();
-        }
-
-        if config.port.is_some() {
-            port = config.port.unwrap();
-        }
-
-        if config.thread_count.is_some() {
-            thread_count = config.thread_count.unwrap();
-        }
-
+        config = toml::from_str(content.unwrap().as_str()).unwrap();
     }
 
     let matches = App::new("rws rust-web-server")
@@ -78,12 +77,12 @@ fn main() {
 
     let port_match = matches.value_of("port");
     match port_match {
-        None => println!("Port: {}", port),
+        None => println!("Port: {}", config.port),
         Some(s) => {
             match s.parse::<i32>() {
-                Ok(n) => {
-                    port = n;
-                    println!("Port: {}", n)
+                Ok(port) => {
+                    config.port = port;
+                    println!("Port: {}", port)
                 },
                 Err(_) => println!("That's not a number! {}", s),
             }
@@ -92,21 +91,21 @@ fn main() {
 
     let ip_match = matches.value_of("ip");
     match ip_match {
-        None => println!("IP: {}", ip),
+        None => println!("IP: {}", config.ip),
         Some(s) => {
-            ip = s.to_string();
-            println!("IP: {}", ip)
+            config.ip = s.to_string();
+            println!("IP: {}", config.ip)
         }
     }
 
     let threads_match = matches.value_of("threads");
     match threads_match {
-        None => println!("Threads: {}", thread_count),
+        None => println!("Threads: {}", config.thread_count),
         Some(s) => {
             match s.parse::<i32>() {
-                Ok(n) => {
-                    thread_count = n;
-                    println!("Threads: {}", n)
+                Ok(thread_count) => {
+                    config.thread_count = thread_count;
+                    println!("Threads: {}", thread_count)
                 },
                 Err(_) => println!("That's not a number! {}", s),
             }
@@ -114,7 +113,7 @@ fn main() {
     }
 
 
-    create_tcp_listener_with_thread_pool(ip.as_str(), port, thread_count);
+    create_tcp_listener_with_thread_pool(config.ip.as_str(), config.port, config.thread_count);
 }
 
 fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
