@@ -37,7 +37,7 @@ fn cors_options_preflight_request() {
     };
 
     let request_access_control_request_headers_header_name = Header::ACCESS_CONTROL_REQUEST_HEADERS;
-    let request_access_control_request_headers_header_value = "Content-Type, X-PINGOTHER";
+    let request_access_control_request_headers_header_value = "content-type,x-custom-header";
     let access_control_request_headers = Header {
         header_name: request_access_control_request_headers_header_name.to_string(),
         header_value: request_access_control_request_headers_header_value.to_string()
@@ -225,7 +225,7 @@ fn cors_allow_all() {
     let origin_value = "origin-value.com";
     let custom_header = "X-CUSTOM-HEADER";
 
-    let expected_allow_headers = format!("{}, {}", Header::CONTENT_TYPE, custom_header);
+    let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header);
 
     let mut request = Request {
         method: REQUEST_METHODS.OPTIONS.to_string(),
@@ -264,14 +264,14 @@ fn cors_allow_all() {
     assert_eq!(REQUEST_METHODS.POST, allow_methods.header_value);
 
     let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
-    let expected_allow_headers = format!("{}, {}", Header::CONTENT_TYPE, custom_header);
+    let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
     assert_eq!(expected_allow_headers, allow_headers.header_value);
 
     let allow_credentials = response.get_header(Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
     assert_eq!("true", allow_credentials.header_value);
 
     let expose_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
-    let expected_expose_headers = format!("{}, {}", Header::CONTENT_TYPE, custom_header);
+    let expected_expose_headers = format!("{},{}", Header::CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
     assert_eq!(expected_expose_headers, expose_headers.header_value);
 
     let max_age = response.get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
@@ -312,7 +312,7 @@ fn cors_process() {
 
     let first_domain = "foo.example";
     let second_domain = "bar.example";
-    let custom_header = "X-CUSTOM-HEADER";
+    let custom_header = "x-custom-header";
     let cors_config = Cors {
         allow_all: false,
         allow_origins: vec![first_domain.to_string(), second_domain.to_string()],
@@ -334,14 +334,14 @@ fn cors_process() {
     assert_eq!(expected_allow_methods, allow_methods.header_value);
 
     let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
-    let expected_allow_headers = format!("{}, {}", Header::CONTENT_TYPE, custom_header);
+    let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header);
     assert_eq!(expected_allow_headers, allow_headers.header_value);
 
     let allow_credentials = response.get_header(Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
     assert_eq!("true", allow_credentials.header_value);
 
     let expose_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
-    let expected_expose_headers = format!("{}, {}", Header::CONTENT_TYPE, custom_header);
+    let expected_expose_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header);
     assert_eq!(expected_expose_headers, expose_headers.header_value);
 
     let max_age = response.get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();

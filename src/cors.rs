@@ -57,13 +57,13 @@ impl Cors {
                     let request_headers = headers.unwrap();
                     let allow_headers = Header {
                         header_name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
-                        header_value: request_headers.header_value.to_string()
+                        header_value: request_headers.header_value.to_lowercase(),
                     };
                     response.headers.push(allow_headers);
 
                     let expose_headers = Header {
                         header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
-                        header_value: request_headers.header_value.to_string()
+                        header_value: request_headers.header_value.to_lowercase(),
                     };
                     response.headers.push(expose_headers);
                 }
@@ -110,14 +110,14 @@ impl Cors {
         };
         response.headers.push(allow_methods);
 
-        let headers = cors.allow_headers.join(", ");
+        let headers = cors.allow_headers.join(",");
         let allow_headers = Header {
             header_name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
             header_value: headers
         };
         response.headers.push(allow_headers);
 
-        let allow_expose_headers  = cors.expose_headers.join(", ");
+        let allow_expose_headers  = cors.expose_headers.join(",");
         let expose_headers = Header {
             header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
             header_value: allow_expose_headers

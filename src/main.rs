@@ -140,9 +140,9 @@ fn setup_environment_variables(config: Config) {
     env::set_var("rws.config.cors.allow_all", config.cors.allow_all.to_string());
     env::set_var("rws.config.cors.allow_origins", config.cors.allow_origins.join(", "));
     env::set_var("rws.config.cors.allow_credentials", config.cors.allow_credentials.to_string());
-    env::set_var("rws.config.cors.allow_headers", config.cors.allow_headers.join(", "));
+    env::set_var("rws.config.cors.allow_headers", config.cors.allow_headers.join(","));
     env::set_var("rws.config.cors.allow_methods", config.cors.allow_methods.join(", "));
-    env::set_var("rws.config.cors.expose_headers", config.cors.expose_headers.join(", "));
+    env::set_var("rws.config.cors.expose_headers", config.cors.expose_headers.join(","));
     env::set_var("rws.config.cors.max_age", config.cors.max_age);
 }
 
