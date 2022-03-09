@@ -324,6 +324,15 @@ fn override_environment_variables_from_command_line_args() {
         }
     }
 
+    let cors_allow_methods = matches.value_of("cors-allow-methods");
+    match cors_allow_methods {
+        None => print!(""),
+        Some(allow_origins) => {
+            env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, allow_origins.to_string());
+            println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, allow_origins.to_string());
+        }
+    }
+
     println!("End of Reading Command Line Arguments");
 }
 
