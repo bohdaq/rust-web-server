@@ -133,8 +133,8 @@ impl Cors {
 
         let allow_expose_headers  = cors.expose_headers.join(",");
         let expose_headers = Header {
-            header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_lowercase(),
-            header_value: allow_expose_headers
+            header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
+            header_value: allow_expose_headers.to_lowercase()
         };
         response.headers.push(expose_headers);
 
