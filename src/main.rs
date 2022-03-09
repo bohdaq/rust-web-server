@@ -305,6 +305,16 @@ fn override_environment_variables_from_command_line_args() {
         }
     }
 
+    let cors_allow_all = matches.value_of("cors-allow-all");
+    match cors_allow_all {
+        None => print!(""),
+        Some(allow_all) => {
+            let is_allow_all: bool = allow_all.parse().unwrap();
+            env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, is_allow_all.to_string());
+            println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_ALLOW_ALL, is_allow_all.to_string());
+        }
+    }
+
     println!("End of Reading Command Line Arguments");
 }
 
