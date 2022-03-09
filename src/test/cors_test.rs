@@ -370,7 +370,7 @@ fn cors_process_default_config() {
     setup_environment_variables(config);
 
     // Origin header indicates it is CORS request
-    let origin_value = "https://foo.example";
+    let origin_value = "https://bar.example";
     let mut request = Request {
         method: "".to_string(),
         request_uri: "".to_string(),
@@ -400,7 +400,7 @@ fn cors_process_default_config() {
     assert_eq!(expected_allow_origins, allow_origins.header_value);
 
     let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
-    let expected_allow_methods = format!("{}, {}, {}", REQUEST_METHODS.GET, REQUEST_METHODS.POST, REQUEST_METHODS.PUT);
+    let expected_allow_methods = format!("{}, {}", REQUEST_METHODS.POST, REQUEST_METHODS.PUT);
     assert_eq!(expected_allow_methods, allow_methods.header_value);
 
     let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
@@ -415,7 +415,7 @@ fn cors_process_default_config() {
     assert_eq!(expected_expose_headers, expose_headers.header_value);
 
     let max_age = response.get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
-    assert_eq!(Cors::MAX_AGE, max_age.header_value);
+    assert_eq!("523452", max_age.header_value);
 
     let vary = response.get_header(Header::VARY.to_string()).unwrap();
     assert_eq!(Header::ORIGIN.to_string(), vary.header_value);
