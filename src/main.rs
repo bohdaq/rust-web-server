@@ -49,74 +49,7 @@ impl Config {
 }
 
 fn main() {
-    // TODO:
-    // 1. read env variables
-    // 2. if config.toml is provided, read config.toml, update env vars
-    // 3. if command line args provided, read command line args, update env vars
-
-    const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-    let mut config: Config = read_config(false);
-
-    let matches = App::new("rws rust-web-server")
-        .version(VERSION)
-        .author("Bohdan Tsap <bohdan.tsap@tutanota.com>")
-        .about("Hi, rust-web-server (rws) is a simple web-server written in Rust. The rws server can serve static content inside the directory it is started.")
-        .arg(Arg::new("port")
-            .short('p')
-            .long("port")
-            .takes_value(true)
-            .help("Port"))
-        .arg(Arg::new("ip")
-            .short('i')
-            .long("ip")
-            .takes_value(true)
-            .help("IP or domain"))
-        .arg(Arg::new("threads")
-            .short('t')
-            .long("threads")
-            .takes_value(true)
-            .help("Number of threads"))
-        .get_matches();
-
-    let port_match = matches.value_of("port");
-    match port_match {
-        None => println!("Port: {}", config.port),
-        Some(s) => {
-            match s.parse::<i32>() {
-                Ok(port) => {
-                    config.port = port;
-                    println!("Port: {}", port)
-                },
-                Err(_) => println!("That's not a number! {}", s),
-            }
-        }
-    }
-
-    let ip_match = matches.value_of("ip");
-    match ip_match {
-        None => println!("IP: {}", config.ip),
-        Some(s) => {
-            config.ip = s.to_string();
-            println!("IP: {}", config.ip)
-        }
-    }
-
-    let threads_match = matches.value_of("threads");
-    match threads_match {
-        None => println!("Threads: {}", config.thread_count),
-        Some(s) => {
-            match s.parse::<i32>() {
-                Ok(thread_count) => {
-                    config.thread_count = thread_count;
-                    println!("Threads: {}", thread_count)
-                },
-                Err(_) => println!("That's not a number! {}", s),
-            }
-        }
-    }
-
-    setup_environment_variables(config);
+    bootstrap();
 
     let ip : String = env::var(Config::RWS_CONFIG_IP).unwrap();
     let port : i32 = env::var(Config::RWS_CONFIG_PORT).unwrap().parse().unwrap();
@@ -133,40 +66,61 @@ fn bootstrap() {
     if is_config_provided {
         override_environment_variables_from_config(is_test_mode);
     }
+    override_environment_variables_from_command_line_args();
 }
 
 fn read_system_environment_variables() {
     println!("Start Of System Environment Variables Section");
 
-    let ip = env::var(Config::RWS_CONFIG_IP).unwrap();
-    println!("{}={}", Config::RWS_CONFIG_IP, ip);
+    let boxed_ip = env::var(Config::RWS_CONFIG_IP);
+    if boxed_ip.is_ok() {
+        println!("{}={}", Config::RWS_CONFIG_IP, boxed_ip.unwrap());
+    }
 
-    let port = env::var(Config::RWS_CONFIG_PORT).unwrap();
-    println!("{}={}", Config::RWS_CONFIG_PORT, port);
+    let boxed_port = env::var(Config::RWS_CONFIG_PORT);
+    if boxed_port.is_ok() {
+        println!("{}={}", Config::RWS_CONFIG_PORT, boxed_port.unwrap());
+    }
 
-    let thread_count = env::var(Config::RWS_CONFIG_THREAD_COUNT).unwrap();
-    println!("{}={}", Config::RWS_CONFIG_THREAD_COUNT, thread_count);
+    let boxed_thread_count = env::var(Config::RWS_CONFIG_THREAD_COUNT);
+    if boxed_thread_count.is_ok() {
+        println!("{}={}", Config::RWS_CONFIG_THREAD_COUNT, boxed_thread_count.unwrap());
+    }
 
-    let cors_allow_all = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap();
-    println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_ALL, cors_allow_all);
+    let boxed_cors_allow_all = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL);
+    if boxed_cors_allow_all.is_ok() {
+        println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_ALL, boxed_cors_allow_all.unwrap());
+    }
 
-    let cors_allow_origins = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS).unwrap();
-    println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, cors_allow_origins);
+    let boxed_cors_allow_origins = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS);
+    if boxed_cors_allow_origins.is_ok() {
+        println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, boxed_cors_allow_origins.unwrap());
+    }
 
-    let cors_allow_methods = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS).unwrap();
-    println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_METHODS, cors_allow_methods);
+    let boxed_cors_allow_methods = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS);
+    if boxed_cors_allow_methods.is_ok() {
+        println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_METHODS, boxed_cors_allow_methods.unwrap());
+    }
 
-    let cors_allow_headers = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS).unwrap();
-    println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, cors_allow_headers);
+    let boxed_cors_allow_headers = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS);
+    if boxed_cors_allow_headers.is_ok() {
+        println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, boxed_cors_allow_headers.unwrap());
+    }
 
-    let cors_allow_credentials = env::var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS).unwrap();
-    println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, cors_allow_credentials);
+    let boxed_cors_allow_credentials = env::var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS);
+    if boxed_cors_allow_credentials.is_ok() {
+        println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, boxed_cors_allow_credentials.unwrap());
+    }
 
-    let cors_expose_headers = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS).unwrap();
-    println!("{}={}", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, cors_expose_headers);
+    let boxed_cors_expose_headers = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS);
+    if boxed_cors_expose_headers.is_ok() {
+        println!("{}={}", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, boxed_cors_expose_headers.unwrap());
+    }
 
-    let cors_max_age = env::var(Config::RWS_CONFIG_CORS_MAX_AGE).unwrap();
-    println!("{}={}", Config::RWS_CONFIG_CORS_MAX_AGE, cors_max_age);
+    let boxed_cors_max_age = env::var(Config::RWS_CONFIG_CORS_MAX_AGE);
+    if boxed_cors_max_age.is_ok() {
+        println!("{}={}", Config::RWS_CONFIG_CORS_MAX_AGE, boxed_cors_max_age.unwrap());
+    }
 
     println!("End of System Environment Variables Section");
 }
@@ -217,9 +171,7 @@ fn override_environment_variables_from_config(is_test_mode: bool) {
 
     if content.is_err() {
         println!("Unable to parse config.toml\n{}", content.err().unwrap());
-    }
-
-    if content.is_ok() {
+    } else {
         config = toml::from_str(content.unwrap().as_str()).unwrap();
     }
 
@@ -250,10 +202,75 @@ fn override_environment_variables_from_config(is_test_mode: bool) {
     env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(","));
     println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(","));
 
-    env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, config.cors.max_age);
+    env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, &config.cors.max_age);
     println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_MAX_AGE, config.cors.max_age);
 
     println!("End of Config Section");
+}
+
+fn override_environment_variables_from_command_line_args() {
+    println!("Start of Reading Command Line Arguments");
+
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+    let matches = App::new("rws rust-web-server")
+        .version(VERSION)
+        .author("Bohdan Tsap <bohdan.tsap@tutanota.com>")
+        .about("Hi, rust-web-server (rws) is a simple web-server written in Rust. The rws server can serve static content inside the directory it is started.")
+        .arg(Arg::new("port")
+            .short('p')
+            .long("port")
+            .takes_value(true)
+            .help("Port"))
+        .arg(Arg::new("ip")
+            .short('i')
+            .long("ip")
+            .takes_value(true)
+            .help("IP or domain"))
+        .arg(Arg::new("threads")
+            .short('t')
+            .long("threads")
+            .takes_value(true)
+            .help("Number of threads"))
+        .get_matches();
+
+    let port_match = matches.value_of("port");
+    match port_match {
+        None => print!(""),
+        Some(s) => {
+            match s.parse::<i32>() {
+                Ok(port) => {
+                    env::set_var(Config::RWS_CONFIG_PORT, port.to_string());
+                    println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_PORT, port.to_string());
+                },
+                Err(_) => println!("That's not a number! {}", s),
+            }
+        }
+    }
+
+    let ip_match = matches.value_of("ip");
+    match ip_match {
+        None => print!(""),
+        Some(ip) => {
+            env::set_var(Config::RWS_CONFIG_IP, ip.to_string());
+            println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_IP, ip.to_string());
+        }
+    }
+
+    let threads_match = matches.value_of("threads");
+    match threads_match {
+        None => print!(""),
+        Some(s) => {
+            match s.parse::<i32>() {
+                Ok(thread_count) => {
+                    env::set_var(Config::RWS_CONFIG_THREAD_COUNT, thread_count.to_string());
+                    println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_THREAD_COUNT, thread_count.to_string());
+                },
+                Err(_) => println!("That's not a number! {}", s),
+            }
+        }
+    }
+
+    println!("End of Reading Command Line Arguments");
 }
 
 
