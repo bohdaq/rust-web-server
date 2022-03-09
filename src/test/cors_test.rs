@@ -2,7 +2,7 @@ use std::{env, fs};
 use std::borrow::Borrow;
 use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::header::Header;
-use crate::{CONSTANTS, read_config, Request, Response, Server, setup_environment_variables};
+use crate::{Config, CONSTANTS, read_config, Request, Response, Server, setup_environment_variables};
 use crate::cors::Cors;
 use crate::mime_type::MimeType;
 use crate::test::server_test::MockTcpStream;
@@ -360,6 +360,71 @@ fn cors_process() {
     println!("{}", response_string);
 
     println!("<--/cors_process-->");
+}
+
+#[test]
+fn cors_process_default_config() {
+    println!("<--cors_process_default_config-->");
+
+    let config : Config = read_config(true);
+    setup_environment_variables(config);
+
+    // Origin header indicates it is CORS request
+    let origin_value = "https://foo.example";
+    let mut request = Request {
+        method: "".to_string(),
+        request_uri: "".to_string(),
+        http_version: "".to_string(),
+        headers: vec![
+            Header {
+                header_name: Header::ORIGIN.to_string(),
+                header_value: origin_value.to_string()
+            }
+        ],
+    };
+
+    let mut response = Response {
+        http_version: "".to_string(),
+        status_code: "".to_string(),
+        reason_phrase: "".to_string(),
+        headers: vec![],
+        content_range_list: vec![]
+    };
+
+    let custom_header = "x-custom-header";
+
+    (request, response) = Cors::process_using_default_config(request, response).unwrap();
+
+    let allow_origins = response.get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
+    let expected_allow_origins = format!("{}", origin_value);
+    assert_eq!(expected_allow_origins, allow_origins.header_value);
+
+    let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
+    let expected_allow_methods = format!("{}, {}, {}", REQUEST_METHODS.GET, REQUEST_METHODS.POST, REQUEST_METHODS.PUT);
+    assert_eq!(expected_allow_methods, allow_methods.header_value);
+
+    let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
+    let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header).to_lowercase();
+    assert_eq!(expected_allow_headers, allow_headers.header_value);
+
+    let allow_credentials = response.get_header(Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
+    assert_eq!("true", allow_credentials.header_value);
+
+    let expose_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
+    let expected_expose_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header).to_lowercase();
+    assert_eq!(expected_expose_headers, expose_headers.header_value);
+
+    let max_age = response.get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
+    assert_eq!(Cors::MAX_AGE, max_age.header_value);
+
+    let vary = response.get_header(Header::VARY.to_string()).unwrap();
+    assert_eq!(Header::ORIGIN.to_string(), vary.header_value);
+
+    let raw_response = Response::generate_response(response, request);
+    let response_string = String::from_utf8(raw_response).unwrap();
+    println!("{}", response_string);
+
+    println!("<--/cors_process_default_config-->");
 }
 
 #[test]
