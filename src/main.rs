@@ -14,6 +14,7 @@ extern crate core;
 
 use std::net::TcpListener;
 use std::env;
+use std::fs::metadata;
 
 use crate::constant::CONSTANTS;
 
@@ -123,6 +124,138 @@ fn main() {
 
     create_tcp_listener_with_thread_pool(ip.as_str(), port, thread_count);
 }
+
+fn bootstrap() {
+    let is_test_mode = false;
+
+    read_system_environment_variables();
+    let is_config_provided = is_config_file_provided(is_test_mode);
+    if is_config_provided {
+        override_environment_variables_from_config(is_test_mode);
+    }
+}
+
+fn read_system_environment_variables() {
+    println!("Start Of System Environment Variables Section");
+
+    let ip = env::var(Config::RWS_CONFIG_IP).unwrap();
+    println!("{}={}", Config::RWS_CONFIG_IP, ip);
+
+    let port = env::var(Config::RWS_CONFIG_PORT).unwrap();
+    println!("{}={}", Config::RWS_CONFIG_PORT, port);
+
+    let thread_count = env::var(Config::RWS_CONFIG_THREAD_COUNT).unwrap();
+    println!("{}={}", Config::RWS_CONFIG_THREAD_COUNT, thread_count);
+
+    let cors_allow_all = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap();
+    println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_ALL, cors_allow_all);
+
+    let cors_allow_origins = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS).unwrap();
+    println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, cors_allow_origins);
+
+    let cors_allow_methods = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS).unwrap();
+    println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_METHODS, cors_allow_methods);
+
+    let cors_allow_headers = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS).unwrap();
+    println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, cors_allow_headers);
+
+    let cors_allow_credentials = env::var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS).unwrap();
+    println!("{}={}", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, cors_allow_credentials);
+
+    let cors_expose_headers = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS).unwrap();
+    println!("{}={}", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, cors_expose_headers);
+
+    let cors_max_age = env::var(Config::RWS_CONFIG_CORS_MAX_AGE).unwrap();
+    println!("{}={}", Config::RWS_CONFIG_CORS_MAX_AGE, cors_max_age);
+
+    println!("End of System Environment Variables Section");
+}
+
+fn is_config_file_provided(is_test_mode: bool) -> bool {
+    println!("Start of Config Section");
+    println!("Is Test Mode: {}", is_test_mode);
+
+    let mut filepath = "/config.toml";
+    if is_test_mode {
+        filepath = "/src/test/config.toml"
+    }
+    let static_filepath = Server::get_static_filepath(filepath);
+    let md = metadata(&static_filepath).unwrap();
+
+    let is_config_provided = md.is_file();
+
+    if !is_config_provided {
+        println!("config.toml is not provided");
+        println!("End of Config Section");
+    }
+
+    is_config_provided
+}
+
+fn override_environment_variables_from_config(is_test_mode: bool) {
+    let mut config: Config = Config {
+        ip: "".to_string(),
+        port: 0,
+        thread_count: 0,
+        cors: Cors {
+            allow_all: false,
+            allow_origins: vec![],
+            allow_methods: vec![],
+            allow_headers: vec![],
+            allow_credentials: false,
+            expose_headers: vec![],
+            max_age: "".to_string()
+        }
+    };
+
+    let mut filepath = "/config.toml";
+    if is_test_mode {
+        filepath = "/src/test/config.toml"
+    }
+    let static_filepath = Server::get_static_filepath(filepath);
+    let content = std::fs::read_to_string(static_filepath);
+
+    if content.is_err() {
+        println!("Unable to parse config.toml\n{}", content.err().unwrap());
+    }
+
+    if content.is_ok() {
+        config = toml::from_str(content.unwrap().as_str()).unwrap();
+    }
+
+    env::set_var(Config::RWS_CONFIG_IP, config.ip.to_string());
+    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_IP, config.ip.to_string());
+
+    env::set_var(Config::RWS_CONFIG_PORT, config.port.to_string());
+    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_PORT, config.port.to_string());
+
+    env::set_var(Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
+    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
+
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
+    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
+
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, config.cors.allow_origins.join(","));
+    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, config.cors.allow_origins.join(","));
+
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, config.cors.allow_credentials.to_string());
+    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, config.cors.allow_credentials.to_string());
+
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS, config.cors.allow_headers.join(","));
+    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, config.cors.allow_headers.join(","));
+
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_METHODS, config.cors.allow_methods.join(","));
+    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_ALLOW_METHODS, config.cors.allow_methods.join(","));
+
+    env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(","));
+    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(","));
+
+    env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, config.cors.max_age);
+    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_MAX_AGE, config.cors.max_age);
+
+    println!("End of Config Section");
+}
+
 
 fn read_config(is_test_mode: bool) -> Config {
     let mut config: Config = Config {
