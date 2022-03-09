@@ -222,6 +222,8 @@ fn actual_request_after_preflight() {
 
 #[test]
 fn cors_allow_all() {
+    println!("<--cors_allow_all-->");
+
     let origin_value = "origin-value.com";
     let custom_header = "X-CUSTOM-HEADER";
 
@@ -283,10 +285,12 @@ fn cors_allow_all() {
     let raw_response = Response::generate_response(response, request);
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("{}", response_string);
+    println!("</--cors_allow_all-->");
 }
 
 #[test]
 fn cors_process() {
+    println!("<--cors_process-->");
 
     // Origin header indicates it is CORS request
     let origin_value = "https://foo.example";
@@ -354,10 +358,13 @@ fn cors_process() {
     let raw_response = Response::generate_response(response, request);
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("{}", response_string);
+
+    println!("<--/cors_process-->");
 }
 
 #[test]
 fn cors_process_empty_config() {
+    println!("<--cors_process_empty_config-->");
 
     // Origin header indicates it is CORS request
     let origin_value = "origin-value.com";
@@ -417,4 +424,6 @@ fn cors_process_empty_config() {
     let raw_response = Response::generate_response(response, request);
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("{}", response_string);
+
+    println!("</--cors_process_empty_config-->");
 }
