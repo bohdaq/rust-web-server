@@ -335,14 +335,14 @@ fn cors_process() {
     assert_eq!(expected_allow_methods, allow_methods.header_value);
 
     let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
-    let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header);
+    let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header).to_lowercase();
     assert_eq!(expected_allow_headers, allow_headers.header_value);
 
     let allow_credentials = response.get_header(Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
     assert_eq!("true", allow_credentials.header_value);
 
     let expose_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
-    let expected_expose_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header);
+    let expected_expose_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header).to_lowercase();
     assert_eq!(expected_expose_headers, expose_headers.header_value);
 
     let max_age = response.get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
@@ -393,26 +393,26 @@ fn cors_process_empty_config() {
 
     (request, response) = Cors::process(request, response, &cors_config).unwrap();
 
-    let allow_origins = response.get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
-    assert_eq!(CONSTANTS.EMPTY_STRING, allow_origins.header_value);
+    let allow_origins = response.get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string());
+    assert!(allow_origins.is_none());
 
-    let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.EMPTY_STRING, allow_methods.header_value);
+    let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string());
+    assert!(allow_methods.is_none());
 
-    let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.EMPTY_STRING, allow_headers.header_value);
+    let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string());
+    assert!(allow_headers.is_none());
 
     let boxed_allow_credentials = response.get_header(Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string());
-    assert_eq!(false, boxed_allow_credentials.is_some());
+    assert!(boxed_allow_credentials.is_none());
 
-    let expose_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.EMPTY_STRING, expose_headers.header_value);
+    let expose_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string());
+    assert!(expose_headers.is_none());
 
-    let max_age = response.get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
-    assert_eq!(CONSTANTS.EMPTY_STRING, max_age.header_value);
+    let max_age = response.get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string());
+    assert!(max_age.is_none());
 
-    let vary = response.get_header(Header::VARY.to_string()).unwrap();
-    assert_eq!(Header::ORIGIN.to_string(), vary.header_value);
+    let vary = response.get_header(Header::VARY.to_string());
+    assert!(vary.is_none());
 
     let raw_response = Response::generate_response(response, request);
     let response_string = String::from_utf8(raw_response).unwrap();

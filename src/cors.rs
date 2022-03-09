@@ -127,13 +127,13 @@ impl Cors {
         let headers = cors.allow_headers.join(",");
         let allow_headers = Header {
             header_name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
-            header_value: headers
+            header_value: headers.to_lowercase()
         };
         response.headers.push(allow_headers);
 
         let allow_expose_headers  = cors.expose_headers.join(",");
         let expose_headers = Header {
-            header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
+            header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_lowercase(),
             header_value: allow_expose_headers
         };
         response.headers.push(expose_headers);
@@ -181,14 +181,14 @@ impl Cors {
         let headers = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS).unwrap();
         let allow_headers = Header {
             header_name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
-            header_value: headers
+            header_value: headers.to_lowercase()
         };
         response.headers.push(allow_headers);
 
         let allow_expose_headers  = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS).unwrap();
         let expose_headers = Header {
             header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
-            header_value: allow_expose_headers
+            header_value: allow_expose_headers.to_lowercase()
         };
         response.headers.push(expose_headers);
 
