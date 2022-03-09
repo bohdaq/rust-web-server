@@ -2,7 +2,7 @@ use std::{env};
 use std::fs::{File, metadata};
 use std::io::Read;
 use crate::constant::{HTTP_VERSIONS, HTTPError, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
-use crate::CONSTANTS;
+use crate::{Config, CONSTANTS};
 use crate::cors::Cors;
 use crate::header::Header;
 use crate::mime_type::MimeType;
@@ -108,7 +108,7 @@ impl App {
                         content_range_list,
                     };
 
-                    let is_cors_set_to_allow_all_requests : bool = env::var("rws.config.cors.allow_all").unwrap().parse().unwrap();
+                    let is_cors_set_to_allow_all_requests : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap().parse().unwrap();
                     if is_cors_set_to_allow_all_requests {
                         (request, response) = Cors::allow_all(request, response).unwrap();
                     } else {

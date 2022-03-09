@@ -34,6 +34,19 @@ struct Config {
     cors: Cors,
 }
 
+impl Config {
+    pub(crate) const RWS_CONFIG_IP: &'static str = "RWS_CONFIG_IP";
+    pub(crate) const RWS_CONFIG_PORT: &'static str = "RWS_CONFIG_PORT";
+    pub(crate) const RWS_CONFIG_THREAD_COUNT: &'static str = "RWS_CONFIG_THREAD_COUNT";
+    pub(crate) const RWS_CONFIG_CORS_ALLOW_ALL: &'static str = "RWS_CONFIG_CORS_ALLOW_ALL";
+    pub(crate) const RWS_CONFIG_CORS_ALLOW_ORIGINS: &'static str = "RWS_CONFIG_CORS_ALLOW_ORIGINS";
+    pub(crate) const RWS_CONFIG_CORS_ALLOW_CREDENTIALS: &'static str = "RWS_CONFIG_CORS_ALLOW_CREDENTIALS";
+    pub(crate) const RWS_CONFIG_CORS_ALLOW_HEADERS: &'static str = "RWS_CONFIG_CORS_ALLOW_HEADERS";
+    pub(crate) const RWS_CONFIG_CORS_ALLOW_METHODS: &'static str = "RWS_CONFIG_CORS_ALLOW_METHODS";
+    pub(crate) const RWS_CONFIG_CORS_EXPOSE_HEADERS: &'static str = "RWS_CONFIG_CORS_EXPOSE_HEADERS";
+    pub(crate) const RWS_CONFIG_CORS_MAX_AGE: &'static str = "RWS_CONFIG_CORS_MAX_AGE";
+}
+
 fn main() {
     const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -99,9 +112,9 @@ fn main() {
 
     setup_environment_variables(config);
 
-    let ip : String = env::var("rws.config.ip").unwrap();
-    let port : i32 = env::var("rws.config.port").unwrap().parse().unwrap();
-    let thread_count : i32 = env::var("rws.config.thread_count").unwrap().parse().unwrap();
+    let ip : String = env::var(Config::RWS_CONFIG_IP).unwrap();
+    let port : i32 = env::var(Config::RWS_CONFIG_PORT).unwrap().parse().unwrap();
+    let thread_count : i32 = env::var(Config::RWS_CONFIG_THREAD_COUNT).unwrap().parse().unwrap();
 
     create_tcp_listener_with_thread_pool(ip.as_str(), port, thread_count);
 }
@@ -134,16 +147,16 @@ fn read_config(is_test_mode: bool) -> Config {
 }
 
 fn setup_environment_variables(config: Config) {
-    env::set_var("rws.config.ip", config.ip.to_string());
-    env::set_var("rws.config.port", config.port.to_string());
-    env::set_var("rws.config.thread_count", config.thread_count.to_string());
-    env::set_var("rws.config.cors.allow_all", config.cors.allow_all.to_string());
-    env::set_var("rws.config.cors.allow_origins", config.cors.allow_origins.join(", "));
-    env::set_var("rws.config.cors.allow_credentials", config.cors.allow_credentials.to_string());
-    env::set_var("rws.config.cors.allow_headers", config.cors.allow_headers.join(","));
-    env::set_var("rws.config.cors.allow_methods", config.cors.allow_methods.join(", "));
-    env::set_var("rws.config.cors.expose_headers", config.cors.expose_headers.join(","));
-    env::set_var("rws.config.cors.max_age", config.cors.max_age);
+    env::set_var(Config::RWS_CONFIG_IP, config.ip.to_string());
+    env::set_var(Config::RWS_CONFIG_PORT, config.port.to_string());
+    env::set_var(Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, config.cors.allow_origins.join(", "));
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, config.cors.allow_credentials.to_string());
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS, config.cors.allow_headers.join(","));
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_METHODS, config.cors.allow_methods.join(", "));
+    env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(","));
+    env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, config.cors.max_age);
 }
 
 fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
