@@ -289,7 +289,7 @@ fn cors_allow_all() {
 fn cors_process() {
 
     // Origin header indicates it is CORS request
-    let origin_value = "origin-value.com";
+    let origin_value = "https://foo.example";
     let mut request = Request {
         method: "".to_string(),
         request_uri: "".to_string(),
@@ -310,8 +310,9 @@ fn cors_process() {
         content_range_list: vec![]
     };
 
-    let first_domain = "foo.example";
-    let second_domain = "bar.example";
+    let first_domain = "https://foo.example";
+    let second_domain = "https://bar.example";
+
     let custom_header = "x-custom-header";
     let cors_config = Cors {
         allow_all: false,
@@ -326,7 +327,7 @@ fn cors_process() {
     (request, response) = Cors::process(request, response, &cors_config).unwrap();
 
     let allow_origins = response.get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
-    let expected_allow_origins = format!("{}, {}", first_domain, second_domain);
+    let expected_allow_origins = format!("{}", origin_value);
     assert_eq!(expected_allow_origins, allow_origins.header_value);
 
     let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
