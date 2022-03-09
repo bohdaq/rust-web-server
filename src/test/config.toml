@@ -3,7 +3,7 @@ port = 7888
 thread_count = 2
 
 [cors]
-allow_all = false # true will allow all CORS requests, and you can omit setting properties below
+allow_all = false # true will allow all CORS requests, other CORS properties will be ignored
 allow_origins = ["https://foo.example", "https://bar.example"] # won't apply if allow_all set to true
 allow_methods = ["POST", "PUT"] # won't apply if allow_all set to true
 allow_headers = ["content-type", "x-custom-header"] # won't apply if allow_all set to true
