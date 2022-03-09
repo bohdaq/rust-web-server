@@ -48,6 +48,11 @@ impl Config {
 }
 
 fn main() {
+    // TODO:
+    // 1. read env variables
+    // 2. if config.toml is provided, read config.toml, update env vars
+    // 3. if command line args provided, read command line args, update env vars
+
     const VERSION: &str = env!("CARGO_PKG_VERSION");
 
     let mut config: Config = read_config(false);
