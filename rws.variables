@@ -1,17 +1,24 @@
 export RWS_CONFIG_IP="localhost"
 export RWS_CONFIG_PORT="7887"
 export RWS_CONFIG_THREAD_COUNT="5"
+
 # true will allow all CORS requests and you can omit configuring cors properties below
 export RWS_CONFIG_CORS_ALLOW_ALL="false"
+
 # list of allowed origins, this setting won't apply if cors allow_all set to true
 export RWS_CONFIG_CORS_ALLOW_ORIGINS="http://localhost:7887,http://localhost:8888"
+
 # if set to true, will allow to transmit credentials via CORS requests, this setting won't apply if cors allow_all set to true
 export RWS_CONFIG_CORS_ALLOW_CREDENTIALS="true"
+
 # list of allowed request headers, in lowercase, this setting won't apply if cors allow_all set to true
 export RWS_CONFIG_CORS_ALLOW_HEADERS="content-type,x-custom-header"
+
 # list of allowed methods, this setting won't apply if cors allow_all set to true
 export RWS_CONFIG_CORS_ALLOW_METHODS="GET,POST,PUT,DELETE"
+
 # list of allowed response headers, in lowercase, this setting won't apply if cors allow_all set to true
 export RWS_CONFIG_CORS_EXPOSE_HEADERS="content-type,x-custom-header"
+
 # in seconds, time to cache in browser CORS information, 86400s = 1 day; this setting won't apply if cors allow_all set to true
 export RWS_CONFIG_CORS_MAX_AGE="11111"
