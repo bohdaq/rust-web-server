@@ -192,13 +192,13 @@ fn override_environment_variables_from_config(is_test_mode: bool) {
     println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, config.cors.allow_credentials.to_string());
 
     env::set_var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS, config.cors.allow_headers.join(","));
-    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, config.cors.allow_headers.join(","));
+    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, config.cors.allow_headers.join(",").to_lowercase());
 
     env::set_var(Config::RWS_CONFIG_CORS_ALLOW_METHODS, config.cors.allow_methods.join(","));
     println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_ALLOW_METHODS, config.cors.allow_methods.join(","));
 
     env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(","));
-    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(","));
+    println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(",").to_lowercase());
 
     env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, &config.cors.max_age);
     println!("Set env variable '{}' to value '{}' from config.toml", Config::RWS_CONFIG_CORS_MAX_AGE, config.cors.max_age);
@@ -336,7 +336,7 @@ fn override_environment_variables_from_command_line_args() {
         None => print!(""),
         Some(allow_headers) => {
             env::set_var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS, allow_headers.to_string());
-            println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, allow_headers.to_string());
+            println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, allow_headers.to_lowercase());
         }
     }
 
@@ -355,7 +355,7 @@ fn override_environment_variables_from_command_line_args() {
         None => print!(""),
         Some(expose_headers) => {
             env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, expose_headers.to_string());
-            println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, expose_headers.to_string());
+            println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, expose_headers.to_lowercase());
         }
     }
 
