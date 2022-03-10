@@ -163,9 +163,6 @@ impl Cors {
         let origin = boxed_origin.unwrap();
         let origin_value = format!("{}", origin.header_value);
 
-        println!("allow_origins: {}", allow_origins);
-        println!("origin_value: {}", origin_value);
-
         let is_valid_origin = allow_origins.contains(&origin_value);
         if !is_valid_origin {
             return Ok((request, response))
