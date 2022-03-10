@@ -352,6 +352,15 @@ fn override_environment_variables_from_command_line_args() {
         }
     }
 
+    let cors_expose_headers = matches.value_of("cors-expose-headers");
+    match cors_expose_headers {
+        None => print!(""),
+        Some(expose_headers) => {
+            env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, expose_headers.to_string());
+            println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, expose_headers.to_string());
+        }
+    }
+
     println!("End of Reading Command Line Arguments");
 }
 
