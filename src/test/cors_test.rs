@@ -335,7 +335,7 @@ fn cors_process() {
     assert_eq!(expected_allow_origins, allow_origins.header_value);
 
     let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
-    let expected_allow_methods = format!("{}, {}, {}", REQUEST_METHODS.GET, REQUEST_METHODS.POST, REQUEST_METHODS.PUT);
+    let expected_allow_methods = format!("{},{},{}", REQUEST_METHODS.GET, REQUEST_METHODS.POST, REQUEST_METHODS.PUT);
     assert_eq!(expected_allow_methods, allow_methods.header_value);
 
     let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
