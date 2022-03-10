@@ -6,7 +6,7 @@ use std::io::{BufReader, Read, Write};
 use std::cmp::min;
 
 use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
-use crate::{CONSTANTS, read_config, Request, Response, Server, setup_environment_variables};
+use crate::{bootstrap, CONSTANTS, Request, Response, Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::Range;
@@ -107,8 +107,8 @@ fn it_generates_successful_response_with_index_html() {
 
 #[test]
 fn it_generates_successful_response_with_static_file() {
-    let config = read_config(true);
-    setup_environment_variables(config);
+    let is_test_mode = true;
+    bootstrap(is_test_mode);
 
     // request test data
     let request_host_header_name = "Host";

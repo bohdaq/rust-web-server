@@ -62,7 +62,9 @@ fn bootstrap(is_test_mode: bool) {
     if is_config_provided {
         override_environment_variables_from_config(is_test_mode);
     }
-    override_environment_variables_from_command_line_args();
+    if !is_test_mode {
+        override_environment_variables_from_command_line_args();
+    }
 }
 
 fn read_system_environment_variables() {
@@ -369,47 +371,6 @@ fn override_environment_variables_from_command_line_args() {
     println!("End of Reading Command Line Arguments");
 }
 
-
-fn read_config(is_test_mode: bool) -> Config {
-    let mut config: Config = Config {
-        ip: "".to_string(),
-        port: 0,
-        thread_count: 0,
-        cors: Cors {
-            allow_all: false,
-            allow_origins: vec![],
-            allow_methods: vec![],
-            allow_headers: vec![],
-            allow_credentials: false,
-            expose_headers: vec![],
-            max_age: "".to_string()
-        }
-    };
-    let mut filepath = "config.toml";
-    if is_test_mode {
-        filepath = "src/test/config.toml"
-    }
-
-    let content = std::fs::read_to_string(filepath);
-    if content.is_ok() {
-        config = toml::from_str(content.unwrap().as_str()).unwrap();
-    }
-    config
-}
-
-fn setup_environment_variables(config: Config) {
-    env::set_var(Config::RWS_CONFIG_IP, config.ip.to_string());
-    env::set_var(Config::RWS_CONFIG_PORT, config.port.to_string());
-    env::set_var(Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, config.cors.allow_origins.join(","));
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, config.cors.allow_credentials.to_string());
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS, config.cors.allow_headers.join(","));
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_METHODS, config.cors.allow_methods.join(","));
-    env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(","));
-    env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, config.cors.max_age);
-}
-
 fn get_ip_port_thread_count() -> (String, i32, i32) {
     let ip : String = env::var(Config::RWS_CONFIG_IP).unwrap();
     let port : i32 = env::var(Config::RWS_CONFIG_PORT).unwrap().parse().unwrap();
@@ -427,7 +388,7 @@ fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) 
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-        println!("Connection established!");
+        println!("Connection established, local addr: {}, peer addr: {}", stream.local_addr().unwrap(), stream.peer_addr().unwrap());
 
         pool.execute(move ||  {
             Server::process_request(stream);

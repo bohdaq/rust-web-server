@@ -2,7 +2,7 @@ use std::{env, fs};
 use std::borrow::Borrow;
 use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::header::Header;
-use crate::{Config, CONSTANTS, read_config, Request, Response, Server, setup_environment_variables};
+use crate::{bootstrap, Config, CONSTANTS, Request, Response, Server};
 use crate::cors::Cors;
 use crate::mime_type::MimeType;
 use crate::test::server_test::MockTcpStream;
@@ -126,8 +126,8 @@ fn cors_options_preflight_request() {
 
 #[test]
 fn actual_request_after_preflight() {
-    let config = read_config(true);
-    setup_environment_variables(config);
+    let is_test_mode = true;
+    bootstrap(is_test_mode);
 
     let request_method = REQUEST_METHODS.GET;
     let request_uri = "/static/test.json";
@@ -222,7 +222,7 @@ fn actual_request_after_preflight() {
 
 #[test]
 fn cors_allow_all() {
-    println!("<--cors_allow_all-->");
+    println!("cors_allow_all");
 
     let origin_value = "origin-value.com";
     let custom_header = "X-CUSTOM-HEADER";
@@ -285,12 +285,12 @@ fn cors_allow_all() {
     let raw_response = Response::generate_response(response, request);
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("{}", response_string);
-    println!("</--cors_allow_all-->");
+    println!("end cors_allow_all");
 }
 
 #[test]
 fn cors_process() {
-    println!("<--cors_process-->");
+    println!("cors_process");
 
     // Origin header indicates it is CORS request
     let origin_value = "https://foo.example";
@@ -359,15 +359,15 @@ fn cors_process() {
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("{}", response_string);
 
-    println!("<--/cors_process-->");
+    println!("end cors_process");
 }
 
 #[test]
 fn cors_process_default_config() {
-    println!("<--cors_process_default_config-->");
+    println!("cors_process_default_config");
 
-    let config : Config = read_config(true);
-    setup_environment_variables(config);
+    let is_test_mode = true;
+    bootstrap(is_test_mode);
 
     // Origin header indicates it is CORS request
     let origin_value = "https://bar.example";
@@ -424,12 +424,12 @@ fn cors_process_default_config() {
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("{}", response_string);
 
-    println!("<--/cors_process_default_config-->");
+    println!("end cors_process_default_config");
 }
 
 #[test]
 fn cors_process_empty_config() {
-    println!("<--cors_process_empty_config-->");
+    println!("cors_process_empty_config");
 
     // Origin header indicates it is CORS request
     let origin_value = "origin-value.com";
@@ -490,5 +490,5 @@ fn cors_process_empty_config() {
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("{}", response_string);
 
-    println!("</--cors_process_empty_config-->");
+    println!("end cors_process_empty_config");
 }
