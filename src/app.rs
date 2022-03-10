@@ -141,6 +141,25 @@ impl App {
 
         }
 
+        if request.request_uri != CONSTANTS.SLASH && request.method == REQUEST_METHODS.POST {
+            let content_range_list = vec![];
+
+            response = Response {
+                http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+                status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE.to_string(),
+                reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE.to_string(),
+                headers: vec![],
+                content_range_list,
+            };
+
+            let is_cors_set_to_allow_all_requests : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap().parse().unwrap();
+            if is_cors_set_to_allow_all_requests {
+                (request, response) = Cors::allow_all(request, response).unwrap();
+            } else {
+                (request, response) = Cors::process_using_default_config(request, response).unwrap();
+            }
+        }
+
         (response, request)
     }
 
