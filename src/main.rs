@@ -49,18 +49,14 @@ impl Config {
 }
 
 fn main() {
-    bootstrap();
+    let is_test_mode = false;
 
-    let ip : String = env::var(Config::RWS_CONFIG_IP).unwrap();
-    let port : i32 = env::var(Config::RWS_CONFIG_PORT).unwrap().parse().unwrap();
-    let thread_count : i32 = env::var(Config::RWS_CONFIG_THREAD_COUNT).unwrap().parse().unwrap();
-
+    bootstrap(is_test_mode);
+    let (ip, port, thread_count) = get_ip_port_thread_count();
     create_tcp_listener_with_thread_pool(ip.as_str(), port, thread_count);
 }
 
-fn bootstrap() {
-    let is_test_mode = false;
-
+fn bootstrap(is_test_mode: bool) {
     read_system_environment_variables();
     let is_config_provided = is_config_file_provided(is_test_mode);
     if is_config_provided {
@@ -412,6 +408,14 @@ fn setup_environment_variables(config: Config) {
     env::set_var(Config::RWS_CONFIG_CORS_ALLOW_METHODS, config.cors.allow_methods.join(","));
     env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(","));
     env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, config.cors.max_age);
+}
+
+fn get_ip_port_thread_count() -> (String, i32, i32) {
+    let ip : String = env::var(Config::RWS_CONFIG_IP).unwrap();
+    let port : i32 = env::var(Config::RWS_CONFIG_PORT).unwrap().parse().unwrap();
+    let thread_count : i32 = env::var(Config::RWS_CONFIG_THREAD_COUNT).unwrap().parse().unwrap();
+
+    (ip, port, thread_count)
 }
 
 fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
