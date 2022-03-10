@@ -46,6 +46,11 @@ impl Config {
     pub(crate) const RWS_CONFIG_CORS_ALLOW_METHODS: &'static str = "RWS_CONFIG_CORS_ALLOW_METHODS";
     pub(crate) const RWS_CONFIG_CORS_EXPOSE_HEADERS: &'static str = "RWS_CONFIG_CORS_EXPOSE_HEADERS";
     pub(crate) const RWS_CONFIG_CORS_MAX_AGE: &'static str = "RWS_CONFIG_CORS_MAX_AGE";
+
+    pub(crate) const RWS_DEFAULT_IP: &'static str = "127.0.0.1";
+    pub(crate) const RWS_DEFAULT_PORT: &'static i32 = &7878;
+    pub(crate) const RWS_DEFAULT_THREAD_COUNT: &'static i32 = &4;
+
 }
 
 fn main() {
@@ -375,11 +380,26 @@ fn override_environment_variables_from_command_line_args() {
 }
 
 fn get_ip_port_thread_count() -> (String, i32, i32) {
-    let ip : String = env::var(Config::RWS_CONFIG_IP).unwrap();
-    let port : i32 = env::var(Config::RWS_CONFIG_PORT).unwrap().parse().unwrap();
-    let thread_count : i32 = env::var(Config::RWS_CONFIG_THREAD_COUNT).unwrap().parse().unwrap();
+    let mut ip : String = Config::RWS_DEFAULT_IP.to_string();
+    let mut port: &i32 = Config::RWS_DEFAULT_PORT;
+    let mut thread_count: &i32 = Config::RWS_DEFAULT_THREAD_COUNT;
 
-    (ip, port, thread_count)
+    let boxed_ip = env::var(Config::RWS_CONFIG_IP);
+    if boxed_ip.is_ok() {
+        ip = boxed_ip.unwrap()
+    }
+
+    let boxed_port = env::var(Config::RWS_CONFIG_PORT);
+    if boxed_port.is_ok() {
+        port = boxed_port.unwrap().parse().unwrap()
+    }
+
+    let boxed_thread_count = env::var(Config::RWS_CONFIG_THREAD_COUNT);
+    if boxed_thread_count.is_ok() {
+        thread_count = boxed_thread_count.unwrap().parse().unwrap()
+    }
+
+    (ip, *port, *thread_count)
 }
 
 fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
