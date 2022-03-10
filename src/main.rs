@@ -361,6 +361,15 @@ fn override_environment_variables_from_command_line_args() {
         }
     }
 
+    let cors_max_age = matches.value_of("cors-max-age");
+    match cors_max_age {
+        None => print!(""),
+        Some(max_age) => {
+            env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, max_age.to_string());
+            println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_MAX_AGE, max_age.to_string());
+        }
+    }
+
     println!("End of Reading Command Line Arguments");
 }
 
