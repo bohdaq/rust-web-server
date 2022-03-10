@@ -381,8 +381,8 @@ fn override_environment_variables_from_command_line_args() {
 
 fn get_ip_port_thread_count() -> (String, i32, i32) {
     let mut ip : String = Config::RWS_DEFAULT_IP.to_string();
-    let mut port: &i32 = Config::RWS_DEFAULT_PORT;
-    let mut thread_count: &i32 = Config::RWS_DEFAULT_THREAD_COUNT;
+    let mut port: i32 = *Config::RWS_DEFAULT_PORT;
+    let mut thread_count: i32 = *Config::RWS_DEFAULT_THREAD_COUNT;
 
     let boxed_ip = env::var(Config::RWS_CONFIG_IP);
     if boxed_ip.is_ok() {
@@ -399,7 +399,7 @@ fn get_ip_port_thread_count() -> (String, i32, i32) {
         thread_count = boxed_thread_count.unwrap().parse().unwrap()
     }
 
-    (ip, *port, *thread_count)
+    (ip, port, thread_count)
 }
 
 fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
