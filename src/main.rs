@@ -342,6 +342,16 @@ fn override_environment_variables_from_command_line_args() {
         }
     }
 
+    let cors_allow_credentials = matches.value_of("cors-allow-credentials");
+    match cors_allow_credentials {
+        None => print!(""),
+        Some(allow_credentials) => {
+            let is_allow_credentials: bool = allow_credentials.parse().unwrap();
+            env::set_var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, is_allow_credentials.to_string());
+            println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, is_allow_credentials.to_string());
+        }
+    }
+
     println!("End of Reading Command Line Arguments");
 }
 
