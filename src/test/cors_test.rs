@@ -295,7 +295,7 @@ fn cors_process() {
     // Origin header indicates it is CORS request
     let origin_value = "https://foo.example";
     let mut request = Request {
-        method: "".to_string(),
+        method: REQUEST_METHODS.OPTIONS.to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
         headers: vec![
@@ -372,7 +372,7 @@ fn cors_process_default_config() {
     // Origin header indicates it is CORS request
     let origin_value = "https://bar.example";
     let mut request = Request {
-        method: "".to_string(),
+        method: REQUEST_METHODS.OPTIONS.to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
         headers: vec![

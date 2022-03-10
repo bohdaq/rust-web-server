@@ -117,32 +117,35 @@ impl Cors {
         };
         response.headers.push(vary);
 
-        let methods = cors.allow_methods.join(", ");
-        let allow_methods = Header {
-            header_name: Header::ACCESS_CONTROL_ALLOW_METHODS.to_string(),
-            header_value: methods
-        };
-        response.headers.push(allow_methods);
+        let is_options = request.method == REQUEST_METHODS.OPTIONS;
+        if is_options {
+            let methods = cors.allow_methods.join(", ");
+            let allow_methods = Header {
+                header_name: Header::ACCESS_CONTROL_ALLOW_METHODS.to_string(),
+                header_value: methods
+            };
+            response.headers.push(allow_methods);
 
-        let headers = cors.allow_headers.join(",");
-        let allow_headers = Header {
-            header_name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
-            header_value: headers.to_lowercase()
-        };
-        response.headers.push(allow_headers);
+            let headers = cors.allow_headers.join(",");
+            let allow_headers = Header {
+                header_name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
+                header_value: headers.to_lowercase()
+            };
+            response.headers.push(allow_headers);
 
-        let allow_expose_headers  = cors.expose_headers.join(",");
-        let expose_headers = Header {
-            header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
-            header_value: allow_expose_headers.to_lowercase()
-        };
-        response.headers.push(expose_headers);
+            let allow_expose_headers  = cors.expose_headers.join(",");
+            let expose_headers = Header {
+                header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
+                header_value: allow_expose_headers.to_lowercase()
+            };
+            response.headers.push(expose_headers);
 
-        let max_age = Header {
-            header_name: Header::ACCESS_CONTROL_MAX_AGE.to_string(),
-            header_value: cors.max_age.to_string()
-        };
-        response.headers.push(max_age);
+            let max_age = Header {
+                header_name: Header::ACCESS_CONTROL_MAX_AGE.to_string(),
+                header_value: cors.max_age.to_string()
+            };
+            response.headers.push(max_age);
+        }
 
         Ok((request, response))
     }
@@ -186,33 +189,37 @@ impl Cors {
         };
         response.headers.push(vary);
 
-        let methods = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS).unwrap();
-        let allow_methods = Header {
-            header_name: Header::ACCESS_CONTROL_ALLOW_METHODS.to_string(),
-            header_value: methods
-        };
-        response.headers.push(allow_methods);
+        let is_options = request.method == REQUEST_METHODS.OPTIONS;
+        if is_options {
+            let methods = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS).unwrap();
+            let allow_methods = Header {
+                header_name: Header::ACCESS_CONTROL_ALLOW_METHODS.to_string(),
+                header_value: methods
+            };
+            response.headers.push(allow_methods);
 
-        let headers = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS).unwrap();
-        let allow_headers = Header {
-            header_name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
-            header_value: headers.to_lowercase()
-        };
-        response.headers.push(allow_headers);
+            let headers = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS).unwrap();
+            let allow_headers = Header {
+                header_name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
+                header_value: headers.to_lowercase()
+            };
+            response.headers.push(allow_headers);
 
-        let allow_expose_headers  = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS).unwrap();
-        let expose_headers = Header {
-            header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
-            header_value: allow_expose_headers.to_lowercase()
-        };
-        response.headers.push(expose_headers);
+            let allow_expose_headers  = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS).unwrap();
+            let expose_headers = Header {
+                header_name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
+                header_value: allow_expose_headers.to_lowercase()
+            };
+            response.headers.push(expose_headers);
 
-        let max_age_value  = env::var(Config::RWS_CONFIG_CORS_MAX_AGE).unwrap();
-        let max_age = Header {
-            header_name: Header::ACCESS_CONTROL_MAX_AGE.to_string(),
-            header_value: max_age_value
-        };
-        response.headers.push(max_age);
+            let max_age_value  = env::var(Config::RWS_CONFIG_CORS_MAX_AGE).unwrap();
+            let max_age = Header {
+                header_name: Header::ACCESS_CONTROL_MAX_AGE.to_string(),
+                header_value: max_age_value
+            };
+            response.headers.push(max_age);
+        }
+
 
         Ok((request, response))
     }
