@@ -49,6 +49,8 @@ impl Config {
 }
 
 fn main() {
+    //test plan: test allowed request with config via system vars, config file or command line
+    //           test misconfigured origin, header, presence allow credentials
     let is_test_mode = false;
 
     bootstrap(is_test_mode);
@@ -132,15 +134,16 @@ fn is_config_file_provided(is_test_mode: bool) -> bool {
         filepath = "/src/test/config.toml"
     }
     let static_filepath = Server::get_static_filepath(filepath);
-    let md = metadata(&static_filepath).unwrap();
-
-    let is_config_provided = md.is_file();
+    let mut is_config_provided = metadata(&static_filepath).is_ok();
 
     if !is_config_provided {
         println!("config.toml is not provided");
         println!("End of Config Section");
-    }
 
+    } else {
+        let md = metadata(&static_filepath).unwrap();
+        is_config_provided = md.is_file();
+    }
     is_config_provided
 }
 
@@ -326,8 +329,8 @@ fn override_environment_variables_from_command_line_args() {
     match cors_allow_methods {
         None => print!(""),
         Some(allow_origins) => {
-            env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, allow_origins.to_string());
-            println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, allow_origins.to_string());
+            env::set_var(Config::RWS_CONFIG_CORS_ALLOW_METHODS, allow_origins.to_string());
+            println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_ALLOW_METHODS, allow_origins.to_string());
         }
     }
 

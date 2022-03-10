@@ -82,7 +82,7 @@ impl Cors {
 
     pub(crate) fn process(request: Request, mut response: Response, cors: &Cors) -> Result<(Request, Response), HTTPError> {
 
-        let allow_origins = cors.allow_origins.join(", ");
+        let allow_origins = cors.allow_origins.join(",");
         let boxed_origin = request.get_header(Header::ORIGIN.to_string());
 
         if boxed_origin.is_none() {
@@ -119,7 +119,7 @@ impl Cors {
 
         let is_options = request.method == REQUEST_METHODS.OPTIONS;
         if is_options {
-            let methods = cors.allow_methods.join(", ");
+            let methods = cors.allow_methods.join(",");
             let allow_methods = Header {
                 header_name: Header::ACCESS_CONTROL_ALLOW_METHODS.to_string(),
                 header_value: methods
@@ -162,6 +162,9 @@ impl Cors {
 
         let origin = boxed_origin.unwrap();
         let origin_value = format!("{}", origin.header_value);
+
+        println!("allow_origins: {}", allow_origins);
+        println!("origin_value: {}", origin_value);
 
         let is_valid_origin = allow_origins.contains(&origin_value);
         if !is_valid_origin {
