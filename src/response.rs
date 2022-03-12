@@ -64,8 +64,8 @@ impl Response {
 
     pub(crate) fn generate_response(mut response: Response, mut request: Request) -> Vec<u8> {
         let mut headers = vec![
-            App::get_x_content_type_options_header(),
-            App::get_accept_ranges_header(),
+            Response::get_x_content_type_options_header(),
+            Response::get_accept_ranges_header(),
         ];
 
         headers.append(&mut response.headers);
@@ -270,5 +270,19 @@ impl Response {
         let multipart_byteranges = [CONSTANTS.MULTIPART, CONSTANTS.SLASH, CONSTANTS.BYTERANGES].join("");
         let is_multipart_byteranges = content_type.header_value.starts_with(&multipart_byteranges);
         is_multipart_byteranges
+    }
+
+    pub(crate) fn get_x_content_type_options_header() -> Header {
+        Header {
+            header_name: Header::X_CONTENT_TYPE_OPTIONS.to_string(),
+            header_value: CONSTANTS.NOSNIFF.to_string(),
+        }
+    }
+
+    pub(crate) fn get_accept_ranges_header() -> Header {
+        Header {
+            header_name: Header::ACCEPT_RANGES.to_string(),
+            header_value: CONSTANTS.BYTES.to_string(),
+        }
     }
 }

@@ -196,18 +196,4 @@ impl App {
 
         Ok(content_range_list)
     }
-
-    pub(crate) fn get_x_content_type_options_header() -> Header {
-        Header {
-            header_name: Header::X_CONTENT_TYPE_OPTIONS.to_string(),
-            header_value: CONSTANTS.NOSNIFF.to_string(),
-        }
-    }
-
-    pub(crate) fn get_accept_ranges_header() -> Header {
-        Header {
-            header_name: Header::ACCEPT_RANGES.to_string(),
-            header_value: CONSTANTS.BYTES.to_string(),
-        }
-    }
 }
