@@ -419,19 +419,7 @@ fn get_ip_port_thread_count() -> (String, i32, i32) {
 fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) -> io::Result<()> {
     let bind_addr = [ip, ":", port.to_string().as_str()].join(CONSTANTS.EMPTY_STRING);
     println!("Hello, rust-web-server is up and running: {}", bind_addr);
-
-    // let listener = TcpListener::bind(bind_addr).unwrap();
-    // let pool = ThreadPool::new(thread_count as usize);
-    //
-    // for stream in listener.incoming() {
-    //     let stream = stream.unwrap();
-    //     println!("Connection established, local addr: {}, peer addr: {}", stream.local_addr().unwrap(), stream.peer_addr().unwrap());
-    //
-    //     pool.execute(move ||  {
-    //         Server::process_request(stream);
-    //     });
-    // }
-
+    
     // Create a poll instance.
     let mut poll = Poll::new()?;
     // Create storage for events.
