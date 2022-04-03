@@ -1,4 +1,4 @@
-export RWS_CONFIG_IP="localhost"
+export RWS_CONFIG_IP="127.0.0.1"
 export RWS_CONFIG_PORT="7887"
 
 # true will allow all CORS requests and you can omit configuring cors properties below
