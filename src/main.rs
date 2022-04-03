@@ -32,7 +32,9 @@ use crate::response::Response;
 use crate::server::Server;
 use crate::thread_pool::ThreadPool;
 
-use clap::{Arg, App};
+use clap::Arg;
+use clap::App as ClapApp;
+use crate::app::App;
 use serde::{Serialize, Deserialize};
 use crate::cors::Cors;
 
@@ -230,7 +232,7 @@ fn override_environment_variables_from_command_line_args() {
     println!("Start of Reading Command Line Arguments");
 
     const VERSION: &str = env!("CARGO_PKG_VERSION");
-    let matches = App::new("rws rust-web-server")
+    let matches = ClapApp::new("rws rust-web-server")
         .version(VERSION)
         .author("Bohdan Tsap <bohdan.tsap@tutanota.com>")
         .about("Hi, rust-web-server (rws) is a simple web-server written in Rust. The rws server can serve static content inside the directory it is started.")
@@ -547,11 +549,17 @@ fn handle_connection_event(
         }
     }
 
+    let mut raw_response : Vec<u8> = vec![];
 
     if bytes_read != 0 {
         let received_data = &received_data[..bytes_read];
         if let Ok(str_buf) = from_utf8(received_data) {
             println!("Received data: {}", str_buf.trim_end());
+
+            let request: Request = Request::parse_request(str_buf.trim_end().as_ref());
+            let (response, request) = App::handle_request(request);
+            raw_response = Response::generate_response(response, request);
+
         } else {
             println!("Received (none UTF-8) data: {:?}", received_data);
         }
@@ -560,7 +568,7 @@ fn handle_connection_event(
 
     // We can (maybe) write to the connection.
 
-    match connection.write(DATA) {
+    match connection.write(raw_response.as_ref()) {
         // We want to write the entire `DATA` buffer in a single go. If we
         // write less we'll return a short write error (same as
         // `io::Write::write_all` does).
