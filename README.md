@@ -73,3 +73,7 @@ If you want to build rust-web-server on your own, make sure you have [Rust insta
 >Hello, rust-web-server is up and running: 127.0.0.1:8888
 
 
+## Community
+Rust Web Server has a [Discord](https://discord.gg/zaErjtr5Dm) where you can ask questions and share ideas.
+
+
