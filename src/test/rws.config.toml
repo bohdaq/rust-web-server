@@ -1,6 +1,5 @@
 ip = 'localhost'
 port = 7888
-thread_count = 2
 
 [cors]
 allow_all = false # true will allow all CORS requests, other CORS properties will be ignored

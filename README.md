@@ -5,9 +5,10 @@ Hi, rust-web-server (**rws**) is a simple web-server written in Rust. The **rws*
 ## Features
 1. [Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
 2. [HTTP range requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests)
+3. [Non-blocking I/O](https://en.wikipedia.org/wiki/Asynchronous_I/O)
 
 ## Download
-Currently, you can download binary for [x86_64-unknown-linux-gnu](https://cv.bohdaq.name/rust-web-server/0.0.6/x86_64-unknown-linux-gnu/rws) or [x86_64-apple-darwin](https://cv.bohdaq.name/rust-web-server/0.0.6/x86_64-apple-darwin/rws) platforms. Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
+Currently, you can download binary for [x86_64-unknown-linux-gnu](https://cv.bohdaq.name/rust-web-server/0.0.7/x86_64-unknown-linux-gnu/rws) or [x86_64-apple-darwin](https://cv.bohdaq.name/rust-web-server/0.0.7/x86_64-apple-darwin/rws) platforms. Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
 
 ## Installation
 Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PATH_%28variable%29). To check installation execute the following code:
@@ -16,7 +17,7 @@ Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PA
  
 You will see similar output:
 
-> rws rust-web-server 0.0.6
+> rws rust-web-server 0.0.7
 > 
 > Bohdan Tsap <bohdan.tsap@tutanota.com>
 > 
@@ -36,14 +37,12 @@ You will see similar output:
 > 
 > -p, --port <port>          Port
 > 
-> -t, --threads <threads>    Number of threads
-> 
 > -V, --version              Print version information
 
 ## Run
 Simply run the following from command line:
 
-> $ rws --ip=127.0.0.1 --port=8888 --threads=5
+> $ rws --ip=127.0.0.1 --port=8888
 
 Make sure in root folder you provided index.html and 404.html files.
 
@@ -60,15 +59,13 @@ If you want to build rust-web-server on your own, make sure you have [Rust insta
 > 
 > $ cd target/release
 > 
-> $ ./rws --ip=127.0.0.1 --port=8888 --threads=5
+> $ ./rws --ip=127.0.0.1 --port=8888
 
 >You will see similar output:
 >
 >Port: 8888
 >
 >IP: 127.0.0.1
->
->Thread count: 5
 >
 >Hello, rust-web-server is up and running: 127.0.0.1:8888
 

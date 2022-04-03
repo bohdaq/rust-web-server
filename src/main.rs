@@ -40,20 +40,17 @@ use serde::{Serialize, Deserialize};
 use crate::cors::Cors;
 
 const SERVER: Token = Token(0);
-const DATA: &[u8] = b"HTTP/1.1 200 OK\r\n\r\n";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Config {
     ip: String,
     port: i32,
-    thread_count: i32,
     cors: Cors,
 }
 
 impl Config {
     pub(crate) const RWS_CONFIG_IP: &'static str = "RWS_CONFIG_IP";
     pub(crate) const RWS_CONFIG_PORT: &'static str = "RWS_CONFIG_PORT";
-    pub(crate) const RWS_CONFIG_THREAD_COUNT: &'static str = "RWS_CONFIG_THREAD_COUNT";
     pub(crate) const RWS_CONFIG_CORS_ALLOW_ALL: &'static str = "RWS_CONFIG_CORS_ALLOW_ALL";
     pub(crate) const RWS_CONFIG_CORS_ALLOW_ORIGINS: &'static str = "RWS_CONFIG_CORS_ALLOW_ORIGINS";
     pub(crate) const RWS_CONFIG_CORS_ALLOW_CREDENTIALS: &'static str = "RWS_CONFIG_CORS_ALLOW_CREDENTIALS";
@@ -64,7 +61,6 @@ impl Config {
 
     pub(crate) const RWS_DEFAULT_IP: &'static str = "127.0.0.1";
     pub(crate) const RWS_DEFAULT_PORT: &'static i32 = &7878;
-    pub(crate) const RWS_DEFAULT_THREAD_COUNT: &'static i32 = &4;
 
 }
 
@@ -74,8 +70,8 @@ fn main() {
     let is_test_mode = false;
 
     bootstrap(is_test_mode);
-    let (ip, port, thread_count) = get_ip_port_thread_count();
-    create_tcp_listener_with_thread_pool(ip.as_str(), port, thread_count);
+    let (ip, port) = get_ip_port();
+    create_tcp_listener(ip.as_str(), port);
 }
 
 fn bootstrap(is_test_mode: bool) {
@@ -100,11 +96,6 @@ fn read_system_environment_variables() {
     let boxed_port = env::var(Config::RWS_CONFIG_PORT);
     if boxed_port.is_ok() {
         println!("{}={}", Config::RWS_CONFIG_PORT, boxed_port.unwrap());
-    }
-
-    let boxed_thread_count = env::var(Config::RWS_CONFIG_THREAD_COUNT);
-    if boxed_thread_count.is_ok() {
-        println!("{}={}", Config::RWS_CONFIG_THREAD_COUNT, boxed_thread_count.unwrap());
     }
 
     let boxed_cors_allow_all = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL);
@@ -171,7 +162,6 @@ fn override_environment_variables_from_config(is_test_mode: bool) {
     let mut config: Config = Config {
         ip: "".to_string(),
         port: 0,
-        thread_count: 0,
         cors: Cors {
             allow_all: false,
             allow_origins: vec![],
@@ -201,9 +191,6 @@ fn override_environment_variables_from_config(is_test_mode: bool) {
 
     env::set_var(Config::RWS_CONFIG_PORT, config.port.to_string());
     println!("Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_PORT, config.port.to_string());
-
-    env::set_var(Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
-    println!("Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
 
     env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
     println!("Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
@@ -247,11 +234,6 @@ fn override_environment_variables_from_command_line_args() {
             .long("ip")
             .takes_value(true)
             .help("IP or domain"))
-        .arg(Arg::new("threads")
-            .short('t')
-            .long("threads")
-            .takes_value(true)
-            .help("Number of threads"))
         .arg(Arg::new("cors-allow-all")
             .short('a')
             .long("cors-allow-all")
@@ -309,20 +291,6 @@ fn override_environment_variables_from_command_line_args() {
         Some(ip) => {
             env::set_var(Config::RWS_CONFIG_IP, ip.to_string());
             println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_IP, ip.to_string());
-        }
-    }
-
-    let threads_match = matches.value_of("threads");
-    match threads_match {
-        None => print!(""),
-        Some(s) => {
-            match s.parse::<i32>() {
-                Ok(thread_count) => {
-                    env::set_var(Config::RWS_CONFIG_THREAD_COUNT, thread_count.to_string());
-                    println!("Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_THREAD_COUNT, thread_count.to_string());
-                },
-                Err(_) => println!("That's not a number! {}", s),
-            }
         }
     }
 
@@ -394,10 +362,9 @@ fn override_environment_variables_from_command_line_args() {
     println!("End of Reading Command Line Arguments");
 }
 
-fn get_ip_port_thread_count() -> (String, i32, i32) {
+fn get_ip_port() -> (String, i32) {
     let mut ip : String = Config::RWS_DEFAULT_IP.to_string();
     let mut port: i32 = *Config::RWS_DEFAULT_PORT;
-    let mut thread_count: i32 = *Config::RWS_DEFAULT_THREAD_COUNT;
 
     let boxed_ip = env::var(Config::RWS_CONFIG_IP);
     if boxed_ip.is_ok() {
@@ -409,15 +376,10 @@ fn get_ip_port_thread_count() -> (String, i32, i32) {
         port = boxed_port.unwrap().parse().unwrap()
     }
 
-    let boxed_thread_count = env::var(Config::RWS_CONFIG_THREAD_COUNT);
-    if boxed_thread_count.is_ok() {
-        thread_count = boxed_thread_count.unwrap().parse().unwrap()
-    }
-
-    (ip, port, thread_count)
+    (ip, port)
 }
 
-fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) -> io::Result<()> {
+fn create_tcp_listener(ip: &str, port: i32) -> io::Result<()> {
     let bind_addr = [ip, ":", port.to_string().as_str()].join(CONSTANTS.EMPTY_STRING);
     println!("Hello, rust-web-server is up and running: {}", bind_addr);
 
@@ -558,7 +520,7 @@ fn handle_connection_event(
         // We want to write the entire `DATA` buffer in a single go. If we
         // write less we'll return a short write error (same as
         // `io::Write::write_all` does).
-        Ok(n) if n < DATA.len() => return Err(io::ErrorKind::WriteZero.into()),
+        Ok(n) if n < raw_response.len() => return Err(io::ErrorKind::WriteZero.into()),
         Ok(_) => {
             // After we've written something we'll reregister the connection
             // to only respond to readable events.
