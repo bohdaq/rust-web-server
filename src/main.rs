@@ -20,6 +20,7 @@ use std::io::{self, Read, Write};
 use std::net::Shutdown;
 use std::str::from_utf8;
 use std::{thread, time};
+use std::time::Instant;
 
 use mio::event::{Event, Source};
 use mio::net::{TcpListener, TcpStream};
@@ -443,6 +444,7 @@ fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) 
         poll.poll(&mut events, None)?;
 
         for event in events.iter() {
+            let now = Instant::now();
             match event.token() {
                 SERVER => loop {
                     // Received an event for the TCP server socket, which
@@ -477,7 +479,7 @@ fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) 
                 token => {
                     // Maybe received an event for a TCP connection.
                     let done = if let Some(connection) = connections.get_mut(&token) {
-                        handle_connection_event(poll.registry(), connection, event)?
+                        handle_connection_event(poll.registry(), connection, event, now)?
                     } else {
                         // Sporadic events happen, we can safely ignore them.
                         false
@@ -506,6 +508,7 @@ fn handle_connection_event(
     registry: &Registry,
     connection: &mut TcpStream,
     event: &Event,
+    now: Instant,
 ) -> io::Result<bool> {
 
     let mut connection_closed = false;
@@ -541,16 +544,11 @@ fn handle_connection_event(
 
     if bytes_read != 0 {
         let received_data = &received_data[..bytes_read];
-        if let Ok(str_buf) = from_utf8(received_data) {
-            println!("\nReceived data: \n{}\n", str_buf.trim_end());
+        println!("Read {} bytes", received_data.len());
 
-            let request: Request = Request::parse_request(str_buf.trim_end().as_ref());
-            let (response, request) = App::handle_request(request);
-            raw_response = Response::generate_response(response, request);
-
-        } else {
-            println!("Received (none UTF-8) data: {:?}", received_data);
-        }
+        let request: Request = Request::parse_request(received_data.as_ref());
+        let (response, request) = App::handle_request(request);
+        raw_response = Response::generate_response(response, request);
     }
 
 
@@ -566,21 +564,21 @@ fn handle_connection_event(
             // to only respond to readable events.
             registry.reregister(connection, event.token(), Interest::READABLE)?;
 
-            println!("\nWritten data: \n{}\n", from_utf8(raw_response.as_ref()).unwrap());
+            println!("Written {} bytes", raw_response.len());
         }
         // Would block "errors" are the OS's way of saying that the
         // connection is not actually ready to perform this I/O operation.
         Err(ref err) if would_block(err) => {}
         // Got interrupted (how rude!), we'll try again.
         Err(ref err) if interrupted(err) => {
-            return handle_connection_event(registry, connection, event)
+            return handle_connection_event(registry, connection, event, now)
         }
         // Other errors we'll consider fatal.
         Err(err) => return Err(err),
     }
 
     if connection_closed {
-        println!("Connection closed");
+        println!("Connection closed. Processing took {} milliseconds", now.elapsed().as_millis());
         return Ok(true);
     }
 
