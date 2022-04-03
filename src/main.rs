@@ -463,7 +463,7 @@ fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) 
                         }
                     };
 
-                    println!("Accepted connection from: {}", address);
+                    println!("\n\n\nAccepted connection from: {}", address);
 
                     let token = next(&mut unique_token);
                     poll.registry().register(
@@ -542,7 +542,7 @@ fn handle_connection_event(
     if bytes_read != 0 {
         let received_data = &received_data[..bytes_read];
         if let Ok(str_buf) = from_utf8(received_data) {
-            println!("Received data: {}", str_buf.trim_end());
+            println!("\nReceived data: \n{}\n", str_buf.trim_end());
 
             let request: Request = Request::parse_request(str_buf.trim_end().as_ref());
             let (response, request) = App::handle_request(request);
@@ -566,7 +566,7 @@ fn handle_connection_event(
             // to only respond to readable events.
             registry.reregister(connection, event.token(), Interest::READABLE)?;
 
-            println!("Written data: {}", from_utf8(raw_response.as_ref()).unwrap());
+            println!("\nWritten data: \n{}\n", from_utf8(raw_response.as_ref()).unwrap());
         }
         // Would block "errors" are the OS's way of saying that the
         // connection is not actually ready to perform this I/O operation.

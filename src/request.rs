@@ -40,7 +40,6 @@ impl Request {
             CONSTANTS.NEW_LINE_SEPARATOR
         );
 
-        println!("_____REQUEST______\n{}", request);
 
         request
     }
@@ -101,11 +100,9 @@ impl Request {
             request.request_uri = request_uri;
             request.http_version = http_version;
 
-            println!("{} {} {}", request.method, request.request_uri, request.http_version);
         }
 
         if current_string_is_empty {
-            println!("end of headers... parse message with length: {}", content_length);
             return;
         }
 
@@ -115,11 +112,9 @@ impl Request {
                 header = Request::parse_http_request_header_string(&string);
                 if header.header_name == Header::CONTENT_LENGTH {
                     content_length = header.header_value.parse().unwrap();
-                    println!("content_length: {}", content_length);
                 }
             }
 
-            println!("{}: {}", header.header_name, header.header_value);
             request.headers.push(header);
             iteration_number += 1;
             Request::cursor_read(cursor, iteration_number, request, content_length);

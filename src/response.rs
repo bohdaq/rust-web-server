@@ -134,8 +134,6 @@ impl Response {
             CONSTANTS.NEW_LINE_SEPARATOR,
         );
 
-        println!("_____RESPONSE w/o body______\n{}", &response_without_body);
-
         let mut response_as_vector : Vec<u8> = vec![];
 
         let is_head = request.method == REQUEST_METHODS.HEAD;
@@ -206,7 +204,6 @@ impl Response {
 
         if is_first_iteration {
             let (http_version, status_code, reason_phrase) = Response::parse_http_version_status_code_reason_phrase_string(&string);
-            println!("{} {} {}", http_version, status_code, reason_phrase);
 
             response.http_version = http_version;
             response.status_code = status_code;
@@ -214,7 +211,6 @@ impl Response {
         }
 
         if current_string_is_empty {
-            println!("end of headers... parse message length: {}", content_length);
             let content_type = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
             let is_multipart = Response::is_multipart_byteranges_content_type(&content_type);
 
@@ -254,7 +250,6 @@ impl Response {
             let mut header = Header { header_name: "".to_string(), header_value: "".to_string() };
             if !is_first_iteration {
                 header = Response::parse_http_response_header_string(&string);
-                println!("{}: {}", &header.header_name, &header.header_value);
                 if header.header_name == Header::CONTENT_LENGTH {
                     content_length = header.header_value.parse().unwrap();
                 }
