@@ -419,7 +419,7 @@ fn get_ip_port_thread_count() -> (String, i32, i32) {
 fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) -> io::Result<()> {
     let bind_addr = [ip, ":", port.to_string().as_str()].join(CONSTANTS.EMPTY_STRING);
     println!("Hello, rust-web-server is up and running: {}", bind_addr);
-    
+
     // Create a poll instance.
     let mut poll = Poll::new()?;
     // Create storage for events.
@@ -566,7 +566,7 @@ fn handle_connection_event(
             // to only respond to readable events.
             registry.reregister(connection, event.token(), Interest::READABLE)?;
 
-            println!("Written data: {}", from_utf8(DATA).unwrap());
+            println!("Written data: {}", from_utf8(raw_response.as_ref()).unwrap());
         }
         // Would block "errors" are the OS's way of saying that the
         // connection is not actually ready to perform this I/O operation.
