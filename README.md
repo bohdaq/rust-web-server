@@ -71,6 +71,6 @@ If you want to build rust-web-server on your own, make sure you have [Rust insta
 
 
 ## Community
-Rust Web Server has a [Discord](https://discord.gg/zaErjtr5Dm) where you can ask questions and share ideas.
+Rust Web Server has a [Discord](https://discord.gg/zaErjtr5Dm) where you can ask questions and share ideas. Follow the [Rust code of conduct](https://www.rust-lang.org/policies/code-of-conduct).
 
 
