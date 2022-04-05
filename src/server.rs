@@ -13,7 +13,7 @@ impl Server {
         let mut stream = s;
         stream.read(&mut buffer).unwrap();
         let request :  &[u8] = &buffer;
-        let request: Request = Request::parse_request(request);
+        let request: Request = Request::parse_request(request).unwrap();
         let (response, request) = App::handle_request(request);
         let raw_response = Response::generate_response(response, request);
         let boxed_stream = stream.write(raw_response.borrow());

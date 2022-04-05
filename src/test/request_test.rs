@@ -30,7 +30,7 @@ fn test_request_ok() {
     let request_data = [method, request_uri, http_version].join(" ");
     let raw_request = [request_data, CONSTANTS.NEW_LINE_SEPARATOR.to_string()].join("");
 
-    let request = Request::parse_request(raw_request.as_bytes());
+    let request = Request::parse_request(raw_request.as_bytes()).unwrap();
 
     assert_eq!(method, request.method);
     assert_eq!(request_uri, request.request_uri);

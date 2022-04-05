@@ -64,7 +64,7 @@ fn it_generates_successful_response_with_index_html() {
 
     let raw_request = Request::generate_request(request);
 
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
     assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -134,7 +134,7 @@ fn it_generates_successful_response_with_static_file() {
 
     let raw_request = Request::generate_request(request);
 
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
     assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -207,7 +207,7 @@ fn it_generates_not_found_page_for_absent_static_file() {
 
     let raw_request = Request::generate_request(request);
 
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
     assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -281,7 +281,7 @@ fn it_generates_not_found_page_for_absent_route() {
 
     let raw_request = Request::generate_request(request);
 
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
     assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -355,7 +355,7 @@ fn it_generates_not_found_page_for_static_directory() {
 
     let raw_request = Request::generate_request(request);
 
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
     assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -429,7 +429,7 @@ fn it_generates_not_found_page_for_static_subdirectory() {
 
     let raw_request = Request::generate_request(request);
 
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
     assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -503,7 +503,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
 
     let raw_request = Request::generate_request(request);
 
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
     assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -577,7 +577,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
 
     let raw_request = Request::generate_request(request);
 
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
     assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -655,7 +655,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 
     let raw_request = Request::generate_request(request);
 
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
     assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -731,7 +731,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 
     let raw_request = Request::generate_request(request);
 
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
     assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -818,7 +818,7 @@ fn check_range_response_for_not_proper_range_header() {
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
@@ -884,7 +884,7 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
@@ -950,7 +950,7 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
@@ -1016,7 +1016,7 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
@@ -1082,7 +1082,7 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
@@ -1148,7 +1148,7 @@ fn check_range_response_for_not_proper_range_header_malformed() {
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],

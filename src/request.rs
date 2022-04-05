@@ -2,7 +2,7 @@ use std::io;
 use std::io::{BufRead, Cursor};
 use crate::header::Header;
 use regex::Regex;
-use crate::constant::{CONSTANTS};
+use crate::constant::{CONSTANTS, HTTPError};
 use crate::Server;
 
 pub struct Request {
@@ -44,7 +44,7 @@ impl Request {
         request
     }
 
-    pub(crate) fn parse_request(request_vec_u8: &[u8]) ->  Request {
+    pub(crate) fn parse_request(request_vec_u8: &[u8]) ->  Result<Request, HTTPError> {
         let mut cursor = io::Cursor::new(request_vec_u8);
 
         let mut request = Request {
@@ -56,9 +56,15 @@ impl Request {
 
         let mut content_length: usize = 0;
         let mut iteration_number : usize = 0;
-        Request::cursor_read(&mut cursor, iteration_number, &mut request, content_length);
+        match Request::cursor_read(&mut cursor, iteration_number, &mut request, content_length) {
+            Ok(_) => {
+                return Ok(request)
+            }
+            Err(e) => {
+                return Err(e)
+            }
+        }
 
-        request
     }
 
     pub(crate)  fn parse_method_and_request_uri_and_http_version_string(http_version_status_code_reason_phrase: &str) -> (String, String, String) {
@@ -83,7 +89,7 @@ impl Request {
         }
     }
 
-    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, request: &mut Request, mut content_length: usize) {
+    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, request: &mut Request, mut content_length: usize) -> Result<bool, HTTPError> {
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let b : &[u8] = &buf;
@@ -103,7 +109,7 @@ impl Request {
         }
 
         if current_string_is_empty {
-            return;
+            return Ok(true);
         }
 
         if new_line_char_found && !current_string_is_empty {
@@ -119,6 +125,8 @@ impl Request {
             iteration_number += 1;
             Request::cursor_read(cursor, iteration_number, request, content_length);
         }
+
+        Ok(true)
     }
 
 }

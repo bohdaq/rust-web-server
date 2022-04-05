@@ -59,7 +59,7 @@ fn cors_options_preflight_request() {
 
     let raw_request = Request::generate_request(request);
 
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
     assert_eq!(request_host_header_value.to_string(), host_header.header_value);
@@ -165,7 +165,7 @@ fn actual_request_after_preflight() {
 
     let raw_request = Request::generate_request(request);
 
-    let request: Request = Request::parse_request(&raw_request.as_bytes());
+    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
     assert_eq!(request_host_header_value.to_string(), host_header.header_value);

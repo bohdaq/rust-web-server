@@ -508,7 +508,7 @@ fn handle_connection_event(
         let received_data = &received_data[..bytes_read];
         println!("Read {} bytes", received_data.len());
 
-        let request: Request = Request::parse_request(received_data.as_ref());
+        let request: Request = Request::parse_request(received_data.as_ref()).unwrap();
         let (response, request) = App::handle_request(request);
         raw_response = Response::generate_response(response, request);
     }
