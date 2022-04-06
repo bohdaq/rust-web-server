@@ -16,7 +16,7 @@ use std::env;
 use std::fs::metadata;
 
 use std::collections::HashMap;
-use std::io::{self, Read, Write};
+use std::io::{self, Error, Read, Write};
 use std::net::Shutdown;
 use std::str::from_utf8;
 use std::{thread, time};
@@ -383,7 +383,6 @@ fn get_ip_port() -> (String, i32) {
 
 fn create_tcp_listener(ip: &str, port: i32) -> io::Result<()> {
     let bind_addr = [ip, ":", port.to_string().as_str()].join(CONSTANTS.EMPTY_STRING);
-    println!("Hello, rust-web-server is up and running: {}", bind_addr);
 
     // Create a poll instance.
     let mut poll = Poll::new()?;
@@ -392,7 +391,14 @@ fn create_tcp_listener(ip: &str, port: i32) -> io::Result<()> {
 
     // Setup the TCP server socket.
     let addr = bind_addr.parse().unwrap();
-    let mut server = TcpListener::bind(addr)?;
+    let boxed_tcp_listener = TcpListener::bind(addr);
+    if boxed_tcp_listener.is_err() {
+        println!("Error: Unable to bind {}\nTo check what process is using port try to run 'lsof -i :PORT_NUMBER'\nTo get information about the running process try to run 'ps -p PID'", bind_addr);
+    }
+
+    let mut server = boxed_tcp_listener.unwrap();
+    println!("Hello, rust-web-server is up and running: {}", bind_addr);
+
 
     // Register the server with poll we can receive events for it.
     poll.registry()
