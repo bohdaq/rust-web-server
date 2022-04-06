@@ -36,3 +36,37 @@ fn test_request_ok() {
     assert_eq!(request_uri, request.request_uri);
     assert_eq!(http_version, request.http_version);
 }
+
+#[test]
+fn test_request_ok_with_special_characters() {
+    let method = REQUEST_METHODS.GET;
+    let special_characters = "_:;.,/\"'?!(){}[]@<>=-+*#$&`|~^%";
+    let request_uri = [CONSTANTS.SLASH, special_characters].join("");
+    let http_version = HTTP_VERSIONS.HTTP_VERSION_1_1;
+
+
+    let request_data = [method, request_uri.as_str(), http_version].join(" ");
+    let raw_request = [request_data, CONSTANTS.NEW_LINE_SEPARATOR.to_string()].join("");
+
+    let request = Request::parse_request(raw_request.as_bytes()).unwrap();
+
+    assert_eq!(method, request.method);
+    assert_eq!(request_uri, request.request_uri);
+    assert_eq!(http_version, request.http_version);
+}
+
+#[test]
+fn test_request_not_ok() {
+    let method = REQUEST_METHODS.GET;
+    let request_uri = [CONSTANTS.SLASH, CONSTANTS.WHITESPACE, CONSTANTS.HYPHEN].join("");
+    let http_version = HTTP_VERSIONS.HTTP_VERSION_1_1;
+
+    let request_data = [method, request_uri.as_str(), http_version].join(" ");
+    let raw_request = [request_data, CONSTANTS.NEW_LINE_SEPARATOR.to_string()].join("");
+
+    let boxed_request = Request::parse_request(raw_request.as_bytes());
+    assert_eq!(true, boxed_request.is_err());
+
+    let error_message = format!("Unable to parse method, request uri and http version: {}", raw_request);
+    assert_eq!(error_message, boxed_request.err().unwrap());
+}

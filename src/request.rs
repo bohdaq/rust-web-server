@@ -1,8 +1,8 @@
 use std::io;
 use std::io::{BufRead, Cursor};
 use crate::header::Header;
-use regex::Regex;
-use crate::constant::{CONSTANTS, HTTPError};
+use regex::{Captures, Regex};
+use crate::constant::{CONSTANTS, HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES, ResponseStatusCodeReasonPhrase, StatusCodeReasonPhrase};
 use crate::Server;
 
 pub struct Request {
@@ -13,7 +13,7 @@ pub struct Request {
 }
 
 impl Request {
-    pub(crate) const METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX: &'static str = "(?P<method>\\w+)\\s(?P<request_uri>[-._/A-Za-z0-9]+)\\s(?P<http_version>[/.A-Za-z0-9]+)";
+    pub(crate) const METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX: &'static str = "(?P<method>\\w+)\\s(?P<request_uri>[^\\s]+)\\s(?P<http_version>[/.A-Za-z0-9]+)";
 
     pub(crate) fn get_header(&self, name: String) -> Option<&Header> {
         let header =  self.headers.iter().find(|x| x.header_name == name);
@@ -44,7 +44,7 @@ impl Request {
         request
     }
 
-    pub(crate) fn parse_request(request_vec_u8: &[u8]) ->  Result<Request, HTTPError> {
+    pub(crate) fn parse_request(request_vec_u8: &[u8]) ->  Result<Request, String> {
         let mut cursor = io::Cursor::new(request_vec_u8);
 
         let mut request = Request {
@@ -60,22 +60,33 @@ impl Request {
             Ok(_) => {
                 return Ok(request)
             }
-            Err(e) => {
-                return Err(e)
+            Err(error_message) => {
+                return Err(error_message)
             }
         }
 
     }
 
-    pub(crate)  fn parse_method_and_request_uri_and_http_version_string(http_version_status_code_reason_phrase: &str) -> (String, String, String) {
+    pub(crate)  fn parse_method_and_request_uri_and_http_version_string(http_version_status_code_reason_phrase: &str) -> Result<(String, String, String), String> {
         let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
-        let caps = re.captures(&http_version_status_code_reason_phrase).unwrap();
+        let caps = re.captures(&http_version_status_code_reason_phrase);
 
-        let method= String::from(&caps["method"]);
-        let request_uri = String::from(&caps["request_uri"]);
-        let http_version = String::from(&caps["http_version"]);
+        return match caps {
+            None => {
+                let message = format!("Unable to parse method, request uri and http version: {}", http_version_status_code_reason_phrase);
+                return Err(message)
+            }
+            Some(captures) => {
+                let method = String::from(&captures["method"]);
+                let request_uri = String::from(&captures["request_uri"]);
+                let http_version = String::from(&captures["http_version"]);
 
-        return (method, request_uri, http_version)
+                Ok((method, request_uri, http_version))
+            }
+        }
+
+
+
     }
 
     pub(crate)  fn parse_http_request_header_string(header_string: &str) -> Header {
@@ -89,7 +100,7 @@ impl Request {
         }
     }
 
-    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, request: &mut Request, mut content_length: usize) -> Result<bool, HTTPError> {
+    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, request: &mut Request, mut content_length: usize) -> Result<bool, String> {
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let b : &[u8] = &buf;
@@ -100,12 +111,16 @@ impl Request {
         let current_string_is_empty = string.trim().len() == 0;
 
         if is_first_iteration {
-            let (method, request_uri, http_version) = Request::parse_method_and_request_uri_and_http_version_string(&string);
-
-            request.method = method;
-            request.request_uri = request_uri;
-            request.http_version = http_version;
-
+            match Request::parse_method_and_request_uri_and_http_version_string(&string) {
+                Ok((method, request_uri, http_version)) => {
+                    request.method = method;
+                    request.request_uri = request_uri;
+                    request.http_version = http_version;
+                }
+                Err(error_message) => {
+                    return Err(error_message)
+                }
+            }
         }
 
         if current_string_is_empty {
