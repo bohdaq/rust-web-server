@@ -97,3 +97,13 @@ fn test_request_not_ok_empty_request() {
     let error_message = format!("Unable to parse method, request uri and http version: ");
     assert_eq!(error_message, boxed_request.err().unwrap());
 }
+
+#[test]
+fn test_request_not_ok_dummy_not_valid_request() {
+    let dummy_request = "some dummy not valid request";
+    let boxed_request = Request::parse_request(dummy_request.as_bytes());
+    assert_eq!(true, boxed_request.is_err());
+
+    let error_message = format!("Unable to parse method, request uri and http version: {}", dummy_request);
+    assert_eq!(error_message, boxed_request.err().unwrap());
+}
