@@ -26,7 +26,7 @@ use mio::event::{Event, Source};
 use mio::net::{TcpListener, TcpStream};
 use mio::{Events, Interest, Poll, Registry, Token};
 
-use crate::constant::CONSTANTS;
+use crate::constant::{CONSTANTS, HTTP_VERSIONS, HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES, StatusCodeReasonPhrase};
 
 use crate::request::Request;
 use crate::response::Response;
@@ -38,6 +38,8 @@ use clap::App as ClapApp;
 use crate::app::App;
 use serde::{Serialize, Deserialize};
 use crate::cors::Cors;
+use crate::mime_type::MimeType;
+use crate::range::{ContentRange, Range};
 
 const SERVER: Token = Token(0);
 
@@ -508,9 +510,39 @@ fn handle_connection_event(
         let received_data = &received_data[..bytes_read];
         println!("Read {} bytes", received_data.len());
 
-        let request: Request = Request::parse_request(received_data.as_ref()).unwrap();
-        let (response, request) = App::handle_request(request);
-        raw_response = Response::generate_response(response, request);
+        let boxed_request = Request::parse_request(received_data.as_ref());
+        if boxed_request.is_ok() {
+            let request = boxed_request.unwrap();
+            let (response, request) = App::handle_request(request);
+            raw_response = Response::generate_response(response, request);
+        } else {
+            let error = boxed_request.err().unwrap();
+            let content_range = ContentRange {
+                unit: CONSTANTS.BYTES.to_string(),
+                range: Range {
+                    start: 0,
+                    end: error.len() as u64
+                },
+                size: error.len().to_string(),
+                body: error.into_bytes(),
+                content_type: MimeType::TEXT_PLAIN.to_string()
+            };
+            let bad_request_error_response = Response {
+                http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+                status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N400_BAD_REQUEST.STATUS_CODE.to_string(),
+                reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N400_BAD_REQUEST.REASON_PHRASE.to_string(),
+                headers: vec![],
+                content_range_list: vec![content_range]
+            };
+            raw_response = Response::generate_response(bad_request_error_response, Request {
+                method: "".to_string(),
+                request_uri: "".to_string(),
+                http_version: "".to_string(),
+                headers: vec![]
+            });
+
+        }
+
     }
 
 
