@@ -56,12 +56,12 @@ impl Request {
 
         let mut content_length: usize = 0;
         let mut iteration_number : usize = 0;
-        match Request::cursor_read(&mut cursor, iteration_number, &mut request, content_length) {
+        return match Request::cursor_read(&mut cursor, iteration_number, &mut request, content_length) {
             Ok(_) => {
-                return Ok(request)
+                Ok(request)
             }
             Err(error_message) => {
-                return Err(error_message)
+                Err(error_message)
             }
         }
 
@@ -134,14 +134,13 @@ impl Request {
         }
 
         if new_line_char_found && !current_string_is_empty {
-            let mut header = Header { header_name: "".to_string(), header_value: "".to_string() };
             if !is_first_iteration {
                 match Request::parse_http_request_header_string(&string) {
-                    Ok(h) => {
-                        header = h;
+                    Ok(header) => {
                         if header.header_name == Header::CONTENT_LENGTH {
                             content_length = header.header_value.parse().unwrap();
                         }
+                        request.headers.push(header);
                     }
                     Err(message) => {
                         return Err(message);
@@ -150,7 +149,6 @@ impl Request {
 
             }
 
-            request.headers.push(header);
             iteration_number += 1;
             return Request::cursor_read(cursor, iteration_number, request, content_length);
         }
