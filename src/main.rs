@@ -22,6 +22,8 @@ use std::str::from_utf8;
 use std::{thread, time};
 use std::time::Instant;
 
+use sysinfo::{NetworkExt, NetworksExt, ProcessExt, System, SystemExt};
+
 use mio::event::{Event, Source};
 use mio::net::{TcpListener, TcpStream};
 use mio::{Events, Interest, Poll, Registry, Token};
@@ -70,10 +72,57 @@ fn main() {
     //test plan: test allowed request with config via system vars, config file or command line
     //           test misconfigured origin, header, presence allow credentials
     let is_test_mode = false;
-
+    display_system_information();
     bootstrap(is_test_mode);
     let (ip, port) = get_ip_port();
     create_tcp_listener(ip.as_str(), port);
+}
+
+fn display_system_information() {
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+
+    println!("8888888b.  888       888  .d8888b.  ");
+    println!("888   Y88b 888   o   888 d88P  Y88b ");
+    println!("888    888 888  d8b  888 Y88b.      ");
+    println!("888   d88P 888 d888b 888  \"Y888b.   ");
+    println!("8888888P\"  888d88888b888     \"Y88b. ");
+    println!("888 T88b   88888P Y88888       \"888 ");
+    println!("888  T88b  8888P   Y8888 Y88b  d88P ");
+    println!("888   T88b 888P     Y888  \"Y8888P\"  ");
+
+
+    println!("\n\n=> system:");
+
+    println!("System name:             {:?}", sys.name());
+    println!("System kernel version:   {:?}", sys.kernel_version());
+    println!("System OS version:       {:?}", sys.os_version());
+    println!("System host name:        {:?}", sys.host_name());
+
+    println!("Number of processors: {}", sys.processors().len());
+
+    println!("total memory: {} KB", sys.total_memory());
+    println!("used memory : {} KB", sys.used_memory());
+    println!("total swap  : {} KB", sys.total_swap());
+    println!("used swap   : {} KB", sys.used_swap());
+
+    println!("\n\n=> disks:");
+    for disk in sys.disks() {
+        println!("{:?}", disk);
+    }
+
+    println!("\n\n=> networks:");
+    for (interface_name, data) in sys.networks() {
+        println!("{}: {}/{} B", interface_name, data.received(), data.transmitted());
+    }
+
+    println!("\n\n=> components:");
+    for component in sys.components() {
+        println!("{:?}", component);
+    }
+
+    println!("\n\n")
 }
 
 fn bootstrap(is_test_mode: bool) {

@@ -107,3 +107,17 @@ fn test_request_not_ok_dummy_not_valid_request() {
     let error_message = format!("Unable to parse method, request uri and http version: {}", dummy_request);
     assert_eq!(error_message, boxed_request.err().unwrap());
 }
+
+#[test]
+fn test_request_not_ok_malformed_header() {
+    let header = "NOT VALID HEADER";
+    let dummy_request = format!("GET / HTTP/1.1\n\nNOT VALID HEADER\r\n");
+    let boxed_request = Request::parse_request(dummy_request.as_bytes());
+    let req = boxed_request.as_ref().unwrap();
+    println!("{}", req);
+
+    assert_eq!(true, boxed_request.is_err());
+
+    let error_message = format!("Unable to parse header: {}", header);
+    assert_eq!(error_message, boxed_request.err().unwrap());
+}

@@ -89,15 +89,21 @@ impl Request {
 
     }
 
-    pub(crate)  fn parse_http_request_header_string(header_string: &str) -> Header {
+    pub(crate)  fn parse_http_request_header_string(header_string: &str) -> Result<Header, String> {
         let header_parts: Vec<&str> = header_string.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
+        let HEADER_PARTS = 2;
+        if header_parts.len() != HEADER_PARTS {
+            let message = format!("Unable to parse header: {}", header_string);
+            return Err(message.to_string());
+        }
+
         let header_name = Server::truncate_new_line_carriage_return(header_parts[0]);
         let header_value = Server::truncate_new_line_carriage_return(header_parts[1]);
 
-        Header {
-            header_name: header_name,
-            header_value: header_value,
-        }
+        Ok(Header {
+            header_name,
+            header_value,
+        })
     }
 
     pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, request: &mut Request, mut content_length: usize) -> Result<bool, String> {
@@ -130,15 +136,23 @@ impl Request {
         if new_line_char_found && !current_string_is_empty {
             let mut header = Header { header_name: "".to_string(), header_value: "".to_string() };
             if !is_first_iteration {
-                header = Request::parse_http_request_header_string(&string);
-                if header.header_name == Header::CONTENT_LENGTH {
-                    content_length = header.header_value.parse().unwrap();
+                match Request::parse_http_request_header_string(&string) {
+                    Ok(h) => {
+                        header = h;
+                        if header.header_name == Header::CONTENT_LENGTH {
+                            content_length = header.header_value.parse().unwrap();
+                        }
+                    }
+                    Err(message) => {
+                        return Err(message);
+                    }
                 }
+
             }
 
             request.headers.push(header);
             iteration_number += 1;
-            Request::cursor_read(cursor, iteration_number, request, content_length);
+            return Request::cursor_read(cursor, iteration_number, request, content_length);
         }
 
         Ok(true)
