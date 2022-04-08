@@ -148,6 +148,23 @@ fn test_request_header_ok() {
 }
 
 #[test]
+fn test_request_header_ok_with_special_characters() {
+    let raw_header = "Header_;.,/\"'?!(){}[]@<>=-+*#$&`|~^%: SomE VALID_:;.,/\"'?!(){}[]@<>=-+*#$&`|~^% HEADER\r\n";
+    let dummy_request = format!("GET / HTTP/1.1\r\n{}", raw_header);
+    let boxed_request = Request::parse_request(dummy_request.as_bytes());
+
+    assert_eq!(true, boxed_request.is_ok());
+    let request = boxed_request.unwrap();
+
+    let boxed_header = request.get_header("Header_;.,/\"'?!(){}[]@<>=-+*#$&`|~^%".to_string());
+    assert!(boxed_header.is_some());
+
+    let header = boxed_header.unwrap();
+
+    assert_eq!("SomE VALID_:;.,/\"'?!(){}[]@<>=-+*#$&`|~^% HEADER", header.header_value);
+}
+
+#[test]
 fn test_request_header_not_ok_starting_with_whitespace() {
     let raw_header = " Header: SomE VALID: HEADER\r\n";
     let dummy_request = format!("GET / HTTP/1.1\r\n{}", raw_header);
