@@ -120,8 +120,37 @@ fn test_request_not_ok_dummy_not_valid_request() {
 }
 
 #[test]
+fn test_request_header_ok() {
+    let raw_header = "Header: SomE VALID: HEADER\r\n";
+    let dummy_request = format!("GET / HTTP/1.1\r\n{}", raw_header);
+    let boxed_request = Request::parse_request(dummy_request.as_bytes());
+
+    assert_eq!(true, boxed_request.is_ok());
+    let request = boxed_request.unwrap();
+
+    let boxed_header = request.get_header("Header".to_string());
+    assert!(boxed_header.is_some());
+
+    let header = boxed_header.unwrap();
+
+    assert_eq!("SomE VALID: HEADER", header.header_value);
+}
+
+#[test]
 fn test_request_not_ok_malformed_header() {
     let header = "NOT VALID HEADER\r\n";
+    let dummy_request = format!("GET / HTTP/1.1\r\n{}", header);
+    let boxed_request = Request::parse_request(dummy_request.as_bytes());
+
+    assert_eq!(true, boxed_request.is_err());
+
+    let error_message = format!("Unable to parse header: {}", header);
+    assert_eq!(error_message, boxed_request.err().unwrap());
+}
+
+#[test]
+fn test_request_not_ok_malformed_header_name() {
+    let header = "NOT VALID: HEADER\r\n";
     let dummy_request = format!("GET / HTTP/1.1\r\n{}", header);
     let boxed_request = Request::parse_request(dummy_request.as_bytes());
 

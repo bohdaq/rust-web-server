@@ -14,6 +14,7 @@ pub struct Request {
 
 impl Request {
     pub(crate) const METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX: &'static str = "(?P<method>(GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE))\\s(?P<request_uri>[^\\s]+)\\s(?P<http_version>[/.A-Za-z0-9]+)";
+    pub(crate) const HEADER_NAME_VALUE_REGEX: &'static str = "^(?P<name>[^\\s]+):\\s(?P<value>[\\s\\S]+)";
 
     pub(crate) fn get_header(&self, name: String) -> Option<&Header> {
         let header =  self.headers.iter().find(|x| x.header_name == name);
@@ -90,20 +91,23 @@ impl Request {
     }
 
     pub(crate)  fn parse_http_request_header_string(header_string: &str) -> Result<Header, String> {
-        let header_parts: Vec<&str> = header_string.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
-        let HEADER_PARTS = 2;
-        if header_parts.len() != HEADER_PARTS {
-            let message = format!("Unable to parse header: {}", header_string);
-            return Err(message.to_string());
+        let re = Regex::new(Request::HEADER_NAME_VALUE_REGEX).unwrap();
+        let caps = re.captures(&header_string);
+
+        return match caps {
+            None => {
+                let message = format!("Unable to parse header: {}", header_string);
+                return Err(message)
+            }
+            Some(captures) => {
+                let header_name = String::from(&captures["name"]).trim().to_string();
+                let header_value = String::from(&captures["value"]).trim().to_string();
+                Ok(Header {
+                    header_name,
+                    header_value,
+                })
+            }
         }
-
-        let header_name = Server::truncate_new_line_carriage_return(header_parts[0]);
-        let header_value = Server::truncate_new_line_carriage_return(header_parts[1]);
-
-        Ok(Header {
-            header_name,
-            header_value,
-        })
     }
 
     pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, request: &mut Request, mut content_length: usize) -> Result<bool, String> {
