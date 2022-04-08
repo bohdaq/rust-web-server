@@ -2,6 +2,7 @@ use std::io::prelude::*;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Cursor, SeekFrom};
 use regex::Regex;
+use sysinfo::{System, SystemExt};
 
 use crate::response::Response;
 use crate::{CONSTANTS, Server};
@@ -37,8 +38,24 @@ impl Range {
     pub(crate) const ERROR_UNABLE_TO_PARSE_RANGE_START: &'static str = "unable to parse range start";
     pub(crate) const ERROR_UNABLE_TO_PARSE_RANGE_END: &'static str = "unable to parse range end";
 
+    pub(crate) const ERROR_NOT_ENOUGH_AVAILABLE_MEMORY: &'static str = "not enough available memory on the server to produce response";
+
 
     pub(crate) fn parse_range_in_content_range(filelength: u64, range_str: &str) -> Result<Range, HTTPError> {
+        let mut sys = System::new_all();
+        sys.refresh_memory();
+
+        let free_memory_in_bytes = sys.available_memory() * 1000;
+        if free_memory_in_bytes < filelength {
+            let message = Range::ERROR_NOT_ENOUGH_AVAILABLE_MEMORY.to_string();
+            let error = HTTPError {
+                STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N507_INSUFFICIENT_STORAGE,
+                MESSAGE: message.to_string()
+            };
+            return Err(error)
+        }
+
+
         const START_INDEX: usize = 0;
         const END_INDEX: usize = 1;
 

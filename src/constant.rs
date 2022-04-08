@@ -94,6 +94,7 @@ pub struct ResponseStatusCodeReasonPhrase {
     pub(crate) N400_BAD_REQUEST: &'static StatusCodeReasonPhrase,
     pub(crate) N404_NOT_FOUND: &'static StatusCodeReasonPhrase,
     pub(crate) N416_RANGE_NOT_SATISFIABLE: &'static StatusCodeReasonPhrase,
+    pub(crate) N507_INSUFFICIENT_STORAGE: &'static StatusCodeReasonPhrase,
 }
 
 pub const RESPONSE_STATUS_CODE_REASON_PHRASES: ResponseStatusCodeReasonPhrase = ResponseStatusCodeReasonPhrase {
@@ -125,6 +126,11 @@ pub const RESPONSE_STATUS_CODE_REASON_PHRASES: ResponseStatusCodeReasonPhrase = 
     N416_RANGE_NOT_SATISFIABLE: &StatusCodeReasonPhrase {
         STATUS_CODE: "416",
         REASON_PHRASE: "Range Not Satisfiable"
+    },
+
+    N507_INSUFFICIENT_STORAGE: &StatusCodeReasonPhrase {
+        STATUS_CODE: "507",
+        REASON_PHRASE: "Insufficient Storage"
     },
 
 };
