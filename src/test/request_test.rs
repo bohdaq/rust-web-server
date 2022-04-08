@@ -110,6 +110,17 @@ fn test_request_not_ok_started_with_empty_line() {
 }
 
 #[test]
+fn test_request_not_ok_started_with_whitespace() {
+    let whitespace = " ";
+    let request = format!("{}GET / HTTP/1.1\r\n", whitespace);
+    let boxed_request = Request::parse_request(request.as_bytes());
+    assert_eq!(true, boxed_request.is_err());
+
+    let error_message = format!("Unable to parse method, request uri and http version: {}", request);
+    assert_eq!(error_message, boxed_request.err().unwrap());
+}
+
+#[test]
 fn test_request_not_ok_dummy_not_valid_request() {
     let dummy_request = "some dummy not valid request";
     let boxed_request = Request::parse_request(dummy_request.as_bytes());
@@ -134,6 +145,18 @@ fn test_request_header_ok() {
     let header = boxed_header.unwrap();
 
     assert_eq!("SomE VALID: HEADER", header.header_value);
+}
+
+#[test]
+fn test_request_header_not_ok_starting_with_whitespace() {
+    let raw_header = " Header: SomE VALID: HEADER\r\n";
+    let dummy_request = format!("GET / HTTP/1.1\r\n{}", raw_header);
+    let boxed_request = Request::parse_request(dummy_request.as_bytes());
+
+    assert_eq!(true, boxed_request.is_err());
+
+    let error_message = format!("Unable to parse header: {}", raw_header);
+    assert_eq!(error_message, boxed_request.err().unwrap());
 }
 
 #[test]
