@@ -199,3 +199,15 @@ fn test_request_not_ok_malformed_header_name() {
     let error_message = format!("Unable to parse header: {}", header);
     assert_eq!(error_message, boxed_request.err().unwrap());
 }
+
+#[test]
+fn test_request_not_ok_malformed_header_name_v2() {
+    let header = "NOTVALID : HEADER\r\n";
+    let dummy_request = format!("GET / HTTP/1.1\r\n{}", header);
+    let boxed_request = Request::parse_request(dummy_request.as_bytes());
+
+    assert_eq!(true, boxed_request.is_err());
+
+    let error_message = format!("Unable to parse header: {}", header);
+    assert_eq!(error_message, boxed_request.err().unwrap());
+}
