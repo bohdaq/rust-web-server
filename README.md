@@ -17,7 +17,7 @@ Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PA
  
 You will see similar output:
 
-> rws rust-web-server 0.0.7
+> rws rust-web-server 0.0.8
 > 
 > Bohdan Tsap <bohdan.tsap@tutanota.com>
 > 
@@ -42,7 +42,7 @@ You will see similar output:
 ## Run
 Simply run the following from command line:
 
-> $ rws --ip=127.0.0.1 --port=8888
+> $ rws --ip=127.0.0.1 --port=8888 --threads=100
 
 Make sure in root folder you provided index.html and 404.html files.
 
