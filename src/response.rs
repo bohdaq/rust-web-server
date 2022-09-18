@@ -132,17 +132,15 @@ impl Response {
             CONSTANTS.new_line_separator,
         );
 
-        let mut response_as_vector : Vec<u8> = vec![];
-
         let is_head = request.method == REQUEST_METHODS.head;
         let is_options = request.method == REQUEST_METHODS.options;
-        if is_head || is_options {
-            response_as_vector = response_without_body.into_bytes();
+
+        return if is_head || is_options {
+            response_without_body.into_bytes()
         } else {
-            response_as_vector = [response_without_body.into_bytes(), body].concat();
+            [response_without_body.into_bytes(), body].concat()
         }
 
-        response_as_vector
     }
 
     pub(crate) fn parse_response(response_vec_u8: &[u8]) -> Response {
