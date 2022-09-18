@@ -138,7 +138,11 @@ impl Request {
 
             request.headers.push(header);
             iteration_number += 1;
-            Request::cursor_read(cursor, iteration_number, request, content_length);
+            let boxed_read = Request::cursor_read(cursor, iteration_number, request, content_length);
+            if boxed_read.is_err() {
+                let reason = boxed_read.err().unwrap().to_string();
+                eprintln!("unable to read request: {}", reason);
+            }
         }
 
         Ok(true)
