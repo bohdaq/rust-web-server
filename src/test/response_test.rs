@@ -22,15 +22,17 @@ fn check_is_multipart_byteranges_content_type() {
 
 #[test]
 fn http_version_and_status_code_and_reason_phrase_regex() {
-    let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
+
+    let http_version_and_status_code_and_reason_phrase_regex = "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)";
+    let re = Regex::new(http_version_and_status_code_and_reason_phrase_regex).unwrap();
     let caps = re.captures("HTTP/1.1 404 Not Found").unwrap();
 
     assert_eq!(HTTP_VERSIONS.http_version_1_1, &caps["http_version"]);
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code, &caps["status_code"]);
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase, &caps["reason_phrase"]);
 
-
-    let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
+    let http_version_and_status_code_and_reason_phrase_regex = "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)";
+    let re = Regex::new(http_version_and_status_code_and_reason_phrase_regex).unwrap();
     let caps = re.captures("HTTP/1.1 200 OK").unwrap();
 
     assert_eq!(HTTP_VERSIONS.http_version_1_1, &caps["http_version"]);

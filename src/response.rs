@@ -15,7 +15,6 @@ pub struct Response {
 }
 
 impl Response {
-    pub(crate) const HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX: &'static str = "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)";
 
     pub(crate) fn get_header(&self, name: String) -> Option<&Header> {
         let header =  self.headers.iter().find(|x| x.header_name == name);
@@ -163,7 +162,8 @@ impl Response {
     }
 
     pub(crate)  fn parse_http_version_status_code_reason_phrase_string(http_version_status_code_reason_phrase: &str) -> (String, String, String) {
-        let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
+        let http_version_and_status_code_and_reason_phrase_regex = "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)";
+        let re = Regex::new(http_version_and_status_code_and_reason_phrase_regex).unwrap();
         let caps = re.captures(&http_version_status_code_reason_phrase).unwrap();
 
         let http_version= String::from(&caps["http_version"]);
