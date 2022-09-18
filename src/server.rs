@@ -31,6 +31,6 @@ impl Server {
     pub(crate) fn get_static_filepath(request_uri: &str) -> String {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
-        [working_directory, request_uri].join(CONSTANTS.EMPTY_STRING)
+        [working_directory, request_uri].join(CONSTANTS.empty_string)
     }
 }

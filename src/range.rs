@@ -43,7 +43,7 @@ impl Range {
         const END_INDEX: usize = 1;
 
         let mut range = Range { start: 0, end: filelength };
-        let parts: Vec<&str> = range_str.split(CONSTANTS.HYPHEN).collect();
+        let parts: Vec<&str> = range_str.split(CONSTANTS.hyphen).collect();
 
         let mut start_range_not_provided = true;
         for (i, part) in parts.iter().enumerate() {
@@ -61,8 +61,8 @@ impl Range {
                 } else {
                     let message = Range::ERROR_UNABLE_TO_PARSE_RANGE_START.to_string();
                     let error = HTTPError {
-                        STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
-                        MESSAGE: message.to_string()
+                        status_code_reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                        message: message.to_string()
                     };
                     return Err(error)
                 }
@@ -74,8 +74,8 @@ impl Range {
                 } else {
                     let message = Range::ERROR_UNABLE_TO_PARSE_RANGE_END.to_string();
                     let error = HTTPError {
-                        STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
-                        MESSAGE: message.to_string()
+                        status_code_reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                        message: message.to_string()
                     };
                     return Err(error)
                 }
@@ -89,8 +89,8 @@ impl Range {
             if range.end > filelength {
                 let message = Range::ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string();
                 let error = HTTPError {
-                    STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
-                    MESSAGE: message,
+                    status_code_reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                    message: message,
                 };
                 return Err(error);
             }
@@ -98,8 +98,8 @@ impl Range {
             if range.start > filelength {
                 let message = Range::ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string();
                 let error = HTTPError {
-                    STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
-                    MESSAGE: message,
+                    status_code_reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                    message: message,
                 };
                 return Err(error);
             }
@@ -107,8 +107,8 @@ impl Range {
             if range.start > range.end {
                 let message = Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.to_string();
                 let error = HTTPError {
-                    STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
-                    MESSAGE: message,
+                    status_code_reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                    message: message,
                 };
                 return Err(error);
             }
@@ -123,20 +123,20 @@ impl Range {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
-        let prefix = [CONSTANTS.BYTES, CONSTANTS.EQUALS].join("");
+        let prefix = [CONSTANTS.bytes, CONSTANTS.equals].join("");
         if !raw_range_value.starts_with(prefix.as_str()) {
             let message = Range::ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT.to_string();
             let error = HTTPError {
-                STATUS_CODE_REASON_PHRASE: RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
-                MESSAGE: message,
+                status_code_reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                message: message,
             };
             return Err(error);
         }
 
-        let split_raw_range_value: Vec<&str> = raw_range_value.split(CONSTANTS.EQUALS).collect();
+        let split_raw_range_value: Vec<&str> = raw_range_value.split(CONSTANTS.equals).collect();
         let raw_bytes = split_raw_range_value.get(INDEX_AFTER_UNIT_DECLARATION).unwrap();
 
-        let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.COMMA).collect();
+        let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.comma).collect();
         for byte in bytes {
             let boxed_range = Range::parse_range_in_content_range(filelength, byte);
             if boxed_range.is_ok() {
@@ -154,7 +154,7 @@ impl Range {
                     let content_type = MimeType::detect_mime_type(filepath);
 
                     let content_range = ContentRange {
-                        unit: CONSTANTS.BYTES.to_string(),
+                        unit: CONSTANTS.bytes.to_string(),
                         range,
                         size: filelength.to_string(),
                         body: buffer,
@@ -164,8 +164,8 @@ impl Range {
                     content_range_list.push(content_range);
                 } else {
                     let error : HTTPError = HTTPError {
-                        STATUS_CODE_REASON_PHRASE:  RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
-                        MESSAGE: boxed_seek.err().unwrap().to_string()
+                        status_code_reason_phrase:  RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                        message: boxed_seek.err().unwrap().to_string()
                     };
                     return Err(error)
                 }
@@ -207,7 +207,7 @@ impl Range {
         };
 
         let mut content_range: ContentRange = ContentRange {
-            unit: CONSTANTS.BYTES.to_string(),
+            unit: CONSTANTS.bytes.to_string(),
             range: Range { start: 0, end: 0 },
             size: "".to_string(),
             body: vec![],
@@ -215,7 +215,7 @@ impl Range {
         };
 
         let content_range_is_not_parsed = content_range.body.len() == 0;
-        if string.starts_with(CONSTANTS.SEPARATOR) && content_range_is_not_parsed {
+        if string.starts_with(CONSTANTS.separator) && content_range_is_not_parsed {
             //read next line - Content-Type
             buffer = Range::parse_line_as_bytes(cursor);
             string = Range::convert_bytes_array_to_string(buffer);
@@ -268,11 +268,11 @@ impl Range {
             body = [body, string.as_bytes().to_vec()].concat();
 
             let mut buf = Vec::from(string.as_bytes());
-            while !buf.starts_with(CONSTANTS.SEPARATOR.as_bytes()) {
+            while !buf.starts_with(CONSTANTS.separator.as_bytes()) {
                 buf = vec![];
                 cursor.read_until(b'\n', &mut buf).unwrap();
 
-                if !buf.starts_with(CONSTANTS.SEPARATOR.as_bytes()) {
+                if !buf.starts_with(CONSTANTS.separator.as_bytes()) {
                     body = [body, buf.to_vec()].concat();
                 }
             }

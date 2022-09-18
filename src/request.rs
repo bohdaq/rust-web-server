@@ -21,15 +21,15 @@ impl Request {
     }
 
     pub(crate) fn generate_request(request: Request) -> String {
-        let status = [request.method, request.request_uri, request.http_version, CONSTANTS.NEW_LINE_SEPARATOR.to_string()].join(CONSTANTS.WHITESPACE);
+        let status = [request.method, request.request_uri, request.http_version, CONSTANTS.new_line_separator.to_string()].join(CONSTANTS.whitespace);
 
-        let mut headers = CONSTANTS.EMPTY_STRING.to_string();
+        let mut headers = CONSTANTS.empty_string.to_string();
         for header in request.headers {
-            let mut header_string = CONSTANTS.EMPTY_STRING.to_string();
+            let mut header_string = CONSTANTS.empty_string.to_string();
             header_string.push_str(&header.header_name);
-            header_string.push_str(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR);
+            header_string.push_str(CONSTANTS.header_name_value_separator);
             header_string.push_str(&header.header_value);
-            header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
+            header_string.push_str(CONSTANTS.new_line_separator);
             headers.push_str(&header_string);
         }
 
@@ -37,7 +37,7 @@ impl Request {
             "{}{}{}",
             status,
             headers,
-            CONSTANTS.NEW_LINE_SEPARATOR
+            CONSTANTS.new_line_separator
         );
 
 
@@ -90,7 +90,7 @@ impl Request {
     }
 
     pub(crate)  fn parse_http_request_header_string(header_string: &str) -> Header {
-        let header_parts: Vec<&str> = header_string.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
+        let header_parts: Vec<&str> = header_string.split(CONSTANTS.header_name_value_separator).collect();
         let header_name = Server::truncate_new_line_carriage_return(header_parts[0]);
         let header_value = Server::truncate_new_line_carriage_return(header_parts[1]);
 

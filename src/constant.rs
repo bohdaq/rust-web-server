@@ -1,136 +1,136 @@
 pub struct Constants {
-    pub(crate) NEW_LINE_SEPARATOR: &'static str,
-    pub(crate) NEW_LINE: &'static str,
-    pub(crate) EMPTY_STRING: &'static str,
-    pub(crate) WHITESPACE: &'static str,
-    pub(crate) EQUALS: &'static str,
-    pub(crate) COMMA: &'static str,
-    pub(crate) HYPHEN: &'static str,
-    pub(crate) HEADER_NAME_VALUE_SEPARATOR: &'static str,
-    pub(crate) SLASH: &'static str,
-    pub(crate) CHARSET: &'static str,
-    pub(crate) UTF_8: &'static str,
-    pub(crate) NOSNIFF: &'static str,
-    pub(crate) BYTES: &'static str,
-    pub(crate) NONE: &'static str,
-    pub(crate) MULTIPART: &'static str,
-    pub(crate) BYTERANGES: &'static str,
-    pub(crate) SEMICOLON: &'static str,
-    pub(crate) BOUNDARY: &'static str,
-    pub(crate) STRING_SEPARATOR: &'static str,
-    pub(crate) SEPARATOR: &'static str,
+    pub(crate) new_line_separator: &'static str,
+    pub(crate) new_line: &'static str,
+    pub(crate) empty_string: &'static str,
+    pub(crate) whitespace: &'static str,
+    pub(crate) equals: &'static str,
+    pub(crate) comma: &'static str,
+    pub(crate) hyphen: &'static str,
+    pub(crate) header_name_value_separator: &'static str,
+    pub(crate) slash: &'static str,
+    pub(crate) charset: &'static str,
+    pub(crate) utf_8: &'static str,
+    pub(crate) nosniff: &'static str,
+    pub(crate) bytes: &'static str,
+    pub(crate) none: &'static str,
+    pub(crate) multipart: &'static str,
+    pub(crate) byteranges: &'static str,
+    pub(crate) semicolon: &'static str,
+    pub(crate) boundary: &'static str,
+    pub(crate) string_separator: &'static str,
+    pub(crate) separator: &'static str,
 }
 
 pub const CONSTANTS: Constants = Constants {
-    NEW_LINE: "\n",
-    NEW_LINE_SEPARATOR: "\r\n",
-    EMPTY_STRING: "",
-    WHITESPACE: " ",
-    EQUALS: "=",
-    COMMA: ",",
-    HYPHEN: "-",
-    HEADER_NAME_VALUE_SEPARATOR: ": ",
-    SLASH: "/",
-    CHARSET: "charset",
-    UTF_8: "UTF-8",
-    NOSNIFF: "nosniff",
-    BYTES: "bytes",
-    NONE: "none",
-    MULTIPART: "multipart",
-    BYTERANGES: "byteranges",
-    SEMICOLON: ";",
-    BOUNDARY: "boundary",
-    STRING_SEPARATOR: "String_separator",
-    SEPARATOR: "--String_separator"
+    new_line: "\n",
+    new_line_separator: "\r\n",
+    empty_string: "",
+    whitespace: " ",
+    equals: "=",
+    comma: ",",
+    hyphen: "-",
+    header_name_value_separator: ": ",
+    slash: "/",
+    charset: "charset",
+    utf_8: "UTF-8",
+    nosniff: "nosniff",
+    bytes: "bytes",
+    none: "none",
+    multipart: "multipart",
+    byteranges: "byteranges",
+    semicolon: ";",
+    boundary: "boundary",
+    string_separator: "String_separator",
+    separator: "--String_separator"
 };
 
 
 pub struct RequestMethod {
-    pub(crate) GET: &'static str,
-    pub(crate) HEAD: &'static str,
-    pub(crate) POST: &'static str,
-    pub(crate) PUT: &'static str,
-    pub(crate) DELETE: &'static str,
-    pub(crate) CONNECT: &'static str,
-    pub(crate) OPTIONS: &'static str,
-    pub(crate) TRACE: &'static str,
+    pub(crate) get: &'static str,
+    pub(crate) head: &'static str,
+    pub(crate) post: &'static str,
+    pub(crate) put: &'static str,
+    pub(crate) delete: &'static str,
+    pub(crate) connect: &'static str,
+    pub(crate) options: &'static str,
+    pub(crate) trace: &'static str,
 }
 
 pub const REQUEST_METHODS: RequestMethod = RequestMethod {
-    GET: "GET",
-    HEAD : "HEAD",
-    POST : "POST",
-    PUT : "PUT",
-    DELETE : "DELETE",
-    CONNECT : "CONNECT",
-    OPTIONS : "OPTIONS",
-    TRACE : "TRACE",
+    get: "GET",
+    head: "HEAD",
+    post: "POST",
+    put: "PUT",
+    delete: "DELETE",
+    connect: "CONNECT",
+    options: "OPTIONS",
+    trace: "TRACE",
 };
 
 pub struct HTTPVersion {
-    pub(crate) HTTP_VERSION_0_9: &'static str,
-    pub(crate) HTTP_VERSION_1_0: &'static str,
-    pub(crate) HTTP_VERSION_1_1: &'static str,
-    pub(crate) HTTP_VERSION_2_0: &'static str,
+    pub(crate) http_version_0_9: &'static str,
+    pub(crate) http_version_1_0: &'static str,
+    pub(crate) http_version_1_1: &'static str,
+    pub(crate) http_version_2_0: &'static str,
 }
 
 pub const HTTP_VERSIONS: HTTPVersion = HTTPVersion {
-    HTTP_VERSION_0_9: "HTTP/0.9",
-    HTTP_VERSION_1_0 : "HTTP/1.0",
-    HTTP_VERSION_1_1 : "HTTP/1.1",
-    HTTP_VERSION_2_0 : "HTTP/2.0",
+    http_version_0_9: "HTTP/0.9",
+    http_version_1_0: "HTTP/1.0",
+    http_version_1_1: "HTTP/1.1",
+    http_version_2_0: "HTTP/2.0",
 };
 
 #[derive(Debug)]
 pub struct StatusCodeReasonPhrase {
-    pub(crate) STATUS_CODE: &'static str,
-    pub(crate) REASON_PHRASE: &'static str,
+    pub(crate) status_code: &'static str,
+    pub(crate) reason_phrase: &'static str,
 }
 
 pub struct ResponseStatusCodeReasonPhrase {
-    pub(crate) N200_OK: &'static StatusCodeReasonPhrase,
-    pub(crate) N204_NO_CONTENT: &'static StatusCodeReasonPhrase,
-    pub(crate) N206_PARTIAL_CONTENT: &'static StatusCodeReasonPhrase,
-    pub(crate) N400_BAD_REQUEST: &'static StatusCodeReasonPhrase,
-    pub(crate) N404_NOT_FOUND: &'static StatusCodeReasonPhrase,
-    pub(crate) N416_RANGE_NOT_SATISFIABLE: &'static StatusCodeReasonPhrase,
+    pub(crate) n200_ok: &'static StatusCodeReasonPhrase,
+    pub(crate) n204_no_content: &'static StatusCodeReasonPhrase,
+    pub(crate) n206_partial_content: &'static StatusCodeReasonPhrase,
+    pub(crate) n400_bad_request: &'static StatusCodeReasonPhrase,
+    pub(crate) n404_not_found: &'static StatusCodeReasonPhrase,
+    pub(crate) n416_range_not_satisfiable: &'static StatusCodeReasonPhrase,
 }
 
 pub const RESPONSE_STATUS_CODE_REASON_PHRASES: ResponseStatusCodeReasonPhrase = ResponseStatusCodeReasonPhrase {
-    N200_OK: &StatusCodeReasonPhrase {
-        STATUS_CODE: "200",
-        REASON_PHRASE: "OK"
+    n200_ok: &StatusCodeReasonPhrase {
+        status_code: "200",
+        reason_phrase: "OK"
     },
 
-    N204_NO_CONTENT: &StatusCodeReasonPhrase {
-        STATUS_CODE: "204",
-        REASON_PHRASE: "No Content"
+    n204_no_content: &StatusCodeReasonPhrase {
+        status_code: "204",
+        reason_phrase: "No Content"
     },
 
-    N206_PARTIAL_CONTENT: &StatusCodeReasonPhrase {
-        STATUS_CODE: "206",
-        REASON_PHRASE: "Partial Content"
+    n206_partial_content: &StatusCodeReasonPhrase {
+        status_code: "206",
+        reason_phrase: "Partial Content"
     },
 
-    N400_BAD_REQUEST: &StatusCodeReasonPhrase {
-        STATUS_CODE: "400",
-        REASON_PHRASE: "Bad Request"
+    n400_bad_request: &StatusCodeReasonPhrase {
+        status_code: "400",
+        reason_phrase: "Bad Request"
     },
 
-    N404_NOT_FOUND: &StatusCodeReasonPhrase {
-        STATUS_CODE: "404",
-        REASON_PHRASE: "Not Found"
+    n404_not_found: &StatusCodeReasonPhrase {
+        status_code: "404",
+        reason_phrase: "Not Found"
     },
 
-    N416_RANGE_NOT_SATISFIABLE: &StatusCodeReasonPhrase {
-        STATUS_CODE: "416",
-        REASON_PHRASE: "Range Not Satisfiable"
+    n416_range_not_satisfiable: &StatusCodeReasonPhrase {
+        status_code: "416",
+        reason_phrase: "Range Not Satisfiable"
     },
 
 };
 
 #[derive(Debug)]
 pub struct HTTPError {
-    pub(crate) STATUS_CODE_REASON_PHRASE: &'static StatusCodeReasonPhrase,
-    pub(crate) MESSAGE: String,
+    pub(crate) status_code_reason_phrase: &'static StatusCodeReasonPhrase,
+    pub(crate) message: String,
 }

@@ -43,9 +43,9 @@ fn it_generates_successful_response_with_index_html() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.GET;
-    let request_uri = CONSTANTS.SLASH;
-    let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let request_method = REQUEST_METHODS.get;
+    let request_uri = CONSTANTS.slash;
+    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
 
     // request part
@@ -73,9 +73,9 @@ fn it_generates_successful_response_with_index_html() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
     let response_filepath = "index.html";
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
@@ -96,7 +96,7 @@ fn it_generates_successful_response_with_index_html() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
     assert_eq!(response_content_length_header_value, header.header_value);
     assert_eq!(response_http_version, response.http_version);
@@ -113,9 +113,9 @@ fn it_generates_successful_response_with_static_file() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.GET;
+    let request_method = REQUEST_METHODS.get;
     let request_uri = "/static/test.txt";
-    let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
 
     // request part
@@ -143,15 +143,15 @@ fn it_generates_successful_response_with_static_file() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -171,7 +171,7 @@ fn it_generates_successful_response_with_static_file() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
 
     assert_eq!(response_content_length_header_value, header.header_value);
@@ -186,9 +186,9 @@ fn it_generates_not_found_page_for_absent_static_file() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.GET;
+    let request_method = REQUEST_METHODS.get;
     let request_uri = "/static/nonexistingfile";
-    let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
 
     // request part
@@ -216,16 +216,16 @@ fn it_generates_not_found_page_for_absent_static_file() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1;
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1;
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
     let not_found_page_path = "404.html";
 
-    let response_filepath = [working_directory, CONSTANTS.SLASH, not_found_page_path].join(CONSTANTS.EMPTY_STRING);
+    let response_filepath = [working_directory, CONSTANTS.slash, not_found_page_path].join(CONSTANTS.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -245,7 +245,7 @@ fn it_generates_not_found_page_for_absent_static_file() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
 
     assert_eq!(response_content_length_header_value, header.header_value);
@@ -260,9 +260,9 @@ fn it_generates_not_found_page_for_absent_route() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.GET;
+    let request_method = REQUEST_METHODS.get;
     let request_uri = "/nonexistingroute";
-    let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
 
     // request part
@@ -290,16 +290,16 @@ fn it_generates_not_found_page_for_absent_route() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
     let not_found_page_path = "404.html";
 
-    let response_filepath = [working_directory, CONSTANTS.SLASH, not_found_page_path].join(CONSTANTS.EMPTY_STRING);
+    let response_filepath = [working_directory, CONSTANTS.slash, not_found_page_path].join(CONSTANTS.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -319,7 +319,7 @@ fn it_generates_not_found_page_for_absent_route() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
 
     assert_eq!(response_content_length_header_value, header.header_value);
@@ -334,9 +334,9 @@ fn it_generates_not_found_page_for_static_directory() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.GET;
+    let request_method = REQUEST_METHODS.get;
     let request_uri = "/static/";
-    let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
 
     // request part
@@ -364,16 +364,16 @@ fn it_generates_not_found_page_for_static_directory() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
     let not_found_page_path = "404.html";
 
-    let response_filepath = [working_directory, CONSTANTS.SLASH, not_found_page_path].join(CONSTANTS.EMPTY_STRING);
+    let response_filepath = [working_directory, CONSTANTS.slash, not_found_page_path].join(CONSTANTS.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -393,7 +393,7 @@ fn it_generates_not_found_page_for_static_directory() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
 
     assert_eq!(response_content_length_header_value, header.header_value);
@@ -408,9 +408,9 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.GET;
+    let request_method = REQUEST_METHODS.get;
     let request_uri = "/static/subdir/";
-    let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
 
     // request part
@@ -438,16 +438,16 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
     let not_found_page_path = "404.html";
 
-    let response_filepath = [working_directory, CONSTANTS.SLASH, not_found_page_path].join(CONSTANTS.EMPTY_STRING);
+    let response_filepath = [working_directory, CONSTANTS.slash, not_found_page_path].join(CONSTANTS.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -467,7 +467,7 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
 
     assert_eq!(response_content_length_header_value, header.header_value);
@@ -482,9 +482,9 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.GET;
+    let request_method = REQUEST_METHODS.get;
     let request_uri = "/static/test.txt";
-    let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
 
     // request part
@@ -512,15 +512,15 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -541,7 +541,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
 
     assert_eq!(response_content_length_header_value, header.header_value);
@@ -556,9 +556,9 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.HEAD;
+    let request_method = REQUEST_METHODS.head;
     let request_uri = "/static/test.txt";
-    let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
 
     // request part
@@ -586,15 +586,15 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -615,7 +615,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
 
     assert_eq!(response_content_length_header_value, header.header_value);
@@ -634,9 +634,9 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.GET;
+    let request_method = REQUEST_METHODS.get;
     let request_uri = "/static/test.txt";
-    let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
 
     // request part
@@ -664,15 +664,15 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -692,7 +692,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
 
     assert_eq!(response_content_length_header_value, header.header_value);
@@ -710,9 +710,9 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.GET;
+    let request_method = REQUEST_METHODS.get;
     let request_uri = "/assets/test.txt";
-    let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
 
     // request part
@@ -740,15 +740,15 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -768,7 +768,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
 
     assert_eq!(response_content_length_header_value, header.header_value);
@@ -811,9 +811,9 @@ fn check_range_response_for_not_proper_range_header() {
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.GET.to_string(),
+        method: REQUEST_METHODS.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
     };
 
@@ -831,14 +831,14 @@ fn check_range_response_for_not_proper_range_header() {
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
+    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.header_value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.BYTES, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.header_value);
 
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE, response.reason_phrase);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT.as_bytes());
@@ -877,9 +877,9 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.GET.to_string(),
+        method: REQUEST_METHODS.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
     };
 
@@ -897,14 +897,14 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
+    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.header_value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.BYTES, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.header_value);
 
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE, response.reason_phrase);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.as_bytes());
@@ -943,9 +943,9 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.GET.to_string(),
+        method: REQUEST_METHODS.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
     };
 
@@ -963,14 +963,14 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
+    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.header_value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.BYTES, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.header_value);
 
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE, response.reason_phrase);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.as_bytes());
@@ -1009,9 +1009,9 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.GET.to_string(),
+        method: REQUEST_METHODS.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
     };
 
@@ -1029,14 +1029,14 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
+    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.header_value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.BYTES, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.header_value);
 
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE, response.reason_phrase);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_START.as_bytes());
@@ -1075,9 +1075,9 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.GET.to_string(),
+        method: REQUEST_METHODS.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
     };
 
@@ -1095,14 +1095,14 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
+    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.header_value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.BYTES, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.header_value);
 
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE, response.reason_phrase);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_END.as_bytes());
@@ -1141,9 +1141,9 @@ fn check_range_response_for_not_proper_range_header_malformed() {
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.GET.to_string(),
+        method: REQUEST_METHODS.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
     };
 
@@ -1161,14 +1161,14 @@ fn check_range_response_for_not_proper_range_header_malformed() {
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
+    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.header_value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.BYTES, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.header_value);
 
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.STATUS_CODE, response.status_code);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE.REASON_PHRASE, response.reason_phrase);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_START.as_bytes());

@@ -30,7 +30,7 @@ impl App {
 
         let length = contents.len() as u64;
         let content_range = ContentRange {
-            unit: CONSTANTS.BYTES.to_string(),
+            unit: CONSTANTS.bytes.to_string(),
             range: Range { start: 0, end: length },
             size: length.to_string(),
             body: contents,
@@ -39,14 +39,14 @@ impl App {
 
 
         let mut response = Response {
-            http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
-            status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE.to_string(),
-            reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE.to_string(),
+            http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+            status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code.to_string(),
+            reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase.to_string(),
             headers: vec![],
             content_range_list: vec![content_range]
         };
 
-        if request.request_uri == CONSTANTS.SLASH {
+        if request.request_uri == CONSTANTS.slash {
             let mut file_content = Vec::new();
             let mut file = File::open(&App::INDEX_FILEPATH).expect("Unable to open file");
             file.read_to_end(&mut file_content).expect("Unable to read");
@@ -57,7 +57,7 @@ impl App {
 
             let length = contents.len() as u64;
             let content_range = ContentRange {
-                unit: CONSTANTS.BYTES.to_string(),
+                unit: CONSTANTS.bytes.to_string(),
                 range: Range { start: 0, end: length },
                 size: length.to_string(),
                 body: contents,
@@ -67,41 +67,41 @@ impl App {
             let content_range_list = vec![content_range];
 
             response = Response {
-                http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
-                status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE.to_string(),
-                reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE.to_string(),
+                http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+                status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code.to_string(),
+                reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase.to_string(),
                 headers: vec![],
                 content_range_list,
             };
         }
 
-        let is_get = request.method == REQUEST_METHODS.GET;
-        let is_head = request.method == REQUEST_METHODS.HEAD;
-        let is_options = request.method == REQUEST_METHODS.OPTIONS;
-        if is_get || is_head || is_options && request.request_uri != CONSTANTS.SLASH {
+        let is_get = request.method == REQUEST_METHODS.get;
+        let is_head = request.method == REQUEST_METHODS.head;
+        let is_options = request.method == REQUEST_METHODS.options;
+        if is_get || is_head || is_options && request.request_uri != CONSTANTS.slash {
             let boxed_content_range_list = App::process_static_resources(&request);
             if boxed_content_range_list.is_ok() {
                 let content_range_list = boxed_content_range_list.unwrap();
 
                 if content_range_list.len() != 0 {
 
-                    let mut status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
-                    let mut reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
+                    let mut status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
+                    let mut reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
 
                     let does_request_include_range_header = request.get_header(Header::RANGE.to_string()).is_some();
                     if does_request_include_range_header {
-                        status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.STATUS_CODE;
-                        reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE;
+                        status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n206_partial_content.status_code;
+                        reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n206_partial_content.reason_phrase;
                     }
 
-                    let is_options_request = request.method == REQUEST_METHODS.OPTIONS;
+                    let is_options_request = request.method == REQUEST_METHODS.options;
                     if is_options_request {
-                        status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N204_NO_CONTENT.STATUS_CODE;
-                        reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N204_NO_CONTENT.REASON_PHRASE;
+                        status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n204_no_content.status_code;
+                        reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n204_no_content.reason_phrase;
                     }
 
                     response = Response {
-                        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+                        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
                         status_code: status_code.to_string(),
                         reason_phrase: reason_phrase.to_string(),
                         headers: vec![],
@@ -117,12 +117,12 @@ impl App {
                 }
             } else {
                 let error : HTTPError = boxed_content_range_list.err().unwrap();
-                let body = error.MESSAGE;
+                let body = error.message;
                 let body_length = body.len() as u64;
 
                 let content_range_list = vec![
                     ContentRange {
-                        unit: CONSTANTS.BYTES.to_string(),
+                        unit: CONSTANTS.bytes.to_string(),
                         range: Range { start: 0, end: body_length },
                         size: body_length.to_string(),
                         body: body.as_bytes().to_vec(),
@@ -131,9 +131,9 @@ impl App {
                 ];
 
                 response = Response {
-                    http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
-                    status_code: error.STATUS_CODE_REASON_PHRASE.STATUS_CODE.to_string(),
-                    reason_phrase: error.STATUS_CODE_REASON_PHRASE.REASON_PHRASE.to_string(),
+                    http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+                    status_code: error.status_code_reason_phrase.status_code.to_string(),
+                    reason_phrase: error.status_code_reason_phrase.reason_phrase.to_string(),
                     headers: vec![],
                     content_range_list,
                 };
@@ -141,13 +141,13 @@ impl App {
 
         }
 
-        if request.request_uri != CONSTANTS.SLASH && request.method == REQUEST_METHODS.POST {
+        if request.request_uri != CONSTANTS.slash && request.method == REQUEST_METHODS.post {
             let content_range_list = vec![];
 
             response = Response {
-                http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
-                status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE.to_string(),
-                reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE.to_string(),
+                http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+                status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code.to_string(),
+                reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase.to_string(),
                 headers: vec![],
                 content_range_list,
             };
@@ -166,7 +166,7 @@ impl App {
     pub(crate) fn process_static_resources(request: &Request) -> Result<Vec<ContentRange>, HTTPError> {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
-        let static_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
+        let static_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
 
         let mut content_range_list = Vec::new();
 

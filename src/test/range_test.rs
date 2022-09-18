@@ -41,9 +41,9 @@ fn check_range_response_is_ok_two_part() {
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.GET.to_string(),
+        method: REQUEST_METHODS.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
     };
 
@@ -61,24 +61,24 @@ fn check_range_response_is_ok_two_part() {
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(response.status_code, RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.STATUS_CODE);
-    assert_eq!(response.reason_phrase, RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE);
+    assert_eq!(response.status_code, RESPONSE_STATUS_CODE_REASON_PHRASES.n206_partial_content.status_code);
+    assert_eq!(response.reason_phrase, RESPONSE_STATUS_CODE_REASON_PHRASES.n206_partial_content.reason_phrase);
 
-    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
+    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.header_value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.BYTES, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.header_value);
     let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let value = [
-        CONSTANTS.MULTIPART,
-        CONSTANTS.SLASH,
-        CONSTANTS.BYTERANGES,
-        CONSTANTS.SEMICOLON,
-        CONSTANTS.WHITESPACE,
-        CONSTANTS.BOUNDARY,
-        CONSTANTS.EQUALS,
-        CONSTANTS.STRING_SEPARATOR
+        CONSTANTS.multipart,
+        CONSTANTS.slash,
+        CONSTANTS.byteranges,
+        CONSTANTS.semicolon,
+        CONSTANTS.whitespace,
+        CONSTANTS.boundary,
+        CONSTANTS.equals,
+        CONSTANTS.string_separator
     ].join("");
     assert_eq!(value, header.header_value);
 
@@ -136,9 +136,9 @@ fn check_range_response_is_ok_single_part() {
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.GET.to_string(),
+        method: REQUEST_METHODS.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
     };
 
@@ -156,14 +156,14 @@ fn check_range_response_is_ok_single_part() {
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(response.status_code, RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.STATUS_CODE);
-    assert_eq!(response.reason_phrase, RESPONSE_STATUS_CODE_REASON_PHRASES.N206_PARTIAL_CONTENT.REASON_PHRASE);
+    assert_eq!(response.status_code, RESPONSE_STATUS_CODE_REASON_PHRASES.n206_partial_content.status_code);
+    assert_eq!(response.reason_phrase, RESPONSE_STATUS_CODE_REASON_PHRASES.n206_partial_content.reason_phrase);
 
-    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, response.http_version);
+    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.NOSNIFF, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.header_value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.BYTES, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.header_value);
     let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let value = MimeType::TEXT_PLAIN.to_string();
     assert_eq!(value, header.header_value);
@@ -196,7 +196,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(0).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.BYTES);
+    assert_eq!(content_range.unit, CONSTANTS.bytes);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();
@@ -213,7 +213,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(1).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.BYTES);
+    assert_eq!(content_range.unit, CONSTANTS.bytes);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();
@@ -229,7 +229,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(2).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.BYTES);
+    assert_eq!(content_range.unit, CONSTANTS.bytes);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();
@@ -245,7 +245,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(3).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.BYTES);
+    assert_eq!(content_range.unit, CONSTANTS.bytes);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();
@@ -259,7 +259,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(4).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.BYTES);
+    assert_eq!(content_range.unit, CONSTANTS.bytes);
     let start = file_size - 500;
     let end = file_size;
     assert_eq!(content_range.range.start, start);
@@ -277,7 +277,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(5).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.BYTES);
+    assert_eq!(content_range.unit, CONSTANTS.bytes);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();
@@ -294,7 +294,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(6).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.BYTES);
+    assert_eq!(content_range.unit, CONSTANTS.bytes);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let mut file = File::open(&static_filepath).unwrap();

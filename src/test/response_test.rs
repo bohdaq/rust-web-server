@@ -25,31 +25,31 @@ fn http_version_and_status_code_and_reason_phrase_regex() {
     let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
     let caps = re.captures("HTTP/1.1 404 Not Found").unwrap();
 
-    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, &caps["http_version"]);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.STATUS_CODE, &caps["status_code"]);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N404_NOT_FOUND.REASON_PHRASE, &caps["reason_phrase"]);
+    assert_eq!(HTTP_VERSIONS.http_version_1_1, &caps["http_version"]);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code, &caps["status_code"]);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase, &caps["reason_phrase"]);
 
 
     let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
     let caps = re.captures("HTTP/1.1 200 OK").unwrap();
 
-    assert_eq!(HTTP_VERSIONS.HTTP_VERSION_1_1, &caps["http_version"]);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE, &caps["status_code"]);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE, &caps["reason_phrase"]);
+    assert_eq!(HTTP_VERSIONS.http_version_1_1, &caps["http_version"]);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code, &caps["status_code"]);
+    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase, &caps["reason_phrase"]);
 
 }
 
 
 #[test]
 fn it_generates_successful_response_with_additional_headers() {
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
     let response_status_code = "401";
     let response_reason_phrase = "Unauthorized";
-    let message_body = CONSTANTS.EMPTY_STRING;
+    let message_body = CONSTANTS.empty_string;
 
 
     let content_range = ContentRange {
-        unit: CONSTANTS.BYTES.to_string(),
+        unit: CONSTANTS.bytes.to_string(),
         range: Range {
             start: 0,
             end: message_body.as_bytes().len() as u64
@@ -73,9 +73,9 @@ fn it_generates_successful_response_with_additional_headers() {
     let response_content_length_header_value = message_body.len().to_string();
 
     let request = Request {
-        method: REQUEST_METHODS.GET.to_string(),
+        method: REQUEST_METHODS.get.to_string(),
         request_uri: "/some-route".to_string(),
-        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers: vec![]
     };
 
@@ -97,15 +97,15 @@ fn it_generates_successful_response_with_additional_headers() {
 
 #[test]
 fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() {
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
     let filepath = "/static/content.png";
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let mut response_filepath = [working_directory, filepath].join(CONSTANTS.EMPTY_STRING);
+    let mut response_filepath = [working_directory, filepath].join(CONSTANTS.empty_string);
     let mut contents = Vec::new();
     let mut file = File::open(response_filepath).unwrap();
     file.read_to_end(&mut contents).expect("Unable to read");
@@ -116,7 +116,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
     let headers = vec![];
 
     let content_range = ContentRange {
-        unit: CONSTANTS.BYTES.to_string(),
+        unit: CONSTANTS.bytes.to_string(),
         range: Range {
             start: 0,
             end: contents.len() as u64
@@ -135,9 +135,9 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
     };
 
     let request = Request {
-        method: REQUEST_METHODS.GET.to_string(),
+        method: REQUEST_METHODS.get.to_string(),
         request_uri: "/some-route".to_string(),
-        http_version: HTTP_VERSIONS.HTTP_VERSION_1_1.to_string(),
+        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers: vec![]
     };
 
@@ -154,7 +154,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
     assert_eq!(response_reason_phrase, response.reason_phrase);
 
     contents = Vec::new();
-    response_filepath = [working_directory, filepath].join(CONSTANTS.EMPTY_STRING);
+    response_filepath = [working_directory, filepath].join(CONSTANTS.empty_string);
     file = File::open(response_filepath).unwrap();
     file.read_to_end(&mut contents).expect("Unable to read");
     assert_eq!(contents, response.content_range_list.get(0).unwrap().body);

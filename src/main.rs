@@ -403,7 +403,7 @@ fn get_ip_port_thread_count() -> (String, i32, i32) {
 }
 
 fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
-    let bind_addr = [ip, ":", port.to_string().as_str()].join(CONSTANTS.EMPTY_STRING);
+    let bind_addr = [ip, ":", port.to_string().as_str()].join(CONSTANTS.empty_string);
     println!("Hello, rust-web-server is up and running: {}", bind_addr);
 
     let listener = TcpListener::bind(bind_addr).unwrap();

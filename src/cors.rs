@@ -41,7 +41,7 @@ impl Cors {
             response.headers.push(vary);
 
 
-            let is_options = request.method == REQUEST_METHODS.OPTIONS;
+            let is_options = request.method == REQUEST_METHODS.options;
             if is_options {
                 let method = request.get_header(Header::ACCESS_CONTROL_REQUEST_METHOD.to_string());
                 if method.is_some() {
@@ -117,7 +117,7 @@ impl Cors {
         };
         response.headers.push(vary);
 
-        let is_options = request.method == REQUEST_METHODS.OPTIONS;
+        let is_options = request.method == REQUEST_METHODS.options;
         if is_options {
             let methods = cors.allow_methods.join(",");
             let allow_methods = Header {
@@ -189,7 +189,7 @@ impl Cors {
         };
         response.headers.push(vary);
 
-        let is_options = request.method == REQUEST_METHODS.OPTIONS;
+        let is_options = request.method == REQUEST_METHODS.options;
         if is_options {
             let methods = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS).unwrap();
             let allow_methods = Header {

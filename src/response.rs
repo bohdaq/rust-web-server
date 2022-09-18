@@ -35,26 +35,26 @@ impl Response {
 
         if content_range_list.len() > ONE {
             for (i, content_range) in content_range_list.iter().enumerate() {
-                let mut body_str = CONSTANTS.EMPTY_STRING.to_string();
+                let mut body_str = CONSTANTS.empty_string.to_string();
                 if i != 0 {
-                    body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
+                    body_str.push_str(CONSTANTS.new_line_separator);
                 }
-                body_str.push_str(CONSTANTS.SEPARATOR);
-                body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
-                let content_type = [Header::CONTENT_TYPE, CONSTANTS.HEADER_NAME_VALUE_SEPARATOR, CONSTANTS.WHITESPACE, &content_range.content_type.to_string()].join("");
+                body_str.push_str(CONSTANTS.separator);
+                body_str.push_str(CONSTANTS.new_line_separator);
+                let content_type = [Header::CONTENT_TYPE, CONSTANTS.header_name_value_separator, CONSTANTS.whitespace, &content_range.content_type.to_string()].join("");
                 body_str.push_str(content_type.as_str());
-                body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
-                let content_range_header = [Header::CONTENT_RANGE, CONSTANTS.HEADER_NAME_VALUE_SEPARATOR, CONSTANTS.WHITESPACE, CONSTANTS.BYTES, CONSTANTS.WHITESPACE, &content_range.range.start.to_string(), CONSTANTS.HYPHEN, &content_range.range.end.to_string(), CONSTANTS.SLASH, &content_range.size].join("");
+                body_str.push_str(CONSTANTS.new_line_separator);
+                let content_range_header = [Header::CONTENT_RANGE, CONSTANTS.header_name_value_separator, CONSTANTS.whitespace, CONSTANTS.bytes, CONSTANTS.whitespace, &content_range.range.start.to_string(), CONSTANTS.hyphen, &content_range.range.end.to_string(), CONSTANTS.slash, &content_range.size].join("");
                 body_str.push_str(content_range_header.as_str());
-                body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
-                body_str.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
+                body_str.push_str(CONSTANTS.new_line_separator);
+                body_str.push_str(CONSTANTS.new_line_separator);
 
                 let inner_body = [body_str.as_bytes(), &content_range.body].concat();
                 body = [body, inner_body].concat();
             }
-            let mut trailing_separator = CONSTANTS.EMPTY_STRING.to_string();
-            trailing_separator.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
-            trailing_separator.push_str(CONSTANTS.SEPARATOR);
+            let mut trailing_separator = CONSTANTS.empty_string.to_string();
+            trailing_separator.push_str(CONSTANTS.new_line_separator);
+            trailing_separator.push_str(CONSTANTS.separator);
             body = [&body, trailing_separator.as_bytes()].concat();
         }
 
@@ -78,12 +78,12 @@ impl Response {
             });
 
             let content_range_header_value = [
-                CONSTANTS.BYTES,
-                CONSTANTS.WHITESPACE,
+                CONSTANTS.bytes,
+                CONSTANTS.whitespace,
                 &content_range.range.start.to_string(),
-                CONSTANTS.HYPHEN,
+                CONSTANTS.hyphen,
                 &content_range.range.end.to_string(),
-                CONSTANTS.SLASH,
+                CONSTANTS.slash,
                 &content_range.size
             ].join("");
             headers.push(Header {
@@ -99,14 +99,14 @@ impl Response {
 
         if response.content_range_list.len() > 1 {
             let content_range_header_value = [
-                CONSTANTS.MULTIPART,
-                CONSTANTS.SLASH,
-                CONSTANTS.BYTERANGES,
-                CONSTANTS.SEMICOLON,
-                CONSTANTS.WHITESPACE,
-                CONSTANTS.BOUNDARY,
-                CONSTANTS.EQUALS,
-                CONSTANTS.STRING_SEPARATOR
+                CONSTANTS.multipart,
+                CONSTANTS.slash,
+                CONSTANTS.byteranges,
+                CONSTANTS.semicolon,
+                CONSTANTS.whitespace,
+                CONSTANTS.boundary,
+                CONSTANTS.equals,
+                CONSTANTS.string_separator
             ].join("");
             headers.push(Header {
                 header_name: Header::CONTENT_TYPE.to_string(),
@@ -116,27 +116,27 @@ impl Response {
 
         let mut body = Response::generate_body(response.content_range_list);
 
-        let mut headers_str = CONSTANTS.NEW_LINE_SEPARATOR.to_string();
+        let mut headers_str = CONSTANTS.new_line_separator.to_string();
         for header in headers {
-            let mut header_string = CONSTANTS.EMPTY_STRING.to_string();
+            let mut header_string = CONSTANTS.empty_string.to_string();
             header_string.push_str(&header.header_name);
-            header_string.push_str(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR);
+            header_string.push_str(CONSTANTS.header_name_value_separator);
             header_string.push_str(&header.header_value);
-            header_string.push_str(CONSTANTS.NEW_LINE_SEPARATOR);
+            header_string.push_str(CONSTANTS.new_line_separator);
             headers_str.push_str(&header_string);
         }
-        let status = [response.http_version, response.status_code, response.reason_phrase].join(CONSTANTS.WHITESPACE);
+        let status = [response.http_version, response.status_code, response.reason_phrase].join(CONSTANTS.whitespace);
         let response_without_body = format!(
             "{}{}{}",
             status,
             headers_str,
-            CONSTANTS.NEW_LINE_SEPARATOR,
+            CONSTANTS.new_line_separator,
         );
 
         let mut response_as_vector : Vec<u8> = vec![];
 
-        let is_head = request.method == REQUEST_METHODS.HEAD;
-        let is_options = request.method == REQUEST_METHODS.OPTIONS;
+        let is_head = request.method == REQUEST_METHODS.head;
+        let is_options = request.method == REQUEST_METHODS.options;
         if is_head || is_options {
             response_as_vector = response_without_body.into_bytes();
         } else {
@@ -178,7 +178,7 @@ impl Response {
     }
 
     pub(crate)  fn parse_http_response_header_string(header_string: &str) -> Header {
-        let mut header_parts: Vec<&str> = header_string.split(CONSTANTS.HEADER_NAME_VALUE_SEPARATOR).collect();
+        let mut header_parts: Vec<&str> = header_string.split(CONSTANTS.header_name_value_separator).collect();
         let mut raw_header_name = header_parts[0].to_string();
         let mut header_name = Server::truncate_new_line_carriage_return(&raw_header_name);
         let mut raw_header_value = header_parts[1].to_string();
@@ -230,7 +230,7 @@ impl Response {
                 b = &buf;
 
                 let content_range = ContentRange {
-                    unit: CONSTANTS.BYTES.to_string(),
+                    unit: CONSTANTS.bytes.to_string(),
                     range: Range {
                         start: 0,
                         end: b.len() as u64
@@ -261,7 +261,7 @@ impl Response {
     }
 
     pub(crate) fn is_multipart_byteranges_content_type(content_type: &Header) -> bool {
-        let multipart_byteranges = [CONSTANTS.MULTIPART, CONSTANTS.SLASH, CONSTANTS.BYTERANGES].join("");
+        let multipart_byteranges = [CONSTANTS.multipart, CONSTANTS.slash, CONSTANTS.byteranges].join("");
         let is_multipart_byteranges = content_type.header_value.starts_with(&multipart_byteranges);
         is_multipart_byteranges
     }
@@ -269,14 +269,14 @@ impl Response {
     pub(crate) fn get_x_content_type_options_header() -> Header {
         Header {
             header_name: Header::X_CONTENT_TYPE_OPTIONS.to_string(),
-            header_value: CONSTANTS.NOSNIFF.to_string(),
+            header_value: CONSTANTS.nosniff.to_string(),
         }
     }
 
     pub(crate) fn get_accept_ranges_header() -> Header {
         Header {
             header_name: Header::ACCEPT_RANGES.to_string(),
-            header_value: CONSTANTS.BYTES.to_string(),
+            header_value: CONSTANTS.bytes.to_string(),
         }
     }
 }

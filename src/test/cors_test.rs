@@ -11,9 +11,9 @@ use crate::test::server_test::MockTcpStream;
 fn cors_options_preflight_request() {
     // request test data
 
-    let request_method = REQUEST_METHODS.OPTIONS;
+    let request_method = REQUEST_METHODS.options;
     let request_uri = "/static/test.json";
-    let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
     let request_host_header_name = Header::HOST;
     let request_host_header_value = "localhost:7777";
@@ -68,14 +68,14 @@ fn cors_options_preflight_request() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N204_NO_CONTENT.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N204_NO_CONTENT.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n204_no_content.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n204_no_content.reason_phrase;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = Header::CONTENT_LENGTH;
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -99,7 +99,7 @@ fn cors_options_preflight_request() {
     assert_eq!(MimeType::APPLICATION_JSON, content_type_header.header_value);
 
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
 
     let access_control_allow_origin_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
     let allow_origins = format!("{}", access_control_allow_origin_header.header_value);
@@ -129,9 +129,9 @@ fn actual_request_after_preflight() {
     let is_test_mode = true;
     bootstrap(is_test_mode);
 
-    let request_method = REQUEST_METHODS.GET;
+    let request_method = REQUEST_METHODS.get;
     let request_uri = "/static/test.json";
-    let request_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
+    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
 
     let request_host_header_name = Header::HOST;
@@ -174,15 +174,15 @@ fn actual_request_after_preflight() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.HTTP_VERSION_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.STATUS_CODE;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.N200_OK.REASON_PHRASE;
+    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
+    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.EMPTY_STRING);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -206,7 +206,7 @@ fn actual_request_after_preflight() {
     assert_eq!(MimeType::APPLICATION_JSON, content_type_header.header_value);
 
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.NOSNIFF, x_content_type_options_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
 
     let vary_header = response.get_header(Header::VARY.to_string()).unwrap();
     assert_eq!(Header::ORIGIN, vary_header.header_value);
@@ -230,7 +230,7 @@ fn cors_allow_all() {
     let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header);
 
     let mut request = Request {
-        method: REQUEST_METHODS.OPTIONS.to_string(),
+        method: REQUEST_METHODS.options.to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
         headers: vec![
@@ -240,7 +240,7 @@ fn cors_allow_all() {
             },
             Header {
                 header_name: Header::ACCESS_CONTROL_REQUEST_METHOD.to_string(),
-                header_value: REQUEST_METHODS.POST.to_string()
+                header_value: REQUEST_METHODS.post.to_string()
             },
             Header {
                 header_name: Header::ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
@@ -263,7 +263,7 @@ fn cors_allow_all() {
     assert_eq!(origin_value, allow_origins.header_value);
 
     let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
-    assert_eq!(REQUEST_METHODS.POST, allow_methods.header_value);
+    assert_eq!(REQUEST_METHODS.post, allow_methods.header_value);
 
     let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
     let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
@@ -295,7 +295,7 @@ fn cors_process() {
     // Origin header indicates it is CORS request
     let origin_value = "https://foo.example";
     let mut request = Request {
-        method: REQUEST_METHODS.OPTIONS.to_string(),
+        method: REQUEST_METHODS.options.to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
         headers: vec![
@@ -321,7 +321,7 @@ fn cors_process() {
     let cors_config = Cors {
         allow_all: false,
         allow_origins: vec![first_domain.to_string(), second_domain.to_string()],
-        allow_methods: vec![REQUEST_METHODS.GET.to_string(), REQUEST_METHODS.POST.to_string(), REQUEST_METHODS.PUT.to_string()],
+        allow_methods: vec![REQUEST_METHODS.get.to_string(), REQUEST_METHODS.post.to_string(), REQUEST_METHODS.put.to_string()],
         allow_headers: vec![Header::CONTENT_TYPE.to_string(), custom_header.to_string()],
         allow_credentials: true,
         expose_headers: vec![Header::CONTENT_TYPE.to_string(), custom_header.to_string()],
@@ -335,7 +335,7 @@ fn cors_process() {
     assert_eq!(expected_allow_origins, allow_origins.header_value);
 
     let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
-    let expected_allow_methods = format!("{},{},{}", REQUEST_METHODS.GET, REQUEST_METHODS.POST, REQUEST_METHODS.PUT);
+    let expected_allow_methods = format!("{},{},{}", REQUEST_METHODS.get, REQUEST_METHODS.post, REQUEST_METHODS.put);
     assert_eq!(expected_allow_methods, allow_methods.header_value);
 
     let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
@@ -372,7 +372,7 @@ fn cors_process_default_config() {
     // Origin header indicates it is CORS request
     let origin_value = "https://bar.example";
     let mut request = Request {
-        method: REQUEST_METHODS.OPTIONS.to_string(),
+        method: REQUEST_METHODS.options.to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
         headers: vec![
@@ -400,7 +400,7 @@ fn cors_process_default_config() {
     assert_eq!(expected_allow_origins, allow_origins.header_value);
 
     let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
-    let expected_allow_methods = format!("{},{}", REQUEST_METHODS.POST, REQUEST_METHODS.PUT);
+    let expected_allow_methods = format!("{},{}", REQUEST_METHODS.post, REQUEST_METHODS.put);
     assert_eq!(expected_allow_methods, allow_methods.header_value);
 
     let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
