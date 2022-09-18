@@ -197,10 +197,10 @@ impl MimeType {
         let mut is_html_suffix = false;
         let boxed_extension = MimeType::get_extension_from_filename(request_uri);
         if !boxed_extension.is_none() {
-            let HTML_SUFFIXES = vec![MimeType::HTML_SUFFIX, MimeType::HTM_SUFFIX];
+            let html_suffixes = vec![MimeType::HTML_SUFFIX, MimeType::HTM_SUFFIX];
             let extension = boxed_extension.unwrap();
             let suffix = [".", extension].join("");
-            is_html_suffix = HTML_SUFFIXES.contains(&suffix.as_str())
+            is_html_suffix = html_suffixes.contains(&suffix.as_str())
         }
 
         if is_html_suffix {
@@ -210,10 +210,10 @@ impl MimeType {
         let mut is_js_suffix = false;
         let boxed_extension = MimeType::get_extension_from_filename(request_uri);
         if !boxed_extension.is_none() {
-            let JS_SUFFIXES = vec![MimeType::MJS_SUFFIX, MimeType::JS_SUFFIX];
+            let js_suffixes = vec![MimeType::MJS_SUFFIX, MimeType::JS_SUFFIX];
             let extension = boxed_extension.unwrap();
             let suffix = [".", extension].join("");
-            is_js_suffix = JS_SUFFIXES.contains(&suffix.as_str())
+            is_js_suffix = js_suffixes.contains(&suffix.as_str())
         }
 
         if is_js_suffix {
@@ -243,10 +243,10 @@ impl MimeType {
         let mut is_jpeg_suffix = false;
         let boxed_extension = MimeType::get_extension_from_filename(request_uri);
         if !boxed_extension.is_none() {
-            let JPEG_SUFFIXES = vec![MimeType::JPG_SUFFIX, MimeType::JPEG_SUFFIX, MimeType::JPE_SUFFIX, MimeType::JIF_SUFFIX, MimeType::JFIF_SUFFIX];
+            let jpeg_suffixes = vec![MimeType::JPG_SUFFIX, MimeType::JPEG_SUFFIX, MimeType::JPE_SUFFIX, MimeType::JIF_SUFFIX, MimeType::JFIF_SUFFIX];
             let extension = boxed_extension.unwrap();
             let suffix = [".", extension].join("");
-            is_jpeg_suffix = JPEG_SUFFIXES.contains(&suffix.as_str())
+            is_jpeg_suffix = jpeg_suffixes.contains(&suffix.as_str())
         }
 
         if is_jpeg_suffix {
@@ -271,10 +271,10 @@ impl MimeType {
         let mut is_ico_suffix = false;
         let boxed_extension = MimeType::get_extension_from_filename(request_uri);
         if !boxed_extension.is_none() {
-            let ICO_SUFFIXES = vec![MimeType::ICO_SUFFIX, MimeType::CUR_SUFFIX];
+            let ico_suffixes = vec![MimeType::ICO_SUFFIX, MimeType::CUR_SUFFIX];
             let extension = boxed_extension.unwrap();
             let suffix = [".", extension].join("");
-            is_ico_suffix = ICO_SUFFIXES.contains(&suffix.as_str())
+            is_ico_suffix = ico_suffixes.contains(&suffix.as_str())
         }
 
         if is_ico_suffix {
@@ -284,10 +284,10 @@ impl MimeType {
         let mut is_tiff_suffix = false;
         let boxed_extension = MimeType::get_extension_from_filename(request_uri);
         if !boxed_extension.is_none() {
-            let TIFF_SUFFIXES = vec![MimeType::TIF_SUFFIX, MimeType::TIFF_SUFFIX];
+            let tiff_suffixes = vec![MimeType::TIF_SUFFIX, MimeType::TIFF_SUFFIX];
             let extension = boxed_extension.unwrap();
             let suffix = [".", extension].join("");
-            is_tiff_suffix = TIFF_SUFFIXES.contains(&suffix.as_str())
+            is_tiff_suffix = tiff_suffixes.contains(&suffix.as_str())
         }
 
         if is_tiff_suffix {
@@ -327,10 +327,10 @@ impl MimeType {
         let mut is_mpeg_suffix = false;
         let boxed_extension = MimeType::get_extension_from_filename(request_uri);
         if !boxed_extension.is_none() {
-            let MPEG_SUFFIXES = vec![MimeType::MPG_SUFFIX, MimeType::MPEG_SUFFIX];
+            let mpeg_suffixes = vec![MimeType::MPG_SUFFIX, MimeType::MPEG_SUFFIX];
             let extension = boxed_extension.unwrap();
             let suffix = [".", extension].join("");
-            is_mpeg_suffix = MPEG_SUFFIXES.contains(&suffix.as_str())
+            is_mpeg_suffix = mpeg_suffixes.contains(&suffix.as_str())
         }
 
         if is_mpeg_suffix {
@@ -340,10 +340,10 @@ impl MimeType {
         let mut is_video_mp4_suffix = false;
         let boxed_extension = MimeType::get_extension_from_filename(request_uri);
         if !boxed_extension.is_none() {
-            let MP4_SUFFIXES = vec![MimeType::MP4_SUFFIX, MimeType::M4V_SUFFIX, MimeType::M4P_SUFFIX];
+            let mp4_suffixes = vec![MimeType::MP4_SUFFIX, MimeType::M4V_SUFFIX, MimeType::M4P_SUFFIX];
             let extension = boxed_extension.unwrap();
             let suffix = [".", extension].join("");
-            is_video_mp4_suffix = MP4_SUFFIXES.contains(&suffix.as_str())
+            is_video_mp4_suffix = mp4_suffixes.contains(&suffix.as_str())
         }
 
         if is_video_mp4_suffix {
@@ -353,10 +353,10 @@ impl MimeType {
         let mut is_video_ogg_suffix = false;
         let boxed_extension = MimeType::get_extension_from_filename(request_uri);
         if !boxed_extension.is_none() {
-            let OGG_SUFFIXES = vec![MimeType::OGG_SUFFIX, MimeType::OGV_SUFFIX];
+            let ogg_suffixes = vec![MimeType::OGG_SUFFIX, MimeType::OGV_SUFFIX];
             let extension = boxed_extension.unwrap();
             let suffix = [".", extension].join("");
-            is_video_ogg_suffix = OGG_SUFFIXES.contains(&suffix.as_str())
+            is_video_ogg_suffix = ogg_suffixes.contains(&suffix.as_str())
         }
 
         if is_video_ogg_suffix {
@@ -467,10 +467,10 @@ impl MimeType {
         let mut is_midi_suffix = false;
         let boxed_extension = MimeType::get_extension_from_filename(request_uri);
         if !boxed_extension.is_none() {
-            let MIDI_SUFFIXES = vec![MimeType::MIDI_SUFFIX, MimeType::MID_SUFFIX];
+            let midi_suffixes = vec![MimeType::MIDI_SUFFIX, MimeType::MID_SUFFIX];
             let extension = boxed_extension.unwrap();
             let suffix = [".", extension].join("");
-            is_midi_suffix = MIDI_SUFFIXES.contains(&suffix.as_str())
+            is_midi_suffix = midi_suffixes.contains(&suffix.as_str())
         }
 
         if is_midi_suffix {
