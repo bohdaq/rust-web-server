@@ -162,8 +162,7 @@ impl Response {
     }
 
     pub(crate)  fn parse_http_version_status_code_reason_phrase_string(http_version_status_code_reason_phrase: &str) -> (String, String, String) {
-        let http_version_and_status_code_and_reason_phrase_regex = "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)";
-        let re = Regex::new(http_version_and_status_code_and_reason_phrase_regex).unwrap();
+        let re = Regex::new(CONSTANTS.http_version_and_status_code_and_reason_phrase_regex).unwrap();
         let caps = re.captures(&http_version_status_code_reason_phrase).unwrap();
 
         let http_version= String::from(&caps["http_version"]);
