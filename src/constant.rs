@@ -20,6 +20,7 @@ pub struct Constants {
     pub(crate) string_separator: &'static str,
     pub(crate) separator: &'static str,
     pub(crate) http_version_and_status_code_and_reason_phrase_regex: &'static str,
+    pub(crate) content_range_regex: &'static str
 }
 
 pub const CONSTANTS: Constants = Constants {
@@ -43,7 +44,8 @@ pub const CONSTANTS: Constants = Constants {
     boundary: "boundary",
     string_separator: "String_separator",
     separator: "--String_separator",
-    http_version_and_status_code_and_reason_phrase_regex: "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)"
+    http_version_and_status_code_and_reason_phrase_regex: "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)",
+    content_range_regex: "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})"
 };
 
 
