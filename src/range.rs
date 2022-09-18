@@ -5,7 +5,7 @@ use regex::Regex;
 
 use crate::response::Response;
 use crate::{CONSTANTS, Server};
-use crate::constant::{HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES, StatusCodeReasonPhrase};
+use crate::constant::{HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 

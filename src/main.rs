@@ -13,7 +13,7 @@ mod cors;
 extern crate core;
 
 use std::net::TcpListener;
-use std::{env, thread};
+use std::{env};
 use std::collections::HashMap;
 use std::fs::metadata;
 use std::time::Duration;

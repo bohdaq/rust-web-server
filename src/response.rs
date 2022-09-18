@@ -2,7 +2,6 @@ use std::io;
 use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use regex::Regex;
-use crate::app::App;
 use crate::constant::{CONSTANTS, REQUEST_METHODS};
 use crate::range::{ContentRange, Range};
 use crate::{Request, Server};
