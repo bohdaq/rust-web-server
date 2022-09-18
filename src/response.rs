@@ -188,11 +188,16 @@ impl Response {
         }
     }
 
-    pub(crate) fn parse_raw_response_via_cursor(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, response: &mut Response, mut content_length: usize) {
-        let mut buf = vec![];
-        let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
-        let mut b : &[u8] = &buf;
-        let string = String::from_utf8(Vec::from(b)).unwrap();
+    pub(crate) fn parse_raw_response_via_cursor(
+            cursor: &mut Cursor<&[u8]>,
+            mut iteration_number: usize,
+            response: &mut Response,
+            mut content_length: usize) {
+
+        let mut buffer = vec![];
+        let bytes_offset = cursor.read_until(b'\n', &mut buffer).unwrap();
+        let mut buffer_as_u8_array: &[u8] = &buffer;
+        let string = String::from_utf8(Vec::from(buffer_as_u8_array)).unwrap();
 
         let is_first_iteration = iteration_number == 0;
         let new_line_char_found = bytes_offset != 0;
@@ -222,21 +227,27 @@ impl Response {
                 }
                 response.content_range_list = range_list;
             } else {
-                buf = vec![];
-                cursor.read_to_end(&mut buf);
-                b = &buf;
+                buffer = vec![];
+                let boxed_read = cursor.read_to_end(&mut buffer);
+                if boxed_read.is_ok() {
+                    buffer_as_u8_array = &buffer;
 
-                let content_range = ContentRange {
-                    unit: CONSTANTS.bytes.to_string(),
-                    range: Range {
-                        start: 0,
-                        end: b.len() as u64
-                    },
-                    size: b.len().to_string(),
-                    body: Vec::from(b),
-                    content_type: content_type.header_value.to_string()
-                };
-                response.content_range_list = vec![content_range];
+                    let content_range = ContentRange {
+                        unit: CONSTANTS.bytes.to_string(),
+                        range: Range {
+                            start: 0,
+                            end: buffer_as_u8_array.len() as u64
+                        },
+                        size: buffer_as_u8_array.len().to_string(),
+                        body: Vec::from(buffer_as_u8_array),
+                        content_type: content_type.header_value.to_string()
+                    };
+                    response.content_range_list = vec![content_range];
+                } else {
+                    let reason = boxed_read.err().unwrap();
+                    eprintln!("error reading file: {}", reason.to_string())
+                }
+
             }
 
             return;
