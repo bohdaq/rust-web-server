@@ -146,21 +146,30 @@ impl Range {
                 let mut file = File::open(filepath).unwrap();
                 let mut reader = BufReader::new(file);
 
-                reader.seek(SeekFrom::Start(range.start));
-                let mut buffer = Vec::new();
-                reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
+                let boxed_seek = reader.seek(SeekFrom::Start(range.start));
+                if boxed_seek.is_ok() {
+                    let mut buffer = Vec::new();
+                    reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
 
-                let content_type = MimeType::detect_mime_type(filepath);
+                    let content_type = MimeType::detect_mime_type(filepath);
 
-                let content_range = ContentRange {
-                    unit: CONSTANTS.BYTES.to_string(),
-                    range,
-                    size: filelength.to_string(),
-                    body: buffer,
-                    content_type,
-                };
+                    let content_range = ContentRange {
+                        unit: CONSTANTS.BYTES.to_string(),
+                        range,
+                        size: filelength.to_string(),
+                        body: buffer,
+                        content_type,
+                    };
 
-                content_range_list.push(content_range);
+                    content_range_list.push(content_range);
+                } else {
+                    let error : HTTPError = HTTPError {
+                        STATUS_CODE_REASON_PHRASE:  RESPONSE_STATUS_CODE_REASON_PHRASES.N416_RANGE_NOT_SATISFIABLE,
+                        MESSAGE: boxed_seek.err().unwrap().to_string()
+                    };
+                    return Err(error)
+                }
+
             } else {
                 let error : HTTPError = boxed_range.err().unwrap();
                 return Err(error);
