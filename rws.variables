@@ -1,5 +1,6 @@
 export RWS_CONFIG_IP="127.0.0.1"
 export RWS_CONFIG_PORT="7887"
+export RWS_CONFIG_THREAD_COUNT="100"
 
 # true will allow all CORS requests and you can omit configuring cors properties below
 export RWS_CONFIG_CORS_ALLOW_ALL="false"
