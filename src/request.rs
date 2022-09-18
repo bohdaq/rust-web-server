@@ -1,8 +1,8 @@
 use std::io;
 use std::io::{BufRead, Cursor};
 use crate::header::Header;
-use regex::{Captures, Regex};
-use crate::constant::{CONSTANTS, HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES, ResponseStatusCodeReasonPhrase, StatusCodeReasonPhrase};
+use regex::{Regex};
+use crate::constant::{CONSTANTS};
 use crate::Server;
 
 pub struct Request {
