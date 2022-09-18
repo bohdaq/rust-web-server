@@ -288,15 +288,13 @@ impl Range {
         }
 
         let boxed_result = Range::parse_multipart_body(cursor, content_range_list);
-        let mut range_list = vec![];
-        if boxed_result.is_ok() {
-            range_list = boxed_result.unwrap();
+        return if boxed_result.is_ok() {
+            Ok(boxed_result.unwrap())
         } else {
             let error = boxed_result.err().unwrap();
-            return Err(error);
+            Err(error)
         }
 
-        Ok(range_list)
     }
 
     pub(crate)  fn parse_content_range_header_value(header_value: String) -> Result<(String, u64, u64), String> {
