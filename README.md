@@ -5,10 +5,9 @@ Hi, rust-web-server (**rws**) is a simple web-server written in Rust. The **rws*
 ## Features
 1. [Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
 2. [HTTP range requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests)
-3. [Non-blocking I/O](https://en.wikipedia.org/wiki/Asynchronous_I/O)
 
 ## Download
-Currently, you can [download binary](https://github.com/bohdaq/rust-web-server/releases/download/0.0.7/release_0.0.7.zip) for x86_64-unknown-linux-gnu or x86_64-apple-darwin platforms. Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
+Currently, you can [download binary](https://github.com/bohdaq/rust-web-server/releases/download/0.0.8/release_0.0.8.zip) for x86_64-unknown-linux-gnu or x86_64-apple-darwin platforms. Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
 
 ## Installation
 Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PATH_%28variable%29). To check installation execute the following code:
@@ -59,7 +58,7 @@ If you want to build rust-web-server on your own, make sure you have [Rust insta
 > 
 > $ cd target/release
 > 
-> $ ./rws --ip=127.0.0.1 --port=8888
+> $ ./rws --ip=127.0.0.1 --port=8888 --threads=100
 
 >You will see similar output:
 >
