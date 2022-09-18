@@ -24,15 +24,15 @@ impl Response {
 
     pub(crate) fn generate_body(content_range_list: Vec<ContentRange>) -> Vec<u8> {
         let mut body = vec![];
-        let ONE = 1;
+        let one = 1;
 
-        if content_range_list.len() == ONE {
+        if content_range_list.len() == one {
             let index = 0;
             let content_range = content_range_list.get(index).unwrap();
             body = content_range.body.to_vec();
         }
 
-        if content_range_list.len() > ONE {
+        if content_range_list.len() > one {
             for (i, content_range) in content_range_list.iter().enumerate() {
                 let mut body_str = CONSTANTS.empty_string.to_string();
                 if i != 0 {
