@@ -8,5 +8,5 @@ authors:
 title: "Rust Web Server"
 version: 0.0.8
 doi: 10.5281/zenodo.7089679
-date-released: 2022-04-01
+date-released: 2022-09-18
 url: "https://github.com/bohdaq/rust-web-server/"
