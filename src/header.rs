@@ -4,8 +4,6 @@ pub struct Header {
 }
 
 impl Header {
-    pub(crate) const CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})";
-
     pub(crate) const CONTENT_TYPE: &'static str = "Content-Type";
     pub(crate) const CONTENT_LENGTH: &'static str = "Content-Length";
     pub(crate) const X_CONTENT_TYPE_OPTIONS: &'static str = "X-Content-Type-Options";
