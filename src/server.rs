@@ -5,7 +5,7 @@ use std::borrow::Borrow;
 use crate::request::Request;
 use crate::response::Response;
 use crate::app::App;
-use crate::{Config, CONSTANTS};
+use crate::{CONSTANTS};
 pub struct Server {}
 impl Server {
     pub(crate) fn process_request(mut s: impl Read + Write + Unpin) -> Vec<u8> {

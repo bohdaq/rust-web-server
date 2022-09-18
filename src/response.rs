@@ -6,7 +6,6 @@ use crate::app::App;
 use crate::constant::{CONSTANTS, REQUEST_METHODS};
 use crate::range::{ContentRange, Range};
 use crate::{Request, Server};
-use crate::cors::Cors;
 
 pub struct Response {
     pub(crate) http_version: String,
