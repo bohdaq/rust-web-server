@@ -142,7 +142,7 @@ impl Range {
                 let range = boxed_range.unwrap();
                 let buff_length = (range.end - range.start) + 1;
 
-                let mut file = File::open(filepath).unwrap();
+                let file = File::open(filepath).unwrap();
                 let mut reader = BufReader::new(file);
 
                 let boxed_seek = reader.seek(SeekFrom::Start(range.start));
@@ -328,15 +328,15 @@ impl Range {
         Ok((size, start, end))
     }
 
-    pub(crate) fn parse_line_as_bytes(mut cursor: &mut Cursor<&[u8]>) -> Vec<u8> {
+    pub(crate) fn parse_line_as_bytes(cursor: &mut Cursor<&[u8]>) -> Vec<u8> {
         let mut buffer = vec![];
         cursor.read_until(b'\n', &mut buffer).unwrap();
         buffer
     }
 
     pub(crate) fn convert_bytes_array_to_string(buffer: Vec<u8>) -> String {
-        let mut b : &[u8] = &buffer;
-        String::from_utf8(Vec::from(b)).unwrap()
+        let buffer_as_u8_array: &[u8] = &buffer;
+        String::from_utf8(Vec::from(buffer_as_u8_array)).unwrap()
     }
 }
 
