@@ -59,12 +59,12 @@ impl Request {
 
         let content_length: usize = 0;
         let iteration_number : usize = 0;
-        match Request::cursor_read(&mut cursor, iteration_number, &mut request, content_length) {
+        return match Request::cursor_read(&mut cursor, iteration_number, &mut request, content_length) {
             Ok(_) => {
-                return Ok(request)
+                Ok(request)
             }
             Err(error_message) => {
-                return Err(error_message)
+                Err(error_message)
             }
         }
 

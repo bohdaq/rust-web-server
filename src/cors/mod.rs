@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::env;
 use crate::{Config, Request, Response};
 use crate::constant::{HTTPError, REQUEST_METHODS};
