@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::ffi::OsStr;
 use std::path::Path;
 
