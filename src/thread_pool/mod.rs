@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::{thread};
 use std::sync::{Arc, mpsc, Mutex};
 

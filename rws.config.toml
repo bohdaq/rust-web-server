@@ -1,4 +1,3 @@
-# see https://github.com/bohdaq/rust-web-server/blob/cors/src/test/config.toml for example configuration
 ip = '127.0.0.1'
 port = 7888
 thread_count = 200
