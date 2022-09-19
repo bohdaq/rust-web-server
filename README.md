@@ -7,7 +7,7 @@ Hi, rust-web-server (**rws**) is a simple web-server written in Rust. The **rws*
 2. [HTTP range requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests)
 
 ## Download
-Currently, you can [download binary](https://github.com/bohdaq/rust-web-server/releases/download/0.0.8/release_0.0.8.zip) for x86_64-unknown-linux-gnu or x86_64-apple-darwin platforms. Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
+Currently, you can [download binary](https://github.com/bohdaq/rust-web-server/releases/download/0.0.9/release_0.0.9.zip) for x86_64-unknown-linux-gnu or x86_64-apple-darwin platforms. Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
 
 ## Installation
 Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PATH_%28variable%29). To check installation execute the following code:
@@ -16,7 +16,7 @@ Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PA
  
 You will see similar output:
 
-> rws rust-web-server 0.0.8
+> rws rust-web-server 0.0.9
 > 
 > Bohdan Tsap <bohdan.tsap@tutanota.com>
 > 
