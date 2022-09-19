@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::io::prelude::*;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Cursor, SeekFrom};
