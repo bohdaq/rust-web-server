@@ -140,7 +140,7 @@ impl Range {
             let boxed_range = Range::parse_range_in_content_range(filelength, byte);
             if boxed_range.is_ok() {
                 let range = boxed_range.unwrap();
-                let mut buff_length = (range.end - range.start) + 1;
+                let buff_length = (range.end - range.start) + 1;
 
                 let mut file = File::open(filepath).unwrap();
                 let mut reader = BufReader::new(file);

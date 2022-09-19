@@ -25,7 +25,7 @@ impl App {
         let mut file = File::open(&App::NOT_FOUND_PAGE_FILEPATH).expect("Unable to open file");
         file.read_to_end(&mut file_content).expect("Unable to read");
 
-        let mut contents = file_content;
+        let contents = file_content;
         let content_type = MimeType::detect_mime_type(App::NOT_FOUND_PAGE_FILEPATH);
 
         let length = contents.len() as u64;
@@ -51,7 +51,7 @@ impl App {
             let mut file = File::open(&App::INDEX_FILEPATH).expect("Unable to open file");
             file.read_to_end(&mut file_content).expect("Unable to read");
 
-            let mut contents = file_content;
+            let contents = file_content;
             let content_type = MimeType::detect_mime_type(App::INDEX_FILEPATH);
 
 
