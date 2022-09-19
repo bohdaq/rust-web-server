@@ -54,8 +54,8 @@ impl Request {
             headers: vec![]
         };
 
-        let mut content_length: usize = 0;
-        let mut iteration_number : usize = 0;
+        let content_length: usize = 0;
+        let iteration_number : usize = 0;
         match Request::cursor_read(&mut cursor, iteration_number, &mut request, content_length) {
             Ok(_) => {
                 return Ok(request)
