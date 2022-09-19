@@ -1,3 +1,6 @@
+#[cfg(test)]
+pub(crate) mod tests;
+
 use std::io::prelude::*;
 use std::{env};
 use std::borrow::Borrow;

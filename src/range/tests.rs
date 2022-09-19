@@ -7,7 +7,7 @@ use crate::{CONSTANTS, Request, Response, Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
-use crate::test::server_test::MockTcpStream;
+use crate::server::tests::MockTcpStream;
 
 #[test]
 fn check_range_response_is_ok_two_part() {

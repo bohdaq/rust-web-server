@@ -5,7 +5,7 @@ use crate::header::Header;
 use crate::{bootstrap, Config, CONSTANTS, Request, Response, Server};
 use crate::cors::Cors;
 use crate::mime_type::MimeType;
-use crate::test::server_test::MockTcpStream;
+use crate::server::tests::MockTcpStream;
 
 #[test]
 fn cors_options_preflight_request() {
