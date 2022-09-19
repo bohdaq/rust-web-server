@@ -1,5 +1,4 @@
 mod header;
-mod request;
 mod response;
 mod server;
 mod test;
@@ -9,6 +8,7 @@ mod constant;
 mod mime_type;
 mod range;
 mod cors;
+mod request;
 
 extern crate core;
 

@@ -3,8 +3,6 @@ mod range_test;
 #[cfg(test)]
 mod response_test;
 #[cfg(test)]
-mod request_test;
-#[cfg(test)]
 mod mime_type_test;
 #[cfg(test)]
 mod server_test;

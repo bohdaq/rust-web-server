@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::io;
 use std::io::{BufRead, Cursor};
 use crate::header::Header;
