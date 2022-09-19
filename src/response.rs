@@ -215,7 +215,7 @@ impl Response {
             let is_multipart = Response::is_multipart_byteranges_content_type(&content_type);
 
             if is_multipart {
-                let mut content_range_list : Vec<ContentRange> = vec![];
+                let content_range_list : Vec<ContentRange> = vec![];
 
                 let mut buf = vec![];
                 cursor.read_until(b'\n', &mut buf).unwrap();

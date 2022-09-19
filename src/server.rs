@@ -8,9 +8,8 @@ use crate::app::App;
 use crate::{CONSTANTS};
 pub struct Server {}
 impl Server {
-    pub(crate) fn process_request(mut s: impl Read + Write + Unpin) -> Vec<u8> {
+    pub(crate) fn process_request(mut stream: impl Read + Write + Unpin) -> Vec<u8> {
         let mut buffer :[u8; 1024] = [0; 1024];
-        let mut stream = s;
         stream.read(&mut buffer).unwrap();
         let request :  &[u8] = &buffer;
         let request: Request = Request::parse_request(request).unwrap();
