@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod range_test;
-#[cfg(test)]
-mod response_test;
+
 #[cfg(test)]
 mod mime_type_test;
 #[cfg(test)]

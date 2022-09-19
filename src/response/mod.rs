@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::io;
 use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
@@ -188,10 +191,10 @@ impl Response {
     }
 
     pub(crate) fn parse_raw_response_via_cursor(
-            cursor: &mut Cursor<&[u8]>,
-            mut iteration_number: usize,
-            response: &mut Response,
-            mut content_length: usize) {
+        cursor: &mut Cursor<&[u8]>,
+        mut iteration_number: usize,
+        response: &mut Response,
+        mut content_length: usize) {
 
         let mut buffer = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buffer).unwrap();
