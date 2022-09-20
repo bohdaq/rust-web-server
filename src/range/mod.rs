@@ -6,9 +6,9 @@ use std::fs::{File, metadata};
 use std::io::{BufReader, Cursor, SeekFrom};
 use regex::Regex;
 
-use crate::response::Response;
+use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::{CONSTANTS, Server};
-use crate::constant::{HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTPError};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 
@@ -63,7 +63,7 @@ impl Range {
                 } else {
                     let message = Range::ERROR_UNABLE_TO_PARSE_RANGE_START.to_string();
                     let error = HTTPError {
-                        status_code_reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                        status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                         message: message.to_string()
                     };
                     return Err(error)
@@ -76,7 +76,7 @@ impl Range {
                 } else {
                     let message = Range::ERROR_UNABLE_TO_PARSE_RANGE_END.to_string();
                     let error = HTTPError {
-                        status_code_reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                        status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                         message: message.to_string()
                     };
                     return Err(error)
@@ -91,7 +91,7 @@ impl Range {
             if range.end > filelength {
                 let message = Range::ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string();
                 let error = HTTPError {
-                    status_code_reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                    status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                     message: message,
                 };
                 return Err(error);
@@ -100,7 +100,7 @@ impl Range {
             if range.start > filelength {
                 let message = Range::ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string();
                 let error = HTTPError {
-                    status_code_reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                    status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                     message: message,
                 };
                 return Err(error);
@@ -109,7 +109,7 @@ impl Range {
             if range.start > range.end {
                 let message = Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.to_string();
                 let error = HTTPError {
-                    status_code_reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                    status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                     message: message,
                 };
                 return Err(error);
@@ -129,7 +129,7 @@ impl Range {
         if !raw_range_value.starts_with(prefix.as_str()) {
             let message = Range::ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT.to_string();
             let error = HTTPError {
-                status_code_reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                 message: message,
             };
             return Err(error);
@@ -166,7 +166,7 @@ impl Range {
                     content_range_list.push(content_range);
                 } else {
                     let error : HTTPError = HTTPError {
-                        status_code_reason_phrase:  RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable,
+                        status_code_reason_phrase:  STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                         message: boxed_seek.err().unwrap().to_string()
                     };
                     return Err(error)

@@ -5,12 +5,13 @@ use std::io::{BufReader, Read, Write};
 
 use std::cmp::min;
 
-use crate::constant::{HTTP_VERSIONS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_VERSIONS};
 use crate::{bootstrap, CONSTANTS, Request, Response, Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::Range;
 use crate::request::METHOD;
+use crate::response::STATUS_CODE_REASON_PHRASE;
 
 pub struct MockTcpStream {
     pub(crate) read_data: Vec<u8>,
@@ -75,8 +76,8 @@ fn it_generates_successful_response_with_index_html() {
 
     // response part
     let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = "index.html";
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
@@ -145,8 +146,8 @@ fn it_generates_successful_response_with_static_file() {
 
     // response part
     let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
@@ -218,8 +219,8 @@ fn it_generates_not_found_page_for_absent_static_file() {
 
     // response part
     let response_http_version = HTTP_VERSIONS.http_version_1_1;
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
@@ -292,8 +293,8 @@ fn it_generates_not_found_page_for_absent_route() {
 
     // response part
     let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
@@ -366,8 +367,8 @@ fn it_generates_not_found_page_for_static_directory() {
 
     // response part
     let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
@@ -440,8 +441,8 @@ fn it_generates_not_found_page_for_static_subdirectory() {
 
     // response part
     let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
@@ -514,8 +515,8 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
 
     // response part
     let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
@@ -588,8 +589,8 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
 
     // response part
     let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
@@ -666,8 +667,8 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 
     // response part
     let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
@@ -742,8 +743,8 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 
     // response part
     let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
@@ -838,8 +839,8 @@ fn check_range_response_for_not_proper_range_header() {
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.bytes, header.value);
 
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT.as_bytes());
@@ -904,8 +905,8 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.bytes, header.value);
 
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.as_bytes());
@@ -970,8 +971,8 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.bytes, header.value);
 
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.as_bytes());
@@ -1036,8 +1037,8 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.bytes, header.value);
 
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_START.as_bytes());
@@ -1102,8 +1103,8 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.bytes, header.value);
 
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_END.as_bytes());
@@ -1168,8 +1169,8 @@ fn check_range_response_for_not_proper_range_header_malformed() {
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(CONSTANTS.bytes, header.value);
 
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_START.as_bytes());

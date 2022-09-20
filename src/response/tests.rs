@@ -3,12 +3,13 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use regex::Regex;
-use crate::constant::{Constants, HTTP_VERSIONS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{Constants, HTTP_VERSIONS};
 use crate::header::Header;
 use crate::{CONSTANTS, Request, Response};
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Method};
+use crate::response::STATUS_CODE_REASON_PHRASE;
 
 #[test]
 fn check_is_multipart_byteranges_content_type() {
@@ -28,15 +29,15 @@ fn http_version_and_status_code_and_reason_phrase_regex() {
     let caps = re.captures("HTTP/1.1 404 Not Found").unwrap();
 
     assert_eq!(HTTP_VERSIONS.http_version_1_1, &caps["http_version"]);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code, &caps["status_code"]);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase, &caps["reason_phrase"]);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.status_code, &caps["status_code"]);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase, &caps["reason_phrase"]);
 
     let re = Regex::new(CONSTANTS.http_version_and_status_code_and_reason_phrase_regex).unwrap();
     let caps = re.captures("HTTP/1.1 200 OK").unwrap();
 
     assert_eq!(HTTP_VERSIONS.http_version_1_1, &caps["http_version"]);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code, &caps["status_code"]);
-    assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase, &caps["reason_phrase"]);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.status_code, &caps["status_code"]);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase, &caps["reason_phrase"]);
 
 }
 
@@ -98,8 +99,8 @@ fn it_generates_successful_response_with_additional_headers() {
 #[test]
 fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() {
     let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let filepath = "/static/content.png";
 
     let dir = env::current_dir().unwrap();

@@ -1,3 +1,5 @@
+use crate::response::StatusCodeReasonPhrase;
+
 pub struct Constants {
     pub(crate) new_line_separator: &'static str,
     pub(crate) new_line: &'static str,
@@ -63,53 +65,6 @@ pub const HTTP_VERSIONS: HTTPVersion = HTTPVersion {
     http_version_2_0: "HTTP/2.0",
 };
 
-#[derive(Debug)]
-pub struct StatusCodeReasonPhrase {
-    pub(crate) status_code: &'static str,
-    pub(crate) reason_phrase: &'static str,
-}
-
-pub struct ResponseStatusCodeReasonPhrase {
-    pub(crate) n200_ok: &'static StatusCodeReasonPhrase,
-    pub(crate) n204_no_content: &'static StatusCodeReasonPhrase,
-    pub(crate) n206_partial_content: &'static StatusCodeReasonPhrase,
-    pub(crate) n400_bad_request: &'static StatusCodeReasonPhrase,
-    pub(crate) n404_not_found: &'static StatusCodeReasonPhrase,
-    pub(crate) n416_range_not_satisfiable: &'static StatusCodeReasonPhrase,
-}
-
-pub const RESPONSE_STATUS_CODE_REASON_PHRASES: ResponseStatusCodeReasonPhrase = ResponseStatusCodeReasonPhrase {
-    n200_ok: &StatusCodeReasonPhrase {
-        status_code: "200",
-        reason_phrase: "OK"
-    },
-
-    n204_no_content: &StatusCodeReasonPhrase {
-        status_code: "204",
-        reason_phrase: "No Content"
-    },
-
-    n206_partial_content: &StatusCodeReasonPhrase {
-        status_code: "206",
-        reason_phrase: "Partial Content"
-    },
-
-    n400_bad_request: &StatusCodeReasonPhrase {
-        status_code: "400",
-        reason_phrase: "Bad Request"
-    },
-
-    n404_not_found: &StatusCodeReasonPhrase {
-        status_code: "404",
-        reason_phrase: "Not Found"
-    },
-
-    n416_range_not_satisfiable: &StatusCodeReasonPhrase {
-        status_code: "416",
-        reason_phrase: "Range Not Satisfiable"
-    },
-
-};
 
 #[derive(Debug)]
 pub struct HTTPError {

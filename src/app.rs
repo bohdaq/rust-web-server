@@ -1,7 +1,7 @@
 use std::{env};
 use std::fs::{File, metadata};
 use std::io::Read;
-use crate::constant::{HTTP_VERSIONS, HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_VERSIONS, HTTPError};
 use crate::{Config, CONSTANTS};
 use crate::cors::Cors;
 use crate::header::Header;
@@ -9,7 +9,7 @@ use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 
 use crate::request::{METHOD, Request};
-use crate::response::Response;
+use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 
 
 pub struct App {}
@@ -40,8 +40,8 @@ impl App {
 
         let mut response = Response {
             http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
-            status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.status_code.to_string(),
-            reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n404_not_found.reason_phrase.to_string(),
+            status_code: STATUS_CODE_REASON_PHRASE.n404_not_found.status_code.to_string(),
+            reason_phrase: STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase.to_string(),
             headers: vec![],
             content_range_list: vec![content_range]
         };
@@ -68,8 +68,8 @@ impl App {
 
             response = Response {
                 http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
-                status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code.to_string(),
-                reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase.to_string(),
+                status_code: STATUS_CODE_REASON_PHRASE.n200_ok.status_code.to_string(),
+                reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
                 headers: vec![],
                 content_range_list,
             };
@@ -85,19 +85,19 @@ impl App {
 
                 if content_range_list.len() != 0 {
 
-                    let mut status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
-                    let mut reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
+                    let mut status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+                    let mut reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
 
                     let does_request_include_range_header = request.get_header(Header::RANGE.to_string()).is_some();
                     if does_request_include_range_header {
-                        status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n206_partial_content.status_code;
-                        reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n206_partial_content.reason_phrase;
+                        status_code = STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code;
+                        reason_phrase = STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase;
                     }
 
                     let is_options_request = request.method == METHOD.options;
                     if is_options_request {
-                        status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n204_no_content.status_code;
-                        reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n204_no_content.reason_phrase;
+                        status_code = STATUS_CODE_REASON_PHRASE.n204_no_content.status_code;
+                        reason_phrase = STATUS_CODE_REASON_PHRASE.n204_no_content.reason_phrase;
                     }
 
                     response = Response {
@@ -146,8 +146,8 @@ impl App {
 
             response = Response {
                 http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
-                status_code: RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code.to_string(),
-                reason_phrase: RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase.to_string(),
+                status_code: STATUS_CODE_REASON_PHRASE.n200_ok.status_code.to_string(),
+                reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
                 headers: vec![],
                 content_range_list,
             };

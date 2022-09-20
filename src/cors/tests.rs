@@ -1,11 +1,12 @@
 use std::{env, fs};
 use std::borrow::Borrow;
-use crate::constant::{HTTP_VERSIONS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_VERSIONS};
 use crate::header::Header;
 use crate::{bootstrap, Config, CONSTANTS, Request, Response, Server};
 use crate::cors::Cors;
 use crate::mime_type::MimeType;
 use crate::request::METHOD;
+use crate::response::STATUS_CODE_REASON_PHRASE;
 use crate::server::tests::MockTcpStream;
 
 #[test]
@@ -70,8 +71,8 @@ fn cors_options_preflight_request() {
 
     // response part
     let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n204_no_content.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n204_no_content.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n204_no_content.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n204_no_content.reason_phrase;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
@@ -176,8 +177,8 @@ fn actual_request_after_preflight() {
 
     // response part
     let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
-    let response_status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.status_code;
-    let response_reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n200_ok.reason_phrase;
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
