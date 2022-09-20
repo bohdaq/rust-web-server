@@ -179,8 +179,7 @@ impl Response {
 
     pub(crate)  fn parse_http_response_header_string(header_string: &str) -> Header {
         let header_parts: Vec<&str> = header_string.split(CONSTANTS.header_name_value_separator).collect();
-        let raw_header_name = header_parts[0].to_string();
-        let header_name = Server::truncate_new_line_carriage_return(&raw_header_name);
+        let header_name = header_parts[0].to_string();
         let raw_header_value = header_parts[1].to_string();
         let header_value = Server::truncate_new_line_carriage_return(&raw_header_value);
 
