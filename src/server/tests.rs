@@ -5,11 +5,12 @@ use std::io::{BufReader, Read, Write};
 
 use std::cmp::min;
 
-use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_VERSIONS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::{bootstrap, CONSTANTS, Request, Response, Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::Range;
+use crate::request::METHOD;
 
 pub struct MockTcpStream {
     pub(crate) read_data: Vec<u8>,
@@ -43,7 +44,7 @@ fn it_generates_successful_response_with_index_html() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.get;
+    let request_method = METHOD.get;
     let request_uri = CONSTANTS.slash;
     let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
@@ -113,7 +114,7 @@ fn it_generates_successful_response_with_static_file() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.get;
+    let request_method = METHOD.get;
     let request_uri = "/static/test.txt";
     let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
@@ -186,7 +187,7 @@ fn it_generates_not_found_page_for_absent_static_file() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.get;
+    let request_method = METHOD.get;
     let request_uri = "/static/nonexistingfile";
     let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
@@ -260,7 +261,7 @@ fn it_generates_not_found_page_for_absent_route() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.get;
+    let request_method = METHOD.get;
     let request_uri = "/nonexistingroute";
     let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
@@ -334,7 +335,7 @@ fn it_generates_not_found_page_for_static_directory() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.get;
+    let request_method = METHOD.get;
     let request_uri = "/static/";
     let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
@@ -408,7 +409,7 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.get;
+    let request_method = METHOD.get;
     let request_uri = "/static/subdir/";
     let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
@@ -482,7 +483,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.get;
+    let request_method = METHOD.get;
     let request_uri = "/static/test.txt";
     let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
@@ -556,7 +557,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.head;
+    let request_method = METHOD.head;
     let request_uri = "/static/test.txt";
     let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
@@ -634,7 +635,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.get;
+    let request_method = METHOD.get;
     let request_uri = "/static/test.txt";
     let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
@@ -710,7 +711,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
-    let request_method = REQUEST_METHODS.get;
+    let request_method = METHOD.get;
     let request_uri = "/assets/test.txt";
     let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
@@ -811,7 +812,7 @@ fn check_range_response_for_not_proper_range_header() {
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.get.to_string(),
+        method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
@@ -877,7 +878,7 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.get.to_string(),
+        method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
@@ -943,7 +944,7 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.get.to_string(),
+        method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
@@ -1009,7 +1010,7 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.get.to_string(),
+        method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
@@ -1075,7 +1076,7 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.get.to_string(),
+        method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
@@ -1141,7 +1142,7 @@ fn check_range_response_for_not_proper_range_header_malformed() {
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.get.to_string(),
+        method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers

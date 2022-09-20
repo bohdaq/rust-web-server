@@ -1,14 +1,14 @@
 use std::{env};
 use std::fs::{File, metadata};
 use std::io::Read;
-use crate::constant::{HTTP_VERSIONS, HTTPError, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_VERSIONS, HTTPError, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::{Config, CONSTANTS};
 use crate::cors::Cors;
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 
-use crate::request::Request;
+use crate::request::{METHOD, Request};
 use crate::response::Response;
 
 
@@ -75,9 +75,9 @@ impl App {
             };
         }
 
-        let is_get = request.method == REQUEST_METHODS.get;
-        let is_head = request.method == REQUEST_METHODS.head;
-        let is_options = request.method == REQUEST_METHODS.options;
+        let is_get = request.method == METHOD.get;
+        let is_head = request.method == METHOD.head;
+        let is_options = request.method == METHOD.options;
         if is_get || is_head || is_options && request.request_uri != CONSTANTS.slash {
             let boxed_content_range_list = App::process_static_resources(&request);
             if boxed_content_range_list.is_ok() {
@@ -94,7 +94,7 @@ impl App {
                         reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n206_partial_content.reason_phrase;
                     }
 
-                    let is_options_request = request.method == REQUEST_METHODS.options;
+                    let is_options_request = request.method == METHOD.options;
                     if is_options_request {
                         status_code = RESPONSE_STATUS_CODE_REASON_PHRASES.n204_no_content.status_code;
                         reason_phrase = RESPONSE_STATUS_CODE_REASON_PHRASES.n204_no_content.reason_phrase;
@@ -141,7 +141,7 @@ impl App {
 
         }
 
-        if request.request_uri != CONSTANTS.slash && request.method == REQUEST_METHODS.post {
+        if request.request_uri != CONSTANTS.slash && request.method == METHOD.post {
             let content_range_list = vec![];
 
             response = Response {

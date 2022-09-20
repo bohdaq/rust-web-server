@@ -1,17 +1,18 @@
 use std::{env, fs};
 use std::borrow::Borrow;
-use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_VERSIONS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::header::Header;
 use crate::{bootstrap, Config, CONSTANTS, Request, Response, Server};
 use crate::cors::Cors;
 use crate::mime_type::MimeType;
+use crate::request::METHOD;
 use crate::server::tests::MockTcpStream;
 
 #[test]
 fn cors_options_preflight_request() {
     // request test data
 
-    let request_method = REQUEST_METHODS.options;
+    let request_method = METHOD.options;
     let request_uri = "/static/test.json";
     let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
@@ -129,7 +130,7 @@ fn actual_request_after_preflight() {
     let is_test_mode = true;
     bootstrap(is_test_mode);
 
-    let request_method = REQUEST_METHODS.get;
+    let request_method = METHOD.get;
     let request_uri = "/static/test.json";
     let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
 
@@ -230,7 +231,7 @@ fn cors_allow_all() {
     let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header);
 
     let mut request = Request {
-        method: REQUEST_METHODS.options.to_string(),
+        method: METHOD.options.to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
         headers: vec![
@@ -240,7 +241,7 @@ fn cors_allow_all() {
             },
             Header {
                 name: Header::ACCESS_CONTROL_REQUEST_METHOD.to_string(),
-                value: REQUEST_METHODS.post.to_string()
+                value: METHOD.post.to_string()
             },
             Header {
                 name: Header::ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
@@ -263,7 +264,7 @@ fn cors_allow_all() {
     assert_eq!(origin_value, allow_origins.value);
 
     let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
-    assert_eq!(REQUEST_METHODS.post, allow_methods.value);
+    assert_eq!(METHOD.post, allow_methods.value);
 
     let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
     let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
@@ -295,7 +296,7 @@ fn cors_process() {
     // Origin header indicates it is CORS request
     let origin_value = "https://foo.example";
     let mut request = Request {
-        method: REQUEST_METHODS.options.to_string(),
+        method: METHOD.options.to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
         headers: vec![
@@ -321,7 +322,7 @@ fn cors_process() {
     let cors_config = Cors {
         allow_all: false,
         allow_origins: vec![first_domain.to_string(), second_domain.to_string()],
-        allow_methods: vec![REQUEST_METHODS.get.to_string(), REQUEST_METHODS.post.to_string(), REQUEST_METHODS.put.to_string()],
+        allow_methods: vec![METHOD.get.to_string(), METHOD.post.to_string(), METHOD.put.to_string()],
         allow_headers: vec![Header::CONTENT_TYPE.to_string(), custom_header.to_string()],
         allow_credentials: true,
         expose_headers: vec![Header::CONTENT_TYPE.to_string(), custom_header.to_string()],
@@ -335,7 +336,7 @@ fn cors_process() {
     assert_eq!(expected_allow_origins, allow_origins.value);
 
     let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
-    let expected_allow_methods = format!("{},{},{}", REQUEST_METHODS.get, REQUEST_METHODS.post, REQUEST_METHODS.put);
+    let expected_allow_methods = format!("{},{},{}", METHOD.get, METHOD.post, METHOD.put);
     assert_eq!(expected_allow_methods, allow_methods.value);
 
     let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
@@ -372,7 +373,7 @@ fn cors_process_default_config() {
     // Origin header indicates it is CORS request
     let origin_value = "https://bar.example";
     let mut request = Request {
-        method: REQUEST_METHODS.options.to_string(),
+        method: METHOD.options.to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
         headers: vec![
@@ -400,7 +401,7 @@ fn cors_process_default_config() {
     assert_eq!(expected_allow_origins, allow_origins.value);
 
     let allow_methods = response.get_header(Header::ACCESS_CONTROL_ALLOW_METHODS.to_string()).unwrap();
-    let expected_allow_methods = format!("{},{}", REQUEST_METHODS.post, REQUEST_METHODS.put);
+    let expected_allow_methods = format!("{},{}", METHOD.post, METHOD.put);
     assert_eq!(expected_allow_methods, allow_methods.value);
 
     let allow_headers = response.get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();

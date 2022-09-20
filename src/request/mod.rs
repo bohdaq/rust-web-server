@@ -15,6 +15,28 @@ pub struct Request {
     pub(crate) headers: Vec<Header>,
 }
 
+pub struct RequestMethod {
+    pub get: &'static str,
+    pub head: &'static str,
+    pub post: &'static str,
+    pub put: &'static str,
+    pub delete: &'static str,
+    pub connect: &'static str,
+    pub options: &'static str,
+    pub trace: &'static str,
+}
+
+pub const METHOD: RequestMethod = RequestMethod {
+    get: "GET",
+    head: "HEAD",
+    post: "POST",
+    put: "PUT",
+    delete: "DELETE",
+    connect: "CONNECT",
+    options: "OPTIONS",
+    trace: "TRACE",
+};
+
 impl Request {
     pub(crate) const METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX: &'static str = "(?P<method>(GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE))\\s(?P<request_uri>[^\\s]+)\\s(?P<http_version>[/.A-Za-z0-9]+)";
 

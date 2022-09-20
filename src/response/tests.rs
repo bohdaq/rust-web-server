@@ -3,11 +3,12 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use regex::Regex;
-use crate::constant::{Constants, HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{Constants, HTTP_VERSIONS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::header::Header;
 use crate::{CONSTANTS, Request, Response};
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
+use crate::request::{METHOD, RequestMethod};
 
 #[test]
 fn check_is_multipart_byteranges_content_type() {
@@ -71,9 +72,8 @@ fn it_generates_successful_response_with_additional_headers() {
 
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = message_body.len().to_string();
-
     let request = Request {
-        method: REQUEST_METHODS.get.to_string(),
+        method: METHOD.get.to_string(),
         request_uri: "/some-route".to_string(),
         http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers: vec![]
@@ -135,7 +135,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
     };
 
     let request = Request {
-        method: REQUEST_METHODS.get.to_string(),
+        method: METHOD.get.to_string(),
         request_uri: "/some-route".to_string(),
         http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers: vec![]

@@ -139,7 +139,7 @@ fn is_config_file_provided(is_test_mode: bool) -> bool {
     let mut is_config_provided = metadata(&static_filepath).is_ok();
 
     if !is_config_provided {
-        println!("rws.config.toml is not provided");
+        eprintln!("rws.config.toml is not provided");
         println!("End of Config Section");
 
     } else {

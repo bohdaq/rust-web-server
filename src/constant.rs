@@ -49,28 +49,6 @@ pub const CONSTANTS: Constants = Constants {
 };
 
 
-pub struct RequestMethod {
-    pub(crate) get: &'static str,
-    pub(crate) head: &'static str,
-    pub(crate) post: &'static str,
-    pub(crate) put: &'static str,
-    pub(crate) delete: &'static str,
-    pub(crate) connect: &'static str,
-    pub(crate) options: &'static str,
-    pub(crate) trace: &'static str,
-}
-
-pub const REQUEST_METHODS: RequestMethod = RequestMethod {
-    get: "GET",
-    head: "HEAD",
-    post: "POST",
-    put: "PUT",
-    delete: "DELETE",
-    connect: "CONNECT",
-    options: "OPTIONS",
-    trace: "TRACE",
-};
-
 pub struct HTTPVersion {
     pub(crate) http_version_0_9: &'static str,
     pub(crate) http_version_1_0: &'static str,

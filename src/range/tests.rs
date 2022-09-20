@@ -2,11 +2,12 @@ use std::borrow::Borrow;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use regex::Regex;
-use crate::constant::{HTTP_VERSIONS, REQUEST_METHODS, RESPONSE_STATUS_CODE_REASON_PHRASES};
+use crate::constant::{HTTP_VERSIONS, RESPONSE_STATUS_CODE_REASON_PHRASES};
 use crate::{CONSTANTS, Request, Response, Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
+use crate::request::METHOD;
 use crate::server::tests::MockTcpStream;
 
 #[test]
@@ -41,7 +42,7 @@ fn check_range_response_is_ok_two_part() {
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.get.to_string(),
+        method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers
@@ -136,7 +137,7 @@ fn check_range_response_is_ok_single_part() {
 
     let headers = vec![host, range];
     let request = Request {
-        method: REQUEST_METHODS.get.to_string(),
+        method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
         headers

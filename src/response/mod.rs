@@ -5,9 +5,10 @@ use std::io;
 use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use regex::Regex;
-use crate::constant::{CONSTANTS, REQUEST_METHODS};
+use crate::constant::{CONSTANTS};
 use crate::range::{ContentRange, Range};
 use crate::{Request, Server};
+use crate::request::METHOD;
 
 pub struct Response {
     pub(crate) http_version: String,
@@ -134,8 +135,8 @@ impl Response {
             CONSTANTS.new_line_separator,
         );
 
-        let is_head = request.method == REQUEST_METHODS.head;
-        let is_options = request.method == REQUEST_METHODS.options;
+        let is_head = request.method == METHOD.head;
+        let is_options = request.method == METHOD.options;
 
         return if is_head || is_options {
             response_without_body.into_bytes()
