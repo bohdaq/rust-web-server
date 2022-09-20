@@ -8,7 +8,7 @@ use crate::header::Header;
 use crate::{CONSTANTS, Request, Response};
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
-use crate::request::{METHOD, RequestMethod};
+use crate::request::{METHOD, Method};
 
 #[test]
 fn check_is_multipart_byteranges_content_type() {

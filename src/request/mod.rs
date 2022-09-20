@@ -15,7 +15,7 @@ pub struct Request {
     pub(crate) headers: Vec<Header>,
 }
 
-pub struct RequestMethod {
+pub struct Method {
     pub get: &'static str,
     pub head: &'static str,
     pub post: &'static str,
@@ -26,7 +26,7 @@ pub struct RequestMethod {
     pub trace: &'static str,
 }
 
-pub const METHOD: RequestMethod = RequestMethod {
+pub const METHOD: Method = Method {
     get: "GET",
     head: "HEAD",
     post: "POST",
