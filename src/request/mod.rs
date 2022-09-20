@@ -8,6 +8,7 @@ use regex::{Regex};
 use crate::constant::{CONSTANTS};
 use crate::Server;
 
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Request {
     pub(crate) method: String,
     pub(crate) request_uri: String,
@@ -15,6 +16,7 @@ pub struct Request {
     pub(crate) headers: Vec<Header>,
 }
 
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Method {
     pub get: &'static str,
     pub head: &'static str,
