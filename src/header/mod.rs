@@ -1,6 +1,10 @@
+#[cfg(test)]
+mod tests;
+
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Header {
-    pub(crate) header_name: String,
-    pub(crate) header_value: String,
+    pub(crate) name: String,
+    pub(crate) value: String,
 }
 
 impl Header {

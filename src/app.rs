@@ -175,8 +175,8 @@ impl App {
             let md = metadata(&static_filepath).unwrap();
             if md.is_file() {
                 let mut range_header = &Header {
-                    header_name: Header::RANGE.to_string(),
-                    header_value: "bytes=0-".to_string()
+                    name: Header::RANGE.to_string(),
+                    value: "bytes=0-".to_string()
                 };
 
                 let boxed_header = request.get_header(Header::RANGE.to_string());

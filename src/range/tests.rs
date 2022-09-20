@@ -30,13 +30,13 @@ fn check_range_response_is_ok_two_part() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let range = Header {
-        header_name: Header::RANGE.to_string(),
-        header_value: range_header_value.to_string()
+        name: Header::RANGE.to_string(),
+        value: range_header_value.to_string()
     };
 
     let headers = vec![host, range];
@@ -66,9 +66,9 @@ fn check_range_response_is_ok_two_part() {
 
     assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.nosniff, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.value);
     let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let value = [
         CONSTANTS.multipart,
@@ -80,7 +80,7 @@ fn check_range_response_is_ok_two_part() {
         CONSTANTS.equals,
         CONSTANTS.string_separator
     ].join("");
-    assert_eq!(value, header.header_value);
+    assert_eq!(value, header.value);
 
     let mut response_result_body : Vec<u8> = vec![];
     let first_range = response.content_range_list.get(0).unwrap();
@@ -125,13 +125,13 @@ fn check_range_response_is_ok_single_part() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let range = Header {
-        header_name: Header::RANGE.to_string(),
-        header_value: range_header_value.to_string()
+        name: Header::RANGE.to_string(),
+        value: range_header_value.to_string()
     };
 
     let headers = vec![host, range];
@@ -161,12 +161,12 @@ fn check_range_response_is_ok_single_part() {
 
     assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.nosniff, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.value);
     let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let value = MimeType::TEXT_PLAIN.to_string();
-    assert_eq!(value, header.header_value);
+    assert_eq!(value, header.value);
 
     let mut response_result_body : Vec<u8> = vec![];
     let first_range = response.content_range_list.get(0).unwrap();
@@ -185,8 +185,8 @@ fn get_right_content_range_of_a_file() {
     let file_size = md.len();
 
     let header = Header {
-        header_name: Header::RANGE.to_string(),
-        header_value: "bytes=200-1000, 1200-1400, 2000-2300, 11000-, -500, 0-, 0-1".to_string()
+        name: Header::RANGE.to_string(),
+        value: "bytes=200-1000, 1200-1400, 2000-2300, 11000-, -500, 0-, 0-1".to_string()
     };
 
     let content_range_list : Vec<ContentRange> = Range::get_content_range_list(image_path, &header).unwrap();

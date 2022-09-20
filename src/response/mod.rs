@@ -20,7 +20,7 @@ pub struct Response {
 impl Response {
 
     pub(crate) fn get_header(&self, name: String) -> Option<&Header> {
-        let header =  self.headers.iter().find(|x| x.header_name == name);
+        let header =  self.headers.iter().find(|x| x.name == name);
         header
     }
 
@@ -74,8 +74,8 @@ impl Response {
             let content_range_index = 0;
             let content_range = response.content_range_list.get(content_range_index).unwrap();
             headers.push(Header {
-                header_name: Header::CONTENT_TYPE.to_string(),
-                header_value: content_range.content_type.to_string()
+                name: Header::CONTENT_TYPE.to_string(),
+                value: content_range.content_type.to_string()
             });
 
             let content_range_header_value = [
@@ -88,13 +88,13 @@ impl Response {
                 &content_range.size
             ].join("");
             headers.push(Header {
-                header_name: Header::CONTENT_RANGE.to_string(),
-                header_value: content_range_header_value.to_string()
+                name: Header::CONTENT_RANGE.to_string(),
+                value: content_range_header_value.to_string()
             });
 
             headers.push(Header {
-                header_name: Header::CONTENT_LENGTH.to_string(),
-                header_value: content_range.body.len().to_string()
+                name: Header::CONTENT_LENGTH.to_string(),
+                value: content_range.body.len().to_string()
             });
         }
 
@@ -110,8 +110,8 @@ impl Response {
                 CONSTANTS.string_separator
             ].join("");
             headers.push(Header {
-                header_name: Header::CONTENT_TYPE.to_string(),
-                header_value: content_range_header_value,
+                name: Header::CONTENT_TYPE.to_string(),
+                value: content_range_header_value,
             });
         }
 
@@ -120,9 +120,9 @@ impl Response {
         let mut headers_str = CONSTANTS.new_line_separator.to_string();
         for header in headers {
             let mut header_string = CONSTANTS.empty_string.to_string();
-            header_string.push_str(&header.header_name);
+            header_string.push_str(&header.name);
             header_string.push_str(CONSTANTS.header_name_value_separator);
-            header_string.push_str(&header.header_value);
+            header_string.push_str(&header.value);
             header_string.push_str(CONSTANTS.new_line_separator);
             headers_str.push_str(&header_string);
         }
@@ -185,8 +185,8 @@ impl Response {
 
 
         Header {
-            header_name: header_name.to_string(),
-            header_value: header_value.to_string()
+            name: header_name.to_string(),
+            value: header_value.to_string()
         }
     }
 
@@ -242,7 +242,7 @@ impl Response {
                         },
                         size: buffer_as_u8_array.len().to_string(),
                         body: Vec::from(buffer_as_u8_array),
-                        content_type: content_type.header_value.to_string()
+                        content_type: content_type.value.to_string()
                     };
                     response.content_range_list = vec![content_range];
                 } else {
@@ -256,11 +256,11 @@ impl Response {
         }
 
         if new_line_char_found && !current_string_is_empty {
-            let mut header = Header { header_name: "".to_string(), header_value: "".to_string() };
+            let mut header = Header { name: "".to_string(), value: "".to_string() };
             if !is_first_iteration {
                 header = Response::parse_http_response_header_string(&string);
-                if header.header_name == Header::CONTENT_LENGTH {
-                    content_length = header.header_value.parse().unwrap();
+                if header.name == Header::CONTENT_LENGTH {
+                    content_length = header.value.parse().unwrap();
                 }
             }
 
@@ -272,21 +272,21 @@ impl Response {
 
     pub(crate) fn is_multipart_byteranges_content_type(content_type: &Header) -> bool {
         let multipart_byteranges = [CONSTANTS.multipart, CONSTANTS.slash, CONSTANTS.byteranges].join("");
-        let is_multipart_byteranges = content_type.header_value.starts_with(&multipart_byteranges);
+        let is_multipart_byteranges = content_type.value.starts_with(&multipart_byteranges);
         is_multipart_byteranges
     }
 
     pub(crate) fn get_x_content_type_options_header() -> Header {
         Header {
-            header_name: Header::X_CONTENT_TYPE_OPTIONS.to_string(),
-            header_value: CONSTANTS.nosniff.to_string(),
+            name: Header::X_CONTENT_TYPE_OPTIONS.to_string(),
+            value: CONSTANTS.nosniff.to_string(),
         }
     }
 
     pub(crate) fn get_accept_ranges_header() -> Header {
         Header {
-            header_name: Header::ACCEPT_RANGES.to_string(),
-            header_value: CONSTANTS.bytes.to_string(),
+            name: Header::ACCEPT_RANGES.to_string(),
+            value: CONSTANTS.bytes.to_string(),
         }
     }
 }

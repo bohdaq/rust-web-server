@@ -186,7 +186,7 @@ impl Range {
 
         let md = metadata(&static_filepath).unwrap();
         if md.is_file() {
-            let boxed_content_range_list = Range::parse_content_range(&static_filepath, md.len(), &range.header_value);
+            let boxed_content_range_list = Range::parse_content_range(&static_filepath, md.len(), &range.value);
             if boxed_content_range_list.is_ok() {
                 content_range_list = boxed_content_range_list.unwrap();
             } else {
@@ -226,7 +226,7 @@ impl Range {
         let content_type_is_not_parsed = content_range.content_type.len() == 0;
         if string.starts_with(Header::CONTENT_TYPE) && content_type_is_not_parsed {
             let content_type = Response::parse_http_response_header_string(string.as_str());
-            content_range.content_type = content_type.header_value.trim().to_string();
+            content_range.content_type = content_type.value.trim().to_string();
 
             //read next line - Content-Range
             buffer = Range::parse_line_as_bytes(cursor);
@@ -237,7 +237,7 @@ impl Range {
         if string.starts_with(Header::CONTENT_RANGE) && content_range_is_not_parsed {
             let content_range_header = Response::parse_http_response_header_string(string.as_str());
 
-            let boxed_result = Range::parse_content_range_header_value(content_range_header.header_value);
+            let boxed_result = Range::parse_content_range_header_value(content_range_header.value);
             if boxed_result.is_ok() {
                 let (size, start, end) = boxed_result.unwrap();
 

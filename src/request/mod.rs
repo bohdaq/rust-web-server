@@ -19,7 +19,7 @@ impl Request {
     pub(crate) const METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX: &'static str = "(?P<method>(GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE))\\s(?P<request_uri>[^\\s]+)\\s(?P<http_version>[/.A-Za-z0-9]+)";
 
     pub(crate) fn get_header(&self, name: String) -> Option<&Header> {
-        let header =  self.headers.iter().find(|x| x.header_name == name);
+        let header =  self.headers.iter().find(|x| x.name == name);
         header
     }
 
@@ -29,9 +29,9 @@ impl Request {
         let mut headers = CONSTANTS.empty_string.to_string();
         for header in request.headers {
             let mut header_string = CONSTANTS.empty_string.to_string();
-            header_string.push_str(&header.header_name);
+            header_string.push_str(&header.name);
             header_string.push_str(CONSTANTS.header_name_value_separator);
-            header_string.push_str(&header.header_value);
+            header_string.push_str(&header.value);
             header_string.push_str(CONSTANTS.new_line_separator);
             headers.push_str(&header_string);
         }
@@ -98,8 +98,8 @@ impl Request {
         let header_value = Server::truncate_new_line_carriage_return(header_parts[1]);
 
         Header {
-            header_name: header_name,
-            header_value: header_value,
+            name: header_name,
+            value: header_value,
         }
     }
 
@@ -131,11 +131,11 @@ impl Request {
         }
 
         if new_line_char_found && !current_string_is_empty {
-            let mut header = Header { header_name: "".to_string(), header_value: "".to_string() };
+            let mut header = Header { name: "".to_string(), value: "".to_string() };
             if !is_first_iteration {
                 header = Request::parse_http_request_header_string(&string);
-                if header.header_name == Header::CONTENT_LENGTH {
-                    content_length = header.header_value.parse().unwrap();
+                if header.name == Header::CONTENT_LENGTH {
+                    content_length = header.value.parse().unwrap();
                 }
             }
 

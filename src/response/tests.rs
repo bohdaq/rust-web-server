@@ -12,8 +12,8 @@ use crate::range::{ContentRange, Range};
 #[test]
 fn check_is_multipart_byteranges_content_type() {
     let content_type = Header {
-        header_name: Header::CONTENT_TYPE.to_string(),
-        header_value: "multipart/byteranges; boundary=String_separator".to_string(),
+        name: Header::CONTENT_TYPE.to_string(),
+        value: "multipart/byteranges; boundary=String_separator".to_string(),
     };
 
     let is_multipart = Response::is_multipart_byteranges_content_type(&content_type);
@@ -84,7 +84,7 @@ fn it_generates_successful_response_with_additional_headers() {
 
 
     let content_length_header = response.get_header(response_content_length_header_name.to_string()).unwrap();
-    assert_eq!(response_content_length_header_value, content_length_header.header_value);
+    assert_eq!(response_content_length_header_value, content_length_header.value);
 
 
     assert_eq!(response_http_version, response.http_version);
@@ -146,7 +146,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
 
 
     let content_length_header = response.get_header(response_content_length_header_name.to_string()).unwrap();
-    assert_eq!(response_content_length_header_value, content_length_header.header_value);
+    assert_eq!(response_content_length_header_value, content_length_header.value);
 
 
     assert_eq!(response_http_version, response.http_version);

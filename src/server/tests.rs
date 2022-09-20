@@ -50,8 +50,8 @@ fn it_generates_successful_response_with_index_html() {
 
     // request part
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let headers = vec![host];
@@ -67,7 +67,7 @@ fn it_generates_successful_response_with_index_html() {
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
-    assert_eq!(request_host_header_value.to_string(), host_header.header_value);
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
     assert_eq!(request_method.to_string(), request.method);
     assert_eq!(request_uri.to_string(), request.request_uri);
     assert_eq!(request_http_version.to_string(), request.http_version);
@@ -96,9 +96,9 @@ fn it_generates_successful_response_with_index_html() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
-    assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
-    assert_eq!(response_content_length_header_value, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
+    assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
     assert_eq!(response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
@@ -120,8 +120,8 @@ fn it_generates_successful_response_with_static_file() {
 
     // request part
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let headers = vec![host];
@@ -137,7 +137,7 @@ fn it_generates_successful_response_with_static_file() {
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
-    assert_eq!(request_host_header_value.to_string(), host_header.header_value);
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
     assert_eq!(request_method.to_string(), request.method);
     assert_eq!(request_uri.to_string(), request.request_uri);
     assert_eq!(request_http_version.to_string(), request.http_version);
@@ -171,10 +171,10 @@ fn it_generates_successful_response_with_static_file() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
-    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
 
-    assert_eq!(response_content_length_header_value, header.header_value);
+    assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
     assert_eq!(response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
@@ -193,8 +193,8 @@ fn it_generates_not_found_page_for_absent_static_file() {
 
     // request part
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let headers = vec![host];
@@ -210,7 +210,7 @@ fn it_generates_not_found_page_for_absent_static_file() {
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
-    assert_eq!(request_host_header_value.to_string(), host_header.header_value);
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
     assert_eq!(request_method.to_string(), request.method);
     assert_eq!(request_uri.to_string(), request.request_uri);
     assert_eq!(request_http_version.to_string(), request.http_version);
@@ -245,10 +245,10 @@ fn it_generates_not_found_page_for_absent_static_file() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
-    assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
 
-    assert_eq!(response_content_length_header_value, header.header_value);
+    assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
     assert_eq!(response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
@@ -267,8 +267,8 @@ fn it_generates_not_found_page_for_absent_route() {
 
     // request part
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let headers = vec![host];
@@ -284,7 +284,7 @@ fn it_generates_not_found_page_for_absent_route() {
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
-    assert_eq!(request_host_header_value.to_string(), host_header.header_value);
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
     assert_eq!(request_method.to_string(), request.method);
     assert_eq!(request_uri.to_string(), request.request_uri);
     assert_eq!(request_http_version.to_string(), request.http_version);
@@ -319,10 +319,10 @@ fn it_generates_not_found_page_for_absent_route() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
-    assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
 
-    assert_eq!(response_content_length_header_value, header.header_value);
+    assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
     assert_eq!(response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
@@ -341,8 +341,8 @@ fn it_generates_not_found_page_for_static_directory() {
 
     // request part
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let headers = vec![host];
@@ -358,7 +358,7 @@ fn it_generates_not_found_page_for_static_directory() {
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
-    assert_eq!(request_host_header_value.to_string(), host_header.header_value);
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
     assert_eq!(request_method.to_string(), request.method);
     assert_eq!(request_uri.to_string(), request.request_uri);
     assert_eq!(request_http_version.to_string(), request.http_version);
@@ -393,10 +393,10 @@ fn it_generates_not_found_page_for_static_directory() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
-    assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
 
-    assert_eq!(response_content_length_header_value, header.header_value);
+    assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
     assert_eq!(response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
@@ -415,8 +415,8 @@ fn it_generates_not_found_page_for_static_subdirectory() {
 
     // request part
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let headers = vec![host];
@@ -432,7 +432,7 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
-    assert_eq!(request_host_header_value.to_string(), host_header.header_value);
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
     assert_eq!(request_method.to_string(), request.method);
     assert_eq!(request_uri.to_string(), request.request_uri);
     assert_eq!(request_http_version.to_string(), request.http_version);
@@ -467,10 +467,10 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
-    assert_eq!(MimeType::TEXT_HTML, content_type_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
 
-    assert_eq!(response_content_length_header_value, header.header_value);
+    assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
     assert_eq!(response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
@@ -489,8 +489,8 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
 
     // request part
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let headers = vec![host];
@@ -506,7 +506,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
-    assert_eq!(request_host_header_value.to_string(), host_header.header_value);
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
     assert_eq!(request_method.to_string(), request.method);
     assert_eq!(request_uri.to_string(), request.request_uri);
     assert_eq!(request_http_version.to_string(), request.http_version);
@@ -541,10 +541,10 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
-    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
 
-    assert_eq!(response_content_length_header_value, header.header_value);
+    assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
     assert_eq!(response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
@@ -563,8 +563,8 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
 
     // request part
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let headers = vec![host];
@@ -580,7 +580,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
-    assert_eq!(request_host_header_value.to_string(), host_header.header_value);
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
     assert_eq!(request_method.to_string(), request.method);
     assert_eq!(request_uri.to_string(), request.request_uri);
     assert_eq!(request_http_version.to_string(), request.http_version);
@@ -615,10 +615,10 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
-    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
 
-    assert_eq!(response_content_length_header_value, header.header_value);
+    assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
     assert_eq!(response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
@@ -641,8 +641,8 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 
     // request part
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let headers = vec![host];
@@ -658,7 +658,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
-    assert_eq!(request_host_header_value.to_string(), host_header.header_value);
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
     assert_eq!(request_method.to_string(), request.method);
     assert_eq!(request_uri.to_string(), request.request_uri);
     assert_eq!(request_http_version.to_string(), request.http_version);
@@ -692,10 +692,10 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
-    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
 
-    assert_eq!(response_content_length_header_value, header.header_value);
+    assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
     assert_eq!(response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
@@ -717,8 +717,8 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 
     // request part
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let headers = vec![host];
@@ -734,7 +734,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
 
-    assert_eq!(request_host_header_value.to_string(), host_header.header_value);
+    assert_eq!(request_host_header_value.to_string(), host_header.value);
     assert_eq!(request_method.to_string(), request.method);
     assert_eq!(request_uri.to_string(), request.request_uri);
     assert_eq!(request_http_version.to_string(), request.http_version);
@@ -768,10 +768,10 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.header_value);
-    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.header_value);
+    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.value);
+    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
 
-    assert_eq!(response_content_length_header_value, header.header_value);
+    assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
     assert_eq!(response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
@@ -800,13 +800,13 @@ fn check_range_response_for_not_proper_range_header() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let range = Header {
-        header_name: Header::RANGE.to_string(),
-        header_value: range_header_value.to_string()
+        name: Header::RANGE.to_string(),
+        value: range_header_value.to_string()
     };
 
     let headers = vec![host, range];
@@ -833,9 +833,9 @@ fn check_range_response_for_not_proper_range_header() {
 
     assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.nosniff, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.value);
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
@@ -866,13 +866,13 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let range = Header {
-        header_name: Header::RANGE.to_string(),
-        header_value: range_header_value.to_string()
+        name: Header::RANGE.to_string(),
+        value: range_header_value.to_string()
     };
 
     let headers = vec![host, range];
@@ -899,9 +899,9 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
 
     assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.nosniff, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.value);
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
@@ -932,13 +932,13 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let range = Header {
-        header_name: Header::RANGE.to_string(),
-        header_value: range_header_value.to_string()
+        name: Header::RANGE.to_string(),
+        value: range_header_value.to_string()
     };
 
     let headers = vec![host, range];
@@ -965,9 +965,9 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
 
     assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.nosniff, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.value);
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
@@ -998,13 +998,13 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let range = Header {
-        header_name: Header::RANGE.to_string(),
-        header_value: range_header_value.to_string()
+        name: Header::RANGE.to_string(),
+        value: range_header_value.to_string()
     };
 
     let headers = vec![host, range];
@@ -1031,9 +1031,9 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
 
     assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.nosniff, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.value);
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
@@ -1064,13 +1064,13 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let range = Header {
-        header_name: Header::RANGE.to_string(),
-        header_value: range_header_value.to_string()
+        name: Header::RANGE.to_string(),
+        value: range_header_value.to_string()
     };
 
     let headers = vec![host, range];
@@ -1097,9 +1097,9 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
 
     assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.nosniff, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.value);
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
@@ -1130,13 +1130,13 @@ fn check_range_response_for_not_proper_range_header_malformed() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        header_name: request_host_header_name.to_string(),
-        header_value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string(),
+        value: request_host_header_value.to_string()
     };
 
     let range = Header {
-        header_name: Header::RANGE.to_string(),
-        header_value: range_header_value.to_string()
+        name: Header::RANGE.to_string(),
+        value: range_header_value.to_string()
     };
 
     let headers = vec![host, range];
@@ -1163,9 +1163,9 @@ fn check_range_response_for_not_proper_range_header_malformed() {
 
     assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.nosniff, header.header_value);
+    assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.header_value);
+    assert_eq!(CONSTANTS.bytes, header.value);
 
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(RESPONSE_STATUS_CODE_REASON_PHRASES.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
