@@ -12,12 +12,13 @@ use crate::constant::{HTTPError};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 
-
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Range {
     pub(crate) start: u64,
     pub(crate) end: u64,
 }
 
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ContentRange {
     pub(crate) unit: String,
     pub(crate) range: Range,

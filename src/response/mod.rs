@@ -10,6 +10,7 @@ use crate::range::{ContentRange, Range};
 use crate::{Request, Server};
 use crate::request::METHOD;
 
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Response {
     pub(crate) http_version: String,
     pub(crate) status_code: String,
@@ -18,12 +19,13 @@ pub struct Response {
     pub(crate) content_range_list: Vec<ContentRange>
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct StatusCodeReasonPhrase {
     pub(crate) status_code: &'static str,
     pub(crate) reason_phrase: &'static str,
 }
 
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ResponseStatusCodeReasonPhrase {
     pub(crate) n200_ok: &'static StatusCodeReasonPhrase,
     pub(crate) n204_no_content: &'static StatusCodeReasonPhrase,
