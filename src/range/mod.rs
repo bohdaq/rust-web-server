@@ -31,6 +31,11 @@ impl Range {
     pub(crate) const STRING_SEPARATOR: &'static str = "String_separator";
     pub(crate) const CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})";
 
+    pub const BOUNDARY: &'static str = "boundary";
+    pub const BYTERANGES: &'static str = "byteranges";
+    pub const MULTIPART: &'static str = "multipart";
+
+
     pub(crate) const ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";
     pub(crate) const ERROR_UNABLE_TO_PARSE_CONTENT_RANGE: &'static str = "unable to parse content-range";
 

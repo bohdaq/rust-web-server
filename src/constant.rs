@@ -12,11 +12,7 @@ pub struct Constants {
     pub(crate) utf_8: &'static str,
     pub(crate) nosniff: &'static str,
     pub(crate) bytes: &'static str,
-    pub(crate) none: &'static str,
-    pub(crate) multipart: &'static str,
-    pub(crate) byteranges: &'static str,
     pub(crate) semicolon: &'static str,
-    pub(crate) boundary: &'static str,
 }
 
 pub const CONSTANTS: Constants = Constants {
@@ -33,9 +29,5 @@ pub const CONSTANTS: Constants = Constants {
     utf_8: "UTF-8",
     nosniff: "nosniff",
     bytes: "bytes",
-    none: "none",
-    multipart: "multipart",
-    byteranges: "byteranges",
     semicolon: ";",
-    boundary: "boundary",
 };

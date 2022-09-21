@@ -163,12 +163,12 @@ impl Response {
 
         if response.content_range_list.len() > 1 {
             let content_range_header_value = [
-                CONSTANTS.multipart,
+                Range::MULTIPART,
                 CONSTANTS.slash,
-                CONSTANTS.byteranges,
+                Range::BYTERANGES,
                 CONSTANTS.semicolon,
                 CONSTANTS.whitespace,
-                CONSTANTS.boundary,
+                Range::BOUNDARY,
                 CONSTANTS.equals,
                 Range::STRING_SEPARATOR
             ].join("");
@@ -333,7 +333,12 @@ impl Response {
     }
 
     pub(crate) fn is_multipart_byteranges_content_type(content_type: &Header) -> bool {
-        let multipart_byteranges = [CONSTANTS.multipart, CONSTANTS.slash, CONSTANTS.byteranges].join("");
+        let multipart_byteranges =
+            [
+                Range::MULTIPART,
+                CONSTANTS.slash,
+                Range::BYTERANGES
+            ].join("");
         let is_multipart_byteranges = content_type.value.starts_with(&multipart_byteranges);
         is_multipart_byteranges
     }

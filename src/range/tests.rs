@@ -73,12 +73,12 @@ fn check_range_response_is_ok_two_part() {
     assert_eq!(CONSTANTS.bytes, header.value);
     let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let value = [
-        CONSTANTS.multipart,
+        Range::MULTIPART,
         CONSTANTS.slash,
-        CONSTANTS.byteranges,
+        Range::BYTERANGES,
         CONSTANTS.semicolon,
         CONSTANTS.whitespace,
-        CONSTANTS.boundary,
+        Range::BOUNDARY,
         CONSTANTS.equals,
         Range::STRING_SEPARATOR
     ].join("");
