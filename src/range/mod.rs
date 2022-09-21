@@ -6,7 +6,7 @@ use std::fs::{File, metadata};
 use std::io::{BufReader, Cursor, SeekFrom};
 use regex::Regex;
 
-use crate::response::{HTTPError, Response, STATUS_CODE_REASON_PHRASE};
+use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
 use crate::{CONSTANTS, Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
@@ -40,7 +40,7 @@ impl Range {
     pub(crate) const ERROR_UNABLE_TO_PARSE_RANGE_END: &'static str = "unable to parse range end";
 
 
-    pub(crate) fn parse_range_in_content_range(filelength: u64, range_str: &str) -> Result<Range, HTTPError> {
+    pub(crate) fn parse_range_in_content_range(filelength: u64, range_str: &str) -> Result<Range, Error> {
         const START_INDEX: usize = 0;
         const END_INDEX: usize = 1;
 
@@ -62,7 +62,7 @@ impl Range {
                     range.start = boxed_start.unwrap()
                 } else {
                     let message = Range::ERROR_UNABLE_TO_PARSE_RANGE_START.to_string();
-                    let error = HTTPError {
+                    let error = Error {
                         status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                         message: message.to_string()
                     };
@@ -75,7 +75,7 @@ impl Range {
                     range.end = boxed_end.unwrap()
                 } else {
                     let message = Range::ERROR_UNABLE_TO_PARSE_RANGE_END.to_string();
-                    let error = HTTPError {
+                    let error = Error {
                         status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                         message: message.to_string()
                     };
@@ -90,7 +90,7 @@ impl Range {
 
             if range.end > filelength {
                 let message = Range::ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string();
-                let error = HTTPError {
+                let error = Error {
                     status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                     message: message,
                 };
@@ -99,7 +99,7 @@ impl Range {
 
             if range.start > filelength {
                 let message = Range::ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string();
-                let error = HTTPError {
+                let error = Error {
                     status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                     message: message,
                 };
@@ -108,7 +108,7 @@ impl Range {
 
             if range.start > range.end {
                 let message = Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.to_string();
-                let error = HTTPError {
+                let error = Error {
                     status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                     message: message,
                 };
@@ -121,14 +121,14 @@ impl Range {
         Ok(range)
     }
 
-    pub(crate) fn parse_content_range(filepath: &str, filelength: u64, raw_range_value: &str) -> Result<Vec<ContentRange>, HTTPError> {
+    pub(crate) fn parse_content_range(filepath: &str, filelength: u64, raw_range_value: &str) -> Result<Vec<ContentRange>, Error> {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
         let prefix = [CONSTANTS.bytes, CONSTANTS.equals].join("");
         if !raw_range_value.starts_with(prefix.as_str()) {
             let message = Range::ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT.to_string();
-            let error = HTTPError {
+            let error = Error {
                 status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                 message: message,
             };
@@ -165,7 +165,7 @@ impl Range {
 
                     content_range_list.push(content_range);
                 } else {
-                    let error : HTTPError = HTTPError {
+                    let error : Error = Error {
                         status_code_reason_phrase:  STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
                         message: boxed_seek.err().unwrap().to_string()
                     };
@@ -173,14 +173,14 @@ impl Range {
                 }
 
             } else {
-                let error : HTTPError = boxed_range.err().unwrap();
+                let error : Error = boxed_range.err().unwrap();
                 return Err(error);
             }
         }
         Ok(content_range_list)
     }
 
-    pub(crate) fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, HTTPError> {
+    pub(crate) fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, Error> {
         let mut content_range_list : Vec<ContentRange> = vec![];
         let static_filepath = Server::get_static_filepath(request_uri);
 

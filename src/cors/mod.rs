@@ -7,7 +7,7 @@ use crate::header::Header;
 
 use serde::{Serialize, Deserialize};
 use crate::request::METHOD;
-use crate::response::HTTPError;
+use crate::response::Error;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Cors {
@@ -23,7 +23,7 @@ pub struct Cors {
 impl Cors {
     pub(crate) const MAX_AGE: &'static str = "86400";
 
-    pub(crate) fn allow_all(request: Request, mut response: Response) -> Result<(Request, Response), HTTPError> {
+    pub(crate) fn allow_all(request: Request, mut response: Response) -> Result<(Request, Response), Error> {
         let origin = request.get_header(Header::ORIGIN.to_string());
         if origin.is_some() {
             let allow_origin = Header {
@@ -84,7 +84,7 @@ impl Cors {
         Ok((request, response))
     }
 
-    pub(crate) fn process(request: Request, mut response: Response, cors: &Cors) -> Result<(Request, Response), HTTPError> {
+    pub(crate) fn process(request: Request, mut response: Response, cors: &Cors) -> Result<(Request, Response), Error> {
 
         let allow_origins = cors.allow_origins.join(",");
         let boxed_origin = request.get_header(Header::ORIGIN.to_string());
@@ -154,7 +154,7 @@ impl Cors {
         Ok((request, response))
     }
 
-    pub(crate) fn process_using_default_config(request: Request, mut response: Response) -> Result<(Request, Response), HTTPError> {
+    pub(crate) fn process_using_default_config(request: Request, mut response: Response) -> Result<(Request, Response), Error> {
 
         let allow_origins : String = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS).unwrap();
 

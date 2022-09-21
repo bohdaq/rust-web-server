@@ -11,7 +11,7 @@ use crate::{Request, Server};
 use crate::request::METHOD;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub struct HTTPError {
+pub struct Error {
     pub status_code_reason_phrase: &'static StatusCodeReasonPhrase,
     pub message: String,
 }

@@ -9,7 +9,7 @@ use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 
 use crate::request::{METHOD, Request};
-use crate::response::{HTTPError, Response, STATUS_CODE_REASON_PHRASE};
+use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
 
 
 pub struct App {}
@@ -116,7 +116,7 @@ impl App {
                     }
                 }
             } else {
-                let error : HTTPError = boxed_content_range_list.err().unwrap();
+                let error : Error = boxed_content_range_list.err().unwrap();
                 let body = error.message;
                 let body_length = body.len() as u64;
 
@@ -163,7 +163,7 @@ impl App {
         (response, request)
     }
 
-    pub(crate) fn process_static_resources(request: &Request) -> Result<Vec<ContentRange>, HTTPError> {
+    pub(crate) fn process_static_resources(request: &Request) -> Result<Vec<ContentRange>, Error> {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
         let static_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
