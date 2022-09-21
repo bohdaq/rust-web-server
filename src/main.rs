@@ -168,7 +168,9 @@ fn override_environment_variables_from_config(filepath: Option<&str>) {
     let content = std::fs::read_to_string(static_filepath);
 
     if content.is_err() {
-        println!("Unable to parse rws.config.toml\n{}", content.err().unwrap());
+        eprintln!("Unable to parse rws.config.toml\n{}", content.err().unwrap());
+        println!("End of Config Section");
+        return;
     } else {
         config = toml::from_str(content.unwrap().as_str()).unwrap();
     }
