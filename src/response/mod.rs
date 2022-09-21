@@ -97,7 +97,9 @@ impl Response {
                 if i != 0 {
                     body_str.push_str(CONSTANTS.new_line_separator);
                 }
-                body_str.push_str(CONSTANTS.separator);
+                body_str.push_str(CONSTANTS.hyphen);
+                body_str.push_str(CONSTANTS.hyphen);
+                body_str.push_str(Range::STRING_SEPARATOR);
                 body_str.push_str(CONSTANTS.new_line_separator);
                 let content_type = [Header::CONTENT_TYPE, CONSTANTS.header_name_value_separator, CONSTANTS.whitespace, &content_range.content_type.to_string()].join("");
                 body_str.push_str(content_type.as_str());
@@ -112,7 +114,9 @@ impl Response {
             }
             let mut trailing_separator = CONSTANTS.empty_string.to_string();
             trailing_separator.push_str(CONSTANTS.new_line_separator);
-            trailing_separator.push_str(CONSTANTS.separator);
+            trailing_separator.push_str(CONSTANTS.hyphen);
+            trailing_separator.push_str(CONSTANTS.hyphen);
+            trailing_separator.push_str(Range::STRING_SEPARATOR);
             body = [&body, trailing_separator.as_bytes()].concat();
         }
 

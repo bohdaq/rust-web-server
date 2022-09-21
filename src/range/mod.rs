@@ -219,7 +219,8 @@ impl Range {
         };
 
         let content_range_is_not_parsed = content_range.body.len() == 0;
-        if string.starts_with(CONSTANTS.separator) && content_range_is_not_parsed {
+        let separator = [CONSTANTS.hyphen, CONSTANTS.hyphen, Range::STRING_SEPARATOR].join("");
+        if string.starts_with(separator.as_str()) && content_range_is_not_parsed {
             //read next line - Content-Type
             buffer = Range::parse_line_as_bytes(cursor);
             string = Range::convert_bytes_array_to_string(buffer);
@@ -272,11 +273,12 @@ impl Range {
             body = [body, string.as_bytes().to_vec()].concat();
 
             let mut buf = Vec::from(string.as_bytes());
-            while !buf.starts_with(CONSTANTS.separator.as_bytes()) {
+            let separator = [CONSTANTS.hyphen, CONSTANTS.hyphen, Range::STRING_SEPARATOR].join("");
+            while !buf.starts_with(separator.as_bytes()) {
                 buf = vec![];
                 cursor.read_until(b'\n', &mut buf).unwrap();
-
-                if !buf.starts_with(CONSTANTS.separator.as_bytes()) {
+                let separator = [CONSTANTS.hyphen, CONSTANTS.hyphen, Range::STRING_SEPARATOR].join("");
+                if !buf.starts_with(separator.as_bytes()) {
                     body = [body, buf.to_vec()].concat();
                 }
             }
