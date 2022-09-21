@@ -80,7 +80,7 @@ fn check_range_response_is_ok_two_part() {
         CONSTANTS.whitespace,
         CONSTANTS.boundary,
         CONSTANTS.equals,
-        CONSTANTS.string_separator
+        Range::STRING_SEPARATOR
     ].join("");
     assert_eq!(value, header.value);
 

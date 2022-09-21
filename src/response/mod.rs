@@ -164,7 +164,7 @@ impl Response {
                 CONSTANTS.whitespace,
                 CONSTANTS.boundary,
                 CONSTANTS.equals,
-                CONSTANTS.string_separator
+                Range::STRING_SEPARATOR
             ].join("");
             headers.push(Header {
                 name: Header::CONTENT_TYPE.to_string(),
