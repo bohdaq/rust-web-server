@@ -84,13 +84,13 @@ fn check_range_response_is_ok_two_part() {
     ].join("");
     assert_eq!(value, header.value);
 
-    let mut response_result_body : Vec<u8> = vec![];
+    let response_result_body : Vec<u8>;
     let first_range = response.content_range_list.get(0).unwrap();
-    let mut first_body = first_range.body.clone();
+    let first_body = first_range.body.clone();
     println!("first range:\n{:?}", &first_body);
 
     let second_range = response.content_range_list.get(1).unwrap();
-    let mut second_body = second_range.body.clone();
+    let second_body = second_range.body.clone();
     println!("second range:\n{:?}", &second_body);
 
     response_result_body = [first_body, second_body].concat();
@@ -170,9 +170,8 @@ fn check_range_response_is_ok_single_part() {
     let value = MimeType::TEXT_PLAIN.to_string();
     assert_eq!(value, header.value);
 
-    let mut response_result_body : Vec<u8> = vec![];
     let first_range = response.content_range_list.get(0).unwrap();
-    let mut first_body = first_range.body.clone();
+    let first_body = first_range.body.clone();
     println!("first range:\n{:?}", &first_body);
 
     assert_eq!(buffer, first_body);
@@ -201,10 +200,10 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.unit, CONSTANTS.bytes);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
-    let mut file = File::open(&static_filepath).unwrap();
+    let file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
     reader.seek(SeekFrom::Start(start)).unwrap();
-    let mut buff_length = (end - start) + 1;
+    let buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
     assert_eq!(content_range.body, buffer);
@@ -218,10 +217,10 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.unit, CONSTANTS.bytes);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
-    let mut file = File::open(&static_filepath).unwrap();
+    let file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
     reader.seek(SeekFrom::Start(start)).unwrap();
-    let mut buff_length = (end - start) + 1;
+    let buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
     assert_eq!(content_range.body, buffer);
@@ -234,10 +233,10 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.unit, CONSTANTS.bytes);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
-    let mut file = File::open(&static_filepath).unwrap();
+    let file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
     reader.seek(SeekFrom::Start(start)).unwrap();
-    let mut buff_length = (end - start) + 1;
+    let buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
     assert_eq!(content_range.body, buffer);
@@ -250,10 +249,10 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.unit, CONSTANTS.bytes);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
-    let mut file = File::open(&static_filepath).unwrap();
+    let file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
     reader.seek(SeekFrom::Start(start)).unwrap();
-    let mut buff_length = (end - start) + 1;
+    let buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
     assert_eq!(content_range.body, buffer);
@@ -266,10 +265,10 @@ fn get_right_content_range_of_a_file() {
     let end = file_size;
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
-    let mut file = File::open(&static_filepath).unwrap();
+    let file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
     reader.seek(SeekFrom::Start(start)).unwrap();
-    let mut buff_length = (end - start) + 1;
+    let buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
     assert_eq!(content_range.body, buffer);
@@ -282,10 +281,10 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.unit, CONSTANTS.bytes);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
-    let mut file = File::open(&static_filepath).unwrap();
+    let file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
     reader.seek(SeekFrom::Start(start)).unwrap();
-    let mut buff_length = (end - start) + 1;
+    let buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
     assert_eq!(content_range.body, buffer);
@@ -299,10 +298,10 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.unit, CONSTANTS.bytes);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
-    let mut file = File::open(&static_filepath).unwrap();
+    let file = File::open(&static_filepath).unwrap();
     let mut reader = BufReader::new(file);
     reader.seek(SeekFrom::Start(start)).unwrap();
-    let mut buff_length = (end - start) + 1;
+    let buff_length = (end - start) + 1;
     let mut buffer = Vec::new();
     reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
     assert_eq!(content_range.body, buffer);
@@ -490,7 +489,7 @@ fn parse_multipart_body() {
     assert_eq!(first_range.range.start, first_range_start);
     assert_eq!(first_range.range.end, first_range_end);
 
-    let mut first_body = first_range.body.clone();
+    let first_body = first_range.body.clone();
     assert_eq!(first_body, first_range_body.as_bytes().to_vec());
 
     let second_range = content_range_list.get(1).unwrap();
@@ -498,7 +497,7 @@ fn parse_multipart_body() {
     assert_eq!(second_range.range.start, second_range_start);
     assert_eq!(second_range.range.end, second_range_end);
 
-    let mut second_body = second_range.body.clone();
+    let second_body = second_range.body.clone();
     assert_eq!(second_body, second_range_body.as_bytes().to_vec());
 }
 

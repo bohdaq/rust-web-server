@@ -143,20 +143,7 @@ fn read_system_environment_variables() {
 fn override_environment_variables_from_config(filepath: Option<&str>) {
     println!("Start of Config Section");
 
-    let mut config: Config = Config {
-        ip: "".to_string(),
-        port: 0,
-        thread_count: 0,
-        cors: Cors {
-            allow_all: false,
-            allow_origins: vec![],
-            allow_methods: vec![],
-            allow_headers: vec![],
-            allow_credentials: false,
-            expose_headers: vec![],
-            max_age: "".to_string()
-        }
-    };
+    let config: Config;
 
     let path: &str;
     if filepath.is_none() {

@@ -5,7 +5,7 @@ use std::io::{BufReader, Read, Write};
 
 use std::cmp::min;
 
-use crate::{bootstrap, CONSTANTS, override_environment_variables_from_config, Request, Response, Server};
+use crate::{CONSTANTS, override_environment_variables_from_config, Request, Response, Server};
 use crate::header::Header;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
@@ -143,7 +143,6 @@ fn it_generates_successful_response_with_static_file() {
     let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
-    let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
@@ -153,14 +152,11 @@ fn it_generates_successful_response_with_static_file() {
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
 
-    let ip_addr= "127.0.0.1".to_string();
-    let port : usize = "8787".parse().unwrap();
-    let static_directories = vec!["/static".to_string()];
-
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
+
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
@@ -216,7 +212,6 @@ fn it_generates_not_found_page_for_absent_static_file() {
     let response_http_version = VERSION.http_1_1;
     let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
-    let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
@@ -226,10 +221,6 @@ fn it_generates_not_found_page_for_absent_static_file() {
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
-
-    let ip_addr= "127.0.0.1".to_string();
-    let port: usize = "8787".parse().unwrap();
-    let static_directories = vec!["/static".to_string()];
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -290,7 +281,6 @@ fn it_generates_not_found_page_for_absent_route() {
     let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
-    let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
@@ -300,10 +290,6 @@ fn it_generates_not_found_page_for_absent_route() {
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
-
-    let ip_addr= "127.0.0.1".to_string();
-    let port : usize = "8787".parse().unwrap();
-    let static_directories = vec!["/static".to_string()];
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -364,7 +350,6 @@ fn it_generates_not_found_page_for_static_directory() {
     let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
-    let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
@@ -374,10 +359,6 @@ fn it_generates_not_found_page_for_static_directory() {
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
-
-    let ip_addr= "127.0.0.1".to_string();
-    let port : usize = "8787".parse().unwrap();
-    let static_directories = vec!["/static".to_string()];
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -438,7 +419,6 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
-    let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
@@ -448,10 +428,6 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
-
-    let ip_addr= "127.0.0.1".to_string();
-    let port : usize = "8787".parse().unwrap();
-    let static_directories = vec!["/static".to_string()];
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -512,7 +488,6 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
-    let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
@@ -522,15 +497,11 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
 
-    let ip_addr= "127.0.0.1".to_string();
-    let port : usize = "8787".parse().unwrap();
-    let static_directories = vec!["/static".to_string()];
-
-
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
+
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
     let response = Response::parse_response(raw_response.borrow());
     let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
@@ -586,7 +557,6 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
     let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
-    let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
@@ -595,11 +565,6 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
-
-    let ip_addr= "127.0.0.1".to_string();
-    let port : usize = "8787".parse().unwrap();
-    let static_directories = vec!["/static".to_string()];
-
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -664,7 +629,6 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
-    let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
@@ -673,10 +637,6 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
-
-    let ip_addr= "127.0.0.1".to_string();
-    let port : usize = "8787".parse().unwrap();
-    let static_directories = vec!["/static".to_string(), "/assets".to_string()];
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -740,7 +700,6 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
-    let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
@@ -749,10 +708,6 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
-
-    let ip_addr= "127.0.0.1".to_string();
-    let port : usize = "8787".parse().unwrap();
-    let static_directories = vec!["/static".to_string(), "/assets".to_string()];
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -815,7 +770,6 @@ fn check_range_response_for_not_proper_range_header() {
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
@@ -881,7 +835,6 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
@@ -947,7 +900,6 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
@@ -1013,7 +965,6 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
@@ -1079,7 +1030,6 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
@@ -1116,11 +1066,6 @@ fn check_range_response_for_not_proper_range_header_malformed() {
 
     reader.read_to_end(&mut buffer).unwrap();
 
-    let length = buffer.len();
-    let mid = length / 2;
-    let end_of_first_range = mid;
-    let start_of_second_range = length + 10;
-    let not_proper_end_of_second_range = mid;
 
     let range_header_value = format!("bytes=zaksd");
 
@@ -1145,7 +1090,6 @@ fn check_range_response_for_not_proper_range_header_malformed() {
     };
 
     let raw_request = Request::generate_request(request);
-    let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],

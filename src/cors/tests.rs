@@ -1,7 +1,7 @@
 use std::{env, fs};
 use std::borrow::Borrow;
 use crate::header::Header;
-use crate::{bootstrap, CONSTANTS, override_environment_variables_from_config, Request, Response, Server};
+use crate::{CONSTANTS, override_environment_variables_from_config, Request, Response, Server};
 use crate::cors::Cors;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
@@ -178,7 +178,6 @@ fn actual_request_after_preflight() {
     let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
-    let response_filepath = &request.request_uri;
 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
