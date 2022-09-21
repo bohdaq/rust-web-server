@@ -9,7 +9,7 @@ use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 use crate::request::{METHOD};
-use crate::response::STATUS_CODE_REASON_PHRASE;
+use crate::response::{Error, STATUS_CODE_REASON_PHRASE};
 
 #[test]
 fn check_is_multipart_byteranges_content_type() {
@@ -20,6 +20,20 @@ fn check_is_multipart_byteranges_content_type() {
 
     let is_multipart = Response::is_multipart_byteranges_content_type(&content_type);
     assert_eq!(true, is_multipart);
+}
+
+#[test]
+fn error() {
+    let error = Error {
+        status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok,
+        message: "some msg".to_string()
+    };
+
+    let clone = error.clone();
+
+    assert_eq!(error, clone);
+    assert_eq!("some msg", error.message);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok, error.status_code_reason_phrase);
 }
 
 #[test]
@@ -93,7 +107,8 @@ fn it_generates_successful_response_with_additional_headers() {
     assert_eq!(response_reason_phrase, response.reason_phrase);
     assert_eq!(message_body.as_bytes().to_vec(), response.content_range_list.get(0).unwrap().body);
 
-
+    let response_clone = response.clone();
+    assert_eq!(response, response_clone);
 }
 
 #[test]
