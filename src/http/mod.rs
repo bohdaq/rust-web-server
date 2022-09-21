@@ -2,10 +2,10 @@
 mod tests;
 
 pub struct Version {
-    pub(crate) http_0_9: &'static str,
-    pub(crate) http_1_0: &'static str,
-    pub(crate) http_1_1: &'static str,
-    pub(crate) http_2_0: &'static str,
+    pub http_0_9: &'static str,
+    pub http_1_0: &'static str,
+    pub http_1_1: &'static str,
+    pub http_2_0: &'static str,
 }
 
 pub const VERSION: Version = Version {

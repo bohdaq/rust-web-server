@@ -3,13 +3,12 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use regex::Regex;
-use crate::constant::{Constants};
 use crate::header::Header;
 use crate::{CONSTANTS, Request, Response};
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
-use crate::request::{METHOD, Method};
+use crate::request::{METHOD};
 use crate::response::STATUS_CODE_REASON_PHRASE;
 
 #[test]

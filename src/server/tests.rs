@@ -83,10 +83,6 @@ fn it_generates_successful_response_with_index_html() {
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
 
-    let ip_addr= "127.0.0.1".to_string();
-    let port : usize = "8787".parse().unwrap();
-    let static_directories = vec!["/static".to_string()];
-
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],

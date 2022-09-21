@@ -1,7 +1,7 @@
 use std::{env, fs};
 use std::borrow::Borrow;
 use crate::header::Header;
-use crate::{bootstrap, Config, CONSTANTS, Request, Response, Server};
+use crate::{bootstrap, CONSTANTS, Request, Response, Server};
 use crate::cors::Cors;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
