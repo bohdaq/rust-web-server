@@ -10,7 +10,6 @@ pub struct Constants {
     pub(crate) slash: &'static str,
     pub(crate) charset: &'static str,
     pub(crate) utf_8: &'static str,
-    pub(crate) nosniff: &'static str,
     pub(crate) semicolon: &'static str,
 }
 
@@ -26,6 +25,5 @@ pub const CONSTANTS: Constants = Constants {
     slash: "/",
     charset: "charset",
     utf_8: "UTF-8",
-    nosniff: "nosniff",
     semicolon: ";",
 };
