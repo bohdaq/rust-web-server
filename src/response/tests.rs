@@ -39,14 +39,14 @@ fn error() {
 #[test]
 fn http_version_and_status_code_and_reason_phrase_regex() {
 
-    let re = Regex::new(CONSTANTS.http_version_and_status_code_and_reason_phrase_regex).unwrap();
+    let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
     let caps = re.captures("HTTP/1.1 404 Not Found").unwrap();
 
     assert_eq!(VERSION.http_1_1, &caps["http_version"]);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.status_code, &caps["status_code"]);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase, &caps["reason_phrase"]);
 
-    let re = Regex::new(CONSTANTS.http_version_and_status_code_and_reason_phrase_regex).unwrap();
+    let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
     let caps = re.captures("HTTP/1.1 200 OK").unwrap();
 
     assert_eq!(VERSION.http_1_1, &caps["http_version"]);

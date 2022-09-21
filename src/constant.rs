@@ -17,7 +17,6 @@ pub struct Constants {
     pub(crate) byteranges: &'static str,
     pub(crate) semicolon: &'static str,
     pub(crate) boundary: &'static str,
-    pub(crate) http_version_and_status_code_and_reason_phrase_regex: &'static str,
 }
 
 pub const CONSTANTS: Constants = Constants {
@@ -39,5 +38,4 @@ pub const CONSTANTS: Constants = Constants {
     byteranges: "byteranges",
     semicolon: ";",
     boundary: "boundary",
-    http_version_and_status_code_and_reason_phrase_regex: "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)",
 };
