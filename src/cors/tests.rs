@@ -1,9 +1,9 @@
 use std::{env, fs};
 use std::borrow::Borrow;
-use crate::constant::{HTTP_VERSIONS};
 use crate::header::Header;
 use crate::{bootstrap, Config, CONSTANTS, Request, Response, Server};
 use crate::cors::Cors;
+use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::request::METHOD;
 use crate::response::STATUS_CODE_REASON_PHRASE;
@@ -15,7 +15,7 @@ fn cors_options_preflight_request() {
 
     let request_method = METHOD.options;
     let request_uri = "/static/test.json";
-    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let request_http_version = VERSION.http_1_1.to_string();
 
     let request_host_header_name = Header::HOST;
     let request_host_header_value = "localhost:7777";
@@ -70,7 +70,7 @@ fn cors_options_preflight_request() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n204_no_content.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n204_no_content.reason_phrase;
 
@@ -133,7 +133,7 @@ fn actual_request_after_preflight() {
 
     let request_method = METHOD.get;
     let request_uri = "/static/test.json";
-    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let request_http_version = VERSION.http_1_1.to_string();
 
 
     let request_host_header_name = Header::HOST;
@@ -176,7 +176,7 @@ fn actual_request_after_preflight() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;

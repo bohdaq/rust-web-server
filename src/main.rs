@@ -8,6 +8,7 @@ mod mime_type;
 mod range;
 mod cors;
 mod request;
+mod http;
 
 extern crate core;
 

@@ -3,9 +3,10 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use regex::Regex;
-use crate::constant::{Constants, HTTP_VERSIONS};
+use crate::constant::{Constants};
 use crate::header::Header;
 use crate::{CONSTANTS, Request, Response};
+use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Method};
@@ -28,14 +29,14 @@ fn http_version_and_status_code_and_reason_phrase_regex() {
     let re = Regex::new(CONSTANTS.http_version_and_status_code_and_reason_phrase_regex).unwrap();
     let caps = re.captures("HTTP/1.1 404 Not Found").unwrap();
 
-    assert_eq!(HTTP_VERSIONS.http_version_1_1, &caps["http_version"]);
+    assert_eq!(VERSION.http_1_1, &caps["http_version"]);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.status_code, &caps["status_code"]);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase, &caps["reason_phrase"]);
 
     let re = Regex::new(CONSTANTS.http_version_and_status_code_and_reason_phrase_regex).unwrap();
     let caps = re.captures("HTTP/1.1 200 OK").unwrap();
 
-    assert_eq!(HTTP_VERSIONS.http_version_1_1, &caps["http_version"]);
+    assert_eq!(VERSION.http_1_1, &caps["http_version"]);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.status_code, &caps["status_code"]);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase, &caps["reason_phrase"]);
 
@@ -44,7 +45,7 @@ fn http_version_and_status_code_and_reason_phrase_regex() {
 
 #[test]
 fn it_generates_successful_response_with_additional_headers() {
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = "401";
     let response_reason_phrase = "Unauthorized";
     let message_body = CONSTANTS.empty_string;
@@ -76,7 +77,7 @@ fn it_generates_successful_response_with_additional_headers() {
     let request = Request {
         method: METHOD.get.to_string(),
         request_uri: "/some-route".to_string(),
-        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
         headers: vec![]
     };
 
@@ -98,7 +99,7 @@ fn it_generates_successful_response_with_additional_headers() {
 
 #[test]
 fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() {
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let filepath = "/static/content.png";
@@ -138,7 +139,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
     let request = Request {
         method: METHOD.get.to_string(),
         request_uri: "/some-route".to_string(),
-        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
         headers: vec![]
     };
 

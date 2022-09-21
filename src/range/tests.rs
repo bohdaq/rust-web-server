@@ -2,9 +2,9 @@ use std::borrow::Borrow;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use regex::Regex;
-use crate::constant::{HTTP_VERSIONS};
 use crate::{CONSTANTS, Request, Response, Server};
 use crate::header::Header;
+use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 use crate::request::METHOD;
@@ -45,7 +45,7 @@ fn check_range_response_is_ok_two_part() {
     let request = Request {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
         headers
     };
 
@@ -66,7 +66,7 @@ fn check_range_response_is_ok_two_part() {
     assert_eq!(response.status_code, STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code);
     assert_eq!(response.reason_phrase, STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase);
 
-    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
+    assert_eq!(VERSION.http_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
@@ -140,7 +140,7 @@ fn check_range_response_is_ok_single_part() {
     let request = Request {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
         headers
     };
 
@@ -161,7 +161,7 @@ fn check_range_response_is_ok_single_part() {
     assert_eq!(response.status_code, STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code);
     assert_eq!(response.reason_phrase, STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase);
 
-    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
+    assert_eq!(VERSION.http_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();

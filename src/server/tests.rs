@@ -5,9 +5,9 @@ use std::io::{BufReader, Read, Write};
 
 use std::cmp::min;
 
-use crate::constant::{HTTP_VERSIONS};
 use crate::{bootstrap, CONSTANTS, Request, Response, Server};
 use crate::header::Header;
+use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::Range;
 use crate::request::METHOD;
@@ -47,7 +47,7 @@ fn it_generates_successful_response_with_index_html() {
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.get;
     let request_uri = CONSTANTS.slash;
-    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let request_http_version = VERSION.http_1_1.to_string();
 
 
     // request part
@@ -75,7 +75,7 @@ fn it_generates_successful_response_with_index_html() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = "index.html";
@@ -117,7 +117,7 @@ fn it_generates_successful_response_with_static_file() {
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.get;
     let request_uri = "/static/test.txt";
-    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let request_http_version = VERSION.http_1_1.to_string();
 
 
     // request part
@@ -145,7 +145,7 @@ fn it_generates_successful_response_with_static_file() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
@@ -190,7 +190,7 @@ fn it_generates_not_found_page_for_absent_static_file() {
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.get;
     let request_uri = "/static/nonexistingfile";
-    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let request_http_version = VERSION.http_1_1.to_string();
 
 
     // request part
@@ -218,7 +218,7 @@ fn it_generates_not_found_page_for_absent_static_file() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.http_version_1_1;
+    let response_http_version = VERSION.http_1_1;
     let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
     let response_filepath = &request.request_uri;
@@ -264,7 +264,7 @@ fn it_generates_not_found_page_for_absent_route() {
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.get;
     let request_uri = "/nonexistingroute";
-    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let request_http_version = VERSION.http_1_1.to_string();
 
 
     // request part
@@ -292,7 +292,7 @@ fn it_generates_not_found_page_for_absent_route() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
     let response_filepath = &request.request_uri;
@@ -338,7 +338,7 @@ fn it_generates_not_found_page_for_static_directory() {
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.get;
     let request_uri = "/static/";
-    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let request_http_version = VERSION.http_1_1.to_string();
 
 
     // request part
@@ -366,7 +366,7 @@ fn it_generates_not_found_page_for_static_directory() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
     let response_filepath = &request.request_uri;
@@ -412,7 +412,7 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.get;
     let request_uri = "/static/subdir/";
-    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let request_http_version = VERSION.http_1_1.to_string();
 
 
     // request part
@@ -440,7 +440,7 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
     let response_filepath = &request.request_uri;
@@ -486,7 +486,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.get;
     let request_uri = "/static/test.txt";
-    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let request_http_version = VERSION.http_1_1.to_string();
 
 
     // request part
@@ -514,7 +514,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
@@ -560,7 +560,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.head;
     let request_uri = "/static/test.txt";
-    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let request_http_version = VERSION.http_1_1.to_string();
 
 
     // request part
@@ -588,7 +588,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
@@ -638,7 +638,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.get;
     let request_uri = "/static/test.txt";
-    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let request_http_version = VERSION.http_1_1.to_string();
 
 
     // request part
@@ -666,7 +666,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
@@ -714,7 +714,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.get;
     let request_uri = "/assets/test.txt";
-    let request_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let request_http_version = VERSION.http_1_1.to_string();
 
 
     // request part
@@ -742,7 +742,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     assert_eq!(request_http_version.to_string(), request.http_version);
 
     // response part
-    let response_http_version = HTTP_VERSIONS.http_version_1_1.to_string();
+    let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
     let response_filepath = &request.request_uri;
@@ -815,7 +815,7 @@ fn check_range_response_for_not_proper_range_header() {
     let request = Request {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
         headers
     };
 
@@ -833,7 +833,7 @@ fn check_range_response_for_not_proper_range_header() {
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
+    assert_eq!(VERSION.http_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
@@ -881,7 +881,7 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
     let request = Request {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
         headers
     };
 
@@ -899,7 +899,7 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
+    assert_eq!(VERSION.http_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
@@ -947,7 +947,7 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     let request = Request {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
         headers
     };
 
@@ -965,7 +965,7 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
+    assert_eq!(VERSION.http_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
@@ -1013,7 +1013,7 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     let request = Request {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
         headers
     };
 
@@ -1031,7 +1031,7 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
+    assert_eq!(VERSION.http_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
@@ -1079,7 +1079,7 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     let request = Request {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
         headers
     };
 
@@ -1097,7 +1097,7 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
+    assert_eq!(VERSION.http_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
@@ -1145,7 +1145,7 @@ fn check_range_response_for_not_proper_range_header_malformed() {
     let request = Request {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
-        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
         headers
     };
 
@@ -1163,7 +1163,7 @@ fn check_range_response_for_not_proper_range_header_malformed() {
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(HTTP_VERSIONS.http_version_1_1, response.http_version);
+    assert_eq!(VERSION.http_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();

@@ -1,10 +1,11 @@
 use std::{env};
 use std::fs::{File, metadata};
 use std::io::Read;
-use crate::constant::{HTTP_VERSIONS, HTTPError};
+use crate::constant::{HTTPError};
 use crate::{Config, CONSTANTS};
 use crate::cors::Cors;
 use crate::header::Header;
+use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 
@@ -39,7 +40,7 @@ impl App {
 
 
         let mut response = Response {
-            http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+            http_version: VERSION.http_1_1.to_string(),
             status_code: STATUS_CODE_REASON_PHRASE.n404_not_found.status_code.to_string(),
             reason_phrase: STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase.to_string(),
             headers: vec![],
@@ -67,7 +68,7 @@ impl App {
             let content_range_list = vec![content_range];
 
             response = Response {
-                http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+                http_version: VERSION.http_1_1.to_string(),
                 status_code: STATUS_CODE_REASON_PHRASE.n200_ok.status_code.to_string(),
                 reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
                 headers: vec![],
@@ -101,7 +102,7 @@ impl App {
                     }
 
                     response = Response {
-                        http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+                        http_version: VERSION.http_1_1.to_string(),
                         status_code: status_code.to_string(),
                         reason_phrase: reason_phrase.to_string(),
                         headers: vec![],
@@ -131,7 +132,7 @@ impl App {
                 ];
 
                 response = Response {
-                    http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+                    http_version: VERSION.http_1_1.to_string(),
                     status_code: error.status_code_reason_phrase.status_code.to_string(),
                     reason_phrase: error.status_code_reason_phrase.reason_phrase.to_string(),
                     headers: vec![],
@@ -145,7 +146,7 @@ impl App {
             let content_range_list = vec![];
 
             response = Response {
-                http_version: HTTP_VERSIONS.http_version_1_1.to_string(),
+                http_version: VERSION.http_1_1.to_string(),
                 status_code: STATUS_CODE_REASON_PHRASE.n200_ok.status_code.to_string(),
                 reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
                 headers: vec![],

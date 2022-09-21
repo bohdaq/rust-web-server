@@ -51,20 +51,6 @@ pub const CONSTANTS: Constants = Constants {
 };
 
 
-pub struct HTTPVersion {
-    pub(crate) http_version_0_9: &'static str,
-    pub(crate) http_version_1_0: &'static str,
-    pub(crate) http_version_1_1: &'static str,
-    pub(crate) http_version_2_0: &'static str,
-}
-
-pub const HTTP_VERSIONS: HTTPVersion = HTTPVersion {
-    http_version_0_9: "HTTP/0.9",
-    http_version_1_0: "HTTP/1.0",
-    http_version_1_1: "HTTP/1.1",
-    http_version_2_0: "HTTP/2.0",
-};
-
 
 #[derive(Debug)]
 pub struct HTTPError {
