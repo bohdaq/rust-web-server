@@ -65,7 +65,7 @@ fn it_generates_successful_response_with_additional_headers() {
 
 
     let content_range = ContentRange {
-        unit: CONSTANTS.bytes.to_string(),
+        unit: Range::BYTES.to_string(),
         range: Range {
             start: 0,
             end: message_body.as_bytes().len() as u64
@@ -132,7 +132,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
     let headers = vec![];
 
     let content_range = ContentRange {
-        unit: CONSTANTS.bytes.to_string(),
+        unit: Range::BYTES.to_string(),
         range: Range {
             start: 0,
             end: contents.len() as u64

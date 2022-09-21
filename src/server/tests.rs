@@ -786,7 +786,7 @@ fn check_range_response_for_not_proper_range_header() {
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.value);
+    assert_eq!(Range::BYTES, header.value);
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
@@ -851,7 +851,7 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.value);
+    assert_eq!(Range::BYTES, header.value);
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
@@ -916,7 +916,7 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.value);
+    assert_eq!(Range::BYTES, header.value);
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
@@ -981,7 +981,7 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.value);
+    assert_eq!(Range::BYTES, header.value);
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
@@ -1046,7 +1046,7 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.value);
+    assert_eq!(Range::BYTES, header.value);
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
@@ -1106,7 +1106,7 @@ fn check_range_response_for_not_proper_range_header_malformed() {
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.value);
+    assert_eq!(Range::BYTES, header.value);
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);

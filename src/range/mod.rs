@@ -34,6 +34,7 @@ impl Range {
     pub const BOUNDARY: &'static str = "boundary";
     pub const BYTERANGES: &'static str = "byteranges";
     pub const MULTIPART: &'static str = "multipart";
+    pub const BYTES: &'static str = "bytes";
 
 
     pub(crate) const ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";
@@ -133,7 +134,7 @@ impl Range {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
-        let prefix = [CONSTANTS.bytes, CONSTANTS.equals].join("");
+        let prefix = [Range::BYTES, CONSTANTS.equals].join("");
         if !raw_range_value.starts_with(prefix.as_str()) {
             let message = Range::ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT.to_string();
             let error = Error {
@@ -164,7 +165,7 @@ impl Range {
                     let content_type = MimeType::detect_mime_type(filepath);
 
                     let content_range = ContentRange {
-                        unit: CONSTANTS.bytes.to_string(),
+                        unit: Range::BYTES.to_string(),
                         range,
                         size: filelength.to_string(),
                         body: buffer,
@@ -217,7 +218,7 @@ impl Range {
         };
 
         let mut content_range: ContentRange = ContentRange {
-            unit: CONSTANTS.bytes.to_string(),
+            unit: Range::BYTES.to_string(),
             range: Range { start: 0, end: 0 },
             size: "".to_string(),
             body: vec![],

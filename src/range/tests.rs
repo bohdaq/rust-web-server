@@ -70,7 +70,7 @@ fn check_range_response_is_ok_two_part() {
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.value);
+    assert_eq!(Range::BYTES, header.value);
     let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let value = [
         Range::MULTIPART,
@@ -165,7 +165,7 @@ fn check_range_response_is_ok_single_part() {
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(CONSTANTS.nosniff, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
-    assert_eq!(CONSTANTS.bytes, header.value);
+    assert_eq!(Range::BYTES, header.value);
     let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let value = MimeType::TEXT_PLAIN.to_string();
     assert_eq!(value, header.value);
@@ -197,7 +197,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(0).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.bytes);
+    assert_eq!(content_range.unit, Range::BYTES);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let file = File::open(&static_filepath).unwrap();
@@ -214,7 +214,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(1).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.bytes);
+    assert_eq!(content_range.unit, Range::BYTES);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let file = File::open(&static_filepath).unwrap();
@@ -230,7 +230,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(2).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.bytes);
+    assert_eq!(content_range.unit, Range::BYTES);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let file = File::open(&static_filepath).unwrap();
@@ -246,7 +246,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(3).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.bytes);
+    assert_eq!(content_range.unit, Range::BYTES);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let file = File::open(&static_filepath).unwrap();
@@ -260,7 +260,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(4).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.bytes);
+    assert_eq!(content_range.unit, Range::BYTES);
     let start = file_size - 500;
     let end = file_size;
     assert_eq!(content_range.range.start, start);
@@ -278,7 +278,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(5).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.bytes);
+    assert_eq!(content_range.unit, Range::BYTES);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let file = File::open(&static_filepath).unwrap();
@@ -295,7 +295,7 @@ fn get_right_content_range_of_a_file() {
     let content_range = content_range_list.get(6).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, CONSTANTS.bytes);
+    assert_eq!(content_range.unit, Range::BYTES);
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let file = File::open(&static_filepath).unwrap();

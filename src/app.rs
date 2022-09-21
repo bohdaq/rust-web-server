@@ -30,7 +30,7 @@ impl App {
 
         let length = contents.len() as u64;
         let content_range = ContentRange {
-            unit: CONSTANTS.bytes.to_string(),
+            unit: Range::BYTES.to_string(),
             range: Range { start: 0, end: length },
             size: length.to_string(),
             body: contents,
@@ -57,7 +57,7 @@ impl App {
 
             let length = contents.len() as u64;
             let content_range = ContentRange {
-                unit: CONSTANTS.bytes.to_string(),
+                unit: Range::BYTES.to_string(),
                 range: Range { start: 0, end: length },
                 size: length.to_string(),
                 body: contents,
@@ -122,7 +122,7 @@ impl App {
 
                 let content_range_list = vec![
                     ContentRange {
-                        unit: CONSTANTS.bytes.to_string(),
+                        unit: Range::BYTES.to_string(),
                         range: Range { start: 0, end: body_length },
                         size: body_length.to_string(),
                         body: body.as_bytes().to_vec(),

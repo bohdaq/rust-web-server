@@ -106,7 +106,7 @@ impl Response {
                 let content_type = [Header::CONTENT_TYPE, CONSTANTS.header_name_value_separator, CONSTANTS.whitespace, &content_range.content_type.to_string()].join("");
                 body_str.push_str(content_type.as_str());
                 body_str.push_str(CONSTANTS.new_line_separator);
-                let content_range_header = [Header::CONTENT_RANGE, CONSTANTS.header_name_value_separator, CONSTANTS.whitespace, CONSTANTS.bytes, CONSTANTS.whitespace, &content_range.range.start.to_string(), CONSTANTS.hyphen, &content_range.range.end.to_string(), CONSTANTS.slash, &content_range.size].join("");
+                let content_range_header = [Header::CONTENT_RANGE, CONSTANTS.header_name_value_separator, CONSTANTS.whitespace, Range::BYTES, CONSTANTS.whitespace, &content_range.range.start.to_string(), CONSTANTS.hyphen, &content_range.range.end.to_string(), CONSTANTS.slash, &content_range.size].join("");
                 body_str.push_str(content_range_header.as_str());
                 body_str.push_str(CONSTANTS.new_line_separator);
                 body_str.push_str(CONSTANTS.new_line_separator);
@@ -142,7 +142,7 @@ impl Response {
             });
 
             let content_range_header_value = [
-                CONSTANTS.bytes,
+                Range::BYTES,
                 CONSTANTS.whitespace,
                 &content_range.range.start.to_string(),
                 CONSTANTS.hyphen,
@@ -297,7 +297,7 @@ impl Response {
                     buffer_as_u8_array = &buffer;
 
                     let content_range = ContentRange {
-                        unit: CONSTANTS.bytes.to_string(),
+                        unit: Range::BYTES.to_string(),
                         range: Range {
                             start: 0,
                             end: buffer_as_u8_array.len() as u64
@@ -353,7 +353,7 @@ impl Response {
     pub(crate) fn get_accept_ranges_header() -> Header {
         Header {
             name: Header::ACCEPT_RANGES.to_string(),
-            value: CONSTANTS.bytes.to_string(),
+            value: Range::BYTES.to_string(),
         }
     }
 }
