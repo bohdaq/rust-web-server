@@ -5,7 +5,7 @@ use std::io::{BufReader, Read, Write};
 
 use std::cmp::min;
 
-use crate::{bootstrap, CONSTANTS, Request, Response, Server};
+use crate::{bootstrap, CONSTANTS, override_environment_variables_from_config, Request, Response, Server};
 use crate::header::Header;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
@@ -105,8 +105,7 @@ fn it_generates_successful_response_with_index_html() {
 
 #[test]
 fn it_generates_successful_response_with_static_file() {
-    let is_test_mode = true;
-    bootstrap(is_test_mode);
+    override_environment_variables_from_config(Some("/src/test/rws.config.toml"));
 
     // request test data
     let request_host_header_name = "Host";

@@ -1,7 +1,7 @@
 use std::{env, fs};
 use std::borrow::Borrow;
 use crate::header::Header;
-use crate::{bootstrap, CONSTANTS, Request, Response, Server};
+use crate::{bootstrap, CONSTANTS, override_environment_variables_from_config, Request, Response, Server};
 use crate::cors::Cors;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
@@ -128,8 +128,7 @@ fn cors_options_preflight_request() {
 
 #[test]
 fn actual_request_after_preflight() {
-    let is_test_mode = true;
-    bootstrap(is_test_mode);
+    override_environment_variables_from_config(Some("/src/test/rws.config.toml"));
 
     let request_method = METHOD.get;
     let request_uri = "/static/test.json";
@@ -368,8 +367,7 @@ fn cors_process() {
 fn cors_process_default_config() {
     println!("cors_process_default_config");
 
-    let is_test_mode = true;
-    bootstrap(is_test_mode);
+    override_environment_variables_from_config(Some("/src/test/rws.config.toml"));
 
     // Origin header indicates it is CORS request
     let origin_value = "https://bar.example";

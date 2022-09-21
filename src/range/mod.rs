@@ -6,9 +6,8 @@ use std::fs::{File, metadata};
 use std::io::{BufReader, Cursor, SeekFrom};
 use regex::Regex;
 
-use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+use crate::response::{HTTPError, Response, STATUS_CODE_REASON_PHRASE};
 use crate::{CONSTANTS, Server};
-use crate::constant::{HTTPError};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 

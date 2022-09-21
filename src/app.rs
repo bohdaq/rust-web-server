@@ -1,7 +1,6 @@
 use std::{env};
 use std::fs::{File, metadata};
 use std::io::Read;
-use crate::constant::{HTTPError};
 use crate::{Config, CONSTANTS};
 use crate::cors::Cors;
 use crate::header::Header;
@@ -10,7 +9,7 @@ use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 
 use crate::request::{METHOD, Request};
-use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+use crate::response::{HTTPError, Response, STATUS_CODE_REASON_PHRASE};
 
 
 pub struct App {}
