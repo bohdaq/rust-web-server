@@ -29,6 +29,7 @@ pub struct ContentRange {
 
 impl Range {
     pub(crate) const STRING_SEPARATOR: &'static str = "String_separator";
+    pub(crate) const CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})";
 
     pub(crate) const ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";
     pub(crate) const ERROR_UNABLE_TO_PARSE_CONTENT_RANGE: &'static str = "unable to parse content-range";
@@ -304,7 +305,7 @@ impl Range {
     }
 
     pub(crate)  fn parse_content_range_header_value(header_value: String) -> Result<(String, u64, u64), String> {
-        let re = Regex::new(CONSTANTS.content_range_regex).unwrap();
+        let re = Regex::new(Range::CONTENT_RANGE_REGEX).unwrap();
         let boxed_caps = re.captures(&header_value);
         if boxed_caps.is_none() {
             return Err(Range::ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())

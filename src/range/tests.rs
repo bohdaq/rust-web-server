@@ -359,7 +359,7 @@ fn content_range_regex() {
     let size_num = 191238270;
 
     let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
-    let re = Regex::new(CONSTANTS.content_range_regex).unwrap();
+    let re = Regex::new(Range::CONTENT_RANGE_REGEX).unwrap();
     let caps = re.captures(string.as_str()).unwrap();
 
     let start= &caps["start"];
