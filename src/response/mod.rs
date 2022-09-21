@@ -103,10 +103,10 @@ impl Response {
                 body_str.push_str(CONSTANTS.hyphen);
                 body_str.push_str(Range::STRING_SEPARATOR);
                 body_str.push_str(CONSTANTS.new_line_separator);
-                let content_type = [Header::CONTENT_TYPE, CONSTANTS.header_name_value_separator, CONSTANTS.whitespace, &content_range.content_type.to_string()].join("");
+                let content_type = [Header::CONTENT_TYPE, Header::NAME_VALUE_SEPARATOR, CONSTANTS.whitespace, &content_range.content_type.to_string()].join("");
                 body_str.push_str(content_type.as_str());
                 body_str.push_str(CONSTANTS.new_line_separator);
-                let content_range_header = [Header::CONTENT_RANGE, CONSTANTS.header_name_value_separator, CONSTANTS.whitespace, Range::BYTES, CONSTANTS.whitespace, &content_range.range.start.to_string(), CONSTANTS.hyphen, &content_range.range.end.to_string(), CONSTANTS.slash, &content_range.size].join("");
+                let content_range_header = [Header::CONTENT_RANGE, Header::NAME_VALUE_SEPARATOR, CONSTANTS.whitespace, Range::BYTES, CONSTANTS.whitespace, &content_range.range.start.to_string(), CONSTANTS.hyphen, &content_range.range.end.to_string(), CONSTANTS.slash, &content_range.size].join("");
                 body_str.push_str(content_range_header.as_str());
                 body_str.push_str(CONSTANTS.new_line_separator);
                 body_str.push_str(CONSTANTS.new_line_separator);
@@ -184,7 +184,7 @@ impl Response {
         for header in headers {
             let mut header_string = CONSTANTS.empty_string.to_string();
             header_string.push_str(&header.name);
-            header_string.push_str(CONSTANTS.header_name_value_separator);
+            header_string.push_str(Header::NAME_VALUE_SEPARATOR);
             header_string.push_str(&header.value);
             header_string.push_str(CONSTANTS.new_line_separator);
             headers_str.push_str(&header_string);
@@ -240,7 +240,7 @@ impl Response {
     }
 
     pub(crate)  fn parse_http_response_header_string(header_string: &str) -> Header {
-        let header_parts: Vec<&str> = header_string.split(CONSTANTS.header_name_value_separator).collect();
+        let header_parts: Vec<&str> = header_string.split(Header::NAME_VALUE_SEPARATOR).collect();
         let header_name = header_parts[0].to_string();
         let raw_header_value = header_parts[1].to_string();
         let header_value = Server::truncate_new_line_carriage_return(&raw_header_value);

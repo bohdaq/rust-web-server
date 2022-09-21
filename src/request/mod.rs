@@ -59,7 +59,7 @@ impl Request {
         for header in request.headers {
             let mut header_string = CONSTANTS.empty_string.to_string();
             header_string.push_str(&header.name);
-            header_string.push_str(CONSTANTS.header_name_value_separator);
+            header_string.push_str(Header::NAME_VALUE_SEPARATOR);
             header_string.push_str(&header.value);
             header_string.push_str(CONSTANTS.new_line_separator);
             headers.push_str(&header_string);
@@ -122,7 +122,7 @@ impl Request {
     }
 
     pub(crate)  fn parse_http_request_header_string(header_string: &str) -> Header {
-        let header_parts: Vec<&str> = header_string.split(CONSTANTS.header_name_value_separator).collect();
+        let header_parts: Vec<&str> = header_string.split(Header::NAME_VALUE_SEPARATOR).collect();
         let header_name = Server::truncate_new_line_carriage_return(header_parts[0]);
         let header_value = Server::truncate_new_line_carriage_return(header_parts[1]);
 

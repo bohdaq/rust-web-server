@@ -28,5 +28,8 @@ impl Header {
     pub(crate) const ACCESS_CONTROL_MAX_AGE: &'static str = "Access-Control-Max-Age";
     pub(crate) const ACCESS_CONTROL_EXPOSE_HEADERS: &'static str = "Access-Control-Expose-Headers";
 
+
+    pub(crate) const NAME_VALUE_SEPARATOR: &'static str = ": ";
+
 }
 
