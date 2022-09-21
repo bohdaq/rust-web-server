@@ -346,7 +346,7 @@ impl Response {
     pub(crate) fn get_x_content_type_options_header() -> Header {
         Header {
             name: Header::X_CONTENT_TYPE_OPTIONS.to_string(),
-            value: CONSTANTS.nosniff.to_string(),
+            value: Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF.to_string(),
         }
     }
 

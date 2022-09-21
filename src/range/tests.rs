@@ -68,7 +68,7 @@ fn check_range_response_is_ok_two_part() {
 
     assert_eq!(VERSION.http_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.nosniff, header.value);
+    assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
     let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
@@ -163,7 +163,7 @@ fn check_range_response_is_ok_single_part() {
 
     assert_eq!(VERSION.http_1_1, response.http_version);
     let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.nosniff, header.value);
+    assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
     let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
     let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();

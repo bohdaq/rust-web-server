@@ -11,6 +11,7 @@ impl Header {
     pub(crate) const CONTENT_TYPE: &'static str = "Content-Type";
     pub(crate) const CONTENT_LENGTH: &'static str = "Content-Length";
     pub(crate) const X_CONTENT_TYPE_OPTIONS: &'static str = "X-Content-Type-Options";
+    pub(crate) const X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF: &'static str = "nosniff";
     pub(crate) const RANGE: &'static str = "Range";
     pub(crate) const ACCEPT_RANGES: &'static str = "Accept-Ranges";
     pub(crate) const CONTENT_RANGE: &'static str = "Content-Range";

@@ -101,7 +101,7 @@ fn cors_options_preflight_request() {
     assert_eq!(MimeType::APPLICATION_JSON, content_type_header.value);
 
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.value);
+    assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
 
     let access_control_allow_origin_header = response.get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
     let allow_origins = format!("{}", access_control_allow_origin_header.value);
@@ -206,7 +206,7 @@ fn actual_request_after_preflight() {
     assert_eq!(MimeType::APPLICATION_JSON, content_type_header.value);
 
     let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
-    assert_eq!(CONSTANTS.nosniff, x_content_type_options_header.value);
+    assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
 
     let vary_header = response.get_header(Header::VARY.to_string()).unwrap();
     assert_eq!(Header::ORIGIN, vary_header.value);
