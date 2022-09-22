@@ -16,7 +16,7 @@ Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PA
  
 You will see similar output:
 
-> rws rust-web-server 0.0.11
+> rws rust-web-server 0.0.12
 > 
 > Bohdan Tsap <bohdan.tsap@tutanota.com>
 > 
