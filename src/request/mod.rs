@@ -5,7 +5,7 @@ use std::io;
 use std::io::{BufRead, Cursor};
 use crate::header::Header;
 use regex::{Regex};
-use crate::Server;
+use crate::server::Server;
 use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]

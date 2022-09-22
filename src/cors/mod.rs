@@ -2,12 +2,12 @@
 mod tests;
 
 use std::env;
-use crate::{Config, Request, Response};
 use crate::header::Header;
 
 use serde::{Serialize, Deserialize};
-use crate::request::METHOD;
-use crate::response::Error;
+use crate::entry_point::Config;
+use crate::request::{METHOD, Request};
+use crate::response::{Error, Response};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Cors {

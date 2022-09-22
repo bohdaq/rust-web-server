@@ -2,13 +2,13 @@ use std::borrow::Borrow;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use regex::Regex;
-use crate::{Request, Response, Server};
 use crate::header::Header;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
-use crate::request::METHOD;
-use crate::response::STATUS_CODE_REASON_PHRASE;
+use crate::request::{METHOD, Request};
+use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+use crate::server::Server;
 use crate::server::tests::MockTcpStream;
 use crate::symbol::SYMBOL;
 

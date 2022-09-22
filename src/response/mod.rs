@@ -6,8 +6,8 @@ use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use regex::Regex;
 use crate::range::{ContentRange, Range};
-use crate::{Request, Server};
-use crate::request::METHOD;
+use crate::request::{METHOD, Request};
+use crate::server::Server;
 use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]

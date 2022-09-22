@@ -4,12 +4,11 @@ use std::fs::File;
 use std::io::Read;
 use regex::Regex;
 use crate::header::Header;
-use crate::{Request, Response};
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
-use crate::request::{METHOD};
-use crate::response::{Error, STATUS_CODE_REASON_PHRASE};
+use crate::request::{METHOD, Request};
+use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
 use crate::symbol::SYMBOL;
 
 #[test]

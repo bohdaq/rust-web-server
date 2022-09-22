@@ -1,4 +1,4 @@
-use crate::ThreadPool;
+use crate::thread_pool::ThreadPool;
 
 #[test]
 fn thread_pool_test() {

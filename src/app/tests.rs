@@ -1,6 +1,6 @@
 use crate::app::App;
-use crate::{override_environment_variables_from_config, Request};
-use crate::request::METHOD;
+use crate::entry_point::override_environment_variables_from_config;
+use crate::request::{METHOD, Request};
 use crate::http::VERSION;
 use crate::response::STATUS_CODE_REASON_PHRASE;
 

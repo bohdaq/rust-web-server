@@ -1,4 +1,4 @@
-use crate::SYMBOL;
+use crate::symbol::SYMBOL;
 
 #[test]
 fn symbol_check() {

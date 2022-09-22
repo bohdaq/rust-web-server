@@ -7,9 +7,9 @@ use std::io::{BufReader, Cursor, SeekFrom};
 use regex::Regex;
 
 use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
-use crate::{Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
+use crate::server::Server;
 use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]

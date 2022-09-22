@@ -1,7 +1,6 @@
 use regex::Regex;
-use crate::{Request};
 use crate::http::VERSION;
-use crate::request::METHOD;
+use crate::request::{METHOD, Request};
 use crate::symbol::SYMBOL;
 
 #[test]
