@@ -5,7 +5,7 @@ use std::{thread};
 use std::sync::{Arc, mpsc, Mutex};
 
 pub struct ThreadPool {
-    workers: Vec<Worker>,
+    _workers: Vec<Worker>,
     sender: mpsc::Sender<Job>,
 }
 
@@ -25,7 +25,7 @@ impl ThreadPool {
         }
 
         ThreadPool {
-            workers,
+            _workers: workers,
             sender,
         }
     }
@@ -41,8 +41,8 @@ impl ThreadPool {
 }
 
 struct Worker {
-    id: usize,
-    thread: thread::JoinHandle<()>,
+    _id: usize,
+    _thread: thread::JoinHandle<()>,
 }
 
 impl Worker {
@@ -57,6 +57,6 @@ impl Worker {
 
         });
 
-        Worker { id, thread }
+        Worker { _id: id, _thread: thread }
     }
 }
