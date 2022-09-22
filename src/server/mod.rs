@@ -8,7 +8,8 @@ use std::borrow::Borrow;
 use crate::request::Request;
 use crate::response::Response;
 use crate::app::App;
-use crate::{CONSTANTS};
+use crate::symbol::SYMBOL;
+
 pub struct Server {}
 impl Server {
     pub(crate) fn process_request(mut stream: impl Read + Write + Unpin) -> Vec<u8> {
@@ -43,6 +44,6 @@ impl Server {
     pub(crate) fn get_static_filepath(request_uri: &str) -> String {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
-        [working_directory, request_uri].join(CONSTANTS.empty_string)
+        [working_directory, request_uri].join(SYMBOL.empty_string)
     }
 }

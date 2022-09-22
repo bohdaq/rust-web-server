@@ -1,13 +1,14 @@
 use std::{env, fs};
 use std::borrow::Borrow;
 use crate::header::Header;
-use crate::{CONSTANTS, override_environment_variables_from_config, Request, Response, Server};
+use crate::{override_environment_variables_from_config, Request, Response, Server};
 use crate::cors::Cors;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::request::METHOD;
 use crate::response::STATUS_CODE_REASON_PHRASE;
 use crate::server::tests::MockTcpStream;
+use crate::symbol::SYMBOL;
 
 #[test]
 fn cors_options_preflight_request() {
@@ -77,7 +78,7 @@ fn cors_options_preflight_request() {
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = Header::CONTENT_LENGTH;
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -182,7 +183,7 @@ fn actual_request_after_preflight() {
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();

@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use regex::Regex;
-use crate::{CONSTANTS, Request, Response, Server};
+use crate::{Request, Response, Server};
 use crate::header::Header;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
@@ -10,6 +10,7 @@ use crate::range::{ContentRange, Range};
 use crate::request::METHOD;
 use crate::response::STATUS_CODE_REASON_PHRASE;
 use crate::server::tests::MockTcpStream;
+use crate::symbol::SYMBOL;
 
 #[test]
 fn check_range_response_is_ok_two_part() {
@@ -74,12 +75,12 @@ fn check_range_response_is_ok_two_part() {
     let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let value = [
         Range::MULTIPART,
-        CONSTANTS.slash,
+        SYMBOL.slash,
         Range::BYTERANGES,
-        CONSTANTS.semicolon,
-        CONSTANTS.whitespace,
+        SYMBOL.semicolon,
+        SYMBOL.whitespace,
         Range::BOUNDARY,
-        CONSTANTS.equals,
+        SYMBOL.equals,
         Range::STRING_SEPARATOR
     ].join("");
     assert_eq!(value, header.value);

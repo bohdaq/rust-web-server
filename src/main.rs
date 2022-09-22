@@ -1,9 +1,9 @@
+mod symbol;
 mod header;
 mod response;
 mod server;
 mod app;
 mod thread_pool;
-mod constant;
 mod mime_type;
 mod range;
 mod cors;
@@ -15,8 +15,6 @@ extern crate core;
 use std::net::TcpListener;
 use std::{env};
 
-use crate::constant::CONSTANTS;
-
 use crate::request::Request;
 use crate::response::Response;
 use crate::server::Server;
@@ -25,6 +23,7 @@ use crate::thread_pool::ThreadPool;
 use clap::{Arg, App};
 use serde::{Serialize, Deserialize};
 use crate::cors::Cors;
+use crate::symbol::SYMBOL;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Config {
@@ -384,7 +383,7 @@ fn get_ip_port_thread_count() -> (String, i32, i32) {
 }
 
 fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
-    let bind_addr = [ip, ":", port.to_string().as_str()].join(CONSTANTS.empty_string);
+    let bind_addr = [ip, ":", port.to_string().as_str()].join(SYMBOL.empty_string);
     println!("Hello, rust-web-server is up and running: {}", bind_addr);
 
     let listener = TcpListener::bind(bind_addr).unwrap();

@@ -1,7 +1,8 @@
 use regex::Regex;
-use crate::{CONSTANTS, Request};
+use crate::{Request};
 use crate::http::VERSION;
 use crate::request::METHOD;
+use crate::symbol::SYMBOL;
 
 #[test]
 fn method_and_request_uri_and_http_version_regex() {
@@ -10,7 +11,7 @@ fn method_and_request_uri_and_http_version_regex() {
 
     assert_eq!(VERSION.http_1_1, &caps["http_version"]);
     assert_eq!(METHOD.get, &caps["method"]);
-    assert_eq!(CONSTANTS.slash, &caps["request_uri"]);
+    assert_eq!(SYMBOL.slash, &caps["request_uri"]);
 
 
     let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
@@ -25,11 +26,11 @@ fn method_and_request_uri_and_http_version_regex() {
 #[test]
 fn test_request_ok() {
     let method = METHOD.get;
-    let request_uri = CONSTANTS.slash;
+    let request_uri = SYMBOL.slash;
     let http_version = VERSION.http_1_1;
 
     let request_data = [method, request_uri, http_version].join(" ");
-    let raw_request = [request_data, CONSTANTS.new_line_separator.to_string()].join("");
+    let raw_request = [request_data, SYMBOL.new_line_carriage_return.to_string()].join("");
 
     let request = Request::parse_request(raw_request.as_bytes()).unwrap();
 
@@ -42,12 +43,12 @@ fn test_request_ok() {
 fn test_request_ok_with_special_characters() {
     let method = METHOD.get;
     let special_characters = "_:;.,/\"'?!(){}[]@<>=-+*#$&`|~^%";
-    let request_uri = [CONSTANTS.slash, special_characters].join("");
+    let request_uri = [SYMBOL.slash, special_characters].join("");
     let http_version = VERSION.http_1_1;
 
 
     let request_data = [method, request_uri.as_str(), http_version].join(" ");
-    let raw_request = [request_data, CONSTANTS.new_line_separator.to_string()].join("");
+    let raw_request = [request_data, SYMBOL.new_line_carriage_return.to_string()].join("");
 
     let request = Request::parse_request(raw_request.as_bytes()).unwrap();
 
@@ -60,12 +61,12 @@ fn test_request_ok_with_special_characters() {
 fn test_request_ok_with_ukrainian_characters() {
     let method = METHOD.get;
     let ukrainian_characters = "АаБбВвГгҐґДдЕеЄєЖжЗзИиІіЇїЙйКкЛлМмНнОоПпРрСсТтУуФфХхЦцЧчШшЩщЬьЮюЯя";
-    let request_uri = [CONSTANTS.slash, ukrainian_characters].join("");
+    let request_uri = [SYMBOL.slash, ukrainian_characters].join("");
     let http_version = VERSION.http_1_1;
 
 
     let request_data = [method, request_uri.as_str(), http_version].join(" ");
-    let raw_request = [request_data, CONSTANTS.new_line_separator.to_string()].join("");
+    let raw_request = [request_data, SYMBOL.new_line_carriage_return.to_string()].join("");
 
     let request = Request::parse_request(raw_request.as_bytes()).unwrap();
 
@@ -77,11 +78,11 @@ fn test_request_ok_with_ukrainian_characters() {
 #[test]
 fn test_request_not_ok() {
     let method = METHOD.get;
-    let request_uri = [CONSTANTS.slash, CONSTANTS.whitespace, CONSTANTS.hyphen].join("");
+    let request_uri = [SYMBOL.slash, SYMBOL.whitespace, SYMBOL.hyphen].join("");
     let http_version = VERSION.http_1_1;
 
     let request_data = [method, request_uri.as_str(), http_version].join(" ");
-    let raw_request = [request_data, CONSTANTS.new_line_separator.to_string()].join("");
+    let raw_request = [request_data, SYMBOL.new_line_carriage_return.to_string()].join("");
 
     let boxed_request = Request::parse_request(raw_request.as_bytes());
     assert_eq!(true, boxed_request.is_err());

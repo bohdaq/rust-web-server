@@ -4,12 +4,13 @@ use std::fs::File;
 use std::io::Read;
 use regex::Regex;
 use crate::header::Header;
-use crate::{CONSTANTS, Request, Response};
+use crate::{Request, Response};
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 use crate::request::{METHOD};
 use crate::response::{Error, STATUS_CODE_REASON_PHRASE};
+use crate::symbol::SYMBOL;
 
 #[test]
 fn check_is_multipart_byteranges_content_type() {
@@ -61,7 +62,7 @@ fn it_generates_successful_response_with_additional_headers() {
     let response_http_version = VERSION.http_1_1.to_string();
     let response_status_code = "401";
     let response_reason_phrase = "Unauthorized";
-    let message_body = CONSTANTS.empty_string;
+    let message_body = SYMBOL.empty_string;
 
 
     let content_range = ContentRange {
@@ -121,7 +122,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let mut response_filepath = [working_directory, filepath].join(CONSTANTS.empty_string);
+    let mut response_filepath = [working_directory, filepath].join(SYMBOL.empty_string);
     let mut contents = Vec::new();
     let mut file = File::open(response_filepath).unwrap();
     file.read_to_end(&mut contents).expect("Unable to read");
@@ -170,7 +171,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
     assert_eq!(response_reason_phrase, response.reason_phrase);
 
     contents = Vec::new();
-    response_filepath = [working_directory, filepath].join(CONSTANTS.empty_string);
+    response_filepath = [working_directory, filepath].join(SYMBOL.empty_string);
     file = File::open(response_filepath).unwrap();
     file.read_to_end(&mut contents).expect("Unable to read");
     assert_eq!(contents, response.content_range_list.get(0).unwrap().body);

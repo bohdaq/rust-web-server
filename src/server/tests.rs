@@ -5,13 +5,14 @@ use std::io::{BufReader, Read, Write};
 
 use std::cmp::min;
 
-use crate::{CONSTANTS, override_environment_variables_from_config, Request, Response, Server};
+use crate::{override_environment_variables_from_config, Request, Response, Server};
 use crate::header::Header;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::Range;
 use crate::request::METHOD;
 use crate::response::STATUS_CODE_REASON_PHRASE;
+use crate::symbol::SYMBOL;
 
 pub struct MockTcpStream {
     pub(crate) read_data: Vec<u8>,
@@ -46,7 +47,7 @@ fn it_generates_successful_response_with_index_html() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.get;
-    let request_uri = CONSTANTS.slash;
+    let request_uri = SYMBOL.slash;
     let request_http_version = VERSION.http_1_1.to_string();
 
 
@@ -147,7 +148,7 @@ fn it_generates_successful_response_with_static_file() {
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -217,7 +218,7 @@ fn it_generates_not_found_page_for_absent_static_file() {
     let working_directory = dir.as_path().to_str().unwrap();
     let not_found_page_path = "404.html";
 
-    let response_filepath = [working_directory, CONSTANTS.slash, not_found_page_path].join(CONSTANTS.empty_string);
+    let response_filepath = [working_directory, SYMBOL.slash, not_found_page_path].join(SYMBOL.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -286,7 +287,7 @@ fn it_generates_not_found_page_for_absent_route() {
     let working_directory = dir.as_path().to_str().unwrap();
     let not_found_page_path = "404.html";
 
-    let response_filepath = [working_directory, CONSTANTS.slash, not_found_page_path].join(CONSTANTS.empty_string);
+    let response_filepath = [working_directory, SYMBOL.slash, not_found_page_path].join(SYMBOL.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -355,7 +356,7 @@ fn it_generates_not_found_page_for_static_directory() {
     let working_directory = dir.as_path().to_str().unwrap();
     let not_found_page_path = "404.html";
 
-    let response_filepath = [working_directory, CONSTANTS.slash, not_found_page_path].join(CONSTANTS.empty_string);
+    let response_filepath = [working_directory, SYMBOL.slash, not_found_page_path].join(SYMBOL.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -424,7 +425,7 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     let working_directory = dir.as_path().to_str().unwrap();
     let not_found_page_path = "404.html";
 
-    let response_filepath = [working_directory, CONSTANTS.slash, not_found_page_path].join(CONSTANTS.empty_string);
+    let response_filepath = [working_directory, SYMBOL.slash, not_found_page_path].join(SYMBOL.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -492,7 +493,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -561,7 +562,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -633,7 +634,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();
@@ -704,7 +705,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
     let dir = env::current_dir().unwrap();
     let working_directory = dir.as_path().to_str().unwrap();
 
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
+    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
     let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = "Content-Length";
     let response_content_length_header_value = response_html_file.len().to_string();

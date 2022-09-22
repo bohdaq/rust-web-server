@@ -5,8 +5,8 @@ use std::io;
 use std::io::{BufRead, Cursor};
 use crate::header::Header;
 use regex::{Regex};
-use crate::constant::{CONSTANTS};
 use crate::Server;
+use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Request {
@@ -52,16 +52,16 @@ impl Request {
             request.method,
             request.request_uri,
             request.http_version,
-            CONSTANTS.new_line_separator.to_string()
-        ].join(CONSTANTS.whitespace);
+            SYMBOL.new_line_carriage_return.to_string()
+        ].join(SYMBOL.whitespace);
 
-        let mut headers = CONSTANTS.empty_string.to_string();
+        let mut headers = SYMBOL.empty_string.to_string();
         for header in request.headers {
-            let mut header_string = CONSTANTS.empty_string.to_string();
+            let mut header_string = SYMBOL.empty_string.to_string();
             header_string.push_str(&header.name);
             header_string.push_str(Header::NAME_VALUE_SEPARATOR);
             header_string.push_str(&header.value);
-            header_string.push_str(CONSTANTS.new_line_separator);
+            header_string.push_str(SYMBOL.new_line_carriage_return);
             headers.push_str(&header_string);
         }
 
@@ -69,7 +69,7 @@ impl Request {
             "{}{}{}",
             status,
             headers,
-            CONSTANTS.new_line_separator
+            SYMBOL.new_line_carriage_return
         );
 
 

@@ -1,7 +1,7 @@
 use std::{env};
 use std::fs::{File, metadata};
 use std::io::Read;
-use crate::{Config, CONSTANTS};
+use crate::{Config};
 use crate::cors::Cors;
 use crate::header::Header;
 use crate::http::VERSION;
@@ -10,6 +10,7 @@ use crate::range::{ContentRange, Range};
 
 use crate::request::{METHOD, Request};
 use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
+use crate::symbol::SYMBOL;
 
 
 pub struct App {}
@@ -46,7 +47,7 @@ impl App {
             content_range_list: vec![content_range]
         };
 
-        if request.request_uri == CONSTANTS.slash {
+        if request.request_uri == SYMBOL.slash {
             let mut file_content = Vec::new();
             let mut file = File::open(&App::INDEX_FILEPATH).expect("Unable to open file");
             file.read_to_end(&mut file_content).expect("Unable to read");
@@ -78,7 +79,7 @@ impl App {
         let is_get = request.method == METHOD.get;
         let is_head = request.method == METHOD.head;
         let is_options = request.method == METHOD.options;
-        if is_get || is_head || is_options && request.request_uri != CONSTANTS.slash {
+        if is_get || is_head || is_options && request.request_uri != SYMBOL.slash {
             let boxed_content_range_list = App::process_static_resources(&request);
             if boxed_content_range_list.is_ok() {
                 let content_range_list = boxed_content_range_list.unwrap();
@@ -141,7 +142,7 @@ impl App {
 
         }
 
-        if request.request_uri != CONSTANTS.slash && request.method == METHOD.post {
+        if request.request_uri != SYMBOL.slash && request.method == METHOD.post {
             let content_range_list = vec![];
 
             response = Response {
@@ -166,7 +167,7 @@ impl App {
     pub(crate) fn process_static_resources(request: &Request) -> Result<Vec<ContentRange>, Error> {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
-        let static_filepath = [working_directory, request.request_uri.as_str()].join(CONSTANTS.empty_string);
+        let static_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
 
         let mut content_range_list = Vec::new();
 

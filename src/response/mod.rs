@@ -5,10 +5,10 @@ use std::io;
 use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use regex::Regex;
-use crate::constant::{CONSTANTS};
 use crate::range::{ContentRange, Range};
 use crate::{Request, Server};
 use crate::request::METHOD;
+use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Error {
@@ -95,29 +95,29 @@ impl Response {
 
         if content_range_list.len() > one {
             for (i, content_range) in content_range_list.iter().enumerate() {
-                let mut body_str = CONSTANTS.empty_string.to_string();
+                let mut body_str = SYMBOL.empty_string.to_string();
                 if i != 0 {
-                    body_str.push_str(CONSTANTS.new_line_separator);
+                    body_str.push_str(SYMBOL.new_line_carriage_return);
                 }
-                body_str.push_str(CONSTANTS.hyphen);
-                body_str.push_str(CONSTANTS.hyphen);
+                body_str.push_str(SYMBOL.hyphen);
+                body_str.push_str(SYMBOL.hyphen);
                 body_str.push_str(Range::STRING_SEPARATOR);
-                body_str.push_str(CONSTANTS.new_line_separator);
-                let content_type = [Header::CONTENT_TYPE, Header::NAME_VALUE_SEPARATOR, CONSTANTS.whitespace, &content_range.content_type.to_string()].join("");
+                body_str.push_str(SYMBOL.new_line_carriage_return);
+                let content_type = [Header::CONTENT_TYPE, Header::NAME_VALUE_SEPARATOR, SYMBOL.whitespace, &content_range.content_type.to_string()].join("");
                 body_str.push_str(content_type.as_str());
-                body_str.push_str(CONSTANTS.new_line_separator);
-                let content_range_header = [Header::CONTENT_RANGE, Header::NAME_VALUE_SEPARATOR, CONSTANTS.whitespace, Range::BYTES, CONSTANTS.whitespace, &content_range.range.start.to_string(), CONSTANTS.hyphen, &content_range.range.end.to_string(), CONSTANTS.slash, &content_range.size].join("");
+                body_str.push_str(SYMBOL.new_line_carriage_return);
+                let content_range_header = [Header::CONTENT_RANGE, Header::NAME_VALUE_SEPARATOR, SYMBOL.whitespace, Range::BYTES, SYMBOL.whitespace, &content_range.range.start.to_string(), SYMBOL.hyphen, &content_range.range.end.to_string(), SYMBOL.slash, &content_range.size].join("");
                 body_str.push_str(content_range_header.as_str());
-                body_str.push_str(CONSTANTS.new_line_separator);
-                body_str.push_str(CONSTANTS.new_line_separator);
+                body_str.push_str(SYMBOL.new_line_carriage_return);
+                body_str.push_str(SYMBOL.new_line_carriage_return);
 
                 let inner_body = [body_str.as_bytes(), &content_range.body].concat();
                 body = [body, inner_body].concat();
             }
-            let mut trailing_separator = CONSTANTS.empty_string.to_string();
-            trailing_separator.push_str(CONSTANTS.new_line_separator);
-            trailing_separator.push_str(CONSTANTS.hyphen);
-            trailing_separator.push_str(CONSTANTS.hyphen);
+            let mut trailing_separator = SYMBOL.empty_string.to_string();
+            trailing_separator.push_str(SYMBOL.new_line_carriage_return);
+            trailing_separator.push_str(SYMBOL.hyphen);
+            trailing_separator.push_str(SYMBOL.hyphen);
             trailing_separator.push_str(Range::STRING_SEPARATOR);
             body = [&body, trailing_separator.as_bytes()].concat();
         }
@@ -143,11 +143,11 @@ impl Response {
 
             let content_range_header_value = [
                 Range::BYTES,
-                CONSTANTS.whitespace,
+                SYMBOL.whitespace,
                 &content_range.range.start.to_string(),
-                CONSTANTS.hyphen,
+                SYMBOL.hyphen,
                 &content_range.range.end.to_string(),
-                CONSTANTS.slash,
+                SYMBOL.slash,
                 &content_range.size
             ].join("");
             headers.push(Header {
@@ -164,12 +164,12 @@ impl Response {
         if response.content_range_list.len() > 1 {
             let content_range_header_value = [
                 Range::MULTIPART,
-                CONSTANTS.slash,
+                SYMBOL.slash,
                 Range::BYTERANGES,
-                CONSTANTS.semicolon,
-                CONSTANTS.whitespace,
+                SYMBOL.semicolon,
+                SYMBOL.whitespace,
                 Range::BOUNDARY,
-                CONSTANTS.equals,
+                SYMBOL.equals,
                 Range::STRING_SEPARATOR
             ].join("");
             headers.push(Header {
@@ -180,21 +180,21 @@ impl Response {
 
         let body = Response::generate_body(response.content_range_list);
 
-        let mut headers_str = CONSTANTS.new_line_separator.to_string();
+        let mut headers_str = SYMBOL.new_line_carriage_return.to_string();
         for header in headers {
-            let mut header_string = CONSTANTS.empty_string.to_string();
+            let mut header_string = SYMBOL.empty_string.to_string();
             header_string.push_str(&header.name);
             header_string.push_str(Header::NAME_VALUE_SEPARATOR);
             header_string.push_str(&header.value);
-            header_string.push_str(CONSTANTS.new_line_separator);
+            header_string.push_str(SYMBOL.new_line_carriage_return);
             headers_str.push_str(&header_string);
         }
-        let status = [response.http_version, response.status_code, response.reason_phrase].join(CONSTANTS.whitespace);
+        let status = [response.http_version, response.status_code, response.reason_phrase].join(SYMBOL.whitespace);
         let response_without_body = format!(
             "{}{}{}",
             status,
             headers_str,
-            CONSTANTS.new_line_separator,
+            SYMBOL.new_line_carriage_return,
         );
 
         let is_head = request.method == METHOD.head;
@@ -336,7 +336,7 @@ impl Response {
         let multipart_byteranges =
             [
                 Range::MULTIPART,
-                CONSTANTS.slash,
+                SYMBOL.slash,
                 Range::BYTERANGES
             ].join("");
         let is_multipart_byteranges = content_type.value.starts_with(&multipart_byteranges);

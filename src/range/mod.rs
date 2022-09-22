@@ -7,9 +7,10 @@ use std::io::{BufReader, Cursor, SeekFrom};
 use regex::Regex;
 
 use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
-use crate::{CONSTANTS, Server};
+use crate::{Server};
 use crate::header::Header;
 use crate::mime_type::MimeType;
+use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Range {
@@ -54,7 +55,7 @@ impl Range {
         const END_INDEX: usize = 1;
 
         let mut range = Range { start: 0, end: filelength };
-        let parts: Vec<&str> = range_str.split(CONSTANTS.hyphen).collect();
+        let parts: Vec<&str> = range_str.split(SYMBOL.hyphen).collect();
 
         let mut start_range_not_provided = true;
         for (i, part) in parts.iter().enumerate() {
@@ -134,7 +135,7 @@ impl Range {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
-        let prefix = [Range::BYTES, CONSTANTS.equals].join("");
+        let prefix = [Range::BYTES, SYMBOL.equals].join("");
         if !raw_range_value.starts_with(prefix.as_str()) {
             let message = Range::ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT.to_string();
             let error = Error {
@@ -144,10 +145,10 @@ impl Range {
             return Err(error);
         }
 
-        let split_raw_range_value: Vec<&str> = raw_range_value.split(CONSTANTS.equals).collect();
+        let split_raw_range_value: Vec<&str> = raw_range_value.split(SYMBOL.equals).collect();
         let raw_bytes = split_raw_range_value.get(INDEX_AFTER_UNIT_DECLARATION).unwrap();
 
-        let bytes: Vec<&str> = raw_bytes.split(CONSTANTS.comma).collect();
+        let bytes: Vec<&str> = raw_bytes.split(SYMBOL.comma).collect();
         for byte in bytes {
             let boxed_range = Range::parse_range_in_content_range(filelength, byte);
             if boxed_range.is_ok() {
@@ -226,7 +227,7 @@ impl Range {
         };
 
         let content_range_is_not_parsed = content_range.body.len() == 0;
-        let separator = [CONSTANTS.hyphen, CONSTANTS.hyphen, Range::STRING_SEPARATOR].join("");
+        let separator = [SYMBOL.hyphen, SYMBOL.hyphen, Range::STRING_SEPARATOR].join("");
         if string.starts_with(separator.as_str()) && content_range_is_not_parsed {
             //read next line - Content-Type
             buffer = Range::parse_line_as_bytes(cursor);
@@ -280,11 +281,11 @@ impl Range {
             body = [body, string.as_bytes().to_vec()].concat();
 
             let mut buf = Vec::from(string.as_bytes());
-            let separator = [CONSTANTS.hyphen, CONSTANTS.hyphen, Range::STRING_SEPARATOR].join("");
+            let separator = [SYMBOL.hyphen, SYMBOL.hyphen, Range::STRING_SEPARATOR].join("");
             while !buf.starts_with(separator.as_bytes()) {
                 buf = vec![];
                 cursor.read_until(b'\n', &mut buf).unwrap();
-                let separator = [CONSTANTS.hyphen, CONSTANTS.hyphen, Range::STRING_SEPARATOR].join("");
+                let separator = [SYMBOL.hyphen, SYMBOL.hyphen, Range::STRING_SEPARATOR].join("");
                 if !buf.starts_with(separator.as_bytes()) {
                     body = [body, buf.to_vec()].concat();
                 }
