@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::{env};
 use std::fs::{File, metadata};
 use std::io::Read;
