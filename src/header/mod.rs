@@ -15,7 +15,7 @@ impl Header {
     pub(crate) const RANGE: &'static str = "Range";
     pub(crate) const ACCEPT_RANGES: &'static str = "Accept-Ranges";
     pub(crate) const CONTENT_RANGE: &'static str = "Content-Range";
-    pub(crate) const HOST: &'static str = "Host";
+    pub(crate) const _HOST: &'static str = "Host";
     pub(crate) const VARY: &'static str = "Vary";
     pub(crate) const ORIGIN: &'static str = "Origin";
 

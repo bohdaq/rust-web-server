@@ -84,7 +84,7 @@ impl Cors {
         Ok((request, response))
     }
 
-    pub(crate) fn process(request: Request, mut response: Response, cors: &Cors) -> Result<(Request, Response), Error> {
+    pub(crate) fn _process(request: Request, mut response: Response, cors: &Cors) -> Result<(Request, Response), Error> {
 
         let allow_origins = cors.allow_origins.join(",");
         let boxed_origin = request.get_header(Header::ORIGIN.to_string());

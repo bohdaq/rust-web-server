@@ -47,7 +47,7 @@ impl Request {
         header
     }
 
-    pub(crate) fn generate_request(request: Request) -> String {
+    pub(crate) fn _generate_request(request: Request) -> String {
         let status = [
             request.method,
             request.request_uri,

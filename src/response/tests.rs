@@ -18,7 +18,7 @@ fn check_is_multipart_byteranges_content_type() {
         value: "multipart/byteranges; boundary=String_separator".to_string(),
     };
 
-    let is_multipart = Response::is_multipart_byteranges_content_type(&content_type);
+    let is_multipart = Response::_is_multipart_byteranges_content_type(&content_type);
     assert_eq!(true, is_multipart);
 }
 
@@ -39,14 +39,14 @@ fn error() {
 #[test]
 fn http_version_and_status_code_and_reason_phrase_regex() {
 
-    let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
+    let re = Regex::new(Response::_HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
     let caps = re.captures("HTTP/1.1 404 Not Found").unwrap();
 
     assert_eq!(VERSION.http_1_1, &caps["http_version"]);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.status_code, &caps["status_code"]);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase, &caps["reason_phrase"]);
 
-    let re = Regex::new(Response::HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
+    let re = Regex::new(Response::_HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
     let caps = re.captures("HTTP/1.1 200 OK").unwrap();
 
     assert_eq!(VERSION.http_1_1, &caps["http_version"]);
@@ -95,10 +95,10 @@ fn it_generates_successful_response_with_additional_headers() {
     };
 
     let raw_response = Response::generate_response(response, request);
-    let response = Response::parse_response(raw_response.borrow());
+    let response = Response::_parse_response(raw_response.borrow());
 
 
-    let content_length_header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+    let content_length_header = response._get_header(response_content_length_header_name.to_string()).unwrap();
     assert_eq!(response_content_length_header_value, content_length_header.value);
 
 
@@ -158,10 +158,10 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
     };
 
     let raw_response = Response::generate_response(response, request);
-    let response = Response::parse_response(raw_response.borrow());
+    let response = Response::_parse_response(raw_response.borrow());
 
 
-    let content_length_header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+    let content_length_header = response._get_header(response_content_length_header_name.to_string()).unwrap();
     assert_eq!(response_content_length_header_value, content_length_header.value);
 
 

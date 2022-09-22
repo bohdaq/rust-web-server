@@ -30,7 +30,7 @@ pub struct ContentRange {
 
 impl Range {
     pub(crate) const STRING_SEPARATOR: &'static str = "String_separator";
-    pub(crate) const CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})";
+    pub(crate) const _CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})";
 
     pub const BOUNDARY: &'static str = "boundary";
     pub const BYTERANGES: &'static str = "byteranges";
@@ -38,8 +38,8 @@ impl Range {
     pub const BYTES: &'static str = "bytes";
 
 
-    pub(crate) const ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";
-    pub(crate) const ERROR_UNABLE_TO_PARSE_CONTENT_RANGE: &'static str = "unable to parse content-range";
+    pub(crate) const _ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";
+    pub(crate) const _ERROR_UNABLE_TO_PARSE_CONTENT_RANGE: &'static str = "unable to parse content-range";
 
     pub(crate) const ERROR_START_IS_AFTER_END_CONTENT_RANGE: &'static str = "start is after end in content range";
     pub(crate) const ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE: &'static str = "start is bigger than filesize in content range";
@@ -208,11 +208,11 @@ impl Range {
         Ok(content_range_list)
     }
 
-    pub(crate) fn parse_multipart_body(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>) -> Result<Vec<ContentRange>, String> {
+    pub(crate) fn _parse_multipart_body(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>) -> Result<Vec<ContentRange>, String> {
 
-        let mut buffer = Range::parse_line_as_bytes(cursor);
+        let mut buffer = Range::_parse_line_as_bytes(cursor);
         let new_line_char_found = buffer.len() != 0;
-        let mut string = Range::convert_bytes_array_to_string(buffer);
+        let mut string = Range::_convert_bytes_array_to_string(buffer);
 
         if !new_line_char_found {
             return Ok(content_range_list)
@@ -230,25 +230,25 @@ impl Range {
         let separator = [SYMBOL.hyphen, SYMBOL.hyphen, Range::STRING_SEPARATOR].join("");
         if string.starts_with(separator.as_str()) && content_range_is_not_parsed {
             //read next line - Content-Type
-            buffer = Range::parse_line_as_bytes(cursor);
-            string = Range::convert_bytes_array_to_string(buffer);
+            buffer = Range::_parse_line_as_bytes(cursor);
+            string = Range::_convert_bytes_array_to_string(buffer);
         }
 
         let content_type_is_not_parsed = content_range.content_type.len() == 0;
         if string.starts_with(Header::CONTENT_TYPE) && content_type_is_not_parsed {
-            let content_type = Response::parse_http_response_header_string(string.as_str());
+            let content_type = Response::_parse_http_response_header_string(string.as_str());
             content_range.content_type = content_type.value.trim().to_string();
 
             //read next line - Content-Range
-            buffer = Range::parse_line_as_bytes(cursor);
-            string = Range::convert_bytes_array_to_string(buffer);
+            buffer = Range::_parse_line_as_bytes(cursor);
+            string = Range::_convert_bytes_array_to_string(buffer);
         }
 
         let content_range_is_not_parsed = content_range.size.len() == 0;
         if string.starts_with(Header::CONTENT_RANGE) && content_range_is_not_parsed {
-            let content_range_header = Response::parse_http_response_header_string(string.as_str());
+            let content_range_header = Response::_parse_http_response_header_string(string.as_str());
 
-            let boxed_result = Range::parse_content_range_header_value(content_range_header.value);
+            let boxed_result = Range::_parse_content_range_header_value(content_range_header.value);
             if boxed_result.is_ok() {
                 let (size, start, end) = boxed_result.unwrap();
 
@@ -262,16 +262,16 @@ impl Range {
 
 
             // read next line - empty line
-            buffer = Range::parse_line_as_bytes(cursor);
-            string = Range::convert_bytes_array_to_string(buffer);
+            buffer = Range::_parse_line_as_bytes(cursor);
+            string = Range::_convert_bytes_array_to_string(buffer);
 
             if string.trim().len() > 0 {
-                return Err(Range::ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY.to_string());
+                return Err(Range::_ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY.to_string());
             }
 
             // read next line - separator between content ranges
-            buffer = Range::parse_line_as_bytes(cursor);
-            string = Range::convert_bytes_array_to_string(buffer);
+            buffer = Range::_parse_line_as_bytes(cursor);
+            string = Range::_convert_bytes_array_to_string(buffer);
         }
 
         let content_range_is_parsed = content_range.size.len() != 0;
@@ -301,7 +301,7 @@ impl Range {
             content_range_list.push(content_range);
         }
 
-        let boxed_result = Range::parse_multipart_body(cursor, content_range_list);
+        let boxed_result = Range::_parse_multipart_body(cursor, content_range_list);
         return if boxed_result.is_ok() {
             Ok(boxed_result.unwrap())
         } else {
@@ -311,11 +311,11 @@ impl Range {
 
     }
 
-    pub(crate)  fn parse_content_range_header_value(header_value: String) -> Result<(String, u64, u64), String> {
-        let re = Regex::new(Range::CONTENT_RANGE_REGEX).unwrap();
+    pub(crate)  fn _parse_content_range_header_value(header_value: String) -> Result<(String, u64, u64), String> {
+        let re = Regex::new(Range::_CONTENT_RANGE_REGEX).unwrap();
         let boxed_caps = re.captures(&header_value);
         if boxed_caps.is_none() {
-            return Err(Range::ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
+            return Err(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
         }
 
         let caps = boxed_caps.unwrap();
@@ -343,13 +343,13 @@ impl Range {
         Ok((size, start, end))
     }
 
-    pub(crate) fn parse_line_as_bytes(cursor: &mut Cursor<&[u8]>) -> Vec<u8> {
+    pub(crate) fn _parse_line_as_bytes(cursor: &mut Cursor<&[u8]>) -> Vec<u8> {
         let mut buffer = vec![];
         cursor.read_until(b'\n', &mut buffer).unwrap();
         buffer
     }
 
-    pub(crate) fn convert_bytes_array_to_string(buffer: Vec<u8>) -> String {
+    pub(crate) fn _convert_bytes_array_to_string(buffer: Vec<u8>) -> String {
         let buffer_as_u8_array: &[u8] = &buffer;
         String::from_utf8(Vec::from(buffer_as_u8_array)).unwrap()
     }

@@ -50,7 +50,7 @@ fn check_range_response_is_ok_two_part() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -58,7 +58,7 @@ fn check_range_response_is_ok_two_part() {
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
 
-    let response = Response::parse_response(raw_response.borrow());
+    let response = Response::_parse_response(raw_response.borrow());
 
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("\n\n\n{}", &raw_request);
@@ -68,11 +68,11 @@ fn check_range_response_is_ok_two_part() {
     assert_eq!(response.reason_phrase, STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase);
 
     assert_eq!(VERSION.http_1_1, response.http_version);
-    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
-    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
+    let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
-    let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let value = [
         Range::MULTIPART,
         SYMBOL.slash,
@@ -145,7 +145,7 @@ fn check_range_response_is_ok_single_part() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -153,7 +153,7 @@ fn check_range_response_is_ok_single_part() {
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
 
-    let response = Response::parse_response(raw_response.borrow());
+    let response = Response::_parse_response(raw_response.borrow());
 
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("\n\n\n{}", &raw_request);
@@ -163,11 +163,11 @@ fn check_range_response_is_ok_single_part() {
     assert_eq!(response.reason_phrase, STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase);
 
     assert_eq!(VERSION.http_1_1, response.http_version);
-    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
-    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
+    let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
-    let header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
     let value = MimeType::TEXT_PLAIN.to_string();
     assert_eq!(value, header.value);
 
@@ -360,7 +360,7 @@ fn content_range_regex() {
     let size_num = 191238270;
 
     let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
-    let re = Regex::new(Range::CONTENT_RANGE_REGEX).unwrap();
+    let re = Regex::new(Range::_CONTENT_RANGE_REGEX).unwrap();
     let caps = re.captures(string.as_str()).unwrap();
 
     let start= &caps["start"];
@@ -383,7 +383,7 @@ fn parse_content_range_header_value() {
     let size_num = 191238270;
 
     let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
-    let (size, start, end) = Range::parse_content_range_header_value(string).unwrap();
+    let (size, start, end) = Range::_parse_content_range_header_value(string).unwrap();
 
     assert_eq!(start_num, start);
     assert_eq!(end_num, end);
@@ -397,7 +397,7 @@ fn start_after_end_parse_content_range_header_value() {
     let size_num = 191238270;
 
     let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
-    let boxed_value = Range::parse_content_range_header_value(string);
+    let boxed_value = Range::_parse_content_range_header_value(string);
     assert_eq!(false, boxed_value.is_ok());
 
     let err = boxed_value.err().unwrap();
@@ -412,7 +412,7 @@ fn start_bigger_than_filesize_parse_content_range_header_value() {
     let size_num = 31000;
 
     let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
-    let boxed_value = Range::parse_content_range_header_value(string);
+    let boxed_value = Range::_parse_content_range_header_value(string);
     assert_eq!(false, boxed_value.is_ok());
 
     let err = boxed_value.err().unwrap();
@@ -427,7 +427,7 @@ fn end_bigger_than_filesize_parse_content_range_header_value() {
     let size_num = 32001;
 
     let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
-    let boxed_value = Range::parse_content_range_header_value(string);
+    let boxed_value = Range::_parse_content_range_header_value(string);
     assert_eq!(false, boxed_value.is_ok());
 
     let err = boxed_value.err().unwrap();
@@ -438,12 +438,12 @@ fn end_bigger_than_filesize_parse_content_range_header_value() {
 #[test]
 fn malformed_header_parse_content_range_header_value() {
     let string = format!("abracadabra");
-    let boxed_value = Range::parse_content_range_header_value(string);
+    let boxed_value = Range::_parse_content_range_header_value(string);
     assert_eq!(false, boxed_value.is_ok());
 
     let err = boxed_value.err().unwrap();
 
-    assert_eq!(Range::ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string().to_string(), err);
+    assert_eq!(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string().to_string(), err);
 }
 
 #[test]
@@ -479,7 +479,7 @@ fn parse_multipart_body() {
     let mut buff = Cursor::new(data.as_bytes());
     let mut content_range_list: Vec<ContentRange> = vec![];
 
-    let boxed_result = Range::parse_multipart_body(&mut buff, content_range_list);
+    let boxed_result = Range::_parse_multipart_body(&mut buff, content_range_list);
     assert!(boxed_result.is_ok());
     content_range_list = boxed_result.unwrap();
 
@@ -533,9 +533,9 @@ fn no_empty_string_between_header_and_body_in_parse_multipart_body() {
     let mut buff = Cursor::new(data.as_bytes());
     let content_range_list: Vec<ContentRange> = vec![];
 
-    let boxed_result = Range::parse_multipart_body(&mut buff, content_range_list);
+    let boxed_result = Range::_parse_multipart_body(&mut buff, content_range_list);
     assert!(boxed_result.is_err());
     let error = boxed_result.err().unwrap();
-    assert_eq!(error, Range::ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY);
+    assert_eq!(error, Range::_ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY);
 
 }

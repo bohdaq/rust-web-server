@@ -34,8 +34,8 @@ fn header_constants() {
     assert_eq!(header.name, Header::CONTENT_RANGE.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::HOST.to_string(), value: "some string".to_string() };
-    assert_eq!(header.name, Header::HOST.to_string());
+    let header = Header { name: Header::_HOST.to_string(), value: "some string".to_string() };
+    assert_eq!(header.name, Header::_HOST.to_string());
     assert_eq!(header.value, "some string".to_string());
 
     let header = Header { name: Header::VARY.to_string(), value: "some string".to_string() };

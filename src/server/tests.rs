@@ -66,7 +66,7 @@ fn it_generates_successful_response_with_index_html() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
 
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
@@ -90,11 +90,11 @@ fn it_generates_successful_response_with_index_html() {
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
-    let response = Response::parse_response(raw_response.borrow());
-    let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
@@ -131,7 +131,7 @@ fn it_generates_successful_response_with_static_file() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
 
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
@@ -160,11 +160,11 @@ fn it_generates_successful_response_with_static_file() {
     };
 
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
-    let response = Response::parse_response(raw_response.borrow());
-    let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
@@ -200,7 +200,7 @@ fn it_generates_not_found_page_for_absent_static_file() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
 
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
@@ -229,11 +229,11 @@ fn it_generates_not_found_page_for_absent_static_file() {
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
-    let response = Response::parse_response(raw_response.borrow());
-    let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
@@ -269,7 +269,7 @@ fn it_generates_not_found_page_for_absent_route() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
 
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
@@ -298,11 +298,11 @@ fn it_generates_not_found_page_for_absent_route() {
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
-    let response = Response::parse_response(raw_response.borrow());
-    let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
@@ -338,7 +338,7 @@ fn it_generates_not_found_page_for_static_directory() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
 
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
@@ -367,11 +367,11 @@ fn it_generates_not_found_page_for_static_directory() {
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
-    let response = Response::parse_response(raw_response.borrow());
-    let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
@@ -407,7 +407,7 @@ fn it_generates_not_found_page_for_static_subdirectory() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
 
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
@@ -436,11 +436,11 @@ fn it_generates_not_found_page_for_static_subdirectory() {
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
-    let response = Response::parse_response(raw_response.borrow());
-    let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
@@ -476,7 +476,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
 
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
@@ -505,11 +505,11 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
     };
 
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
-    let response = Response::parse_response(raw_response.borrow());
-    let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
@@ -545,7 +545,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
 
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
@@ -573,11 +573,11 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
-    let response = Response::parse_response(raw_response.borrow());
-    let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
@@ -617,7 +617,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
 
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
@@ -645,11 +645,11 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
-    let response = Response::parse_response(raw_response.borrow());
-    let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
@@ -688,7 +688,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
 
     let request: Request = Request::parse_request(&raw_request.as_bytes()).unwrap();
     let host_header = request.get_header(request_host_header_name.to_string()).unwrap();
@@ -716,11 +716,11 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
-    let response = Response::parse_response(raw_response.borrow());
-    let header = response.get_header(response_content_length_header_name.to_string()).unwrap();
+    let response = Response::_parse_response(raw_response.borrow());
+    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
-    let content_type_header = response.get_header(Header::CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let content_type_header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let x_content_type_options_header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
@@ -771,23 +771,23 @@ fn check_range_response_for_not_proper_range_header() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
 
-    let response = Response::parse_response(raw_response.borrow());
+    let response = Response::_parse_response(raw_response.borrow());
 
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
     assert_eq!(VERSION.http_1_1, response.http_version);
-    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
-    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
+    let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
@@ -836,23 +836,23 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
 
-    let response = Response::parse_response(raw_response.borrow());
+    let response = Response::_parse_response(raw_response.borrow());
 
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
     assert_eq!(VERSION.http_1_1, response.http_version);
-    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
-    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
+    let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
@@ -901,23 +901,23 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
 
-    let response = Response::parse_response(raw_response.borrow());
+    let response = Response::_parse_response(raw_response.borrow());
 
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
     assert_eq!(VERSION.http_1_1, response.http_version);
-    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
-    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
+    let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
@@ -966,23 +966,23 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
 
-    let response = Response::parse_response(raw_response.borrow());
+    let response = Response::_parse_response(raw_response.borrow());
 
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
     assert_eq!(VERSION.http_1_1, response.http_version);
-    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
-    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
+    let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
@@ -1031,23 +1031,23 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
 
-    let response = Response::parse_response(raw_response.borrow());
+    let response = Response::_parse_response(raw_response.borrow());
 
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
     assert_eq!(VERSION.http_1_1, response.http_version);
-    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
-    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
+    let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
@@ -1091,23 +1091,23 @@ fn check_range_response_for_not_proper_range_header_malformed() {
         headers
     };
 
-    let raw_request = Request::generate_request(request);
+    let raw_request = Request::_generate_request(request);
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
 
-    let response = Response::parse_response(raw_response.borrow());
+    let response = Response::_parse_response(raw_response.borrow());
 
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
     assert_eq!(VERSION.http_1_1, response.http_version);
-    let header = response.get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
+    let header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
-    let header = response.get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
+    let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
