@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 pub struct Symbol {
     pub new_line_carriage_return: &'static str,
     pub new_line: &'static str,
