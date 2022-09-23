@@ -21,13 +21,25 @@ pub struct App {}
 impl App {
     pub(crate) const NOT_FOUND_PAGE_FILEPATH: &'static str = "404.html";
     pub(crate) const INDEX_FILEPATH: &'static str = "index.html";
+    pub(crate) const NOT_FOUND_CONTENT: &'static str = "<title>Not Found</title><h1>Requested resource not found.</h1>";
 
     pub(crate) fn handle_request(mut request: Request) -> (Response, Request) {
 
         // by default we assume route or static asset is not found
         let mut file_content = Vec::new();
-        let mut file = File::open(&App::NOT_FOUND_PAGE_FILEPATH).expect("Unable to open file");
-        file.read_to_end(&mut file_content).expect("Unable to read");
+        let boxed_file = File::open(&App::NOT_FOUND_PAGE_FILEPATH);
+        if boxed_file.is_err() {
+            eprintln!("Unable to open file: {} error: {}", App::NOT_FOUND_PAGE_FILEPATH, boxed_file.err().unwrap());
+            file_content = Vec::from(App::NOT_FOUND_CONTENT.as_bytes());
+        } else {
+            let mut file = boxed_file.unwrap();
+            let boxed_read= file.read_to_end(&mut file_content);
+            if boxed_read.is_err() {
+                eprintln!("Unable to read file: {} error: {}",App::NOT_FOUND_PAGE_FILEPATH, boxed_read.err().unwrap());
+                file_content = Vec::from(App::NOT_FOUND_CONTENT.as_bytes());
+            }
+        }
+
 
         let contents = file_content;
         let content_type = MimeType::detect_mime_type(App::NOT_FOUND_PAGE_FILEPATH);
@@ -53,7 +65,10 @@ impl App {
         if request.request_uri == SYMBOL.slash {
             let mut file_content = Vec::new();
             let mut file = File::open(&App::INDEX_FILEPATH).expect("Unable to open file");
-            file.read_to_end(&mut file_content).expect("Unable to read");
+            let boxed_read = file.read_to_end(&mut file_content);
+            if boxed_read.is_err() {
+                file_content = Vec::from(format!("<title>Internal Server Error</title><h1>Unable to read {}</h1><p>{}</p>", App::INDEX_FILEPATH, boxed_read.err().unwrap()));
+            }
 
             let contents = file_content;
             let content_type = MimeType::detect_mime_type(App::INDEX_FILEPATH);
