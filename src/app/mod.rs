@@ -26,15 +26,23 @@ impl App {
     pub(crate) fn handle_request(mut request: Request) -> (Response, Request) {
 
         // by default we assume route or static asset is not found
-        let contents = read_file(App::NOT_FOUND_PAGE_FILEPATH);
+        let body: Vec<u8>;
+        let boxed_file = read_file(App::NOT_FOUND_PAGE_FILEPATH);
+        if boxed_file.is_err() {
+            let error = boxed_file.err().unwrap();
+            eprintln!("{}", &error);
+            body = Vec::from(error.as_bytes())
+        } else {
+            body = boxed_file.unwrap()
+        }
         let content_type = MimeType::detect_mime_type(App::NOT_FOUND_PAGE_FILEPATH);
 
-        let length = contents.len() as u64;
+        let length = body.len() as u64;
         let content_range = ContentRange {
             unit: Range::BYTES.to_string(),
             range: Range { start: 0, end: length },
             size: length.to_string(),
-            body: contents,
+            body,
             content_type
         };
 
