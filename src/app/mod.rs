@@ -29,7 +29,7 @@ impl App {
         let boxed_open = File::open(&App::NOT_FOUND_PAGE_FILEPATH);
         if boxed_open.is_err() {
             let error_msg = boxed_open.err().unwrap();
-            let error = format!("<p>Unable to open file: {}</p> <p>error: {}</p>", App::INDEX_FILEPATH, error_msg);
+            let error = format!("<p>Unable to open file: {}</p> <p>error: {}</p>", App::NOT_FOUND_PAGE_FILEPATH, error_msg);
             eprintln!("{}", error);
             file_content = Vec::from(error.as_bytes());
         } else {
@@ -37,7 +37,7 @@ impl App {
             let boxed_read= file.read_to_end(&mut file_content);
             if boxed_read.is_err() {
                 let error_msg = boxed_read.err().unwrap();
-                let error = format!("<p>Unable to read file: {}</p> <p>error: {}</p>", App::INDEX_FILEPATH, error_msg);
+                let error = format!("<p>Unable to read file: {}</p> <p>error: {}</p>", App::NOT_FOUND_PAGE_FILEPATH, error_msg);
                 eprintln!("{}", error);
                 file_content = Vec::from(
                     error.as_bytes()
