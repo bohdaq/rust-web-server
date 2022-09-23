@@ -10,6 +10,7 @@ mod range;
 mod cors;
 mod request;
 mod http;
+mod ext;
 
 extern crate core;
 

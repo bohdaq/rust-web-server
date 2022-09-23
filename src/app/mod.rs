@@ -6,6 +6,7 @@ use std::fs::{File, metadata};
 use std::io::Read;
 use crate::cors::Cors;
 use crate::entry_point::Config;
+use crate::ext::file_ext::read_file;
 use crate::header::Header;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
@@ -25,28 +26,7 @@ impl App {
     pub(crate) fn handle_request(mut request: Request) -> (Response, Request) {
 
         // by default we assume route or static asset is not found
-        let mut file_content = Vec::new();
-        let boxed_open = File::open(&App::NOT_FOUND_PAGE_FILEPATH);
-        if boxed_open.is_err() {
-            let error_msg = boxed_open.err().unwrap();
-            let error = format!("<p>Unable to open file: {}</p> <p>error: {}</p>", App::NOT_FOUND_PAGE_FILEPATH, error_msg);
-            eprintln!("{}", error);
-            file_content = Vec::from(error.as_bytes());
-        } else {
-            let mut file = boxed_open.unwrap();
-            let boxed_read= file.read_to_end(&mut file_content);
-            if boxed_read.is_err() {
-                let error_msg = boxed_read.err().unwrap();
-                let error = format!("<p>Unable to read file: {}</p> <p>error: {}</p>", App::NOT_FOUND_PAGE_FILEPATH, error_msg);
-                eprintln!("{}", error);
-                file_content = Vec::from(
-                    error.as_bytes()
-                );
-            }
-        }
-
-
-        let contents = file_content;
+        let contents = read_file(App::NOT_FOUND_PAGE_FILEPATH);
         let content_type = MimeType::detect_mime_type(App::NOT_FOUND_PAGE_FILEPATH);
 
         let length = contents.len() as u64;
