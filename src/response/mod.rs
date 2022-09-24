@@ -45,6 +45,12 @@ pub struct ResponseStatusCodeReasonPhrase {
     pub(crate) n502_bad_gateway: &'static StatusCodeReasonPhrase,
     pub(crate) n503_service_unavailable: &'static StatusCodeReasonPhrase,
     pub(crate) n504_gateway_timeout: &'static StatusCodeReasonPhrase,
+    pub(crate) n505_http_version_not_supported: &'static StatusCodeReasonPhrase,
+    pub(crate) n506_variant_also_negotiates: &'static StatusCodeReasonPhrase,
+    pub(crate) n507_insufficient_storage: &'static StatusCodeReasonPhrase,
+    pub(crate) n508_loop_detected: &'static StatusCodeReasonPhrase,
+    pub(crate) n510_not_extended: &'static StatusCodeReasonPhrase,
+    pub(crate) n511_network_authentication_required: &'static StatusCodeReasonPhrase,
 }
 
 pub const STATUS_CODE_REASON_PHRASE: ResponseStatusCodeReasonPhrase = ResponseStatusCodeReasonPhrase {
@@ -85,7 +91,13 @@ pub const STATUS_CODE_REASON_PHRASE: ResponseStatusCodeReasonPhrase = ResponseSt
     n501_not_implemented: &StatusCodeReasonPhrase { status_code: "501", reason_phrase: "Not Implemented" },
     n502_bad_gateway: &StatusCodeReasonPhrase { status_code: "502", reason_phrase: "Bad Gateway" },
     n503_service_unavailable: &StatusCodeReasonPhrase { status_code: "503", reason_phrase: "Service Unavailable" },
-    n504_gateway_timeout: &StatusCodeReasonPhrase { status_code: "504", reason_phrase: "Gateway Timeout" }
+    n504_gateway_timeout: &StatusCodeReasonPhrase { status_code: "504", reason_phrase: "Gateway Timeout" },
+    n505_http_version_not_supported: &StatusCodeReasonPhrase { status_code: "505", reason_phrase: "HTTP Version Not Supported" },
+    n506_variant_also_negotiates: &StatusCodeReasonPhrase { status_code: "506", reason_phrase: "Variant Also Negotiates" },
+    n507_insufficient_storage: &StatusCodeReasonPhrase { status_code: "507", reason_phrase: "Insufficient Storage" },
+    n508_loop_detected: &StatusCodeReasonPhrase { status_code: "508", reason_phrase: "Loop Detected" },
+    n510_not_extended: &StatusCodeReasonPhrase { status_code: "510", reason_phrase: "Not Extended" },
+    n511_network_authentication_required: &StatusCodeReasonPhrase { status_code: "511", reason_phrase: "Network Authentication Required" }
 };
 
 impl Response {

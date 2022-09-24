@@ -190,4 +190,26 @@ fn status_code_reason_phrase() {
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n503_service_unavailable.status_code, "503");
     assert_eq!(STATUS_CODE_REASON_PHRASE.n503_service_unavailable.reason_phrase, "Service Unavailable");
+
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout.status_code, "504");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout.reason_phrase, "Gateway Timeout");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n505_http_version_not_supported.status_code, "505");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n505_http_version_not_supported.reason_phrase, "HTTP Version Not Supported");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n506_variant_also_negotiates.status_code, "506");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n506_variant_also_negotiates.reason_phrase, "Variant Also Negotiates");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n507_insufficient_storage.status_code, "507");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n507_insufficient_storage.reason_phrase, "Insufficient Storage");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n508_loop_detected.status_code, "508");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n508_loop_detected.reason_phrase, "Loop Detected");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n510_not_extended.status_code, "510");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n510_not_extended.reason_phrase, "Not Extended");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n511_network_authentication_required.status_code, "511");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n511_network_authentication_required.reason_phrase, "Network Authentication Required");
 }
