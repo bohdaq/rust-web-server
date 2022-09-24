@@ -3,7 +3,6 @@ mod tests;
 
 use std::{env};
 use std::fs::{File, metadata};
-use std::io::Read;
 use crate::cors::Cors;
 use crate::entry_point::Config;
 use crate::ext::file_ext::read_file;
@@ -56,36 +55,25 @@ impl App {
         };
 
         if request.request_uri == SYMBOL.slash {
-            let mut file_content = Vec::new();
-            let boxed_open = File::open(&App::INDEX_FILEPATH);
-            if boxed_open.is_err() {
-                let error_msg = boxed_open.err().unwrap();
-                let error = format!("<p>Unable to open file: {}</p> <p>error: {}</p>", App::INDEX_FILEPATH, error_msg);
-                eprintln!("{}", error);
-                file_content = Vec::from(error.as_bytes());
+
+            let body: Vec<u8>;
+            let boxed_file = read_file(App::INDEX_FILEPATH);
+            if boxed_file.is_err() {
+                let error = boxed_file.err().unwrap();
+                eprintln!("{}", &error);
+                body = Vec::from(error.as_bytes())
             } else {
-                let mut file = boxed_open.unwrap();
-                let boxed_read= file.read_to_end(&mut file_content);
-                if boxed_read.is_err() {
-                    let error_msg = boxed_read.err().unwrap();
-                    let error = format!("<p>Unable to read file: {}</p> <p>error: {}</p>", App::INDEX_FILEPATH, error_msg);
-                    eprintln!("{}", error);
-                    file_content = Vec::from(
-                        error.as_bytes()
-                    );
-                }
+                body = boxed_file.unwrap()
             }
 
-            let contents = file_content;
             let content_type = MimeType::detect_mime_type(App::INDEX_FILEPATH);
 
-
-            let length = contents.len() as u64;
+            let length = body.len() as u64;
             let content_range = ContentRange {
                 unit: Range::BYTES.to_string(),
                 range: Range { start: 0, end: length },
                 size: length.to_string(),
-                body: contents,
+                body,
                 content_type
             };
 
