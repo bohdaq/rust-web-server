@@ -6,7 +6,6 @@ use std::fs::{File, metadata};
 use crate::cors::Cors;
 use crate::entry_point::Config;
 use crate::header::Header;
-use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 
@@ -110,28 +109,23 @@ impl App {
 
                 if content_range_list.len() != 0 {
 
-                    let mut status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
-                    let mut reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
+                    let mut status_code_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok;
 
                     let does_request_include_range_header = request.get_header(Header::RANGE.to_string()).is_some();
                     if does_request_include_range_header {
-                        status_code = STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code;
-                        reason_phrase = STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase;
+                        status_code_reason_phrase = STATUS_CODE_REASON_PHRASE.n206_partial_content;
                     }
 
                     let is_options_request = request.method == METHOD.options;
                     if is_options_request {
-                        status_code = STATUS_CODE_REASON_PHRASE.n204_no_content.status_code;
-                        reason_phrase = STATUS_CODE_REASON_PHRASE.n204_no_content.reason_phrase;
+                        status_code_reason_phrase = STATUS_CODE_REASON_PHRASE.n204_no_content;
                     }
 
-                    response = Response {
-                        http_version: VERSION.http_1_1.to_string(),
-                        status_code: status_code.to_string(),
-                        reason_phrase: reason_phrase.to_string(),
-                        headers: vec![],
-                        content_range_list,
-                    };
+                    response = Response::get_response(
+                        status_code_reason_phrase,
+                        None,
+                        Some(content_range_list)
+                    ).unwrap();
 
                     let is_cors_set_to_allow_all_requests : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap().parse().unwrap();
                     if is_cors_set_to_allow_all_requests {
@@ -165,15 +159,12 @@ impl App {
         }
 
         if request.request_uri != SYMBOL.slash && request.method == METHOD.post {
-            let content_range_list = vec![];
 
-            response = Response {
-                http_version: VERSION.http_1_1.to_string(),
-                status_code: STATUS_CODE_REASON_PHRASE.n200_ok.status_code.to_string(),
-                reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
-                headers: vec![],
-                content_range_list,
-            };
+            response = Response::get_response(
+                STATUS_CODE_REASON_PHRASE.n200_ok,
+                None,
+                None
+            ).unwrap();
 
             let is_cors_set_to_allow_all_requests : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap().parse().unwrap();
             if is_cors_set_to_allow_all_requests {
