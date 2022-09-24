@@ -5,6 +5,7 @@ use std::io;
 use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use regex::Regex;
+use crate::http::VERSION;
 use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Request};
 use crate::server::Server;
@@ -39,6 +40,7 @@ pub struct ResponseStatusCodeReasonPhrase {
     pub(crate) n400_bad_request: &'static StatusCodeReasonPhrase,
     pub(crate) n404_not_found: &'static StatusCodeReasonPhrase,
     pub(crate) n416_range_not_satisfiable: &'static StatusCodeReasonPhrase,
+    pub(crate) n500_internal_server_error: &'static StatusCodeReasonPhrase,
 }
 
 pub const STATUS_CODE_REASON_PHRASE: ResponseStatusCodeReasonPhrase = ResponseStatusCodeReasonPhrase {
@@ -72,6 +74,10 @@ pub const STATUS_CODE_REASON_PHRASE: ResponseStatusCodeReasonPhrase = ResponseSt
         reason_phrase: "Range Not Satisfiable"
     },
 
+    n500_internal_server_error: &StatusCodeReasonPhrase {
+        status_code: "500",
+        reason_phrase: "Internal Server Error"
+    }
 };
 
 impl Response {
@@ -355,5 +361,31 @@ impl Response {
             name: Header::ACCEPT_RANGES.to_string(),
             value: Range::BYTES.to_string(),
         }
+    }
+
+    pub fn get_response(
+        status_code_reason_phrase: &StatusCodeReasonPhrase,
+        boxed_header_list: Option<Vec<Header>>,
+        boxed_content_range_list: Option<Vec<ContentRange>>) -> Result<Response, String> {
+
+        let mut header_list: Vec<Header> = vec![];
+        if boxed_header_list.is_some() {
+            header_list = boxed_header_list.unwrap();
+        }
+
+        let mut content_range_list: Vec<ContentRange> = vec![];
+        if boxed_content_range_list.is_some() {
+            content_range_list = boxed_content_range_list.unwrap();
+        }
+
+        let response = Response {
+            http_version: VERSION.http_1_1.to_string(),
+            status_code: status_code_reason_phrase.status_code.to_string(),
+            reason_phrase: status_code_reason_phrase.reason_phrase.to_string(),
+            headers: header_list,
+            content_range_list
+        };
+
+        Ok(response)
     }
 }

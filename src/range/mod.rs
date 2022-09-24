@@ -5,6 +5,7 @@ use std::io::prelude::*;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Cursor, SeekFrom};
 use regex::Regex;
+use crate::ext::file_ext::read_file;
 
 use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
 use crate::header::Header;
@@ -352,6 +353,33 @@ impl Range {
     pub(crate) fn _convert_bytes_array_to_string(buffer: Vec<u8>) -> String {
         let buffer_as_u8_array: &[u8] = &buffer;
         String::from_utf8(Vec::from(buffer_as_u8_array)).unwrap()
+    }
+
+    pub fn get_content_range(body: Vec<u8>, mime_type: String) -> ContentRange {
+        let length = body.len() as u64;
+        let content_range = ContentRange {
+            unit: Range::BYTES.to_string(),
+            range: Range { start: 0, end: length },
+            size: length.to_string(),
+            body,
+            content_type: mime_type
+        };
+
+        content_range
+    }
+
+    pub fn get_content_range_of_a_file(filepath: &str) -> Result<ContentRange, String> {
+        let body: Vec<u8>;
+        let boxed_file = read_file(filepath);
+        if boxed_file.is_err() {
+            let error = boxed_file.err().unwrap();
+            return Err(error);
+        }
+
+        body = boxed_file.unwrap();
+        let mime_type = MimeType::detect_mime_type(filepath);
+        let content_range = Range::get_content_range(body, mime_type);
+        Ok(content_range)
     }
 }
 
