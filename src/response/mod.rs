@@ -41,6 +41,10 @@ pub struct ResponseStatusCodeReasonPhrase {
     pub(crate) n404_not_found: &'static StatusCodeReasonPhrase,
     pub(crate) n416_range_not_satisfiable: &'static StatusCodeReasonPhrase,
     pub(crate) n500_internal_server_error: &'static StatusCodeReasonPhrase,
+    pub(crate) n501_not_implemented: &'static StatusCodeReasonPhrase,
+    pub(crate) n502_bad_gateway: &'static StatusCodeReasonPhrase,
+    pub(crate) n503_service_unavailable: &'static StatusCodeReasonPhrase,
+    pub(crate) n504_gateway_timeout: &'static StatusCodeReasonPhrase,
 }
 
 pub const STATUS_CODE_REASON_PHRASE: ResponseStatusCodeReasonPhrase = ResponseStatusCodeReasonPhrase {
@@ -77,7 +81,11 @@ pub const STATUS_CODE_REASON_PHRASE: ResponseStatusCodeReasonPhrase = ResponseSt
     n500_internal_server_error: &StatusCodeReasonPhrase {
         status_code: "500",
         reason_phrase: "Internal Server Error"
-    }
+    },
+    n501_not_implemented: &StatusCodeReasonPhrase { status_code: "501", reason_phrase: "Not Implemented" },
+    n502_bad_gateway: &StatusCodeReasonPhrase { status_code: "502", reason_phrase: "Bad Gateway" },
+    n503_service_unavailable: &StatusCodeReasonPhrase { status_code: "503", reason_phrase: "Service Unavailable" },
+    n504_gateway_timeout: &StatusCodeReasonPhrase { status_code: "504", reason_phrase: "Gateway Timeout" }
 };
 
 impl Response {

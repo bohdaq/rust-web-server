@@ -175,3 +175,19 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
     file.read_to_end(&mut contents).expect("Unable to read");
     assert_eq!(contents, response.content_range_list.get(0).unwrap().body);
 }
+
+#[test]
+fn status_code_reason_phrase() {
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n500_internal_server_error.status_code, "500");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n500_internal_server_error.reason_phrase, "Internal Server Error");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n501_not_implemented.status_code, "501");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n501_not_implemented.reason_phrase, "Not Implemented");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n502_bad_gateway.status_code, "502");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n502_bad_gateway.reason_phrase, "Bad Gateway");
+
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n503_service_unavailable.status_code, "503");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n503_service_unavailable.reason_phrase, "Service Unavailable");
+}
