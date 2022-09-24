@@ -34,12 +34,11 @@ impl App {
             Range::get_content_range_of_a_file(App::NOT_FOUND_PAGE_FILEPATH);
 
         if boxed_content_range.is_ok() {
-            let header_list : Vec<Header> = vec![];
             let content_range = boxed_content_range.unwrap();
             let content_range_list = vec![content_range];
             let boxed_response = Response::get_response(
                 STATUS_CODE_REASON_PHRASE.n404_not_found,
-                Option::from(header_list),
+                None,
                 Option::from(content_range_list)
             );
             if boxed_response.is_ok() {
@@ -53,11 +52,10 @@ impl App {
                 mime_type
             );
 
-            let header_list : Vec<Header> = vec![];
             let content_range_list = vec![content_range];
             let boxed_response = Response::get_response(
                 STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
-                Option::from(header_list),
+                None,
                 Option::from(content_range_list)
             );
             if boxed_response.is_ok() {
@@ -72,12 +70,11 @@ impl App {
                 Range::get_content_range_of_a_file(App::INDEX_FILEPATH);
 
             if boxed_content_range.is_ok() {
-                let header_list : Vec<Header> = vec![];
                 let content_range = boxed_content_range.unwrap();
                 let content_range_list = vec![content_range];
                 let boxed_response = Response::get_response(
                     STATUS_CODE_REASON_PHRASE.n200_ok,
-                    Option::from(header_list),
+                    None,
                     Option::from(content_range_list)
                 );
                 if boxed_response.is_ok() {
@@ -91,11 +88,10 @@ impl App {
                     mime_type
                 );
 
-                let header_list : Vec<Header> = vec![];
                 let content_range_list = vec![content_range];
                 let boxed_response = Response::get_response(
                     STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
-                    Option::from(header_list),
+                    None,
                     Option::from(content_range_list)
                 );
                 if boxed_response.is_ok() {
@@ -147,25 +143,23 @@ impl App {
             } else {
                 let error : Error = boxed_content_range_list.err().unwrap();
                 let body = error.message;
-                let body_length = body.len() as u64;
 
-                let content_range_list = vec![
-                    ContentRange {
-                        unit: Range::BYTES.to_string(),
-                        range: Range { start: 0, end: body_length },
-                        size: body_length.to_string(),
-                        body: body.as_bytes().to_vec(),
-                        content_type: MimeType::TEXT_PLAIN.to_string(),
-                    }
-                ];
+                let content_range = Range::get_content_range(
+                    Vec::from(body.as_bytes()),
+                    MimeType::TEXT_HTML.to_string()
+                );
 
-                response = Response {
-                    http_version: VERSION.http_1_1.to_string(),
-                    status_code: error.status_code_reason_phrase.status_code.to_string(),
-                    reason_phrase: error.status_code_reason_phrase.reason_phrase.to_string(),
-                    headers: vec![],
-                    content_range_list,
-                };
+                let content_range_list = vec![content_range];
+
+                let boxed_response = Response::get_response(
+                    error.status_code_reason_phrase,
+                    None,
+                    Some(content_range_list)
+                );
+
+                if boxed_response.is_ok() {
+                    response = boxed_response.unwrap();
+                }
             }
 
         }
