@@ -178,81 +178,102 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
 
 #[test]
 fn status_code_reason_phrase() {
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n500_internal_server_error.status_code.to_string(), "500");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n500_internal_server_error.status_code, &500);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n500_internal_server_error.reason_phrase, "Internal Server Error");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n501_not_implemented.status_code.to_string(), "501");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n501_not_implemented.status_code, &501);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n501_not_implemented.reason_phrase, "Not Implemented");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n502_bad_gateway.status_code.to_string(), "502");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n502_bad_gateway.status_code, &502);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n502_bad_gateway.reason_phrase, "Bad Gateway");
 
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n503_service_unavailable.status_code.to_string(), "503");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n503_service_unavailable.status_code, &503);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n503_service_unavailable.reason_phrase, "Service Unavailable");
 
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout.status_code.to_string(), "504");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout.status_code, &504);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout.reason_phrase, "Gateway Timeout");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n505_http_version_not_supported.status_code.to_string(), "505");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n505_http_version_not_supported.status_code, &505);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n505_http_version_not_supported.reason_phrase, "HTTP Version Not Supported");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n506_variant_also_negotiates.status_code.to_string(), "506");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n506_variant_also_negotiates.status_code, &506);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n506_variant_also_negotiates.reason_phrase, "Variant Also Negotiates");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n507_insufficient_storage.status_code.to_string(), "507");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n507_insufficient_storage.status_code, &507);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n507_insufficient_storage.reason_phrase, "Insufficient Storage");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n508_loop_detected.status_code.to_string(), "508");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n508_loop_detected.status_code, &508);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n508_loop_detected.reason_phrase, "Loop Detected");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n510_not_extended.status_code.to_string(), "510");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n510_not_extended.status_code, &510);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n510_not_extended.reason_phrase, "Not Extended");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n511_network_authentication_required.status_code.to_string(), "511");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n511_network_authentication_required.status_code, &511);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n511_network_authentication_required.reason_phrase, "Network Authentication Required");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.status_code.to_string(), "200");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.status_code, &200);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase, "OK");
 
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n201_created.status_code.to_string(), "201");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n201_created.status_code, &201);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n201_created.reason_phrase, "Created");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n202_accepted.status_code.to_string(), "202");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n202_accepted.status_code, &202);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n202_accepted.reason_phrase, "Accepted");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n203_non_authoritative_information.status_code.to_string(), "203");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n203_non_authoritative_information.status_code, &203);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n203_non_authoritative_information.reason_phrase, "Non Authoritative Information");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n204_no_content.status_code.to_string(), "204");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n204_no_content.status_code, &204);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n204_no_content.reason_phrase, "No Content");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n205_reset_content.status_code.to_string(), "205");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n205_reset_content.status_code, &205);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n205_reset_content.reason_phrase, "Reset Content");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code.to_string(), "206");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code, &206);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase, "Partial Content");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n207_multi_status.status_code.to_string(), "207");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n207_multi_status.status_code, &207);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n207_multi_status.reason_phrase, "Multi-Status");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n208_already_reported.status_code.to_string(), "208");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n208_already_reported.status_code, &208);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n208_already_reported.reason_phrase, "Already Reported");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n226_im_used.status_code.to_string(), "226");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n226_im_used.status_code, &226);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n226_im_used.reason_phrase, "IM Used");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n100_continue.status_code.to_string(), "100");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n100_continue.status_code, &100);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n100_continue.reason_phrase, "Continue");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n101_switching_protocols.status_code.to_string(), "101");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n101_switching_protocols.status_code, &101);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n101_switching_protocols.reason_phrase, "Switching Protocols");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n102_processing.status_code.to_string(), "102");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n102_processing.status_code, &102);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n102_processing.reason_phrase, "Processing");
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n103_early_hints.status_code.to_string(), "103");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n103_early_hints.status_code, &103);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n103_early_hints.reason_phrase, "Early Hints");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n300_multiple_choices.status_code, &300);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n300_multiple_choices.reason_phrase, "Multiple Choices");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n301_moved_permanently.status_code, &301);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n301_moved_permanently.reason_phrase, "Moved Permanently");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n302_found.status_code, &302);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n302_found.reason_phrase, "Found");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n303_see_other.status_code, &303);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n303_see_other.reason_phrase, "See Other");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code, &304);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase, "Not Modified");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n307_temporary_redirect.status_code, &307);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n307_temporary_redirect.reason_phrase, "Temporary Redirect");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n308_permanent_redirect.status_code, &308);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n308_permanent_redirect.reason_phrase, "Permanent Redirect");
 }
