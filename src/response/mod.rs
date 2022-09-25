@@ -28,7 +28,7 @@ pub struct Response {
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct StatusCodeReasonPhrase {
-    pub(crate) status_code: &'static i32,
+    pub(crate) status_code: &'static i16,
     pub(crate) reason_phrase: &'static str,
 }
 
