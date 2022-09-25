@@ -35,8 +35,15 @@ pub struct StatusCodeReasonPhrase {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ResponseStatusCodeReasonPhrase {
     pub(crate) n200_ok: &'static StatusCodeReasonPhrase,
+    pub(crate) n201_created: &'static StatusCodeReasonPhrase,
+    pub(crate) n202_accepted: &'static StatusCodeReasonPhrase,
+    pub(crate) n203_non_authoritative_information: &'static StatusCodeReasonPhrase,
     pub(crate) n204_no_content: &'static StatusCodeReasonPhrase,
+    pub(crate) n205_reset_content: &'static StatusCodeReasonPhrase,
     pub(crate) n206_partial_content: &'static StatusCodeReasonPhrase,
+    pub(crate) n207_multi_status: &'static StatusCodeReasonPhrase,
+    pub(crate) n208_already_reported: &'static StatusCodeReasonPhrase,
+    pub(crate) n226_im_used: &'static StatusCodeReasonPhrase,
     pub(crate) n400_bad_request: &'static StatusCodeReasonPhrase,
     pub(crate) n404_not_found: &'static StatusCodeReasonPhrase,
     pub(crate) n416_range_not_satisfiable: &'static StatusCodeReasonPhrase,
@@ -59,16 +66,23 @@ pub const STATUS_CODE_REASON_PHRASE: ResponseStatusCodeReasonPhrase = ResponseSt
         reason_phrase: "OK"
     },
 
+    n201_created: &StatusCodeReasonPhrase { status_code: "201", reason_phrase: "Created" },
+    n202_accepted: &StatusCodeReasonPhrase { status_code: "202", reason_phrase: "Accepted" },
+    n203_non_authoritative_information: &StatusCodeReasonPhrase { status_code: "203", reason_phrase: "Non Authoritative Information" },
     n204_no_content: &StatusCodeReasonPhrase {
         status_code: "204",
         reason_phrase: "No Content"
     },
 
+    n205_reset_content: &StatusCodeReasonPhrase { status_code: "205", reason_phrase: "Reset Content" },
     n206_partial_content: &StatusCodeReasonPhrase {
         status_code: "206",
         reason_phrase: "Partial Content"
     },
 
+    n207_multi_status: &StatusCodeReasonPhrase { status_code: "207", reason_phrase: "Multi-Status" },
+    n208_already_reported: &StatusCodeReasonPhrase { status_code: "208", reason_phrase: "Already Reported" },
+    n226_im_used: &StatusCodeReasonPhrase { status_code: "226", reason_phrase: "IM Used" },
     n400_bad_request: &StatusCodeReasonPhrase {
         status_code: "400",
         reason_phrase: "Bad Request"

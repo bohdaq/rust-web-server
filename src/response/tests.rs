@@ -212,4 +212,35 @@ fn status_code_reason_phrase() {
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n511_network_authentication_required.status_code, "511");
     assert_eq!(STATUS_CODE_REASON_PHRASE.n511_network_authentication_required.reason_phrase, "Network Authentication Required");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.status_code, "200");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase, "OK");
+
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n201_created.status_code, "201");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n201_created.reason_phrase, "Created");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n202_accepted.status_code, "202");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n202_accepted.reason_phrase, "Accepted");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n203_non_authoritative_information.status_code, "203");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n203_non_authoritative_information.reason_phrase, "Non Authoritative Information");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n204_no_content.status_code, "204");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n204_no_content.reason_phrase, "No Content");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n205_reset_content.status_code, "205");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n205_reset_content.reason_phrase, "Reset Content");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code, "206");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase, "Partial Content");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n207_multi_status.status_code, "207");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n207_multi_status.reason_phrase, "Multi-Status");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n208_already_reported.status_code, "208");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n208_already_reported.reason_phrase, "Already Reported");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n226_im_used.status_code, "226");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n226_im_used.reason_phrase, "IM Used");
 }
