@@ -100,7 +100,7 @@ fn it_generates_successful_response_with_index_html() {
     assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
     assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
     assert_eq!(response_html_file.as_bytes().to_vec(), response.content_range_list.get(0).unwrap().body);
 }
@@ -171,7 +171,7 @@ fn it_generates_successful_response_with_static_file() {
 
     assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
     assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
 }
@@ -240,7 +240,7 @@ fn it_generates_not_found_page_for_absent_static_file() {
 
     assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
     assert_eq!(response_html_file.as_bytes().to_vec(), response.content_range_list.get(0).unwrap().body);
 }
@@ -309,7 +309,7 @@ fn it_generates_not_found_page_for_absent_route() {
 
     assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
     assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
 }
@@ -378,7 +378,7 @@ fn it_generates_not_found_page_for_static_directory() {
 
     assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
     assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
 }
@@ -447,7 +447,7 @@ fn it_generates_not_found_page_for_static_subdirectory() {
 
     assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
     assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
 }
@@ -516,7 +516,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
 
     assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
     assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
 }
@@ -584,7 +584,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
 
     assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
     assert_eq!(0, response.content_range_list.get(0).unwrap().range.end);
     assert_eq!("0", response.content_range_list.get(0).unwrap().size);
@@ -656,7 +656,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 
     assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
     assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
 
@@ -727,7 +727,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 
     assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
     assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
 }
@@ -790,7 +790,7 @@ fn check_range_response_for_not_proper_range_header() {
     let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code.to_string(), response.status_code);
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
@@ -855,7 +855,7 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
     let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code.to_string(), response.status_code);
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
@@ -920,7 +920,7 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code.to_string(), response.status_code);
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
@@ -985,7 +985,7 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code.to_string(), response.status_code);
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
@@ -1050,7 +1050,7 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code.to_string(), response.status_code);
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
@@ -1110,7 +1110,7 @@ fn check_range_response_for_not_proper_range_header_malformed() {
     let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code.to_string(), response.status_code);
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();

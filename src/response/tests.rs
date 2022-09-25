@@ -59,7 +59,7 @@ fn http_version_and_status_code_and_reason_phrase_regex() {
 #[test]
 fn it_generates_successful_response_with_additional_headers() {
     let response_http_version = VERSION.http_1_1.to_string();
-    let response_status_code = "401";
+    let response_status_code = 401;
     let response_reason_phrase = "Unauthorized";
     let message_body = SYMBOL.empty_string;
 
@@ -78,7 +78,7 @@ fn it_generates_successful_response_with_additional_headers() {
     let headers = vec![];
     let response = Response {
         http_version: response_http_version.to_string(),
-        status_code: response_status_code.to_string(),
+        status_code: response_status_code,
         reason_phrase: response_reason_phrase.to_string(),
         headers,
         content_range_list: vec![content_range],
@@ -144,7 +144,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
 
     let response = Response {
         http_version: response_http_version.to_string(),
-        status_code: response_status_code.to_string(),
+        status_code: *response_status_code,
         reason_phrase: response_reason_phrase.to_string(),
         headers,
         content_range_list: vec![content_range],
@@ -166,7 +166,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
 
 
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
 
     contents = Vec::new();

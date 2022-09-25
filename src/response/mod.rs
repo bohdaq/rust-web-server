@@ -20,7 +20,7 @@ pub struct Error {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Response {
     pub(crate) http_version: String,
-    pub(crate) status_code: String,
+    pub(crate) status_code: i16,
     pub(crate) reason_phrase: String,
     pub(crate) headers: Vec<Header>,
     pub(crate) content_range_list: Vec<ContentRange>
@@ -237,7 +237,7 @@ impl Response {
             header_string.push_str(SYMBOL.new_line_carriage_return);
             headers_str.push_str(&header_string);
         }
-        let status = [response.http_version, response.status_code, response.reason_phrase].join(SYMBOL.whitespace);
+        let status = [response.http_version, response.status_code.to_string(), response.reason_phrase].join(SYMBOL.whitespace);
         let response_without_body = format!(
             "{}{}{}",
             status,
@@ -261,7 +261,7 @@ impl Response {
 
         let mut response = Response {
             http_version: "".to_string(),
-            status_code: "".to_string(),
+            status_code: 0,
             reason_phrase: "".to_string(),
             headers: vec![],
             content_range_list: vec![],
@@ -275,16 +275,25 @@ impl Response {
         return response;
     }
 
-    pub(crate)  fn _parse_http_version_status_code_reason_phrase_string(http_version_status_code_reason_phrase: &str) -> (String, String, String) {
+    pub(crate)  fn _parse_http_version_status_code_reason_phrase_string(http_version_status_code_reason_phrase: &str) -> Result<(String, i16, String), String> {
         let re = Regex::new(Response::_HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
         let caps = re.captures(&http_version_status_code_reason_phrase).unwrap();
 
         let http_version= String::from(&caps["http_version"]);
         let status_code = String::from(&caps["status_code"]);
+        let boxed_status_code_i16 = status_code.parse::<i16>();
+        if boxed_status_code_i16.is_err() {
+            let message = [
+                "unable to parse status code: ",
+                boxed_status_code_i16.err().unwrap().to_string().as_str()
+            ].join("");
+            return Err(message)
+        }
+        let status_code_i16 : i16 = boxed_status_code_i16.unwrap();
         let mut reason_phrase = String::from(&caps["reason_phrase"]);
         reason_phrase = Server::truncate_new_line_carriage_return(&reason_phrase);
 
-        return (http_version, status_code, reason_phrase)
+        return Ok((http_version, status_code_i16, reason_phrase))
     }
 
     pub(crate)  fn _parse_http_response_header_string(header_string: &str) -> Header {
@@ -316,7 +325,14 @@ impl Response {
         let current_string_is_empty = string.trim().len() == 0;
 
         if is_first_iteration {
-            let (http_version, status_code, reason_phrase) = Response::_parse_http_version_status_code_reason_phrase_string(&string);
+            let boxed_http_version_status_code_reason_phrase = Response::_parse_http_version_status_code_reason_phrase_string(&string);
+            if boxed_http_version_status_code_reason_phrase.is_err() {
+                let error = boxed_http_version_status_code_reason_phrase.err().unwrap();
+                eprintln!("{}", error);
+                return;
+            }
+
+            let (http_version, status_code, reason_phrase) = boxed_http_version_status_code_reason_phrase.unwrap();
 
             response.http_version = http_version;
             response.status_code = status_code;
@@ -422,7 +438,7 @@ impl Response {
 
         let response = Response {
             http_version: VERSION.http_1_1.to_string(),
-            status_code: status_code_reason_phrase.status_code.to_string(),
+            status_code: *status_code_reason_phrase.status_code,
             reason_phrase: status_code_reason_phrase.reason_phrase.to_string(),
             headers: header_list,
             content_range_list

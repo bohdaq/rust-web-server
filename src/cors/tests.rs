@@ -93,7 +93,7 @@ fn cors_options_preflight_request() {
 
 
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
 
     let content_length_header = response._get_header(response_content_length_header_name.to_string()).unwrap();
@@ -197,7 +197,7 @@ fn actual_request_after_preflight() {
     let response = Response::_parse_response(raw_response.borrow());
 
     assert_eq!(response_http_version, response.http_version);
-    assert_eq!(response_status_code.to_string(), response.status_code);
+    assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
     assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
 
@@ -253,7 +253,7 @@ fn cors_allow_all() {
 
     let mut response = Response {
         http_version: "".to_string(),
-        status_code: "".to_string(),
+        status_code: 0,
         reason_phrase: "".to_string(),
         headers: vec![],
         content_range_list: vec![]
@@ -310,7 +310,7 @@ fn cors_process() {
 
     let mut response = Response {
         http_version: "".to_string(),
-        status_code: "".to_string(),
+        status_code: 0,
         reason_phrase: "".to_string(),
         headers: vec![],
         content_range_list: vec![]
@@ -386,7 +386,7 @@ fn cors_process_default_config() {
 
     let mut response = Response {
         http_version: "".to_string(),
-        status_code: "".to_string(),
+        status_code: 0,
         reason_phrase: "".to_string(),
         headers: vec![],
         content_range_list: vec![]
@@ -448,7 +448,7 @@ fn cors_process_empty_config() {
 
     let mut response = Response {
         http_version: "".to_string(),
-        status_code: "".to_string(),
+        status_code: 0,
         reason_phrase: "".to_string(),
         headers: vec![],
         content_range_list: vec![]
