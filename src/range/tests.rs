@@ -64,7 +64,7 @@ fn check_range_response_is_ok_two_part() {
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(response.status_code, STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code);
+    assert_eq!(response.status_code, STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code.to_string());
     assert_eq!(response.reason_phrase, STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase);
 
     assert_eq!(VERSION.http_1_1, response.http_version);
@@ -159,7 +159,7 @@ fn check_range_response_is_ok_single_part() {
     println!("\n\n\n{}", &raw_request);
     println!("\n\n\n{}", &response_string);
 
-    assert_eq!(response.status_code, STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code);
+    assert_eq!(response.status_code, STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code.to_string());
     assert_eq!(response.reason_phrase, STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase);
 
     assert_eq!(VERSION.http_1_1, response.http_version);

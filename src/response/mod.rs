@@ -28,7 +28,7 @@ pub struct Response {
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct StatusCodeReasonPhrase {
-    pub(crate) status_code: &'static str,
+    pub(crate) status_code: &'static i32,
     pub(crate) reason_phrase: &'static str,
 }
 
@@ -65,61 +65,61 @@ pub struct ResponseStatusCodeReasonPhrase {
 }
 
 pub const STATUS_CODE_REASON_PHRASE: ResponseStatusCodeReasonPhrase = ResponseStatusCodeReasonPhrase {
-    n100_continue: &StatusCodeReasonPhrase { status_code: "100", reason_phrase: "Continue" },
-    n101_switching_protocols: &StatusCodeReasonPhrase { status_code: "101", reason_phrase: "Switching Protocols" },
-    n102_processing: &StatusCodeReasonPhrase { status_code: "102", reason_phrase: "Processing" },
-    n103_early_hints: &StatusCodeReasonPhrase { status_code: "103", reason_phrase: "Early Hints" },
+    n100_continue: &StatusCodeReasonPhrase { status_code: &100, reason_phrase: "Continue" },
+    n101_switching_protocols: &StatusCodeReasonPhrase { status_code: &101, reason_phrase: "Switching Protocols" },
+    n102_processing: &StatusCodeReasonPhrase { status_code: &102, reason_phrase: "Processing" },
+    n103_early_hints: &StatusCodeReasonPhrase { status_code: &103, reason_phrase: "Early Hints" },
     n200_ok: &StatusCodeReasonPhrase {
-        status_code: "200",
+        status_code: &200,
         reason_phrase: "OK"
     },
 
-    n201_created: &StatusCodeReasonPhrase { status_code: "201", reason_phrase: "Created" },
-    n202_accepted: &StatusCodeReasonPhrase { status_code: "202", reason_phrase: "Accepted" },
-    n203_non_authoritative_information: &StatusCodeReasonPhrase { status_code: "203", reason_phrase: "Non Authoritative Information" },
+    n201_created: &StatusCodeReasonPhrase { status_code: &201, reason_phrase: "Created" },
+    n202_accepted: &StatusCodeReasonPhrase { status_code: &202, reason_phrase: "Accepted" },
+    n203_non_authoritative_information: &StatusCodeReasonPhrase { status_code: &203, reason_phrase: "Non Authoritative Information" },
     n204_no_content: &StatusCodeReasonPhrase {
-        status_code: "204",
+        status_code: &204,
         reason_phrase: "No Content"
     },
 
-    n205_reset_content: &StatusCodeReasonPhrase { status_code: "205", reason_phrase: "Reset Content" },
+    n205_reset_content: &StatusCodeReasonPhrase { status_code: &205, reason_phrase: "Reset Content" },
     n206_partial_content: &StatusCodeReasonPhrase {
-        status_code: "206",
+        status_code: &206,
         reason_phrase: "Partial Content"
     },
 
-    n207_multi_status: &StatusCodeReasonPhrase { status_code: "207", reason_phrase: "Multi-Status" },
-    n208_already_reported: &StatusCodeReasonPhrase { status_code: "208", reason_phrase: "Already Reported" },
-    n226_im_used: &StatusCodeReasonPhrase { status_code: "226", reason_phrase: "IM Used" },
+    n207_multi_status: &StatusCodeReasonPhrase { status_code: &207, reason_phrase: "Multi-Status" },
+    n208_already_reported: &StatusCodeReasonPhrase { status_code: &208, reason_phrase: "Already Reported" },
+    n226_im_used: &StatusCodeReasonPhrase { status_code: &226, reason_phrase: "IM Used" },
     n400_bad_request: &StatusCodeReasonPhrase {
-        status_code: "400",
+        status_code: &400,
         reason_phrase: "Bad Request"
     },
 
     n404_not_found: &StatusCodeReasonPhrase {
-        status_code: "404",
+        status_code: &404,
         reason_phrase: "Not Found"
     },
 
     n416_range_not_satisfiable: &StatusCodeReasonPhrase {
-        status_code: "416",
+        status_code: &416,
         reason_phrase: "Range Not Satisfiable"
     },
 
     n500_internal_server_error: &StatusCodeReasonPhrase {
-        status_code: "500",
+        status_code: &500,
         reason_phrase: "Internal Server Error"
     },
-    n501_not_implemented: &StatusCodeReasonPhrase { status_code: "501", reason_phrase: "Not Implemented" },
-    n502_bad_gateway: &StatusCodeReasonPhrase { status_code: "502", reason_phrase: "Bad Gateway" },
-    n503_service_unavailable: &StatusCodeReasonPhrase { status_code: "503", reason_phrase: "Service Unavailable" },
-    n504_gateway_timeout: &StatusCodeReasonPhrase { status_code: "504", reason_phrase: "Gateway Timeout" },
-    n505_http_version_not_supported: &StatusCodeReasonPhrase { status_code: "505", reason_phrase: "HTTP Version Not Supported" },
-    n506_variant_also_negotiates: &StatusCodeReasonPhrase { status_code: "506", reason_phrase: "Variant Also Negotiates" },
-    n507_insufficient_storage: &StatusCodeReasonPhrase { status_code: "507", reason_phrase: "Insufficient Storage" },
-    n508_loop_detected: &StatusCodeReasonPhrase { status_code: "508", reason_phrase: "Loop Detected" },
-    n510_not_extended: &StatusCodeReasonPhrase { status_code: "510", reason_phrase: "Not Extended" },
-    n511_network_authentication_required: &StatusCodeReasonPhrase { status_code: "511", reason_phrase: "Network Authentication Required" }
+    n501_not_implemented: &StatusCodeReasonPhrase { status_code: &501, reason_phrase: "Not Implemented" },
+    n502_bad_gateway: &StatusCodeReasonPhrase { status_code: &502, reason_phrase: "Bad Gateway" },
+    n503_service_unavailable: &StatusCodeReasonPhrase { status_code: &503, reason_phrase: "Service Unavailable" },
+    n504_gateway_timeout: &StatusCodeReasonPhrase { status_code: &504, reason_phrase: "Gateway Timeout" },
+    n505_http_version_not_supported: &StatusCodeReasonPhrase { status_code: &505, reason_phrase: "HTTP Version Not Supported" },
+    n506_variant_also_negotiates: &StatusCodeReasonPhrase { status_code: &506, reason_phrase: "Variant Also Negotiates" },
+    n507_insufficient_storage: &StatusCodeReasonPhrase { status_code: &507, reason_phrase: "Insufficient Storage" },
+    n508_loop_detected: &StatusCodeReasonPhrase { status_code: &508, reason_phrase: "Loop Detected" },
+    n510_not_extended: &StatusCodeReasonPhrase { status_code: &510, reason_phrase: "Not Extended" },
+    n511_network_authentication_required: &StatusCodeReasonPhrase { status_code: &511, reason_phrase: "Network Authentication Required" }
 };
 
 impl Response {
