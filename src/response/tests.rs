@@ -243,4 +243,16 @@ fn status_code_reason_phrase() {
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n226_im_used.status_code, "226");
     assert_eq!(STATUS_CODE_REASON_PHRASE.n226_im_used.reason_phrase, "IM Used");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n100_continue.status_code, "100");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n100_continue.reason_phrase, "Continue");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n101_switching_protocols.status_code, "101");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n101_switching_protocols.reason_phrase, "Switching Protocols");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n102_processing.status_code, "102");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n102_processing.reason_phrase, "Processing");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n103_early_hints.status_code, "103");
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n103_early_hints.reason_phrase, "Early Hints");
 }

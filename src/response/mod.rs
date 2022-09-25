@@ -34,6 +34,10 @@ pub struct StatusCodeReasonPhrase {
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ResponseStatusCodeReasonPhrase {
+    pub(crate) n100_continue: &'static StatusCodeReasonPhrase,
+    pub(crate) n101_switching_protocols: &'static StatusCodeReasonPhrase,
+    pub(crate) n102_processing: &'static StatusCodeReasonPhrase,
+    pub(crate) n103_early_hints: &'static StatusCodeReasonPhrase,
     pub(crate) n200_ok: &'static StatusCodeReasonPhrase,
     pub(crate) n201_created: &'static StatusCodeReasonPhrase,
     pub(crate) n202_accepted: &'static StatusCodeReasonPhrase,
@@ -61,6 +65,10 @@ pub struct ResponseStatusCodeReasonPhrase {
 }
 
 pub const STATUS_CODE_REASON_PHRASE: ResponseStatusCodeReasonPhrase = ResponseStatusCodeReasonPhrase {
+    n100_continue: &StatusCodeReasonPhrase { status_code: "100", reason_phrase: "Continue" },
+    n101_switching_protocols: &StatusCodeReasonPhrase { status_code: "101", reason_phrase: "Switching Protocols" },
+    n102_processing: &StatusCodeReasonPhrase { status_code: "102", reason_phrase: "Processing" },
+    n103_early_hints: &StatusCodeReasonPhrase { status_code: "103", reason_phrase: "Early Hints" },
     n200_ok: &StatusCodeReasonPhrase {
         status_code: "200",
         reason_phrase: "OK"
