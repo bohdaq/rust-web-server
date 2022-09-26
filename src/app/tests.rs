@@ -16,5 +16,5 @@ fn post() {
     };
 
     let (response, _request) = App::handle_request(request);
-    assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n200_ok.status_code);
+    assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n404_not_found.status_code);
 }
