@@ -25,7 +25,7 @@ impl App {
     pub(crate) fn handle_request(request: Request) -> (Response, Request) {
 
         let mut response: Response = Response::get_response(
-            STATUS_CODE_REASON_PHRASE.n404_not_found,
+            STATUS_CODE_REASON_PHRASE.n501_not_implemented,
             None,
             None
         ).unwrap();
