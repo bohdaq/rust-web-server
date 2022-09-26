@@ -5,7 +5,7 @@ use std::io::prelude::*;
 use std::fs::{metadata};
 use std::io::{Cursor};
 use regex::Regex;
-use crate::ext::file_ext::{FileExt, read_file};
+use crate::ext::file_ext::{FileExt};
 
 use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
 use crate::header::Header;
@@ -360,7 +360,7 @@ impl Range {
 
     pub fn get_content_range_of_a_file(filepath: &str) -> Result<ContentRange, String> {
         let body: Vec<u8>;
-        let boxed_file = read_file(filepath);
+        let boxed_file = FileExt::read_file(filepath);
         if boxed_file.is_err() {
             let error = boxed_file.err().unwrap();
             return Err(error);
