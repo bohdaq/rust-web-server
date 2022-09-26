@@ -276,4 +276,92 @@ fn status_code_reason_phrase() {
 
     assert_eq!(STATUS_CODE_REASON_PHRASE.n308_permanent_redirect.status_code, &308);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n308_permanent_redirect.reason_phrase, "Permanent Redirect");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n400_bad_request.status_code, &400);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n400_bad_request.reason_phrase, "Bad Request");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n401_unauthorized.status_code, &401);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n401_unauthorized.reason_phrase, "Unauthorized");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n402_payment_required.status_code, &402);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n402_payment_required.reason_phrase, "Payment Required");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n403_forbidden.status_code, &403);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n403_forbidden.reason_phrase, "Forbidden");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.status_code, &404);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase, "Not Found");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n405_method_not_allowed.status_code, &405);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n405_method_not_allowed.reason_phrase, "Method Not Allowed");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n406_not_acceptable.status_code, &406);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n406_not_acceptable.reason_phrase, "Not Acceptable");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n407_proxy_authentication_required.status_code, &407);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n407_proxy_authentication_required.reason_phrase, "Proxy Authentication Required");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n408_request_timeout.status_code, &408);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n408_request_timeout.reason_phrase, "Request Timeout");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n409_conflict.status_code, &409);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n409_conflict.reason_phrase, "Conflict");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n410_gone.status_code, &410);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n410_gone.reason_phrase, "Gone");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n411_length_required.status_code, &411);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n411_length_required.reason_phrase, "Length Required");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n412_precondition_failed.status_code, &412);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n412_precondition_failed.reason_phrase, "Precondition Failed");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n413_payload_too_large.status_code, &413);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n413_payload_too_large.reason_phrase, "Payload Too Large");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n414_uri_too_long.status_code, &414);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n414_uri_too_long.reason_phrase, "URI Too Long");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n415_unsupported_media_type.status_code, &415);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n415_unsupported_media_type.reason_phrase, "Unsupported Media Type");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, &416);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, "Range Not Satisfiable");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n417_expectation_failed.status_code, &417);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n417_expectation_failed.reason_phrase, "Expectation Failed");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n418_im_a_teapot.status_code, &418);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n418_im_a_teapot.reason_phrase, "I'm A Teapot");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n421_misdirected_request.status_code, &421);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n421_misdirected_request.reason_phrase, "Misdirected Request");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n422_unprocessable_entity.status_code, &422);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n422_unprocessable_entity.reason_phrase, "Unprocessable Entity");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n423_locked.status_code, &423);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n423_locked.reason_phrase, "Locked");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n424_failed_dependency.status_code, &424);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n424_failed_dependency.reason_phrase, "Failed Dependency");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n425_too_early.status_code, &425);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n425_too_early.reason_phrase, "Too Early");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n426_upgrade_required.status_code, &426);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n426_upgrade_required.reason_phrase, "Upgrade Required");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n428_precondition_required.status_code, &428);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n428_precondition_required.reason_phrase, "Precondition Required");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n429_too_many_requests.status_code, &429);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n429_too_many_requests.reason_phrase, "Too Many Requests");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n431_request_header_fields_too_large.status_code, &431);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n431_request_header_fields_too_large.reason_phrase, "Request Header Fields Too Large");
+
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n451_unavailable_for_legal_reasons.status_code, &451);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n451_unavailable_for_legal_reasons.reason_phrase, "Unavailable For Legal Reasons");
+
 }
