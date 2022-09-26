@@ -5,6 +5,7 @@ pub mod controller;
 
 use std::{env};
 use std::fs::{File, metadata};
+use crate::app::controller::index::IndexController;
 use crate::app::controller::not_found::NotFoundController;
 use crate::cors::Cors;
 use crate::entry_point::Config;
@@ -20,9 +21,7 @@ use crate::symbol::SYMBOL;
 pub struct App {}
 
 impl App {
-    pub(crate) const INDEX_FILEPATH: &'static str = "index.html";
-
-    pub(crate) fn handle_request(request: Request) -> (Response, Request) {
+    pub fn handle_request(request: Request) -> (Response, Request) {
 
         let mut response: Response = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n501_not_implemented,
@@ -37,40 +36,8 @@ impl App {
 
 
         // index controller
-        if request.request_uri == SYMBOL.slash {
-
-            let boxed_content_range =
-                Range::get_content_range_of_a_file(App::INDEX_FILEPATH);
-
-            if boxed_content_range.is_ok() {
-                let content_range = boxed_content_range.unwrap();
-                let content_range_list = vec![content_range];
-                let boxed_response = Response::get_response(
-                    STATUS_CODE_REASON_PHRASE.n200_ok,
-                    None,
-                    Option::from(content_range_list)
-                );
-                if boxed_response.is_ok() {
-                    response = boxed_response.unwrap();
-                }
-            } else {
-                let error = boxed_content_range.err().unwrap();
-                let mime_type = MimeType::TEXT_HTML.to_string();
-                let content_range = Range::get_content_range(
-                    Vec::from(error.as_bytes()),
-                    mime_type
-                );
-
-                let content_range_list = vec![content_range];
-                let boxed_response = Response::get_response(
-                    STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
-                    None,
-                    Option::from(content_range_list)
-                );
-                if boxed_response.is_ok() {
-                    response = boxed_response.unwrap();
-                }
-            }
+        if IndexController::is_matching_request(&request) {
+            response = IndexController::process_request(&request, response)
         }
 
         // static resources controller
