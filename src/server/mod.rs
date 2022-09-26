@@ -35,8 +35,4 @@ impl Server {
         raw_response
     }
 
-    pub(crate) fn truncate_new_line_carriage_return(str: &str) -> String {
-        str.replace("\r", "").replace("\n", "")
-    }
-
 }

@@ -5,10 +5,10 @@ use std::io;
 use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use regex::Regex;
+use crate::ext::string_ext::StringExt;
 use crate::http::VERSION;
 use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Request};
-use crate::server::Server;
 use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -357,7 +357,7 @@ impl Response {
         }
         let status_code_i16 : i16 = boxed_status_code_i16.unwrap();
         let mut reason_phrase = String::from(&caps["reason_phrase"]);
-        reason_phrase = Server::truncate_new_line_carriage_return(&reason_phrase);
+        reason_phrase = StringExt::truncate_new_line_carriage_return(&reason_phrase);
 
         return Ok((http_version, status_code_i16, reason_phrase))
     }
@@ -366,7 +366,7 @@ impl Response {
         let header_parts: Vec<&str> = header_string.split(Header::NAME_VALUE_SEPARATOR).collect();
         let header_name = header_parts[0].to_string();
         let raw_header_value = header_parts[1].to_string();
-        let header_value = Server::truncate_new_line_carriage_return(&raw_header_value);
+        let header_value = StringExt::truncate_new_line_carriage_return(&raw_header_value);
 
 
         Header {
