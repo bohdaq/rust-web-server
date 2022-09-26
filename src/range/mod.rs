@@ -103,7 +103,7 @@ impl Range {
                 let message = Range::ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string();
                 let error = Error {
                     status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
-                    message: message,
+                    message,
                 };
                 return Err(error);
             }
@@ -112,7 +112,7 @@ impl Range {
                 let message = Range::ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string();
                 let error = Error {
                     status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
-                    message: message,
+                    message,
                 };
                 return Err(error);
             }
@@ -121,7 +121,7 @@ impl Range {
                 let message = Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.to_string();
                 let error = Error {
                     status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
-                    message: message,
+                    message,
                 };
                 return Err(error);
             }
@@ -141,7 +141,7 @@ impl Range {
             let message = Range::ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT.to_string();
             let error = Error {
                 status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
-                message: message,
+                message,
             };
             return Err(error);
         }
