@@ -12,10 +12,27 @@ pub struct StaticResourceController;
 impl StaticResourceController {
 
     pub fn is_matching_request(request: &Request) -> bool {
+        let dir = env::current_dir().unwrap();
+        let working_directory = dir.as_path().to_str().unwrap();
+        let static_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
+
+
+        let boxed_md = metadata(&static_filepath);
+        if boxed_md.is_err() {
+            return false
+        }
+
+        let md = boxed_md.unwrap();
+        if md.is_dir() {
+            return false
+        }
+
+        let boxed_file = File::open(&static_filepath);
+
         let is_get = request.method == METHOD.get;
         let is_head = request.method == METHOD.head;
         let is_options = request.method == METHOD.options;
-        is_get || is_head || is_options && request.request_uri != SYMBOL.slash
+        boxed_file.is_ok() && (is_get || is_head || is_options && request.request_uri != SYMBOL.slash)
     }
 
     pub fn process_request(request: &Request, mut response: Response) -> Response {

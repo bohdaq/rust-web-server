@@ -34,20 +34,21 @@ impl App {
             None
         ).unwrap();
 
-        // by default we assume route or static asset is not found
-        if NotFoundController::is_matching_request(&request) {
-            response = NotFoundController::process_request(&request, response)
-        }
 
 
-        // index controller
         if IndexController::is_matching_request(&request) {
-            response = IndexController::process_request(&request, response)
+            response = IndexController::process_request(&request, response);
+            return (response, request)
         }
 
-        // static resources controller
         if StaticResourceController::is_matching_request(&request) {
-            response = StaticResourceController::process_request(&request, response)
+            response = StaticResourceController::process_request(&request, response);
+            return (response, request)
+        }
+
+        if NotFoundController::is_matching_request(&request) {
+            response = NotFoundController::process_request(&request, response);
+            return (response, request)
         }
 
 
