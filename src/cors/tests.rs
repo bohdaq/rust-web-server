@@ -233,7 +233,7 @@ fn cors_allow_all() {
 
     let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header);
 
-    let mut request = Request {
+    let request = Request {
         method: METHOD.options.to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
@@ -261,7 +261,7 @@ fn cors_allow_all() {
         content_range_list: vec![]
     };
 
-    (request, response) = Cors::allow_all(request, response).unwrap();
+    response.headers = Cors::allow_all(&request).unwrap();
 
     let allow_origins = response._get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
     assert_eq!(origin_value, allow_origins.value);
@@ -298,7 +298,7 @@ fn cors_process() {
 
     // Origin header indicates it is CORS request
     let origin_value = "https://foo.example";
-    let mut request = Request {
+    let request = Request {
         method: METHOD.options.to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
@@ -332,7 +332,7 @@ fn cors_process() {
         max_age: "172800".to_string()
     };
 
-    (request, response) = Cors::_process(request, response, &cors_config).unwrap();
+    response.headers = Cors::_process(&request, &cors_config).unwrap();
 
     let allow_origins = response._get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
     let expected_allow_origins = format!("{}", origin_value);
@@ -374,7 +374,7 @@ fn cors_process_default_config() {
 
     // Origin header indicates it is CORS request
     let origin_value = "https://bar.example";
-    let mut request = Request {
+    let request = Request {
         method: METHOD.options.to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
@@ -396,7 +396,7 @@ fn cors_process_default_config() {
 
     let custom_header = "x-custom-header";
 
-    (request, response) = Cors::process_using_default_config(request, response).unwrap();
+    response.headers = Cors::process_using_default_config(&request).unwrap();
 
     let allow_origins = response._get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
     let expected_allow_origins = format!("{}", origin_value);
@@ -436,7 +436,7 @@ fn cors_process_empty_config() {
 
     // Origin header indicates it is CORS request
     let origin_value = "origin-value.com";
-    let mut request = Request {
+    let request = Request {
         method: "".to_string(),
         request_uri: "".to_string(),
         http_version: "".to_string(),
@@ -466,7 +466,7 @@ fn cors_process_empty_config() {
         max_age: "".to_string()
     };
 
-    (request, response) = Cors::_process(request, response, &cors_config).unwrap();
+    response.headers = Cors::_process(&request, &cors_config).unwrap();
 
     let allow_origins = response._get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string());
     assert!(allow_origins.is_none());

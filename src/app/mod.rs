@@ -20,7 +20,7 @@ impl App {
     pub(crate) const NOT_FOUND_PAGE_FILEPATH: &'static str = "404.html";
     pub(crate) const INDEX_FILEPATH: &'static str = "index.html";
 
-    pub(crate) fn handle_request(mut request: Request) -> (Response, Request) {
+    pub(crate) fn handle_request(request: Request) -> (Response, Request) {
 
         let mut response: Response = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n404_not_found,
@@ -129,9 +129,9 @@ impl App {
 
                     let is_cors_set_to_allow_all_requests : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap().parse().unwrap();
                     if is_cors_set_to_allow_all_requests {
-                        (request, response) = Cors::allow_all(request, response).unwrap();
+                        response.headers = Cors::allow_all(&request).unwrap();
                     } else {
-                        (request, response) = Cors::process_using_default_config(request, response).unwrap();
+                        response.headers = Cors::process_using_default_config(&request).unwrap();
                     }
                 }
             } else {
@@ -168,9 +168,9 @@ impl App {
 
             let is_cors_set_to_allow_all_requests : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap().parse().unwrap();
             if is_cors_set_to_allow_all_requests {
-                (request, response) = Cors::allow_all(request, response).unwrap();
+                response.headers = Cors::allow_all(&request).unwrap();
             } else {
-                (request, response) = Cors::process_using_default_config(request, response).unwrap();
+                response.headers = Cors::process_using_default_config(&request).unwrap();
             }
         }
 
