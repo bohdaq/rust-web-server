@@ -2,13 +2,11 @@
 pub(crate) mod tests;
 
 use std::io::prelude::*;
-use std::{env};
 use std::borrow::Borrow;
 
 use crate::request::Request;
 use crate::response::Response;
 use crate::app::App;
-use crate::symbol::SYMBOL;
 
 pub struct Server {}
 impl Server {
@@ -41,9 +39,4 @@ impl Server {
         str.replace("\r", "").replace("\n", "")
     }
 
-    pub(crate) fn get_static_filepath(request_uri: &str) -> String {
-        let dir = env::current_dir().unwrap();
-        let working_directory = dir.as_path().to_str().unwrap();
-        [working_directory, request_uri].join(SYMBOL.empty_string)
-    }
 }

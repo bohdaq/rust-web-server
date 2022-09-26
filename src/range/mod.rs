@@ -10,7 +10,6 @@ use crate::ext::file_ext::{FileExt};
 use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
 use crate::header::Header;
 use crate::mime_type::MimeType;
-use crate::server::Server;
 use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -183,7 +182,7 @@ impl Range {
 
     pub(crate) fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, Error> {
         let mut content_range_list : Vec<ContentRange> = vec![];
-        let static_filepath = Server::get_static_filepath(request_uri);
+        let static_filepath = FileExt::get_static_filepath(request_uri);
 
         let md = metadata(&static_filepath).unwrap();
         if md.is_file() {

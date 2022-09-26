@@ -11,6 +11,7 @@ use crate::thread_pool::ThreadPool;
 use clap::{Arg, App};
 use serde::{Serialize, Deserialize};
 use crate::cors::Cors;
+use crate::ext::file_ext::FileExt;
 use crate::symbol::SYMBOL;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -138,7 +139,7 @@ pub fn override_environment_variables_from_config(filepath: Option<&str>) {
     } else {
         path = filepath.unwrap();
     }
-    let static_filepath = Server::get_static_filepath(path);
+    let static_filepath = FileExt::get_static_filepath(path);
     let content = std::fs::read_to_string(static_filepath);
 
     if content.is_err() {

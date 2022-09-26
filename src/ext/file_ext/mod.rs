@@ -1,6 +1,8 @@
+use std::env;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use crate::range::Range;
+use crate::symbol::SYMBOL;
 
 pub struct FileExt;
 
@@ -54,6 +56,12 @@ impl FileExt {
             }
         }
         Ok(file_content)
+    }
+
+    pub fn get_static_filepath(request_uri: &str) -> String {
+        let dir = env::current_dir().unwrap();
+        let working_directory = dir.as_path().to_str().unwrap();
+        [working_directory, request_uri].join(SYMBOL.empty_string)
     }
 }
 
