@@ -127,12 +127,6 @@ impl App {
                         Some(content_range_list)
                     ).unwrap();
 
-                    let is_cors_set_to_allow_all_requests : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap().parse().unwrap();
-                    if is_cors_set_to_allow_all_requests {
-                        response.headers = Cors::allow_all(&request).unwrap();
-                    } else {
-                        response.headers = Cors::process_using_default_config(&request).unwrap();
-                    }
                 }
             } else {
                 let error : Error = boxed_content_range_list.err().unwrap();
@@ -166,13 +160,18 @@ impl App {
                 None
             ).unwrap();
 
-            let is_cors_set_to_allow_all_requests : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap().parse().unwrap();
-            if is_cors_set_to_allow_all_requests {
-                response.headers = Cors::allow_all(&request).unwrap();
-            } else {
-                response.headers = Cors::process_using_default_config(&request).unwrap();
-            }
         }
+
+        let mut cors_header_list : Vec<Header>;
+        let is_cors_set_to_allow_all_requests : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap().parse().unwrap();
+        if is_cors_set_to_allow_all_requests {
+            cors_header_list = Cors::allow_all(&request).unwrap();
+        } else {
+            cors_header_list = Cors::process_using_default_config(&request).unwrap();
+        }
+
+        response.headers.append(&mut cors_header_list);
+
 
         (response, request)
     }
