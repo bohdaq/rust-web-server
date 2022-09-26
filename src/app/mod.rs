@@ -1,8 +1,11 @@
 #[cfg(test)]
 mod tests;
 
+pub mod controller;
+
 use std::{env};
 use std::fs::{File, metadata};
+use crate::app::controller::not_found::NotFoundController;
 use crate::cors::Cors;
 use crate::entry_point::Config;
 use crate::header::Header;
@@ -17,7 +20,6 @@ use crate::symbol::SYMBOL;
 pub struct App {}
 
 impl App {
-    pub(crate) const NOT_FOUND_PAGE_FILEPATH: &'static str = "404.html";
     pub(crate) const INDEX_FILEPATH: &'static str = "index.html";
 
     pub(crate) fn handle_request(request: Request) -> (Response, Request) {
@@ -29,40 +31,12 @@ impl App {
         ).unwrap();
 
         // by default we assume route or static asset is not found
-        let boxed_content_range =
-            Range::get_content_range_of_a_file(App::NOT_FOUND_PAGE_FILEPATH);
-
-        if boxed_content_range.is_ok() {
-            let content_range = boxed_content_range.unwrap();
-            let content_range_list = vec![content_range];
-            let boxed_response = Response::get_response(
-                STATUS_CODE_REASON_PHRASE.n404_not_found,
-                None,
-                Option::from(content_range_list)
-            );
-            if boxed_response.is_ok() {
-                response = boxed_response.unwrap();
-            }
-        } else {
-            let error = boxed_content_range.err().unwrap();
-            let mime_type = MimeType::TEXT_HTML.to_string();
-            let content_range = Range::get_content_range(
-                Vec::from(error.as_bytes()),
-                mime_type
-            );
-
-            let content_range_list = vec![content_range];
-            let boxed_response = Response::get_response(
-                STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
-                None,
-                Option::from(content_range_list)
-            );
-            if boxed_response.is_ok() {
-                response = boxed_response.unwrap();
-            }
+        if NotFoundController::is_matching_request(&request) {
+            response = NotFoundController::process_request(&request, response)
         }
 
 
+        // index controller
         if request.request_uri == SYMBOL.slash {
 
             let boxed_content_range =
@@ -99,6 +73,7 @@ impl App {
             }
         }
 
+        // static resources controller
         let is_get = request.method == METHOD.get;
         let is_head = request.method == METHOD.head;
         let is_options = request.method == METHOD.options;
@@ -152,6 +127,8 @@ impl App {
 
         }
 
+
+        // cors wildcard controller
         if request.request_uri != SYMBOL.slash && request.method == METHOD.post {
 
             response = Response::get_response(
