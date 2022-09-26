@@ -2,10 +2,10 @@
 mod tests;
 
 use std::io::prelude::*;
-use std::fs::{File, metadata};
-use std::io::{BufReader, Cursor, SeekFrom};
+use std::fs::{metadata};
+use std::io::{Cursor};
 use regex::Regex;
-use crate::ext::file_ext::read_file;
+use crate::ext::file_ext::{FileExt, read_file};
 
 use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
 use crate::header::Header;
@@ -154,35 +154,25 @@ impl Range {
             let boxed_range = Range::parse_range_in_content_range(filelength, byte);
             if boxed_range.is_ok() {
                 let range = boxed_range.unwrap();
-                let buff_length = (range.end - range.start) + 1;
-
-                let file = File::open(filepath).unwrap();
-                let mut reader = BufReader::new(file);
-
-                let boxed_seek = reader.seek(SeekFrom::Start(range.start));
-                if boxed_seek.is_ok() {
-                    let mut buffer = Vec::new();
-                    reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
-
+                let boxed_read = FileExt::read_file_partially(filepath, &range);
+                if boxed_read.is_ok() {
                     let content_type = MimeType::detect_mime_type(filepath);
-
+                    let body = boxed_read.unwrap();
                     let content_range = ContentRange {
                         unit: Range::BYTES.to_string(),
                         range,
                         size: filelength.to_string(),
-                        body: buffer,
+                        body,
                         content_type,
                     };
-
                     content_range_list.push(content_range);
                 } else {
                     let error : Error = Error {
                         status_code_reason_phrase:  STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
-                        message: boxed_seek.err().unwrap().to_string()
+                        message: boxed_read.err().unwrap().to_string()
                     };
                     return Err(error)
                 }
-
             } else {
                 let error : Error = boxed_range.err().unwrap();
                 return Err(error);
