@@ -364,4 +364,6 @@ fn status_code_reason_phrase() {
     assert_eq!(STATUS_CODE_REASON_PHRASE.n451_unavailable_for_legal_reasons.status_code, &451);
     assert_eq!(STATUS_CODE_REASON_PHRASE.n451_unavailable_for_legal_reasons.reason_phrase, "Unavailable For Legal Reasons");
 
+    assert_eq!(STATUS_CODE_REASON_PHRASE, STATUS_CODE_REASON_PHRASE.clone());
+
 }

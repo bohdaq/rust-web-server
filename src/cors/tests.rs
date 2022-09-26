@@ -15,6 +15,8 @@ use crate::symbol::SYMBOL;
 fn cors_options_preflight_request() {
     // request test data
 
+    override_environment_variables_from_config(Some("/src/test/rws.config.toml"));
+
     let request_method = METHOD.options;
     let request_uri = "/static/test.json";
     let request_http_version = VERSION.http_1_1.to_string();
