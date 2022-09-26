@@ -3,12 +3,10 @@ mod tests;
 
 pub mod controller;
 
-use std::{env};
 use crate::app::controller::index::IndexController;
 use crate::app::controller::not_found::NotFoundController;
 use crate::app::controller::static_resource::StaticResourceController;
 use crate::cors::Cors;
-use crate::entry_point::Config;
 use crate::header::Header;
 
 use crate::request::{Request};
@@ -20,13 +18,7 @@ pub struct App {}
 impl App {
     pub fn handle_request(request: Request) -> (Response, Request) {
 
-        let cors_header_list : Vec<Header>;
-        let is_cors_set_to_allow_all_requests : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap().parse().unwrap();
-        if is_cors_set_to_allow_all_requests {
-            cors_header_list = Cors::allow_all(&request).unwrap();
-        } else {
-            cors_header_list = Cors::process_using_default_config(&request).unwrap();
-        }
+        let cors_header_list : Vec<Header> = Cors::get_headers(&request);
 
         let mut response: Response = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n501_not_implemented,

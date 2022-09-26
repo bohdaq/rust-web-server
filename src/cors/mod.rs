@@ -229,4 +229,17 @@ impl Cors {
 
         Ok(headers)
     }
+
+    pub fn get_headers(request: &Request) -> Vec<Header> {
+        let cors_header_list : Vec<Header>;
+
+        let is_cors_set_to_allow_all_requests : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap().parse().unwrap();
+        if is_cors_set_to_allow_all_requests {
+            cors_header_list = Cors::allow_all(&request).unwrap();
+        } else {
+            cors_header_list = Cors::process_using_default_config(&request).unwrap();
+        }
+
+        cors_header_list
+    }
 }
