@@ -9,7 +9,7 @@ use crate::entry_point::Config;
 use crate::request::{METHOD, Request};
 use crate::response::{Error};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct Cors {
     pub(crate) allow_all: bool,
     pub(crate) allow_origins: Vec<String>,

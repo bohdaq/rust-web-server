@@ -14,7 +14,7 @@ use crate::cors::Cors;
 use crate::ext::file_ext::FileExt;
 use crate::symbol::SYMBOL;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     ip: String,
     port: i32,
