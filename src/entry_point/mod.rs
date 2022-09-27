@@ -10,7 +10,7 @@ use crate::thread_pool::ThreadPool;
 
 use clap::{Arg, App};
 use serde::{Serialize, Deserialize};
-use crate::client_hint::AskClientHint;
+use crate::client_hint::ClientHint;
 use crate::cors::Cors;
 use crate::ext::file_ext::FileExt;
 use crate::symbol::SYMBOL;
@@ -20,14 +20,16 @@ pub struct Config {
     ip: String,
     port: i32,
     thread_count: i32,
+    client_hints: bool,
     cors: Cors,
-    ask_client_hint: AskClientHint,
 }
 
 impl Config {
     pub const RWS_CONFIG_IP: &'static str = "RWS_CONFIG_IP";
     pub const RWS_CONFIG_PORT: &'static str = "RWS_CONFIG_PORT";
     pub const RWS_CONFIG_THREAD_COUNT: &'static str = "RWS_CONFIG_THREAD_COUNT";
+    pub const RWS_CONFIG_CLIENT_HINTS: &'static str = "RWS_CONFIG_CLIENT_HINTS";
+
     pub const RWS_CONFIG_CORS_ALLOW_ALL: &'static str = "RWS_CONFIG_CORS_ALLOW_ALL";
     pub const RWS_CONFIG_CORS_ALLOW_ORIGINS: &'static str = "RWS_CONFIG_CORS_ALLOW_ORIGINS";
     pub const RWS_CONFIG_CORS_ALLOW_CREDENTIALS: &'static str = "RWS_CONFIG_CORS_ALLOW_CREDENTIALS";
@@ -35,15 +37,6 @@ impl Config {
     pub const RWS_CONFIG_CORS_ALLOW_METHODS: &'static str = "RWS_CONFIG_CORS_ALLOW_METHODS";
     pub const RWS_CONFIG_CORS_EXPOSE_HEADERS: &'static str = "RWS_CONFIG_CORS_EXPOSE_HEADERS";
     pub const RWS_CONFIG_CORS_MAX_AGE: &'static str = "RWS_CONFIG_CORS_MAX_AGE";
-    pub const RWS_CONFIG_CLIENT_HINT_ACCEPT_ALL: &'static str = "RWS_CONFIG_CLIENT_HINT_ACCEPT_ALL";
-    pub const RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_ARCHITECTURE: &'static str = "RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_ARCHITECTURE";
-    pub const RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_BITNESS: &'static str = "RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_BITNESS";
-    pub const RWS_CONFIG_CLIENT_HINT_USER_AGENT_FULL_BRAND_INFORMATION: &'static str = "RWS_CONFIG_CLIENT_HINT_USER_AGENT_FULL_BRAND_INFORMATION";
-    pub const RWS_CONFIG_CLIENT_HINT_USER_AGENT_DEVICE_MODEL: &'static str = "RWS_CONFIG_CLIENT_HINT_USER_AGENT_DEVICE_MODEL";
-    pub const RWS_CONFIG_CLIENT_HINT_USER_AGENT_OPERATING_SYSTEM_VERSION: &'static str = "RWS_CONFIG_CLIENT_HINT_USER_AGENT_OPERATING_SYSTEM_VERSION";
-    pub const RWS_CONFIG_CLIENT_HINT_NETWORK_DOWNLOAD_SPEED: &'static str = "RWS_CONFIG_CLIENT_HINT_NETWORK_DOWNLOAD_SPEED";
-    pub const RWS_CONFIG_CLIENT_HINT_EFFECTIVE_CONNECTION_TYPE: &'static str = "RWS_CONFIG_CLIENT_HINT_EFFECTIVE_CONNECTION_TYPE";
-    pub const RWS_CONFIG_CLIENT_HINT_ROUND_TRIP_TIME: &'static str = "RWS_CONFIG_CLIENT_HINT_ROUND_TRIP_TIME";
 
     pub const RWS_DEFAULT_IP: &'static str = "127.0.0.1";
     pub const RWS_DEFAULT_PORT: &'static i32 = &7878;
@@ -85,6 +78,13 @@ pub fn read_system_environment_variables() {
         println!("  Set env variable '{}' to value '{}' environment variable",
                  Config::RWS_CONFIG_THREAD_COUNT,
                  boxed_thread_count.unwrap());
+    }
+
+    let boxed_rws_config_client_hints = env::var(Config::RWS_CONFIG_CLIENT_HINTS);
+    if boxed_rws_config_client_hints.is_ok() {
+        println!("  Set env variable '{}' to value '{}' environment variable",
+                 Config::RWS_CONFIG_CLIENT_HINTS,
+                 boxed_rws_config_client_hints.unwrap());
     }
 
     let boxed_cors_allow_all = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL);
@@ -136,69 +136,6 @@ pub fn read_system_environment_variables() {
                  boxed_cors_max_age.unwrap());
     }
 
-    let boxed_rws_config_client_hint_accept_all = env::var(Config::RWS_CONFIG_CLIENT_HINT_ACCEPT_ALL);
-    if boxed_rws_config_client_hint_accept_all.is_ok() {
-        println!("  Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CLIENT_HINT_ACCEPT_ALL,
-                 boxed_rws_config_client_hint_accept_all.unwrap());
-    }
-
-    let boxed_rws_config_client_hint_user_agent_cpu_architecture = env::var(Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_ARCHITECTURE);
-    if boxed_rws_config_client_hint_user_agent_cpu_architecture.is_ok() {
-        println!("  Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_ARCHITECTURE,
-                 boxed_rws_config_client_hint_user_agent_cpu_architecture.unwrap());
-    }
-
-    let boxed_rws_config_client_hint_user_agent_cpu_bitness = env::var(Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_BITNESS);
-    if boxed_rws_config_client_hint_user_agent_cpu_bitness.is_ok() {
-        println!("  Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_BITNESS,
-                 boxed_rws_config_client_hint_user_agent_cpu_bitness.unwrap());
-    }
-
-    let boxed_rws_config_client_hint_user_agent_full_brand_information = env::var(Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_FULL_BRAND_INFORMATION);
-    if boxed_rws_config_client_hint_user_agent_full_brand_information.is_ok() {
-        println!("  Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_FULL_BRAND_INFORMATION,
-                 boxed_rws_config_client_hint_user_agent_full_brand_information.unwrap());
-    }
-
-    let boxed_rws_config_client_hint_user_agent_device_model = env::var(Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_DEVICE_MODEL);
-    if boxed_rws_config_client_hint_user_agent_device_model.is_ok() {
-        println!("  Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_DEVICE_MODEL,
-                 boxed_rws_config_client_hint_user_agent_device_model.unwrap());
-    }
-
-    let boxed_rws_config_client_hint_user_agent_operating_system_version = env::var(Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_OPERATING_SYSTEM_VERSION);
-    if boxed_rws_config_client_hint_user_agent_operating_system_version.is_ok() {
-        println!("  Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_OPERATING_SYSTEM_VERSION,
-                 boxed_rws_config_client_hint_user_agent_operating_system_version.unwrap());
-    }
-
-    let boxed_rws_config_client_hint_network_download_speed = env::var(Config::RWS_CONFIG_CLIENT_HINT_NETWORK_DOWNLOAD_SPEED);
-    if boxed_rws_config_client_hint_network_download_speed.is_ok() {
-        println!("  Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CLIENT_HINT_NETWORK_DOWNLOAD_SPEED,
-                 boxed_rws_config_client_hint_network_download_speed.unwrap());
-    }
-
-    let boxed_rws_config_client_hint_effective_connection_type = env::var(Config::RWS_CONFIG_CLIENT_HINT_EFFECTIVE_CONNECTION_TYPE);
-    if boxed_rws_config_client_hint_effective_connection_type.is_ok() {
-        println!("  Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CLIENT_HINT_EFFECTIVE_CONNECTION_TYPE,
-                 boxed_rws_config_client_hint_effective_connection_type.unwrap());
-    }
-
-    let boxed_rws_config_client_hint_round_trip_time = env::var(Config::RWS_CONFIG_CLIENT_HINT_ROUND_TRIP_TIME);
-    if boxed_rws_config_client_hint_round_trip_time.is_ok() {
-        println!("  Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CLIENT_HINT_ROUND_TRIP_TIME,
-                 boxed_rws_config_client_hint_round_trip_time.unwrap());
-    }
-
     println!("End of System Environment Variables Section");
 }
 
@@ -232,6 +169,9 @@ pub fn override_environment_variables_from_config(filepath: Option<&str>) {
 
     env::set_var(Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
     println!("  Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
+
+    env::set_var(Config::RWS_CONFIG_CLIENT_HINTS, config.client_hints.to_string());
+    println!("  Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CLIENT_HINTS, config.client_hints.to_string());
 
     env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
     println!("  Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
@@ -280,6 +220,11 @@ pub fn override_environment_variables_from_command_line_args() {
             .long("threads")
             .takes_value(true)
             .help("Number of threads"))
+        .arg(Arg::new("client-hints")
+            .short('b')
+            .long("client-hints")
+            .takes_value(true)
+            .help("Server will ask for the following hints: Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT"))
         .arg(Arg::new("cors-allow-all")
             .short('a')
             .long("cors-allow-all")
@@ -351,6 +296,16 @@ pub fn override_environment_variables_from_command_line_args() {
                 },
                 Err(_) => println!("That's not a number! {}", s),
             }
+        }
+    }
+
+    let client_hints = matches.value_of("client_hints");
+    match client_hints {
+        None => print!(""),
+        Some(hints) => {
+            let parsed_client_hints_arg: bool = hints.parse().unwrap();
+            env::set_var(Config::RWS_CONFIG_CLIENT_HINTS, parsed_client_hints_arg.to_string());
+            println!("  Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CLIENT_HINTS, parsed_client_hints_arg.to_string());
         }
     }
 
