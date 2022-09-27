@@ -43,7 +43,7 @@ impl Request {
     pub(crate) const METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX: &'static str = "(?P<method>(GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE))\\s(?P<request_uri>[^\\s]+)\\s(?P<http_version>[/.A-Za-z0-9]+)";
 
     pub(crate) fn get_header(&self, name: String) -> Option<&Header> {
-        let header =  self.headers.iter().find(|x| x.name == name);
+        let header =  self.headers.iter().find(|x| x.name.to_lowercase() == name.to_lowercase());
         header
     }
 
