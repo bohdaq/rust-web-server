@@ -23,6 +23,10 @@ pub struct Cors {
 impl Cors {
     pub(crate) const MAX_AGE: &'static str = "86400";
 
+    pub fn get_vary_header_value() -> String {
+        Header::VARY.to_string()
+    }
+
     pub(crate) fn allow_all(request: &Request) -> Result<Vec<Header>, Error> {
         let mut headers : Vec<Header> = vec![];
         let origin = request.get_header(Header::ORIGIN.to_string());

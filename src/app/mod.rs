@@ -6,6 +6,7 @@ pub mod controller;
 use crate::app::controller::index::IndexController;
 use crate::app::controller::not_found::NotFoundController;
 use crate::app::controller::static_resource::StaticResourceController;
+use crate::client_hint::ClientHint;
 use crate::cors::Cors;
 use crate::header::Header;
 
@@ -17,12 +18,28 @@ pub struct App {}
 
 impl App {
     pub fn handle_request(request: Request) -> (Response, Request) {
+        let mut header_list : Vec<Header>;
+        let mut vary_value : Vec<String>;
 
-        let cors_header_list : Vec<Header> = Cors::get_headers(&request);
+        let cors_vary = Cors::get_vary_header_value();
+        vary_value = vec![cors_vary];
+        let cors_header_list: Vec<Header> = Cors::get_headers(&request);
+        header_list = cors_header_list;
+
+        let boxed_client_hint_header = ClientHint::get_accept_client_hints_header();
+        if boxed_client_hint_header.is_some() {
+            let client_hint_vary = ClientHint::get_vary_header_value();
+            vary_value.push(client_hint_vary);
+            let client_hint_header = boxed_client_hint_header.unwrap();
+            header_list.push(client_hint_header);
+        }
+
+        let vary_header = Header { name: Header::VARY.to_string(), value: vary_value.join(", ") };
+        header_list.push(vary_header);
 
         let mut response: Response = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n501_not_implemented,
-            Some(cors_header_list),
+            Some(header_list),
             None
         ).unwrap();
 

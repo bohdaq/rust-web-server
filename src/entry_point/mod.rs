@@ -10,7 +10,6 @@ use crate::thread_pool::ThreadPool;
 
 use clap::{Arg, App};
 use serde::{Serialize, Deserialize};
-use crate::client_hint::ClientHint;
 use crate::cors::Cors;
 use crate::ext::file_ext::FileExt;
 use crate::symbol::SYMBOL;
