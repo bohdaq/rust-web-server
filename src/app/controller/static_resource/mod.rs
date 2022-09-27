@@ -1,5 +1,6 @@
 use std::env;
 use std::fs::{File, metadata};
+use crate::ext::file_ext::FileExt;
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
@@ -12,10 +13,7 @@ pub struct StaticResourceController;
 impl StaticResourceController {
 
     pub fn is_matching_request(request: &Request) -> bool {
-        let dir = env::current_dir().unwrap();
-        let working_directory = dir.as_path().to_str().unwrap();
-        let static_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
-
+        let static_filepath = FileExt::get_static_filepath(&request.request_uri);
 
         let boxed_md = metadata(&static_filepath);
         if boxed_md.is_err() {
