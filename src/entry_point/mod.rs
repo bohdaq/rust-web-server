@@ -220,7 +220,7 @@ pub fn override_environment_variables_from_command_line_args() {
             .long("threads")
             .takes_value(true)
             .help("Number of threads"))
-        .arg(Arg::new("client-hints")
+        .arg(Arg::new("client_hints")
             .short('b')
             .long("client-hints")
             .takes_value(true)
