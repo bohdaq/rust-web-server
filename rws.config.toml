@@ -11,13 +11,13 @@ allow_credentials = true # if set to true, will allow to transmit credentials vi
 expose_headers = ["content-type", "x-custom-header"] # list of allowed response headers, in lowercase, this setting won't apply if cors allow_all set to true
 max_age = "86400" # in seconds, time to cache in browser CORS information, 86400s = 1 day; this setting won't apply if cors allow_all set to true
 
-[ask_client_hint]
-accept_all = false
-ask_user_agent_cpu_architecture = true
-ask_user_agent_cpu_bitness = true
-ask_user_agent_full_brand_information = true
-ask_user_agent_device_model = true
-ask_user_agent_operating_system_version = true
-ask_network_download_speed = true
-ask_effective_connection_type = true
-ask_round_trip_time = true
+[ask_client_hint] #  CLIENT HINTS
+accept_all = false # will ignore further configuration and ask all client hints listed below
+ask_user_agent_cpu_architecture = true # Sec-CH-UA-Arch
+ask_user_agent_cpu_bitness = true # Sec-CH-UA-Bitness
+ask_user_agent_full_brand_information = true # Sec-CH-UA-Full-Version-List
+ask_user_agent_device_model = true # Sec-CH-UA-Model
+ask_user_agent_operating_system_version = true # Sec-CH-UA-Platform-Version
+ask_network_download_speed = true # Downlink (Mbps)
+ask_effective_connection_type = true # ECT (2g/3g/4g)
+ask_round_trip_time = true # RTT (in ms, includes server processing time)
