@@ -136,6 +136,69 @@ pub fn read_system_environment_variables() {
                  boxed_cors_max_age.unwrap());
     }
 
+    let boxed_rws_config_client_hint_accept_all = env::var(Config::RWS_CONFIG_CLIENT_HINT_ACCEPT_ALL);
+    if boxed_rws_config_client_hint_accept_all.is_ok() {
+        println!("  Set env variable '{}' to value '{}' environment variable",
+                 Config::RWS_CONFIG_CLIENT_HINT_ACCEPT_ALL,
+                 boxed_rws_config_client_hint_accept_all.unwrap());
+    }
+
+    let boxed_rws_config_client_hint_user_agent_cpu_architecture = env::var(Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_ARCHITECTURE);
+    if boxed_rws_config_client_hint_user_agent_cpu_architecture.is_ok() {
+        println!("  Set env variable '{}' to value '{}' environment variable",
+                 Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_ARCHITECTURE,
+                 boxed_rws_config_client_hint_user_agent_cpu_architecture.unwrap());
+    }
+
+    let boxed_rws_config_client_hint_user_agent_cpu_bitness = env::var(Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_BITNESS);
+    if boxed_rws_config_client_hint_user_agent_cpu_bitness.is_ok() {
+        println!("  Set env variable '{}' to value '{}' environment variable",
+                 Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_BITNESS,
+                 boxed_rws_config_client_hint_user_agent_cpu_bitness.unwrap());
+    }
+
+    let boxed_rws_config_client_hint_user_agent_full_brand_information = env::var(Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_FULL_BRAND_INFORMATION);
+    if boxed_rws_config_client_hint_user_agent_full_brand_information.is_ok() {
+        println!("  Set env variable '{}' to value '{}' environment variable",
+                 Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_FULL_BRAND_INFORMATION,
+                 boxed_rws_config_client_hint_user_agent_full_brand_information.unwrap());
+    }
+
+    let boxed_rws_config_client_hint_user_agent_device_model = env::var(Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_DEVICE_MODEL);
+    if boxed_rws_config_client_hint_user_agent_device_model.is_ok() {
+        println!("  Set env variable '{}' to value '{}' environment variable",
+                 Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_DEVICE_MODEL,
+                 boxed_rws_config_client_hint_user_agent_device_model.unwrap());
+    }
+
+    let boxed_rws_config_client_hint_user_agent_operating_system_version = env::var(Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_OPERATING_SYSTEM_VERSION);
+    if boxed_rws_config_client_hint_user_agent_operating_system_version.is_ok() {
+        println!("  Set env variable '{}' to value '{}' environment variable",
+                 Config::RWS_CONFIG_CLIENT_HINT_USER_AGENT_OPERATING_SYSTEM_VERSION,
+                 boxed_rws_config_client_hint_user_agent_operating_system_version.unwrap());
+    }
+
+    let boxed_rws_config_client_hint_network_download_speed = env::var(Config::RWS_CONFIG_CLIENT_HINT_NETWORK_DOWNLOAD_SPEED);
+    if boxed_rws_config_client_hint_network_download_speed.is_ok() {
+        println!("  Set env variable '{}' to value '{}' environment variable",
+                 Config::RWS_CONFIG_CLIENT_HINT_NETWORK_DOWNLOAD_SPEED,
+                 boxed_rws_config_client_hint_network_download_speed.unwrap());
+    }
+
+    let boxed_rws_config_client_hint_effective_connection_type = env::var(Config::RWS_CONFIG_CLIENT_HINT_EFFECTIVE_CONNECTION_TYPE);
+    if boxed_rws_config_client_hint_effective_connection_type.is_ok() {
+        println!("  Set env variable '{}' to value '{}' environment variable",
+                 Config::RWS_CONFIG_CLIENT_HINT_EFFECTIVE_CONNECTION_TYPE,
+                 boxed_rws_config_client_hint_effective_connection_type.unwrap());
+    }
+
+    let boxed_rws_config_client_hint_round_trip_time = env::var(Config::RWS_CONFIG_CLIENT_HINT_ROUND_TRIP_TIME);
+    if boxed_rws_config_client_hint_round_trip_time.is_ok() {
+        println!("  Set env variable '{}' to value '{}' environment variable",
+                 Config::RWS_CONFIG_CLIENT_HINT_ROUND_TRIP_TIME,
+                 boxed_rws_config_client_hint_round_trip_time.unwrap());
+    }
+
     println!("End of System Environment Variables Section");
 }
 
