@@ -11,6 +11,7 @@ mod cors;
 mod request;
 mod http;
 mod ext;
+mod client_hint;
 
 extern crate core;
 

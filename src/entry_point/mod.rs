@@ -10,6 +10,7 @@ use crate::thread_pool::ThreadPool;
 
 use clap::{Arg, App};
 use serde::{Serialize, Deserialize};
+use crate::client_hint::AskClientHint;
 use crate::cors::Cors;
 use crate::ext::file_ext::FileExt;
 use crate::symbol::SYMBOL;
@@ -20,23 +21,33 @@ pub struct Config {
     port: i32,
     thread_count: i32,
     cors: Cors,
+    ask_client_hint: AskClientHint,
 }
 
 impl Config {
-    pub(crate) const RWS_CONFIG_IP: &'static str = "RWS_CONFIG_IP";
-    pub(crate) const RWS_CONFIG_PORT: &'static str = "RWS_CONFIG_PORT";
-    pub(crate) const RWS_CONFIG_THREAD_COUNT: &'static str = "RWS_CONFIG_THREAD_COUNT";
-    pub(crate) const RWS_CONFIG_CORS_ALLOW_ALL: &'static str = "RWS_CONFIG_CORS_ALLOW_ALL";
-    pub(crate) const RWS_CONFIG_CORS_ALLOW_ORIGINS: &'static str = "RWS_CONFIG_CORS_ALLOW_ORIGINS";
-    pub(crate) const RWS_CONFIG_CORS_ALLOW_CREDENTIALS: &'static str = "RWS_CONFIG_CORS_ALLOW_CREDENTIALS";
-    pub(crate) const RWS_CONFIG_CORS_ALLOW_HEADERS: &'static str = "RWS_CONFIG_CORS_ALLOW_HEADERS";
-    pub(crate) const RWS_CONFIG_CORS_ALLOW_METHODS: &'static str = "RWS_CONFIG_CORS_ALLOW_METHODS";
-    pub(crate) const RWS_CONFIG_CORS_EXPOSE_HEADERS: &'static str = "RWS_CONFIG_CORS_EXPOSE_HEADERS";
-    pub(crate) const RWS_CONFIG_CORS_MAX_AGE: &'static str = "RWS_CONFIG_CORS_MAX_AGE";
+    pub const RWS_CONFIG_IP: &'static str = "RWS_CONFIG_IP";
+    pub const RWS_CONFIG_PORT: &'static str = "RWS_CONFIG_PORT";
+    pub const RWS_CONFIG_THREAD_COUNT: &'static str = "RWS_CONFIG_THREAD_COUNT";
+    pub const RWS_CONFIG_CORS_ALLOW_ALL: &'static str = "RWS_CONFIG_CORS_ALLOW_ALL";
+    pub const RWS_CONFIG_CORS_ALLOW_ORIGINS: &'static str = "RWS_CONFIG_CORS_ALLOW_ORIGINS";
+    pub const RWS_CONFIG_CORS_ALLOW_CREDENTIALS: &'static str = "RWS_CONFIG_CORS_ALLOW_CREDENTIALS";
+    pub const RWS_CONFIG_CORS_ALLOW_HEADERS: &'static str = "RWS_CONFIG_CORS_ALLOW_HEADERS";
+    pub const RWS_CONFIG_CORS_ALLOW_METHODS: &'static str = "RWS_CONFIG_CORS_ALLOW_METHODS";
+    pub const RWS_CONFIG_CORS_EXPOSE_HEADERS: &'static str = "RWS_CONFIG_CORS_EXPOSE_HEADERS";
+    pub const RWS_CONFIG_CORS_MAX_AGE: &'static str = "RWS_CONFIG_CORS_MAX_AGE";
+    pub const RWS_CONFIG_CLIENT_HINT_ACCEPT_ALL: &'static str = "RWS_CONFIG_CLIENT_HINT_ACCEPT_ALL";
+    pub const RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_ARCHITECTURE: &'static str = "RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_ARCHITECTURE";
+    pub const RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_BITNESS: &'static str = "RWS_CONFIG_CLIENT_HINT_USER_AGENT_CPU_BITNESS";
+    pub const RWS_CONFIG_CLIENT_HINT_USER_AGENT_FULL_BRAND_INFORMATION: &'static str = "RWS_CONFIG_CLIENT_HINT_USER_AGENT_FULL_BRAND_INFORMATION";
+    pub const RWS_CONFIG_CLIENT_HINT_USER_AGENT_DEVICE_MODEL: &'static str = "RWS_CONFIG_CLIENT_HINT_USER_AGENT_DEVICE_MODEL";
+    pub const RWS_CONFIG_CLIENT_HINT_USER_AGENT_OPERATING_SYSTEM_VERSION: &'static str = "RWS_CONFIG_CLIENT_HINT_USER_AGENT_OPERATING_SYSTEM_VERSION";
+    pub const RWS_CONFIG_CLIENT_HINT_NETWORK_DOWNLOAD_SPEED: &'static str = "RWS_CONFIG_CLIENT_HINT_NETWORK_DOWNLOAD_SPEED";
+    pub const RWS_CONFIG_CLIENT_HINT_EFFECTIVE_CONNECTION_TYPE: &'static str = "RWS_CONFIG_CLIENT_HINT_EFFECTIVE_CONNECTION_TYPE";
+    pub const RWS_CONFIG_CLIENT_HINT_ROUND_TRIP_TIME: &'static str = "RWS_CONFIG_CLIENT_HINT_ROUND_TRIP_TIME";
 
-    pub(crate) const RWS_DEFAULT_IP: &'static str = "127.0.0.1";
-    pub(crate) const RWS_DEFAULT_PORT: &'static i32 = &7878;
-    pub(crate) const RWS_DEFAULT_THREAD_COUNT: &'static i32 = &4;
+    pub const RWS_DEFAULT_IP: &'static str = "127.0.0.1";
+    pub const RWS_DEFAULT_PORT: &'static i32 = &7878;
+    pub const RWS_DEFAULT_THREAD_COUNT: &'static i32 = &4;
 
 }
 

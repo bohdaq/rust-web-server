@@ -1,3 +1,6 @@
+use serde::{Serialize, Deserialize};
+
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct AskClientHint {
     pub accept_all: bool,
     pub ask_user_agent_cpu_architecture: bool, // Sec-CH-UA-Arch
