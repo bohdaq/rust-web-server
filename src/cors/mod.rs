@@ -43,13 +43,6 @@ impl Cors {
             };
             headers.push(allow_credentials);
 
-            let vary = Header {
-                name: Header::VARY.to_string(),
-                value: Header::ORIGIN.to_string()
-            };
-            headers.push(vary);
-
-
             let is_options = request.method == METHOD.options;
             if is_options {
                 let method = request.get_header(Header::ACCESS_CONTROL_REQUEST_METHOD.to_string());
@@ -121,12 +114,6 @@ impl Cors {
             headers.push(allow_credentials);
         }
 
-        let vary = Header {
-            name: Header::VARY.to_string(),
-            value: Header::ORIGIN.to_string(),
-        };
-        headers.push(vary);
-
         let is_options = request.method == METHOD.options;
         if is_options {
             let methods = cors.allow_methods.join(",");
@@ -192,12 +179,6 @@ impl Cors {
             };
             headers.push(allow_credentials);
         }
-
-        let vary = Header {
-            name: Header::VARY.to_string(),
-            value: Header::ORIGIN.to_string(),
-        };
-        headers.push(vary);
 
         let is_options = request.method == METHOD.options;
         if is_options {

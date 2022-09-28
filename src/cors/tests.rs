@@ -126,8 +126,6 @@ fn cors_options_preflight_request() {
     let access_control_max_age_header = response._get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
     assert_eq!("523452", access_control_max_age_header.value);
 
-    let vary_header = response._get_header(Header::VARY.to_string()).unwrap();
-    assert_eq!(Header::ORIGIN, vary_header.value);
 }
 
 #[test]
@@ -212,9 +210,6 @@ fn actual_request_after_preflight() {
     let x_content_type_options_header = response._get_header(Header::X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
 
-    let vary_header = response._get_header(Header::VARY.to_string()).unwrap();
-    assert_eq!(Header::ORIGIN, vary_header.value);
-
     let access_control_allow_origin_header = response._get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
     let allow_origins = format!("{}", access_control_allow_origin_header.value);
     assert!(allow_origins.contains(request_origin_header_value));
@@ -276,15 +271,12 @@ fn cors_allow_all() {
     let allow_credentials = response._get_header(Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
     assert_eq!("true", allow_credentials.value);
 
-    let expose_headers = response._get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
+    let expose_headers = response._get_header(Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string()).unwrap();
     let expected_expose_headers = format!("{},{}", Header::CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
     assert_eq!(expected_expose_headers, expose_headers.value);
 
     let max_age = response._get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
     assert_eq!(Cors::MAX_AGE, max_age.value);
-
-    let vary = response._get_header(Header::VARY.to_string()).unwrap();
-    assert_eq!(Header::ORIGIN.to_string(), vary.value);
 
     let raw_response = Response::generate_response(response, request);
     let response_string = String::from_utf8(raw_response).unwrap();
@@ -356,9 +348,6 @@ fn cors_process() {
     let max_age = response._get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
     assert_eq!(cors_config.max_age, max_age.value);
 
-    let vary = response._get_header(Header::VARY.to_string()).unwrap();
-    assert_eq!(Header::ORIGIN.to_string(), vary.value);
-
     let raw_response = Response::generate_response(response, request);
     let response_string = String::from_utf8(raw_response).unwrap();
     println!("{}", response_string);
@@ -419,9 +408,6 @@ fn cors_process_default_config() {
 
     let max_age = response._get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
     assert_eq!("523452", max_age.value);
-
-    let vary = response._get_header(Header::VARY.to_string()).unwrap();
-    assert_eq!(Header::ORIGIN.to_string(), vary.value);
 
     let raw_response = Response::generate_response(response, request);
     let response_string = String::from_utf8(raw_response).unwrap();
@@ -485,9 +471,6 @@ fn cors_process_empty_config() {
 
     let max_age = response._get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string());
     assert!(max_age.is_none());
-
-    let vary = response._get_header(Header::VARY.to_string());
-    assert!(vary.is_none());
 
     let raw_response = Response::generate_response(response, request);
     let response_string = String::from_utf8(raw_response).unwrap();
