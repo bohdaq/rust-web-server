@@ -1,4 +1,7 @@
+use crate::client_hint::ClientHint;
+use crate::cors::Cors;
 use crate::range::Range;
+use crate::request::Request;
 
 #[cfg(test)]
 mod tests;
@@ -32,6 +35,37 @@ impl Header {
 
 
     pub const NAME_VALUE_SEPARATOR: &'static str = ": ";
+
+
+
+    pub fn get_header_list(request: &Request) -> Vec<Header> {
+        let mut header_list : Vec<Header>;
+        let mut vary_value : Vec<String>;
+
+        let cors_vary = Cors::get_vary_header_value();
+        vary_value = vec![cors_vary];
+        let cors_header_list: Vec<Header> = Cors::get_headers(&request);
+        header_list = cors_header_list;
+
+        let boxed_client_hint_header = ClientHint::get_accept_client_hints_header();
+        if boxed_client_hint_header.is_some() {
+            let client_hint_vary = ClientHint::get_vary_header_value();
+            vary_value.push(client_hint_vary);
+            let client_hint_header = boxed_client_hint_header.unwrap();
+            header_list.push(client_hint_header);
+        }
+
+        let vary_header = Header { name: Header::VARY.to_string(), value: vary_value.join(", ") };
+        header_list.push(vary_header);
+
+        let x_content_type_options_header = Header::get_x_content_type_options_header();
+        header_list.push(x_content_type_options_header);
+
+        let accept_ranges_header = Header::get_accept_ranges_header();
+        header_list.push(accept_ranges_header);
+
+        header_list
+    }
 
 
     pub fn get_x_content_type_options_header() -> Header {
