@@ -75,6 +75,15 @@ If you want to build rust-web-server on your own, make sure you have [Rust insta
 ## Community
 Rust Web Server has a [Discord](https://discord.gg/zaErjtr5Dm) where you can ask questions and share ideas. Follow the [Rust code of conduct](https://www.rust-lang.org/policies/code-of-conduct).
 
+## Encryption
+
+The rws is an [HTTP server](https://developer.mozilla.org/en-US/docs/Web/HTTP). This means if you are planning to use it somewhere else except the local machine you need to protect transferred data by using encryption.
+
+The most common use cases are:
+1. You need your webapp to be globally available via the internet. In such a case, the simplest solution is to use a reverse proxy and certificate provided by [Let's Encrypt](https://letsencrypt.org/). A proxy will redirect all HTTP traffic to HTTPS, decrypt it via certificate and forward the request to rws. Response from rws will be forwarded to a proxy, encrypted, and send to a client. As reverse proxy you may use Apache HTTP Server, lighttpd, etc.
+2. You don't need your webapp to be globally available. In such case the solution may be to setup VPN.
+
+
 ## Donations
 If you appreciate my work and want to support it, feel free to do it via [PayPal](https://www.paypal.com/donate/?hosted_button_id=7J69SYZWSP6HJ).
 
