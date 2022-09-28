@@ -17,6 +17,9 @@ impl Header {
     pub const CONTENT_LENGTH: &'static str = "Content-Length";
     pub const X_CONTENT_TYPE_OPTIONS: &'static str = "X-Content-Type-Options";
     pub const X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF: &'static str = "nosniff";
+    pub const X_FRAME_OPTIONS: &'static str = "X-Frame-Options";
+    pub const _X_FRAME_OPTIONS_VALUE_DENY: &'static str = "DENY";
+    pub const X_FRAME_OPTIONS_VALUE_SAME_ORIGIN: &'static str = "SAMEORIGIN";
     pub const RANGE: &'static str = "Range";
     pub const ACCEPT_RANGES: &'static str = "Accept-Ranges";
     pub const CONTENT_RANGE: &'static str = "Content-Range";
@@ -64,6 +67,9 @@ impl Header {
         let accept_ranges_header = Header::get_accept_ranges_header();
         header_list.push(accept_ranges_header);
 
+        let x_frame_options_header = Header::get_x_frame_options_header();
+        header_list.push(x_frame_options_header);
+
         header_list
     }
 
@@ -79,6 +85,13 @@ impl Header {
         Header {
             name: Header::ACCEPT_RANGES.to_string(),
             value: Range::BYTES.to_string(),
+        }
+    }
+
+    pub fn get_x_frame_options_header() -> Header {
+        Header {
+            name: Header::X_FRAME_OPTIONS.to_string(),
+            value: Header::X_FRAME_OPTIONS_VALUE_SAME_ORIGIN.to_string(),
         }
     }
 

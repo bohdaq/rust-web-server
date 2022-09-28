@@ -122,6 +122,9 @@ fn static_file_cors_options_preflight_request_client_hints_on() {
         ClientHint::get_client_hint_list()
     );
 
+    let x_frame_options = response._get_header(Header::X_FRAME_OPTIONS.to_string()).unwrap();
+    assert_eq!(Header::X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
+
     for header in response.headers {
         println!("{:?}", header);
     }
@@ -186,6 +189,9 @@ fn static_file_cors_options_preflight_request_client_hints_off() {
     let boxed_client_hints = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string());
     assert!(boxed_client_hints.is_none());
 
+    let x_frame_options = response._get_header(Header::X_FRAME_OPTIONS.to_string()).unwrap();
+    assert_eq!(Header::X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
+
     for header in response.headers {
         println!("{:?}", header);
     }
@@ -236,6 +242,9 @@ fn static_file_cors_off_options_preflight_request_client_hints_on() {
         client_hints.value,
         ClientHint::get_client_hint_list()
     );
+
+    let x_frame_options = response._get_header(Header::X_FRAME_OPTIONS.to_string()).unwrap();
+    assert_eq!(Header::X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
 
     for header in response.headers {
         println!("{:?}", header);
