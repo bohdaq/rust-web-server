@@ -1,17 +1,6 @@
 ip = '127.0.0.1'
 port = 7888
 thread_count = 200
-client_hints = false
-#  CLIENT HINTS
-# Sec-CH-UA-Arch
-# Sec-CH-UA-Bitness
-# Sec-CH-UA-Full-Version-List
-# Sec-CH-UA-Model
-# Sec-CH-UA-Platform-Version
-# Downlink (Mbps)
-# ECT (2g/3g/4g)
-# RTT (in ms, includes server processing time)
-
 
 [cors] #  CROSS ORIGIN RESOURCE SHARING
 allow_all = false # true will allow all CORS requests, other CORS properties will be ignored

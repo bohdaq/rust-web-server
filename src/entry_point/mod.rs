@@ -19,7 +19,6 @@ pub struct Config {
     ip: String,
     port: i32,
     thread_count: i32,
-    client_hints: bool,
     cors: Cors,
 }
 
@@ -27,7 +26,6 @@ impl Config {
     pub const RWS_CONFIG_IP: &'static str = "RWS_CONFIG_IP";
     pub const RWS_CONFIG_PORT: &'static str = "RWS_CONFIG_PORT";
     pub const RWS_CONFIG_THREAD_COUNT: &'static str = "RWS_CONFIG_THREAD_COUNT";
-    pub const RWS_CONFIG_CLIENT_HINTS: &'static str = "RWS_CONFIG_CLIENT_HINTS";
 
     pub const RWS_CONFIG_CORS_ALLOW_ALL: &'static str = "RWS_CONFIG_CORS_ALLOW_ALL";
     pub const RWS_CONFIG_CORS_ALLOW_ORIGINS: &'static str = "RWS_CONFIG_CORS_ALLOW_ORIGINS";
@@ -77,13 +75,6 @@ pub fn read_system_environment_variables() {
         println!("  Set env variable '{}' to value '{}' environment variable",
                  Config::RWS_CONFIG_THREAD_COUNT,
                  boxed_thread_count.unwrap());
-    }
-
-    let boxed_rws_config_client_hints = env::var(Config::RWS_CONFIG_CLIENT_HINTS);
-    if boxed_rws_config_client_hints.is_ok() {
-        println!("  Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CLIENT_HINTS,
-                 boxed_rws_config_client_hints.unwrap());
     }
 
     let boxed_cors_allow_all = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL);
@@ -169,9 +160,6 @@ pub fn override_environment_variables_from_config(filepath: Option<&str>) {
     env::set_var(Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
     println!("  Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
 
-    env::set_var(Config::RWS_CONFIG_CLIENT_HINTS, config.client_hints.to_string());
-    println!("  Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CLIENT_HINTS, config.client_hints.to_string());
-
     env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
     println!("  Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
 
@@ -219,11 +207,6 @@ pub fn override_environment_variables_from_command_line_args() {
             .long("threads")
             .takes_value(true)
             .help("Number of threads"))
-        .arg(Arg::new("client_hints")
-            .short('b')
-            .long("client-hints")
-            .takes_value(true)
-            .help("Server will ask for the following hints: Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT"))
         .arg(Arg::new("cors-allow-all")
             .short('a')
             .long("cors-allow-all")
@@ -298,15 +281,6 @@ pub fn override_environment_variables_from_command_line_args() {
         }
     }
 
-    let client_hints = matches.value_of("client_hints");
-    match client_hints {
-        None => print!(""),
-        Some(hints) => {
-            let parsed_client_hints_arg: bool = hints.parse().unwrap();
-            env::set_var(Config::RWS_CONFIG_CLIENT_HINTS, parsed_client_hints_arg.to_string());
-            println!("  Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CLIENT_HINTS, parsed_client_hints_arg.to_string());
-        }
-    }
 
     let cors_allow_all = matches.value_of("cors-allow-all");
     match cors_allow_all {
