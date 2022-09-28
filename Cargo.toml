@@ -1,6 +1,6 @@
 [package]
 name = "rws"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 edition = "2021"
 
