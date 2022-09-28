@@ -26,6 +26,7 @@ pub struct Method {
     pub connect: &'static str,
     pub options: &'static str,
     pub trace: &'static str,
+    pub patch: &'static str,
 }
 
 pub const METHOD: Method = Method {
@@ -37,6 +38,7 @@ pub const METHOD: Method = Method {
     connect: "CONNECT",
     options: "OPTIONS",
     trace: "TRACE",
+    patch: "PATCH",
 };
 
 impl Request {

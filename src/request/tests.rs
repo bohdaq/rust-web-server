@@ -4,6 +4,19 @@ use crate::request::{METHOD, Request};
 use crate::symbol::SYMBOL;
 
 #[test]
+fn method() {
+    assert_eq!(METHOD.get, "GET");
+    assert_eq!(METHOD.head, "HEAD");
+    assert_eq!(METHOD.post, "POST");
+    assert_eq!(METHOD.put, "PUT");
+    assert_eq!(METHOD.delete, "DELETE");
+    assert_eq!(METHOD.connect, "CONNECT");
+    assert_eq!(METHOD.options, "OPTIONS");
+    assert_eq!(METHOD.trace, "TRACE");
+    assert_eq!(METHOD.patch, "PATCH");
+}
+
+#[test]
 fn method_and_request_uri_and_http_version_regex() {
     let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
     let caps = re.captures("GET / HTTP/1.1").unwrap();

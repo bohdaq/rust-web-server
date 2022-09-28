@@ -77,4 +77,11 @@ fn header_constants() {
     let header = Header { name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(), value: "some string".to_string() };
     assert_eq!(header.name, Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string());
     assert_eq!(header.value, "some string".to_string());
+
+    assert_eq!(Header::_ACCEPT, "Accept");
+    assert_eq!(Header::_ACCEPT_CH, "Accept-CH");
+    assert_eq!(Header::_ACCEPT_ENCODING, "Accept-Encoding");
+    assert_eq!(Header::_ACCEPT_LANGUAGE, "Accept-Language");
+    assert_eq!(Header::_ACCEPT_PATCH, "Accept-Patch");
+
 }

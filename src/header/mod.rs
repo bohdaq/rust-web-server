@@ -36,6 +36,13 @@ impl Header {
     pub const ACCESS_CONTROL_MAX_AGE: &'static str = "Access-Control-Max-Age";
     pub const ACCESS_CONTROL_EXPOSE_HEADERS: &'static str = "Access-Control-Expose-Headers";
 
+    pub const _ACCEPT: &'static str = "Accept";
+    pub const _ACCEPT_CH: &'static str = "Accept-CH";
+    pub const _ACCEPT_ENCODING: &'static str = "Accept-Encoding";
+    pub const _ACCEPT_LANGUAGE: &'static str = "Accept-Language";
+    pub const _ACCEPT_PATCH: &'static str = "Accept-Patch";
+
+
 
     pub const NAME_VALUE_SEPARATOR: &'static str = ": ";
 
