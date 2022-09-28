@@ -6,7 +6,6 @@ pub mod controller;
 use crate::app::controller::index::IndexController;
 use crate::app::controller::not_found::NotFoundController;
 use crate::app::controller::static_resource::StaticResourceController;
-use crate::cors::Cors;
 use crate::header::Header;
 
 use crate::request::{Request};
