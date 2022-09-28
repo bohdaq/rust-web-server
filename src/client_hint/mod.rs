@@ -56,7 +56,15 @@ impl ClientHint {
     }
 
     pub fn get_vary_header_value() -> String {
-        ClientHint::get_client_hint_list()
+        let hint_list = [
+            ClientHint::USER_AGENT_CPU_ARCHITECTURE,
+            ClientHint::USER_AGENT_CPU_BITNESS,
+            ClientHint::USER_AGENT_FULL_BRAND_INFORMATION,
+            ClientHint::USER_AGENT_DEVICE_MODEL,
+            ClientHint::USER_AGENT_OPERATING_SYSTEM_VERSION,
+        ];
+        let vary_client_hint = hint_list.join(", ");
+        vary_client_hint
     }
 
 }

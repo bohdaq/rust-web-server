@@ -228,7 +228,7 @@ fn static_file_cors_off_options_preflight_request_client_hints_on() {
     let vary_header = response._get_header(Header::VARY.to_string()).unwrap();
     assert_eq!(
         vary_header.value,
-        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT"
+        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version"
     );
 
     let client_hints = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).unwrap();
