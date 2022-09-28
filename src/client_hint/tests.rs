@@ -1,6 +1,5 @@
-use std::env;
 use crate::client_hint::ClientHint;
-use crate::entry_point::{Config, override_environment_variables_from_config};
+use crate::entry_point::{override_environment_variables_from_config};
 
 #[test]
 fn consts() {
@@ -31,8 +30,6 @@ fn client_hints_header() {
 
 #[test]
 fn client_hints_false() {
-    env::set_var(Config::RWS_CONFIG_CLIENT_HINTS, "false".to_string());
-
     let header = ClientHint::get_accept_client_hints_header();
     let hint_header_value = ClientHint::get_client_hint_list();
     assert_eq!(header.value, hint_header_value);
