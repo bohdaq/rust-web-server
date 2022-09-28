@@ -4,7 +4,9 @@ Hi, rust-web-server (**rws**) is a simple web-server written in Rust. The **rws*
 
 ## Features
 1. [Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
-2. [HTTP range requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests)
+2. [HTTP Range Requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests)
+2. [HTTP Client Hints](https://developer.mozilla.org/en-US/docs/Web/HTTP/Client_hints)
+3. [X-Content-Type-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options)
 
 ## Download
 Currently, you can [download binary](https://github.com/bohdaq/rust-web-server/releases) for x86_64-unknown-linux-gnu or x86_64-apple-darwin platforms. Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
