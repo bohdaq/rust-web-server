@@ -46,6 +46,8 @@ impl Header {
     pub const _ACCEPT_PATCH: &'static str = "Accept-Patch";
     pub const _ACCEPT_POST: &'static str = "Accept-Post";
     pub const _AGE: &'static str = "Age";
+    pub const _ALLOW: &'static str = "Allow";
+    pub const _ALT_SVC: &'static str = "Alt-Svc";
 
 
 
