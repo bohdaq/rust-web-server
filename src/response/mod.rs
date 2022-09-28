@@ -240,17 +240,11 @@ impl Response {
     }
 
     pub(crate) fn generate_response(mut response: Response, request: Request) -> Vec<u8> {
-        let mut headers = vec![
-            Response::get_x_content_type_options_header(),
-            Response::get_accept_ranges_header(),
-        ];
-
-        headers.append(&mut response.headers);
 
         if response.content_range_list.len() == 1 {
             let content_range_index = 0;
             let content_range = response.content_range_list.get(content_range_index).unwrap();
-            headers.push(Header {
+            response.headers.push(Header {
                 name: Header::CONTENT_TYPE.to_string(),
                 value: content_range.content_type.to_string()
             });
@@ -264,12 +258,12 @@ impl Response {
                 SYMBOL.slash,
                 &content_range.size
             ].join("");
-            headers.push(Header {
+            response.headers.push(Header {
                 name: Header::CONTENT_RANGE.to_string(),
                 value: content_range_header_value.to_string()
             });
 
-            headers.push(Header {
+            response.headers.push(Header {
                 name: Header::CONTENT_LENGTH.to_string(),
                 value: content_range.body.len().to_string()
             });
@@ -286,7 +280,7 @@ impl Response {
                 SYMBOL.equals,
                 Range::STRING_SEPARATOR
             ].join("");
-            headers.push(Header {
+            response.headers.push(Header {
                 name: Header::CONTENT_TYPE.to_string(),
                 value: content_range_header_value,
             });
@@ -295,7 +289,7 @@ impl Response {
         let body = Response::generate_body(response.content_range_list);
 
         let mut headers_str = SYMBOL.new_line_carriage_return.to_string();
-        for header in headers {
+        for header in response.headers {
             let mut header_string = SYMBOL.empty_string.to_string();
             header_string.push_str(&header.name);
             header_string.push_str(Header::NAME_VALUE_SEPARATOR);
@@ -473,19 +467,6 @@ impl Response {
         is_multipart_byteranges
     }
 
-    pub(crate) fn get_x_content_type_options_header() -> Header {
-        Header {
-            name: Header::X_CONTENT_TYPE_OPTIONS.to_string(),
-            value: Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF.to_string(),
-        }
-    }
-
-    pub(crate) fn get_accept_ranges_header() -> Header {
-        Header {
-            name: Header::ACCEPT_RANGES.to_string(),
-            value: Range::BYTES.to_string(),
-        }
-    }
 
     pub fn get_response(
         status_code_reason_phrase: &StatusCodeReasonPhrase,

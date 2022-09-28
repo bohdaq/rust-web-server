@@ -37,6 +37,12 @@ impl App {
         let vary_header = Header { name: Header::VARY.to_string(), value: vary_value.join(", ") };
         header_list.push(vary_header);
 
+        let x_content_type_options_header = Header::get_x_content_type_options_header();
+        header_list.push(x_content_type_options_header);
+
+        let accept_ranges_header = Header::get_accept_ranges_header();
+        header_list.push(accept_ranges_header);
+
         let mut response: Response = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n501_not_implemented,
             Some(header_list),

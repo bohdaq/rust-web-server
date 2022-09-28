@@ -1,3 +1,5 @@
+use crate::range::Range;
+
 #[cfg(test)]
 mod tests;
 
@@ -30,6 +32,21 @@ impl Header {
 
 
     pub const NAME_VALUE_SEPARATOR: &'static str = ": ";
+
+
+    pub fn get_x_content_type_options_header() -> Header {
+        Header {
+            name: Header::X_CONTENT_TYPE_OPTIONS.to_string(),
+            value: Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF.to_string(),
+        }
+    }
+
+    pub fn get_accept_ranges_header() -> Header {
+        Header {
+            name: Header::ACCEPT_RANGES.to_string(),
+            value: Range::BYTES.to_string(),
+        }
+    }
 
 }
 
