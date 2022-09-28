@@ -183,11 +183,13 @@ fn static_file_cors_options_preflight_request_client_hints_off() {
     let vary_header = response._get_header(Header::VARY.to_string()).unwrap();
     assert_eq!(
         vary_header.value,
-        Header::ORIGIN
+        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version"
     );
 
-    let boxed_client_hints = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string());
-    assert!(boxed_client_hints.is_none());
+    let client_hints_header = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).unwrap();
+    assert_eq!(client_hints_header.name, ClientHint::ACCEPT_CLIENT_HINTS);
+    assert_eq!(client_hints_header.value, "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT");
+
 
     let x_frame_options = response._get_header(Header::X_FRAME_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);

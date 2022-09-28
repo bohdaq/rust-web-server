@@ -1,8 +1,6 @@
 #[cfg(test)]
 mod tests;
 
-use std::env;
-use crate::entry_point::Config;
 use crate::header::Header;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -35,24 +33,10 @@ impl ClientHint {
         hint_header_value
     }
 
-    pub fn get_accept_client_hints_header() -> Option<Header> {
-        let boxed_rws_config_client_hints = env::var(Config::RWS_CONFIG_CLIENT_HINTS);
-        if boxed_rws_config_client_hints.is_ok() {
-            let boxed_rws_config_client_hints_as_string = boxed_rws_config_client_hints.unwrap();
-            let boxed_rws_config_client_hints_as_bool = boxed_rws_config_client_hints_as_string.parse();
-            if boxed_rws_config_client_hints_as_bool.is_err() {
-                eprintln!("wrong RWS_CONFIG_CLIENT_HINTS value: {}", boxed_rws_config_client_hints_as_string);
-                return None;
-            }
-            let client_hint_config_value : bool = boxed_rws_config_client_hints_as_bool.unwrap();
-            if client_hint_config_value {
-                let hint_header_value = ClientHint::get_client_hint_list();
-                let header = Header { name: ClientHint::ACCEPT_CLIENT_HINTS.to_string(), value: hint_header_value.to_string() };
-                return Some(header);
-            }
-
-        }
-        None
+    pub fn get_accept_client_hints_header() -> Header {
+        let hint_header_value = ClientHint::get_client_hint_list();
+        let header = Header { name: ClientHint::ACCEPT_CLIENT_HINTS.to_string(), value: hint_header_value.to_string() };
+        header
     }
 
     pub fn get_vary_header_value() -> String {

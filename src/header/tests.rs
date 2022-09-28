@@ -83,5 +83,7 @@ fn header_constants() {
     assert_eq!(Header::_ACCEPT_ENCODING, "Accept-Encoding");
     assert_eq!(Header::_ACCEPT_LANGUAGE, "Accept-Language");
     assert_eq!(Header::_ACCEPT_PATCH, "Accept-Patch");
+    assert_eq!(Header::_AGE, "Age");
+    assert_eq!(Header::DATE_ISO_8601, "Date-ISO-8601");
 
 }

@@ -24,7 +24,7 @@ fn hint_list() {
 fn client_hints_header() {
     override_environment_variables_from_config(Some("/src/test/client_hint/rws.config.toml"));
 
-    let header = ClientHint::get_accept_client_hints_header().unwrap();
+    let header = ClientHint::get_accept_client_hints_header();
     assert_eq!(header.name, ClientHint::ACCEPT_CLIENT_HINTS);
     assert_eq!(header.value, "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT");
 }
@@ -34,7 +34,9 @@ fn client_hints_false() {
     env::set_var(Config::RWS_CONFIG_CLIENT_HINTS, "false".to_string());
 
     let header = ClientHint::get_accept_client_hints_header();
-    assert_eq!(header, None);
+    let hint_header_value = ClientHint::get_client_hint_list();
+    assert_eq!(header.value, hint_header_value);
+    assert_eq!(header.name, ClientHint::ACCEPT_CLIENT_HINTS);
 }
 
 

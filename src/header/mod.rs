@@ -1,5 +1,6 @@
 use crate::client_hint::ClientHint;
 use crate::cors::Cors;
+use crate::ext::date_time_ext::DateTimeExt;
 use crate::range::Range;
 use crate::request::Request;
 
@@ -26,6 +27,8 @@ impl Header {
     pub const _HOST: &'static str = "Host";
     pub const VARY: &'static str = "Vary";
     pub const ORIGIN: &'static str = "Origin";
+    pub const _DATE: &'static str = "Date";
+    pub const DATE_ISO_8601: &'static str = "Date-ISO-8601";
 
     pub const ACCESS_CONTROL_REQUEST_METHOD: &'static str = "Access-Control-Request-Method";
     pub const ACCESS_CONTROL_REQUEST_HEADERS: &'static str = "Access-Control-Request-Headers";
@@ -41,6 +44,8 @@ impl Header {
     pub const _ACCEPT_ENCODING: &'static str = "Accept-Encoding";
     pub const _ACCEPT_LANGUAGE: &'static str = "Accept-Language";
     pub const _ACCEPT_PATCH: &'static str = "Accept-Patch";
+    pub const _ACCEPT_POST: &'static str = "Accept-Post";
+    pub const _AGE: &'static str = "Age";
 
 
 
@@ -57,13 +62,11 @@ impl Header {
         let cors_header_list: Vec<Header> = Cors::get_headers(&request);
         header_list = cors_header_list;
 
-        let boxed_client_hint_header = ClientHint::get_accept_client_hints_header();
-        if boxed_client_hint_header.is_some() {
-            let client_hint_vary = ClientHint::get_vary_header_value();
-            vary_value.push(client_hint_vary);
-            let client_hint_header = boxed_client_hint_header.unwrap();
-            header_list.push(client_hint_header);
-        }
+        let client_hint_header = ClientHint::get_accept_client_hints_header();
+        header_list.push(client_hint_header);
+
+        let client_hint_vary = ClientHint::get_vary_header_value();
+        vary_value.push(client_hint_vary);
 
         let vary_header = Header { name: Header::VARY.to_string(), value: vary_value.join(", ") };
         header_list.push(vary_header);
@@ -76,6 +79,9 @@ impl Header {
 
         let x_frame_options_header = Header::get_x_frame_options_header();
         header_list.push(x_frame_options_header);
+
+        let date_iso_8601_header = Header::get_date_iso_8601_header();
+        header_list.push(date_iso_8601_header);
 
         header_list
     }
@@ -99,6 +105,13 @@ impl Header {
         Header {
             name: Header::X_FRAME_OPTIONS.to_string(),
             value: Header::X_FRAME_OPTIONS_VALUE_SAME_ORIGIN.to_string(),
+        }
+    }
+
+    pub fn get_date_iso_8601_header() -> Header {
+        Header {
+            name: Header::DATE_ISO_8601.to_string(),
+            value: DateTimeExt::_now_utc().to_string(),
         }
     }
 
