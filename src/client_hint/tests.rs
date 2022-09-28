@@ -40,5 +40,5 @@ fn client_hints_false() {
 
 #[test]
 fn vary() {
-    assert_eq!(ClientHint::get_vary_header_value(), "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT");
+    assert_eq!(ClientHint::get_vary_header_value(), "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version");
 }

@@ -234,7 +234,7 @@ fn static_file_cors_off_options_preflight_request_client_hints_on() {
     let client_hints = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).unwrap();
     assert_eq!(
         client_hints.value,
-        ClientHint::get_vary_header_value()
+        ClientHint::get_client_hint_list()
     );
 
     for header in response.headers {
