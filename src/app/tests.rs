@@ -192,3 +192,54 @@ fn static_file_cors_options_preflight_request_client_hints_off() {
     assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n204_no_content.status_code);
 }
 
+#[test]
+fn static_file_cors_off_options_preflight_request_client_hints_on() {
+    override_environment_variables_from_config(Some("/src/test/app/rws.config_cors_off.toml"));
+
+    let origin_value = "origin-value.com";
+    let custom_header = "X-CUSTOM-HEADER";
+
+    let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header);
+
+
+    let request = Request {
+        method: METHOD.options.to_string(),
+        request_uri: "/static/content.png".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![
+            Header {
+                name: Header::ORIGIN.to_string(),
+                value: origin_value.to_string()
+            },
+            Header {
+                name: Header::ACCESS_CONTROL_REQUEST_METHOD.to_string(),
+                value: METHOD.post.to_string()
+            },
+            Header {
+                name: Header::ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
+                value: expected_allow_headers
+            },
+        ]
+    };
+
+    let (response, _request) = App::handle_request(request);
+
+
+    let vary_header = response._get_header(Header::VARY.to_string()).unwrap();
+    assert_eq!(
+        vary_header.value,
+        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT"
+    );
+
+    let client_hints = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).unwrap();
+    assert_eq!(
+        client_hints.value,
+        ClientHint::get_vary_header_value()
+    );
+
+    for header in response.headers {
+        println!("{:?}", header);
+    }
+    assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n204_no_content.status_code);
+}
+
