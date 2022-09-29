@@ -113,7 +113,7 @@ fn static_file_cors_options_preflight_request_client_hints_on() {
     let vary_header = response._get_header(Header::VARY.to_string()).unwrap();
     assert_eq!(
         vary_header.value,
-        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data"
+        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory"
     );
 
     let client_hints = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).unwrap();
@@ -183,12 +183,12 @@ fn static_file_cors_options_preflight_request_client_hints_off() {
     let vary_header = response._get_header(Header::VARY.to_string()).unwrap();
     assert_eq!(
         vary_header.value,
-        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data"
+        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory"
     );
 
     let client_hints_header = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).unwrap();
     assert_eq!(client_hints_header.name, ClientHint::ACCEPT_CLIENT_HINTS);
-    assert_eq!(client_hints_header.value, "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT, Save-Data");
+    assert_eq!(client_hints_header.value, "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT, Save-Data, Device-Memory");
 
 
     let x_frame_options = response._get_header(Header::X_FRAME_OPTIONS.to_string()).unwrap();
@@ -236,7 +236,7 @@ fn static_file_cors_off_options_preflight_request_client_hints_on() {
     let vary_header = response._get_header(Header::VARY.to_string()).unwrap();
     assert_eq!(
         vary_header.value,
-        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data"
+        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory"
     );
 
     let client_hints = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).unwrap();
