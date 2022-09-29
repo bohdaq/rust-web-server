@@ -91,6 +91,14 @@ impl Header {
     pub const _RETRY_AFTER: &'static str = "Retry-After";
     pub const _RTT: &'static str = "RTT";
     pub const _SAVE_DATA: &'static str = "Save-Data";
+    pub const _SEC_CH_UA: &'static str = "Sec-CH-UA";
+    pub const _SEC_CH_UA_ARCH: &'static str = "Sec-CH-UA-Arch";
+    pub const _SEC_CH_UA_BITNESS: &'static str = "Sec-CH-UA-Bitness";
+    pub const _SEC_CH_UA_FULL_VERSION_LIST: &'static str = "Sec-CH-UA-Full-Version-List";
+    pub const _SEC_CH_UA_MOBILE: &'static str = "Sec-CH-UA-Mobile";
+    pub const _SEC_CH_UA_MODEL: &'static str = "Sec-CH-UA-Model";
+    pub const _SEC_CH_UA_PLATFORM: &'static str = "Sec-CH-UA-Platform";
+    pub const _SEC_CH_UA_PLATFORM_VERSION: &'static str = "Sec-CH-UA-Platform-Version";
 
 
 

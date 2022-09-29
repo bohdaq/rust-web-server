@@ -125,5 +125,13 @@ fn header_constants() {
     assert_eq!(Header::_REFERER_POLICY, "Referer-Policy");
     assert_eq!(Header::_RTT, "RTT");
     assert_eq!(Header::_SAVE_DATA, "Save-Data");
+    assert_eq!(Header::_SEC_CH_UA, "Sec-CH-UA");
+    assert_eq!(Header::_SEC_CH_UA_ARCH, "Sec-CH-UA-Arch");
+    assert_eq!(Header::_SEC_CH_UA_BITNESS, "Sec-CH-UA-Bitness");
+    assert_eq!(Header::_SEC_CH_UA_FULL_VERSION_LIST, "Sec-CH-UA-Full-Version-List");
+    assert_eq!(Header::_SEC_CH_UA_MOBILE, "Sec-CH-UA-Mobile");
+    assert_eq!(Header::_SEC_CH_UA_MODEL, "Sec-CH-UA-Model");
+    assert_eq!(Header::_SEC_CH_UA_PLATFORM, "Sec-CH-UA-Platform");
+    assert_eq!(Header::_SEC_CH_UA_PLATFORM_VERSION, "Sec-CH-UA-Platform-Version");
 
 }
