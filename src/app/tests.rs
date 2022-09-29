@@ -110,7 +110,7 @@ fn static_file_cors_options_preflight_request_client_hints_on() {
     let max_age = response._get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
     assert_eq!(Cors::MAX_AGE, max_age.value);
 
-    let vary_header = response._get_header(Header::VARY.to_string()).unwrap();
+    let vary_header = response._get_header(Header::_VARY.to_string()).unwrap();
     assert_eq!(
         vary_header.value,
         "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory, Upgrade-Insecure-Requests"
@@ -122,8 +122,8 @@ fn static_file_cors_options_preflight_request_client_hints_on() {
         ClientHint::get_client_hint_list()
     );
 
-    let x_frame_options = response._get_header(Header::X_FRAME_OPTIONS.to_string()).unwrap();
-    assert_eq!(Header::X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
+    let x_frame_options = response._get_header(Header::_X_FRAME_OPTIONS.to_string()).unwrap();
+    assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
 
     for header in response.headers {
         println!("{:?}", header);
@@ -180,7 +180,7 @@ fn static_file_cors_options_preflight_request_client_hints_off() {
     let max_age = response._get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
     assert_eq!(Cors::MAX_AGE, max_age.value);
 
-    let vary_header = response._get_header(Header::VARY.to_string()).unwrap();
+    let vary_header = response._get_header(Header::_VARY.to_string()).unwrap();
     assert_eq!(
         vary_header.value,
         "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory, Upgrade-Insecure-Requests"
@@ -191,8 +191,8 @@ fn static_file_cors_options_preflight_request_client_hints_off() {
     assert_eq!(client_hints_header.value, "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT, Save-Data, Device-Memory");
 
 
-    let x_frame_options = response._get_header(Header::X_FRAME_OPTIONS.to_string()).unwrap();
-    assert_eq!(Header::X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
+    let x_frame_options = response._get_header(Header::_X_FRAME_OPTIONS.to_string()).unwrap();
+    assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
 
     for header in response.headers {
         println!("{:?}", header);
@@ -233,7 +233,7 @@ fn static_file_cors_off_options_preflight_request_client_hints_on() {
     let (response, _request) = App::handle_request(request);
 
 
-    let vary_header = response._get_header(Header::VARY.to_string()).unwrap();
+    let vary_header = response._get_header(Header::_VARY.to_string()).unwrap();
     assert_eq!(
         vary_header.value,
         "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory, Upgrade-Insecure-Requests"
@@ -245,8 +245,8 @@ fn static_file_cors_off_options_preflight_request_client_hints_on() {
         ClientHint::get_client_hint_list()
     );
 
-    let x_frame_options = response._get_header(Header::X_FRAME_OPTIONS.to_string()).unwrap();
-    assert_eq!(Header::X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
+    let x_frame_options = response._get_header(Header::_X_FRAME_OPTIONS.to_string()).unwrap();
+    assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
 
     for header in response.headers {
         println!("{:?}", header);

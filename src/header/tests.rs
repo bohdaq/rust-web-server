@@ -18,8 +18,8 @@ fn header_constants() {
     assert_eq!(header.name, Header::CONTENT_LENGTH.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::X_CONTENT_TYPE_OPTIONS.to_string(), value: "some string".to_string() };
-    assert_eq!(header.name, Header::X_CONTENT_TYPE_OPTIONS.to_string());
+    let header = Header { name: Header::_X_CONTENT_TYPE_OPTIONS.to_string(), value: "some string".to_string() };
+    assert_eq!(header.name, Header::_X_CONTENT_TYPE_OPTIONS.to_string());
     assert_eq!(header.value, "some string".to_string());
 
     let header = Header { name: Header::RANGE.to_string(), value: "some string".to_string() };
@@ -38,8 +38,8 @@ fn header_constants() {
     assert_eq!(header.name, Header::_HOST.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::VARY.to_string(), value: "some string".to_string() };
-    assert_eq!(header.name, Header::VARY.to_string());
+    let header = Header { name: Header::_VARY.to_string(), value: "some string".to_string() };
+    assert_eq!(header.name, Header::_VARY.to_string());
     assert_eq!(header.value, "some string".to_string());
 
     let header = Header { name: Header::ORIGIN.to_string(), value: "some string".to_string() };
@@ -147,6 +147,15 @@ fn header_constants() {
     assert_eq!(Header::_TRAILER, "Trailer");
     assert_eq!(Header::_TRANSFER_ENCODING, "Transfer-Encoding");
     assert_eq!(Header::_UPGRADE, "Upgrade");
-    assert_eq!(Header::_UPGRADE_INSECURE_REQUESTS, "Upgrade-Insecure-Requests");
+    assert_eq!(Header::_USER_AGENT, "User-Agent");
+    assert_eq!(Header::_VARY, "Vary");
+    assert_eq!(Header::_VIA, "Via");
+    assert_eq!(Header::_WANT_DIGEST, "Want-Digest");
+    assert_eq!(Header::_WWW_AUTHENTICATE, "WWW-Authenticate");
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS, "X-Content-Type-Options");
+    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, "nosniff");
+    assert_eq!(Header::_X_FRAME_OPTIONS, "X-Frame-Options");
+    assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_DENY, "DENY");
+    assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, "SAMEORIGIN");
 
 }

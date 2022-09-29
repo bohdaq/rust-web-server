@@ -16,15 +16,9 @@ pub struct Header {
 impl Header {
     pub const CONTENT_TYPE: &'static str = "Content-Type";
     pub const CONTENT_LENGTH: &'static str = "Content-Length";
-    pub const X_CONTENT_TYPE_OPTIONS: &'static str = "X-Content-Type-Options";
-    pub const X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF: &'static str = "nosniff";
-    pub const X_FRAME_OPTIONS: &'static str = "X-Frame-Options";
-    pub const _X_FRAME_OPTIONS_VALUE_DENY: &'static str = "DENY";
-    pub const X_FRAME_OPTIONS_VALUE_SAME_ORIGIN: &'static str = "SAMEORIGIN";
     pub const RANGE: &'static str = "Range";
     pub const ACCEPT_RANGES: &'static str = "Accept-Ranges";
     pub const CONTENT_RANGE: &'static str = "Content-Range";
-    pub const VARY: &'static str = "Vary";
     pub const ORIGIN: &'static str = "Origin";
     pub const DATE_ISO_8601: &'static str = "Date-ISO-8601";
 
@@ -116,7 +110,16 @@ impl Header {
     pub const _TRANSFER_ENCODING: &'static str = "Transfer-Encoding";
     pub const _UPGRADE: &'static str = "Upgrade";
     pub const _UPGRADE_INSECURE_REQUESTS: &'static str = "Upgrade-Insecure-Requests";
-
+    pub const _USER_AGENT: &'static str = "User-Agent";
+    pub const _VARY: &'static str = "Vary";
+    pub const _VIA: &'static str = "Via";
+    pub const _WANT_DIGEST: &'static str = "Want-Digest";
+    pub const _WWW_AUTHENTICATE: &'static str = "WWW-Authenticate";
+    pub const _X_CONTENT_TYPE_OPTIONS: &'static str = "X-Content-Type-Options";
+    pub const _X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF: &'static str = "nosniff";
+    pub const _X_FRAME_OPTIONS: &'static str = "X-Frame-Options";
+    pub const _X_FRAME_OPTIONS_VALUE_DENY: &'static str = "DENY";
+    pub const _X_FRAME_OPTIONS_VALUE_SAME_ORIGIN: &'static str = "SAMEORIGIN";
 
 
 
@@ -142,7 +145,7 @@ impl Header {
 
         vary_value.push(Header::_UPGRADE_INSECURE_REQUESTS.to_string());
 
-        let vary_header = Header { name: Header::VARY.to_string(), value: vary_value.join(", ") };
+        let vary_header = Header { name: Header::_VARY.to_string(), value: vary_value.join(", ") };
         header_list.push(vary_header);
 
         let x_content_type_options_header = Header::get_x_content_type_options_header();
@@ -163,8 +166,8 @@ impl Header {
 
     pub fn get_x_content_type_options_header() -> Header {
         Header {
-            name: Header::X_CONTENT_TYPE_OPTIONS.to_string(),
-            value: Header::X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF.to_string(),
+            name: Header::_X_CONTENT_TYPE_OPTIONS.to_string(),
+            value: Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF.to_string(),
         }
     }
 
@@ -177,8 +180,8 @@ impl Header {
 
     pub fn get_x_frame_options_header() -> Header {
         Header {
-            name: Header::X_FRAME_OPTIONS.to_string(),
-            value: Header::X_FRAME_OPTIONS_VALUE_SAME_ORIGIN.to_string(),
+            name: Header::_X_FRAME_OPTIONS.to_string(),
+            value: Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN.to_string(),
         }
     }
 
