@@ -17,6 +17,7 @@ impl ClientHint {
     pub const NETWORK_DOWNLOAD_SPEED: &'static str = "Downlink"; // (Mbps)
     pub const NETWORK_EFFECTIVE_CONNECTION_TYPE: &'static str = "ECT"; // (2g/3g/4g)
     pub const NETWORK_ROUND_TRIP_TIME: &'static str = "RTT"; // (in ms, includes server processing time)
+    pub const NETWORK_SAVE_DATA: &'static str = "Save-Data"; // (in ms, includes server processing time)
 
     pub fn get_client_hint_list() -> String {
         let hint_list = [
@@ -28,6 +29,7 @@ impl ClientHint {
             ClientHint::NETWORK_DOWNLOAD_SPEED,
             ClientHint::NETWORK_EFFECTIVE_CONNECTION_TYPE,
             ClientHint::NETWORK_ROUND_TRIP_TIME,
+            ClientHint::NETWORK_SAVE_DATA
         ];
         let hint_header_value = hint_list.join(", ");
         hint_header_value
@@ -46,6 +48,7 @@ impl ClientHint {
             ClientHint::USER_AGENT_FULL_BRAND_INFORMATION,
             ClientHint::USER_AGENT_DEVICE_MODEL,
             ClientHint::USER_AGENT_OPERATING_SYSTEM_VERSION,
+            ClientHint::NETWORK_SAVE_DATA,
         ];
         let vary_client_hint = hint_list.join(", ");
         vary_client_hint

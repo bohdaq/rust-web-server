@@ -90,6 +90,7 @@ impl Header {
     pub const _REFERER_POLICY: &'static str = "Referer-Policy";
     pub const _RETRY_AFTER: &'static str = "Retry-After";
     pub const _RTT: &'static str = "RTT";
+    pub const _SAVE_DATA: &'static str = "Save-Data";
 
 
 

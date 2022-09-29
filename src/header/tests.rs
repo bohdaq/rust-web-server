@@ -124,5 +124,6 @@ fn header_constants() {
     assert_eq!(Header::_REFERER, "Referer");
     assert_eq!(Header::_REFERER_POLICY, "Referer-Policy");
     assert_eq!(Header::_RTT, "RTT");
+    assert_eq!(Header::_SAVE_DATA, "Save-Data");
 
 }

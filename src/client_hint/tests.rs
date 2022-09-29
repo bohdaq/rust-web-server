@@ -16,7 +16,7 @@ fn consts() {
 
 #[test]
 fn hint_list() {
-    assert_eq!(ClientHint::get_client_hint_list(), "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT");
+    assert_eq!(ClientHint::get_client_hint_list(), "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT, Save-Data");
 }
 
 #[test]
@@ -25,7 +25,7 @@ fn client_hints_header() {
 
     let header = ClientHint::get_accept_client_hints_header();
     assert_eq!(header.name, ClientHint::ACCEPT_CLIENT_HINTS);
-    assert_eq!(header.value, "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT");
+    assert_eq!(header.value, "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT, Save-Data");
 }
 
 #[test]
@@ -39,5 +39,5 @@ fn client_hints_false() {
 
 #[test]
 fn vary() {
-    assert_eq!(ClientHint::get_vary_header_value(), "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version");
+    assert_eq!(ClientHint::get_vary_header_value(), "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data");
 }
