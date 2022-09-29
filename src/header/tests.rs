@@ -144,5 +144,9 @@ fn header_constants() {
     assert_eq!(Header::_STRICT_TRANSPORT_SECURITY, "Strict-Transport-Security");
     assert_eq!(Header::_TE, "TE");
     assert_eq!(Header::_TIMING_ALLOW_ORIGIN, "Timing-Allow-Origin");
+    assert_eq!(Header::_TRAILER, "Trailer");
+    assert_eq!(Header::_TRANSFER_ENCODING, "Transfer-Encoding");
+    assert_eq!(Header::_UPGRADE, "Upgrade");
+    assert_eq!(Header::_UPGRADE_INSECURE_REQUESTS, "Upgrade-Insecure-Requests");
 
 }

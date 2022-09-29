@@ -112,6 +112,10 @@ impl Header {
     pub const _STRICT_TRANSPORT_SECURITY: &'static str = "Strict-Transport-Security";
     pub const _TE: &'static str = "TE";
     pub const _TIMING_ALLOW_ORIGIN: &'static str = "Timing-Allow-Origin";
+    pub const _TRAILER: &'static str = "Trailer";
+    pub const _TRANSFER_ENCODING: &'static str = "Transfer-Encoding";
+    pub const _UPGRADE: &'static str = "Upgrade";
+    pub const _UPGRADE_INSECURE_REQUESTS: &'static str = "Upgrade-Insecure-Requests";
 
 
 
@@ -135,6 +139,8 @@ impl Header {
 
         let client_hint_vary = ClientHint::get_vary_header_value();
         vary_value.push(client_hint_vary);
+
+        vary_value.push(Header::_UPGRADE_INSECURE_REQUESTS.to_string());
 
         let vary_header = Header { name: Header::VARY.to_string(), value: vary_value.join(", ") };
         header_list.push(vary_header);
