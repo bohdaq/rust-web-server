@@ -139,5 +139,10 @@ fn header_constants() {
     assert_eq!(Header::_SEC_FETCH_USER, "Sec-Fetch-User");
     assert_eq!(Header::_SERVER, "Server");
     assert_eq!(Header::_SET_COOKIE, "Set-Cookie");
+    assert_eq!(Header::_SET_COOKIE, "Set-Cookie");
+    assert_eq!(Header::_SOURCE_MAP, "SourceMap");
+    assert_eq!(Header::_STRICT_TRANSPORT_SECURITY, "Strict-Transport-Security");
+    assert_eq!(Header::_TE, "TE");
+    assert_eq!(Header::_TIMING_ALLOW_ORIGIN, "Timing-Allow-Origin");
 
 }

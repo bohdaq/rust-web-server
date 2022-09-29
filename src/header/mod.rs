@@ -108,6 +108,10 @@ impl Header {
     pub const _SERVER_TIMING: &'static str = "Server-Timing";
     pub const _SERVICE_WORKER_NAVIGATION_PRELOAD: &'static str = "Service-Worker-Navigation-Preload";
     pub const _SET_COOKIE: &'static str = "Set-Cookie";
+    pub const _SOURCE_MAP: &'static str = "SourceMap";
+    pub const _STRICT_TRANSPORT_SECURITY: &'static str = "Strict-Transport-Security";
+    pub const _TE: &'static str = "TE";
+    pub const _TIMING_ALLOW_ORIGIN: &'static str = "Timing-Allow-Origin";
 
 
 
