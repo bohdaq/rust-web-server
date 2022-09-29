@@ -104,5 +104,11 @@ fn header_constants() {
     assert_eq!(Header::_DIGEST, "Digest");
     assert_eq!(Header::_DOWNLINK, "Downlink");
     assert_eq!(Header::_EARLY_DATA, "Early-Data");
+    assert_eq!(Header::_ECT, "ECT");
+    assert_eq!(Header::_ETAG, "ETag");
+    assert_eq!(Header::_EXPECT, "Expect");
+    assert_eq!(Header::_EXPIRES, "Expires");
+    assert_eq!(Header::_FEATURE_POLICY, "Feature-Policy");
+    assert_eq!(Header::_PERMISSIONS_POLICY, "Permissions-Policy");
 
 }

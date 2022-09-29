@@ -66,6 +66,12 @@ impl Header {
     pub const _DIGEST: &'static str = "Digest";
     pub const _DOWNLINK: &'static str = "Downlink";
     pub const _EARLY_DATA: &'static str = "Early-Data";
+    pub const _ECT: &'static str = "ECT";
+    pub const _ETAG: &'static str = "ETag";
+    pub const _EXPECT: &'static str = "Expect";
+    pub const _EXPIRES: &'static str = "Expires";
+    pub const _FEATURE_POLICY: &'static str = "Feature-Policy";
+    pub const _PERMISSIONS_POLICY: &'static str = "Permissions-Policy";
 
 
 
