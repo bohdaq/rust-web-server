@@ -74,6 +74,17 @@ impl Header {
     pub const _FORWARDED: &'static str = "Forwarded";
     pub const _FROM: &'static str = "From";
     pub const _HOST: &'static str = "Host";
+    pub const _IF_MATCH: &'static str = "If-Match";
+    pub const _IF_MODIFIED_SINCE: &'static str = "If-Modified-Since";
+    pub const _IF_NONE_MATCH: &'static str = "If-None-Match";
+    pub const _IF_RANGE: &'static str = "If-Range";
+    pub const _IF_UNMODIFIED_SINCE: &'static str = "If-Unmodified-Since";
+    pub const _LAST_MODIFIED: &'static str = "Last-Modified";
+    pub const _LINK: &'static str = "Link";
+    pub const _LOCATION: &'static str = "Location";
+    pub const _MAX_FORWARDS: &'static str = "Max-Forwards";
+    pub const _NEL: &'static str = "NEL";
+
 
 
 

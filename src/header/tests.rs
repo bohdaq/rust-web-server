@@ -111,5 +111,13 @@ fn header_constants() {
     assert_eq!(Header::_FEATURE_POLICY, "Feature-Policy");
     assert_eq!(Header::_PERMISSIONS_POLICY, "Permissions-Policy");
     assert_eq!(Header::_FROM, "From");
+    assert_eq!(Header::_IF_MODIFIED_SINCE, "If-Modified-Since");
+    assert_eq!(Header::_IF_NONE_MATCH, "If-None-Match");
+    assert_eq!(Header::_IF_RANGE, "If-Range");
+    assert_eq!(Header::_IF_UNMODIFIED_SINCE, "If-Unmodified-Since");
+    assert_eq!(Header::_LINK, "Link");
+    assert_eq!(Header::_LOCATION, "Location");
+    assert_eq!(Header::_MAX_FORWARDS, "Max-Forwards");
+    assert_eq!(Header::_NEL, "NEL");
 
 }
