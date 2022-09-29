@@ -24,7 +24,6 @@ impl Header {
     pub const RANGE: &'static str = "Range";
     pub const ACCEPT_RANGES: &'static str = "Accept-Ranges";
     pub const CONTENT_RANGE: &'static str = "Content-Range";
-    pub const _HOST: &'static str = "Host";
     pub const VARY: &'static str = "Vary";
     pub const ORIGIN: &'static str = "Origin";
     pub const DATE_ISO_8601: &'static str = "Date-ISO-8601";
@@ -72,6 +71,10 @@ impl Header {
     pub const _EXPIRES: &'static str = "Expires";
     pub const _FEATURE_POLICY: &'static str = "Feature-Policy";
     pub const _PERMISSIONS_POLICY: &'static str = "Permissions-Policy";
+    pub const _FORWARDED: &'static str = "Forwarded";
+    pub const _FROM: &'static str = "From";
+    pub const _HOST: &'static str = "Host";
+
 
 
 

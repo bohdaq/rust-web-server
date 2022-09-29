@@ -110,5 +110,6 @@ fn header_constants() {
     assert_eq!(Header::_EXPIRES, "Expires");
     assert_eq!(Header::_FEATURE_POLICY, "Feature-Policy");
     assert_eq!(Header::_PERMISSIONS_POLICY, "Permissions-Policy");
+    assert_eq!(Header::_FROM, "From");
 
 }
