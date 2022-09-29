@@ -42,7 +42,7 @@ impl StaticResourceController {
 
                 let mut status_code_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok;
 
-                let does_request_include_range_header = request.get_header(Header::RANGE.to_string()).is_some();
+                let does_request_include_range_header = request.get_header(Header::_RANGE.to_string()).is_some();
                 if does_request_include_range_header {
                     status_code_reason_phrase = STATUS_CODE_REASON_PHRASE.n206_partial_content;
                 }
@@ -90,11 +90,11 @@ impl StaticResourceController {
             let md = metadata(&static_filepath).unwrap();
             if md.is_file() {
                 let mut range_header = &Header {
-                    name: Header::RANGE.to_string(),
+                    name: Header::_RANGE.to_string(),
                     value: "bytes=0-".to_string()
                 };
 
-                let boxed_header = request.get_header(Header::RANGE.to_string());
+                let boxed_header = request.get_header(Header::_RANGE.to_string());
                 if boxed_header.is_some() {
                     range_header = boxed_header.unwrap();
                 }

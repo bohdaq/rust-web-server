@@ -217,10 +217,10 @@ impl Response {
                 body_str.push_str(SYMBOL.hyphen);
                 body_str.push_str(Range::STRING_SEPARATOR);
                 body_str.push_str(SYMBOL.new_line_carriage_return);
-                let content_type = [Header::CONTENT_TYPE, Header::NAME_VALUE_SEPARATOR, SYMBOL.whitespace, &content_range.content_type.to_string()].join("");
+                let content_type = [Header::_CONTENT_TYPE, Header::NAME_VALUE_SEPARATOR, SYMBOL.whitespace, &content_range.content_type.to_string()].join("");
                 body_str.push_str(content_type.as_str());
                 body_str.push_str(SYMBOL.new_line_carriage_return);
-                let content_range_header = [Header::CONTENT_RANGE, Header::NAME_VALUE_SEPARATOR, SYMBOL.whitespace, Range::BYTES, SYMBOL.whitespace, &content_range.range.start.to_string(), SYMBOL.hyphen, &content_range.range.end.to_string(), SYMBOL.slash, &content_range.size].join("");
+                let content_range_header = [Header::_CONTENT_RANGE, Header::NAME_VALUE_SEPARATOR, SYMBOL.whitespace, Range::BYTES, SYMBOL.whitespace, &content_range.range.start.to_string(), SYMBOL.hyphen, &content_range.range.end.to_string(), SYMBOL.slash, &content_range.size].join("");
                 body_str.push_str(content_range_header.as_str());
                 body_str.push_str(SYMBOL.new_line_carriage_return);
                 body_str.push_str(SYMBOL.new_line_carriage_return);
@@ -245,7 +245,7 @@ impl Response {
             let content_range_index = 0;
             let content_range = response.content_range_list.get(content_range_index).unwrap();
             response.headers.push(Header {
-                name: Header::CONTENT_TYPE.to_string(),
+                name: Header::_CONTENT_TYPE.to_string(),
                 value: content_range.content_type.to_string()
             });
 
@@ -259,12 +259,12 @@ impl Response {
                 &content_range.size
             ].join("");
             response.headers.push(Header {
-                name: Header::CONTENT_RANGE.to_string(),
+                name: Header::_CONTENT_RANGE.to_string(),
                 value: content_range_header_value.to_string()
             });
 
             response.headers.push(Header {
-                name: Header::CONTENT_LENGTH.to_string(),
+                name: Header::_CONTENT_LENGTH.to_string(),
                 value: content_range.body.len().to_string()
             });
         }
@@ -281,7 +281,7 @@ impl Response {
                 Range::STRING_SEPARATOR
             ].join("");
             response.headers.push(Header {
-                name: Header::CONTENT_TYPE.to_string(),
+                name: Header::_CONTENT_TYPE.to_string(),
                 value: content_range_header_value,
             });
         }
@@ -400,7 +400,7 @@ impl Response {
         }
 
         if current_string_is_empty {
-            let content_type = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+            let content_type = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
             let is_multipart = Response::_is_multipart_byteranges_content_type(&content_type);
 
             if is_multipart {
@@ -445,7 +445,7 @@ impl Response {
             let mut header = Header { name: "".to_string(), value: "".to_string() };
             if !is_first_iteration {
                 header = Response::_parse_http_response_header_string(&string);
-                if header.name == Header::CONTENT_LENGTH {
+                if header.name == Header::_CONTENT_LENGTH {
                     content_length = header.value.parse().unwrap();
                 }
             }

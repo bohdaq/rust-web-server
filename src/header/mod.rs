@@ -14,24 +14,18 @@ pub struct Header {
 }
 
 impl Header {
-    pub const CONTENT_TYPE: &'static str = "Content-Type";
-    pub const CONTENT_LENGTH: &'static str = "Content-Length";
-    pub const RANGE: &'static str = "Range";
-    pub const ACCEPT_RANGES: &'static str = "Accept-Ranges";
-    pub const CONTENT_RANGE: &'static str = "Content-Range";
-    pub const ORIGIN: &'static str = "Origin";
-    pub const DATE_ISO_8601: &'static str = "Date-ISO-8601";
 
-    pub const ACCESS_CONTROL_REQUEST_METHOD: &'static str = "Access-Control-Request-Method";
-    pub const ACCESS_CONTROL_REQUEST_HEADERS: &'static str = "Access-Control-Request-Headers";
-    pub const ACCESS_CONTROL_ALLOW_ORIGIN: &'static str = "Access-Control-Allow-Origin";
-    pub const ACCESS_CONTROL_ALLOW_METHODS: &'static str = "Access-Control-Allow-Methods";
-    pub const ACCESS_CONTROL_ALLOW_HEADERS: &'static str = "Access-Control-Allow-Headers";
-    pub const ACCESS_CONTROL_ALLOW_CREDENTIALS: &'static str = "Access-Control-Allow-Credentials";
-    pub const ACCESS_CONTROL_MAX_AGE: &'static str = "Access-Control-Max-Age";
-    pub const ACCESS_CONTROL_EXPOSE_HEADERS: &'static str = "Access-Control-Expose-Headers";
+    pub const _ACCESS_CONTROL_REQUEST_METHOD: &'static str = "Access-Control-Request-Method";
+    pub const _ACCESS_CONTROL_REQUEST_HEADERS: &'static str = "Access-Control-Request-Headers";
+    pub const _ACCESS_CONTROL_ALLOW_ORIGIN: &'static str = "Access-Control-Allow-Origin";
+    pub const _ACCESS_CONTROL_ALLOW_METHODS: &'static str = "Access-Control-Allow-Methods";
+    pub const _ACCESS_CONTROL_ALLOW_HEADERS: &'static str = "Access-Control-Allow-Headers";
+    pub const _ACCESS_CONTROL_ALLOW_CREDENTIALS: &'static str = "Access-Control-Allow-Credentials";
+    pub const _ACCESS_CONTROL_MAX_AGE: &'static str = "Access-Control-Max-Age";
+    pub const _ACCESS_CONTROL_EXPOSE_HEADERS: &'static str = "Access-Control-Expose-Headers";
 
     pub const _ACCEPT: &'static str = "Accept";
+    pub const _ACCEPT_RANGES: &'static str = "Accept-Ranges";
     pub const _ACCEPT_CH: &'static str = "Accept-CH";
     pub const _ACCEPT_ENCODING: &'static str = "Accept-Encoding";
     pub const _ACCEPT_LANGUAGE: &'static str = "Accept-Language";
@@ -43,10 +37,12 @@ impl Header {
     pub const _AUTHORIZATION: &'static str = "Authorization";
     pub const _CACHE_CONTROL: &'static str = "Cache-Control";
     pub const _CLEAR_SITE_DATA: &'static str = "Clear-Site-Data";
+    pub const _CONTENT_TYPE: &'static str = "Content-Type";
+    pub const _CONTENT_LENGTH: &'static str = "Content-Length";
+    pub const _CONTENT_RANGE: &'static str = "Content-Range";
     pub const _CONTENT_DISPOSITION: &'static str = "Content-Disposition";
     pub const _CONTENT_ENCODING: &'static str = "Content-Encoding";
     pub const _CONTENT_LANGUAGE: &'static str = "Content-Language";
-    pub const _CONTENT_LENGTH: &'static str = "Content-Length";
     pub const _CONTENT_LOCATION: &'static str = "Content-Location";
     pub const _CONTENT_SECURITY_POLICY: &'static str = "Content-Security-Policy";
     pub const _CONTENT_SECURITY_POLICY_REPORT_ONLY: &'static str = "Content-Security-Policy-Report-Only";
@@ -55,6 +51,7 @@ impl Header {
     pub const _CROSS_ORIGIN_OPENER_POLICY: &'static str = "Cross-Origin-Opener-Policy";
     pub const _CROSS_ORIGIN_RESOURCE_POLICY: &'static str = "Cross-Origin-Resource-Policy";
     pub const _DATE: &'static str = "Date";
+    pub const _DATE_ISO_8601: &'static str = "Date-ISO-8601";
     pub const _DEVICE_MEMORY: &'static str = "Device-Memory";
     pub const _DIGEST: &'static str = "Digest";
     pub const _DOWNLINK: &'static str = "Downlink";
@@ -78,8 +75,10 @@ impl Header {
     pub const _LOCATION: &'static str = "Location";
     pub const _MAX_FORWARDS: &'static str = "Max-Forwards";
     pub const _NEL: &'static str = "NEL";
+    pub const _ORIGIN: &'static str = "Origin";
     pub const _PROXY_AUTHENTICATE: &'static str = "Proxy-Authenticate";
     pub const _PROXY_AUTHORIZATION: &'static str = "Proxy-Authorization";
+    pub const _RANGE: &'static str = "Range";
     pub const _REFERER: &'static str = "Referer";
     pub const _REFERER_POLICY: &'static str = "Referer-Policy";
     pub const _RETRY_AFTER: &'static str = "Retry-After";
@@ -173,7 +172,7 @@ impl Header {
 
     pub fn get_accept_ranges_header() -> Header {
         Header {
-            name: Header::ACCEPT_RANGES.to_string(),
+            name: Header::_ACCEPT_RANGES.to_string(),
             value: Range::BYTES.to_string(),
         }
     }
@@ -187,7 +186,7 @@ impl Header {
 
     pub fn get_date_iso_8601_header() -> Header {
         Header {
-            name: Header::DATE_ISO_8601.to_string(),
+            name: Header::_DATE_ISO_8601.to_string(),
             value: DateTimeExt::_now_utc().to_string(),
         }
     }

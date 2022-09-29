@@ -68,7 +68,7 @@ fn static_file_cors_options_preflight_request_client_hints_on() {
     let origin_value = "origin-value.com";
     let custom_header = "X-CUSTOM-HEADER";
 
-    let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header);
+    let expected_allow_headers = format!("{},{}", Header::_CONTENT_TYPE, custom_header);
 
 
     let request = Request {
@@ -77,15 +77,15 @@ fn static_file_cors_options_preflight_request_client_hints_on() {
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![
             Header {
-                name: Header::ORIGIN.to_string(),
+                name: Header::_ORIGIN.to_string(),
                 value: origin_value.to_string()
             },
             Header {
-                name: Header::ACCESS_CONTROL_REQUEST_METHOD.to_string(),
+                name: Header::_ACCESS_CONTROL_REQUEST_METHOD.to_string(),
                 value: METHOD.post.to_string()
             },
             Header {
-                name: Header::ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
+                name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
                 value: expected_allow_headers
             },
         ]
@@ -93,21 +93,21 @@ fn static_file_cors_options_preflight_request_client_hints_on() {
 
     let (response, _request) = App::handle_request(request);
 
-    let allow_origins = response._get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
+    let allow_origins = response._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
     assert_eq!(origin_value, allow_origins.value);
 
-    let allow_headers = response._get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
-    let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
+    let allow_headers = response._get_header(Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
+    let expected_allow_headers = format!("{},{}", Header::_CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
     assert_eq!(expected_allow_headers, allow_headers.value);
 
-    let allow_credentials = response._get_header(Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
+    let allow_credentials = response._get_header(Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
     assert_eq!("true", allow_credentials.value);
 
-    let expose_headers = response._get_header(Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string()).unwrap();
-    let expected_expose_headers = format!("{},{}", Header::CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
+    let expose_headers = response._get_header(Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string()).unwrap();
+    let expected_expose_headers = format!("{},{}", Header::_CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
     assert_eq!(expected_expose_headers, expose_headers.value);
 
-    let max_age = response._get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
+    let max_age = response._get_header(Header::_ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
     assert_eq!(Cors::MAX_AGE, max_age.value);
 
     let vary_header = response._get_header(Header::_VARY.to_string()).unwrap();
@@ -138,7 +138,7 @@ fn static_file_cors_options_preflight_request_client_hints_off() {
     let origin_value = "origin-value.com";
     let custom_header = "X-CUSTOM-HEADER";
 
-    let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header);
+    let expected_allow_headers = format!("{},{}", Header::_CONTENT_TYPE, custom_header);
 
 
     let request = Request {
@@ -147,15 +147,15 @@ fn static_file_cors_options_preflight_request_client_hints_off() {
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![
             Header {
-                name: Header::ORIGIN.to_string(),
+                name: Header::_ORIGIN.to_string(),
                 value: origin_value.to_string()
             },
             Header {
-                name: Header::ACCESS_CONTROL_REQUEST_METHOD.to_string(),
+                name: Header::_ACCESS_CONTROL_REQUEST_METHOD.to_string(),
                 value: METHOD.post.to_string()
             },
             Header {
-                name: Header::ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
+                name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
                 value: expected_allow_headers
             },
         ]
@@ -163,21 +163,21 @@ fn static_file_cors_options_preflight_request_client_hints_off() {
 
     let (response, _request) = App::handle_request(request);
 
-    let allow_origins = response._get_header(Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
+    let allow_origins = response._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
     assert_eq!(origin_value, allow_origins.value);
 
-    let allow_headers = response._get_header(Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
-    let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
+    let allow_headers = response._get_header(Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string()).unwrap();
+    let expected_allow_headers = format!("{},{}", Header::_CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
     assert_eq!(expected_allow_headers, allow_headers.value);
 
-    let allow_credentials = response._get_header(Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
+    let allow_credentials = response._get_header(Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string()).unwrap();
     assert_eq!("true", allow_credentials.value);
 
-    let expose_headers = response._get_header(Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string()).unwrap();
-    let expected_expose_headers = format!("{},{}", Header::CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
+    let expose_headers = response._get_header(Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string()).unwrap();
+    let expected_expose_headers = format!("{},{}", Header::_CONTENT_TYPE.to_lowercase(), custom_header.to_lowercase());
     assert_eq!(expected_expose_headers, expose_headers.value);
 
-    let max_age = response._get_header(Header::ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
+    let max_age = response._get_header(Header::_ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
     assert_eq!(Cors::MAX_AGE, max_age.value);
 
     let vary_header = response._get_header(Header::_VARY.to_string()).unwrap();
@@ -207,7 +207,7 @@ fn static_file_cors_off_options_preflight_request_client_hints_on() {
     let origin_value = "origin-value.com";
     let custom_header = "X-CUSTOM-HEADER";
 
-    let expected_allow_headers = format!("{},{}", Header::CONTENT_TYPE, custom_header);
+    let expected_allow_headers = format!("{},{}", Header::_CONTENT_TYPE, custom_header);
 
 
     let request = Request {
@@ -216,15 +216,15 @@ fn static_file_cors_off_options_preflight_request_client_hints_on() {
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![
             Header {
-                name: Header::ORIGIN.to_string(),
+                name: Header::_ORIGIN.to_string(),
                 value: origin_value.to_string()
             },
             Header {
-                name: Header::ACCESS_CONTROL_REQUEST_METHOD.to_string(),
+                name: Header::_ACCESS_CONTROL_REQUEST_METHOD.to_string(),
                 value: METHOD.post.to_string()
             },
             Header {
-                name: Header::ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
+                name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
                 value: expected_allow_headers
             },
         ]

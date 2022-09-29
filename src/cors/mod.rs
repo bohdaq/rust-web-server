@@ -24,54 +24,54 @@ impl Cors {
     pub(crate) const MAX_AGE: &'static str = "86400";
 
     pub fn get_vary_header_value() -> String {
-        Header::ORIGIN.to_string()
+        Header::_ORIGIN.to_string()
     }
 
     pub(crate) fn allow_all(request: &Request) -> Result<Vec<Header>, Error> {
         let mut headers : Vec<Header> = vec![];
-        let origin = request.get_header(Header::ORIGIN.to_string());
+        let origin = request.get_header(Header::_ORIGIN.to_string());
         if origin.is_some() {
             let allow_origin = Header {
-                name: Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
+                name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
                 value: origin.unwrap().value.to_string()
             };
             headers.push(allow_origin);
 
             let allow_credentials = Header {
-                name: Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
+                name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
                 value: "true".to_string()
             };
             headers.push(allow_credentials);
 
             let is_options = request.method == METHOD.options;
             if is_options {
-                let method = request.get_header(Header::ACCESS_CONTROL_REQUEST_METHOD.to_string());
+                let method = request.get_header(Header::_ACCESS_CONTROL_REQUEST_METHOD.to_string());
                 if method.is_some() {
                     let allow_method = Header {
-                        name: Header::ACCESS_CONTROL_ALLOW_METHODS.to_string(),
+                        name: Header::_ACCESS_CONTROL_ALLOW_METHODS.to_string(),
                         value: method.unwrap().value.to_string()
                     };
                     headers.push(allow_method);
                 }
 
-                let access_control_request_headers = request.get_header(Header::ACCESS_CONTROL_REQUEST_HEADERS.to_string());
+                let access_control_request_headers = request.get_header(Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string());
                 if access_control_request_headers.is_some() {
                     let request_headers = access_control_request_headers.unwrap();
                     let allow_headers = Header {
-                        name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
+                        name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
                         value: request_headers.value.to_lowercase(),
                     };
                     headers.push(allow_headers);
 
                     let expose_headers = Header {
-                        name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
+                        name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
                         value: request_headers.value.to_lowercase(),
                     };
                     headers.push(expose_headers);
                 }
 
                 let max_age = Header {
-                    name: Header::ACCESS_CONTROL_MAX_AGE.to_string(),
+                    name: Header::_ACCESS_CONTROL_MAX_AGE.to_string(),
                     value: Cors::MAX_AGE.to_string()
                 };
                 headers.push(max_age);
@@ -86,7 +86,7 @@ impl Cors {
         let mut headers : Vec<Header> = vec![];
 
         let allow_origins = cors.allow_origins.join(",");
-        let boxed_origin = request.get_header(Header::ORIGIN.to_string());
+        let boxed_origin = request.get_header(Header::_ORIGIN.to_string());
 
         if boxed_origin.is_none() {
             return Ok(headers)
@@ -101,14 +101,14 @@ impl Cors {
         }
 
         let allow_origin = Header {
-            name: Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
+            name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
             value: origin_value
         };
         headers.push(allow_origin);
 
         if cors.allow_credentials {
             let allow_credentials = Header {
-                name: Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
+                name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
                 value: cors.allow_credentials.to_string()
             };
             headers.push(allow_credentials);
@@ -118,27 +118,27 @@ impl Cors {
         if is_options {
             let methods = cors.allow_methods.join(",");
             let allow_methods = Header {
-                name: Header::ACCESS_CONTROL_ALLOW_METHODS.to_string(),
+                name: Header::_ACCESS_CONTROL_ALLOW_METHODS.to_string(),
                 value: methods
             };
             headers.push(allow_methods);
 
             let allow_headers_value = cors.allow_headers.join(",");
             let allow_headers = Header {
-                name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
+                name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
                 value: allow_headers_value.to_lowercase()
             };
             headers.push(allow_headers);
 
             let allow_expose_headers  = cors.expose_headers.join(",");
             let expose_headers = Header {
-                name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
+                name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
                 value: allow_expose_headers.to_lowercase()
             };
             headers.push(expose_headers);
 
             let max_age = Header {
-                name: Header::ACCESS_CONTROL_MAX_AGE.to_string(),
+                name: Header::_ACCESS_CONTROL_MAX_AGE.to_string(),
                 value: cors.max_age.to_string()
             };
             headers.push(max_age);
@@ -151,7 +151,7 @@ impl Cors {
         let mut headers : Vec<Header> = vec![];
         let allow_origins : String = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS).unwrap();
 
-        let boxed_origin = request.get_header(Header::ORIGIN.to_string());
+        let boxed_origin = request.get_header(Header::_ORIGIN.to_string());
 
         if boxed_origin.is_none() {
             return Ok(headers)
@@ -166,7 +166,7 @@ impl Cors {
         }
 
         let allow_origin = Header {
-            name: Header::ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
+            name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
             value: origin_value
         };
         headers.push(allow_origin);
@@ -174,7 +174,7 @@ impl Cors {
         let is_allow_credentials : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS).unwrap().parse().unwrap();
         if is_allow_credentials {
             let allow_credentials = Header {
-                name: Header::ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
+                name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
                 value: is_allow_credentials.to_string()
             };
             headers.push(allow_credentials);
@@ -184,28 +184,28 @@ impl Cors {
         if is_options {
             let methods = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS).unwrap();
             let allow_methods = Header {
-                name: Header::ACCESS_CONTROL_ALLOW_METHODS.to_string(),
+                name: Header::_ACCESS_CONTROL_ALLOW_METHODS.to_string(),
                 value: methods
             };
             headers.push(allow_methods);
 
             let allow_headers_env_variable = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS).unwrap();
             let allow_headers = Header {
-                name: Header::ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
+                name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
                 value: allow_headers_env_variable.to_lowercase()
             };
             headers.push(allow_headers);
 
             let allow_expose_headers  = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS).unwrap();
             let expose_headers = Header {
-                name: Header::ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
+                name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
                 value: allow_expose_headers.to_lowercase()
             };
             headers.push(expose_headers);
 
             let max_age_value  = env::var(Config::RWS_CONFIG_CORS_MAX_AGE).unwrap();
             let max_age = Header {
-                name: Header::ACCESS_CONTROL_MAX_AGE.to_string(),
+                name: Header::_ACCESS_CONTROL_MAX_AGE.to_string(),
                 value: max_age_value
             };
             headers.push(max_age);

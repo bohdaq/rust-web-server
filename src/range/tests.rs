@@ -39,7 +39,7 @@ fn check_range_response_is_ok_two_part() {
     };
 
     let range = Header {
-        name: Header::RANGE.to_string(),
+        name: Header::_RANGE.to_string(),
         value: range_header_value.to_string()
     };
 
@@ -71,9 +71,9 @@ fn check_range_response_is_ok_two_part() {
     assert_eq!(VERSION.http_1_1, response.http_version);
     let header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
-    let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
+    let header = response._get_header(Header::_ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
-    let header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
     let value = [
         Range::MULTIPART,
         SYMBOL.slash,
@@ -134,7 +134,7 @@ fn check_range_response_is_ok_single_part() {
     };
 
     let range = Header {
-        name: Header::RANGE.to_string(),
+        name: Header::_RANGE.to_string(),
         value: range_header_value.to_string()
     };
 
@@ -166,9 +166,9 @@ fn check_range_response_is_ok_single_part() {
     assert_eq!(VERSION.http_1_1, response.http_version);
     let header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, header.value);
-    let header = response._get_header(Header::ACCEPT_RANGES.to_string()).unwrap();
+    let header = response._get_header(Header::_ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
-    let header = response._get_header(Header::CONTENT_TYPE.to_string()).unwrap();
+    let header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
     let value = MimeType::TEXT_PLAIN.to_string();
     assert_eq!(value, header.value);
 
@@ -188,7 +188,7 @@ fn get_right_content_range_of_a_file() {
     let file_size = md.len();
 
     let header = Header {
-        name: Header::RANGE.to_string(),
+        name: Header::_RANGE.to_string(),
         value: "bytes=200-1000, 1200-1400, 2000-2300, 11000-, -500, 0-, 0-1".to_string()
     };
 

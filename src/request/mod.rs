@@ -165,7 +165,7 @@ impl Request {
             let mut header = Header { name: "".to_string(), value: "".to_string() };
             if !is_first_iteration {
                 header = Request::parse_http_request_header_string(&string);
-                if header.name == Header::CONTENT_LENGTH {
+                if header.name == Header::_CONTENT_LENGTH {
                     content_length = header.value.parse().unwrap();
                 }
             }

@@ -225,7 +225,7 @@ impl Range {
         }
 
         let content_type_is_not_parsed = content_range.content_type.len() == 0;
-        if string.starts_with(Header::CONTENT_TYPE) && content_type_is_not_parsed {
+        if string.starts_with(Header::_CONTENT_TYPE) && content_type_is_not_parsed {
             let content_type = Response::_parse_http_response_header_string(string.as_str());
             content_range.content_type = content_type.value.trim().to_string();
 
@@ -235,7 +235,7 @@ impl Range {
         }
 
         let content_range_is_not_parsed = content_range.size.len() == 0;
-        if string.starts_with(Header::CONTENT_RANGE) && content_range_is_not_parsed {
+        if string.starts_with(Header::_CONTENT_RANGE) && content_range_is_not_parsed {
             let content_range_header = Response::_parse_http_response_header_string(string.as_str());
 
             let boxed_result = Range::_parse_content_range_header_value(content_range_header.value);

@@ -14,7 +14,7 @@ use crate::symbol::SYMBOL;
 #[test]
 fn check_is_multipart_byteranges_content_type() {
     let content_type = Header {
-        name: Header::CONTENT_TYPE.to_string(),
+        name: Header::_CONTENT_TYPE.to_string(),
         value: "multipart/byteranges; boundary=String_separator".to_string(),
     };
 
