@@ -84,6 +84,12 @@ impl Header {
     pub const _LOCATION: &'static str = "Location";
     pub const _MAX_FORWARDS: &'static str = "Max-Forwards";
     pub const _NEL: &'static str = "NEL";
+    pub const _PROXY_AUTHENTICATE: &'static str = "Proxy-Authenticate";
+    pub const _PROXY_AUTHORIZATION: &'static str = "Proxy-Authorization";
+    pub const _REFERER: &'static str = "Referer";
+    pub const _REFERER_POLICY: &'static str = "Referer-Policy";
+    pub const _RETRY_AFTER: &'static str = "Retry-After";
+    pub const _RTT: &'static str = "RTT";
 
 
 
