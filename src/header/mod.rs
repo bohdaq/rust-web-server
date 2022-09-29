@@ -27,7 +27,6 @@ impl Header {
     pub const _HOST: &'static str = "Host";
     pub const VARY: &'static str = "Vary";
     pub const ORIGIN: &'static str = "Origin";
-    pub const _DATE: &'static str = "Date";
     pub const DATE_ISO_8601: &'static str = "Date-ISO-8601";
 
     pub const ACCESS_CONTROL_REQUEST_METHOD: &'static str = "Access-Control-Request-Method";
@@ -48,6 +47,25 @@ impl Header {
     pub const _AGE: &'static str = "Age";
     pub const _ALLOW: &'static str = "Allow";
     pub const _ALT_SVC: &'static str = "Alt-Svc";
+    pub const _AUTHORIZATION: &'static str = "Authorization";
+    pub const _CACHE_CONTROL: &'static str = "Cache-Control";
+    pub const _CLEAR_SITE_DATA: &'static str = "Clear-Site-Data";
+    pub const _CONTENT_DISPOSITION: &'static str = "Content-Disposition";
+    pub const _CONTENT_ENCODING: &'static str = "Content-Encoding";
+    pub const _CONTENT_LANGUAGE: &'static str = "Content-Language";
+    pub const _CONTENT_LENGTH: &'static str = "Content-Length";
+    pub const _CONTENT_LOCATION: &'static str = "Content-Location";
+    pub const _CONTENT_SECURITY_POLICY: &'static str = "Content-Security-Policy";
+    pub const _CONTENT_SECURITY_POLICY_REPORT_ONLY: &'static str = "Content-Security-Policy-Report-Only";
+    pub const _COOKIE: &'static str = "Cookie";
+    pub const _CROSS_ORIGIN_EMBEDDER_POLICY: &'static str = "Cross-Origin-Embedder-Policy";
+    pub const _CROSS_ORIGIN_OPENER_POLICY: &'static str = "Cross-Origin-Opener-Policy";
+    pub const _CROSS_ORIGIN_RESOURCE_POLICY: &'static str = "Cross-Origin-Resource-Policy";
+    pub const _DATE: &'static str = "Date";
+    pub const _DEVICE_MEMORY: &'static str = "Device-Memory";
+    pub const _DIGEST: &'static str = "Digest";
+    pub const _DOWNLINK: &'static str = "Downlink";
+    pub const _EARLY_DATA: &'static str = "Early-Data";
 
 
 

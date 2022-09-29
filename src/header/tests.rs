@@ -86,5 +86,23 @@ fn header_constants() {
     assert_eq!(Header::_AGE, "Age");
     assert_eq!(Header::DATE_ISO_8601, "Date-ISO-8601");
     assert_eq!(Header::_ALT_SVC, "Alt-Svc");
+    assert_eq!(Header::_AUTHORIZATION, "Authorization");
+    assert_eq!(Header::_CACHE_CONTROL, "Cache-Control");
+    assert_eq!(Header::_CLEAR_SITE_DATA, "Clear-Site-Data");
+    assert_eq!(Header::_CONTENT_DISPOSITION, "Content-Disposition");
+    assert_eq!(Header::_CONTENT_LANGUAGE, "Content-Language");
+    assert_eq!(Header::_CONTENT_LENGTH, "Content-Length");
+    assert_eq!(Header::_CONTENT_LOCATION, "Content-Location");
+    assert_eq!(Header::_CONTENT_SECURITY_POLICY, "Content-Security-Policy");
+    assert_eq!(Header::_CONTENT_SECURITY_POLICY_REPORT_ONLY, "Content-Security-Policy-Report-Only");
+    assert_eq!(Header::_COOKIE, "Cookie");
+    assert_eq!(Header::_CROSS_ORIGIN_EMBEDDER_POLICY, "Cross-Origin-Embedder-Policy");
+    assert_eq!(Header::_CROSS_ORIGIN_OPENER_POLICY, "Cross-Origin-Opener-Policy");
+    assert_eq!(Header::_CROSS_ORIGIN_RESOURCE_POLICY, "Cross-Origin-Resource-Policy");
+    assert_eq!(Header::_DATE, "Date");
+    assert_eq!(Header::_DEVICE_MEMORY, "Device-Memory");
+    assert_eq!(Header::_DIGEST, "Digest");
+    assert_eq!(Header::_DOWNLINK, "Downlink");
+    assert_eq!(Header::_EARLY_DATA, "Early-Data");
 
 }
