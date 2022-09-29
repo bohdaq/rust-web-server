@@ -133,5 +133,11 @@ fn header_constants() {
     assert_eq!(Header::_SEC_CH_UA_MODEL, "Sec-CH-UA-Model");
     assert_eq!(Header::_SEC_CH_UA_PLATFORM, "Sec-CH-UA-Platform");
     assert_eq!(Header::_SEC_CH_UA_PLATFORM_VERSION, "Sec-CH-UA-Platform-Version");
+    assert_eq!(Header::_SEC_FETCH_DEST, "Sec-Fetch-Dest");
+    assert_eq!(Header::_SEC_FETCH_MODE, "Sec-Fetch-Mode");
+    assert_eq!(Header::_SEC_FETCH_SITE, "Sec-Fetch-Site");
+    assert_eq!(Header::_SEC_FETCH_USER, "Sec-Fetch-User");
+    assert_eq!(Header::_SERVER, "Server");
+    assert_eq!(Header::_SET_COOKIE, "Set-Cookie");
 
 }

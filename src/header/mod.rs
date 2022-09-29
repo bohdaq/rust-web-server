@@ -99,6 +99,15 @@ impl Header {
     pub const _SEC_CH_UA_MODEL: &'static str = "Sec-CH-UA-Model";
     pub const _SEC_CH_UA_PLATFORM: &'static str = "Sec-CH-UA-Platform";
     pub const _SEC_CH_UA_PLATFORM_VERSION: &'static str = "Sec-CH-UA-Platform-Version";
+    pub const _SEC_FETCH_DEST: &'static str = "Sec-Fetch-Dest";
+    pub const _SEC_FETCH_MODE: &'static str = "Sec-Fetch-Mode";
+    pub const _SEC_FETCH_SITE: &'static str = "Sec-Fetch-Site";
+    pub const _SEC_FETCH_USER: &'static str = "Sec-Fetch-User";
+    pub const _SEC_GPC: &'static str = "Sec-GPC";
+    pub const _SERVER: &'static str = "Server";
+    pub const _SERVER_TIMING: &'static str = "Server-Timing";
+    pub const _SERVICE_WORKER_NAVIGATION_PRELOAD: &'static str = "Service-Worker-Navigation-Preload";
+    pub const _SET_COOKIE: &'static str = "Set-Cookie";
 
 
 
