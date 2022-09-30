@@ -19,5 +19,17 @@ use crate::entry_point::start;
 
 
 fn main() {
+ const VERSION: &str = env!("CARGO_PKG_VERSION");
+ const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
+ const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
+ const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
+
+ println!("Rust Web Server");
+ println!("Version:    {}", VERSION);
+ println!("Authors:    {}", AUTHORS);
+ println!("Repository: {}", REPOSITORY);
+ println!("Desciption: {}\n\n", DESCRIPTION);
+ println!("RWS Configuration Start: \n");
+
  start();
 }
