@@ -157,5 +157,7 @@ fn header_constants() {
     assert_eq!(Header::_X_FRAME_OPTIONS, "X-Frame-Options");
     assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_DENY, "DENY");
     assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, "SAMEORIGIN");
+    assert_eq!(Header::_LAST_MODIFIED, "Last-Modified");
+    assert_eq!(Header::_LAST_MODIFIED_ISO_8601, "Last-Modified-ISO-8601");
 
 }

@@ -52,6 +52,18 @@ impl StaticResourceController {
                     status_code_reason_phrase = STATUS_CODE_REASON_PHRASE.n204_no_content;
                 }
 
+
+                let dir = env::current_dir().unwrap();
+                let working_directory = dir.as_path().to_str().unwrap();
+                let static_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
+                let boxed_modified_date_time = FileExt::file_modified_utc(&static_filepath);
+
+                if boxed_modified_date_time.is_ok() {
+                    let modified_date_time = boxed_modified_date_time.unwrap();
+                    let last_modified_iso_8601 = Header{ name: Header::_LAST_MODIFIED_ISO_8601.to_string(), value: modified_date_time.format("%+").to_string() };
+                    response.headers.push(last_modified_iso_8601);
+                }
+
                 response.status_code = *status_code_reason_phrase.status_code;
                 response.reason_phrase = status_code_reason_phrase.reason_phrase.to_string();
                 response.content_range_list = content_range_list;

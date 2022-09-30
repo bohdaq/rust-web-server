@@ -126,7 +126,10 @@ impl Request {
     pub(crate)  fn parse_http_request_header_string(header_string: &str) -> Header {
         let header_parts: Vec<&str> = header_string.split(Header::NAME_VALUE_SEPARATOR).collect();
         let header_name = StringExt::truncate_new_line_carriage_return(header_parts[0]);
-        let header_value = StringExt::truncate_new_line_carriage_return(header_parts[1]);
+        let mut header_value= "".to_string();
+        if header_parts.get(1).is_some() {
+            header_value = StringExt::truncate_new_line_carriage_return(header_parts[1]);
+        }
 
         Header {
             name: header_name,

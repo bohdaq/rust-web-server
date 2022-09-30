@@ -71,6 +71,7 @@ impl Header {
     pub const _IF_RANGE: &'static str = "If-Range";
     pub const _IF_UNMODIFIED_SINCE: &'static str = "If-Unmodified-Since";
     pub const _LAST_MODIFIED: &'static str = "Last-Modified";
+    pub const _LAST_MODIFIED_ISO_8601: &'static str = "Last-Modified-ISO-8601";
     pub const _LINK: &'static str = "Link";
     pub const _LOCATION: &'static str = "Location";
     pub const _MAX_FORWARDS: &'static str = "Max-Forwards";
@@ -187,7 +188,7 @@ impl Header {
     pub fn get_date_iso_8601_header() -> Header {
         Header {
             name: Header::_DATE_ISO_8601.to_string(),
-            value: DateTimeExt::_now_utc().to_string(),
+            value: DateTimeExt::_now_utc().format("%+").to_string(),
         }
     }
 

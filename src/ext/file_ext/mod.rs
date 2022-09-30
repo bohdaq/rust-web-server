@@ -1,6 +1,8 @@
 use std::env;
-use std::fs::File;
+use std::fs::{File};
 use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::time::{UNIX_EPOCH};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use crate::range::Range;
 use crate::symbol::SYMBOL;
 
@@ -57,6 +59,36 @@ impl FileExt {
         }
         Ok(file_content)
     }
+
+    pub fn file_modified_utc(filepath: &str) -> Result<DateTime<Utc>, String> {
+
+        let boxed_open = File::open(filepath);
+        if boxed_open.is_err() {
+            let error_msg = boxed_open.err().unwrap();
+            let error = format!("<p>Unable to open file: {}</p> <p>error: {}</p>", filepath, error_msg);
+            return Err(error)
+        }
+
+        let file : File = boxed_open.unwrap();
+        let boxed_metadata = file.metadata();
+        if boxed_metadata.is_err() {
+            let error_msg = boxed_metadata.err().unwrap();
+            let error = format!("<p>Unable to open file: {}</p> <p>error: {}</p>", filepath, error_msg);
+            return Err(error)
+        }
+        let metadata = boxed_metadata.unwrap();
+        let boxed_last_modified_time = metadata.modified();
+        if boxed_last_modified_time.is_err() {
+            let error_msg = boxed_last_modified_time.err().unwrap();
+            let error = format!("<p>Unable to open file: {}</p> <p>error: {}</p>", filepath, error_msg);
+            return Err(error)
+        }
+        let modified_time = boxed_last_modified_time.unwrap();
+        let seconds = modified_time.duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let naive_datetime = NaiveDateTime::from_timestamp(seconds as i64, 0);
+        let current_utc: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
+        Ok(current_utc)
+     }
 
     pub fn get_static_filepath(request_uri: &str) -> String {
         let dir = env::current_dir().unwrap();
