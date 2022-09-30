@@ -10,10 +10,10 @@ use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Request {
-    pub(crate) method: String,
-    pub(crate) request_uri: String,
-    pub(crate) http_version: String,
-    pub(crate) headers: Vec<Header>,
+    pub method: String,
+    pub request_uri: String,
+    pub http_version: String,
+    pub headers: Vec<Header>,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -42,14 +42,14 @@ pub const METHOD: Method = Method {
 };
 
 impl Request {
-    pub(crate) const METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX: &'static str = "(?P<method>(GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE))\\s(?P<request_uri>[^\\s]+)\\s(?P<http_version>[/.A-Za-z0-9]+)";
+    pub const METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX: &'static str = "(?P<method>(GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE))\\s(?P<request_uri>[^\\s]+)\\s(?P<http_version>[/.A-Za-z0-9]+)";
 
-    pub(crate) fn get_header(&self, name: String) -> Option<&Header> {
+    pub fn get_header(&self, name: String) -> Option<&Header> {
         let header =  self.headers.iter().find(|x| x.name.to_lowercase() == name.to_lowercase());
         header
     }
 
-    pub(crate) fn _generate_request(request: Request) -> String {
+    pub fn _generate_request(request: Request) -> String {
         let status = [
             request.method,
             request.request_uri,
@@ -78,7 +78,7 @@ impl Request {
         request
     }
 
-    pub(crate) fn parse_request(request_vec_u8: &[u8]) ->  Result<Request, String> {
+    pub fn parse_request(request_vec_u8: &[u8]) ->  Result<Request, String> {
         let mut cursor = io::Cursor::new(request_vec_u8);
 
         let mut request = Request {
@@ -101,7 +101,7 @@ impl Request {
 
     }
 
-    pub(crate)  fn parse_method_and_request_uri_and_http_version_string(http_version_status_code_reason_phrase: &str) -> Result<(String, String, String), String> {
+    pub  fn parse_method_and_request_uri_and_http_version_string(http_version_status_code_reason_phrase: &str) -> Result<(String, String, String), String> {
         let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
         let caps = re.captures(&http_version_status_code_reason_phrase);
 
@@ -123,7 +123,7 @@ impl Request {
 
     }
 
-    pub(crate)  fn parse_http_request_header_string(header_string: &str) -> Header {
+    pub  fn parse_http_request_header_string(header_string: &str) -> Header {
         let header_parts: Vec<&str> = header_string.split(Header::NAME_VALUE_SEPARATOR).collect();
         let header_name = StringExt::truncate_new_line_carriage_return(header_parts[0]);
         let mut header_value= "".to_string();
@@ -137,7 +137,7 @@ impl Request {
         }
     }
 
-    pub(crate) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, request: &mut Request, mut content_length: usize) -> Result<bool, String> {
+    pub fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, request: &mut Request, mut content_length: usize) -> Result<bool, String> {
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let b : &[u8] = &buf;

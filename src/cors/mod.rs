@@ -11,23 +11,23 @@ use crate::response::{Error};
 
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct Cors {
-    pub(crate) allow_all: bool,
-    pub(crate) allow_origins: Vec<String>,
-    pub(crate) allow_methods: Vec<String>,
-    pub(crate) allow_headers: Vec<String>,
-    pub(crate) allow_credentials: bool,
-    pub(crate) expose_headers: Vec<String>,
-    pub(crate) max_age: String,
+    pub allow_all: bool,
+    pub allow_origins: Vec<String>,
+    pub allow_methods: Vec<String>,
+    pub allow_headers: Vec<String>,
+    pub allow_credentials: bool,
+    pub expose_headers: Vec<String>,
+    pub max_age: String,
 }
 
 impl Cors {
-    pub(crate) const MAX_AGE: &'static str = "86400";
+    pub const MAX_AGE: &'static str = "86400";
 
     pub fn get_vary_header_value() -> String {
         Header::_ORIGIN.to_string()
     }
 
-    pub(crate) fn allow_all(request: &Request) -> Result<Vec<Header>, Error> {
+    pub fn allow_all(request: &Request) -> Result<Vec<Header>, Error> {
         let mut headers : Vec<Header> = vec![];
         let origin = request.get_header(Header::_ORIGIN.to_string());
         if origin.is_some() {
@@ -82,7 +82,7 @@ impl Cors {
         Ok(headers)
     }
 
-    pub(crate) fn _process(request: &Request, cors: &Cors) -> Result<Vec<Header>, Error> {
+    pub fn _process(request: &Request, cors: &Cors) -> Result<Vec<Header>, Error> {
         let mut headers : Vec<Header> = vec![];
 
         let allow_origins = cors.allow_origins.join(",");
@@ -147,7 +147,7 @@ impl Cors {
         Ok(headers)
     }
 
-    pub(crate) fn process_using_default_config(request: &Request) -> Result<Vec<Header>, Error> {
+    pub fn process_using_default_config(request: &Request) -> Result<Vec<Header>, Error> {
         let mut headers : Vec<Header> = vec![];
         let allow_origins : String = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS).unwrap();
 

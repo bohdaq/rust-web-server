@@ -14,23 +14,23 @@ use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Range {
-    pub(crate) start: u64,
-    pub(crate) end: u64,
+    pub start: u64,
+    pub end: u64,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ContentRange {
-    pub(crate) unit: String,
-    pub(crate) range: Range,
-    pub(crate) size: String,
-    pub(crate) body: Vec<u8>,
-    pub(crate) content_type: String,
+    pub unit: String,
+    pub range: Range,
+    pub size: String,
+    pub body: Vec<u8>,
+    pub content_type: String,
 }
 
 
 impl Range {
-    pub(crate) const STRING_SEPARATOR: &'static str = "String_separator";
-    pub(crate) const _CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})";
+    pub const STRING_SEPARATOR: &'static str = "String_separator";
+    pub const _CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})";
 
     pub const BOUNDARY: &'static str = "boundary";
     pub const BYTERANGES: &'static str = "byteranges";
@@ -38,19 +38,19 @@ impl Range {
     pub const BYTES: &'static str = "bytes";
 
 
-    pub(crate) const _ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";
-    pub(crate) const _ERROR_UNABLE_TO_PARSE_CONTENT_RANGE: &'static str = "unable to parse content-range";
+    pub const _ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";
+    pub const _ERROR_UNABLE_TO_PARSE_CONTENT_RANGE: &'static str = "unable to parse content-range";
 
-    pub(crate) const ERROR_START_IS_AFTER_END_CONTENT_RANGE: &'static str = "start is after end in content range";
-    pub(crate) const ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE: &'static str = "start is bigger than filesize in content range";
-    pub(crate) const ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE: &'static str = "end is bigger than filesize in content range";
-    pub(crate) const ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT: &'static str = "range header malformed, most likely you have an error in unit statement";
+    pub const ERROR_START_IS_AFTER_END_CONTENT_RANGE: &'static str = "start is after end in content range";
+    pub const ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE: &'static str = "start is bigger than filesize in content range";
+    pub const ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE: &'static str = "end is bigger than filesize in content range";
+    pub const ERROR_MALFORMED_RANGE_HEADER_WRONG_UNIT: &'static str = "range header malformed, most likely you have an error in unit statement";
 
-    pub(crate) const ERROR_UNABLE_TO_PARSE_RANGE_START: &'static str = "unable to parse range start";
-    pub(crate) const ERROR_UNABLE_TO_PARSE_RANGE_END: &'static str = "unable to parse range end";
+    pub const ERROR_UNABLE_TO_PARSE_RANGE_START: &'static str = "unable to parse range start";
+    pub const ERROR_UNABLE_TO_PARSE_RANGE_END: &'static str = "unable to parse range end";
 
 
-    pub(crate) fn parse_range_in_content_range(filelength: u64, range_str: &str) -> Result<Range, Error> {
+    pub fn parse_range_in_content_range(filelength: u64, range_str: &str) -> Result<Range, Error> {
         const START_INDEX: usize = 0;
         const END_INDEX: usize = 1;
 
@@ -131,7 +131,7 @@ impl Range {
         Ok(range)
     }
 
-    pub(crate) fn parse_content_range(filepath: &str, filelength: u64, raw_range_value: &str) -> Result<Vec<ContentRange>, Error> {
+    pub fn parse_content_range(filepath: &str, filelength: u64, raw_range_value: &str) -> Result<Vec<ContentRange>, Error> {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
 
@@ -180,7 +180,7 @@ impl Range {
         Ok(content_range_list)
     }
 
-    pub(crate) fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, Error> {
+    pub fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, Error> {
         let mut content_range_list : Vec<ContentRange> = vec![];
         let static_filepath = FileExt::get_static_filepath(request_uri);
 
@@ -198,7 +198,7 @@ impl Range {
         Ok(content_range_list)
     }
 
-    pub(crate) fn _parse_multipart_body(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>) -> Result<Vec<ContentRange>, String> {
+    pub fn _parse_multipart_body(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>) -> Result<Vec<ContentRange>, String> {
 
         let mut buffer = Range::_parse_line_as_bytes(cursor);
         let new_line_char_found = buffer.len() != 0;
@@ -301,7 +301,7 @@ impl Range {
 
     }
 
-    pub(crate)  fn _parse_content_range_header_value(header_value: String) -> Result<(String, u64, u64), String> {
+    pub  fn _parse_content_range_header_value(header_value: String) -> Result<(String, u64, u64), String> {
         let re = Regex::new(Range::_CONTENT_RANGE_REGEX).unwrap();
         let boxed_caps = re.captures(&header_value);
         if boxed_caps.is_none() {
@@ -333,13 +333,13 @@ impl Range {
         Ok((size, start, end))
     }
 
-    pub(crate) fn _parse_line_as_bytes(cursor: &mut Cursor<&[u8]>) -> Vec<u8> {
+    pub fn _parse_line_as_bytes(cursor: &mut Cursor<&[u8]>) -> Vec<u8> {
         let mut buffer = vec![];
         cursor.read_until(b'\n', &mut buffer).unwrap();
         buffer
     }
 
-    pub(crate) fn _convert_bytes_array_to_string(buffer: Vec<u8>) -> String {
+    pub fn _convert_bytes_array_to_string(buffer: Vec<u8>) -> String {
         let buffer_as_u8_array: &[u8] = &buffer;
         String::from_utf8(Vec::from(buffer_as_u8_array)).unwrap()
     }

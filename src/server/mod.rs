@@ -1,5 +1,5 @@
 #[cfg(test)]
-pub(crate) mod tests;
+pub mod tests;
 
 use std::io::prelude::*;
 use std::borrow::Borrow;
@@ -10,7 +10,7 @@ use crate::app::App;
 
 pub struct Server {}
 impl Server {
-    pub(crate) fn process_request(mut stream: impl Read + Write + Unpin) -> Vec<u8> {
+    pub fn process_request(mut stream: impl Read + Write + Unpin) -> Vec<u8> {
         let mut buffer :[u8; 1024] = [0; 1024];
         stream.read(&mut buffer).unwrap();
         let request : &[u8] = &buffer;

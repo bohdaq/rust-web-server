@@ -19,17 +19,17 @@ pub struct Error {
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Response {
-    pub(crate) http_version: String,
-    pub(crate) status_code: i16,
-    pub(crate) reason_phrase: String,
-    pub(crate) headers: Vec<Header>,
-    pub(crate) content_range_list: Vec<ContentRange>
+    pub http_version: String,
+    pub status_code: i16,
+    pub reason_phrase: String,
+    pub headers: Vec<Header>,
+    pub content_range_list: Vec<ContentRange>
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct StatusCodeReasonPhrase {
-    pub(crate) status_code: &'static i16,
-    pub(crate) reason_phrase: &'static str,
+    pub status_code: &'static i16,
+    pub reason_phrase: &'static str,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -192,12 +192,12 @@ impl Response {
 
     pub const _HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX: &'static str = "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)";
 
-    pub(crate) fn _get_header(&self, name: String) -> Option<&Header> {
+    pub fn _get_header(&self, name: String) -> Option<&Header> {
         let header =  self.headers.iter().find(|x| x.name == name);
         header
     }
 
-    pub(crate) fn generate_body(content_range_list: Vec<ContentRange>) -> Vec<u8> {
+    pub fn generate_body(content_range_list: Vec<ContentRange>) -> Vec<u8> {
         let mut body = vec![];
         let one = 1;
 
@@ -239,7 +239,7 @@ impl Response {
         body
     }
 
-    pub(crate) fn generate_response(mut response: Response, request: Request) -> Vec<u8> {
+    pub fn generate_response(mut response: Response, request: Request) -> Vec<u8> {
 
         if response.content_range_list.len() == 1 {
             let content_range_index = 0;
@@ -316,7 +316,7 @@ impl Response {
 
     }
 
-    pub(crate) fn _parse_response(response_vec_u8: &[u8]) -> Response {
+    pub fn _parse_response(response_vec_u8: &[u8]) -> Response {
         let mut cursor = io::Cursor::new(response_vec_u8);
 
         let mut response = Response {
@@ -335,7 +335,7 @@ impl Response {
         return response;
     }
 
-    pub(crate)  fn _parse_http_version_status_code_reason_phrase_string(http_version_status_code_reason_phrase: &str) -> Result<(String, i16, String), String> {
+    pub  fn _parse_http_version_status_code_reason_phrase_string(http_version_status_code_reason_phrase: &str) -> Result<(String, i16, String), String> {
         let re = Regex::new(Response::_HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
         let caps = re.captures(&http_version_status_code_reason_phrase).unwrap();
 
@@ -356,7 +356,7 @@ impl Response {
         return Ok((http_version, status_code_i16, reason_phrase))
     }
 
-    pub(crate)  fn _parse_http_response_header_string(header_string: &str) -> Header {
+    pub fn _parse_http_response_header_string(header_string: &str) -> Header {
         let header_parts: Vec<&str> = header_string.split(Header::NAME_VALUE_SEPARATOR).collect();
         let header_name = header_parts[0].to_string();
         let raw_header_value = header_parts[1].to_string();
@@ -369,7 +369,7 @@ impl Response {
         }
     }
 
-    pub(crate) fn _parse_raw_response_via_cursor(
+    pub fn _parse_raw_response_via_cursor(
         cursor: &mut Cursor<&[u8]>,
         mut iteration_number: usize,
         response: &mut Response,
@@ -456,7 +456,7 @@ impl Response {
         }
     }
 
-    pub(crate) fn _is_multipart_byteranges_content_type(content_type: &Header) -> bool {
+    pub fn _is_multipart_byteranges_content_type(content_type: &Header) -> bool {
         let multipart_byteranges =
             [
                 Range::MULTIPART,

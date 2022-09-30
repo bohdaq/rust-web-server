@@ -17,8 +17,8 @@ use crate::server::Server;
 use crate::symbol::SYMBOL;
 
 pub struct MockTcpStream {
-    pub(crate) read_data: Vec<u8>,
-    pub(crate) write_data: Vec<u8>,
+    pub read_data: Vec<u8>,
+    pub write_data: Vec<u8>,
 }
 
 impl Read for MockTcpStream {
