@@ -354,6 +354,22 @@ fn parse_range_test() {
     assert_eq!(range.end, 1);
 }
 
+
+#[test]
+fn content_range_raw_regex() {
+    let start_num = 123;
+    let end_num = 3212350;
+    let size_num = 191238270;
+
+    let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
+    let (start, end, size) = Range::_parse_raw_content_range_header_value(string).unwrap();
+
+
+    assert_eq!(start_num, start);
+    assert_eq!(end_num, end);
+    assert_eq!(size_num, size);
+}
+
 #[test]
 fn content_range_regex() {
     let start_num = 123;

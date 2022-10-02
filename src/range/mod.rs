@@ -301,6 +301,41 @@ impl Range {
 
     }
 
+    pub fn _parse_raw_content_range_header_value(unparsed_header_value: String)-> Result<(i64, i64, i64), String> {
+        let lowercase_unparsed_header_value = unparsed_header_value.trim().to_lowercase();
+
+        let mut start = 0 as i64;
+        let mut end = 0 as i64;
+        let mut size = 0 as i64;
+
+        println!("lowercase_unparsed_header_value {}", &lowercase_unparsed_header_value);
+
+        let split_without_bytes: Vec<&str> = lowercase_unparsed_header_value.split_whitespace().collect();
+        let bytes_index = 0;
+        let bytes = split_without_bytes.get(bytes_index).unwrap().to_string();
+        let without_bytes_index = 1;
+        let without_bytes = split_without_bytes.get(without_bytes_index).unwrap().to_string();
+
+        println!("bytes: {}", &bytes);
+        println!("without_bytes: {}", &without_bytes);
+
+        let (_start, _without_start) = without_bytes.split_once('-').unwrap();
+
+        println!("start: {}", &_start);
+        println!("without_start: {}", &_without_start);
+
+        let (_end, _size) = _without_start.split_once('/').unwrap();
+
+        println!("end: {}", &_end);
+        println!("without_end: {}", &_size);
+
+        start = _start.parse::<i64>().unwrap();
+        end = _end.parse::<i64>().unwrap();
+        size = _size.parse::<i64>().unwrap();
+
+        Ok((start, end, size))
+    }
+
     pub  fn _parse_content_range_header_value(header_value: String) -> Result<(String, u64, u64), String> {
         let re = Regex::new(Range::_CONTENT_RANGE_REGEX).unwrap();
         let boxed_caps = re.captures(&header_value);
