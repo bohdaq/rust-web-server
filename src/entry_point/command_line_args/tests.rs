@@ -180,9 +180,10 @@ fn parse() {
 
     let _args_vec_as_string : Vec<String> = args_vec_as_str.iter().map(|str| str.to_string()).collect::<Vec<String>>();
 
+    let debug = format!("{:?}", _args_vec_as_string);
+
     let _args_list : Vec<CommandLineArgument> = CommandLineArgument::_parse(_args_vec_as_string);
 
-    // let debug = format!("{:?}", args_list);
 
     assert_eq!("1", "1");
 }

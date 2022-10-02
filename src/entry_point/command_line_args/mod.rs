@@ -105,8 +105,23 @@ impl CommandLineArgument {
 
             let boxed_split = unparsed_argument.split_once('=');
             if boxed_split.is_some() {
+                let predefined_arguments_list = CommandLineArgument::get_command_line_arg_list();
+
                 let (parameter, value) = boxed_split.unwrap();
                 println!("{} {}", parameter, value);
+                let boxed_predefined_argument =
+                    predefined_arguments_list
+                        .iter()
+                        .find(
+                            |predefined_argument| {
+                                let _param = parameter.replace('-', "");
+                                predefined_argument.short_form.eq(_param.as_str()) || predefined_argument.long_form.eq(_param.as_str())
+                });
+                if boxed_predefined_argument.is_some() {
+                    let predefined_argument = boxed_predefined_argument.unwrap();
+                    CommandLineArgument::set_environment_variable(predefined_argument, value.to_string());
+                }
+
             }
         }
         argument_list
