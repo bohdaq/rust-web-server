@@ -4,7 +4,7 @@ thread_count = 200
 
 [cors]
 allow_all = false # true will allow all CORS requests and you can omit configuring cors properties below
-allow_origins = ["http://localhost:7888", "http://localhost:7887"] # list of allowed origins, this setting won't apply if cors allow_all set to true
+allow_origins = ["https://foo.example", "https://bar.example"] # list of allowed origins, this setting won't apply if cors allow_all set to true
 allow_methods = ["GET", "DELETE", "PUT", "PATCH"] # list of allowed methods, this setting won't apply if cors allow_all set to true
 allow_headers = ["content-type", "x-custom-header"] # list of allowed request headers, in lowercase, this setting won't apply if cors allow_all set to true
 allow_credentials = true # if set to true, will allow to transmit credentials via CORS requests, this setting won't apply if cors allow_all set to true

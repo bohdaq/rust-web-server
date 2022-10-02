@@ -7,7 +7,7 @@ export RWS_CONFIG_THREAD_COUNT="100"
 export RWS_CONFIG_CORS_ALLOW_ALL="false"
 
 # list of allowed origins, this setting won't apply if cors allow_all set to true
-export RWS_CONFIG_CORS_ALLOW_ORIGINS="http://localhost:7887,http://localhost:8888"
+export RWS_CONFIG_CORS_ALLOW_ORIGINS="https://foo.example,https://bar.example"
 
 # if set to true, will allow to transmit credentials via CORS requests, this setting won't apply if cors allow_all set to true
 export RWS_CONFIG_CORS_ALLOW_CREDENTIALS="true"
