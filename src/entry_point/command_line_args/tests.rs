@@ -174,7 +174,7 @@ fn command_line_arg_thread_cors_max_age() {
 
 #[test]
 fn parse() {
-    let args_vec_as_str : Vec<&str> = "-i=127.0.0.1 -p=7777 -t=100 -a=false -o=http://localhost:7887,http://localhost:8668 -m=GET,POST,PUT,DELETE -h=content-type,x-custom-header -c=true -e=content-type,x-custom-header -g=5555"
+    let args_vec_as_str : Vec<&str> = "-i=127.0.0.1 -p=7777 -t=100 -a=false -o=https://foo.example,https://bar.example -m=GET,POST,PUT,DELETE -h=content-type,x-custom-header -c=true -e=content-type,x-custom-header -g=523452"
         .split_whitespace()
         .collect::<Vec<&str>>();
 
@@ -184,7 +184,7 @@ fn parse() {
     let _args_list : Vec<CommandLineArgument> = CommandLineArgument::_parse(_args_vec_as_string, predefined_arguments_list);
 
     let env_var = env::var(Config::RWS_CONFIG_CORS_MAX_AGE).unwrap();
-    assert_eq!(env_var, "5555");
+    assert_eq!(env_var, "523452");
 
     let env_var = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS).unwrap();
     assert_eq!(env_var, "content-type,x-custom-header");
@@ -199,7 +199,7 @@ fn parse() {
     assert_eq!(env_var, "GET,POST,PUT,DELETE");
 
     let env_var = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS).unwrap();
-    assert_eq!(env_var, "http://localhost:7887,http://localhost:8668");
+    assert_eq!(env_var, "https://foo.example,https://bar.example");
 
     let env_var = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap();
     assert_eq!(env_var, "false");
