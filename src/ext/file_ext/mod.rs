@@ -1,8 +1,8 @@
 use std::env;
 use std::fs::{File};
 use std::io::{BufReader, Read, Seek, SeekFrom};
-use std::time::{UNIX_EPOCH};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
+use crate::ext::date_time_ext::DateTimeExt;
 use crate::range::Range;
 use crate::symbol::SYMBOL;
 
@@ -84,9 +84,7 @@ impl FileExt {
             return Err(error)
         }
         let modified_time = boxed_last_modified_time.unwrap();
-        let seconds = modified_time.duration_since(UNIX_EPOCH).unwrap().as_secs();
-        let naive_datetime = NaiveDateTime::from_timestamp(seconds as i64, 0);
-        let current_utc: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
+        let current_utc: DateTime<Utc> = DateTimeExt::_system_time_to_utc(modified_time);
         Ok(current_utc)
      }
 
