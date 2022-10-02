@@ -4,7 +4,6 @@ mod tests;
 use std::io::prelude::*;
 use std::fs::{metadata};
 use std::io::{Cursor};
-use regex::Regex;
 use crate::ext::file_ext::{FileExt};
 
 use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
@@ -240,11 +239,11 @@ impl Range {
 
             let boxed_result = Range::_parse_content_range_header_value(content_range_header.value);
             if boxed_result.is_ok() {
-                let (size, start, end) = boxed_result.unwrap();
+                let (start, end, size) = boxed_result.unwrap();
 
-                content_range.size = size;
-                content_range.range.start = start;
-                content_range.range.end = end;
+                content_range.size = size.to_string();
+                content_range.range.start = start as u64;
+                content_range.range.end = end as u64;
             } else {
                 return Err(boxed_result.err().unwrap())
             }
@@ -301,12 +300,12 @@ impl Range {
 
     }
 
-    pub fn _parse_raw_content_range_header_value(unparsed_header_value: String)-> Result<(i64, i64, i64), String> {
+    pub fn _parse_raw_content_range_header_value(unparsed_header_value: &str)-> Result<(i64, i64, i64), String> {
         let lowercase_unparsed_header_value = unparsed_header_value.trim().to_lowercase();
 
-        let mut start = 0 as i64;
-        let mut end = 0 as i64;
-        let mut size = 0 as i64;
+        let start : i64;
+        let end : i64;
+        let size : i64;
 
         println!("lowercase_unparsed_header_value {}", &lowercase_unparsed_header_value);
 
@@ -317,28 +316,12 @@ impl Range {
 
         let (bytes, without_bytes) = boxed_split_without_bytes.unwrap();
 
-        println!("bytes: {}", &bytes);
-        println!("without_bytes: {}", &without_bytes);
-
-        let boxed_without_bytes = without_bytes.split_once('-');
+        let boxed_without_bytes = without_bytes.split_once(SYMBOL.hyphen);
         if boxed_without_bytes.is_none() {
             return Err(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
         }
 
         let (_start, _without_start) = boxed_without_bytes.unwrap();
-
-        println!("start: {}", &_start);
-        println!("without_start: {}", &_without_start);
-
-
-        let boxed_without_start = _without_start.split_once('/');
-        if boxed_without_start.is_none() {
-            return Err(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
-        }
-        let (_end, _size) = boxed_without_start.unwrap();
-
-        println!("end: {}", &_end);
-        println!("without_end: {}", &_size);
 
         let boxed_start = _start.parse::<i64>();
         if boxed_start.is_err() {
@@ -346,6 +329,14 @@ impl Range {
         }
 
         start = boxed_start.unwrap();
+
+
+
+        let boxed_without_start = _without_start.split_once(SYMBOL.slash);
+        if boxed_without_start.is_none() {
+            return Err(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
+        }
+        let (_end, _size) = boxed_without_start.unwrap();
 
         let boxed_end = _end.parse::<i64>();
         if boxed_end.is_err() {
@@ -361,41 +352,28 @@ impl Range {
 
         size = boxed_size.unwrap();
 
-
-
         Ok((start, end, size))
     }
 
-    pub  fn _parse_content_range_header_value(header_value: String) -> Result<(String, u64, u64), String> {
-        let re = Regex::new(Range::_CONTENT_RANGE_REGEX).unwrap();
-        let boxed_caps = re.captures(&header_value);
-        if boxed_caps.is_none() {
-            return Err(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
+    pub fn _parse_content_range_header_value(header_value: String) -> Result<(i64, i64, i64), String> {
+        let boxed_parse_result = Range::_parse_raw_content_range_header_value(&header_value);
+        if boxed_parse_result.is_err() {
+            return Err(boxed_parse_result.err().unwrap())
         }
-
-        let caps = boxed_caps.unwrap();
-
-        let start= &caps["start"];
-        let end = &caps["end"];
-        let size = &caps["size"];
-
-        let size = size.to_string();
-        let start = start.parse().unwrap();
-        let end = end.parse().unwrap();
+        let (start, end, size) = boxed_parse_result.unwrap();
 
         if start > end {
             return Err(Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.to_string())
         }
 
-        let size_num: u64 = size.parse().unwrap();
-        if start > size_num {
+        if start > size {
             return Err(Range::ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string());
         }
-        if end > size_num {
+        if end > size {
             return  Err(Range::ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string());
         }
 
-        Ok((size, start, end))
+        Ok((start, end, size))
     }
 
     pub fn _parse_line_as_bytes(cursor: &mut Cursor<&[u8]>) -> Vec<u8> {
