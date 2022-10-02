@@ -99,18 +99,16 @@ impl CommandLineArgument {
         argument_list
     }
 
-    pub fn _parse(args: Vec<String>) -> Vec<CommandLineArgument> {
-        let argument_list : Vec<CommandLineArgument> = vec![];
+    pub fn _parse(args: Vec<String>, argument_list : Vec<CommandLineArgument>) -> Vec<CommandLineArgument> {
         for unparsed_argument in args.iter() {
 
             let boxed_split = unparsed_argument.split_once('=');
             if boxed_split.is_some() {
-                let predefined_arguments_list = CommandLineArgument::get_command_line_arg_list();
 
                 let (parameter, value) = boxed_split.unwrap();
                 println!("\n    {} {}", parameter, value);
                 let boxed_predefined_argument =
-                    predefined_arguments_list
+                    argument_list
                         .iter()
                         .find(
                             |predefined_argument| {

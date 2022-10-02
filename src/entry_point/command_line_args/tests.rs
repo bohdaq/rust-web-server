@@ -180,7 +180,8 @@ fn parse() {
 
     let _args_vec_as_string : Vec<String> = args_vec_as_str.iter().map(|str| str.to_string()).collect::<Vec<String>>();
 
-    let _args_list : Vec<CommandLineArgument> = CommandLineArgument::_parse(_args_vec_as_string);
+    let predefined_arguments_list = CommandLineArgument::get_command_line_arg_list();
+    let _args_list : Vec<CommandLineArgument> = CommandLineArgument::_parse(_args_vec_as_string, predefined_arguments_list);
 
     let env_var = env::var(Config::RWS_CONFIG_CORS_MAX_AGE).unwrap();
     assert_eq!(env_var, "5555");
