@@ -112,8 +112,13 @@ impl CommandLineArgument {
                         .iter()
                         .find(
                             |predefined_argument| {
-                                let _param = parameter.replace('-', "");
-                                predefined_argument.short_form.eq(_param.as_str()) || predefined_argument.long_form.eq(_param.as_str())
+                                let short_form = predefined_argument.short_form.to_string();
+                                let long_form = predefined_argument.long_form.to_string();
+                                let _param_short_form = ["-", &short_form].join("");
+                                let _param_long_form = ["--", &long_form].join("");
+
+                                parameter.eq(_param_short_form.as_str()) ||
+                                    parameter.eq(_param_long_form.as_str())
                 });
                 if boxed_predefined_argument.is_some() {
                     let predefined_argument = boxed_predefined_argument.unwrap();
