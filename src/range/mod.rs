@@ -29,8 +29,6 @@ pub struct ContentRange {
 
 impl Range {
     pub const STRING_SEPARATOR: &'static str = "String_separator";
-    pub const _CONTENT_RANGE_REGEX: &'static str = "bytes\\s(?P<start>\\d{1,})-(?P<end>\\d{1,})/(?P<size>\\d{1,})";
-
     pub const BOUNDARY: &'static str = "boundary";
     pub const BYTERANGES: &'static str = "byteranges";
     pub const MULTIPART: &'static str = "multipart";

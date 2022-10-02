@@ -1,7 +1,6 @@
 use std::borrow::Borrow;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Read, Seek, SeekFrom};
-use regex::Regex;
 use crate::ext::file_ext::FileExt;
 use crate::header::Header;
 use crate::http::VERSION;
@@ -468,29 +467,6 @@ fn content_range_raw_regex_empty_string() {
     assert!(boxed_result.is_err());
 
     assert_eq!(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string(), boxed_result.err().unwrap());
-}
-
-#[test]
-fn content_range_regex() {
-    let start_num = 123;
-    let end_num = 3212350;
-    let size_num = 191238270;
-
-    let string = format!("bytes {}-{}/{}", start_num, end_num, size_num);
-    let re = Regex::new(Range::_CONTENT_RANGE_REGEX).unwrap();
-    let caps = re.captures(string.as_str()).unwrap();
-
-    let start= &caps["start"];
-    let end = &caps["end"];
-    let size = &caps["size"];
-
-    let size = size.parse().unwrap();
-    let start = start.parse().unwrap();
-    let end = end.parse().unwrap();
-
-    assert_eq!(start_num, start);
-    assert_eq!(end_num, end);
-    assert_eq!(size_num, size);
 }
 
 #[test]
