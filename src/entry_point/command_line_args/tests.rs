@@ -156,6 +156,23 @@ fn command_line_arg_thread_cors_expose_headers() {
 }
 
 #[test]
+fn command_line_arg_thread_cors_max_age() {
+    let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
+
+    let argument = command_line_arg_list.get(9).unwrap();
+    let hint = argument.hint.as_ref().unwrap();
+    assert_eq!(argument.short_form, "g");
+    assert_eq!(argument.long_form, "cors-max-age");
+    assert_eq!(argument.environment_variable, Config::RWS_CONFIG_CORS_MAX_AGE.to_string());
+    assert_eq!(hint, "How long results of preflight requests can be cached (in seconds)");
+
+    CommandLineArgument::set_environment_variable(argument, "99999".to_string());
+
+    let env_var = env::var(&argument.environment_variable).unwrap();
+    assert_eq!(env_var, "99999");
+}
+
+#[test]
 fn parse() {
     let args_vec_as_str : Vec<&str> = "-i=127.0.0.1 -p=7777 -t=100 -a=false -o=http://localhost:7887,http://localhost:8668 -m=GET,POST,PUT,DELETE -h=content-type,x-custom-header -c=true -e=content-type,x-custom-header -g=5555"
         .split_whitespace()

@@ -92,7 +92,7 @@ impl CommandLineArgument {
             short_form: "g".to_string(),
             long_form: "cors-max-age".to_string(),
             environment_variable: Config::RWS_CONFIG_CORS_MAX_AGE.to_string(),
-            hint: Some("Comma separated list of allowed response headers, in lowercase, example: content-type,x-custom-header".to_string())
+            hint: Some("How long results of preflight requests can be cached (in seconds)".to_string())
         };
         argument_list.push(argument);
 
