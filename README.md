@@ -58,13 +58,6 @@ Minimum rust version is 1.64, as I'm testing on this specific version. However, 
 > 
 > $ ./rws --ip=127.0.0.1 --port=8888 --threads=100
 
->You will see similar output:
->
->Port: 8888
->
->IP: 127.0.0.1
->
->Hello, rust-web-server is up and running: 127.0.0.1:8888
 
 
 ## Community
