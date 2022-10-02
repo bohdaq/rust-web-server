@@ -216,7 +216,7 @@ fn parse() {
 
 #[test]
 fn parse_long_form() {
-    let args_vec_as_str : Vec<&str> = "--ip=127.0.0.1 --port=7777 --threads=100 --cors-allow-all=false --cors-allow-origins=https://foo.example,https://bar.example --cors-allow_methods=GET,POST,PUT,DELETE --cors-allow-headers=content-type,x-custom-header --cors-allow-credentials=true --cors-expose-headers=content-type,x-custom-header -g=86400"
+    let args_vec_as_str : Vec<&str> = "--ip=127.0.0.1 --port=7777 --threads=100 --cors-allow-all=false --cors-allow-origins=https://foo.example,https://bar.example --cors-allow_methods=GET,POST,PUT,DELETE --cors-allow-headers=content-type,x-custom-header --cors-allow-credentials=true --cors-expose-headers=content-type,x-custom-header --cors-max-age=86400"
         .split_whitespace()
         .collect::<Vec<&str>>();
 
