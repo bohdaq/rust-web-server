@@ -371,6 +371,88 @@ fn content_range_raw_regex() {
 }
 
 #[test]
+fn content_range_raw_regex_whitespace() {
+    let start_num = 123;
+    let end_num = 3212350;
+    let size_num = 191238270;
+
+    let string = format!("  bytes {}-{}/{}  ", start_num, end_num, size_num);
+    let (start, end, size) = Range::_parse_raw_content_range_header_value(string).unwrap();
+
+
+    assert_eq!(start_num, start);
+    assert_eq!(end_num, end);
+    assert_eq!(size_num, size);
+}
+
+#[test]
+fn content_range_raw_regex_whitespace_uppercase() {
+    let start_num = 123;
+    let end_num = 3212350;
+    let size_num = 191238270;
+
+    let string = format!("  BYTES {}-{}/{}  ", start_num, end_num, size_num);
+    let (start, end, size) = Range::_parse_raw_content_range_header_value(string).unwrap();
+
+
+    assert_eq!(start_num, start);
+    assert_eq!(end_num, end);
+    assert_eq!(size_num, size);
+}
+
+#[test]
+fn content_range_raw_regex_random_string() {
+    let start_num = 123;
+    let end_num = 3212350;
+    let size_num = 191238270;
+
+    let string = format!(" some string ");
+    let boxed_result = Range::_parse_raw_content_range_header_value(string);
+    assert!(boxed_result.is_err());
+
+    assert_eq!(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string(), boxed_result.err().unwrap());
+}
+
+#[test]
+fn content_range_raw_regex_start_not_a_number() {
+    let start_num = "text";
+    let end_num = 3212350;
+    let size_num = 191238270;
+
+    let string = format!("  bytes {}-{}/{}  ", start_num, end_num, size_num);
+    let boxed_result = Range::_parse_raw_content_range_header_value(string);
+    assert!(boxed_result.is_err());
+
+    assert_eq!(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string(), boxed_result.err().unwrap());
+}
+
+#[test]
+fn content_range_raw_regex_end_not_a_number() {
+    let start_num = 123;
+    let end_num = 3212350;
+    let size_num = "text";
+
+    let string = format!("  bytes {}-{}/{}  ", start_num, end_num, size_num);
+    let boxed_result = Range::_parse_raw_content_range_header_value(string);
+    assert!(boxed_result.is_err());
+
+    assert_eq!(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string(), boxed_result.err().unwrap());
+}
+
+#[test]
+fn content_range_raw_regex_size_not_a_number() {
+    let start_num = 123;
+    let end_num = "sometext";
+    let size_num = 191238270;
+
+    let string = format!("  bytes {}-{}/{}  ", start_num, end_num, size_num);
+    let boxed_result = Range::_parse_raw_content_range_header_value(string);
+    assert!(boxed_result.is_err());
+
+    assert_eq!(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string(), boxed_result.err().unwrap());
+}
+
+#[test]
 fn content_range_regex() {
     let start_num = 123;
     let end_num = 3212350;

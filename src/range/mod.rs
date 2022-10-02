@@ -310,28 +310,58 @@ impl Range {
 
         println!("lowercase_unparsed_header_value {}", &lowercase_unparsed_header_value);
 
-        let split_without_bytes: Vec<&str> = lowercase_unparsed_header_value.split_whitespace().collect();
-        let bytes_index = 0;
-        let bytes = split_without_bytes.get(bytes_index).unwrap().to_string();
-        let without_bytes_index = 1;
-        let without_bytes = split_without_bytes.get(without_bytes_index).unwrap().to_string();
+        let boxed_split_without_bytes = lowercase_unparsed_header_value.split_once(SYMBOL.whitespace);
+        if boxed_split_without_bytes.is_none() {
+            return Err(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
+        }
+
+        let (bytes, without_bytes) = boxed_split_without_bytes.unwrap();
 
         println!("bytes: {}", &bytes);
         println!("without_bytes: {}", &without_bytes);
 
-        let (_start, _without_start) = without_bytes.split_once('-').unwrap();
+        let boxed_without_bytes = without_bytes.split_once('-');
+        if boxed_without_bytes.is_none() {
+            return Err(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
+        }
+
+        let (_start, _without_start) = boxed_without_bytes.unwrap();
 
         println!("start: {}", &_start);
         println!("without_start: {}", &_without_start);
 
-        let (_end, _size) = _without_start.split_once('/').unwrap();
+
+        let boxed_without_start = _without_start.split_once('/');
+        if boxed_without_start.is_none() {
+            return Err(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
+        }
+        let (_end, _size) = boxed_without_start.unwrap();
 
         println!("end: {}", &_end);
         println!("without_end: {}", &_size);
 
-        start = _start.parse::<i64>().unwrap();
-        end = _end.parse::<i64>().unwrap();
-        size = _size.parse::<i64>().unwrap();
+        let boxed_start = _start.parse::<i64>();
+        if boxed_start.is_err() {
+            return Err(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
+        }
+
+        start = boxed_start.unwrap();
+
+        let boxed_end = _end.parse::<i64>();
+        if boxed_end.is_err() {
+            return Err(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
+        }
+
+        end = boxed_end.unwrap();
+
+        let boxed_size = _size.parse::<i64>();
+        if boxed_size.is_err() {
+            return Err(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
+        }
+
+        size = boxed_size.unwrap();
+
+
 
         Ok((start, end, size))
     }
