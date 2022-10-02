@@ -180,10 +180,35 @@ fn parse() {
 
     let _args_vec_as_string : Vec<String> = args_vec_as_str.iter().map(|str| str.to_string()).collect::<Vec<String>>();
 
-    let debug = format!("{:?}", _args_vec_as_string);
-
     let _args_list : Vec<CommandLineArgument> = CommandLineArgument::_parse(_args_vec_as_string);
 
+    let env_var = env::var(Config::RWS_CONFIG_CORS_MAX_AGE).unwrap();
+    assert_eq!(env_var, "5555");
 
-    assert_eq!("1", "1");
+    let env_var = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS).unwrap();
+    assert_eq!(env_var, "content-type,x-custom-header");
+
+    let env_var = env::var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS).unwrap();
+    assert_eq!(env_var, "true");
+
+    let env_var = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS).unwrap();
+    assert_eq!(env_var, "content-type,x-custom-header");
+
+    let env_var = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS).unwrap();
+    assert_eq!(env_var, "GET,POST,PUT,DELETE");
+
+    let env_var = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS).unwrap();
+    assert_eq!(env_var, "http://localhost:7887,http://localhost:8668");
+
+    let env_var = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap();
+    assert_eq!(env_var, "false");
+
+    let env_var = env::var(Config::RWS_CONFIG_THREAD_COUNT).unwrap();
+    assert_eq!(env_var, "100");
+
+    let env_var = env::var(Config::RWS_CONFIG_PORT).unwrap();
+    assert_eq!(env_var, "7777");
+
+    let env_var = env::var(Config::RWS_CONFIG_IP).unwrap();
+    assert_eq!(env_var, "127.0.0.1");
 }

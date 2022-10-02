@@ -108,7 +108,7 @@ impl CommandLineArgument {
                 let predefined_arguments_list = CommandLineArgument::get_command_line_arg_list();
 
                 let (parameter, value) = boxed_split.unwrap();
-                println!("{} {}", parameter, value);
+                println!("\n    {} {}", parameter, value);
                 let boxed_predefined_argument =
                     predefined_arguments_list
                         .iter()
