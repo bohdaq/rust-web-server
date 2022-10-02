@@ -57,6 +57,8 @@ The rws will try to read configuration from [system environment variables](https
 
 If you want to build rust-web-server on your own, make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
 
+Minimum rust version is 1.64, as I'm testing on this specific version. However, if needed you may try to build rws on your own using older version using the _--ignore-rust-version_ flag.
+
 > $ cargo build --release
 > 
 > $ cd target/release
