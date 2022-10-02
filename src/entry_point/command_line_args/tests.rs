@@ -7,7 +7,7 @@ fn command_line_arg_port() {
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(0).unwrap();
-    let hint = argument.hint.as_ref().unwrap();
+    let hint = argument._hint.as_ref().unwrap();
     assert_eq!(argument.short_form, "p");
     assert_eq!(argument.long_form, "port");
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_PORT.to_string());
@@ -24,7 +24,7 @@ fn command_line_arg_ip() {
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(1).unwrap();
-    let hint = argument.hint.as_ref().unwrap();
+    let hint = argument._hint.as_ref().unwrap();
     assert_eq!(argument.short_form, "i");
     assert_eq!(argument.long_form, "ip");
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_IP.to_string());
@@ -41,7 +41,7 @@ fn command_line_arg_thread_count() {
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(2).unwrap();
-    let hint = argument.hint.as_ref().unwrap();
+    let hint = argument._hint.as_ref().unwrap();
     assert_eq!(argument.short_form, "t");
     assert_eq!(argument.long_form, "threads");
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_THREAD_COUNT.to_string());
@@ -58,7 +58,7 @@ fn command_line_arg_thread_cors_allow_all() {
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(3).unwrap();
-    let hint = argument.hint.as_ref().unwrap();
+    let hint = argument._hint.as_ref().unwrap();
     assert_eq!(argument.short_form, "a");
     assert_eq!(argument.long_form, "cors-allow-all");
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_CORS_ALLOW_ALL.to_string());
@@ -75,7 +75,7 @@ fn command_line_arg_thread_cors_allow_origins() {
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(4).unwrap();
-    let hint = argument.hint.as_ref().unwrap();
+    let hint = argument._hint.as_ref().unwrap();
     assert_eq!(argument.short_form, "o");
     assert_eq!(argument.long_form, "cors-allow-origins");
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_CORS_ALLOW_ORIGINS.to_string());
@@ -92,7 +92,7 @@ fn command_line_arg_thread_cors_allow_methods() {
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(5).unwrap();
-    let hint = argument.hint.as_ref().unwrap();
+    let hint = argument._hint.as_ref().unwrap();
     assert_eq!(argument.short_form, "m");
     assert_eq!(argument.long_form, "cors-allow_methods");
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_CORS_ALLOW_METHODS.to_string());
@@ -109,7 +109,7 @@ fn command_line_arg_thread_cors_allow_headers() {
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(6).unwrap();
-    let hint = argument.hint.as_ref().unwrap();
+    let hint = argument._hint.as_ref().unwrap();
     assert_eq!(argument.short_form, "h");
     assert_eq!(argument.long_form, "cors-allow-headers");
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_CORS_ALLOW_HEADERS.to_string());
@@ -126,7 +126,7 @@ fn command_line_arg_thread_cors_allow_credentials() {
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(7).unwrap();
-    let hint = argument.hint.as_ref().unwrap();
+    let hint = argument._hint.as_ref().unwrap();
     assert_eq!(argument.short_form, "c");
     assert_eq!(argument.long_form, "cors-allow-credentials");
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS.to_string());
@@ -143,7 +143,7 @@ fn command_line_arg_thread_cors_expose_headers() {
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(8).unwrap();
-    let hint = argument.hint.as_ref().unwrap();
+    let hint = argument._hint.as_ref().unwrap();
     assert_eq!(argument.short_form, "e");
     assert_eq!(argument.long_form, "cors-expose-headers");
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_CORS_EXPOSE_HEADERS.to_string());
@@ -160,7 +160,7 @@ fn command_line_arg_thread_cors_max_age() {
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(9).unwrap();
-    let hint = argument.hint.as_ref().unwrap();
+    let hint = argument._hint.as_ref().unwrap();
     assert_eq!(argument.short_form, "g");
     assert_eq!(argument.long_form, "cors-max-age");
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_CORS_MAX_AGE.to_string());
