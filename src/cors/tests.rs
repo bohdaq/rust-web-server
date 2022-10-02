@@ -124,7 +124,7 @@ fn cors_options_preflight_request() {
     assert_eq!(request_access_control_request_headers_header_value, access_control_expose_headers_header.value);
 
     let access_control_max_age_header = response._get_header(Header::_ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
-    assert_eq!("523452", access_control_max_age_header.value);
+    assert_eq!("86400", access_control_max_age_header.value);
 
 }
 
@@ -407,7 +407,7 @@ fn cors_process_default_config() {
     assert_eq!(expected_expose_headers, expose_headers.value);
 
     let max_age = response._get_header(Header::_ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
-    assert_eq!("523452", max_age.value);
+    assert_eq!("86400", max_age.value);
 
     let raw_response = Response::generate_response(response, request);
     let response_string = String::from_utf8(raw_response).unwrap();

@@ -9,4 +9,4 @@ allow_methods = ["POST", "PUT"] # won't apply if allow_all set to true
 allow_headers = ["content-type", "x-custom-header"] # won't apply if allow_all set to true
 allow_credentials = true # won't apply if allow_all set to true
 expose_headers = ["content-type", "x-custom-header"] # won't apply if allow_all set to true
-max_age = "523452" # won't apply if allow_all set to true
+max_age = "86400" # won't apply if allow_all set to true

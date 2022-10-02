@@ -123,15 +123,6 @@ impl CommandLineArgument {
             }
         }
         argument_list
-        // fn findArgument(long_form: &str, short_form: &str, args: Vec<String>) -> Option<CommandLineArgument> {
-        //     let mut argument = None;
-        //     let arg = args.iter().find(|arg| {
-
-        //
-        //         false
-        //     });
-
-        // }
     }
 
     pub fn set_environment_variable(argument: &CommandLineArgument, value: String) {
