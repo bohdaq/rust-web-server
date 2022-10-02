@@ -15,31 +15,22 @@ Currently, you can [download binary](https://github.com/bohdaq/rust-web-server/r
 ## Installation
 Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PATH_%28variable%29). To check installation execute the following code:
 
-> $ rws --help
+> $ rws
  
 You will see similar output:
 
-> rws rust-web-server 0.0.23
+> Rust Web Server
 > 
-> Bohdan Tsap <bohdan.tsap@tutanota.com>
+> Version:       0.0.23
 > 
-> Hi, rust-web-server (rws) is a simple web-server written in Rust. The rws server can serve static
-> content inside the directory it is started.
->
-> USAGE:
+> Authors:       Bohdan Tsap <bohdan.tsap@tutanota.com>
 > 
-> rws [OPTIONS]
+> Repository:    https://github.com/bohdaq/rust-web-server
 > 
->
-> OPTIONS:
+> Desciption:    rust-web-server (rws) is a simple web-server written in Rust. The rws http server can serve static content inside the directory it is started.
 > 
-> -h, --help                 Print help information
-> 
-> -i, --ip <ip>              IP or domain
-> 
-> -p, --port <port>          Port
-> 
-> -V, --version              Print version information
+> Rust Version:  1.64
+
 
 ## Run
 Simply run the following from command line:
