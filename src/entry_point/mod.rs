@@ -9,9 +9,9 @@ use std::{env};
 use crate::server::Server;
 use crate::thread_pool::ThreadPool;
 
-use clap::{Arg, App};
 use serde::{Serialize, Deserialize};
 use crate::cors::Cors;
+use crate::entry_point::command_line_args::CommandLineArgument;
 use crate::ext::file_ext::FileExt;
 use crate::symbol::SYMBOL;
 
@@ -188,161 +188,9 @@ pub fn override_environment_variables_from_config(filepath: Option<&str>) {
 pub fn override_environment_variables_from_command_line_args() {
     println!("  Start of Reading Command Line Arguments Section");
 
-    let matches = App::new("rws rust-web-server")
-        .arg(Arg::new("port")
-            .short('p')
-            .long("port")
-            .takes_value(true)
-            .help("Port"))
-        .arg(Arg::new("ip")
-            .short('i')
-            .long("ip")
-            .takes_value(true)
-            .help("IP or domain"))
-        .arg(Arg::new("threads")
-            .short('t')
-            .long("threads")
-            .takes_value(true)
-            .help("Number of threads"))
-        .arg(Arg::new("cors-allow-all")
-            .short('a')
-            .long("cors-allow-all")
-            .takes_value(true)
-            .help("If set to true, will allow all CORS requests, other CORS properties will be ignored"))
-        .arg(Arg::new("cors-allow-origins")
-            .short('o')
-            .long("cors-allow-origins")
-            .takes_value(true)
-            .help("Comma separated list of allowed origins, example: https://foo.example,https://bar.example"))
-        .arg(Arg::new("cors-allow-methods")
-            .short('m')
-            .long("cors-allow_methods")
-            .takes_value(true)
-            .help("Comma separated list of allowed methods, example: POST,PUT"))
-        .arg(Arg::new("cors-allow-headers")
-            .short('h')
-            .long("cors-allow-headers")
-            .takes_value(true)
-            .help("Comma separated list of allowed request headers, in lowercase, example: content-type,x-custom-header"))
-        .arg(Arg::new("cors-allow-credentials")
-            .short('c')
-            .long("cors-allow-credentials")
-            .takes_value(true)
-            .help("If set to true, will allow to transmit credentials via CORS requests"))
-        .arg(Arg::new("cors-expose-headers")
-            .short('e')
-            .long("cors-expose-headers")
-            .takes_value(true)
-            .help("Comma separated list of allowed response headers, in lowercase, example: content-type,x-custom-header"))
-        .arg(Arg::new("cors-max-age")
-            .short('g')
-            .long("cors-max-age")
-            .takes_value(true)
-            .help("In seconds, time to cache in browser CORS information, example: 86400"))
-        .get_matches();
-
-    let port_match = matches.value_of("port");
-    match port_match {
-        None => print!(""),
-        Some(s) => {
-            match s.parse::<i32>() {
-                Ok(port) => {
-                    env::set_var(Config::RWS_CONFIG_PORT, port.to_string());
-                    println!("    Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_PORT, port.to_string());
-                },
-                Err(_) => println!("That's not a number! {}", s),
-            }
-        }
-    }
-
-    let ip_match = matches.value_of("ip");
-    match ip_match {
-        None => print!(""),
-        Some(ip) => {
-            env::set_var(Config::RWS_CONFIG_IP, ip.to_string());
-            println!("    Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_IP, ip.to_string());
-        }
-    }
-
-    let threads_match = matches.value_of("threads");
-    match threads_match {
-        None => print!(""),
-        Some(s) => {
-            match s.parse::<i32>() {
-                Ok(thread_count) => {
-                    env::set_var(Config::RWS_CONFIG_THREAD_COUNT, thread_count.to_string());
-                    println!("    Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_THREAD_COUNT, thread_count.to_string());
-                },
-                Err(_) => println!("That's not a number! {}", s),
-            }
-        }
-    }
-
-
-    let cors_allow_all = matches.value_of("cors-allow-all");
-    match cors_allow_all {
-        None => print!(""),
-        Some(allow_all) => {
-            let is_allow_all: bool = allow_all.parse().unwrap();
-            env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, is_allow_all.to_string());
-            println!("    Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_ALLOW_ALL, is_allow_all.to_string());
-        }
-    }
-
-    let cors_allow_origins = matches.value_of("cors-allow-origins");
-    match cors_allow_origins {
-        None => print!(""),
-        Some(allow_origins) => {
-            env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, allow_origins.to_string());
-            println!("    Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, allow_origins.to_string());
-        }
-    }
-
-    let cors_allow_methods = matches.value_of("cors-allow-methods");
-    match cors_allow_methods {
-        None => print!(""),
-        Some(allow_origins) => {
-            env::set_var(Config::RWS_CONFIG_CORS_ALLOW_METHODS, allow_origins.to_string());
-            println!("    Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_ALLOW_METHODS, allow_origins.to_string());
-        }
-    }
-
-    let cors_allow_headers = matches.value_of("cors-allow-headers");
-    match cors_allow_headers {
-        None => print!(""),
-        Some(allow_headers) => {
-            env::set_var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS, allow_headers.to_string());
-            println!("    Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, allow_headers.to_lowercase());
-        }
-    }
-
-    let cors_allow_credentials = matches.value_of("cors-allow-credentials");
-    match cors_allow_credentials {
-        None => print!(""),
-        Some(allow_credentials) => {
-            let is_allow_credentials: bool = allow_credentials.parse().unwrap();
-            env::set_var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, is_allow_credentials.to_string());
-            println!("    Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, is_allow_credentials.to_string());
-        }
-    }
-
-    let cors_expose_headers = matches.value_of("cors-expose-headers");
-    match cors_expose_headers {
-        None => print!(""),
-        Some(expose_headers) => {
-            env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, expose_headers.to_string());
-            println!("    Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, expose_headers.to_lowercase());
-        }
-    }
-
-    let cors_max_age = matches.value_of("cors-max-age");
-    match cors_max_age {
-        None => print!(""),
-        Some(max_age) => {
-            env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, max_age.to_string());
-            println!("    Set env variable '{}' to value '{}' from command line argument", Config::RWS_CONFIG_CORS_MAX_AGE, max_age.to_string());
-        }
-    }
+    let args = env::args().collect();
+    let params = CommandLineArgument::get_command_line_arg_list();
+    CommandLineArgument::_parse(args, params);
 
     println!("  End of Reading Command Line Arguments\n");
     println!("RWS Configuration End\n\n");
