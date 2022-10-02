@@ -131,7 +131,7 @@ pub fn read_system_environment_variables() {
 }
 
 pub fn override_environment_variables_from_config(filepath: Option<&str>) {
-    println!("  Start of Config Section");
+    println!("\n  Start of Config Section");
 
     let config: Config;
 
@@ -186,7 +186,7 @@ pub fn override_environment_variables_from_config(filepath: Option<&str>) {
 }
 
 pub fn override_environment_variables_from_command_line_args() {
-    println!("  Start of Reading Command Line Arguments Section");
+    println!("\n  Start of Reading Command Line Arguments Section");
 
     let args = env::args().collect();
     let params = CommandLineArgument::get_command_line_arg_list();
