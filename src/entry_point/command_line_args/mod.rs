@@ -11,14 +11,6 @@ pub struct CommandLineArgument {
     hint: Option<String>,
 }
 
-pub struct CommandLineArgumentValue {
-    short_form: String,
-    long_form: String,
-    environment_variable: String,
-    value: Option<String>,
-    hint: Option<String>,
-}
-
 impl CommandLineArgument {
     pub fn get_command_line_arg_list() -> Vec<CommandLineArgument> {
         let mut argument_list : Vec<CommandLineArgument> = vec![];
@@ -107,8 +99,8 @@ impl CommandLineArgument {
         argument_list
     }
 
-    pub fn parse(args: Vec<String>) -> Vec<CommandLineArgument> {
-        let mut argument_list : Vec<CommandLineArgument> = vec![];
+    pub fn _parse(args: Vec<String>) -> Vec<CommandLineArgument> {
+        let argument_list : Vec<CommandLineArgument> = vec![];
         for unparsed_argument in args.iter() {
 
             let boxed_split = unparsed_argument.split_once('=');
