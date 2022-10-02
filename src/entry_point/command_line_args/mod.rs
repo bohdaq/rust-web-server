@@ -35,7 +35,7 @@ impl CommandLineArgument {
             short_form: "t".to_string(),
             long_form: "threads".to_string(),
             environment_variable: Config::RWS_CONFIG_THREAD_COUNT.to_string(),
-            hint: Some("IP or domain".to_string())
+            hint: Some("Number of threads".to_string())
         };
         argument_list.push(argument);
 
