@@ -71,6 +71,23 @@ fn command_line_arg_thread_cors_allow_all() {
 }
 
 #[test]
+fn command_line_arg_thread_cors_allow_origins() {
+    let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
+
+    let argument = command_line_arg_list.get(4).unwrap();
+    let hint = argument.hint.as_ref().unwrap();
+    assert_eq!(argument.short_form, "o");
+    assert_eq!(argument.long_form, "cors-allow-origins");
+    assert_eq!(argument.environment_variable, Config::RWS_CONFIG_CORS_ALLOW_ORIGINS.to_string());
+    assert_eq!(hint, "Comma separated list of allowed origins, example: https://foo.example,https://bar.example");
+
+    CommandLineArgument::set_environment_variable(argument, "https://foo.example,https://bar.example".to_string());
+
+    let env_var = env::var(&argument.environment_variable).unwrap();
+    assert_eq!(env_var, "https://foo.example,https://bar.example");
+}
+
+#[test]
 fn parse() {
     let args_vec_as_str : Vec<&str> = "-i=127.0.0.1 -p=7777 -t=100 -a=false -o=http://localhost:7887,http://localhost:8668 -m=GET,POST,PUT,DELETE -h=content-type,x-custom-header -c=true -e=content-type,x-custom-header -g=5555"
         .split_whitespace()
