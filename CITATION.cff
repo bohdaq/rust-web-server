@@ -7,6 +7,6 @@ authors:
     email: bohdan.tsap@tutanota.com
 title: "Rust Web Server"
 version: 0.0.23
-doi: 10.5281/zenodo.7130796
+doi: 10.5281/zenodo.7134144
 date-released: 2022-09-18
 url: "https://github.com/bohdaq/rust-web-server/"
