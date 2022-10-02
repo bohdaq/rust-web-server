@@ -45,6 +45,8 @@ The rws will try to read configuration from [system environment variables](https
 
 I personally prefer to use system environment variables, as once it is set correctly, they are hard to break accidentally by overwriting config, or each time providing command line arguments during restarts.
 
+There may be a use case when you need to run more than one instance, in such a case config file per instance or command line configuration is an option. 
+
 
 ## Build
 
