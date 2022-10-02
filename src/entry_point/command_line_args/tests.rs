@@ -13,10 +13,10 @@ fn command_line_arg_port() {
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_PORT.to_string());
     assert_eq!(hint, "Port");
 
-    CommandLineArgument::set_environment_variable(argument, "8888".to_string());
+    CommandLineArgument::set_environment_variable(argument, "7888".to_string());
 
     let env_var = env::var(&argument.environment_variable).unwrap();
-    assert_eq!(env_var, "8888");
+    assert_eq!(env_var, "7888");
 }
 
 #[test]
@@ -30,10 +30,10 @@ fn command_line_arg_ip() {
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_IP.to_string());
     assert_eq!(hint, "IP or domain");
 
-    CommandLineArgument::set_environment_variable(argument, "localhost".to_string());
+    CommandLineArgument::set_environment_variable(argument, "127.0.0.1".to_string());
 
     let env_var = env::var(&argument.environment_variable).unwrap();
-    assert_eq!(env_var, "localhost");
+    assert_eq!(env_var, "127.0.0.1");
 }
 
 #[test]
