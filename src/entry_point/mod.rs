@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests;
-mod command_line_args;
+pub mod command_line_args;
 
 
 use std::net::TcpListener;
