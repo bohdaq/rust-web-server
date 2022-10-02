@@ -371,6 +371,19 @@ fn content_range_raw_regex() {
 }
 
 #[test]
+fn content_range_raw_regex_malformed_bytes() {
+    let start_num = 123;
+    let end_num = 3212350;
+    let size_num = 191238270;
+
+    let string = format!("byytes {}-{}/{}", start_num, end_num, size_num);
+    let boxed_result = Range::_parse_raw_content_range_header_value(string.as_str());
+    assert!(boxed_result.is_err());
+
+    assert_eq!(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string(), boxed_result.err().unwrap());
+}
+
+#[test]
 fn content_range_raw_regex_whitespace() {
     let start_num = 123;
     let end_num = 3212350;

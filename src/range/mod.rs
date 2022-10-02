@@ -315,6 +315,9 @@ impl Range {
         }
 
         let (bytes, without_bytes) = boxed_split_without_bytes.unwrap();
+        if !bytes.eq("bytes") {
+            return Err(Range::_ERROR_UNABLE_TO_PARSE_CONTENT_RANGE.to_string())
+        }
 
         let boxed_without_bytes = without_bytes.split_once(SYMBOL.hyphen);
         if boxed_without_bytes.is_none() {
