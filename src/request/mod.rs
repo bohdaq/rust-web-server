@@ -4,8 +4,8 @@ mod tests;
 use std::io;
 use std::io::{BufRead, Cursor};
 use crate::header::Header;
-use regex::{Regex};
 use crate::ext::string_ext::StringExt;
+use crate::http::HTTP;
 use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -42,11 +42,37 @@ pub const METHOD: Method = Method {
 };
 
 impl Request {
-    pub const METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX: &'static str = "(?P<method>(GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE))\\s(?P<request_uri>[^\\s]+)\\s(?P<http_version>[/.A-Za-z0-9]+)";
+    pub const _ERROR_UNABLE_TO_PARSE_METHOD_AND_REQUEST_URI_AND_HTTP_VERSION: &'static str = "Unable to parse method, request uri and http version";
 
     pub fn get_header(&self, name: String) -> Option<&Header> {
         let header =  self.headers.iter().find(|x| x.name.to_lowercase() == name.to_lowercase());
         header
+    }
+
+    pub fn method_list() -> Vec<String> {
+        let method_get = METHOD.get.to_string();
+        let method_head = METHOD.head.to_string();
+        let method_post = METHOD.post.to_string();
+        let method_put = METHOD.put.to_string();
+        let method_delete = METHOD.delete.to_string();
+        let method_connect = METHOD.connect.to_string();
+        let method_options = METHOD.options.to_string();
+        let method_trace = METHOD.trace.to_string();
+        let method_patch = METHOD.patch.to_string();
+
+        let method_list = vec![
+            method_get,
+            method_head,
+            method_post,
+            method_put,
+            method_delete,
+            method_connect,
+            method_options,
+            method_trace,
+            method_patch,
+        ];
+
+        method_list
     }
 
     pub fn _generate_request(request: Request) -> String {
@@ -101,29 +127,39 @@ impl Request {
 
     }
 
-    pub  fn parse_method_and_request_uri_and_http_version_string(http_version_status_code_reason_phrase: &str) -> Result<(String, String, String), String> {
-        let re = Regex::new(Request::METHOD_AND_REQUEST_URI_AND_HTTP_VERSION_REGEX).unwrap();
-        let caps = re.captures(&http_version_status_code_reason_phrase);
 
-        return match caps {
-            None => {
-                let message = format!("Unable to parse method, request uri and http version: {}", http_version_status_code_reason_phrase);
-                return Err(message)
-            }
-            Some(captures) => {
-                let method = String::from(&captures["method"]);
-                let request_uri = String::from(&captures["request_uri"]);
-                let http_version = String::from(&captures["http_version"]);
+    pub fn parse_method_and_request_uri_and_http_version_string(http_version_status_code_reason_phrase: &str) -> Result<(String, String, String), String> {
+        let lowercase_unparsed_method_and_request_uri_and_http_version = http_version_status_code_reason_phrase.trim();
 
-                Ok((method, request_uri, http_version))
-            }
+        let boxed_split_without_method = lowercase_unparsed_method_and_request_uri_and_http_version.split_once(SYMBOL.whitespace);
+        if boxed_split_without_method.is_none() {
+            return Err(Request::_ERROR_UNABLE_TO_PARSE_METHOD_AND_REQUEST_URI_AND_HTTP_VERSION.to_string())
         }
 
+        let (method, without_method) = boxed_split_without_method.unwrap();
+        let supported_methods = Request::method_list();
+        if !supported_methods.contains(&method.to_uppercase().to_string()) {
+            return Err(Request::_ERROR_UNABLE_TO_PARSE_METHOD_AND_REQUEST_URI_AND_HTTP_VERSION.to_string())
+        }
 
+        let boxed_without_method = without_method.split_once(SYMBOL.whitespace);
+        if boxed_without_method.is_none() {
+            return Err(Request::_ERROR_UNABLE_TO_PARSE_METHOD_AND_REQUEST_URI_AND_HTTP_VERSION.to_string())
+        }
+
+        let (request_uri, http_version) = boxed_without_method.unwrap();
+
+
+        let supported_http_versions = HTTP::version_list();
+        if !supported_http_versions.contains(&http_version.to_uppercase().to_string()) {
+            return Err(Request::_ERROR_UNABLE_TO_PARSE_METHOD_AND_REQUEST_URI_AND_HTTP_VERSION.to_string())
+        }
+
+        Ok((method.to_string(), request_uri.to_string(), http_version.to_string()))
 
     }
 
-    pub  fn parse_http_request_header_string(header_string: &str) -> Header {
+    pub fn parse_http_request_header_string(header_string: &str) -> Header {
         let header_parts: Vec<&str> = header_string.split(Header::NAME_VALUE_SEPARATOR).collect();
         let header_name = StringExt::truncate_new_line_carriage_return(header_parts[0]);
         let mut header_value= "".to_string();
