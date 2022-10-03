@@ -4,9 +4,8 @@ mod tests;
 use std::io;
 use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
-use regex::Regex;
 use crate::ext::string_ext::StringExt;
-use crate::http::VERSION;
+use crate::http::{HTTP, VERSION};
 use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Request};
 use crate::symbol::SYMBOL;
@@ -190,6 +189,75 @@ pub const STATUS_CODE_REASON_PHRASE: ResponseStatusCodeReasonPhrase = ResponseSt
 
 impl Response {
 
+    pub fn status_code_reason_phrase_list() -> Vec<&'static StatusCodeReasonPhrase> {
+        let list = vec![
+            STATUS_CODE_REASON_PHRASE.n100_continue,
+            STATUS_CODE_REASON_PHRASE.n101_switching_protocols,
+            STATUS_CODE_REASON_PHRASE.n102_processing,
+            STATUS_CODE_REASON_PHRASE.n103_early_hints,
+            STATUS_CODE_REASON_PHRASE.n200_ok,
+            STATUS_CODE_REASON_PHRASE.n201_created,
+            STATUS_CODE_REASON_PHRASE.n202_accepted,
+            STATUS_CODE_REASON_PHRASE.n203_non_authoritative_information,
+            STATUS_CODE_REASON_PHRASE.n204_no_content,
+            STATUS_CODE_REASON_PHRASE.n205_reset_content,
+            STATUS_CODE_REASON_PHRASE.n206_partial_content,
+            STATUS_CODE_REASON_PHRASE.n207_multi_status,
+            STATUS_CODE_REASON_PHRASE.n208_already_reported,
+            STATUS_CODE_REASON_PHRASE.n226_im_used,
+            STATUS_CODE_REASON_PHRASE.n300_multiple_choices,
+            STATUS_CODE_REASON_PHRASE.n301_moved_permanently,
+            STATUS_CODE_REASON_PHRASE.n302_found,
+            STATUS_CODE_REASON_PHRASE.n303_see_other,
+            STATUS_CODE_REASON_PHRASE.n304_not_modified,
+            STATUS_CODE_REASON_PHRASE.n307_temporary_redirect,
+            STATUS_CODE_REASON_PHRASE.n308_permanent_redirect,
+            STATUS_CODE_REASON_PHRASE.n400_bad_request,
+            STATUS_CODE_REASON_PHRASE.n401_unauthorized,
+            STATUS_CODE_REASON_PHRASE.n402_payment_required,
+            STATUS_CODE_REASON_PHRASE.n403_forbidden,
+            STATUS_CODE_REASON_PHRASE.n404_not_found,
+            STATUS_CODE_REASON_PHRASE.n405_method_not_allowed,
+            STATUS_CODE_REASON_PHRASE.n406_not_acceptable,
+            STATUS_CODE_REASON_PHRASE.n407_proxy_authentication_required,
+            STATUS_CODE_REASON_PHRASE.n408_request_timeout,
+            STATUS_CODE_REASON_PHRASE.n409_conflict,
+            STATUS_CODE_REASON_PHRASE.n410_gone,
+            STATUS_CODE_REASON_PHRASE.n411_length_required,
+            STATUS_CODE_REASON_PHRASE.n412_precondition_failed,
+            STATUS_CODE_REASON_PHRASE.n413_payload_too_large,
+            STATUS_CODE_REASON_PHRASE.n414_uri_too_long,
+            STATUS_CODE_REASON_PHRASE.n415_unsupported_media_type,
+            STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
+            STATUS_CODE_REASON_PHRASE.n417_expectation_failed,
+            STATUS_CODE_REASON_PHRASE.n418_im_a_teapot,
+            STATUS_CODE_REASON_PHRASE.n421_misdirected_request,
+            STATUS_CODE_REASON_PHRASE.n422_unprocessable_entity,
+            STATUS_CODE_REASON_PHRASE.n423_locked,
+            STATUS_CODE_REASON_PHRASE.n424_failed_dependency,
+            STATUS_CODE_REASON_PHRASE.n425_too_early,
+            STATUS_CODE_REASON_PHRASE.n426_upgrade_required,
+            STATUS_CODE_REASON_PHRASE.n428_precondition_required,
+            STATUS_CODE_REASON_PHRASE.n429_too_many_requests,
+            STATUS_CODE_REASON_PHRASE.n431_request_header_fields_too_large,
+            STATUS_CODE_REASON_PHRASE.n451_unavailable_for_legal_reasons,
+            STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
+            STATUS_CODE_REASON_PHRASE.n501_not_implemented,
+            STATUS_CODE_REASON_PHRASE.n502_bad_gateway,
+            STATUS_CODE_REASON_PHRASE.n503_service_unavailable,
+            STATUS_CODE_REASON_PHRASE.n504_gateway_timeout,
+            STATUS_CODE_REASON_PHRASE.n505_http_version_not_supported,
+            STATUS_CODE_REASON_PHRASE.n506_variant_also_negotiates,
+            STATUS_CODE_REASON_PHRASE.n507_insufficient_storage,
+            STATUS_CODE_REASON_PHRASE.n508_loop_detected,
+            STATUS_CODE_REASON_PHRASE.n510_not_extended,
+            STATUS_CODE_REASON_PHRASE.n511_network_authentication_required,
+        ];
+        list
+    }
+
+    pub const _ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE: &'static str = "Unable to parse status code";
+
     pub const _HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX: &'static str = "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)";
 
     pub fn _get_header(&self, name: String) -> Option<&Header> {
@@ -336,24 +404,56 @@ impl Response {
     }
 
     pub  fn _parse_http_version_status_code_reason_phrase_string(http_version_status_code_reason_phrase: &str) -> Result<(String, i16, String), String> {
-        let re = Regex::new(Response::_HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
-        let caps = re.captures(&http_version_status_code_reason_phrase).unwrap();
+        let truncated = StringExt::truncate_new_line_carriage_return(http_version_status_code_reason_phrase);
 
-        let http_version= String::from(&caps["http_version"]);
-        let status_code = String::from(&caps["status_code"]);
+        let boxed_split = truncated.split_once(SYMBOL.whitespace);
+        if boxed_split.is_none() {
+            return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
+        }
+
+        let (http_version, status_code_reason_phrase) = boxed_split.unwrap();
+        let supported_http_versions = HTTP::version_list();
+        if !supported_http_versions.contains(&http_version.to_uppercase().to_string()) {
+            return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
+        }
+
+        let boxed_split = status_code_reason_phrase.split_once(SYMBOL.whitespace);
+        if boxed_split.is_none() {
+            return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
+        }
+        let (status_code, reason_phrase) = boxed_split.unwrap();
+
         let boxed_status_code_i16 = status_code.parse::<i16>();
         if boxed_status_code_i16.is_err() {
-            let message = [
-                "unable to parse status code: ",
-                boxed_status_code_i16.err().unwrap().to_string().as_str()
-            ].join("");
-            return Err(message)
+            return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
         }
-        let status_code_i16 : i16 = boxed_status_code_i16.unwrap();
-        let mut reason_phrase = String::from(&caps["reason_phrase"]);
-        reason_phrase = StringExt::truncate_new_line_carriage_return(&reason_phrase);
 
-        return Ok((http_version, status_code_i16, reason_phrase))
+        let status_code_i16 = boxed_status_code_i16.unwrap();
+
+        let list = Response::status_code_reason_phrase_list();
+        let boxed_search =
+            list
+                .iter()
+                .find(|x| {
+                    return x.status_code == &status_code_i16
+                });
+
+        if boxed_search.is_none() {
+            return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
+        }
+
+        let found_status_code_reason_phrase = boxed_search.unwrap();
+        let uppercase_reason_phrase = reason_phrase.to_uppercase();
+        let is_equal =
+            &found_status_code_reason_phrase.reason_phrase
+            .to_uppercase()
+                .eq(uppercase_reason_phrase.as_str());
+
+        if !is_equal {
+            return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
+        }
+
+        return Ok((http_version.to_string(), status_code_i16, reason_phrase.to_string()))
     }
 
     pub fn _parse_http_response_header_string(header_string: &str) -> Header {
