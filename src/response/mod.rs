@@ -403,7 +403,7 @@ impl Response {
         return response;
     }
 
-    pub  fn _parse_http_version_status_code_reason_phrase_string(http_version_status_code_reason_phrase: &str) -> Result<(String, i16, String), String> {
+    pub fn _parse_http_version_status_code_reason_phrase_string(http_version_status_code_reason_phrase: &str) -> Result<(String, i16, String), String> {
         let truncated = StringExt::truncate_new_line_carriage_return(http_version_status_code_reason_phrase);
 
         let boxed_split = truncated.split_once(SYMBOL.whitespace);

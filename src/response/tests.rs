@@ -2,7 +2,6 @@ use std::borrow::Borrow;
 use std::env;
 use std::fs::File;
 use std::io::Read;
-use regex::Regex;
 use crate::header::Header;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
@@ -37,21 +36,72 @@ fn error() {
 }
 
 #[test]
-fn http_version_and_status_code_and_reason_phrase_regex() {
+fn http_version_and_status_code_and_reason_phrase_404_regex() {
 
-    let re = Regex::new(Response::_HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
-    let caps = re.captures("HTTP/1.1 404 Not Found").unwrap();
+    let http_version_and_status_code_and_reason_phrase = "HTTP/1.1 404 Not Found";
+    let boxed_parse = Response::_parse_http_version_status_code_reason_phrase_string(http_version_and_status_code_and_reason_phrase);
 
-    assert_eq!(VERSION.http_1_1, &caps["http_version"]);
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.status_code.to_string(), &caps["status_code"]);
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase, &caps["reason_phrase"]);
+    assert!(boxed_parse.is_ok());
+    let (http_version, status_code, reason_phrase) = boxed_parse.unwrap();
 
-    let re = Regex::new(Response::_HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX).unwrap();
-    let caps = re.captures("HTTP/1.1 200 OK").unwrap();
+    assert_eq!(VERSION.http_1_1, http_version);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.status_code, &status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase, reason_phrase);
 
-    assert_eq!(VERSION.http_1_1, &caps["http_version"]);
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.status_code.to_string(), &caps["status_code"]);
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase, &caps["reason_phrase"]);
+}
+
+#[test]
+fn http_version_and_status_code_and_reason_phrase_200_regex() {
+
+    let http_version_and_status_code_and_reason_phrase = "HTTP/1.1 200 OK";
+    let boxed_parse = Response::_parse_http_version_status_code_reason_phrase_string(http_version_and_status_code_and_reason_phrase);
+
+    assert!(boxed_parse.is_ok());
+    let (http_version, status_code, reason_phrase) = boxed_parse.unwrap();
+
+    assert_eq!(VERSION.http_1_1, http_version);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.status_code, &status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase, reason_phrase);
+}
+
+#[test]
+fn http_version_and_status_code_and_reason_phrase_200_regex_random_case() {
+
+    let http_version_and_status_code_and_reason_phrase = "hTTp/1.1 200 Ok";
+    let boxed_parse = Response::_parse_http_version_status_code_reason_phrase_string(http_version_and_status_code_and_reason_phrase);
+
+    assert!(boxed_parse.is_ok());
+    let (http_version, status_code, reason_phrase) = boxed_parse.unwrap();
+
+    assert_eq!(VERSION.http_1_1.to_uppercase(), http_version.to_uppercase());
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.status_code, &status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_uppercase(), reason_phrase.to_uppercase());
+}
+
+#[test]
+fn http_version_and_status_code_and_reason_phrase_empty_string() {
+
+    let http_version_and_status_code_and_reason_phrase = "";
+    let boxed_parse = Response::_parse_http_version_status_code_reason_phrase_string(http_version_and_status_code_and_reason_phrase);
+
+    assert!(!boxed_parse.is_ok());
+    let error_msg = boxed_parse.err().unwrap();
+
+    assert_eq!("Unable to parse status code", error_msg);
+}
+
+#[test]
+fn http_version_and_status_code_and_reason_phrase_empty_string_newline() {
+
+    let http_version_and_status_code_and_reason_phrase = "hTTp/1.1 200 Ok\r\n";
+    let boxed_parse = Response::_parse_http_version_status_code_reason_phrase_string(http_version_and_status_code_and_reason_phrase);
+
+    assert!(boxed_parse.is_ok());
+    let (http_version, status_code, reason_phrase) = boxed_parse.unwrap();
+
+    assert_eq!(VERSION.http_1_1, http_version.to_uppercase());
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.status_code, &status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase, reason_phrase.to_uppercase());
 
 }
 
