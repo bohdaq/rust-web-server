@@ -161,3 +161,20 @@ fn test_request_lowercase() {
     assert_eq!(request_uri, request.request_uri);
     assert_eq!(http_version, request.http_version);
 }
+
+#[test]
+fn test_request_randomcase() {
+    let method = "GeT";
+    let request_uri = "/path";
+    let http_version = "HtTP/1.1";
+
+    let request_line = [method.to_string(), request_uri.to_string(), http_version.to_string()].join(" ");
+
+    let boxed_request = Request::parse_request(request_line.as_bytes());
+
+    let request = boxed_request.unwrap();
+
+    assert_eq!(method, request.method);
+    assert_eq!(request_uri, request.request_uri);
+    assert_eq!(http_version, request.http_version);
+}
