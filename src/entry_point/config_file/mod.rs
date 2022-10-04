@@ -5,8 +5,7 @@ use crate::ext::file_ext::FileExt;
 use crate::symbol::SYMBOL;
 
 pub fn read_config_file(
-    mut cursor: Cursor<&[u8]>,
-    mut iteration_number: usize,
+    cursor: Cursor<&[u8]>,
     mut prefix: String) -> Result<bool, String> {
 
     let lines = cursor.lines().into_iter();
@@ -34,13 +33,15 @@ pub fn read_config_file(
             .replace(SYMBOL.quotation_mark, SYMBOL.empty_string)
             .replace(SYMBOL.closing_square_bracket, SYMBOL.empty_string)
             .replace(SYMBOL.opening_square_bracket, SYMBOL.empty_string);
+        let key = unparsed_key
+            .replace(SYMBOL.underscore, SYMBOL.hyphen);
 
 
         if prefix.chars().count() == 0 {
             arg = [
                 SYMBOL.hyphen,
                 SYMBOL.hyphen,
-                unparsed_key,
+                &key,
                 SYMBOL.equals,
                 &value
             ].join("");
@@ -99,9 +100,8 @@ pub fn override_environment_variables_from_config(filepath: Option<&str>) {
     } else {
         let content = boxed_content.unwrap();
         config = toml::from_str(content.as_str()).unwrap();
-        let mut cursor = io::Cursor::new(content.as_bytes());
-        let mut iteration_number = 0;
-        let _ = read_config_file(cursor, iteration_number, SYMBOL.empty_string.to_string());
+        let cursor = io::Cursor::new(content.as_bytes());
+        let _ = read_config_file(cursor, SYMBOL.empty_string.to_string());
     }
 
     env::set_var(Config::RWS_CONFIG_IP, config.ip.to_string());
