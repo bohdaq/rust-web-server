@@ -44,7 +44,7 @@ impl CommandLineArgument {
 
         let argument = CommandLineArgument {
             short_form: "t".to_string(),
-            long_form: "threads".to_string(),
+            long_form: "thread-count".to_string(),
             environment_variable: Config::RWS_CONFIG_THREAD_COUNT.to_string(),
             _hint: Some("Number of threads".to_string())
         };

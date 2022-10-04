@@ -52,7 +52,7 @@ pub fn read_config_file(
                 SYMBOL.hyphen,
                 &prefix.to_string(),
                 SYMBOL.hyphen,
-                unparsed_key,
+                &key,
                 SYMBOL.equals,
                 &value].join("");
         }
