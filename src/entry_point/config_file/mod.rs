@@ -1,6 +1,17 @@
-use std::env;
+use std::{env, io};
+use std::io::{BufRead, Cursor};
 use crate::entry_point::Config;
 use crate::ext::file_ext::FileExt;
+
+pub fn read_config_file(mut cursor: Cursor<&[u8]>, mut iteration_number: usize) -> Result<bool, String> {
+    let lines = cursor.lines().into_iter();
+    for boxed_line in lines {
+        let line = boxed_line.unwrap();
+        println!("{}\n\n", &line);
+    }
+
+    Ok(true)
+}
 
 pub fn override_environment_variables_from_config(filepath: Option<&str>) {
     println!("\n  Start of Config Section");
@@ -14,14 +25,18 @@ pub fn override_environment_variables_from_config(filepath: Option<&str>) {
         path = filepath.unwrap();
     }
     let static_filepath = FileExt::get_static_filepath(path);
-    let content = std::fs::read_to_string(static_filepath);
+    let boxed_content = std::fs::read_to_string(static_filepath);
 
-    if content.is_err() {
-        eprintln!("    Unable to parse rws.config.toml\n{}", content.err().unwrap());
+    if boxed_content.is_err() {
+        eprintln!("    Unable to parse rws.config.toml\n{}", boxed_content.err().unwrap());
         println!("  End of Config Section");
         return;
     } else {
-        config = toml::from_str(content.unwrap().as_str()).unwrap();
+        let content = boxed_content.unwrap();
+        config = toml::from_str(content.as_str()).unwrap();
+        let mut cursor = io::Cursor::new(content.as_bytes());
+        let mut iteration_number = 0;
+        let _ = read_config_file(cursor, iteration_number);
     }
 
     env::set_var(Config::RWS_CONFIG_IP, config.ip.to_string());
