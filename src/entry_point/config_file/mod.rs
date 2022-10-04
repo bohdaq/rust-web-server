@@ -4,15 +4,24 @@ use crate::entry_point::Config;
 use crate::ext::file_ext::FileExt;
 use crate::symbol::SYMBOL;
 
-pub fn read_config_file(mut cursor: Cursor<&[u8]>, mut iteration_number: usize) -> Result<bool, String> {
+pub fn read_config_file(
+    mut cursor: Cursor<&[u8]>,
+    mut iteration_number: usize,
+    mut prefix: String) -> Result<bool, String> {
+
     let lines = cursor.lines().into_iter();
     for boxed_line in lines {
         let line = boxed_line.unwrap();
         let without_comment = strip_comment(line);
         let without_whitespaces = strip_whitespaces(without_comment.to_string());
-
-
-        println!("{}\n\n", &without_whitespaces);
+        let is_table = without_whitespaces.starts_with(SYMBOL.opening_square_bracket);
+        if is_table {
+            prefix = without_whitespaces
+                .replace(SYMBOL.opening_square_bracket, SYMBOL.empty_string)
+                .replace(SYMBOL.closing_square_bracket, SYMBOL.empty_string)
+                .to_string();
+        }
+        println!("{} table: {}\n\n", &without_whitespaces, &prefix);
     }
 
     Ok(true)
@@ -58,7 +67,7 @@ pub fn override_environment_variables_from_config(filepath: Option<&str>) {
         config = toml::from_str(content.as_str()).unwrap();
         let mut cursor = io::Cursor::new(content.as_bytes());
         let mut iteration_number = 0;
-        let _ = read_config_file(cursor, iteration_number);
+        let _ = read_config_file(cursor, iteration_number, SYMBOL.empty_string.to_string());
     }
 
     env::set_var(Config::RWS_CONFIG_IP, config.ip.to_string());

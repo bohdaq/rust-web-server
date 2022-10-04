@@ -13,6 +13,8 @@ pub struct Symbol {
     pub slash: &'static str,
     pub semicolon: &'static str,
     pub number_sign: &'static str,
+    pub opening_square_bracket: &'static str,
+    pub closing_square_bracket: &'static str,
 }
 
 pub const SYMBOL: Symbol = Symbol {
@@ -27,4 +29,6 @@ pub const SYMBOL: Symbol = Symbol {
     slash: "/",
     semicolon: ";",
     number_sign: "#",
+    opening_square_bracket: "[",
+    closing_square_bracket: "]",
 };
