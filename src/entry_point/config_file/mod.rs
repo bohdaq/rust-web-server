@@ -2,15 +2,30 @@ use std::{env, io};
 use std::io::{BufRead, Cursor};
 use crate::entry_point::Config;
 use crate::ext::file_ext::FileExt;
+use crate::symbol::SYMBOL;
 
 pub fn read_config_file(mut cursor: Cursor<&[u8]>, mut iteration_number: usize) -> Result<bool, String> {
     let lines = cursor.lines().into_iter();
     for boxed_line in lines {
         let line = boxed_line.unwrap();
-        println!("{}\n\n", &line);
+        let without_comment = strip_comment(line);
+
+
+        println!("{}\n\n", &without_comment);
     }
 
     Ok(true)
+}
+
+fn strip_comment(line: String) -> String {
+    let boxed_split = line.split_once(SYMBOL.number_sign);
+    if boxed_split.is_none() {
+        return line;
+    }
+
+    let (without_comment, _) = boxed_split.unwrap();
+
+    without_comment.trim().to_string()
 }
 
 pub fn override_environment_variables_from_config(filepath: Option<&str>) {

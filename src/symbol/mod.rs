@@ -12,6 +12,7 @@ pub struct Symbol {
     pub hyphen: &'static str,
     pub slash: &'static str,
     pub semicolon: &'static str,
+    pub number_sign: &'static str,
 }
 
 pub const SYMBOL: Symbol = Symbol {
@@ -25,4 +26,5 @@ pub const SYMBOL: Symbol = Symbol {
     hyphen: "-",
     slash: "/",
     semicolon: ";",
+    number_sign: "#",
 };
