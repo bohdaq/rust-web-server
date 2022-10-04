@@ -24,12 +24,25 @@ pub fn read_config_file(
 
         let boxed_split = without_whitespaces.split_once(SYMBOL.equals);
         if boxed_split.is_none() { // empty line as an example
+            prefix = "".to_string();
             continue;
         }
+
+        let arg: String;
         let (unparsed_key, unparsed_value) = boxed_split.unwrap();
+        if prefix.chars().count() == 0 {
+            arg = [SYMBOL.hyphen, SYMBOL.hyphen, unparsed_key, SYMBOL.equals, unparsed_value].join("");
+        } else {
+            arg = [
+                SYMBOL.hyphen,
+                SYMBOL.hyphen,
+                &prefix.to_string(),
+                unparsed_key,
+                SYMBOL.equals,
+                unparsed_value].join("");
+        }
 
-
-        println!("{} {}={}", &prefix, &unparsed_key, &unparsed_value );
+        println!("{}", arg );
 
     }
 
