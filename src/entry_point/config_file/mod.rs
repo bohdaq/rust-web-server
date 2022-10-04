@@ -26,11 +26,10 @@ pub fn read_config_file(
         if boxed_split.is_none() { // empty line as an example
             continue;
         }
-        let (key, value) = boxed_split.unwrap();
+        let (unparsed_key, unparsed_value) = boxed_split.unwrap();
 
 
-        println!("key: {} value: {} table: {}\n\n", &key, &value, &prefix);
-
+        println!("{} {}={}", &prefix, &unparsed_key, &unparsed_value );
 
     }
 

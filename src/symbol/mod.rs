@@ -15,6 +15,8 @@ pub struct Symbol {
     pub number_sign: &'static str,
     pub opening_square_bracket: &'static str,
     pub closing_square_bracket: &'static str,
+    pub quotation_mark: &'static str,
+    pub underscore: &'static str,
 }
 
 pub const SYMBOL: Symbol = Symbol {
@@ -31,4 +33,6 @@ pub const SYMBOL: Symbol = Symbol {
     number_sign: "#",
     opening_square_bracket: "[",
     closing_square_bracket: "]",
+    quotation_mark: "\"",
+    underscore: "_",
 };
