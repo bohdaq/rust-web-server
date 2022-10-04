@@ -4,12 +4,11 @@ mod tests;
 use std::env;
 use crate::header::Header;
 
-use serde::{Serialize, Deserialize};
 use crate::entry_point::Config;
 use crate::request::{METHOD, Request};
 use crate::response::{Error};
 
-#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Cors {
     pub allow_all: bool,
     pub allow_origins: Vec<String>,

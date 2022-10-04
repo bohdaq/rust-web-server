@@ -11,14 +11,13 @@ use std::{env};
 use crate::server::Server;
 use crate::thread_pool::ThreadPool;
 
-use serde::{Serialize, Deserialize};
 use crate::cors::Cors;
 use crate::entry_point::command_line_args::{override_environment_variables_from_command_line_args};
 use crate::entry_point::config_file::override_environment_variables_from_config;
 use crate::entry_point::environment_variables::read_system_environment_variables;
 use crate::symbol::SYMBOL;
 
-#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Config {
     ip: String,
     port: i32,
