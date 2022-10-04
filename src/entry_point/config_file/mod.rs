@@ -9,9 +9,10 @@ pub fn read_config_file(mut cursor: Cursor<&[u8]>, mut iteration_number: usize) 
     for boxed_line in lines {
         let line = boxed_line.unwrap();
         let without_comment = strip_comment(line);
+        let without_whitespaces = strip_whitespaces(without_comment.to_string());
 
 
-        println!("{}\n\n", &without_comment);
+        println!("{}\n\n", &without_whitespaces);
     }
 
     Ok(true)
@@ -26,6 +27,12 @@ fn strip_comment(line: String) -> String {
     let (without_comment, _) = boxed_split.unwrap();
 
     without_comment.trim().to_string()
+}
+
+fn strip_whitespaces(line: String) -> String {
+    let without_whitespaces = line.replace(SYMBOL.whitespace, SYMBOL.empty_string);
+
+    without_whitespaces
 }
 
 pub fn override_environment_variables_from_config(filepath: Option<&str>) {
