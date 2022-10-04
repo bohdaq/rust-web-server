@@ -94,7 +94,7 @@ fn command_line_arg_thread_cors_allow_methods() {
     let argument = command_line_arg_list.get(5).unwrap();
     let hint = argument._hint.as_ref().unwrap();
     assert_eq!(argument.short_form, "m");
-    assert_eq!(argument.long_form, "cors-allow_methods");
+    assert_eq!(argument.long_form, "cors-allow-methods");
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_CORS_ALLOW_METHODS.to_string());
     assert_eq!(hint, "Comma separated list of allowed methods, example: POST,PUT");
 

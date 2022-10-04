@@ -69,7 +69,7 @@ impl CommandLineArgument {
 
         let argument = CommandLineArgument {
             short_form: "m".to_string(),
-            long_form: "cors-allow_methods".to_string(),
+            long_form: "cors-allow-methods".to_string(),
             environment_variable: Config::RWS_CONFIG_CORS_ALLOW_METHODS.to_string(),
             _hint: Some("Comma separated list of allowed methods, example: POST,PUT".to_string())
         };

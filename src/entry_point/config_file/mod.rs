@@ -1,7 +1,6 @@
-use std::{env, io};
+use std::{io};
 use std::io::{BufRead, Cursor};
 use crate::entry_point::command_line_args::{CommandLineArgument};
-use crate::entry_point::Config;
 use crate::ext::file_ext::FileExt;
 use crate::symbol::SYMBOL;
 
@@ -85,8 +84,6 @@ fn strip_whitespaces(line: String) -> String {
 
 pub fn override_environment_variables_from_config(filepath: Option<&str>) {
     println!("\n  Start of Config Section");
-
-    let config: Config;
 
     let path: &str;
     if filepath.is_none() {
