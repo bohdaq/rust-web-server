@@ -143,6 +143,6 @@ impl CommandLineArgument {
 
     pub fn set_environment_variable(argument: &CommandLineArgument, value: String) {
         env::set_var(&argument.environment_variable, &value);
-        println!("    Set env variable '{}' to value '{}' from command line argument", argument.environment_variable, &value);
+        println!("    Set env variable '{}' to value '{}'", argument.environment_variable, &value);
     }
 }

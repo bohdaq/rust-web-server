@@ -1,5 +1,6 @@
 use std::{env, io};
 use std::io::{BufRead, Cursor};
+use crate::entry_point::command_line_args::{CommandLineArgument};
 use crate::entry_point::Config;
 use crate::ext::file_ext::FileExt;
 use crate::symbol::SYMBOL;
@@ -8,6 +9,7 @@ pub fn read_config_file(
     cursor: Cursor<&[u8]>,
     mut prefix: String) -> Result<bool, String> {
 
+    let mut argument_list : Vec<String> = vec![];
     let lines = cursor.lines().into_iter();
     for boxed_line in lines {
         let line = boxed_line.unwrap();
@@ -23,7 +25,6 @@ pub fn read_config_file(
 
         let boxed_split = without_whitespaces.split_once(SYMBOL.equals);
         if boxed_split.is_none() { // empty line as an example
-            prefix = "".to_string();
             continue;
         }
 
@@ -50,14 +51,17 @@ pub fn read_config_file(
                 SYMBOL.hyphen,
                 SYMBOL.hyphen,
                 &prefix.to_string(),
+                SYMBOL.hyphen,
                 unparsed_key,
                 SYMBOL.equals,
                 &value].join("");
         }
 
         println!("{}", arg );
-
+        argument_list.push(arg);
     }
+    let params = CommandLineArgument::get_command_line_arg_list();
+    CommandLineArgument::_parse(argument_list, params);
 
     Ok(true)
 }
