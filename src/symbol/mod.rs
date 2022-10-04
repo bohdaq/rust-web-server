@@ -17,6 +17,7 @@ pub struct Symbol {
     pub closing_square_bracket: &'static str,
     pub quotation_mark: &'static str,
     pub underscore: &'static str,
+    pub single_quote: &'static str,
 }
 
 pub const SYMBOL: Symbol = Symbol {
@@ -35,4 +36,5 @@ pub const SYMBOL: Symbol = Symbol {
     closing_square_bracket: "]",
     quotation_mark: "\"",
     underscore: "_",
+    single_quote: "'",
 };

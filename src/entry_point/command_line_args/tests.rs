@@ -43,7 +43,7 @@ fn command_line_arg_thread_count() {
     let argument = command_line_arg_list.get(2).unwrap();
     let hint = argument._hint.as_ref().unwrap();
     assert_eq!(argument.short_form, "t");
-    assert_eq!(argument.long_form, "threads");
+    assert_eq!(argument.long_form, "thread-count");
     assert_eq!(argument.environment_variable, Config::RWS_CONFIG_THREAD_COUNT.to_string());
     assert_eq!(hint, "Number of threads");
 

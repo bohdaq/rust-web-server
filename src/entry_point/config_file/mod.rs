@@ -31,6 +31,7 @@ pub fn read_config_file(
         let arg: String;
         let (unparsed_key, unparsed_value) = boxed_split.unwrap();
         let value = unparsed_value
+            .replace(SYMBOL.single_quote, SYMBOL.empty_string)
             .replace(SYMBOL.quotation_mark, SYMBOL.empty_string)
             .replace(SYMBOL.closing_square_bracket, SYMBOL.empty_string)
             .replace(SYMBOL.opening_square_bracket, SYMBOL.empty_string);
@@ -57,7 +58,6 @@ pub fn read_config_file(
                 &value].join("");
         }
 
-        println!("{}", arg );
         argument_list.push(arg);
     }
     let params = CommandLineArgument::get_command_line_arg_list();
@@ -103,40 +103,9 @@ pub fn override_environment_variables_from_config(filepath: Option<&str>) {
         return;
     } else {
         let content = boxed_content.unwrap();
-        config = toml::from_str(content.as_str()).unwrap();
         let cursor = io::Cursor::new(content.as_bytes());
         let _ = read_config_file(cursor, SYMBOL.empty_string.to_string());
     }
-
-    env::set_var(Config::RWS_CONFIG_IP, config.ip.to_string());
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_IP, config.ip.to_string());
-
-    env::set_var(Config::RWS_CONFIG_PORT, config.port.to_string());
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_PORT, config.port.to_string());
-
-    env::set_var(Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
-
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
-
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, config.cors.allow_origins.join(","));
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, config.cors.allow_origins.join(","));
-
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, config.cors.allow_credentials.to_string());
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, config.cors.allow_credentials.to_string());
-
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS, config.cors.allow_headers.join(","));
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, config.cors.allow_headers.join(",").to_lowercase());
-
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_METHODS, config.cors.allow_methods.join(","));
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_METHODS, config.cors.allow_methods.join(","));
-
-    env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(","));
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(",").to_lowercase());
-
-    env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, &config.cors.max_age);
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_MAX_AGE, config.cors.max_age);
 
     println!("  End of Config Section");
 }

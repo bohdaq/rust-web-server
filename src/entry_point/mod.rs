@@ -84,6 +84,8 @@ pub fn get_ip_port_thread_count() -> (String, i32, i32) {
 
 pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
     let bind_addr = [ip, ":", port.to_string().as_str()].join(SYMBOL.empty_string);
+    println!("Setting up {}...", bind_addr);
+
 
     let listener = TcpListener::bind(&bind_addr).unwrap();
     let pool = ThreadPool::new(thread_count as usize);
