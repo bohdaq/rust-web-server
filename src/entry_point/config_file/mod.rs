@@ -21,7 +21,17 @@ pub fn read_config_file(
                 .replace(SYMBOL.closing_square_bracket, SYMBOL.empty_string)
                 .to_string();
         }
-        println!("{} table: {}\n\n", &without_whitespaces, &prefix);
+
+        let boxed_split = without_whitespaces.split_once(SYMBOL.equals);
+        if boxed_split.is_none() { // empty line as an example
+            continue;
+        }
+        let (key, value) = boxed_split.unwrap();
+
+
+        println!("key: {} value: {} table: {}\n\n", &key, &value, &prefix);
+
+
     }
 
     Ok(true)
