@@ -4,6 +4,17 @@ use crate::entry_point::Config;
 #[cfg(test)]
 mod tests;
 
+pub fn override_environment_variables_from_command_line_args() {
+    println!("\n  Start of Reading Command Line Arguments Section");
+
+    let args = env::args().collect();
+    let params = CommandLineArgument::get_command_line_arg_list();
+    CommandLineArgument::_parse(args, params);
+
+    println!("  End of Reading Command Line Arguments\n");
+    println!("RWS Configuration End\n\n");
+}
+
 pub struct CommandLineArgument {
     short_form: String,
     long_form: String,

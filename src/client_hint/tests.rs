@@ -1,5 +1,5 @@
 use crate::client_hint::ClientHint;
-use crate::entry_point::{override_environment_variables_from_config};
+use crate::entry_point::config_file::override_environment_variables_from_config;
 
 #[test]
 fn consts() {

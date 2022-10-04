@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{BufReader, Read, Write};
 
 use std::cmp::min;
-use crate::entry_point::override_environment_variables_from_config;
+use crate::entry_point::config_file::override_environment_variables_from_config;
 use crate::ext::file_ext::FileExt;
 
 use crate::header::Header;

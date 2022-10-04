@@ -1,7 +1,7 @@
 use crate::app::App;
 use crate::client_hint::ClientHint;
 use crate::cors::Cors;
-use crate::entry_point::override_environment_variables_from_config;
+use crate::entry_point::config_file::override_environment_variables_from_config;
 use crate::header::Header;
 use crate::request::{METHOD, Request};
 use crate::http::VERSION;

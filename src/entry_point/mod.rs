@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests;
 pub mod command_line_args;
+pub mod config_file;
+pub mod environment_variables;
 
 
 use std::net::TcpListener;
@@ -11,8 +13,9 @@ use crate::thread_pool::ThreadPool;
 
 use serde::{Serialize, Deserialize};
 use crate::cors::Cors;
-use crate::entry_point::command_line_args::CommandLineArgument;
-use crate::ext::file_ext::FileExt;
+use crate::entry_point::command_line_args::{override_environment_variables_from_command_line_args};
+use crate::entry_point::config_file::override_environment_variables_from_config;
+use crate::entry_point::environment_variables::read_system_environment_variables;
 use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
@@ -54,147 +57,7 @@ pub fn bootstrap() {
     override_environment_variables_from_command_line_args();
 }
 
-pub fn read_system_environment_variables() {
-    println!("  Start Of System Environment Variables Section");
 
-    let boxed_ip = env::var(Config::RWS_CONFIG_IP);
-    if boxed_ip.is_ok() {
-        println!("    Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_IP,
-                 boxed_ip.unwrap());
-    }
-
-    let boxed_port = env::var(Config::RWS_CONFIG_PORT);
-    if boxed_port.is_ok() {
-        println!("    Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_PORT,
-                 boxed_port.unwrap());
-    }
-
-    let boxed_thread_count = env::var(Config::RWS_CONFIG_THREAD_COUNT);
-    if boxed_thread_count.is_ok() {
-        println!("    Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_THREAD_COUNT,
-                 boxed_thread_count.unwrap());
-    }
-
-    let boxed_cors_allow_all = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL);
-    if boxed_cors_allow_all.is_ok() {
-        println!("    Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CORS_ALLOW_ALL,
-                 boxed_cors_allow_all.unwrap());
-    }
-
-    let boxed_cors_allow_origins = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS);
-    if boxed_cors_allow_origins.is_ok() {
-        println!("    Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CORS_ALLOW_ORIGINS,
-                 boxed_cors_allow_origins.unwrap());
-    }
-
-    let boxed_cors_allow_methods = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS);
-    if boxed_cors_allow_methods.is_ok() {
-        println!("    Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CORS_ALLOW_METHODS,
-                 boxed_cors_allow_methods.unwrap());
-    }
-
-    let boxed_cors_allow_headers = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS);
-    if boxed_cors_allow_headers.is_ok() {
-        println!("    Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CORS_ALLOW_HEADERS,
-                 boxed_cors_allow_headers.unwrap());
-    }
-
-    let boxed_cors_allow_credentials = env::var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS);
-    if boxed_cors_allow_credentials.is_ok() {
-        println!("    Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS,
-                 boxed_cors_allow_credentials.unwrap());
-    }
-
-    let boxed_cors_expose_headers = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS);
-    if boxed_cors_expose_headers.is_ok() {
-        println!("    Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CORS_EXPOSE_HEADERS,
-                 boxed_cors_expose_headers.unwrap());
-    }
-
-    let boxed_cors_max_age = env::var(Config::RWS_CONFIG_CORS_MAX_AGE);
-    if boxed_cors_max_age.is_ok() {
-        println!("    Set env variable '{}' to value '{}' environment variable",
-                 Config::RWS_CONFIG_CORS_MAX_AGE,
-                 boxed_cors_max_age.unwrap());
-    }
-
-    println!("  End of System Environment Variables Section");
-}
-
-pub fn override_environment_variables_from_config(filepath: Option<&str>) {
-    println!("\n  Start of Config Section");
-
-    let config: Config;
-
-    let path: &str;
-    if filepath.is_none() {
-        path = "/rws.config.toml";
-    } else {
-        path = filepath.unwrap();
-    }
-    let static_filepath = FileExt::get_static_filepath(path);
-    let content = std::fs::read_to_string(static_filepath);
-
-    if content.is_err() {
-        eprintln!("    Unable to parse rws.config.toml\n{}", content.err().unwrap());
-        println!("  End of Config Section");
-        return;
-    } else {
-        config = toml::from_str(content.unwrap().as_str()).unwrap();
-    }
-
-    env::set_var(Config::RWS_CONFIG_IP, config.ip.to_string());
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_IP, config.ip.to_string());
-
-    env::set_var(Config::RWS_CONFIG_PORT, config.port.to_string());
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_PORT, config.port.to_string());
-
-    env::set_var(Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_THREAD_COUNT, config.thread_count.to_string());
-
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_ALL, config.cors.allow_all.to_string());
-
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, config.cors.allow_origins.join(","));
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, config.cors.allow_origins.join(","));
-
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, config.cors.allow_credentials.to_string());
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, config.cors.allow_credentials.to_string());
-
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS, config.cors.allow_headers.join(","));
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, config.cors.allow_headers.join(",").to_lowercase());
-
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_METHODS, config.cors.allow_methods.join(","));
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_ALLOW_METHODS, config.cors.allow_methods.join(","));
-
-    env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(","));
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, config.cors.expose_headers.join(",").to_lowercase());
-
-    env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, &config.cors.max_age);
-    println!("    Set env variable '{}' to value '{}' from rws.config.toml", Config::RWS_CONFIG_CORS_MAX_AGE, config.cors.max_age);
-
-    println!("  End of Config Section");
-}
-
-pub fn override_environment_variables_from_command_line_args() {
-    println!("\n  Start of Reading Command Line Arguments Section");
-
-    let args = env::args().collect();
-    let params = CommandLineArgument::get_command_line_arg_list();
-    CommandLineArgument::_parse(args, params);
-
-    println!("  End of Reading Command Line Arguments\n");
-    println!("RWS Configuration End\n\n");
-}
 
 pub fn get_ip_port_thread_count() -> (String, i32, i32) {
     let mut ip : String = Config::RWS_DEFAULT_IP.to_string();

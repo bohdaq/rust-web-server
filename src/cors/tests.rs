@@ -2,7 +2,7 @@ use std::{env, fs};
 use std::borrow::Borrow;
 use crate::header::Header;
 use crate::cors::Cors;
-use crate::entry_point::override_environment_variables_from_config;
+use crate::entry_point::config_file::override_environment_variables_from_config;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::request::{METHOD, Request};
