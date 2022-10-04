@@ -30,8 +30,20 @@ pub fn read_config_file(
 
         let arg: String;
         let (unparsed_key, unparsed_value) = boxed_split.unwrap();
+        let value = unparsed_value
+            .replace(SYMBOL.quotation_mark, SYMBOL.empty_string)
+            .replace(SYMBOL.closing_square_bracket, SYMBOL.empty_string)
+            .replace(SYMBOL.opening_square_bracket, SYMBOL.empty_string);
+
+
         if prefix.chars().count() == 0 {
-            arg = [SYMBOL.hyphen, SYMBOL.hyphen, unparsed_key, SYMBOL.equals, unparsed_value].join("");
+            arg = [
+                SYMBOL.hyphen,
+                SYMBOL.hyphen,
+                unparsed_key,
+                SYMBOL.equals,
+                &value
+            ].join("");
         } else {
             arg = [
                 SYMBOL.hyphen,
@@ -39,7 +51,7 @@ pub fn read_config_file(
                 &prefix.to_string(),
                 unparsed_key,
                 SYMBOL.equals,
-                unparsed_value].join("");
+                &value].join("");
         }
 
         println!("{}", arg );
