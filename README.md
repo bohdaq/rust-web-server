@@ -4,10 +4,11 @@ Hi, rust-web-server (**rws**) is a simple web-server written in Rust. The **rws*
 
 ## Features
 1. [Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
-2. [HTTP Range Requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests)
-2. [HTTP Client Hints](https://developer.mozilla.org/en-US/docs/Web/HTTP/Client_hints)
-3. [X-Content-Type-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options)
-4. [X-Frame-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options)
+1. [HTTP Range Requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests)
+1. [HTTP Client Hints](https://developer.mozilla.org/en-US/docs/Web/HTTP/Client_hints)
+1. [X-Content-Type-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options)
+1. [X-Frame-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options)
+1. No third party dependencies
 
 ## Download
 Currently, you can [download binary](https://github.com/bohdaq/rust-web-server/releases) for x86_64-unknown-linux-gnu or x86_64-apple-darwin platforms. Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
@@ -21,7 +22,7 @@ You will see similar output:
 
 > Rust Web Server
 > 
-> Version:       0.0.25
+> Version:       0.0.26
 > 
 > Authors:       Bohdan Tsap <bohdan.tsap@tutanota.com>
 > 
