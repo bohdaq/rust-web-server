@@ -1,5 +1,5 @@
 use std::env;
-use crate::entry_point::command_line_args::{CommandLineArgument};
+use crate::entry_point::command_line_args::{CommandLineArgument, override_environment_variables_from_command_line_args};
 use crate::entry_point::Config;
 
 #[test]
@@ -254,4 +254,9 @@ fn parse_long_form() {
 
     let env_var = env::var(Config::RWS_CONFIG_IP).unwrap();
     assert_eq!(env_var, "127.0.0.1");
+}
+
+#[test]
+fn _override() {
+    override_environment_variables_from_command_line_args()
 }

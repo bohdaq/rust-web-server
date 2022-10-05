@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::env;
 use crate::entry_point::Config;
 
