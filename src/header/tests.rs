@@ -84,7 +84,7 @@ fn header_constants() {
     assert_eq!(Header::_ACCEPT_LANGUAGE, "Accept-Language");
     assert_eq!(Header::_ACCEPT_PATCH, "Accept-Patch");
     assert_eq!(Header::_AGE, "Age");
-    assert_eq!(Header::_DATE_UNIX_EPOCH_NANOS, "Date-ISO-8601");
+    assert_eq!(Header::_DATE_UNIX_EPOCH_NANOS, "Date-Unix-Epoch-Nanos");
     assert_eq!(Header::_ALT_SVC, "Alt-Svc");
     assert_eq!(Header::_AUTHORIZATION, "Authorization");
     assert_eq!(Header::_CACHE_CONTROL, "Cache-Control");
@@ -158,6 +158,6 @@ fn header_constants() {
     assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_DENY, "DENY");
     assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, "SAMEORIGIN");
     assert_eq!(Header::_LAST_MODIFIED, "Last-Modified");
-    assert_eq!(Header::_LAST_MODIFIED_ISO_8601, "Last-Modified-ISO-8601");
+    assert_eq!(Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS, "Last-Modified-Unix-Epoch-Nanos");
 
 }

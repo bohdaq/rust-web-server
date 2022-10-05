@@ -51,7 +51,7 @@ impl Header {
     pub const _CROSS_ORIGIN_OPENER_POLICY: &'static str = "Cross-Origin-Opener-Policy";
     pub const _CROSS_ORIGIN_RESOURCE_POLICY: &'static str = "Cross-Origin-Resource-Policy";
     pub const _DATE: &'static str = "Date";
-    pub const _DATE_UNIX_EPOCH_NANOS: &'static str = "Date-Unix-epoch-nanos";
+    pub const _DATE_UNIX_EPOCH_NANOS: &'static str = "Date-Unix-Epoch-Nanos";
     pub const _DEVICE_MEMORY: &'static str = "Device-Memory";
     pub const _DIGEST: &'static str = "Digest";
     pub const _DOWNLINK: &'static str = "Downlink";
@@ -71,7 +71,7 @@ impl Header {
     pub const _IF_RANGE: &'static str = "If-Range";
     pub const _IF_UNMODIFIED_SINCE: &'static str = "If-Unmodified-Since";
     pub const _LAST_MODIFIED: &'static str = "Last-Modified";
-    pub const _LAST_MODIFIED_ISO_8601: &'static str = "Last-Modified-ISO-8601";
+    pub const _LAST_MODIFIED_UNIX_EPOCH_NANOS: &'static str = "Last-Modified-Unix-Epoch-Nanos";
     pub const _LINK: &'static str = "Link";
     pub const _LOCATION: &'static str = "Location";
     pub const _MAX_FORWARDS: &'static str = "Max-Forwards";
