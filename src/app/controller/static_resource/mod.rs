@@ -60,8 +60,8 @@ impl StaticResourceController {
 
                 if boxed_modified_date_time.is_ok() {
                     let modified_date_time = boxed_modified_date_time.unwrap();
-                    let last_modified_iso_8601 = Header{ name: Header::_LAST_MODIFIED_ISO_8601.to_string(), value: modified_date_time.format("%+").to_string() };
-                    response.headers.push(last_modified_iso_8601);
+                    let last_modified_unix_nanos = Header{ name: Header::_LAST_MODIFIED_ISO_8601.to_string(), value: modified_date_time.to_string() };
+                    response.headers.push(last_modified_unix_nanos);
                 }
 
                 response.status_code = *status_code_reason_phrase.status_code;

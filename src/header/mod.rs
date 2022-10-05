@@ -51,7 +51,7 @@ impl Header {
     pub const _CROSS_ORIGIN_OPENER_POLICY: &'static str = "Cross-Origin-Opener-Policy";
     pub const _CROSS_ORIGIN_RESOURCE_POLICY: &'static str = "Cross-Origin-Resource-Policy";
     pub const _DATE: &'static str = "Date";
-    pub const _DATE_ISO_8601: &'static str = "Date-ISO-8601";
+    pub const _DATE_UNIX_EPOCH_NANOS: &'static str = "Date-Unix-epoch-nanos";
     pub const _DEVICE_MEMORY: &'static str = "Device-Memory";
     pub const _DIGEST: &'static str = "Digest";
     pub const _DOWNLINK: &'static str = "Downlink";
@@ -187,8 +187,8 @@ impl Header {
 
     pub fn get_date_iso_8601_header() -> Header {
         Header {
-            name: Header::_DATE_ISO_8601.to_string(),
-            value: DateTimeExt::_now_utc().format("%+").to_string(),
+            name: Header::_DATE_UNIX_EPOCH_NANOS.to_string(),
+            value: DateTimeExt::_now_unix_epoch_nanos().to_string(),
         }
     }
 

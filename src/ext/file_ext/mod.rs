@@ -1,7 +1,6 @@
 use std::env;
 use std::fs::{File};
 use std::io::{BufReader, Read, Seek, SeekFrom};
-use chrono::{DateTime, Utc};
 use crate::ext::date_time_ext::DateTimeExt;
 use crate::range::Range;
 use crate::symbol::SYMBOL;
@@ -60,7 +59,7 @@ impl FileExt {
         Ok(file_content)
     }
 
-    pub fn file_modified_utc(filepath: &str) -> Result<DateTime<Utc>, String> {
+    pub fn file_modified_utc(filepath: &str) -> Result<u128, String> {
 
         let boxed_open = File::open(filepath);
         if boxed_open.is_err() {
@@ -84,8 +83,8 @@ impl FileExt {
             return Err(error)
         }
         let modified_time = boxed_last_modified_time.unwrap();
-        let current_utc: DateTime<Utc> = DateTimeExt::_system_time_to_utc(modified_time);
-        Ok(current_utc)
+        let nanos = DateTimeExt::_system_time_to_unix_nanos(modified_time);
+        Ok(nanos)
      }
 
     pub fn get_static_filepath(request_uri: &str) -> String {

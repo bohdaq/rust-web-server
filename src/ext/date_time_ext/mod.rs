@@ -1,5 +1,4 @@
 use std::time::{SystemTime, UNIX_EPOCH};
-use chrono::{DateTime, Utc, Local, NaiveDateTime};
 
 #[cfg(test)]
 mod tests;
@@ -7,16 +6,15 @@ mod tests;
 pub struct DateTimeExt;
 
 impl DateTimeExt {
-    pub fn _now_utc() -> DateTime<Utc> {
-        let current_utc: DateTime<Utc> = Utc::now();
-        current_utc
+    pub fn _now_unix_epoch_nanos() -> u128 {
+        let now = SystemTime::now();
+        let nanos = DateTimeExt::_system_time_to_unix_nanos(now);
+        nanos
     }
 
-    pub fn _system_time_to_utc(system_time: SystemTime) -> DateTime<Utc> {
-        let seconds = system_time.duration_since(UNIX_EPOCH).unwrap().as_secs();
-        let naive_datetime = NaiveDateTime::from_timestamp(seconds as i64, 1111);
-        let datetime_utc: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
-        datetime_utc
+    pub fn _system_time_to_unix_nanos(system_time: SystemTime) -> u128 {
+        let nanos = system_time.duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        nanos
     }
 
 }

@@ -84,7 +84,7 @@ fn header_constants() {
     assert_eq!(Header::_ACCEPT_LANGUAGE, "Accept-Language");
     assert_eq!(Header::_ACCEPT_PATCH, "Accept-Patch");
     assert_eq!(Header::_AGE, "Age");
-    assert_eq!(Header::_DATE_ISO_8601, "Date-ISO-8601");
+    assert_eq!(Header::_DATE_UNIX_EPOCH_NANOS, "Date-ISO-8601");
     assert_eq!(Header::_ALT_SVC, "Alt-Svc");
     assert_eq!(Header::_AUTHORIZATION, "Authorization");
     assert_eq!(Header::_CACHE_CONTROL, "Cache-Control");
