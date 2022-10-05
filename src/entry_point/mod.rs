@@ -5,25 +5,14 @@ pub mod config_file;
 pub mod environment_variables;
 
 
-use std::net::TcpListener;
 use std::{env};
 
-use crate::server::Server;
-use crate::thread_pool::ThreadPool;
-
-use crate::cors::Cors;
 use crate::entry_point::command_line_args::{override_environment_variables_from_command_line_args};
 use crate::entry_point::config_file::override_environment_variables_from_config;
 use crate::entry_point::environment_variables::read_system_environment_variables;
-use crate::symbol::SYMBOL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub struct Config {
-    ip: String,
-    port: i32,
-    thread_count: i32,
-    cors: Cors,
-}
+pub struct Config {}
 
 impl Config {
     pub const RWS_CONFIG_IP: &'static str = "RWS_CONFIG_IP";
@@ -42,12 +31,6 @@ impl Config {
     pub const RWS_DEFAULT_PORT: &'static i32 = &7878;
     pub const RWS_DEFAULT_THREAD_COUNT: &'static i32 = &4;
 
-}
-
-pub fn start() {
-    bootstrap();
-    let (ip, port, thread_count) = get_ip_port_thread_count();
-    create_tcp_listener_with_thread_pool(ip.as_str(), port, thread_count);
 }
 
 pub fn bootstrap() {
@@ -81,22 +64,3 @@ pub fn get_ip_port_thread_count() -> (String, i32, i32) {
     (ip, port, thread_count)
 }
 
-pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
-    let bind_addr = [ip, ":", port.to_string().as_str()].join(SYMBOL.empty_string);
-    println!("Setting up {}...", bind_addr);
-
-
-    let listener = TcpListener::bind(&bind_addr).unwrap();
-    let pool = ThreadPool::new(thread_count as usize);
-
-    println!("Hello, rust-web-server is up and running: {}", &bind_addr);
-
-    for boxed_stream in listener.incoming() {
-        let stream = boxed_stream.unwrap();
-        println!("Connection established, local addr: {}, peer addr: {}", stream.local_addr().unwrap(), stream.peer_addr().unwrap());
-
-        pool.execute(move ||  {
-            Server::process_request(stream);
-        });
-    }
-}
