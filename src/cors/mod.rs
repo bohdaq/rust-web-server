@@ -266,17 +266,23 @@ impl Cors {
             } else {
                 return boxed_cors_header_list.unwrap()
             }
-        }
-
-        let is_cors_set_to_allow_all_requests : bool = boxed_rws_config_cors_allow_all.unwrap().parse().unwrap();
-        if !is_cors_set_to_allow_all_requests {
-            let boxed_cors_header_list = Cors::process_using_default_config(&request);
-            if boxed_cors_header_list.is_err() {
-                eprintln!("unable to get Cors::process_using_default_config headers {}", boxed_cors_header_list.err().unwrap().message);
+        } else {
+            let boxed_parse = boxed_rws_config_cors_allow_all.unwrap().parse::<bool>();
+            if boxed_parse.is_err() {
+                eprintln!("unable to parse as boolean {} environment variable. Possible values are true or false", Config::RWS_CONFIG_CORS_ALLOW_ALL);
             } else {
-                return boxed_cors_header_list.unwrap()
+                let is_cors_set_to_allow_all_requests = boxed_parse.unwrap();
+                if !is_cors_set_to_allow_all_requests {
+                    let boxed_cors_header_list = Cors::process_using_default_config(&request);
+                    if boxed_cors_header_list.is_err() {
+                        eprintln!("unable to get Cors::process_using_default_config headers {}", boxed_cors_header_list.err().unwrap().message);
+                    } else {
+                        return boxed_cors_header_list.unwrap()
+                    }
+                }
             }
         }
+
 
         let boxed_cors_header_list = Cors::allow_all(&request);
         if boxed_cors_header_list.is_err() {
