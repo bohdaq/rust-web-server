@@ -223,12 +223,19 @@ impl Cors {
                 headers.push(allow_headers);
             }
 
-            let allow_expose_headers  = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS).unwrap();
-            let expose_headers = Header {
-                name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
-                value: allow_expose_headers.to_lowercase()
-            };
-            headers.push(expose_headers);
+
+            let boxed_allow_expose_headers = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS);
+            if boxed_allow_expose_headers.is_err() {
+                eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS);
+            } else {
+                let allow_expose_headers  = boxed_allow_expose_headers.unwrap();
+                let expose_headers = Header {
+                    name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
+                    value: allow_expose_headers.to_lowercase()
+                };
+                headers.push(expose_headers);
+            }
+
 
             let max_age_value  = env::var(Config::RWS_CONFIG_CORS_MAX_AGE).unwrap();
             let max_age = Header {
