@@ -93,6 +93,10 @@ fn static_file_cors_options_preflight_request_client_hints() {
 
     let (response, _request) = App::handle_request(request);
 
+    for header in &response.headers {
+        println!("{:?}", header);
+    }
+
     let allow_origins = response._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
     assert_eq!(origin_value, allow_origins.value);
 
@@ -125,7 +129,7 @@ fn static_file_cors_options_preflight_request_client_hints() {
     let x_frame_options = response._get_header(Header::_X_FRAME_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
 
-    for header in response.headers {
+    for header in &response.headers {
         println!("{:?}", header);
     }
     assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n204_no_content.status_code);

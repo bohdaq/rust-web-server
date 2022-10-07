@@ -256,21 +256,34 @@ impl Cors {
     }
 
     pub fn get_headers(request: &Request) -> Vec<Header> {
-        let mut cors_header_list : Vec<Header> = vec![];
 
         let boxed_rws_config_cors_allow_all = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL);
         if boxed_rws_config_cors_allow_all.is_err() {
             eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_ALLOW_ALL);
-            return cors_header_list
+            let boxed_cors_header_list = Cors::allow_all(&request);
+            if boxed_cors_header_list.is_err() {
+                eprintln!("unable to get Cors::allow_all headers {}", boxed_cors_header_list.err().unwrap().message);
+            } else {
+                return boxed_cors_header_list.unwrap()
+            }
         }
 
         let is_cors_set_to_allow_all_requests : bool = boxed_rws_config_cors_allow_all.unwrap().parse().unwrap();
-        if is_cors_set_to_allow_all_requests {
-            cors_header_list = Cors::allow_all(&request).unwrap();
-        } else {
-            cors_header_list = Cors::process_using_default_config(&request).unwrap();
+        if !is_cors_set_to_allow_all_requests {
+            let boxed_cors_header_list = Cors::process_using_default_config(&request);
+            if boxed_cors_header_list.is_err() {
+                eprintln!("unable to get Cors::process_using_default_config headers {}", boxed_cors_header_list.err().unwrap().message);
+            } else {
+                return boxed_cors_header_list.unwrap()
+            }
         }
 
-        cors_header_list
+        let boxed_cors_header_list = Cors::allow_all(&request);
+        if boxed_cors_header_list.is_err() {
+            eprintln!("unable to get Cors::allow_all headers {}", boxed_cors_header_list.err().unwrap().message);
+            vec![]
+        } else {
+            return boxed_cors_header_list.unwrap()
+        }
     }
 }
