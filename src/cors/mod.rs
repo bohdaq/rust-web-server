@@ -198,7 +198,13 @@ impl Cors {
 
         let is_options = request.method == METHOD.options;
         if is_options {
-            let methods = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS).unwrap();
+            let mut methods = "".to_string();
+            let boxed_methods = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS);
+            if boxed_methods.is_err() {
+                eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_ALLOW_METHODS);
+            } else {
+                methods = boxed_methods.unwrap();
+            }
             let allow_methods = Header {
                 name: Header::_ACCESS_CONTROL_ALLOW_METHODS.to_string(),
                 value: methods
