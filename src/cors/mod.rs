@@ -180,13 +180,18 @@ impl Cors {
         if boxed_is_allow_credentials.is_err() {
             eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS);
         } else {
-            let is_allow_credentials : bool = boxed_is_allow_credentials.unwrap().parse().unwrap();
-            if is_allow_credentials {
-                let allow_credentials = Header {
-                    name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
-                    value: is_allow_credentials.to_string()
-                };
-                headers.push(allow_credentials);
+            let boxed_parse = boxed_is_allow_credentials.unwrap().parse::<bool>();
+            if boxed_parse.is_err() {
+                eprintln!("unable to parse as boolean {} environment variable. Possible values are true or false", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS);
+            } else {
+                let is_allow_credentials : bool = boxed_parse.unwrap();
+                if is_allow_credentials {
+                    let allow_credentials = Header {
+                        name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
+                        value: is_allow_credentials.to_string()
+                    };
+                    headers.push(allow_credentials);
+                }
             }
         }
 
