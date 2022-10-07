@@ -237,12 +237,18 @@ impl Cors {
             }
 
 
-            let max_age_value  = env::var(Config::RWS_CONFIG_CORS_MAX_AGE).unwrap();
-            let max_age = Header {
-                name: Header::_ACCESS_CONTROL_MAX_AGE.to_string(),
-                value: max_age_value
-            };
-            headers.push(max_age);
+            let boxed_max_age_value = env::var(Config::RWS_CONFIG_CORS_MAX_AGE);
+            if boxed_max_age_value.is_err() {
+                eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_MAX_AGE);
+            } else {
+                let max_age_value  = boxed_max_age_value.unwrap();
+                let max_age = Header {
+                    name: Header::_ACCESS_CONTROL_MAX_AGE.to_string(),
+                    value: max_age_value
+                };
+                headers.push(max_age);
+            }
+
         }
 
 
