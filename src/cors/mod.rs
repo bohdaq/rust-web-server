@@ -148,7 +148,13 @@ impl Cors {
 
     pub fn process_using_default_config(request: &Request) -> Result<Vec<Header>, Error> {
         let mut headers : Vec<Header> = vec![];
-        let allow_origins : String = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS).unwrap();
+        let boxed_allow_origins = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS);
+        let mut allow_origins: String = "".to_string();
+        if boxed_allow_origins.is_err() {
+            eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS);
+        } else {
+            allow_origins = boxed_allow_origins.unwrap();
+        }
 
         let boxed_origin = request.get_header(Header::_ORIGIN.to_string());
 
@@ -170,14 +176,20 @@ impl Cors {
         };
         headers.push(allow_origin);
 
-        let is_allow_credentials : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS).unwrap().parse().unwrap();
-        if is_allow_credentials {
-            let allow_credentials = Header {
-                name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
-                value: is_allow_credentials.to_string()
-            };
-            headers.push(allow_credentials);
+        let boxed_is_allow_credentials = env::var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS);
+        if boxed_is_allow_credentials.is_err() {
+            eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS);
+        } else {
+            let is_allow_credentials : bool = boxed_is_allow_credentials.unwrap().parse().unwrap();
+            if is_allow_credentials {
+                let allow_credentials = Header {
+                    name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
+                    value: is_allow_credentials.to_string()
+                };
+                headers.push(allow_credentials);
+            }
         }
+
 
         let is_options = request.method == METHOD.options;
         if is_options {
@@ -215,9 +227,15 @@ impl Cors {
     }
 
     pub fn get_headers(request: &Request) -> Vec<Header> {
-        let cors_header_list : Vec<Header>;
+        let mut cors_header_list : Vec<Header> = vec![];
 
-        let is_cors_set_to_allow_all_requests : bool = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).unwrap().parse().unwrap();
+        let boxed_rws_config_cors_allow_all = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL);
+        if boxed_rws_config_cors_allow_all.is_err() {
+            eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_ALLOW_ALL);
+            return cors_header_list
+        }
+
+        let is_cors_set_to_allow_all_requests : bool = boxed_rws_config_cors_allow_all.unwrap().parse().unwrap();
         if is_cors_set_to_allow_all_requests {
             cors_header_list = Cors::allow_all(&request).unwrap();
         } else {
