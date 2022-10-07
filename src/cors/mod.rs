@@ -211,12 +211,17 @@ impl Cors {
             }
 
 
-            let allow_headers_env_variable = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS).unwrap();
-            let allow_headers = Header {
-                name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
-                value: allow_headers_env_variable.to_lowercase()
-            };
-            headers.push(allow_headers);
+            let boxed_allow_headers_env_variable = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS);
+            if boxed_allow_headers_env_variable.is_err() {
+                eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_ALLOW_HEADERS);
+            } else {
+                let allow_headers_env_variable = boxed_allow_headers_env_variable.unwrap();
+                let allow_headers = Header {
+                    name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
+                    value: allow_headers_env_variable.to_lowercase()
+                };
+                headers.push(allow_headers);
+            }
 
             let allow_expose_headers  = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS).unwrap();
             let expose_headers = Header {
