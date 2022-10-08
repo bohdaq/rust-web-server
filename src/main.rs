@@ -60,16 +60,20 @@ pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i
         println!("Hello, rust-web-server is up and running: {}", &bind_addr);
 
         for boxed_stream in listener.incoming() {
-            let stream = boxed_stream.unwrap();
-            println!(
-                "Connection established, local addr: {}, peer addr: {}",
-                stream.local_addr().unwrap(),
-                stream.peer_addr().unwrap()
-            );
+            if boxed_stream.is_err() {
+                eprintln!("unable to get TCP stream: {}", boxed_stream.err().unwrap());
+            } else {
+                let stream = boxed_stream.unwrap();
+                println!(
+                    "Connection established, local addr: {}, peer addr: {}",
+                    stream.local_addr().unwrap(),
+                    stream.peer_addr().unwrap()
+                );
 
-            pool.execute(move || {
-                Server::process_request(stream);
-            });
+                pool.execute(move || {
+                    Server::process_request(stream);
+                });
+            }
         }
     }
 

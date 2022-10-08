@@ -305,7 +305,6 @@ impl Range {
         let end : i64;
         let size : i64;
 
-        println!("lowercase_unparsed_header_value {}", &lowercase_unparsed_header_value);
 
         let boxed_split_without_bytes = lowercase_unparsed_header_value.split_once(SYMBOL.whitespace);
         if boxed_split_without_bytes.is_none() {
