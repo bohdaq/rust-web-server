@@ -151,7 +151,17 @@ impl Range {
         }
 
         let split_raw_range_value: Vec<&str> = raw_range_value.split(SYMBOL.equals).collect();
-        let raw_bytes = split_raw_range_value.get(INDEX_AFTER_UNIT_DECLARATION).unwrap();
+        let boxed_raw_bytes = split_raw_range_value.get(INDEX_AFTER_UNIT_DECLARATION);
+        if boxed_raw_bytes.is_none() {
+            let message = Range::ERROR_UNABLE_TO_PARSE_RANGE_START.to_string();
+            let error = Error {
+                status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
+                message: message.to_string()
+            };
+            return Err(error)
+        }
+
+        let raw_bytes = boxed_raw_bytes.unwrap();
 
         let bytes: Vec<&str> = raw_bytes.split(SYMBOL.comma).collect();
         for byte in bytes {
