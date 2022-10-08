@@ -22,7 +22,7 @@ You will see similar output:
 
 > Rust Web Server
 > 
-> Version:       0.0.27
+> Version:       0.0.28
 > 
 > Authors:       Bohdan Tsap <bohdan.tsap@tutanota.com>
 > 
