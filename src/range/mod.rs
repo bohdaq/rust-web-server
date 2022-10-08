@@ -90,7 +90,15 @@ impl Range {
                 }
             }
             if i == END_INDEX && length != 0 && start_range_not_provided {
-                let num_usize : u64 = num.parse().unwrap();
+                let boxed_parse = num.parse();
+                if boxed_parse.is_err() {
+                    let error = Error {
+                        status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
+                        message: Range::ERROR_UNABLE_TO_PARSE_RANGE_END.to_string()
+                    };
+                    return Err(error)
+                }
+                let num_usize : u64 = boxed_parse.unwrap();
                 range.start = filelength - num_usize;
                 range.end = filelength;
             }
