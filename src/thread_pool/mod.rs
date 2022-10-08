@@ -35,7 +35,12 @@ impl ThreadPool {
             F: FnOnce() + Send  + 'static,
     {
         let job = Box::new(f);
-        self.sender.send(job).unwrap();
+        let boxed_send = self.sender.send(job);
+        if boxed_send.is_err() {
+            eprintln!("unable to send job: {}", boxed_send.err().unwrap());
+        } else {
+            boxed_send.unwrap()
+        }
 
     }
 }
