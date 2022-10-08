@@ -64,11 +64,22 @@ pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i
                 eprintln!("unable to get TCP stream: {}", boxed_stream.err().unwrap());
             } else {
                 let stream = boxed_stream.unwrap();
-                println!(
-                    "Connection established, local addr: {}, peer addr: {}",
-                    stream.local_addr().unwrap(),
-                    stream.peer_addr().unwrap()
-                );
+
+                print!("Connection established, ");
+
+                let boxed_local_addr = stream.local_addr();
+                if boxed_local_addr.is_ok() {
+                    print!("local addr: {}", boxed_local_addr.unwrap())
+                } else {
+                    eprintln!("unable to read local addr");
+                }
+
+                let boxed_peer_addr = stream.local_addr();
+                if boxed_peer_addr.is_ok() {
+                    print!(", peer addr: {}\n", boxed_peer_addr.unwrap())
+                } else {
+                    eprintln!("unable to read peer addr");
+                }
 
                 pool.execute(move || {
                     Server::process_request(stream);
