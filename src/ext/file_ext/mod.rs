@@ -19,7 +19,7 @@ impl FileExt {
             return Err(error)
         }
 
-        let file = File::open(filepath).unwrap();
+        let file = boxed_open.unwrap();
         let mut reader = BufReader::new(file);
 
         let boxed_seek = reader.seek(SeekFrom::Start(range.start));
