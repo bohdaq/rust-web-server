@@ -13,7 +13,12 @@ pub struct StaticResourceController;
 impl StaticResourceController {
 
     pub fn is_matching_request(request: &Request) -> bool {
-        let static_filepath = FileExt::get_static_filepath(&request.request_uri);
+        let boxed_static_filepath = FileExt::get_static_filepath(&request.request_uri);
+        if boxed_static_filepath.is_err() {
+            return false
+        }
+
+        let static_filepath = boxed_static_filepath.unwrap();
 
         let boxed_md = metadata(&static_filepath);
         if boxed_md.is_err() {

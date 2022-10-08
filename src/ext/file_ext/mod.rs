@@ -87,10 +87,26 @@ impl FileExt {
         Ok(nanos)
      }
 
-    pub fn get_static_filepath(request_uri: &str) -> String {
-        let dir = env::current_dir().unwrap();
-        let working_directory = dir.as_path().to_str().unwrap();
-        [working_directory, request_uri].join(SYMBOL.empty_string)
+    pub fn get_static_filepath(request_uri: &str) -> Result<String, String> {
+        let boxed_dir = env::current_dir();
+        if boxed_dir.is_err() {
+            let error = boxed_dir.err().unwrap();
+            eprintln!("{}", error);
+            return Err(error.to_string());
+        }
+        let dir = boxed_dir.unwrap();
+
+
+        let boxed_working_directory = dir.as_path().to_str();
+        if boxed_working_directory.is_none() {
+            let error = "working directory is not set";
+            eprintln!("{}", error);
+            return Err(error.to_string());
+        }
+
+        let working_directory = boxed_working_directory.unwrap();
+        let absolute_path = [working_directory, request_uri].join(SYMBOL.empty_string);
+        Ok(absolute_path)
     }
 }
 

@@ -15,7 +15,7 @@ use crate::symbol::SYMBOL;
 #[test]
 fn check_range_response_is_ok_two_part() {
     let uri = "/static/test.txt";
-    let url = FileExt::get_static_filepath(uri);
+    let url = FileExt::get_static_filepath(uri).unwrap();
 
     let file = File::open(url).unwrap();
     let mut reader = BufReader::new(file);
@@ -106,7 +106,7 @@ fn check_range_response_is_ok_two_part() {
 #[test]
 fn check_range_response_is_ok_single_part() {
     let uri = "/static/test.txt";
-    let url = FileExt::get_static_filepath(uri);
+    let url = FileExt::get_static_filepath(uri).unwrap();
 
     let file = File::open(url).unwrap();
     let mut reader = BufReader::new(file);
@@ -182,7 +182,7 @@ fn check_range_response_is_ok_single_part() {
 #[test]
 fn get_right_content_range_of_a_file() {
     let image_path = "/static/content.png";
-    let static_filepath = FileExt::get_static_filepath(image_path);
+    let static_filepath = FileExt::get_static_filepath(image_path).unwrap();
     let md = metadata(&static_filepath).unwrap();
     let file_size = md.len();
 

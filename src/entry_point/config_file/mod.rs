@@ -91,7 +91,14 @@ pub fn override_environment_variables_from_config(filepath: Option<&str>) {
     } else {
         path = filepath.unwrap();
     }
-    let static_filepath = FileExt::get_static_filepath(path);
+
+    let boxed_static_filepath = FileExt::get_static_filepath(path);
+    if boxed_static_filepath.is_err() {
+        eprintln!("{}", boxed_static_filepath.err().unwrap());
+        return;
+    }
+
+    let static_filepath = boxed_static_filepath.unwrap();
     let boxed_content = std::fs::read_to_string(static_filepath);
 
     if boxed_content.is_err() {

@@ -736,7 +736,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 #[test]
 fn check_range_response_for_not_proper_range_header() {
     let uri = "/static/test.txt";
-    let url = FileExt::get_static_filepath(uri);
+    let url = FileExt::get_static_filepath(uri).unwrap();
 
     let file = File::open(url).unwrap();
     let mut reader = BufReader::new(file);
@@ -801,7 +801,7 @@ fn check_range_response_for_not_proper_range_header() {
 #[test]
 fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesize() {
     let uri = "/static/test.txt";
-    let url = FileExt::get_static_filepath(uri);
+    let url = FileExt::get_static_filepath(uri).unwrap();
 
     let file = File::open(url).unwrap();
     let mut reader = BufReader::new(file);
@@ -866,7 +866,7 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
 #[test]
 fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end() {
     let uri = "/static/test.txt";
-    let url = FileExt::get_static_filepath(uri);
+    let url = FileExt::get_static_filepath(uri).unwrap();
 
     let file = File::open(url).unwrap();
     let mut reader = BufReader::new(file);
@@ -931,7 +931,7 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
 #[test]
 fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     let uri = "/static/test.txt";
-    let url = FileExt::get_static_filepath(uri);
+    let url = FileExt::get_static_filepath(uri).unwrap();
 
     let file = File::open(url).unwrap();
     let mut reader = BufReader::new(file);
@@ -996,7 +996,7 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
 #[test]
 fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     let uri = "/static/test.txt";
-    let url = FileExt::get_static_filepath(uri);
+    let url = FileExt::get_static_filepath(uri).unwrap();
 
     let file = File::open(url).unwrap();
     let mut reader = BufReader::new(file);
@@ -1061,7 +1061,7 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
 #[test]
 fn check_range_response_for_not_proper_range_header_malformed() {
     let uri = "/static/test.txt";
-    let url = FileExt::get_static_filepath(uri);
+    let url = FileExt::get_static_filepath(uri).unwrap();
 
     let file = File::open(url).unwrap();
     let mut reader = BufReader::new(file);

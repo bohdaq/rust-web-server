@@ -197,7 +197,17 @@ impl Range {
 
     pub fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, Error> {
         let mut content_range_list : Vec<ContentRange> = vec![];
-        let static_filepath = FileExt::get_static_filepath(request_uri);
+
+        let boxed_static_filepath = FileExt::get_static_filepath(request_uri);
+        if boxed_static_filepath.is_err() {
+            let error = Error {
+                status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
+                message: boxed_static_filepath.err().unwrap()
+            };
+            eprintln!("{}", &error.message);
+            return Err(error);
+        }
+        let static_filepath = boxed_static_filepath.unwrap();
 
         let md = metadata(&static_filepath).unwrap();
         if md.is_file() {
