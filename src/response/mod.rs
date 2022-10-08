@@ -476,7 +476,12 @@ impl Response {
         mut content_length: usize) {
 
         let mut buffer = vec![];
-        let bytes_offset = cursor.read_until(b'\n', &mut buffer).unwrap();
+        let boxed_read = cursor.read_until(b'\n', &mut buffer);
+        if boxed_read.is_err() {
+            eprintln!("unable to parse raw response via cursor {}", boxed_read.err().unwrap());
+            return;
+        }
+        let bytes_offset = boxed_read.unwrap();
         let mut buffer_as_u8_array: &[u8] = &buffer;
         let string = String::from_utf8(Vec::from(buffer_as_u8_array)).unwrap();
 
