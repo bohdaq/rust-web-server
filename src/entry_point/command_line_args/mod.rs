@@ -117,7 +117,7 @@ impl CommandLineArgument {
             if boxed_split.is_some() {
 
                 let (parameter, value) = boxed_split.unwrap();
-                println!("\n    {} {}", parameter, value);
+                println!("\n    {}={}", parameter, value);
                 let boxed_predefined_argument =
                     argument_list
                         .iter()
