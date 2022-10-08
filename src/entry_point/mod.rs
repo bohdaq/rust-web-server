@@ -29,7 +29,7 @@ impl Config {
 
     pub const RWS_DEFAULT_IP: &'static str = "127.0.0.1";
     pub const RWS_DEFAULT_PORT: &'static i32 = &7878;
-    pub const RWS_DEFAULT_THREAD_COUNT: &'static i32 = &4;
+    pub const RWS_DEFAULT_THREAD_COUNT: &'static i32 = &200;
 
 }
 
