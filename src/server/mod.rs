@@ -4,15 +4,38 @@ pub mod tests;
 use std::io::prelude::*;
 use std::borrow::Borrow;
 
-use crate::request::Request;
-use crate::response::Response;
+use crate::request::{METHOD, Request};
+use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::app::App;
+use crate::header::Header;
 
 pub struct Server {}
 impl Server {
     pub fn process_request(mut stream: impl Read + Write + Unpin) -> Vec<u8> {
         let mut buffer :[u8; 1024] = [0; 1024];
-        stream.read(&mut buffer).unwrap();
+        let boxed_read = stream.read(&mut buffer);
+        if boxed_read.is_err() {
+            eprintln!("unable to read TCP stream {}", boxed_read.err().unwrap());
+
+            let error_request = Request {
+                method: METHOD.head.to_string(),
+                request_uri: "".to_string(),
+                http_version: "".to_string(),
+                headers: vec![]
+            };
+
+            let header_list = Header::get_header_list(&error_request);
+            let error_response: Response = Response::get_response(
+                STATUS_CODE_REASON_PHRASE.n400_bad_request,
+                Some(header_list),
+                None
+            );
+
+            let response = Response::generate_response(error_response, error_request);
+            return response
+        }
+
+        boxed_read.unwrap();
         let request : &[u8] = &buffer;
 
 
