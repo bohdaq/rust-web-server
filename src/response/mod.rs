@@ -571,7 +571,7 @@ impl Response {
     pub fn get_response(
         status_code_reason_phrase: &StatusCodeReasonPhrase,
         boxed_header_list: Option<Vec<Header>>,
-        boxed_content_range_list: Option<Vec<ContentRange>>) -> Result<Response, String> {
+        boxed_content_range_list: Option<Vec<ContentRange>>) -> Response {
 
         let mut header_list: Vec<Header> = vec![];
         if boxed_header_list.is_some() {
@@ -591,6 +591,6 @@ impl Response {
             content_range_list
         };
 
-        Ok(response)
+        response
     }
 }

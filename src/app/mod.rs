@@ -22,7 +22,7 @@ impl App {
             STATUS_CODE_REASON_PHRASE.n501_not_implemented,
             Some(header_list),
             None
-        ).unwrap();
+        );
 
 
 
