@@ -50,21 +50,27 @@ pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i
     let bind_addr = [ip, ":", port.to_string().as_str()].join(SYMBOL.empty_string);
     println!("Setting up {}...", bind_addr);
 
-    let listener = TcpListener::bind(&bind_addr).unwrap();
-    let pool = ThreadPool::new(thread_count as usize);
+    let boxed_listener = TcpListener::bind(&bind_addr);
+    if boxed_listener.is_err() {
+        eprintln!("unable to set up TCP listener: {}", boxed_listener.err().unwrap());
+    } else {
+        let listener = boxed_listener.unwrap();
+        let pool = ThreadPool::new(thread_count as usize);
 
-    println!("Hello, rust-web-server is up and running: {}", &bind_addr);
+        println!("Hello, rust-web-server is up and running: {}", &bind_addr);
 
-    for boxed_stream in listener.incoming() {
-        let stream = boxed_stream.unwrap();
-        println!(
-            "Connection established, local addr: {}, peer addr: {}",
-            stream.local_addr().unwrap(),
-            stream.peer_addr().unwrap()
-        );
+        for boxed_stream in listener.incoming() {
+            let stream = boxed_stream.unwrap();
+            println!(
+                "Connection established, local addr: {}, peer addr: {}",
+                stream.local_addr().unwrap(),
+                stream.peer_addr().unwrap()
+            );
 
-        pool.execute(move || {
-            Server::process_request(stream);
-        });
+            pool.execute(move || {
+                Server::process_request(stream);
+            });
+        }
     }
+
 }
