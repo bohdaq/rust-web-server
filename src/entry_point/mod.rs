@@ -53,7 +53,16 @@ pub fn get_ip_port_thread_count() -> (String, i32, i32) {
 
     let boxed_port = env::var(Config::RWS_CONFIG_PORT);
     if boxed_port.is_ok() {
-        port = boxed_port.unwrap().parse().unwrap()
+        let _port = boxed_port.unwrap();
+        let boxed_parse = _port.parse::<i32>();
+        if boxed_parse.is_ok() {
+            port = boxed_parse.unwrap();
+        } else {
+            eprintln!("unable to parse port value, expected number, got {}, variable: {}",
+                      _port, Config::RWS_CONFIG_PORT);
+        }
+    } else {
+        eprintln!("unable to parse port value, variable: {}", Config::RWS_CONFIG_PORT);
     }
 
     let boxed_thread_count = env::var(Config::RWS_CONFIG_THREAD_COUNT);
