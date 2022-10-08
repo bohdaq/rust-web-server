@@ -49,11 +49,24 @@ impl Worker {
     fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
         let thread = thread::spawn(move || loop {
 
-            let job = receiver.lock().unwrap().recv().unwrap();
+            let boxed_lock = receiver.lock();
+            if boxed_lock.is_err() {
+                eprintln!("Worker {} -> unable to acquire lock {}", id, boxed_lock.err().unwrap());
+            } else {
+                let boxed_job = boxed_lock.unwrap().recv();
+                if boxed_job.is_err() {
+                    eprintln!("Worker {} -> unable to get job to execute {}", id, boxed_job.err().unwrap());
+                } else {
+                    let job = boxed_job.unwrap();
 
-            println!("Worker {} got a job; executing.", id);
+                    println!("Worker {} got a job; executing.", id);
 
-            job();
+                    job();
+                }
+
+            }
+
+
 
         });
 
