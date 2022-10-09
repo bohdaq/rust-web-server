@@ -22,7 +22,7 @@ impl Server {
             if boxed_stream.is_ok() {
                 stream.flush().unwrap();
             };
-            return vec![];
+            return raw_response;
         }
 
         boxed_read.unwrap();
@@ -38,7 +38,7 @@ impl Server {
             if boxed_stream.is_ok() {
                 stream.flush().unwrap();
             };
-            return vec![];
+            return raw_response;
         }
 
 
