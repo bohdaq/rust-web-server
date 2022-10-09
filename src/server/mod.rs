@@ -17,7 +17,12 @@ impl Server {
         if boxed_read.is_err() {
             eprintln!("unable to read TCP stream {}", boxed_read.err().unwrap());
 
-            return Server::bad_request_response();
+            let raw_response = Server::bad_request_response();
+            let boxed_stream = stream.write(raw_response.borrow());
+            if boxed_stream.is_ok() {
+                stream.flush().unwrap();
+            };
+            return vec![];
         }
 
         boxed_read.unwrap();
@@ -28,7 +33,12 @@ impl Server {
         if boxed_request.is_err() {
             eprintln!("unable to parse request: {}", boxed_request.err().unwrap());
 
-            return Server::bad_request_response();
+            let raw_response = Server::bad_request_response();
+            let boxed_stream = stream.write(raw_response.borrow());
+            if boxed_stream.is_ok() {
+                stream.flush().unwrap();
+            };
+            return vec![];
         }
 
 
