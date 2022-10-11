@@ -8,7 +8,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0 OR ISC OR LGPL-3.0-or-later OR CC-BY-4.0"
 rust-version = "1.64"
 categories = ["web-programming", "web-programming::http-client", "web-programming::http-server", "parsing", "network-programming"]
-keywords = ["HTTP", "server", "request", "response", "header", "CORS", "hints", "range"]
+keywords = ["HTTP", "server", "request", "response", "header"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
