@@ -1,3 +1,8 @@
+//! # rust-web-server
+//!
+//! `rust-web-server` provides the collection of utility functions and modules used to build Rust Web Server. Can be useful while developing HTTP related functionality.
+//!
+
 pub mod app;
 pub mod client_hint;
 pub mod cors;
@@ -21,11 +26,7 @@ use crate::thread_pool::ThreadPool;
 use std::net::TcpListener;
 use crate::symbol::SYMBOL;
 
-fn main() {
-    start();
-}
-
-pub fn start() {
+pub fn start_server() {
     const VERSION: &str = env!("CARGO_PKG_VERSION");
     const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
     const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");

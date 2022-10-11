@@ -1,12 +1,14 @@
 [package]
-name = "rws"
+name = "rust-web-server"
 version = "0.0.28"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
-description = "rust-web-server (rws) is a simple web-server written in Rust. The rws http server can serve static content inside the directory it is started."
+description = "Collection of utility functions used to build Rust Web Server. Can be useful while developing HTTP related functionality"
 edition = "2021"
 license = "MIT OR Apache-2.0 OR ISC OR LGPL-3.0-or-later OR CC-BY-4.0"
 rust-version = "1.64"
+categories = ["web-programming", "web-programming::http-client", "web-programming::http-server", "parsing", "network-programming"]
+keywords = ["HTTP", "server", "request", "response", "header", "CORS", "hints", "range"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
