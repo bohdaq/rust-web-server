@@ -26,7 +26,7 @@ Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PA
 > $ brew install rws
 
 ### Linux
-To install simply download on
+To install simply download
 #### Debian based distros
 - [.deb package for x86_64](https://github.com/bohdaq/rws-deb-package/raw/x86_64/rws.deb) (Ubuntu, Linux Mint, etc.)
 - [.deb package for arm_64](https://github.com/bohdaq/rws-deb-package/raw/arm_64/rws.deb) (Raspberry Pi, Ubuntu ARM, etc.)
