@@ -22,17 +22,22 @@ Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PA
 ### Homebrew on macOS
 
 > $ brew tap bohdaq/rust-web-server
-> 
 > $ brew install rws
 
 ### Linux
-To install simply download
+
 #### Debian based distros
+
 - [.deb package for x86_64](https://github.com/bohdaq/rws-deb-package/raw/x86_64/rws.deb) (Ubuntu, Linux Mint, etc.)
 - [.deb package for arm_64](https://github.com/bohdaq/rws-deb-package/raw/arm_64/rws.deb) (Raspberry Pi, Ubuntu ARM, etc.)
 
 and execute
 > $ sudo dpkg -i rws.deb
+#### RPM based distros (CentOS, openSUSE, Oracle Linux, etc)
+- [.rpm package for x86_64](https://github.com/bohdaq/rws-rpm-package/raw/x86_64/rws-0.0.28-0.x86_64.rpm)
+
+and execute
+> $ sudo rpm -i rws-0.0.28-0.x86_64.rpm
 
  
 
