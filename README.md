@@ -22,6 +22,7 @@ Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PA
 ### Homebrew on macOS
 
 > $ brew tap bohdaq/rust-web-server
+> 
 > $ brew install rws
 
 ### Linux
