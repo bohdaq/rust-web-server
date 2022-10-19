@@ -17,7 +17,10 @@ Currently, you can [download binary](https://github.com/bohdaq/rust-web-server/r
 rws is a binary so there are a couple of ways to install it
 
 ### Platform Independent
-Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PATH_%28variable%29). 
+Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PATH_%28variable%29). As an example copy it to bin folder and make it executable:
+> $ sudo cp rws /usr/local/bin
+> 
+> $ sudo chmod +x /usr/local/bin/rws
  
 ### Homebrew on macOS
 
