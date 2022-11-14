@@ -871,6 +871,16 @@ fn detect_mime_type_for_7z_file() {
 }
 
 #[test]
+fn detect_mime_type_for_crt_file() {
+    let expected_mime_type = MimeType::APPLICATION_X_X509_CA_CERT;
+    let request_uri = "/dir/test.crt";
+
+    let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+    assert_eq!(expected_mime_type, actual_mime_type);
+}
+
+#[test]
 fn detect_mime_type_for_3g2_file() {
     let expected_mime_type = MimeType::VIDEO_3GPP2;
     let request_uri = "/dir/test.3g2";

@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "1.0.1"
+version = "2.0.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server/tree/lib"
 description = "Collection of utility functions used to build Rust Web Server. Can be useful while developing HTTP related functionality"

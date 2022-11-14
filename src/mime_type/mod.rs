@@ -45,6 +45,7 @@ impl MimeType {
     pub const APPLICATION_VND_MOZILLA_XUL_XML: &'static str = "application/vnd.mozilla.xul+xml";
     pub const APPLICATION_ZIP: &'static str = "application/zip";
     pub const APPLICATION_X_7Z_COMPRESSED: &'static str = "application/x-7z-compressed";
+    pub const APPLICATION_X_X509_CA_CERT: &'static str = "application/x-x509-ca-cert";
 
 
     pub const TEXT_PLAIN: &'static str = "text/plain";
@@ -184,6 +185,7 @@ impl MimeType {
     pub const ZIP_SUFFIX: &'static str = ".zip";
     pub const N7Z_SUFFIX: &'static str = ".7z";
     pub const N3G2_SUFFIX: &'static str = ".3g2";
+    pub const CRT_SUFFIX: &'static str = ".crt";
 
     pub fn detect_mime_type(request_uri: &str) -> String {
 
@@ -633,6 +635,11 @@ impl MimeType {
         let is_zip_suffix = request_uri.ends_with(MimeType::N3G2_SUFFIX);
         if is_zip_suffix {
             return MimeType::VIDEO_3GPP2.to_string();
+        }
+
+        let is_crt_suffix = request_uri.ends_with(MimeType::CRT_SUFFIX);
+        if is_crt_suffix {
+            return MimeType::APPLICATION_X_X509_CA_CERT.to_string();
         }
 
         return MimeType::APPLICATION_OCTET_STREAM.to_string();
