@@ -122,7 +122,7 @@ fn header_constants() {
     assert_eq!(Header::_PROXY_AUTHENTICATE, "Proxy-Authenticate");
     assert_eq!(Header::_PROXY_AUTHORIZATION, "Proxy-Authorization");
     assert_eq!(Header::_REFERER, "Referer");
-    assert_eq!(Header::_REFERER_POLICY, "Referer-Policy");
+    assert_eq!(Header::_REFERRER_POLICY, "Referrer-Policy");
     assert_eq!(Header::_RTT, "RTT");
     assert_eq!(Header::_SAVE_DATA, "Save-Data");
     assert_eq!(Header::_SEC_CH_UA, "Sec-CH-UA");
