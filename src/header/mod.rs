@@ -81,7 +81,7 @@ impl Header {
     pub const _PROXY_AUTHORIZATION: &'static str = "Proxy-Authorization";
     pub const _RANGE: &'static str = "Range";
     pub const _REFERER: &'static str = "Referer";
-    pub const _REFERER_POLICY: &'static str = "Referer-Policy";
+    pub const _REFERRER_POLICY: &'static str = "Referrer-Policy";
     pub const _RETRY_AFTER: &'static str = "Retry-After";
     pub const _RTT: &'static str = "RTT";
     pub const _SAVE_DATA: &'static str = "Save-Data";

@@ -12,4 +12,5 @@ fn symbol_check() {
     assert_eq!(SYMBOL.hyphen, "-");
     assert_eq!(SYMBOL.slash, "/");
     assert_eq!(SYMBOL.semicolon, ";");
+    assert_eq!(SYMBOL.colon, ":");
 }
