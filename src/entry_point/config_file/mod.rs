@@ -102,7 +102,7 @@ pub fn override_environment_variables_from_config(filepath: Option<&str>) {
     let boxed_content = std::fs::read_to_string(static_filepath);
 
     if boxed_content.is_err() {
-        eprintln!("    Unable to parse rws.config.toml\n{}", boxed_content.err().unwrap());
+        eprintln!("    Unable to parse rws.config.toml: {}", boxed_content.err().unwrap());
         println!("  End of Config Section");
         return;
     } else {

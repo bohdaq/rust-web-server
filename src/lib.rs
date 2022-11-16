@@ -48,7 +48,7 @@ pub fn start_server() {
 }
 
 pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
-    let bind_addr = [ip, ":", port.to_string().as_str()].join(SYMBOL.empty_string);
+    let bind_addr = [ip, SYMBOL.colon, port.to_string().as_str()].join(SYMBOL.empty_string);
     println!("Setting up {}...", bind_addr);
 
     let boxed_listener = TcpListener::bind(&bind_addr);
