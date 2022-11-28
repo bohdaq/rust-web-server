@@ -1,4 +1,4 @@
-# rust-web-server!
+# rust-web-server
 
 rust-web-server (**rws**) is a simple web-server written in Rust. The **rws** server can serve static content inside the directory it is started.
 
