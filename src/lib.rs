@@ -20,7 +20,7 @@ pub mod symbol;
 pub mod thread_pool;
 extern crate core;
 
-use crate::entry_point::{bootstrap, get_ip_port_thread_count};
+use crate::entry_point::{bootstrap, get_ip_port_thread_count, set_default_values};
 use crate::server::Server;
 use crate::thread_pool::ThreadPool;
 use std::net::TcpListener;
@@ -42,6 +42,7 @@ pub fn start_server() {
     println!("Rust Version:  {}", RUST_VERSION);
     println!("License:       {}\n\n", LICENSE);
     println!("RWS Configuration Start: \n");
+    set_default_values();
     bootstrap();
     let (ip, port, thread_count) = get_ip_port_thread_count();
     create_tcp_listener_with_thread_pool(ip.as_str(), port, thread_count);
@@ -58,7 +59,7 @@ pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i
         let listener = boxed_listener.unwrap();
         let pool = ThreadPool::new(thread_count as usize);
 
-        println!("Hello, rust-web-server is up and running: {}", &bind_addr);
+        println!("Hello, rust-web-server is up and running: http://{}", &bind_addr);
 
         for boxed_stream in listener.incoming() {
             if boxed_stream.is_err() {

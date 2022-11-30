@@ -1,4 +1,4 @@
-# Welcome to rust-web-server!
+# rust-web-server
 
 Collection of utility functions used to build [Rust Web Server](https://github.com/bohdaq/rust-web-server). Can be useful while developing HTTP related functionality.
 

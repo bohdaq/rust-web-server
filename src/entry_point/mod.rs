@@ -16,16 +16,34 @@ pub struct Config {}
 
 impl Config {
     pub const RWS_CONFIG_IP: &'static str = "RWS_CONFIG_IP";
+    pub const RWS_CONFIG_IP_DEFAULT_VALUE: &'static str = "127.0.0.1";
+
     pub const RWS_CONFIG_PORT: &'static str = "RWS_CONFIG_PORT";
+    pub const RWS_CONFIG_PORT_DEFAULT_VALUE: &'static str = "7887";
+
     pub const RWS_CONFIG_THREAD_COUNT: &'static str = "RWS_CONFIG_THREAD_COUNT";
+    pub const RWS_CONFIG_THREAD_COUNT_DEFAULT_VALUE: &'static str = "200";
 
     pub const RWS_CONFIG_CORS_ALLOW_ALL: &'static str = "RWS_CONFIG_CORS_ALLOW_ALL";
+    pub const RWS_CONFIG_CORS_ALLOW_ALL_DEFAULT_VALUE: &'static str = "true";
+
     pub const RWS_CONFIG_CORS_ALLOW_ORIGINS: &'static str = "RWS_CONFIG_CORS_ALLOW_ORIGINS";
+    pub const RWS_CONFIG_CORS_ALLOW_ORIGINS_DEFAULT_VALUE: &'static str = "";
+
     pub const RWS_CONFIG_CORS_ALLOW_CREDENTIALS: &'static str = "RWS_CONFIG_CORS_ALLOW_CREDENTIALS";
+    pub const RWS_CONFIG_CORS_ALLOW_CREDENTIALS_DEFAULT_VALUE: &'static str = "";
+
     pub const RWS_CONFIG_CORS_ALLOW_HEADERS: &'static str = "RWS_CONFIG_CORS_ALLOW_HEADERS";
+    pub const RWS_CONFIG_CORS_ALLOW_HEADERS_DEFAULT_VALUE: &'static str = "";
+
     pub const RWS_CONFIG_CORS_ALLOW_METHODS: &'static str = "RWS_CONFIG_CORS_ALLOW_METHODS";
+    pub const RWS_CONFIG_CORS_ALLOW_METHODS_DEFAULT_VALUE: &'static str = "";
+
     pub const RWS_CONFIG_CORS_EXPOSE_HEADERS: &'static str = "RWS_CONFIG_CORS_EXPOSE_HEADERS";
+    pub const RWS_CONFIG_CORS_EXPOSE_HEADERS_DEFAULT_VALUE: &'static str = "";
+
     pub const RWS_CONFIG_CORS_MAX_AGE: &'static str = "RWS_CONFIG_CORS_MAX_AGE";
+    pub const RWS_CONFIG_CORS_MAX_AGE_DEFAULT_VALUE: &'static str = "86400";
 
     pub const RWS_DEFAULT_IP: &'static str = "127.0.0.1";
     pub const RWS_DEFAULT_PORT: &'static i32 = &7878;
@@ -39,6 +57,43 @@ pub fn bootstrap() {
     override_environment_variables_from_command_line_args();
 }
 
+pub fn set_default_values() {
+    println!("  Initializing default values");
+
+    env::set_var(Config::RWS_CONFIG_IP, Config::RWS_CONFIG_IP_DEFAULT_VALUE);
+    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_IP, Config::RWS_CONFIG_IP_DEFAULT_VALUE);
+
+    env::set_var(Config::RWS_CONFIG_PORT, Config::RWS_CONFIG_PORT_DEFAULT_VALUE);
+    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_PORT, Config::RWS_CONFIG_PORT_DEFAULT_VALUE);
+
+
+    env::set_var(Config::RWS_CONFIG_THREAD_COUNT, Config::RWS_CONFIG_THREAD_COUNT_DEFAULT_VALUE);
+    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_THREAD_COUNT, Config::RWS_CONFIG_THREAD_COUNT_DEFAULT_VALUE);
+
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, Config::RWS_CONFIG_CORS_ALLOW_ALL_DEFAULT_VALUE);
+    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_ALL, Config::RWS_CONFIG_CORS_ALLOW_ALL_DEFAULT_VALUE);
+
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, Config::RWS_CONFIG_CORS_ALLOW_ORIGINS_DEFAULT_VALUE);
+    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, Config::RWS_CONFIG_CORS_ALLOW_ORIGINS_DEFAULT_VALUE);
+
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS_DEFAULT_VALUE);
+    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS, Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS_DEFAULT_VALUE);
+
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS, Config::RWS_CONFIG_CORS_ALLOW_HEADERS_DEFAULT_VALUE);
+    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, Config::RWS_CONFIG_CORS_ALLOW_HEADERS_DEFAULT_VALUE);
+
+    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_METHODS, Config::RWS_CONFIG_CORS_ALLOW_METHODS_DEFAULT_VALUE);
+    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_METHODS, Config::RWS_CONFIG_CORS_ALLOW_METHODS_DEFAULT_VALUE);
+
+    env::set_var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, Config::RWS_CONFIG_CORS_EXPOSE_HEADERS_DEFAULT_VALUE);
+    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS, Config::RWS_CONFIG_CORS_EXPOSE_HEADERS_DEFAULT_VALUE);
+
+    env::set_var(Config::RWS_CONFIG_CORS_MAX_AGE, Config::RWS_CONFIG_CORS_MAX_AGE_DEFAULT_VALUE);
+    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_MAX_AGE, Config::RWS_CONFIG_CORS_MAX_AGE_DEFAULT_VALUE);
+
+
+    println!("  End of initializing default values\n");
+}
 
 
 pub fn get_ip_port_thread_count() -> (String, i32, i32) {
