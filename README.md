@@ -105,7 +105,9 @@ Rust Web Server has a [Discord](https://discord.gg/zaErjtr5Dm) where you can ask
 
 The rws is an [HTTP server](https://developer.mozilla.org/en-US/docs/Web/HTTP). This means if you are planning to use it somewhere else except the local machine you need to protect transferred data by using encryption.
 
-The most common use cases are:
+There is a [Rust TLS Server](https://github.com/bohdaq/rust-tls-server) for handling HTTPS over TLS.
+
+Alternative solutions to Rust TLS Server are:
 1. You need your webapp to be globally available via the internet. In such a case, the simplest solution is to use a reverse proxy and certificate provided by [Let's Encrypt](https://letsencrypt.org/). A proxy will redirect all HTTP traffic to HTTPS, decrypt it via certificate and forward the request to rws. Response from rws will be forwarded to a proxy, encrypted, and send to a client. As [reverse proxy](https://ssl-config.mozilla.org/) you may use Apache HTTP Server, lighttpd, etc.
 2. You don't need your webapp to be globally available. In such case the solution may be to setup VPN.
 
