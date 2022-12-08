@@ -177,7 +177,12 @@ impl Request {
         let mut buf = vec![];
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let b : &[u8] = &buf;
-        let string = String::from_utf8(Vec::from(b)).unwrap();
+        let boxed_request = String::from_utf8(Vec::from(b));
+        if boxed_request.is_err() {
+            let error_message = boxed_request.err().unwrap().to_string();
+            return Err(error_message);
+        }
+        let string = boxed_request.unwrap();
 
         let is_first_iteration = iteration_number == 0;
         let new_line_char_found = bytes_offset != 0;
