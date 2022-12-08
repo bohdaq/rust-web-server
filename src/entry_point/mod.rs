@@ -68,8 +68,14 @@ pub fn set_default_values() {
         println!("    There is an environment variable  for '{}', omitting default value set", Config::RWS_CONFIG_IP);
     }
 
-    env::set_var(Config::RWS_CONFIG_PORT, Config::RWS_CONFIG_PORT_DEFAULT_VALUE);
-    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_PORT, Config::RWS_CONFIG_PORT_DEFAULT_VALUE);
+
+    let is_var_set = env::var(Config::RWS_CONFIG_PORT).is_ok();
+    if !is_var_set {
+        env::set_var(Config::RWS_CONFIG_PORT, Config::RWS_CONFIG_PORT_DEFAULT_VALUE);
+        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_PORT, Config::RWS_CONFIG_PORT_DEFAULT_VALUE);
+    } else {
+        println!("    There is an environment variable  for '{}', omitting default value set", Config::RWS_CONFIG_PORT);
+    }
 
 
     env::set_var(Config::RWS_CONFIG_THREAD_COUNT, Config::RWS_CONFIG_THREAD_COUNT_DEFAULT_VALUE);
