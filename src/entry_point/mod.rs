@@ -111,8 +111,13 @@ pub fn set_default_values() {
         println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS);
     }
 
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS, Config::RWS_CONFIG_CORS_ALLOW_HEADERS_DEFAULT_VALUE);
-    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, Config::RWS_CONFIG_CORS_ALLOW_HEADERS_DEFAULT_VALUE);
+    let is_var_set = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS).is_ok();
+    if !is_var_set {
+        env::set_var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS, Config::RWS_CONFIG_CORS_ALLOW_HEADERS_DEFAULT_VALUE);
+        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_HEADERS, Config::RWS_CONFIG_CORS_ALLOW_HEADERS_DEFAULT_VALUE);
+    } else {
+        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_HEADERS);
+    }
 
     env::set_var(Config::RWS_CONFIG_CORS_ALLOW_METHODS, Config::RWS_CONFIG_CORS_ALLOW_METHODS_DEFAULT_VALUE);
     println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_METHODS, Config::RWS_CONFIG_CORS_ALLOW_METHODS_DEFAULT_VALUE);
