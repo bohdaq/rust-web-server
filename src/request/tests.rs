@@ -163,6 +163,26 @@ fn test_request_lowercase() {
 }
 
 #[test]
+fn test_request_lowercase_not_valid_utf_8() {
+    let mut non_utf8_char: Vec<u8> = vec![255];
+
+    let method = METHOD.get.to_lowercase();
+    let request_uri = "/path";
+    let http_version = VERSION.http_1_1.to_lowercase();
+
+    let mut request_vec : Vec<u8> = vec![];
+    request_vec.append(&mut method.as_bytes().to_vec());
+    request_vec.append(&mut request_uri.as_bytes().to_vec());
+    request_vec.append(&mut non_utf8_char);
+    request_vec.append(&mut http_version.as_bytes().to_vec());
+
+    let boxed_request = Request::parse_request(&request_vec);
+
+    assert_eq!(true, boxed_request.is_err());
+    assert_eq!("invalid utf-8 sequence of 1 bytes from index 8", boxed_request.err().unwrap());
+}
+
+#[test]
 fn test_request_randomcase() {
     let method = "GeT";
     let request_uri = "/path";
