@@ -65,7 +65,7 @@ pub fn set_default_values() {
         env::set_var(Config::RWS_CONFIG_IP, Config::RWS_CONFIG_IP_DEFAULT_VALUE);
         println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_IP, Config::RWS_CONFIG_IP_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', omitting default value set", Config::RWS_CONFIG_IP);
+        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_IP);
     }
 
 
@@ -74,7 +74,7 @@ pub fn set_default_values() {
         env::set_var(Config::RWS_CONFIG_PORT, Config::RWS_CONFIG_PORT_DEFAULT_VALUE);
         println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_PORT, Config::RWS_CONFIG_PORT_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', omitting default value set", Config::RWS_CONFIG_PORT);
+        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_PORT);
     }
 
 
@@ -83,11 +83,16 @@ pub fn set_default_values() {
         env::set_var(Config::RWS_CONFIG_THREAD_COUNT, Config::RWS_CONFIG_THREAD_COUNT_DEFAULT_VALUE);
         println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_THREAD_COUNT, Config::RWS_CONFIG_THREAD_COUNT_DEFAULT_VALUE);
     } else {
-        println!("    There is an environment variable  for '{}', omitting default value set", Config::RWS_CONFIG_THREAD_COUNT);
+        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_THREAD_COUNT);
     }
 
-    env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, Config::RWS_CONFIG_CORS_ALLOW_ALL_DEFAULT_VALUE);
-    println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_ALL, Config::RWS_CONFIG_CORS_ALLOW_ALL_DEFAULT_VALUE);
+    let is_var_set = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL).is_ok();
+    if !is_var_set {
+        env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ALL, Config::RWS_CONFIG_CORS_ALLOW_ALL_DEFAULT_VALUE);
+        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_ALL, Config::RWS_CONFIG_CORS_ALLOW_ALL_DEFAULT_VALUE);
+    } else {
+        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_ALLOW_ALL);
+    }
 
     env::set_var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, Config::RWS_CONFIG_CORS_ALLOW_ORIGINS_DEFAULT_VALUE);
     println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS, Config::RWS_CONFIG_CORS_ALLOW_ORIGINS_DEFAULT_VALUE);
