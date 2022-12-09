@@ -7,12 +7,14 @@ use std::borrow::Borrow;
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::app::App;
+use crate::entry_point::get_request_allocation_size;
 use crate::header::Header;
 
 pub struct Server {}
 impl Server {
     pub fn process_request(mut stream: impl Read + Write + Unpin) -> Vec<u8> {
-        let mut buffer :[u8; 1024] = [0; 1024];
+        let request_allocation_size = get_request_allocation_size();
+        let mut buffer = vec![0; request_allocation_size as usize];
         let boxed_read = stream.read(&mut buffer);
         if boxed_read.is_err() {
             eprintln!("unable to read TCP stream {}", boxed_read.err().unwrap());

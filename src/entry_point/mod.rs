@@ -19,7 +19,7 @@ impl Config {
     pub const RWS_CONFIG_IP_DEFAULT_VALUE: &'static str = "127.0.0.1";
 
     pub const RWS_CONFIG_PORT: &'static str = "RWS_CONFIG_PORT";
-    pub const RWS_CONFIG_PORT_DEFAULT_VALUE: &'static str = "7887";
+    pub const RWS_CONFIG_PORT_DEFAULT_VALUE: &'static str = "7878";
 
     pub const RWS_CONFIG_THREAD_COUNT: &'static str = "RWS_CONFIG_THREAD_COUNT";
     pub const RWS_CONFIG_THREAD_COUNT_DEFAULT_VALUE: &'static str = "200";
@@ -45,9 +45,15 @@ impl Config {
     pub const RWS_CONFIG_CORS_MAX_AGE: &'static str = "RWS_CONFIG_CORS_MAX_AGE";
     pub const RWS_CONFIG_CORS_MAX_AGE_DEFAULT_VALUE: &'static str = "86400";
 
+    pub const RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES: &'static str = "RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES";
+    pub const RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES_DEFAULT_VALUE: &'static str = "10000";
+
+
     pub const RWS_DEFAULT_IP: &'static str = "127.0.0.1";
     pub const RWS_DEFAULT_PORT: &'static i32 = &7878;
     pub const RWS_DEFAULT_THREAD_COUNT: &'static i32 = &200;
+    pub const RWS_DEFAULT_REQUEST_ALLOCATION_SIZE_IN_BYTES: &'static i64 = &10000;
+
 
 }
 
@@ -75,6 +81,14 @@ pub fn set_default_values() {
         println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_PORT, Config::RWS_CONFIG_PORT_DEFAULT_VALUE);
     } else {
         println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_PORT);
+    }
+
+    let is_var_set = env::var(Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES).is_ok();
+    if !is_var_set {
+        env::set_var(Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES, Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES_DEFAULT_VALUE);
+        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES, Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES_DEFAULT_VALUE);
+    } else {
+        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES);
     }
 
 
@@ -150,7 +164,7 @@ pub fn set_default_values() {
 
 
 pub fn get_ip_port_thread_count() -> (String, i32, i32) {
-    let mut ip : String = Config::RWS_DEFAULT_IP.to_string();
+    let mut ip : String = Config::RWS_CONFIG_IP_DEFAULT_VALUE.to_string();
     let mut port: i32 = *Config::RWS_DEFAULT_PORT;
     let mut thread_count: i32 = *Config::RWS_DEFAULT_THREAD_COUNT;
 
@@ -189,5 +203,26 @@ pub fn get_ip_port_thread_count() -> (String, i32, i32) {
     }
 
     (ip, port, thread_count)
+}
+
+pub fn get_request_allocation_size() -> i64 {
+    let mut request_allocation_size: i64 = *Config::RWS_DEFAULT_REQUEST_ALLOCATION_SIZE_IN_BYTES;
+
+    let boxed_port = env::var(Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES);
+    if boxed_port.is_ok() {
+        let _request_allocation_size = boxed_port.unwrap();
+        let boxed_parse = _request_allocation_size.parse::<i64>();
+        if boxed_parse.is_ok() {
+            request_allocation_size = boxed_parse.unwrap();
+        } else {
+            eprintln!("unable to parse port value, expected number, got {}, variable: {}",
+                      _request_allocation_size, Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES);
+        }
+    } else {
+        eprintln!("unable to parse request allocation size value, variable: {}", Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES);
+    }
+
+
+    request_allocation_size
 }
 
