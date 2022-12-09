@@ -54,6 +54,23 @@ fn command_line_arg_thread_count() {
 }
 
 #[test]
+fn command_line_arg_request_allocation_size() {
+    let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
+
+    let argument = command_line_arg_list.get(10).unwrap();
+    let hint = argument._hint.as_ref().unwrap();
+    assert_eq!(argument.short_form, "r");
+    assert_eq!(argument.long_form, "request-allocation-size-in-bytes");
+    assert_eq!(argument.environment_variable, Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES.to_string());
+    assert_eq!(hint, "In bytes, how much memory to allocate for each request");
+
+    CommandLineArgument::set_environment_variable(argument, "10000".to_string());
+
+    let env_var = env::var(&argument.environment_variable).unwrap();
+    assert_eq!(env_var, "10000");
+}
+
+#[test]
 fn command_line_arg_thread_cors_allow_all() {
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 

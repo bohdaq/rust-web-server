@@ -107,6 +107,14 @@ impl CommandLineArgument {
         };
         argument_list.push(argument);
 
+        let argument = CommandLineArgument {
+            short_form: "r".to_string(),
+            long_form: "request-allocation-size-in-bytes".to_string(),
+            environment_variable: Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES.to_string(),
+            _hint: Some("In bytes, how much memory to allocate for each request".to_string())
+        };
+        argument_list.push(argument);
+
         argument_list
     }
 
