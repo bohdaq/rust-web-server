@@ -484,6 +484,9 @@ fn it_generates_bad_request_for_non_ut8_char_in_request() {
     let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
 
+    let response_body = response.content_range_list.get(0).unwrap();
+    assert_eq!("invalid utf-8 sequence of 1 bytes from index 8", String::from_utf8(response_body.clone().body).unwrap());
+
 }
 
 #[test]
