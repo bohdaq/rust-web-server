@@ -477,9 +477,9 @@ fn it_generates_bad_request_for_non_ut8_char_in_request() {
     println!("{}", str);
 
     let response = Response::_parse_response(&raw_response);
-    assert_eq!(400, response.status_code);
-    assert_eq!("Bad Request", response.reason_phrase);
-    assert_eq!("HTTP/1.1", response.http_version);
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n400_bad_request.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n400_bad_request.reason_phrase, response.reason_phrase);
+    assert_eq!(VERSION.http_1_1, response.http_version);
 
     let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
     assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
