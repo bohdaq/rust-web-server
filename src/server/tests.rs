@@ -454,6 +454,39 @@ fn it_generates_not_found_page_for_static_subdirectory() {
 }
 
 #[test]
+fn it_generates_bad_request_for_non_ut8_char_in_request() {
+    // request test data
+    let mut non_utf8_char: Vec<u8> = vec![255];
+
+    let method = METHOD.get.to_lowercase();
+    let request_uri = "/path";
+    let http_version = VERSION.http_1_1.to_lowercase();
+
+    let mut request_vec : Vec<u8> = vec![];
+    request_vec.append(&mut method.as_bytes().to_vec());
+    request_vec.append(&mut request_uri.as_bytes().to_vec());
+    request_vec.append(&mut non_utf8_char);
+    request_vec.append(&mut http_version.as_bytes().to_vec());
+
+    let mock_tcp_stream = MockTcpStream {
+        read_data: request_vec,
+        write_data: vec![],
+    };
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let str = String::from_utf8(raw_response.clone()).unwrap();
+    println!("{}", str);
+
+    let response = Response::_parse_response(&raw_response);
+    assert_eq!(400, response.status_code);
+    assert_eq!("Bad Request", response.reason_phrase);
+    assert_eq!("HTTP/1.1", response.http_version);
+
+    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    assert_eq!(MimeType::TEXT_PLAIN, content_type_header.value);
+
+}
+
+#[test]
 fn it_generates_successful_response_with_static_file_in_subdirectory() {
     // request test data
     let request_host_header_name = "Host";

@@ -9,6 +9,7 @@ use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::app::App;
 use crate::entry_point::get_request_allocation_size;
 use crate::header::Header;
+use crate::mime_type::MimeType;
 
 pub struct Server {}
 impl Server {
@@ -64,7 +65,8 @@ impl Server {
             headers: vec![]
         };
 
-        let header_list = Header::get_header_list(&error_request);
+        let mut header_list = Header::get_header_list(&error_request);
+        header_list.push(Header { name: Header::_CONTENT_TYPE.to_string(), value: MimeType::TEXT_PLAIN.to_string() });
         let error_response: Response = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n400_bad_request,
             Some(header_list),
