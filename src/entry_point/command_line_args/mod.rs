@@ -16,10 +16,10 @@ pub fn override_environment_variables_from_command_line_args() {
 }
 
 pub struct CommandLineArgument {
-    short_form: String,
-    long_form: String,
-    environment_variable: String,
-    _hint: Option<String>,
+    pub short_form: String,
+    pub long_form: String,
+    pub environment_variable: String,
+    pub _hint: Option<String>,
 }
 
 impl CommandLineArgument {
