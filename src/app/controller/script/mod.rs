@@ -3,15 +3,14 @@ use crate::mime_type::MimeType;
 use crate::range::Range;
 use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
-use crate::symbol::SYMBOL;
 
-pub struct IndexController;
+pub struct ScriptController;
 
-impl IndexController {
-    pub const INDEX_FILEPATH: &'static str = "index.html";
+impl ScriptController {
+    pub const SCRIPT_FILEPATH: &'static str = "script.js";
 
     pub fn is_matching_request(request: &Request) -> bool {
-        request.request_uri == SYMBOL.slash
+        request.request_uri == "/script.js"
     }
 
     pub fn process_request(_request: &Request, mut response: Response) -> Response {
@@ -19,9 +18,9 @@ impl IndexController {
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
 
 
-        if FileExt::does_file_exist(IndexController::INDEX_FILEPATH) {
+        if FileExt::does_file_exist(ScriptController::SCRIPT_FILEPATH) {
             let boxed_content_range =
-                Range::get_content_range_of_a_file(IndexController::INDEX_FILEPATH);
+                Range::get_content_range_of_a_file(ScriptController::SCRIPT_FILEPATH);
 
             if boxed_content_range.is_ok() {
                 let content_range = boxed_content_range.unwrap();
@@ -41,10 +40,10 @@ impl IndexController {
                 response.reason_phrase = STATUS_CODE_REASON_PHRASE.n500_internal_server_error.reason_phrase.to_string();
             }
         } else {
-            let index_file = include_bytes!("index.html");
+            let script_file = include_bytes!("script.js");
 
             let content_range =
-                Range::get_content_range(index_file.to_vec(), MimeType::TEXT_HTML.to_string());
+                Range::get_content_range(script_file.to_vec(), MimeType::TEXT_JAVASCRIPT.to_string());
 
 
             let content_range_list = vec![content_range];

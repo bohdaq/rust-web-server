@@ -1,6 +1,7 @@
 use std::env;
 use std::fs::{File};
 use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::path::Path;
 use crate::ext::date_time_ext::DateTimeExt;
 use crate::range::Range;
 use crate::symbol::SYMBOL;
@@ -107,6 +108,11 @@ impl FileExt {
         let working_directory = boxed_working_directory.unwrap();
         let absolute_path = [working_directory, request_uri].join(SYMBOL.empty_string);
         Ok(absolute_path)
+    }
+
+    pub fn does_file_exist(path: &str) -> bool {
+        let file_exists = Path::new(path).is_file();
+        file_exists
     }
 }
 

@@ -7,17 +7,22 @@ use std::borrow::Borrow;
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::app::App;
+use crate::entry_point::get_request_allocation_size;
 use crate::header::Header;
+use crate::mime_type::MimeType;
+use crate::range::{ContentRange, Range};
 
 pub struct Server {}
 impl Server {
     pub fn process_request(mut stream: impl Read + Write + Unpin) -> Vec<u8> {
-        let mut buffer :[u8; 1024] = [0; 1024];
+        let request_allocation_size = get_request_allocation_size();
+        let mut buffer = vec![0; request_allocation_size as usize];
         let boxed_read = stream.read(&mut buffer);
         if boxed_read.is_err() {
-            eprintln!("unable to read TCP stream {}", boxed_read.err().unwrap());
+            let message = boxed_read.err().unwrap().to_string();
+            eprintln!("unable to read TCP stream {}", &message);
 
-            let raw_response = Server::bad_request_response();
+            let raw_response = Server::bad_request_response(message);
             let boxed_stream = stream.write(raw_response.borrow());
             if boxed_stream.is_ok() {
                 stream.flush().unwrap();
@@ -31,9 +36,10 @@ impl Server {
 
         let boxed_request = Request::parse_request(request);
         if boxed_request.is_err() {
-            eprintln!("unable to parse request: {}", boxed_request.err().unwrap());
+            let message = boxed_request.err().unwrap();
+            eprintln!("unable to parse request: {}", &message);
 
-            let raw_response = Server::bad_request_response();
+            let raw_response = Server::bad_request_response(message);
             let boxed_stream = stream.write(raw_response.borrow());
             if boxed_stream.is_ok() {
                 stream.flush().unwrap();
@@ -54,19 +60,28 @@ impl Server {
         raw_response
     }
 
-    pub fn bad_request_response() -> Vec<u8> {
+    pub fn bad_request_response(message: String) -> Vec<u8> {
         let error_request = Request {
-            method: METHOD.head.to_string(),
+            method: METHOD.get.to_string(),
             request_uri: "".to_string(),
             http_version: "".to_string(),
             headers: vec![]
+        };
+
+        let size = message.chars().count() as u64;
+        let content_range = ContentRange {
+            unit: Range::BYTES.to_string(),
+            range: Range { start: 0, end: size },
+            size: size.to_string(),
+            body: Vec::from(message.as_bytes()),
+            content_type: MimeType::TEXT_PLAIN.to_string(),
         };
 
         let header_list = Header::get_header_list(&error_request);
         let error_response: Response = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n400_bad_request,
             Some(header_list),
-            None
+            Some(vec![content_range])
         );
 
         let response = Response::generate_response(error_response, error_request);

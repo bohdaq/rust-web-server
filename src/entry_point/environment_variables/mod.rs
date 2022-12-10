@@ -21,6 +21,13 @@ pub fn read_system_environment_variables() {
                  boxed_port.unwrap());
     }
 
+    let boxed_request_allocation_size = env::var(Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES);
+    if boxed_request_allocation_size.is_ok() {
+        println!("    Environment variable '{}' set to value '{}'",
+                 Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES,
+                 boxed_request_allocation_size.unwrap());
+    }
+
     let boxed_thread_count = env::var(Config::RWS_CONFIG_THREAD_COUNT);
     if boxed_thread_count.is_ok() {
         println!("    Environment variable '{}' set to value '{}'",

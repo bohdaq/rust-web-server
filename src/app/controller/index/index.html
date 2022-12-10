@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="/style.css" />
+        <link rel="icon" href="/favicon.svg" />
+        <meta charset="utf-8">
+    </head>
+    <body>
+        <div class="container">
+            <h1>Server is Up and Running</h1>
+            <div>You see default page served by the server. You can change this page to whatever you need.
+                Simply put <span class="accent">index.html</span> in your server's root folder.
+            </div>
+            <div>Whatever you put in the server folder will be accessible through the
+                <a href="/" class="location accent">URL</a>
+            </div>
+            <div>If you put file bigger than there is available memory and then request it,
+                server will be stopped with an error.
+            </div>
+            <div>These are default resources provided by the server:
+                <span class="accent">favicon.svg, index.html, 404.html, script.js</span> and
+                <span class="accent">style.css</span>.
+                To override put corresponding files in the server's root folder.
+            </div>
+            <div>Security based restrictions:
+                <ul>
+                    <li>Website can not be used in iframe on other domains.</li>
+                    <li>Resources will be sent to a user with a Content-Type based on file extension.
+                        In practice this means if you, for example, create a js file named script.jstypo,
+                        it won't be interpreted by a client's browser. Use correct file extensions.
+                    </li>
+                </ul>
+            </div>
+            <h2>Useful links: </h2>
+            <ul>
+                <li><a href="https://github.com/bohdaq/rust-web-server">Rust Web Server</a> — static content web-server written in Rust</li>
+                <li><a href="https://github.com/bohdaq/rust-tls-server">Rust TLS Server</a> — TLS capable server version</li>
+                <li><a href="https://github.com/bohdaq/rust-http-to-https-letsencrypt-acme">HTTP-to-HTTPS Let's Encrypt</a> — HTTP server for traffic redirection to HTTPS</li>
+            </ul>
+        </div>
+    <script src="script.js"></script>
+    </body>
+</html>

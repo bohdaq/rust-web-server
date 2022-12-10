@@ -16,10 +16,10 @@ pub fn override_environment_variables_from_command_line_args() {
 }
 
 pub struct CommandLineArgument {
-    short_form: String,
-    long_form: String,
-    environment_variable: String,
-    _hint: Option<String>,
+    pub short_form: String,
+    pub long_form: String,
+    pub environment_variable: String,
+    pub _hint: Option<String>,
 }
 
 impl CommandLineArgument {
@@ -104,6 +104,14 @@ impl CommandLineArgument {
             long_form: "cors-max-age".to_string(),
             environment_variable: Config::RWS_CONFIG_CORS_MAX_AGE.to_string(),
             _hint: Some("How long results of preflight requests can be cached (in seconds)".to_string())
+        };
+        argument_list.push(argument);
+
+        let argument = CommandLineArgument {
+            short_form: "r".to_string(),
+            long_form: "request-allocation-size-in-bytes".to_string(),
+            environment_variable: Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES.to_string(),
+            _hint: Some("In bytes, how much memory to allocate for each request".to_string())
         };
         argument_list.push(argument);
 

@@ -3,15 +3,14 @@ use crate::mime_type::MimeType;
 use crate::range::Range;
 use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
-use crate::symbol::SYMBOL;
 
-pub struct IndexController;
+pub struct FaviconController;
 
-impl IndexController {
-    pub const INDEX_FILEPATH: &'static str = "index.html";
+impl FaviconController {
+    pub const STYLE_FILEPATH: &'static str = "favicon.svg";
 
     pub fn is_matching_request(request: &Request) -> bool {
-        request.request_uri == SYMBOL.slash
+        request.request_uri == "/favicon.svg"
     }
 
     pub fn process_request(_request: &Request, mut response: Response) -> Response {
@@ -19,9 +18,9 @@ impl IndexController {
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
 
 
-        if FileExt::does_file_exist(IndexController::INDEX_FILEPATH) {
+        if FileExt::does_file_exist(FaviconController::STYLE_FILEPATH) {
             let boxed_content_range =
-                Range::get_content_range_of_a_file(IndexController::INDEX_FILEPATH);
+                Range::get_content_range_of_a_file(FaviconController::STYLE_FILEPATH);
 
             if boxed_content_range.is_ok() {
                 let content_range = boxed_content_range.unwrap();
@@ -41,10 +40,10 @@ impl IndexController {
                 response.reason_phrase = STATUS_CODE_REASON_PHRASE.n500_internal_server_error.reason_phrase.to_string();
             }
         } else {
-            let index_file = include_bytes!("index.html");
+            let style_file = include_bytes!("favicon.svg");
 
             let content_range =
-                Range::get_content_range(index_file.to_vec(), MimeType::TEXT_HTML.to_string());
+                Range::get_content_range(style_file.to_vec(), MimeType::IMAGE_SVG.to_string());
 
 
             let content_range_list = vec![content_range];

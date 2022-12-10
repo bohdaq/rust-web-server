@@ -24,6 +24,7 @@ use crate::entry_point::{bootstrap, get_ip_port_thread_count, set_default_values
 use crate::server::Server;
 use crate::thread_pool::ThreadPool;
 use std::net::TcpListener;
+use crate::entry_point::command_line_args::CommandLineArgument;
 use crate::symbol::SYMBOL;
 
 pub fn start_server() {
@@ -41,6 +42,15 @@ pub fn start_server() {
     println!("Desciption:    {}", DESCRIPTION);
     println!("Rust Version:  {}", RUST_VERSION);
     println!("License:       {}\n\n", LICENSE);
+
+    println!("Usage:\n");
+    let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
+    for arg in command_line_arg_list {
+        println!("  {} environment variable\n  -{} or --{} as command line line argument\n  {}\n\n", arg.environment_variable, arg.short_form, arg.long_form, arg._hint.unwrap())
+    }
+    println!("End of usage section\n\n");
+
+
     println!("RWS Configuration Start: \n");
     set_default_values();
     bootstrap();
@@ -50,7 +60,7 @@ pub fn start_server() {
 
 pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
     let bind_addr = [ip, SYMBOL.colon, port.to_string().as_str()].join(SYMBOL.empty_string);
-    println!("Setting up {}...", bind_addr);
+    println!("Setting up http://{}...", bind_addr);
 
     let boxed_listener = TcpListener::bind(&bind_addr);
     if boxed_listener.is_err() {

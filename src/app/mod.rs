@@ -3,9 +3,12 @@ mod tests;
 
 pub mod controller;
 
+use crate::app::controller::favicon::FaviconController;
 use crate::app::controller::index::IndexController;
 use crate::app::controller::not_found::NotFoundController;
+use crate::app::controller::script::ScriptController;
 use crate::app::controller::static_resource::StaticResourceController;
+use crate::app::controller::style::StyleController;
 use crate::header::Header;
 
 use crate::request::{Request};
@@ -28,6 +31,21 @@ impl App {
 
         if IndexController::is_matching_request(&request) {
             response = IndexController::process_request(&request, response);
+            return (response, request)
+        }
+
+        if StyleController::is_matching_request(&request) {
+            response = StyleController::process_request(&request, response);
+            return (response, request)
+        }
+
+        if ScriptController::is_matching_request(&request) {
+            response = ScriptController::process_request(&request, response);
+            return (response, request)
+        }
+
+        if FaviconController::is_matching_request(&request) {
+            response = FaviconController::process_request(&request, response);
             return (response, request)
         }
 
