@@ -61,7 +61,7 @@ You will see similar output:
 > 
 > Repository:    https://github.com/bohdaq/rust-web-server
 > 
-> Desciption:    rust-web-server (rws) is a simple web-server written in Rust. The rws http server can serve static content inside the directory it is started.
+> Desciption:    rust-web-server (rws) is a static content web-server written in Rust
 > 
 > Rust Version:  1.65
 
