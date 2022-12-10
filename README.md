@@ -55,7 +55,7 @@ You will see similar output:
 
 > Rust Web Server
 > 
-> Version:       0.0.28
+> Version:       8.0.0
 > 
 > Authors:       Bohdan Tsap <bohdan.tsap@tutanota.com>
 > 
@@ -63,7 +63,7 @@ You will see similar output:
 > 
 > Desciption:    rust-web-server (rws) is a simple web-server written in Rust. The rws http server can serve static content inside the directory it is started.
 > 
-> Rust Version:  1.64
+> Rust Version:  1.65
 
 
 ## Run
@@ -88,7 +88,7 @@ There may be a use case when you need to run more than one instance, in such a c
 
 If you want to build rust-web-server on your own, make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
 
-Minimum rust version is 1.64, as I'm testing on this specific version. However, if needed you may try to build rws on your own using older version with the _--ignore-rust-version_ flag.
+Minimum rust version is 1.65, as I'm testing on this specific version. However, if needed you may try to build rws on your own using older version with the _--ignore-rust-version_ flag.
 
 > $ cargo build --release
 > 
