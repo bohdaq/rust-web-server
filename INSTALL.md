@@ -3,6 +3,8 @@
 
 ### x86 64-bit Apple
 > TODO
+#### x86 64-bit Homebrew
+> TODO
 
 ### x86 64-bit Linux
 > TODO
