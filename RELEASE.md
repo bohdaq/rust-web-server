@@ -36,3 +36,6 @@ Here is the list of supported architectures:
 3. ARM 64-bit Linux: **aarch64_unknown_linux_gnu**
    1.  Debian: **rws-arm-create-deb** TODO LINK
 4. x86 64-bit Windows: **x86_64-pc-windows-msvc**
+
+
+Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).

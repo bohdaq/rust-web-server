@@ -1,6 +1,6 @@
 ## Install
 [Download binary](https://github.com/bohdaq/rust-web-server/releases) for you platform from releases page.
-
+There is a mirror for downloads on [Google Drive](https://drive.google.com/drive/folders/13iSR3VxmfFvZgOZ0LddP_EJp7GJ-lQd8?usp=sharing).
 ### x86 64-bit Apple macOS
 > sudo cp rws /usr/local/bin
 >

@@ -11,65 +11,11 @@ rust-web-server (**rws**) is a static content web-server written in Rust.
 1. [X-Frame-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options)
 1. No third party dependencies
 
-## Download
-[Download binary](https://github.com/bohdaq/rust-web-server/releases) from releases page. Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html). There is a mirror for downloads on [Google Drive](https://drive.google.com/drive/folders/13iSR3VxmfFvZgOZ0LddP_EJp7GJ-lQd8?usp=sharing).
+## Development
+Open [DEVELOPER](INSTALL.md) for details.
 
 ## Installation
-rws is a binary so there are a couple of ways to install it
-
-### Platform Independent
-Simply add downloaded **rws** binary to [$PATH](https://en.wikipedia.org/wiki/PATH_%28variable%29). As an example copy it to bin folder and make it executable:
-> $ sudo cp rws /usr/local/bin
-> 
-> $ sudo chmod +x /usr/local/bin/rws
- 
-### Homebrew on macOS
-
-> $ brew tap bohdaq/rust-web-server
-> 
-> $ brew install rws
-
-### Linux
-
-#### Debian based distros
-
-- [.deb package for x86_64](https://github.com/bohdaq/rws-deb-package/raw/x86_64/rws.deb) (Ubuntu, Linux Mint, etc.)
-- [.deb package for arm_64](https://github.com/bohdaq/rws-deb-package/raw/arm_64/rws.deb) (Raspberry Pi, Ubuntu ARM, etc.)
-
-and execute
-> $ sudo dpkg -i --force-overwrite rws.deb
-#### RPM based distros (CentOS, openSUSE, Oracle Linux, etc)
-- [.rpm package for x86_64](https://github.com/bohdaq/rws-rpm-package/raw/x86_64/rws-0.0.28-0.x86_64.rpm)
-
-and execute
-> $ sudo rpm -i rws-0.0.28-0.x86_64.rpm
-
-
-### Testing installation
-To check installation execute the following code:
-
-> $ rws
-
-You will see similar output:
-
-> Rust Web Server
-> 
-> Version:       8.0.0
-> 
-> Authors:       Bohdan Tsap <bohdan.tsap@tutanota.com>
-> 
-> Repository:    https://github.com/bohdaq/rust-web-server
-> 
-> Desciption:    rust-web-server (rws) is a static content web-server written in Rust
-> 
-> Rust Version:  1.65
-
-
-## Run
-Simply run the following from command line:
-
-> $ rws --ip=127.0.0.1 --port=8888 --threads=100
-
+Open [INSTALL](INSTALL.md) for details.
 
 ## Configuration
 

@@ -10,5 +10,7 @@ Minimum rust version is 1.65, as I'm testing on this specific version. However, 
 > cargo test
 
 ## Build
-
 > cargo build
+
+## Release
+Open [RELEASE.md](INSTALL.md) for details.
