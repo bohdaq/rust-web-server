@@ -11,11 +11,11 @@ rust-web-server (**rws**) is a static content web-server written in Rust.
 1. [X-Frame-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options)
 1. No third party dependencies
 
-## Development
-Open [DEVELOPER](INSTALL.md) for details.
-
 ## Installation
 Open [INSTALL](INSTALL.md) for details.
+
+## Development
+Open [DEVELOPER](DEVELOPER.md) for details.
 
 ## Configuration
 
