@@ -1,6 +1,6 @@
 # rust-web-server
 
-rust-web-server (**rws**) is a static content web-server written in Rust. 
+rust-web-server (**rws**) is a static content web-server written in Rust.
 
 
 ## Features
@@ -44,7 +44,6 @@ and execute
 and execute
 > $ sudo rpm -i rws-0.0.28-0.x86_64.rpm
 
- 
 
 ### Testing installation
 To check installation execute the following code:
@@ -71,30 +70,19 @@ Simply run the following from command line:
 
 > $ rws --ip=127.0.0.1 --port=8888 --threads=100
 
-Make sure in the folder where you execute rws there are index.html and 404.html files.
 
 ## Configuration
 
 The rws can be started without any configuration. The following is the default config - the server will bind to IP 127.0.0.1 and port 7887, will spawn 200 threads, CORS requests are allowed.
 
-The rws will try to read configuration from [system environment variables](https://github.com/bohdaq/rust-web-server/blob/main/rws.variables) first, then it will override configuration by reading it from file named [rws.config.toml](https://github.com/bohdaq/rust-web-server/blob/main/rws.config.toml) placed in the same directory where you execute rws, at last it will apply config provided via [command-line arguments](https://github.com/bohdaq/rust-web-server/blob/main/rws.command_line). 
+The rws will try to read configuration from [system environment variables](https://github.com/bohdaq/rust-web-server/blob/main/rws.variables) first, then it will override configuration 
+by reading it from file named [rws.config.toml](https://github.com/bohdaq/rust-web-server/blob/main/rws.config.toml) placed in the same directory where you execute rws, at last it will 
+apply config provided via [command-line arguments](https://github.com/bohdaq/rust-web-server/blob/main/rws.command_line). 
 
-I personally prefer to use system environment variables, as once it is set correctly, they are hard to break accidentally by overwriting config, or each time providing command line arguments during restarts.
+I personally prefer to use system environment variables, as once it is set correctly, they are hard to break accidentally by overwriting config, or each time providing command line arguments 
+during restarts.
 
 There may be a use case when you need to run more than one instance, in such a case config file per instance or command line configuration is an option. 
-
-
-## Build
-
-If you want to build rust-web-server on your own, make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
-
-Minimum rust version is 1.65, as I'm testing on this specific version. However, if needed you may try to build rws on your own using older version with the _--ignore-rust-version_ flag.
-
-> $ cargo build --release
-> 
-> $ cd target/release
-> 
-> $ ./rws --ip=127.0.0.1 --port=8888 --threads=100
 
 
 
