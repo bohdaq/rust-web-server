@@ -29,3 +29,31 @@ Replace _YOUR_VERSION_ with version you downloaded.
 
 ### x86 64-bit Windows
 Copy executable to _C:\WINDOWS\system32_ folder.
+
+
+### Testing installation
+To check installation execute the following code in the terminal:
+
+> $ rws
+
+You will see similar output:
+
+> Rust Web Server
+>
+> Version:       YOUR_VERSION
+>
+> Authors:       Bohdan Tsap <bohdan.tsap@tutanota.com>
+>
+> Repository:    https://github.com/bohdaq/rust-web-server
+>
+> Desciption:    rust-web-server (rws) is a static content web-server written in Rust
+>
+> Rust Version:  RUST_VERSION
+> 
+> ...
+> Hello, rust-web-server is up and running: http://127.0.0.1:7888
+
+
+Open browser, go to http://127.0.0.1:7888, you'll see default page.
+
+Go back to terminal, press Ctrl + C (or CMD + C) to stop server.
