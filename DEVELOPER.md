@@ -11,31 +11,4 @@ Minimum rust version is 1.65, as I'm testing on this specific version. However, 
 
 ## Build
 
-> cargo build --release
->
-> cd target/release
->
-> ./rws --ip=127.0.0.1 --port=8888 --threads=100
-
-
-# Release
-Build binary on specific platform to prepare release.
-For each binary provide sha 256 check sum.
-Releases initially being prepared at
-[Drive](https://drive.google.com/drive/folders/13iSR3VxmfFvZgOZ0LddP_EJp7GJ-lQd8?usp=share_link) mirror.
-
-Here is the list of supported architectures:
-1. x86_64-apple-darwin
-2. x86_64-unknown-linux-gnu
-3. aarch64_unknown_linux_gnu
-4. x86_64-pc-windows-msvc
-
-## Build Templates
-There are templates for 
-[Homebrew](https://brew.sh/), 
-[Debian](https://www.debian.org/) and 
-[RPM](https://rpm.org/) package systems.
-1. [Homebrew](https://github.com/bohdaq/homebrew-rust-web-server)
-2. rws-x86_64-create-deb TODO
-3. rws-arm-create-deb TODO
-4. rws-x86_64-rpm-builder TODO
+> cargo build
