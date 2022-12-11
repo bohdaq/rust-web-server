@@ -32,7 +32,7 @@ Here is the list of supported architectures:
     1. [Homebrew formula](https://github.com/bohdaq/homebrew-rust-web-server)
 2. x86 64 bit Linux: **x86_64-unknown-linux-gnu**
    1.  Debian: **rws-x86_64-create-deb** TODO LINK
-   2.  RPM: **rws-x86_64-rpm-builder** TODO LINK
+   2.  RPM: **rws-x86_64-create-rpm** TODO LINK
 3. ARM 64 bit Linux: **aarch64_unknown_linux_gnu**
    1.  Debian: **rws-arm-create-deb** TODO LINK
 4. x86 64 bit Windows: **x86_64-pc-windows-msvc**
