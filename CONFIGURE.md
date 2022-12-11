@@ -1,3 +1,5 @@
+[Read Me](README.md) > Configuration
+
 # Configuration Info
 The rws can be started without any configuration. The following is the default config - the server will bind to IP 127.0.0.1 and port 7878, will spawn 200 threads, CORS requests are allowed.
 

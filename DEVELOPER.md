@@ -1,3 +1,5 @@
+[Read Me](README.md) > Developer
+
 # Developer Info
 Make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
 
@@ -13,4 +15,4 @@ Minimum rust version is 1.65, as I'm testing on this specific version. However, 
 > cargo build
 
 ## Release
-Open [RELEASE.md](RELEASE.md) for details.
+Open [RELEASE](RELEASE.md) for details.
