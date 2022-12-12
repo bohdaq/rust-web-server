@@ -24,6 +24,9 @@ export RWS_CONFIG_CORS_EXPOSE_HEADERS="content-type,x-custom-header"
 # in seconds, time to cache in browser CORS information, 86400s = 1 day; this setting won't apply if cors allow_all set to true
 export RWS_CONFIG_CORS_MAX_AGE="86400"
 
+# In bytes, how much memory to allocate for each request
+export RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES="16000"
+
 
 
 
