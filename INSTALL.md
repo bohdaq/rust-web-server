@@ -20,7 +20,7 @@ There is a mirror for downloads on [Google Drive](https://drive.google.com/drive
 > sudo dpkg -i --force-overwrite rws.deb
 #### x86 64-bit RPM
 Replace _YOUR_VERSION_ with version you downloaded.
-> sudo rpm -i rws-_YOUR_VERSION_.rpm
+> sudo rpm -i --force rws-_YOUR_VERSION_.rpm
 
 ### ARM 64-bit Linux
 > sudo cp rws /usr/local/bin
