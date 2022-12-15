@@ -31,5 +31,5 @@ If you appreciate my work and want to support it, feel free to do it via [PayPal
 1. [Rust Web Framework](https://github.com/bohdaq/rust-web-framework/)
 1. [Create Debian Package](https://github.com/bohdaq/rws-create-deb)
 1. [Create RPM Package](https://github.com/bohdaq/rws-rpm-builder)
-1. [Homebrew Formula](https://github.com/bohdaq/homebrew-rust-tls-server)
+1. [Homebrew Formula](https://github.com/bohdaq/homebrew-rust-web-server)
 
