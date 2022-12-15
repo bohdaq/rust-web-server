@@ -6,7 +6,7 @@ There is a mirror for downloads on [Google Drive](https://drive.google.com/drive
 ### x86 64-bit Apple macOS
 > sudo cp rws /usr/local/bin
 >
-> sudo chmod +x /usr/local/bin/rws
+> sudo chmod ug+rwx,o+r /usr/local/bin/rws
 #### x86 64-bit Homebrew macOS
 > brew tap bohdaq/rust-web-server
 >
@@ -15,7 +15,7 @@ There is a mirror for downloads on [Google Drive](https://drive.google.com/drive
 ### x86 64-bit Linux
 > sudo cp rws /usr/local/bin
 >
-> sudo chmod +x /usr/local/bin/rws
+> sudo chmod ug+rwx,o+r /usr/local/bin/rws
 #### x86 64-bit Debian
 > sudo dpkg -i --force-overwrite rws.deb
 #### x86 64-bit RPM
@@ -25,7 +25,7 @@ Replace _YOUR_VERSION_ with version you downloaded.
 ### ARM 64-bit Linux
 > sudo cp rws /usr/local/bin
 >
-> sudo chmod +x /usr/local/bin/rws
+> sudo chmod ug+rwx,o+r /usr/local/bin/rws
 #### ARM 64-bit Debian
 > sudo dpkg -i --force-overwrite rws.deb
 

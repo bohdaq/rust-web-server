@@ -12,7 +12,6 @@ pub fn override_environment_variables_from_command_line_args() {
     CommandLineArgument::_parse(args, params);
 
     println!("  End of Reading Command Line Arguments\n");
-    println!("RWS Configuration End\n\n");
 }
 
 pub struct CommandLineArgument {

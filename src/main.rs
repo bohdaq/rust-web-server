@@ -42,17 +42,16 @@ pub fn start() {
     println!("Rust Version:  {}", RUST_VERSION);
     println!("License:       {}\n\n", LICENSE);
 
-    println!("Usage:\n");
-    let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
-    for arg in command_line_arg_list {
-        println!("  {} environment variable\n  -{} or --{} as command line line argument\n  {}\n\n", arg.environment_variable, arg.short_form, arg.long_form, arg._hint.unwrap())
-    }
-    println!("End of usage section\n\n");
-
+    print_usage_information();
 
     println!("RWS Configuration Start: \n");
+
     set_default_values();
     bootstrap();
+
+    println!("\nRWS Configuration End\n\n");
+
+
     let (ip, port, thread_count) = get_ip_port_thread_count();
     create_tcp_listener_with_thread_pool(ip.as_str(), port, thread_count);
 }
@@ -99,4 +98,13 @@ pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i
         }
     }
 
+}
+
+pub fn print_usage_information() {
+    println!("Usage:\n");
+    let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
+    for arg in command_line_arg_list {
+        println!("  {} environment variable\n  -{} or --{} as command line line argument\n  {}\n\n", arg.environment_variable, arg.short_form, arg.long_form, arg._hint.unwrap())
+    }
+    println!("End of usage section\n\n");
 }
