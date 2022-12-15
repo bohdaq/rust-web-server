@@ -85,7 +85,7 @@ pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i
                     eprintln!("\nunable to read local addr");
                 }
 
-                let boxed_peer_addr = stream.local_addr();
+                let boxed_peer_addr = stream.peer_addr();
                 if boxed_peer_addr.is_ok() {
                     print!(", peer addr: {}\n", boxed_peer_addr.unwrap())
                 } else {

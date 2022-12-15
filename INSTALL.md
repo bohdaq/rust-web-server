@@ -53,9 +53,9 @@ You will see similar output:
 > Rust Version:  RUST_VERSION
 > 
 > ...
-> Hello, rust-web-server is up and running: http://127.0.0.1:7888
+> Hello, rust-web-server is up and running: http://127.0.0.1:7878
 
 
-Open browser, go to http://127.0.0.1:7888, you'll see default page.
+Open browser, go to http://127.0.0.1:7878, you'll see default page.
 
 Go back to terminal, press Ctrl + C (or CMD + C) to stop server.
