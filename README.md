@@ -36,4 +36,5 @@ If you appreciate my work and want to support it, feel free to do it via [PayPal
 1. [Create Debian Package](https://github.com/bohdaq/rws-create-deb)
 1. [Create RPM Package](https://github.com/bohdaq/rws-rpm-builder)
 1. [Homebrew Formula](https://github.com/bohdaq/homebrew-rust-web-server)
-
+1. [crypto-ext](https://github.com/bohdaq/crypto-ext/)
+1. [file-ext](https://github.com/bohdaq/file-ext/)
