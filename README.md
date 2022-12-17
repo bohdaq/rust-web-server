@@ -20,7 +20,11 @@ Open [DEVELOPER](DEVELOPER.md) for details.
 Open [CONFIGURE](CONFIGURE.md) for details.
 
 ## Community
-Rust Web Server has a [Discord](https://discord.gg/zaErjtr5Dm) where you can ask questions and share ideas. Follow the [Rust code of conduct](https://www.rust-lang.org/policies/code-of-conduct).
+Use GitHub discussions, issues and pull requests.
+
+There is Rust Web Server [Discord](https://discord.gg/zaErjtr5Dm) where you can ask questions and share ideas.
+
+Follow the [Rust code of conduct](https://www.rust-lang.org/policies/code-of-conduct).
 
 ## Donations
 If you appreciate my work and want to support it, feel free to do it via [PayPal](https://www.paypal.com/donate/?hosted_button_id=7J69SYZWSP6HJ).
