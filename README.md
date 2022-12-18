@@ -19,6 +19,9 @@ Open [DEVELOPER](DEVELOPER.md) for details.
 ## Configuration
 Open [CONFIGURE](CONFIGURE.md) for details.
 
+## Frequently Asked Questions
+Open [FAQ](FAQ.md) for details.
+
 ## Community
 Use GitHub discussions, issues and pull requests.
 
