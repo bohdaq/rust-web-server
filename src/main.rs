@@ -18,7 +18,8 @@ extern crate core;
 use crate::entry_point::{bootstrap, get_ip_port_thread_count, set_default_values};
 use crate::server::Server;
 use crate::thread_pool::ThreadPool;
-use std::net::TcpListener;
+use std::net::{SocketAddr, SocketAddrV6, TcpListener};
+use std::str::FromStr;
 use crate::entry_point::command_line_args::CommandLineArgument;
 use crate::symbol::SYMBOL;
 
@@ -58,16 +59,26 @@ pub fn start() {
 
 pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
     let bind_addr = [ip, SYMBOL.colon, port.to_string().as_str()].join(SYMBOL.empty_string);
-    println!("Setting up http://{}...", bind_addr);
+    let addr = SocketAddrV6::new("::".parse().unwrap(), port as u16, 0, 0);
 
-    let boxed_listener = TcpListener::bind(&bind_addr);
+    println!("Setting up http://{}...", &addr);
+
+
+    let boxed_listener = TcpListener::bind(&addr);
     if boxed_listener.is_err() {
         eprintln!("unable to set up TCP listener: {}", boxed_listener.err().unwrap());
     } else {
         let listener = boxed_listener.unwrap();
         let pool = ThreadPool::new(thread_count as usize);
 
-        println!("Hello, rust-web-server is up and running: http://{}", &bind_addr);
+
+
+        let ip = listener.local_addr().unwrap().ip();
+        let port = listener.local_addr().unwrap().port();
+        let bind_address = format!("{}:{}", ip, port);
+
+        println!("Rust Web Server is up and running: http://{}", &addr);
+
 
         for boxed_stream in listener.incoming() {
             if boxed_stream.is_err() {
