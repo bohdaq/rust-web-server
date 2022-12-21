@@ -65,3 +65,10 @@ I see the following error in the console(**Linux**):
 
 ### Solution
 Most probably you are trying to start server on port 80. To start server on port 80 try to run it as an administrator or user with admin privileges.
+
+
+## Problem #8
+How do i start server on IPv6?
+
+### Solution
+Simply start server with -ip=:: (or -i=::).
