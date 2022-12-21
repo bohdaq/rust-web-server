@@ -68,7 +68,13 @@ Most probably you are trying to start server on port 80. To start server on port
 
 
 ## Problem #8
-How do i start server on IPv6?
+How do I start server on IPv6?
 
 ### Solution
 Simply start server with -ip=:: (or -i=::).
+
+## Problem #9
+I have started server on ip=:: but unable to access it via fe80::... address.
+
+### Solution
+Try to access the server using IPv4 _inet_ address, from the same interface. Internally your IPv4 address will be converted to IPv6 variant [::ffff:192.168.m.n].
