@@ -78,3 +78,11 @@ I have started server on ip=:: but unable to access it via fe80::... address.
 
 ### Solution
 Try to access the server using IPv4 _inet_ address, from the same interface. Internally your IPv4 address will be converted to IPv6 variant [::ffff:192.168.m.n].
+
+## Problem #10
+I'm trying to open directory, but getting _404 Not Found_ error.
+
+### Solution
+Directory listing is not implemented. The reason behind this decision is security. To eliminate accidental sharing of unintended files.
+
+As a workaround you can create html file with list of files you need to make available.
