@@ -94,3 +94,9 @@ I'm not able to connect to server, getting error:
 
 Most likely firewall is blocking incoming request, try to stop firewall and retry.
 
+## Problem 12
+I'm not able to start server as root
+
+> Command not found
+
+Root does not have /usr/local/bin as part of his $PATH variable. Try to start server by explicitly specifying path to rws: _/usr/local/bin/rws_ 
