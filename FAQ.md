@@ -86,3 +86,11 @@ I'm trying to open directory, but getting _404 Not Found_ error.
 Directory listing is not implemented. The reason behind this decision is security. To eliminate accidental sharing of unintended files.
 
 As a workaround you can create html file with list of files you need to make available.
+
+## Problem 11
+I'm not able to connect to server, getting error:
+
+> Failed to connect to 192.168.m.n port x after y ms: Connection refused
+
+Most likely firewall is blocking incoming request, try to stop firewall and retry.
+
