@@ -92,6 +92,7 @@ I'm not able to connect to server, getting error:
 
 > Failed to connect to 192.168.m.n port x after y ms: Connection refused
 
+### Solution
 Most likely firewall is blocking incoming request, try to stop firewall and retry.
 
 ## Problem 12
@@ -99,4 +100,25 @@ I'm not able to start server as root
 
 > Command not found
 
+### Solution
 Root does not have /usr/local/bin as part of his $PATH variable. Try to start server by explicitly specifying path to rws: _/usr/local/bin/rws_ 
+
+## Problem 12
+I'm trying to build rws from source and getting the error:
+
+> linker 'cc' not found
+
+### Solution
+You need to install development tools:
+> sudo yum groupinstall "Development Tools"  #RHEL and derivatives
+> 
+> sudo yum install cmake make gcc #RHEL and derivatives
+
+
+> sudo apt-get install build-essential # Ubuntu and derivatives
+> 
+> sudo apt-get install make gcc cmake  # Ubuntu and derivatives
+
+
+> sudo pacman -S base-devel # Arch Linux
+
