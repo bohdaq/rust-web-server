@@ -7,7 +7,7 @@ use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 pub struct FaviconController;
 
 impl FaviconController {
-    pub const STYLE_FILEPATH: &'static str = "favicon.svg";
+    pub const FAVICON_FILEPATH: &'static str = "favicon.svg";
 
     pub fn is_matching_request(request: &Request) -> bool {
         request.request_uri == "/favicon.svg"
@@ -18,9 +18,9 @@ impl FaviconController {
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
 
 
-        if FileExt::does_file_exist(FaviconController::STYLE_FILEPATH) {
+        if FileExt::does_file_exist(FaviconController::FAVICON_FILEPATH) {
             let boxed_content_range =
-                Range::get_content_range_of_a_file(FaviconController::STYLE_FILEPATH);
+                Range::get_content_range_of_a_file(FaviconController::FAVICON_FILEPATH);
 
             if boxed_content_range.is_ok() {
                 let content_range = boxed_content_range.unwrap();
