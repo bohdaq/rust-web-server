@@ -13,36 +13,27 @@ pub mod response;
 pub mod server;
 pub mod symbol;
 pub mod thread_pool;
+pub mod log;
 extern crate core;
 
 use crate::entry_point::{bootstrap, get_ip_port_thread_count, set_default_values};
 use crate::server::Server;
 use crate::thread_pool::ThreadPool;
-use std::net::{SocketAddrV6, TcpListener};
-use crate::entry_point::command_line_args::CommandLineArgument;
+use std::net::{TcpListener};
 use crate::symbol::SYMBOL;
+use crate::log::Log;
 
 fn main() {
     start();
 }
 
 pub fn start() {
-    const VERSION: &str = env!("CARGO_PKG_VERSION");
-    const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
-    const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
-    const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
-    const RUST_VERSION: &str = env!("CARGO_PKG_RUST_VERSION");
-    const LICENSE: &str = env!("CARGO_PKG_LICENSE");
+    let info = Log::info("Rust Web Server");
+    println!("{}", info);
 
-    println!("Rust Web Server");
-    println!("Version:       {}", VERSION);
-    println!("Authors:       {}", AUTHORS);
-    println!("Repository:    {}", REPOSITORY);
-    println!("Desciption:    {}", DESCRIPTION);
-    println!("Rust Version:  {}", RUST_VERSION);
-    println!("License:       {}\n\n", LICENSE);
+    let usage_info = Log::usage_information();
+    println!("{}", usage_info);
 
-    print_usage_information();
 
     println!("RWS Configuration Start: \n");
 
@@ -57,13 +48,16 @@ pub fn start() {
 }
 
 pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
-    let _bind_addr = [ip, SYMBOL.colon, port.to_string().as_str()].join(SYMBOL.empty_string);
-    let addr = SocketAddrV6::new("::".parse().unwrap(), port as u16, 0, 0);
+    let mut ip_readable = ip.to_string();
 
-    println!("Setting up http://{}...", &addr);
+    if ip.contains(":") {
+        ip_readable = [SYMBOL.opening_square_bracket, ip, SYMBOL.closing_square_bracket].join("");
+    }
 
+    let bind_addr = [ip_readable, SYMBOL.colon.to_string(), port.to_string()].join(SYMBOL.empty_string);
+    println!("Setting up http://{}...", &bind_addr);
 
-    let boxed_listener = TcpListener::bind(&addr);
+    let boxed_listener = TcpListener::bind(&bind_addr);
     if boxed_listener.is_err() {
         eprintln!("unable to set up TCP listener: {}", boxed_listener.err().unwrap());
     } else {
@@ -71,12 +65,8 @@ pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i
         let pool = ThreadPool::new(thread_count as usize);
 
 
-
-        let ip = listener.local_addr().unwrap().ip();
-        let port = listener.local_addr().unwrap().port();
-        let _bind_address = format!("{}:{}", ip, port);
-
-        println!("Rust Web Server is up and running: http://{}", &addr);
+        let server_url_thread_count = Log::server_url_thread_count("http", &bind_addr, thread_count);
+        println!("{}", server_url_thread_count);
 
 
         for boxed_stream in listener.incoming() {
@@ -110,11 +100,3 @@ pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i
 
 }
 
-pub fn print_usage_information() {
-    println!("Usage:\n");
-    let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
-    for arg in command_line_arg_list {
-        println!("  {} environment variable\n  -{} or --{} as command line line argument\n  {}\n\n", arg.environment_variable, arg.short_form, arg.long_form, arg._hint.unwrap())
-    }
-    println!("End of usage section\n\n");
-}
