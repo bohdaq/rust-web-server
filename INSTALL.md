@@ -21,6 +21,8 @@ There is a mirror for downloads on [Google Drive](https://drive.google.com/drive
 #### x86 64-bit RPM
 Replace _YOUR_VERSION_ with version you downloaded.
 > sudo rpm -i --force rws-_YOUR_VERSION_.rpm
+#### x86 64-bit Portage ebuild
+Open **[Rust Web Server Portage ebuild](https://github.com/bohdaq/rws-gentoo-ebuild)** for details.
 
 ### ARM 64-bit Linux
 > sudo cp rws /usr/local/bin

@@ -32,12 +32,13 @@ There are additional templates for
 Here is the list of supported architectures:
 1. x86 64-bit Apple: **x86_64-apple-darwin**
     1. [Homebrew Formula](https://github.com/bohdaq/homebrew-rust-web-server)
-2. x86 64-bit Linux: **x86_64-unknown-linux-gnu**
+1. x86 64-bit Linux: **x86_64-unknown-linux-gnu**
    1.  Debian: **[rws create deb package](https://github.com/bohdaq/rws-create-deb)** 
-   2.  RPM: **[rws create rpm package](https://github.com/bohdaq/rws-rpm-builder)** 
-3. ARM 64-bit Linux: **aarch64_unknown_linux_gnu**
+   1.  RPM: **[rws create rpm package](https://github.com/bohdaq/rws-rpm-builder)**
+   1.  Portage ebuild: **[rws create portage ebuild](https://github.com/bohdaq/rws-gentoo-ebuild)**
+1. ARM 64-bit Linux: **aarch64_unknown_linux_gnu**
    1.  Debian: **[rws create deb package](https://github.com/bohdaq/rws-create-deb)**
-4. x86 64-bit Windows: **x86_64-pc-windows-msvc**
+1. x86 64-bit Windows: **x86_64-pc-windows-msvc**
 
 
 Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
