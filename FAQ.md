@@ -48,7 +48,7 @@ I see the following error in the console:
 > unable to parse request: invalid utf-8 sequence of _n_ bytes from index _m_
 
 ### Solution
-Server received not properly encoded request in UTF-8 charset. Request may be sent from various software on your network. You can ignore this message.
+Server received not properly encoded request in UTF-8 charset. Request may be sent from various software on your network. You can ignore this message. Also request may be done through https but server is on http protocol.
 
 
 ## Problem #6
