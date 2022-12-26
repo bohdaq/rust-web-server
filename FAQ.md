@@ -101,7 +101,9 @@ I'm not able to start server as root
 > Command not found
 
 ### Solution
-Root does not have /usr/local/bin as part of his $PATH variable. Try to start server by explicitly specifying path to rws: _/usr/local/bin/rws_ 
+Root does not have /usr/local/bin as part of his $PATH variable. Try to start server by explicitly specifying path to rws: _/usr/local/bin/rws_
+
+UPDATE 26 Dec 2022: new guideline is to install to /usr/bin directory.
 
 ## Problem 12
 I'm trying to build rws from source and getting the error:

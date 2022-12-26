@@ -4,18 +4,18 @@
 [Download binary](https://github.com/bohdaq/rust-web-server/releases) for you platform from releases page.
 There is a mirror for downloads on [Google Drive](https://drive.google.com/drive/folders/13iSR3VxmfFvZgOZ0LddP_EJp7GJ-lQd8?usp=sharing).
 ### x86 64-bit Apple macOS
-> sudo cp rws /usr/local/bin
+> sudo cp rws /usr/bin
 >
-> sudo chmod ug+rwx,o+r /usr/local/bin/rws
+> sudo chmod ug+rwx,o+r /usr/bin/rws
 #### x86 64-bit Homebrew macOS
 > brew tap bohdaq/rust-web-server
 >
 > brew install rws
 
 ### x86 64-bit Linux
-> sudo cp rws /usr/local/bin
+> sudo cp rws /usr/bin
 >
-> sudo chmod ug+rwx,o+r /usr/local/bin/rws
+> sudo chmod ug+rwx,o+r /usr/bin/rws
 #### x86 64-bit Debian
 > sudo dpkg -i --force-overwrite rws.deb
 #### x86 64-bit RPM
@@ -25,9 +25,9 @@ Replace _YOUR_VERSION_ with version you downloaded.
 Open **[Rust Web Server Portage ebuild](https://github.com/bohdaq/rws-gentoo-ebuild)** for details.
 
 ### ARM 64-bit Linux
-> sudo cp rws /usr/local/bin
+> sudo cp rws /usr/bin
 >
-> sudo chmod ug+rwx,o+r /usr/local/bin/rws
+> sudo chmod ug+rwx,o+r /usr/bin/rws
 #### ARM 64-bit Debian
 > sudo dpkg -i --force-overwrite rws.deb
 
