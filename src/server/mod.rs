@@ -3,18 +3,20 @@ pub mod tests;
 
 use std::io::prelude::*;
 use std::borrow::Borrow;
+use std::net::SocketAddr;
 
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::app::App;
 use crate::entry_point::get_request_allocation_size;
 use crate::header::Header;
+use crate::log::Log;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 
 pub struct Server {}
 impl Server {
-    pub fn process_request(mut stream: impl Read + Write + Unpin) -> Vec<u8> {
+    pub fn process_request(mut stream: impl Read + Write + Unpin, peer_addr: SocketAddr) -> Vec<u8> {
         let request_allocation_size = get_request_allocation_size();
         let mut buffer = vec![0; request_allocation_size as usize];
         let boxed_read = stream.read(&mut buffer);
@@ -50,6 +52,10 @@ impl Server {
 
         let request: Request = boxed_request.unwrap();
         let (response, request) = App::handle_request(request);
+
+
+        let log_request_response = Log::request_response(&request, &response, &peer_addr);
+        println!("{}", log_request_response);
         let raw_response = Response::generate_response(response, request);
 
         let boxed_stream = stream.write(raw_response.borrow());

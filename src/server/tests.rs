@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::{BufReader, Read, Write};
 
 use std::cmp::min;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use crate::entry_point::config_file::override_environment_variables_from_config;
 use crate::ext::file_ext::FileExt;
 
@@ -90,7 +91,8 @@ fn it_generates_successful_response_with_index_html() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
     let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -160,7 +162,8 @@ fn it_generates_successful_response_with_static_file() {
         write_data: vec![],
     };
 
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
     let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -229,7 +232,8 @@ fn it_generates_not_found_page_for_absent_static_file() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
     let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -298,7 +302,8 @@ fn it_generates_not_found_page_for_absent_route() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
     let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -367,7 +372,8 @@ fn it_generates_not_found_page_for_static_directory() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
     let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -436,7 +442,8 @@ fn it_generates_not_found_page_for_static_subdirectory() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
     let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -472,7 +479,8 @@ fn it_generates_bad_request_for_non_ut8_char_in_request() {
         read_data: request_vec,
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let str = String::from_utf8(raw_response.clone()).unwrap();
     println!("{}", str);
 
@@ -541,7 +549,8 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
         write_data: vec![],
     };
 
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
     let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -609,7 +618,8 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
     let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -681,7 +691,8 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
     let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -752,7 +763,8 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
     let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
@@ -813,7 +825,8 @@ fn check_range_response_for_not_proper_range_header() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
 
     let response = Response::_parse_response(raw_response.borrow());
 
@@ -878,7 +891,8 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
 
     let response = Response::_parse_response(raw_response.borrow());
 
@@ -943,7 +957,8 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
 
     let response = Response::_parse_response(raw_response.borrow());
 
@@ -1008,7 +1023,8 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
 
     let response = Response::_parse_response(raw_response.borrow());
 
@@ -1073,7 +1089,8 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
 
     let response = Response::_parse_response(raw_response.borrow());
 
@@ -1133,7 +1150,8 @@ fn check_range_response_for_not_proper_range_header_malformed() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
 
     let response = Response::_parse_response(raw_response.borrow());
 

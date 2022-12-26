@@ -19,7 +19,7 @@ extern crate core;
 use crate::entry_point::{bootstrap, get_ip_port_thread_count, set_default_values};
 use crate::server::Server;
 use crate::thread_pool::ThreadPool;
-use std::net::{TcpListener};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use crate::symbol::SYMBOL;
 use crate::log::Log;
 
@@ -92,7 +92,16 @@ pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i
                 }
 
                 pool.execute(move || {
-                    Server::process_request(stream);
+
+                    let mut peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+                    let boxed_peer_addr = stream.peer_addr();
+                    if boxed_peer_addr.is_ok() {
+                        peer_addr = boxed_peer_addr.unwrap()
+                    } else {
+                        eprintln!("\nunable to read peer addr");
+                    }
+
+                    Server::process_request(stream, peer_addr);
                 });
             }
         }

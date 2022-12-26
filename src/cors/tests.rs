@@ -1,5 +1,6 @@
 use std::{env, fs};
 use std::borrow::Borrow;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use crate::header::Header;
 use crate::cors::Cors;
 use crate::entry_point::config_file::override_environment_variables_from_config;
@@ -90,7 +91,8 @@ fn cors_options_preflight_request() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
 
 
@@ -193,7 +195,8 @@ fn actual_request_after_preflight() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
 
     assert_eq!(response_http_version, response.http_version);

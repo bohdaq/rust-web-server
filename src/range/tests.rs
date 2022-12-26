@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use crate::ext::file_ext::FileExt;
 use crate::header::Header;
 use crate::http::VERSION;
@@ -56,7 +57,8 @@ fn check_range_response_is_ok_two_part() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
 
     let response = Response::_parse_response(raw_response.borrow());
 
@@ -151,7 +153,9 @@ fn check_range_response_is_ok_single_part() {
         read_data: raw_request.as_bytes().to_vec(),
         write_data: vec![],
     };
-    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream);
+
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
+    let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
 
     let response = Response::_parse_response(raw_response.borrow());
 

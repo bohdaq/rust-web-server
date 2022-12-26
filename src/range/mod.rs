@@ -170,6 +170,8 @@ impl Range {
                 let range = boxed_range.unwrap();
                 let boxed_read = FileExt::read_file_partially(filepath, &range);
                 if boxed_read.is_ok() {
+
+                    //todo follow link to detect actual mime type
                     let content_type = MimeType::detect_mime_type(filepath);
                     let body = boxed_read.unwrap();
                     let content_range = ContentRange {
@@ -211,7 +213,14 @@ impl Range {
 
         let md = metadata(&static_filepath).unwrap();
         if md.is_file() {
-            let boxed_content_range_list = Range::parse_content_range(&static_filepath, md.len(), &range.value);
+            let mut path = static_filepath.as_str().to_string();
+
+            let is_link = FileExt::is_symlink(&static_filepath).unwrap();
+            if is_link {
+                path = FileExt::symlink_points_to(&static_filepath).unwrap();
+            }
+
+            let boxed_content_range_list = Range::parse_content_range(&path, md.len(), &range.value);
             if boxed_content_range_list.is_ok() {
                 content_range_list = boxed_content_range_list.unwrap();
             } else {
