@@ -216,7 +216,9 @@ impl Range {
 
             let is_link = FileExt::is_symlink(&static_filepath).unwrap();
             if is_link {
-                path = FileExt::symlink_points_to(&static_filepath).unwrap();
+                let points_to = FileExt::symlink_points_to(&static_filepath).unwrap();
+                let slash_points_to = [SYMBOL.slash.to_string(), points_to].join(SYMBOL.empty_string);
+                path = FileExt::get_static_filepath(slash_points_to.as_str()).unwrap();
             }
 
             let boxed_content_range_list = Range::parse_content_range(&path, md.len(), &range.value);
