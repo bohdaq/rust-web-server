@@ -25,10 +25,12 @@ There is a mirror for downloads on [Google Drive](https://drive.google.com/drive
 #### x86 64-bit Debian
 > sudo dpkg -i --force-overwrite rws.deb
 #### x86 64-bit RPM
-Replace _YOUR_VERSION_ with version you downloaded.
-> sudo rpm -i --force rws-_YOUR_VERSION_.rpm
+Replace _VERSION_ with version you downloaded.
+> sudo rpm -i --force rws-_VERSION_.rpm
 #### x86 64-bit Portage ebuild
 Open **[Rust Web Server Portage ebuild](https://github.com/bohdaq/rws-gentoo-ebuild)** for details.
+#### x86 64-bit Pacman package
+Open **[Rust Web Server Pacman package](https://github.com/bohdaq/rws-arch-package)** for details.
 
 ### ARM 64-bit Linux
 > sudo cp rws /usr/bin

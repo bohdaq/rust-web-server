@@ -25,6 +25,8 @@ Releases initially being prepared at
 
 There are additional templates for
 [Homebrew](https://brew.sh/),
+[Portage](https://wiki.gentoo.org/wiki/Portage),
+[Pacman](https://wiki.archlinux.org/title/pacman),
 [Debian](https://www.debian.org/) and
 [RPM](https://rpm.org/) package systems.
 
@@ -36,6 +38,7 @@ Here is the list of supported architectures:
    1.  Debian: **[rws create deb package](https://github.com/bohdaq/rws-create-deb)** 
    1.  RPM: **[rws create rpm package](https://github.com/bohdaq/rws-rpm-builder)**
    1.  Portage ebuild: **[rws create portage ebuild](https://github.com/bohdaq/rws-gentoo-ebuild)**
+   1.  Pacman package: **[rws create pacman package](https://github.com/bohdaq/rws-arch-package)**
 1. ARM 64-bit Linux: **aarch64_unknown_linux_gnu**
    1.  Debian: **[rws create deb package](https://github.com/bohdaq/rws-create-deb)**
 1. x86 64-bit Windows: **x86_64-pc-windows-msvc**
