@@ -210,7 +210,17 @@ impl Range {
         }
         let static_filepath = boxed_static_filepath.unwrap();
 
-        let md = metadata(&static_filepath).unwrap();
+        let boxed_metadata = metadata(&static_filepath);
+        if boxed_metadata.is_err() {
+            let error = Error {
+                status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
+                message: boxed_metadata.err().unwrap().to_string()
+            };
+            eprintln!("{}", &error.message);
+            return Err(error);
+        }
+
+        let md = boxed_metadata.unwrap();
         if md.is_file() {
             let mut path = static_filepath.as_str().to_string();
 
