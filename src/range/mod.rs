@@ -224,7 +224,18 @@ impl Range {
         if md.is_file() {
             let mut path = static_filepath.as_str().to_string();
 
-            let is_link = FileExt::is_symlink(&static_filepath).unwrap();
+            let boxed_is_link = FileExt::is_symlink(&static_filepath);
+            if boxed_is_link.is_err() {
+                let error = Error {
+                    status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
+                    message: boxed_is_link.err().unwrap()
+                };
+                eprintln!("{}", &error.message);
+                return Err(error);
+            }
+
+
+            let is_link = boxed_is_link.unwrap();
             if is_link {
                 let points_to = FileExt::symlink_points_to(&static_filepath).unwrap();
                 let not_in_the_server_folder = points_to.starts_with("..");
