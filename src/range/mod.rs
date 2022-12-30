@@ -237,7 +237,16 @@ impl Range {
 
             let is_link = boxed_is_link.unwrap();
             if is_link {
-                let points_to = FileExt::symlink_points_to(&static_filepath).unwrap();
+                let boxed_points_to = FileExt::symlink_points_to(&static_filepath);
+                if boxed_points_to.is_err() {
+                    let error = Error {
+                        status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
+                        message: boxed_points_to.err().unwrap()
+                    };
+                    eprintln!("{}", &error.message);
+                    return Err(error);
+                }
+                let points_to = boxed_points_to.unwrap();
                 let not_in_the_server_folder = points_to.starts_with("..");
                 if not_in_the_server_folder {
                     let msg = format!("unable to locate file for given symlink. check if symlinks points to a file inside server directory");
