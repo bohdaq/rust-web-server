@@ -138,4 +138,23 @@ Usually whenever such error encountered by me, I'm performing clean and build fr
 > cargo build
 
 
+## Problem 14
+While building from IDE getting error:
+
+> error: failed to get `NAME` as a dependency of package `NAME VERSION
+>
+> failed to load source for dependency `rust-web-server`
+>
+> Unable to update registry `crates-io`
+>
+> failed to fetch `https://github.com/rust-lang/crates.io-index`
+>
+> failed open - 'PATH.git/FETCH_HEAD' is locked: Permission denied; class=Os (2); code=Locked (-14)
+
+### Solution
+Usually whenever such error encountered by me, I'm performing clean and build from the console as an administrator, eliminating the built-in IDE compilation, and it works fine.
+
+> sudo cargo clean
+>
+> sudo cargo build
 
