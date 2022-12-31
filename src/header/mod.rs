@@ -140,10 +140,11 @@ impl Header {
         let client_hint_header = ClientHint::get_accept_client_hints_header();
         header_list.push(client_hint_header);
 
+        let critical_client_hint_header = ClientHint::get_critical_client_hints_header();
+        header_list.push(critical_client_hint_header);
+
         let client_hint_vary = ClientHint::get_vary_header_value();
         vary_value.push(client_hint_vary);
-
-        vary_value.push(Header::_UPGRADE_INSECURE_REQUESTS.to_string());
 
         let vary_header = Header { name: Header::_VARY.to_string(), value: vary_value.join(", ") };
         header_list.push(vary_header);
