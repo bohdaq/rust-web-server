@@ -117,7 +117,7 @@ fn static_file_cors_options_preflight_request_client_hints() {
     let vary_header = response._get_header(Header::_VARY.to_string()).unwrap();
     assert_eq!(
         vary_header.value,
-        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory, Upgrade-Insecure-Requests, Sec-CH-Prefers-Reduced-Motion"
+        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory, Upgrade-Insecure-Requests, Sec-CH-Prefers-Reduced-Motion, Sec-CH-Prefers-Color-Scheme"
     );
 
     let client_hints = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).unwrap();
@@ -171,7 +171,7 @@ fn static_file_cors_off_options_preflight_request_client_hints() {
     let vary_header = response._get_header(Header::_VARY.to_string()).unwrap();
     assert_eq!(
         vary_header.value,
-        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory, Upgrade-Insecure-Requests, Sec-CH-Prefers-Reduced-Motion"
+        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory, Upgrade-Insecure-Requests, Sec-CH-Prefers-Reduced-Motion, Sec-CH-Prefers-Color-Scheme"
     );
 
     let client_hints = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).unwrap();

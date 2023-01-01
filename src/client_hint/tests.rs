@@ -17,7 +17,7 @@ fn consts() {
 
 #[test]
 fn hint_list() {
-    assert_eq!(ClientHint::get_client_hint_list(), "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT, Save-Data, Device-Memory, Sec-CH-Prefers-Reduced-Motion");
+    assert_eq!(ClientHint::get_client_hint_list(), "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT, Save-Data, Device-Memory, Sec-CH-Prefers-Reduced-Motion, Sec-CH-Prefers-Color-Scheme");
 }
 
 #[test]
@@ -26,7 +26,7 @@ fn accept_client_hints_header() {
 
     let header = ClientHint::get_accept_client_hints_header();
     assert_eq!(header.name, ClientHint::ACCEPT_CLIENT_HINTS);
-    assert_eq!(header.value, "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT, Save-Data, Device-Memory, Sec-CH-Prefers-Reduced-Motion");
+    assert_eq!(header.value, "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT, Save-Data, Device-Memory, Sec-CH-Prefers-Reduced-Motion, Sec-CH-Prefers-Color-Scheme");
 }
 
 #[test]
@@ -35,7 +35,7 @@ fn critical_client_hints_header() {
 
     let header = ClientHint::get_critical_client_hints_header();
     assert_eq!(header.name, ClientHint::CRITICAL_CLIENT_HINTS);
-    assert_eq!(header.value, "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT, Save-Data, Device-Memory, Sec-CH-Prefers-Reduced-Motion");
+    assert_eq!(header.value, "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Downlink, ECT, RTT, Save-Data, Device-Memory, Sec-CH-Prefers-Reduced-Motion, Sec-CH-Prefers-Color-Scheme");
 }
 
 #[test]
@@ -57,5 +57,5 @@ fn critical_client_hints() {
 
 #[test]
 fn vary() {
-    assert_eq!(ClientHint::get_vary_header_value(), "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory, Upgrade-Insecure-Requests, Sec-CH-Prefers-Reduced-Motion");
+    assert_eq!(ClientHint::get_vary_header_value(), "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory, Upgrade-Insecure-Requests, Sec-CH-Prefers-Reduced-Motion, Sec-CH-Prefers-Color-Scheme");
 }

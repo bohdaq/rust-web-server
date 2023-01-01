@@ -21,6 +21,7 @@ impl ClientHint {
     pub const NETWORK_SAVE_DATA: &'static str = "Save-Data";
     pub const DEVICE_MEMORY: &'static str = "Device-Memory";
     pub const PREFERS_REDUCED_MOTION: &'static str = "Sec-CH-Prefers-Reduced-Motion";
+    pub const PREFERS_COLOR_SCHEME: &'static str = "Sec-CH-Prefers-Color-Scheme";
 
     pub fn get_client_hint_list() -> String {
         let hint_list = [
@@ -35,6 +36,7 @@ impl ClientHint {
             ClientHint::NETWORK_SAVE_DATA,
             ClientHint::DEVICE_MEMORY,
             ClientHint::PREFERS_REDUCED_MOTION,
+            ClientHint::PREFERS_COLOR_SCHEME,
         ];
         let hint_header_value = hint_list.join(", ");
         hint_header_value
@@ -63,6 +65,7 @@ impl ClientHint {
             ClientHint::DEVICE_MEMORY,
             Header::_UPGRADE_INSECURE_REQUESTS,
             ClientHint::PREFERS_REDUCED_MOTION,
+            ClientHint::PREFERS_COLOR_SCHEME,
         ];
         let vary_client_hint = hint_list.join(", ");
         vary_client_hint
