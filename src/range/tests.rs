@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use crate::ext::file_ext::FileExt;
+use file_ext::FileExt;
 use crate::header::Header;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;

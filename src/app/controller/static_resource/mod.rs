@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::{File, metadata};
-use crate::ext::file_ext::FileExt;
+use file_ext::FileExt;
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};

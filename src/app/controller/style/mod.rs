@@ -1,4 +1,4 @@
-use crate::ext::file_ext::FileExt;
+use file_ext::FileExt;
 use crate::mime_type::MimeType;
 use crate::range::Range;
 use crate::request::Request;

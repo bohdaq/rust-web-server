@@ -4,7 +4,7 @@ mod tests;
 use std::io::prelude::*;
 use std::fs::{metadata};
 use std::io::{Cursor};
-use crate::ext::file_ext::{FileExt};
+use file_ext::FileExt;
 
 use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
 use crate::header::Header;
@@ -168,7 +168,7 @@ impl Range {
             let boxed_range = Range::parse_range_in_content_range(filelength, byte);
             if boxed_range.is_ok() {
                 let range = boxed_range.unwrap();
-                let boxed_read = FileExt::read_file_partially(filepath, &range);
+                let boxed_read = FileExt::read_file_partially(filepath, range.start, range.end);
                 if boxed_read.is_ok() {
 
                     let content_type = MimeType::detect_mime_type(filepath);

@@ -6,7 +6,7 @@ use std::io::{BufReader, Read, Write};
 use std::cmp::min;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use crate::entry_point::config_file::override_environment_variables_from_config;
-use crate::ext::file_ext::FileExt;
+use file_ext::FileExt;
 
 use crate::header::Header;
 use crate::http::VERSION;

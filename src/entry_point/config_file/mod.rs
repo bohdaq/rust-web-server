@@ -1,7 +1,7 @@
 use std::{io};
 use std::io::{BufRead, Cursor};
 use crate::entry_point::command_line_args::{CommandLineArgument};
-use crate::ext::file_ext::FileExt;
+use file_ext::FileExt;
 use crate::symbol::SYMBOL;
 
 pub fn read_config_file(
