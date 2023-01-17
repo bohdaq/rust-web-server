@@ -21,6 +21,12 @@ To run specific test (replace client_hint::tests::client_hints_header with test 
 
 > cargo test --package rws --bin rws client_hint::tests::client_hints_header -- --exact --ignore-rust-version
 
+## Debug
+
+While running a test you may notice the fact that stdout does not show the `println!`. To workaround this problem I usually create a file named as the test I'm running and instead of using `println!` macros simply writing the output to the file.
+
+Tests may be executed in parallel so use unique file name for each test to eliminate concurrency issues.
+
 
 ## Build
 > cargo build --ignore-rust-version
