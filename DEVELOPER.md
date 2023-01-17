@@ -5,7 +5,11 @@ Make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
 
 Minimum rust version is 1.66, as I'm testing on this specific version. However, if needed you may try to build rws on your own using older version with the _--ignore-rust-version_ flag.
 
-Depending on your setup you may need to run commands listed below as an administrator (open CMD as an administrator on Windows or use `sudo` on Linux and macOS)
+Depending on your setup you may need to run commands listed below as an administrator (open CMD as an administrator on Windows or use `sudo` on Linux and macOS).
+
+I personally use [IDEA Community Edition](https://www.jetbrains.com/idea/download/) with [Rust plugin](https://www.jetbrains.com/rust/), it is free and works quite well with code inspections.
+
+However, I **run and test from terminal**. 
 
 ## Run
 > cargo run --ignore-rust-version
@@ -14,6 +18,7 @@ Depending on your setup you may need to run commands listed below as an administ
 > cargo test --ignore-rust-version
 
 To run specific test (replace client_hint::tests::client_hints_header with test you want to run)
+
 > cargo test --package rws --bin rws client_hint::tests::client_hints_header -- --exact --ignore-rust-version
 
 
