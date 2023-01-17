@@ -3,6 +3,8 @@
 # Developer Info
 Make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
 
+Main branch shall work fine for most of the time, but from time to time it may have some issues, as a result of ongoing development. Usually they are resolved as soon as possible. So you may think to base your changes on latest [tag](https://github.com/bohdaq/rust-web-server/tags) instead of `main` branch.
+
 Minimum rust version is 1.66, as I'm testing on this specific version. However, if needed you may try to build rws on your own using older version with the _--ignore-rust-version_ flag.
 
 Depending on your setup you may need to run commands listed below as an administrator (open CMD as an administrator on Windows or use `sudo` on Linux and macOS).
