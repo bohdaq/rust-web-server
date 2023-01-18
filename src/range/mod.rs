@@ -198,8 +198,9 @@ impl Range {
 
     pub fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, Error> {
         let mut content_range_list : Vec<ContentRange> = vec![];
+        let file_path_part = request_uri.replace(SYMBOL.slash, &FileExt::get_path_separator());
 
-        let boxed_static_filepath = FileExt::get_static_filepath(request_uri);
+        let boxed_static_filepath = FileExt::get_static_filepath(&file_path_part);
         if boxed_static_filepath.is_err() {
             let error = Error {
                 status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
@@ -246,19 +247,19 @@ impl Range {
                     eprintln!("{}", &error.message);
                     return Err(error);
                 }
+
                 let points_to = boxed_points_to.unwrap();
-                let not_in_the_server_folder = points_to.starts_with("..");
-                if not_in_the_server_folder {
-                    let msg = format!("unable to locate file for given symlink. check if symlinks points to a file inside server directory");
-                    let error = Error {
-                        status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
-                        message: msg
-                    };
-                    eprintln!("{}", &error.message);
-                    return Err(error);
+                let reversed_link = &static_filepath.chars().rev().collect::<String>();
+
+                let mut symlink_directory = SYMBOL.empty_string.to_string();
+                let boxed_split = reversed_link.split_once(&FileExt::get_path_separator());
+                if boxed_split.is_some() {
+                    let (_filename, path) = boxed_split.unwrap();
+                    symlink_directory = path.chars().rev().collect::<String>();
                 }
-                let slash_points_to = [SYMBOL.slash.to_string(), points_to].join(SYMBOL.empty_string);
-                path = FileExt::get_static_filepath(slash_points_to.as_str()).unwrap();
+
+                let resolved_link = FileExt::resolve_symlink_path(&symlink_directory, &points_to).unwrap();
+                path = resolved_link;
             }
 
             let boxed_content_range_list = Range::parse_content_range(&path, md.len(), &range.value);
