@@ -109,6 +109,7 @@ fn it_generates_successful_response_with_index_html() {
 }
 
 #[test]
+#[cfg(target_family = "unix")]
 fn it_generates_successful_response_with_index_html_as_symlink() {
     // request test data
     let request_host_header_name = "Host";
