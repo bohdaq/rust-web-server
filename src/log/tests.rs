@@ -1,4 +1,5 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use file_ext::FileExt;
 use crate::app::App;
 use crate::header::Header;
 use crate::http::VERSION;
@@ -48,14 +49,31 @@ fn info() {
     const RUST_VERSION: &str = env!("CARGO_PKG_RUST_VERSION");
     const LICENSE: &str = env!("CARGO_PKG_LICENSE");
 
+    let boxed_user = FileExt::get_current_user();
+    if boxed_user.is_err() {
+        let message = boxed_user.as_ref().err().unwrap();
+        eprintln!("{}", message)
+    }
+    let user: String = boxed_user.unwrap();
 
-    let expected_info = format!("HTTP to HTTPS with LetsEncrypt HTTP verification server\nVersion:       {}\nAuthors:       {}\nRepository:    {}\nDesciption:    {}\nRust Version:  {}\nLicense:       {}\n",
+    let boxed_working_directory = FileExt::get_static_filepath("");
+    if boxed_working_directory.is_err() {
+        let message = boxed_working_directory.as_ref().err().unwrap();
+        eprintln!("{}", message)
+    }
+
+    let working_directory: String = boxed_working_directory.unwrap();
+
+
+    let expected_info = format!("HTTP to HTTPS with LetsEncrypt HTTP verification server\nVersion:           {}\nAuthors:           {}\nRepository:        {}\nDesciption:        {}\nRust Version:      {}\nLicense:           {}\nUser:              {}\nWorking Directory: {}\n",
         VERSION,
         AUTHORS,
         REPOSITORY,
         DESCRIPTION,
         RUST_VERSION,
-        LICENSE
+        LICENSE,
+        user,
+        working_directory
     ).to_string();
     let actual_info = Log::info("HTTP to HTTPS with LetsEncrypt HTTP verification server");
     assert_eq!(expected_info, actual_info)
