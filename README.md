@@ -8,6 +8,7 @@ rust-web-server (**rws**) is a static content web-server written in Rust.
 1. [HTTP Client Hints](https://developer.mozilla.org/en-US/docs/Web/HTTP/Client_hints)
 1. [X-Content-Type-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options)
 1. [X-Frame-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options)
+1. [Symlinks](https://en.wikipedia.org/wiki/Symbolic_link)
 1. No third party dependencies. ([file-ext](https://github.com/bohdaq/file-ext) is written by me)
 
 ## Download
@@ -40,8 +41,5 @@ Follow the [Rust code of conduct](https://www.rust-lang.org/policies/code-of-con
 1. [Rust TLS Server](https://github.com/bohdaq/rust-tls-server)
 1. [http-to-https-letsencrypt](https://github.com/bohdaq/http-to-https-letsencrypt)
 1. [Rust Web Framework](https://github.com/bohdaq/rust-web-framework/)
-1. [Create Debian Package](https://github.com/bohdaq/rws-create-deb)
-1. [Create RPM Package](https://github.com/bohdaq/rws-rpm-builder)
-1. [Homebrew Formula](https://github.com/bohdaq/homebrew-rust-web-server)
 1. [crypto-ext](https://github.com/bohdaq/crypto-ext/)
 1. [file-ext](https://github.com/bohdaq/file-ext/)

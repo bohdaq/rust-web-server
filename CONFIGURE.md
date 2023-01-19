@@ -16,11 +16,8 @@ There may be a use case when you need to run more than one instance, in such a c
 
 The rws is an [HTTP server](https://developer.mozilla.org/en-US/docs/Web/HTTP). This means if you are planning to use it somewhere else except the local machine you need to protect transferred data by using encryption.
 
-There is a [Rust TLS Server](https://github.com/bohdaq/rust-tls-server) for handling HTTPS over TLS.
-
-Alternative solutions to Rust TLS Server are:
-1. You need your webapp to be globally available via the internet. In such a case, the simplest solution is to use a reverse proxy and certificate provided by [Let's Encrypt](https://letsencrypt.org/). A proxy will redirect all HTTP traffic to HTTPS, decrypt it via certificate and forward the request to rws. Response from rws will be forwarded to a proxy, encrypted, and sent to a client. As [reverse proxy](https://ssl-config.mozilla.org/) you may use Apache HTTP Server, lighttpd, etc.
-2. You don't need your webapp to be globally available. In such case the solution may be to setup VPN.
+There is a [Rust TLS Server](https://github.com/bohdaq/rust-tls-server) for handling HTTPS over TLS. 
+You can also use [http-to-https-letsencrypt](https://github.com/bohdaq/http-to-https-letsencrypt) to obtain free certificate from Let's Encrypt.
 
 ## Memory
 As any other application, rws will allocate memory required to serve the request.
