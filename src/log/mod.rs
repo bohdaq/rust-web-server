@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use file_ext::FileExt;
 use crate::entry_point::command_line_args::CommandLineArgument;
 use crate::request::Request;
 use crate::response::Response;
@@ -81,23 +82,43 @@ impl Log {
         const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
         const RUST_VERSION: &str = env!("CARGO_PKG_RUST_VERSION");
         const LICENSE: &str = env!("CARGO_PKG_LICENSE");
+        let boxed_user = FileExt::get_current_user();
+        if boxed_user.is_err() {
+            let message = boxed_user.as_ref().err().unwrap();
+            eprintln!("{}", message)
+        }
+        let user: String = boxed_user.unwrap();
 
-        let version = format!("Version:       {}\n", VERSION);
+        let boxed_working_directory = FileExt::get_static_filepath("");
+        if boxed_working_directory.is_err() {
+            let message = boxed_working_directory.as_ref().err().unwrap();
+            eprintln!("{}", message)
+        }
+
+        let working_directory: String = boxed_working_directory.unwrap();
+
+        let version = format!("Version:           {}\n", VERSION);
         log = [log, version].join("");
 
-        let authors = format!("Authors:       {}\n", AUTHORS);
+        let authors = format!("Authors:           {}\n", AUTHORS);
         log = [log, authors].join("");
 
-        let repository = format!("Repository:    {}\n", REPOSITORY);
+        let repository = format!("Repository:        {}\n", REPOSITORY);
         log = [log, repository].join("");
 
-        let description = format!("Desciption:    {}\n", DESCRIPTION);
+        let description = format!("Desciption:        {}\n", DESCRIPTION);
         log = [log, description].join("");
 
-        let rust_version = format!("Rust Version:  {}\n", RUST_VERSION);
+        let rust_version = format!("Rust Version:      {}\n", RUST_VERSION);
         log = [log, rust_version].join("");
 
-        let license = format!("License:       {}\n", LICENSE);
+        let license = format!("License:           {}\n", LICENSE);
+        log = [log, license].join("");
+
+        let license = format!("User:              {}\n", user);
+        log = [log, license].join("");
+
+        let license = format!("Working Directory: {}\n", working_directory);
         log = [log, license].join("");
 
         log
