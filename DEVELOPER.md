@@ -13,6 +13,9 @@ I personally use [IDEA Community Edition](https://www.jetbrains.com/idea/downloa
 
 However, I **run and test from terminal**. 
 
+Before proceeding, it is a good idea to update rust toolchain:
+> rustup update
+
 ## Run
 > cargo run --ignore-rust-version
 
