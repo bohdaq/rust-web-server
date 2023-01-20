@@ -1,6 +1,9 @@
 [Read Me](README.md) > Developer
 
 # Developer Info
+
+Note: there is a [quick setup tutorial](DEVELOPER/UBUNTU_LTS_DEVELOPER_SETUP.md) for Ubuntu 22.04 LTS
+
 Make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
 
 Main branch shall work fine for most of the time, but from time to time it may have some issues, as a result of ongoing development. Usually they are resolved as soon as possible. So you may think to base your changes on latest [tag](https://github.com/bohdaq/rust-web-server/tags) instead of `main` branch.
