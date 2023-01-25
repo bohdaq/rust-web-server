@@ -198,3 +198,8 @@ fn test_request_randomcase() {
     assert_eq!(request_uri, request.request_uri);
     assert_eq!(http_version, request.http_version);
 }
+
+#[test]
+fn file_upload() {
+    
+}
