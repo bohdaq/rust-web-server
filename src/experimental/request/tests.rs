@@ -208,9 +208,8 @@ fn file_upload_text_plain_content_type() {
     let raw_request_1 = format!("POST /file-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
     let raw_request_2 = format!("Content-Type: text/plain{}", SYMBOL.new_line_carriage_return);
     let raw_request_3 = format!("Host: 127.0.0.1:7888{}", SYMBOL.new_line_carriage_return);
-    let raw_request_4 = format!("Content-Length: 14{}", SYMBOL.new_line_carriage_return);
-    let raw_request_5 = SYMBOL.new_line_carriage_return.to_string();
-    let raw_request_6 = format!("some-prop 1234{}", SYMBOL.new_line_carriage_return);
+    let raw_request_4 = SYMBOL.new_line_carriage_return.to_string();
+    let raw_request_5 = format!("some-prop 1234{}", SYMBOL.new_line_carriage_return);
 
     let raw_request = [
         raw_request_1,
@@ -218,7 +217,33 @@ fn file_upload_text_plain_content_type() {
         raw_request_3,
         raw_request_4,
         raw_request_5,
-        raw_request_6,
+    ].join(SYMBOL.empty_string);
+
+    let boxed_request = Request::parse_request(raw_request.as_bytes());
+
+    assert!(boxed_request.is_ok());
+}
+
+
+#[test]
+fn file_upload_multipart_form_data_content_type() {
+
+    //let raw_request = String::from_utf8(Vec::from(request)).unwrap();
+    //println!("\n\n______{}______\n\n", raw_request);
+    let boundary = "------hdfkjshdfkljashdgkh";
+
+    let raw_request_1 = format!("POST /file-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
+    let raw_request_2 = format!("Content-Type: multipart/form-data; boundary={}{}", boundary, SYMBOL.new_line_carriage_return);
+    let raw_request_3 = format!("Host: 127.0.0.1:7888{}", SYMBOL.new_line_carriage_return);
+    let raw_request_4 = SYMBOL.new_line_carriage_return.to_string();
+    let raw_request_5 = format!("some-prop 1234{}", SYMBOL.new_line_carriage_return);
+
+    let raw_request = [
+        raw_request_1,
+        raw_request_2,
+        raw_request_3,
+        raw_request_4,
+        raw_request_5,
     ].join(SYMBOL.empty_string);
 
     let boxed_request = Request::parse_request(raw_request.as_bytes());

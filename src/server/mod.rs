@@ -35,6 +35,9 @@ impl Server {
         boxed_read.unwrap();
         let request : &[u8] = &buffer;
 
+        // let raw_request = String::from_utf8(Vec::from(request)).unwrap();
+        // println!("\n\n______{}______\n\n", raw_request);
+
 
         let boxed_request = Request::parse_request(request);
         if boxed_request.is_err() {
