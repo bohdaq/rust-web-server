@@ -207,16 +207,14 @@ fn file_upload_text_plain_content_type() {
 
     let raw_request_1 = format!("POST /file-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
     let raw_request_2 = format!("Content-Type: text/plain{}", SYMBOL.new_line_carriage_return);
-    let raw_request_3 = format!("Host: 127.0.0.1:7888{}", SYMBOL.new_line_carriage_return);
-    let raw_request_4 = SYMBOL.new_line_carriage_return.to_string();
-    let raw_request_5 = format!("some-prop 1234{}", SYMBOL.new_line_carriage_return);
+    let raw_request_3 = SYMBOL.new_line_carriage_return.to_string();
+    let raw_request_4 = format!("some-prop 1234{}", SYMBOL.new_line_carriage_return);
 
     let raw_request = [
         raw_request_1,
         raw_request_2,
         raw_request_3,
         raw_request_4,
-        raw_request_5,
     ].join(SYMBOL.empty_string);
 
     let boxed_request = Request::parse_request(raw_request.as_bytes());
