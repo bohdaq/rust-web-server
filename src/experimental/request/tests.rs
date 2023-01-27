@@ -268,9 +268,10 @@ fn file_upload_multipart_form_data_content_type() {
     let uri = "/file-upload";
     let method = "POST";
     let http_version = "HTTP/1.1";
+    let content_type = format!("multipart/form-data; boundary={}", boundary);
 
     let raw_request_1 = format!("{} {} {} {}", method, uri, http_version, SYMBOL.new_line_carriage_return);
-    let raw_request_2 = format!("Content-Type: multipart/form-data; boundary={}{}", boundary, SYMBOL.new_line_carriage_return);
+    let raw_request_2 = format!("Content-Type: {}{}", content_type, SYMBOL.new_line_carriage_return);
     let raw_request_3 = format!("Host: 127.0.0.1:7888{}", SYMBOL.new_line_carriage_return);
     let raw_request_4 = SYMBOL.new_line_carriage_return.to_string();
     let raw_request_5 = raw_payload;
