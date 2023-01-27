@@ -237,8 +237,9 @@ fn file_upload_multipart_form_data_content_type() {
 
 
     let payload = "123".to_string();
+    let key = "some";
     let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
-    let content_disposition = format!("Content-Disposition: form-data; name=\"some\"{}", SYMBOL.new_line_carriage_return);
+    let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"{}", key, SYMBOL.new_line_carriage_return);
     let raw_payload_1 = [
         payload_boundary,
         content_disposition,
@@ -249,8 +250,9 @@ fn file_upload_multipart_form_data_content_type() {
 
 
     let payload = "45678".to_string();
+    let key = "key";
     let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
-    let content_disposition = format!("Content-Disposition: form-data; name=\"key\"{}", SYMBOL.new_line_carriage_return);
+    let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"{}", key, SYMBOL.new_line_carriage_return);
     let raw_payload_2 = [
         payload_boundary,
         content_disposition,
