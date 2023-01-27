@@ -238,7 +238,7 @@ fn file_upload_multipart_form_data_content_type() {
 
     let payload = "123".to_string();
     let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
-    let content_disposition = format!("Content-Disposition: form-data; name=\"some\"{}", SYMBOL.new_line_carriage_return);;
+    let content_disposition = format!("Content-Disposition: form-data; name=\"some\"{}", SYMBOL.new_line_carriage_return);
     let raw_payload_1 = [
         payload_boundary,
         content_disposition,
@@ -250,7 +250,7 @@ fn file_upload_multipart_form_data_content_type() {
 
     let payload = "45678".to_string();
     let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
-    let content_disposition = format!("Content-Disposition: form-data; name=\"key\"{}", SYMBOL.new_line_carriage_return);;
+    let content_disposition = format!("Content-Disposition: form-data; name=\"key\"{}", SYMBOL.new_line_carriage_return);
     let raw_payload_2 = [
         payload_boundary,
         content_disposition,
@@ -272,16 +272,14 @@ fn file_upload_multipart_form_data_content_type() {
 
     let raw_request_1 = format!("{} {} {} {}", method, uri, http_version, SYMBOL.new_line_carriage_return);
     let raw_request_2 = format!("Content-Type: {}{}", content_type, SYMBOL.new_line_carriage_return);
-    let raw_request_3 = format!("Host: 127.0.0.1:7888{}", SYMBOL.new_line_carriage_return);
-    let raw_request_4 = SYMBOL.new_line_carriage_return.to_string();
-    let raw_request_5 = raw_payload;
+    let raw_request_3 = SYMBOL.new_line_carriage_return.to_string();
+    let raw_request_4 = raw_payload;
 
     let raw_request = [
         raw_request_1,
         raw_request_2,
         raw_request_3,
         raw_request_4,
-        raw_request_5,
     ].join(SYMBOL.empty_string);
 
     let boxed_request = Request::parse_request(raw_request.as_bytes());
@@ -292,4 +290,7 @@ fn file_upload_multipart_form_data_content_type() {
     assert_eq!(uri, request.request_uri);
     assert_eq!(method, request.method);
     assert_eq!(http_version, request.http_version);
+
+    let content_type_header = request.get_header("Content-Type".to_string()).unwrap();
+    assert_eq!(content_type_header.value, content_type);
 }
