@@ -220,8 +220,22 @@ fn file_upload_text_plain_content_type() {
     ].join(SYMBOL.empty_string);
 
     let boxed_request = Request::parse_request(raw_request.as_bytes());
-
     assert!(boxed_request.is_ok());
+
+    let request = boxed_request.unwrap();
+
+    let uri = "/file-upload";
+    let method = "POST";
+    let http_version = "HTTP/1.1";
+    let content_type = "text/plain";
+
+    assert_eq!(uri, request.request_uri);
+    assert_eq!(method, request.method);
+    assert_eq!(http_version, request.http_version);
+
+    let content_type_header = request.get_header("Content-Type".to_string()).unwrap();
+    assert_eq!(content_type_header.value, content_type);
+
 }
 
 
