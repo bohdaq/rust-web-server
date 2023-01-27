@@ -232,6 +232,20 @@ fn file_upload_multipart_form_data_content_type() {
     //println!("\n\n______{}______\n\n", raw_request);
     let boundary = "------hdfkjshdfkljashdgkh";
 
+
+    let new_line = SYMBOL.new_line_carriage_return.to_string();
+
+
+    let payload = "123".to_string();
+    let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
+    let content_disposition = format!("Content-Disposition: form-data; name=\"some\"{}", SYMBOL.new_line_carriage_return);;
+    let raw_payload_1 = [
+        payload_boundary,
+        content_disposition,
+        new_line,
+        payload
+    ].join(SYMBOL.empty_string);
+
     let raw_request_1 = format!("POST /file-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
     let raw_request_2 = format!("Content-Type: multipart/form-data; boundary={}{}", boundary, SYMBOL.new_line_carriage_return);
     let raw_request_3 = format!("Host: 127.0.0.1:7888{}", SYMBOL.new_line_carriage_return);
