@@ -265,7 +265,11 @@ fn file_upload_multipart_form_data_content_type() {
         boundary.to_string(),
     ].join(SYMBOL.empty_string);
 
-    let raw_request_1 = format!("POST /file-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
+    let uri = "/file-upload";
+    let method = "POST";
+    let http_version = "HTTP/1.1";
+
+    let raw_request_1 = format!("{} {} {} {}", method, uri, http_version, SYMBOL.new_line_carriage_return);
     let raw_request_2 = format!("Content-Type: multipart/form-data; boundary={}{}", boundary, SYMBOL.new_line_carriage_return);
     let raw_request_3 = format!("Host: 127.0.0.1:7888{}", SYMBOL.new_line_carriage_return);
     let raw_request_4 = SYMBOL.new_line_carriage_return.to_string();
@@ -282,4 +286,9 @@ fn file_upload_multipart_form_data_content_type() {
     let boxed_request = Request::parse_request(raw_request.as_bytes());
 
     assert!(boxed_request.is_ok());
+
+    let request = boxed_request.unwrap();
+    assert_eq!(uri, request.request_uri);
+    assert_eq!(method, request.method);
+    assert_eq!(http_version, request.http_version);
 }
