@@ -242,15 +242,34 @@ fn file_upload_multipart_form_data_content_type() {
     let raw_payload_1 = [
         payload_boundary,
         content_disposition,
-        new_line,
-        payload
+        new_line.to_string(),
+        payload,
+        new_line.to_string(),
+    ].join(SYMBOL.empty_string);
+
+
+    let payload = "45678".to_string();
+    let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
+    let content_disposition = format!("Content-Disposition: form-data; name=\"key\"{}", SYMBOL.new_line_carriage_return);;
+    let raw_payload_2 = [
+        payload_boundary,
+        content_disposition,
+        new_line.to_string(),
+        payload,
+        new_line.to_string(),
+    ].join(SYMBOL.empty_string);
+
+    let raw_payload = [
+        raw_payload_1,
+        raw_payload_2,
+        boundary.to_string(),
     ].join(SYMBOL.empty_string);
 
     let raw_request_1 = format!("POST /file-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
     let raw_request_2 = format!("Content-Type: multipart/form-data; boundary={}{}", boundary, SYMBOL.new_line_carriage_return);
     let raw_request_3 = format!("Host: 127.0.0.1:7888{}", SYMBOL.new_line_carriage_return);
     let raw_request_4 = SYMBOL.new_line_carriage_return.to_string();
-    let raw_request_5 = format!("some-prop 1234{}", SYMBOL.new_line_carriage_return);
+    let raw_request_5 = raw_payload;
 
     let raw_request = [
         raw_request_1,
