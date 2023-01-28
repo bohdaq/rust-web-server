@@ -141,7 +141,8 @@ fn it_generates_successful_response_with_additional_headers() {
         method: METHOD.get.to_string(),
         request_uri: "/some-route".to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers: vec![]
+        headers: vec![],
+        body: vec![],
     };
 
     let raw_response = Response::generate_response(response, request);
@@ -204,7 +205,8 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
         method: METHOD.get.to_string(),
         request_uri: "/some-route".to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers: vec![]
+        headers: vec![],
+        body: vec![],
     };
 
     let raw_response = Response::generate_response(response, request);

@@ -15,7 +15,8 @@ fn not_found() {
         method: METHOD.post.to_string(),
         request_uri: "/some/path".to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers: vec![]
+        headers: vec![],
+        body: vec![],
     };
 
     let (response, _request) = App::handle_request(request);
@@ -33,7 +34,8 @@ fn static_file() {
         method: METHOD.get.to_string(),
         request_uri: "/static/content.png".to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers: vec![]
+        headers: vec![],
+        body: vec![],
     };
 
     let (response, _request) = App::handle_request(request);
@@ -51,7 +53,8 @@ fn index() {
         method: METHOD.get.to_string(),
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers: vec![]
+        headers: vec![],
+        body: vec![],
     };
 
     let (response, _request) = App::handle_request(request);
@@ -88,7 +91,8 @@ fn static_file_cors_options_preflight_request_client_hints() {
                 name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
                 value: expected_allow_headers
             },
-        ]
+        ],
+        body: vec![],
     };
 
     let (response, _request) = App::handle_request(request);
@@ -162,7 +166,8 @@ fn static_file_cors_off_options_preflight_request_client_hints() {
                 name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
                 value: expected_allow_headers
             },
-        ]
+        ],
+        body: vec![],
     };
 
     let (response, _request) = App::handle_request(request);

@@ -1,4 +1,3 @@
-use std::fs::File;
 use file_ext::FileExt;
 use crate::http::VERSION;
 use crate::experimental::request::{METHOD, Request};

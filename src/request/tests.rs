@@ -1,3 +1,4 @@
+use file_ext::FileExt;
 use crate::http::VERSION;
 use crate::request::{METHOD, Request};
 use crate::symbol::SYMBOL;
@@ -200,6 +201,170 @@ fn test_request_randomcase() {
 }
 
 #[test]
-fn file_upload() {
-    
+fn file_upload_text_plain_content_type() {
+
+    //let raw_request = String::from_utf8(Vec::from(request)).unwrap();
+    //println!("\n\n______{}______\n\n", raw_request);
+
+    let raw_request_1 = format!("POST /file-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
+    let raw_request_2 = format!("Content-Type: text/plain{}", SYMBOL.new_line_carriage_return);
+    let raw_request_3 = SYMBOL.new_line_carriage_return.to_string();
+    let raw_request_4 = format!("some-prop 1234{}", SYMBOL.new_line_carriage_return);
+
+    let raw_request = [
+        raw_request_1,
+        raw_request_2,
+        raw_request_3,
+        raw_request_4,
+    ].join(SYMBOL.empty_string);
+
+    let boxed_request = Request::parse_request(raw_request.as_bytes());
+    assert!(boxed_request.is_ok());
+
+    let request = boxed_request.unwrap();
+
+    let uri = "/file-upload";
+    let method = "POST";
+    let http_version = "HTTP/1.1";
+    let content_type = "text/plain";
+
+    assert_eq!(uri, request.request_uri);
+    assert_eq!(method, request.method);
+    assert_eq!(http_version, request.http_version);
+
+    let content_type_header = request.get_header("Content-Type".to_string()).unwrap();
+    assert_eq!(content_type_header.value, content_type);
+
+}
+
+
+#[test]
+fn file_upload_multipart_form_data_content_type() {
+
+    //let raw_request = String::from_utf8(Vec::from(request)).unwrap();
+    //println!("\n\n______{}______\n\n", raw_request);
+    let boundary = "------hdfkjshdfkljashdgkh";
+
+
+    let new_line = SYMBOL.new_line_carriage_return.to_string();
+
+
+    let payload = "123".to_string();
+    let key = "some";
+    let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
+    let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"{}", key, SYMBOL.new_line_carriage_return);
+    let raw_payload_key_value = [
+        payload_boundary,
+        content_disposition,
+        new_line.to_string(),
+        payload,
+        new_line.to_string(),
+    ].join(SYMBOL.empty_string);
+
+
+    let payload = "45678".to_string();
+    let key = "key";
+    let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
+    let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"{}", key, SYMBOL.new_line_carriage_return);
+    let raw_payload_another_key_value = [
+        payload_boundary,
+        content_disposition,
+        new_line.to_string(),
+        payload,
+        new_line.to_string(),
+    ].join(SYMBOL.empty_string);
+
+    let filename = "rws.config.toml";
+    let path = FileExt::build_path(&["src", "test", filename]);
+    let boxed_payload = FileExt::read_file(&path);
+    assert!(boxed_payload.is_ok());
+
+    let payload = boxed_payload.unwrap();
+    let key = "fileupload";
+    let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
+    let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"{}", key, filename, SYMBOL.new_line_carriage_return);
+    let raw_payload_file = [
+        payload_boundary,
+        content_disposition,
+        new_line.to_string(),
+        String::from_utf8(payload).unwrap(), // payload is not escaped, text file used for test
+        new_line.to_string(),
+    ].join(SYMBOL.empty_string);
+
+    let raw_payload = [
+        raw_payload_key_value,
+        raw_payload_another_key_value,
+        raw_payload_file,
+        boundary.to_string(),
+    ].join(SYMBOL.empty_string);
+
+    let uri = "/file-upload";
+    let method = "POST";
+    let http_version = "HTTP/1.1";
+    let content_type = format!("multipart/form-data; boundary={}", boundary);
+
+    let head = format!("{} {} {} {}", method, uri, http_version, SYMBOL.new_line_carriage_return);
+    let multipart_form_data_content_type = format!("Content-Type: {}{}", content_type, SYMBOL.new_line_carriage_return);
+    let body = raw_payload.to_string();
+
+    let raw_request = [
+        head,
+        multipart_form_data_content_type,
+        new_line.to_string(),
+        body,
+    ].join(SYMBOL.empty_string);
+
+    let boxed_request = Request::parse_request(raw_request.as_bytes());
+
+    assert!(boxed_request.is_ok());
+
+    let request = boxed_request.unwrap();
+    assert_eq!(uri, request.request_uri);
+    assert_eq!(method, request.method);
+    assert_eq!(http_version, request.http_version);
+
+    let content_type_header = request.get_header("Content-Type".to_string()).unwrap();
+    assert_eq!(content_type_header.value, content_type);
+
+    assert_eq!(raw_payload.as_bytes(), request.body);
+}
+
+
+#[test]
+fn file_upload_form_urlencoded_content_type() {
+
+    //let raw_request = String::from_utf8(Vec::from(request)).unwrap();
+    //println!("\n\n______{}______\n\n", raw_request);
+
+    let head = format!("POST /file-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
+    let form_urlencoded_content_type = format!("Content-Type: application/x-www-form-urlencoded{}", SYMBOL.new_line_carriage_return);
+    let new_line = SYMBOL.new_line_carriage_return.to_string();
+    let body = format!("some=1234&key=5678{}", SYMBOL.new_line_carriage_return);
+
+    let raw_request = [
+        head,
+        form_urlencoded_content_type,
+        new_line,
+        body.to_string(),
+    ].join(SYMBOL.empty_string);
+
+    let boxed_request = Request::parse_request(raw_request.as_bytes());
+    assert!(boxed_request.is_ok());
+
+    let request = boxed_request.unwrap();
+
+    let uri = "/file-upload";
+    let method = "POST";
+    let http_version = "HTTP/1.1";
+    let content_type = "application/x-www-form-urlencoded";
+
+    assert_eq!(uri, request.request_uri);
+    assert_eq!(method, request.method);
+    assert_eq!(http_version, request.http_version);
+
+    let content_type_header = request.get_header("Content-Type".to_string()).unwrap();
+    assert_eq!(content_type_header.value, content_type);
+
+    assert_eq!(body.as_bytes(), request.body);
+
 }

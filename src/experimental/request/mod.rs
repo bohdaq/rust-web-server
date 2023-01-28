@@ -3,7 +3,6 @@ mod tests;
 
 use std::io;
 use std::io::{BufRead, Cursor, Read};
-use file_ext::FileExt;
 use crate::header::Header;
 use crate::ext::string_ext::StringExt;
 use crate::http::HTTP;
@@ -232,11 +231,7 @@ impl Request {
         let _ = cursor.read_to_end(&mut buf).unwrap();
         let b : &[u8] = &buf;
 
-        // let body = String::from_utf8(Vec::from(b)).unwrap();
         request.body.append(&mut Vec::from(b));// = Vec::from(b);
-
-        // FileExt::create_file("out.log").unwrap();
-        // FileExt::write_file("out.log", b).unwrap();
 
         Ok(true)
     }

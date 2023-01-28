@@ -48,7 +48,8 @@ fn check_range_response_is_ok_two_part() {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -144,7 +145,8 @@ fn check_range_response_is_ok_single_part() {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);

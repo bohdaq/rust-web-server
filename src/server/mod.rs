@@ -74,7 +74,8 @@ impl Server {
             method: METHOD.get.to_string(),
             request_uri: "".to_string(),
             http_version: "".to_string(),
-            headers: vec![]
+            headers: vec![],
+            body: vec![],
         };
 
         let size = message.chars().count() as u64;

@@ -65,7 +65,8 @@ fn it_generates_successful_response_with_index_html() {
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -130,7 +131,8 @@ fn it_generates_successful_response_with_index_html_as_symlink() {
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -196,7 +198,8 @@ fn it_generates_successful_response_with_static_file() {
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -266,7 +269,8 @@ fn it_generates_not_found_page_for_absent_static_file() {
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -336,7 +340,8 @@ fn it_generates_not_found_page_for_absent_route() {
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -406,7 +411,8 @@ fn it_generates_not_found_page_for_static_directory() {
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -476,7 +482,8 @@ fn it_generates_not_found_page_for_static_subdirectory() {
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -583,7 +590,8 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -653,7 +661,8 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -726,7 +735,8 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -798,7 +808,8 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -882,7 +893,8 @@ fn check_range_response_for_not_proper_range_header() {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -948,7 +960,8 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -1014,7 +1027,8 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -1080,7 +1094,8 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -1146,7 +1161,8 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -1207,7 +1223,8 @@ fn check_range_response_for_not_proper_range_header_malformed() {
         method: METHOD.get.to_string(),
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);

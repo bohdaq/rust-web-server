@@ -61,7 +61,8 @@ fn cors_options_preflight_request() {
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -165,7 +166,8 @@ fn actual_request_after_preflight() {
         method: request_method.to_string(),
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
-        headers
+        headers,
+        body: vec![],
     };
 
     let raw_request = Request::_generate_request(request);
@@ -249,6 +251,7 @@ fn cors_allow_all() {
                 value: expected_allow_headers
             },
         ],
+        body: vec![],
     };
 
     let mut response = Response {
@@ -303,6 +306,7 @@ fn cors_process() {
                 value: origin_value.to_string()
             }
         ],
+        body: vec![],
     };
 
     let mut response = Response {
@@ -376,6 +380,7 @@ fn cors_process_default_config() {
                 value: origin_value.to_string()
             }
         ],
+        body: vec![],
     };
 
     let mut response = Response {
@@ -435,6 +440,7 @@ fn cors_process_empty_config() {
                 value: origin_value.to_string()
             }
         ],
+        body: vec![],
     };
 
     let mut response = Response {

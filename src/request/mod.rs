@@ -2,7 +2,7 @@
 mod tests;
 
 use std::io;
-use std::io::{BufRead, Cursor};
+use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use crate::ext::string_ext::StringExt;
 use crate::http::HTTP;
@@ -14,6 +14,7 @@ pub struct Request {
     pub request_uri: String,
     pub http_version: String,
     pub headers: Vec<Header>,
+    pub body: Vec<u8>,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -111,7 +112,8 @@ impl Request {
             method: "".to_string(),
             request_uri: "".to_string(),
             http_version: "".to_string(),
-            headers: vec![]
+            headers: vec![],
+            body: vec![],
         };
 
         let content_length: usize = 0;
@@ -222,6 +224,14 @@ impl Request {
                 eprintln!("unable to read request: {}", reason);
             }
         }
+
+        // remaining part is request body
+
+        let mut buf = vec![];
+        let _ = cursor.read_to_end(&mut buf).unwrap();
+        let b : &[u8] = &buf;
+
+        request.body.append(&mut Vec::from(b));// = Vec::from(b);
 
         Ok(true)
     }

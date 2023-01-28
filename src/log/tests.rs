@@ -20,6 +20,7 @@ fn log_request_response() {
             Header { name: Header::_ACCEPT_ENCODING.to_string(), value: "gzip, deflate, br".to_string() },
             Header { name: Header::_REFERER.to_string(), value: "https://127.0.0.1:7878/".to_string() },
         ],
+        body: vec![],
     };
 
     let (response, request) = App::handle_request(request);
