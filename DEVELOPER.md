@@ -37,7 +37,7 @@ To run specific test (replace client_hint::tests::client_hints_header with test 
 
 ## Debug
 
-In my setup [IDEA Community Edition](https://plugins.jetbrains.com/plugin/8182-rust/docs/rust-debugging.html) does not have support for debugging, even though it is [stated otherwise](https://www.jetbrains.com/idea/download/) on their website.
+[IDEA Community Edition](https://plugins.jetbrains.com/plugin/8182-rust/docs/rust-debugging.html) does not have support for debugging, even though it is [stated otherwise](https://www.jetbrains.com/idea/download/) on their website.
 
 While running a test you may notice the fact that stdout does not show the `println!`. To workaround this problem I usually create a file named as the test I'm running and instead of using `println!` macros simply writing the output to the file.
 
