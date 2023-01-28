@@ -231,9 +231,10 @@ impl Request {
         let mut buf = vec![];
         let _ = cursor.read_to_end(&mut buf).unwrap();
         let b : &[u8] = &buf;
-        request.body = Vec::from(b);
 
-        // let body = String::from_utf8(Vec::from(b)).unwrap();
+        let body = String::from_utf8(Vec::from(b)).unwrap();
+        request.body.append(&mut Vec::from(b));// = Vec::from(b);
+
         // FileExt::create_file("out.log").unwrap();
         // FileExt::write_file("out.log", b).unwrap();
 

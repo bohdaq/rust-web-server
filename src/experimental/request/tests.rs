@@ -336,16 +336,16 @@ fn file_upload_form_urlencoded_content_type() {
     //let raw_request = String::from_utf8(Vec::from(request)).unwrap();
     //println!("\n\n______{}______\n\n", raw_request);
 
-    let raw_request_1 = format!("POST /file-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
-    let raw_request_2 = format!("Content-Type: application/x-www-form-urlencoded{}", SYMBOL.new_line_carriage_return);
-    let raw_request_3 = SYMBOL.new_line_carriage_return.to_string();
-    let raw_request_4 = format!("some=1234&key=5678{}", SYMBOL.new_line_carriage_return);
+    let head = format!("POST /file-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
+    let form_urlencoded_content_type = format!("Content-Type: application/x-www-form-urlencoded{}", SYMBOL.new_line_carriage_return);
+    let new_line = SYMBOL.new_line_carriage_return.to_string();
+    let body = format!("some=1234&key=5678{}", SYMBOL.new_line_carriage_return);
 
     let raw_request = [
-        raw_request_1,
-        raw_request_2,
-        raw_request_3,
-        raw_request_4,
+        head,
+        form_urlencoded_content_type,
+        new_line,
+        body.to_string(),
     ].join(SYMBOL.empty_string);
 
     let boxed_request = Request::parse_request(raw_request.as_bytes());
@@ -364,5 +364,7 @@ fn file_upload_form_urlencoded_content_type() {
 
     let content_type_header = request.get_header("Content-Type".to_string()).unwrap();
     assert_eq!(content_type_header.value, content_type);
+
+    assert_eq!(body.as_bytes(), request.body);
 
 }
