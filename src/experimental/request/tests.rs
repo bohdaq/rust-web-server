@@ -1,7 +1,7 @@
 use std::fs::File;
 use file_ext::FileExt;
 use crate::http::VERSION;
-use crate::request::{METHOD, Request};
+use crate::experimental::request::{METHOD, Request};
 use crate::symbol::SYMBOL;
 
 #[test]
@@ -283,7 +283,7 @@ fn file_upload_multipart_form_data_content_type() {
     let payload = boxed_payload.unwrap();
     let key = "fileupload";
     let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
-    let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"{}; filename=\"{}\"", key, filename, SYMBOL.new_line_carriage_return);
+    let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"{}", key, filename, SYMBOL.new_line_carriage_return);
     let raw_payload_3 = [
          payload_boundary,
          content_disposition,

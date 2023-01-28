@@ -14,6 +14,8 @@ Depending on your setup you may need to run commands listed below as an administ
 
 I personally use [IDEA Community Edition](https://www.jetbrains.com/idea/download/) with [Rust plugin](https://www.jetbrains.com/rust/), it is free and works quite well with code inspections.
 
+UPDATE 28.01.2023: I've got an [open source license](https://www.jetbrains.com/community/opensource/) from JetBrains on all products.
+
 However, I **run and test from terminal**. 
 
 Before proceeding, it is a good idea to update rust toolchain:
