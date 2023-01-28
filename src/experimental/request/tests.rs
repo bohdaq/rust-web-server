@@ -254,7 +254,7 @@ fn file_upload_multipart_form_data_content_type() {
     let key = "some";
     let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
     let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"{}", key, SYMBOL.new_line_carriage_return);
-    let raw_payload_1 = [
+    let raw_payload_key_value = [
         payload_boundary,
         content_disposition,
         new_line.to_string(),
@@ -267,7 +267,7 @@ fn file_upload_multipart_form_data_content_type() {
     let key = "key";
     let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
     let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"{}", key, SYMBOL.new_line_carriage_return);
-    let raw_payload_2 = [
+    let raw_payload_another_key_value = [
         payload_boundary,
         content_disposition,
         new_line.to_string(),
@@ -284,7 +284,7 @@ fn file_upload_multipart_form_data_content_type() {
     let key = "fileupload";
     let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
     let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"{}", key, filename, SYMBOL.new_line_carriage_return);
-    let raw_payload_3 = [
+    let raw_payload_file = [
          payload_boundary,
          content_disposition,
          new_line.to_string(),
@@ -293,9 +293,9 @@ fn file_upload_multipart_form_data_content_type() {
      ].join(SYMBOL.empty_string);
 
     let raw_payload = [
-        raw_payload_1,
-        raw_payload_2,
-        raw_payload_3,
+        raw_payload_key_value,
+        raw_payload_another_key_value,
+        raw_payload_file,
         boundary.to_string(),
     ].join(SYMBOL.empty_string);
 
@@ -304,16 +304,15 @@ fn file_upload_multipart_form_data_content_type() {
     let http_version = "HTTP/1.1";
     let content_type = format!("multipart/form-data; boundary={}", boundary);
 
-    let raw_request_1 = format!("{} {} {} {}", method, uri, http_version, SYMBOL.new_line_carriage_return);
-    let raw_request_2 = format!("Content-Type: {}{}", content_type, SYMBOL.new_line_carriage_return);
-    let raw_request_3 = SYMBOL.new_line_carriage_return.to_string();
-    let raw_request_4 = raw_payload;
+    let head = format!("{} {} {} {}", method, uri, http_version, SYMBOL.new_line_carriage_return);
+    let multipart_form_data_content_type = format!("Content-Type: {}{}", content_type, SYMBOL.new_line_carriage_return);
+    let body = raw_payload.to_string();
 
     let raw_request = [
-        raw_request_1,
-        raw_request_2,
-        raw_request_3,
-        raw_request_4,
+        head,
+        multipart_form_data_content_type,
+        new_line.to_string(),
+        body,
     ].join(SYMBOL.empty_string);
 
     let boxed_request = Request::parse_request(raw_request.as_bytes());
@@ -327,6 +326,8 @@ fn file_upload_multipart_form_data_content_type() {
 
     let content_type_header = request.get_header("Content-Type".to_string()).unwrap();
     assert_eq!(content_type_header.value, content_type);
+
+    assert_eq!(raw_payload.as_bytes(), request.body);
 }
 
 
