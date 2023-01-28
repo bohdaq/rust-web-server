@@ -14,6 +14,10 @@ Depending on your setup you may need to run commands listed below as an administ
 
 I personally use [IDEA Community Edition](https://www.jetbrains.com/idea/download/) with [Rust plugin](https://www.jetbrains.com/rust/), it is free and works quite well with code inspections.
 
+On macOS to get IDE work properly run it as an administrator:
+
+> sudo /Applications/IntelliJ\ IDEA\ CE.app/Contents/MacOS/idea
+
 UPDATE 28.01.2023: I've got an [open source license](https://www.jetbrains.com/community/opensource/) from JetBrains on all products. They also have [academic licenses](https://www.jetbrains.com/community/education/) available.
 
 However, I **run and test from terminal**. 
@@ -40,6 +44,8 @@ While running a test you may notice the fact that stdout does not show the `prin
 It's not a fancy debugger, but you may print to a file all info debugger shows - variable, it's value and any additional information.
 
 Tests may be executed in parallel so use unique file name for each test to eliminate concurrency issues.
+
+Debugger support is present in [CLion](https://www.jetbrains.com/clion/) and works quite well.
 
 
 ## Build
