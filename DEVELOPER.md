@@ -14,7 +14,7 @@ Depending on your setup you may need to run commands listed below as an administ
 
 I personally use [IDEA Community Edition](https://www.jetbrains.com/idea/download/) with [Rust plugin](https://www.jetbrains.com/rust/), it is free and works quite well with code inspections.
 
-UPDATE 28.01.2023: I've got an [open source license](https://www.jetbrains.com/community/opensource/) from JetBrains on all products.
+UPDATE 28.01.2023: I've got an [open source license](https://www.jetbrains.com/community/opensource/) from JetBrains on all products. They also have [academic licenses](https://www.jetbrains.com/community/education/) available.
 
 However, I **run and test from terminal**. 
 
