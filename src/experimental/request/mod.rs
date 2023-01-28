@@ -232,7 +232,7 @@ impl Request {
         let _ = cursor.read_to_end(&mut buf).unwrap();
         let b : &[u8] = &buf;
 
-        let body = String::from_utf8(Vec::from(b)).unwrap();
+        // let body = String::from_utf8(Vec::from(b)).unwrap();
         request.body.append(&mut Vec::from(b));// = Vec::from(b);
 
         // FileExt::create_file("out.log").unwrap();
