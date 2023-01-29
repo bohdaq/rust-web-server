@@ -47,12 +47,13 @@ impl Log {
             }
         }
 
-        let log_request_response = format!("\n\nRequest (peer address is {}):\n  {} {} {}  {}\nEnd of Request\nResponse:\n  {} {} {}\n\n  Body: {} part(s), {} byte(s) total\nEnd of Response",
+        let log_request_response = format!("\n\nRequest (peer address is {}):\n  {} {} {}  {}\n  Body: {} byte(s) total (including default initialization vector)\nEnd of Request\nResponse:\n  {} {} {}\n\n  Body: {} part(s), {} byte(s) total\nEnd of Response",
                                            peer_addr,
                                            &request.http_version,
                                            &request.method,
                                            &request.request_uri,
                                            request_headers,
+                                           request.body.len(),
 
                                            &response.status_code,
                                            &response.reason_phrase,
