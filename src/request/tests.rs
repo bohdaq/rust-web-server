@@ -337,7 +337,7 @@ fn file_upload_form_urlencoded_content_type() {
     //let raw_request = String::from_utf8(Vec::from(request)).unwrap();
     //println!("\n\n______{}______\n\n", raw_request);
 
-    let head = format!("POST /file-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
+    let head = format!("POST /form-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
     let form_urlencoded_content_type = format!("Content-Type: application/x-www-form-urlencoded{}", SYMBOL.new_line_carriage_return);
     let new_line = SYMBOL.new_line_carriage_return.to_string();
     let body = format!("some=1234&key=5678");
@@ -354,7 +354,7 @@ fn file_upload_form_urlencoded_content_type() {
 
     let request = boxed_request.unwrap();
 
-    let uri = "/file-upload";
+    let uri = "/form-upload";
     let method = "POST";
     let http_version = "HTTP/1.1";
     let content_type = "application/x-www-form-urlencoded";
