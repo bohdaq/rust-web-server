@@ -14,6 +14,7 @@ pub mod server;
 pub mod symbol;
 pub mod thread_pool;
 pub mod log;
+pub mod body;
 mod experimental;
 extern crate core;
 

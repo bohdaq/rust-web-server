@@ -1,4 +1,5 @@
 use file_ext::FileExt;
+use crate::body::form_urlencoded::FormUrlEncoded;
 use crate::http::VERSION;
 use crate::request::{METHOD, Request};
 use crate::symbol::SYMBOL;
@@ -339,7 +340,7 @@ fn file_upload_form_urlencoded_content_type() {
     let head = format!("POST /file-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
     let form_urlencoded_content_type = format!("Content-Type: application/x-www-form-urlencoded{}", SYMBOL.new_line_carriage_return);
     let new_line = SYMBOL.new_line_carriage_return.to_string();
-    let body = format!("some=1234&key=5678{}", SYMBOL.new_line_carriage_return);
+    let body = format!("some=1234&key=5678");
 
     let raw_request = [
         head,
@@ -366,5 +367,11 @@ fn file_upload_form_urlencoded_content_type() {
     assert_eq!(content_type_header.value, content_type);
 
     assert_eq!(body.as_bytes(), request.body);
+
+    let boxed_parse = FormUrlEncoded::parse(request.body);
+    let form = boxed_parse.unwrap();
+
+    assert_eq!(form.get("key").unwrap(), "5678");
+    assert_eq!(form.get("some").unwrap(), "1234");
 
 }
