@@ -22,7 +22,7 @@ impl FormUrlEncodedEnctypePostMethodController {
                 .eq(FormUrlEncodedEnctypePostMethodController::FORM_URL_ENCODED_CONTENT_TYPE);
         if !is_form_url_encoded_content_type { return false }
 
-        request.request_uri == "/form" && request.method == METHOD.post
+        request.request_uri == "/form-url-encoded-enctype-post-method" && request.method == METHOD.post
     }
 
     pub fn process_request(_request: &Request, mut response: Response) -> Response {
