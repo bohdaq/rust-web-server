@@ -4,7 +4,7 @@ mod tests;
 pub mod controller;
 
 use crate::app::controller::favicon::FaviconController;
-use crate::app::controller::form::FormUrlEncodedEnctypePostMethodController;
+use crate::app::controller::form::url_encoded_enctype_post_method::FormUrlEncodedEnctypePostMethodController;
 use crate::app::controller::index::IndexController;
 use crate::app::controller::not_found::NotFoundController;
 use crate::app::controller::script::ScriptController;
