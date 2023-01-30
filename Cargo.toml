@@ -12,3 +12,4 @@ rust-version = "1.66"
 
 [dependencies]
 file-ext = "9.0.3"
+url-search-params = "9.0.0"
