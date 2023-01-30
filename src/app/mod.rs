@@ -4,7 +4,7 @@ mod tests;
 pub mod controller;
 
 use crate::app::controller::favicon::FaviconController;
-use crate::app::controller::form::FormUrlEncodedMethodPostController;
+use crate::app::controller::form::FormUrlEncodedEnctypePostMethodController;
 use crate::app::controller::index::IndexController;
 use crate::app::controller::not_found::NotFoundController;
 use crate::app::controller::script::ScriptController;
@@ -45,8 +45,8 @@ impl App {
             return (response, request)
         }
 
-        if FormUrlEncodedMethodPostController::is_matching_request(&request) {
-            response = FormUrlEncodedMethodPostController::process_request(&request, response);
+        if FormUrlEncodedEnctypePostMethodController::is_matching_request(&request) {
+            response = FormUrlEncodedEnctypePostMethodController::process_request(&request, response);
             return (response, request)
         }
 

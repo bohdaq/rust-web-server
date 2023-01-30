@@ -7,9 +7,9 @@ use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::symbol::SYMBOL;
 
-pub struct FormUrlEncodedMethodPostController;
+pub struct FormUrlEncodedEnctypePostMethodController;
 
-impl FormUrlEncodedMethodPostController {
+impl FormUrlEncodedEnctypePostMethodController {
     pub const FORM_URL_ENCODED_CONTENT_TYPE: &'static str = "application/x-www-form-urlencoded";
 
     pub fn is_matching_request(request: &Request) -> bool {
@@ -19,7 +19,7 @@ impl FormUrlEncodedMethodPostController {
         let content_type_header = boxed_content_type.unwrap();
         let is_form_url_encoded_content_type =
             content_type_header.value.to_lowercase()
-                .eq(FormUrlEncodedMethodPostController::FORM_URL_ENCODED_CONTENT_TYPE);
+                .eq(FormUrlEncodedEnctypePostMethodController::FORM_URL_ENCODED_CONTENT_TYPE);
         if !is_form_url_encoded_content_type { return false }
 
         request.request_uri == "/form" && request.method == METHOD.post
