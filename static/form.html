@@ -14,8 +14,11 @@
     </style>
 </head>
 <body>
+    <p>There's a good article on <a href="https://developer.mozilla.org/en-US/docs/Web/HTML/Element/form">form</a> functionality in HTML</p>
+    <p>Below are listed several demos on howto handle forms within the framework.</p>
+    <p>You can use these  examples for your own implementations.</p>
     <h4>Form Method Post Url Encoded Enctype</h4>
-    <p>For demo purposes, there is a <a href="https://github.com/bohdaq/rust-web-server/blob/main/src/app/controller/form/url_encoded_enctype_post_method/mod.rs">FormUrlEncodedEnctypePostMethodController</a> controller capable of handling form submission. You can use this controller as an example for your own implementations.</p>
+    <p><a href="https://github.com/bohdaq/rust-web-server/blob/main/src/app/controller/form/url_encoded_enctype_post_method/mod.rs">FormUrlEncodedEnctypePostMethodController</a> controller capable of handling form with method <i>POST</i> and enctype <i>application/x-www-form-urlencoded</i> submission.</p>
     <form method="post" action="/form-url-encoded-enctype-post-method" enctype="application/x-www-form-urlencoded">
         <label>Field 1:
             <input name="field-1" />
@@ -29,7 +32,7 @@
     </form>
 
     <h4>Form Method Get</h4>
-    <p>TODO</p>
+    <p><a href="https://github.com/bohdaq/rust-web-server/blob/main/src/app/controller/form/get_method/mod.rs">FormGetMethodController</a> controller capable of handling form with method <i>GET</i> and without enctype specified.</p>
     <form method="get" action="/form-get-method">
         <label>Field 1:
             <input name="field-1" />
