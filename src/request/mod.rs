@@ -1,12 +1,14 @@
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashMap;
 use std::io;
 use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use crate::ext::string_ext::StringExt;
 use crate::http::HTTP;
 use crate::symbol::SYMBOL;
+use url_build_parse::parse_url;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Request {
@@ -48,6 +50,34 @@ impl Request {
     pub fn get_header(&self, name: String) -> Option<&Header> {
         let header =  self.headers.iter().find(|x| x.name.to_lowercase() == name.to_lowercase());
         header
+    }
+
+    pub fn get_uri_query(&self) -> Result<Option<HashMap<String, String>>, String> {
+        // it will return an error if unable to parse url
+        // it will return None if there are no query params
+        // scheme and host required for the parse_url function
+        let url_array = ["http://", "localhost/", &self.request_uri];
+        let url = url_array.join(SYMBOL.empty_string);
+
+        let boxed_url_components = parse_url(&url);
+        if boxed_url_components.is_err() {
+            let message = boxed_url_components.err().unwrap().to_string();
+            return Err(message)
+        }
+        Ok(boxed_url_components.unwrap().query)
+    }
+
+    pub fn get_uri_path(&self) -> Result<String, String> {
+        // scheme and host required for the parse_url function
+        let url_array = ["http://", "localhost", &self.request_uri];
+        let url = url_array.join(SYMBOL.empty_string);
+
+        let boxed_url_components = parse_url(&url);
+        if boxed_url_components.is_err() {
+            let message = boxed_url_components.err().unwrap().to_string();
+            return Err(message)
+        }
+        Ok(boxed_url_components.unwrap().path)
     }
 
     pub fn method_list() -> Vec<String> {
