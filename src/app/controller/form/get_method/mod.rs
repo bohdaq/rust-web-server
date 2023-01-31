@@ -7,7 +7,6 @@ use crate::symbol::SYMBOL;
 
 pub struct FormGetMethodController;
 
-// TODO:
 impl FormGetMethodController {
 
     pub fn is_matching_request(request: &Request) -> bool {
@@ -28,28 +27,33 @@ impl FormGetMethodController {
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
 
         // here is the form data, as an example here it is printed in the response body
-        // TODO error handling
         let boxed_query_option = _request.get_uri_query();
-        let query_option = boxed_query_option.unwrap();
-        let form: HashMap<String, String> = query_option.unwrap();
-
-
-        let mut formatted_list : Vec<String> = vec![];
-        for (key, value) in form.into_iter() {
-            let formatted_output = format!("{} is {}{}", key, value, SYMBOL.new_line_carriage_return);
-            formatted_list.push(formatted_output);
+        if boxed_query_option.is_err() {
+            let error_message = boxed_query_option.clone().err().unwrap().to_string();
+            eprintln!("unable to extract query from url: {}", error_message)
         }
+        let query_option = boxed_query_option.unwrap();
+        if query_option.is_some() {
+            let form: HashMap<String, String> = query_option.unwrap();
 
-        let response_body = formatted_list.join(SYMBOL.empty_string);
-        response.content_range_list = vec![
-            ContentRange{
-                unit: Range::BYTES.to_string(),
-                range: Range { start: 0, end: response_body.len() as u64 },
-                size: response_body.len().to_string(),
-                body: Vec::from(response_body.as_bytes()),
-                content_type: MimeType::TEXT_PLAIN.to_string(),
+
+            let mut formatted_list : Vec<String> = vec![];
+            for (key, value) in form.into_iter() {
+                let formatted_output = format!("{} is {}{}", key, value, SYMBOL.new_line_carriage_return);
+                formatted_list.push(formatted_output);
             }
-        ];
+
+            let response_body = formatted_list.join(SYMBOL.empty_string);
+            response.content_range_list = vec![
+                ContentRange{
+                    unit: Range::BYTES.to_string(),
+                    range: Range { start: 0, end: response_body.len() as u64 },
+                    size: response_body.len().to_string(),
+                    body: Vec::from(response_body.as_bytes()),
+                    content_type: MimeType::TEXT_PLAIN.to_string(),
+                }
+            ];
+        }
 
         response
     }
