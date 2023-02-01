@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::header::Header;
 
 pub struct FormMultipartData;
