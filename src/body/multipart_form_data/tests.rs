@@ -59,4 +59,8 @@ fn parse_multipart_request_body() {
     ].join(SYMBOL.empty_string);
 
    // TODO:
+    let content_type = format!("multipart/form-data; boundary={}", boundary);
+    let multipart_form_data_content_type = format!("Content-Type: {}{}", content_type, SYMBOL.new_line_carriage_return);
+
+    
 }
