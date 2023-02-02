@@ -64,6 +64,8 @@ fn parse_multipart_request_body() {
     let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
     assert_eq!(actual_boundary, boundary);
 
+    FileExt::create_file("out.log").unwrap();
+    FileExt::write_file("out.log", raw_payload.len().to_string().as_bytes()).unwrap();
     let part_list = FormMultipartData::parse(raw_payload.as_bytes(), actual_boundary).unwrap();
     // TODO:
 
