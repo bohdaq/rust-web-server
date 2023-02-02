@@ -1,4 +1,5 @@
 use file_ext::FileExt;
+use crate::body::multipart_form_data::FormMultipartData;
 use crate::symbol::SYMBOL;
 
 #[test]
@@ -58,9 +59,12 @@ fn parse_multipart_request_body() {
         boundary.to_string(),
     ].join(SYMBOL.empty_string);
 
-   // TODO:
     let content_type = format!("multipart/form-data; boundary={}", boundary);
-    let multipart_form_data_content_type = format!("Content-Type: {}{}", content_type, SYMBOL.new_line_carriage_return);
 
-    
+    let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
+    assert_eq!(actual_boundary, boundary);
+
+    let part_list = FormMultipartData::parse(raw_payload.as_bytes(), actual_boundary).unwrap();
+    // TODO:
+
 }
