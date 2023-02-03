@@ -117,7 +117,7 @@ impl FormMultipartData {
                         return Err(error_message);
                     }
                     let string = boxed_line.unwrap();
-                    FileExt::write_file("out.log", string.as_bytes()).unwrap();
+                    FileExt::write_file("out.log", &body).unwrap();
                     FileExt::write_file("out.log", "string: ".to_string().as_bytes()).unwrap();
                     FileExt::write_file("out.log", string.to_string().as_bytes()).unwrap();
                 } else {
