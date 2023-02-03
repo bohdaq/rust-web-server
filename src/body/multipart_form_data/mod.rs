@@ -90,15 +90,31 @@ impl FormMultipartData {
 
         // body part. it just arbitrary bytes. ends by delimiter.
         // TODO:
+        let mut current_string_is_delimiter = false;
+        while !current_string_is_delimiter {
+            buf = vec![];
+            let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
+            if bytes_offset == 0 { break };
 
-        let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
-        let b : &[u8] = &buf;
-        bytes_read = bytes_read + bytes_offset as i32;
-        FileExt::write_file("out.log", "bytes_read".to_string().as_bytes()).unwrap();
-        FileExt::write_file("out.log", bytes_read.to_string().as_bytes()).unwrap();
+            let b : &[u8] = &buf;
+            bytes_read = bytes_read + bytes_offset as i32;
 
 
-        FileExt::write_file("out.log", b).unwrap();
+            let boxed_line = String::from_utf8(Vec::from(b));
+            if boxed_line.is_ok() {
+                let string = boxed_line.unwrap();
+                let string = StringExt::filter_ascii_control_characters(&string);
+                current_string_is_delimiter = string.starts_with(&boundary);
+
+                if current_string_is_delimiter {
+                    FileExt::write_file("out.log", "string: ".to_string().as_bytes()).unwrap();
+                    FileExt::write_file("out.log", string.to_string().as_bytes()).unwrap();
+                }
+            }
+
+        }
+
+
         if bytes_read == total_bytes as i32 {
             return Ok(())
         }
