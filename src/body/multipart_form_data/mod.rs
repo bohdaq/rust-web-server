@@ -88,6 +88,17 @@ impl FormMultipartData {
             let string = StringExt::truncate_new_line_carriage_return(&string);
 
             current_string_is_empty = string.trim().len() == 0;
+
+            if !current_string_is_empty {
+                let boxed_header = Header::parse_header(&string);
+                if boxed_header.is_err() {
+                    let message = boxed_header.err().unwrap();
+                    return Err(message)
+                }
+
+                let header = boxed_header.unwrap();
+                part.headers.push(header);
+            }
         }
 
 
