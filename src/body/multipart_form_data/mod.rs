@@ -6,7 +6,6 @@ use std::io::{BufRead, Cursor};
 use file_ext::FileExt;
 use crate::ext::string_ext::StringExt;
 use crate::header::Header;
-use crate::symbol::SYMBOL;
 
 pub struct FormMultipartData;
 
@@ -24,7 +23,7 @@ impl FormMultipartData {
         let total_bytes = data.len();
 
         FormMultipartData::
-        read_line(
+        parse_input(
             cursor,
             boundary,
             bytes_read,
@@ -36,7 +35,7 @@ impl FormMultipartData {
     }
 
     //TODO: wip
-    fn read_line(mut cursor: Cursor<&[u8]>, boundary: String, mut bytes_read: i32, total_bytes: usize) -> Result<(), String> {
+    fn parse_input(mut cursor: Cursor<&[u8]>, boundary: String, mut bytes_read: i32, total_bytes: usize) -> Result<(), String> {
         let mut buf = vec![];
         if bytes_read == 0 {
             let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
@@ -71,7 +70,7 @@ impl FormMultipartData {
             return Ok(())
         }
 
-        FormMultipartData::read_line(cursor, boundary, bytes_read, total_bytes)
+        FormMultipartData::parse_input(cursor, boundary, bytes_read, total_bytes)
     }
 
     pub fn extract_boundary(content_type: &str) -> Result<String, String> {
