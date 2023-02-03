@@ -1,6 +1,25 @@
 use crate::header::Header;
 
 #[test]
+fn parse() {
+    let raw_header = "Some-Header: some value";
+    let header = Header::parse_header(raw_header).unwrap();
+
+    assert_eq!(header.name, "Some-Header".to_string());
+    assert_eq!(header.value, "some value".to_string());
+}
+
+#[test]
+fn parse_not_valid_header() {
+    let raw_header = "some random characters";
+    let boxed_header = Header::parse_header(raw_header);
+
+    assert!(boxed_header.is_err());
+    let err_msg = boxed_header.err().unwrap();
+    assert_eq!("Unable to parse header: some random characters", err_msg);
+}
+
+#[test]
 fn header_test() {
     let header = Header { name: Header::_ORIGIN.to_string(), value: "some string".to_string() };
 

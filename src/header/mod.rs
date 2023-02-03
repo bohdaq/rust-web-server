@@ -1,8 +1,11 @@
+use file_ext::FileExt;
 use crate::client_hint::ClientHint;
 use crate::cors::Cors;
 use crate::ext::date_time_ext::DateTimeExt;
+use crate::ext::string_ext::StringExt;
 use crate::range::Range;
 use crate::request::Request;
+use crate::symbol::SYMBOL;
 
 #[cfg(test)]
 mod tests;
@@ -191,6 +194,26 @@ impl Header {
             name: Header::_DATE_UNIX_EPOCH_NANOS.to_string(),
             value: DateTimeExt::_now_unix_epoch_nanos().to_string(),
         }
+    }
+
+    pub fn parse_header(raw_header: &str) -> Result<Header, String> {
+        let escaped_header = StringExt::filter_ascii_control_characters(raw_header);
+        let escaped_header = StringExt::truncate_new_line_carriage_return(&escaped_header);
+
+        let boxed_split = escaped_header.split_once(SYMBOL.colon);
+        if boxed_split.is_none() {
+            let message = format!("Unable to parse header: {}", escaped_header);
+            return Err(message)
+        }
+
+        let (name, value) = boxed_split.unwrap();
+
+        let header = Header {
+            name: name.trim().to_string(),
+            value: value.trim().to_string(),
+        };
+
+        Ok(header)
     }
 
 }

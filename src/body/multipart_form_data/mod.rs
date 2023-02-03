@@ -16,28 +16,30 @@ pub struct Part {
 
 impl FormMultipartData {
     pub fn parse(data: &[u8], boundary: String) -> Result<Vec<Part>, String> {
-        let parts = vec![];
 
         let cursor = io::Cursor::new(data);
         let bytes_read = 0;
         let total_bytes = data.len();
 
-        
+
+        let mut part_list : Vec<Part> = vec![];
         FormMultipartData::
-        parse_form_part_recursively(
+            parse_form_part_recursively(
                 cursor,
                 boundary,
                 bytes_read,
-                total_bytes
+                total_bytes,
+                &part_list
             ).unwrap();
 
 
-        Ok(parts)
+        Ok(part_list)
     }
 
     //TODO: wip
-    fn parse_form_part_recursively(mut cursor: Cursor<&[u8]>, boundary: String, mut bytes_read: i32, total_bytes: usize) -> Result<(), String> {
+    fn parse_form_part_recursively(mut cursor: Cursor<&[u8]>, boundary: String, mut bytes_read: i32, total_bytes: usize, mut part_list: &Vec<Part>) -> Result<(), String> {
         let mut buf = vec![];
+        let mut part = Part { headers: vec![], body: vec![] };
 
         // first boundary starts parsable payload
         if bytes_read == 0 {
@@ -55,6 +57,7 @@ impl FormMultipartData {
             let string = boxed_line.unwrap();
             let string = StringExt::filter_ascii_control_characters(&string);
             let is_start_of_payload = string.starts_with(&boundary);
+
 
             FileExt::write_file("out.log", is_start_of_payload.to_string().as_bytes()).unwrap();
             buf = vec![];
@@ -132,7 +135,7 @@ impl FormMultipartData {
             return Ok(())
         }
 
-        FormMultipartData::parse_form_part_recursively(cursor, boundary, bytes_read, total_bytes)
+        FormMultipartData::parse_form_part_recursively(cursor, boundary, bytes_read, total_bytes, part_list)
     }
 
     pub fn extract_boundary(content_type: &str) -> Result<String, String> {
