@@ -38,11 +38,11 @@ impl FormMultipartData {
 
     //TODO: wip
     fn parse_form_part_recursively(
-        mut cursor: Cursor<&[u8]>,
-        boundary: String,
-        mut bytes_read: i32,
-        total_bytes: usize,
-        mut part_list: Vec<Part>) -> Result<Vec<Part>, String> {
+                mut cursor: Cursor<&[u8]>,
+                boundary: String,
+                mut bytes_read: i32,
+                total_bytes: usize,
+                mut part_list: Vec<Part>) -> Result<Vec<Part>, String> {
         let mut buf = vec![];
         let mut part = Part { headers: vec![], body: vec![] };
 
@@ -51,8 +51,8 @@ impl FormMultipartData {
             let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
             let b : &[u8] = &buf;
             bytes_read = bytes_read + bytes_offset as i32;
-            FileExt::write_file("out.log", "bytes_read".to_string().as_bytes()).unwrap();
-            FileExt::write_file("out.log", bytes_read.to_string().as_bytes()).unwrap();
+            // FileExt::write_file("out.log", "bytes_read".to_string().as_bytes()).unwrap();
+            // FileExt::write_file("out.log", bytes_read.to_string().as_bytes()).unwrap();
 
             let boxed_line = String::from_utf8(Vec::from(b));
             if boxed_line.is_err() {
@@ -62,9 +62,10 @@ impl FormMultipartData {
             let string = boxed_line.unwrap();
             let string = StringExt::filter_ascii_control_characters(&string);
             let is_start_of_payload = string.starts_with(&boundary);
+            //TODO: handle case if more than one preceeding new line
 
 
-            FileExt::write_file("out.log", is_start_of_payload.to_string().as_bytes()).unwrap();
+            // FileExt::write_file("out.log", is_start_of_payload.to_string().as_bytes()).unwrap();
             buf = vec![];
         }
 
@@ -86,11 +87,8 @@ impl FormMultipartData {
                 return Err(error_message);
             }
             let string = boxed_line.unwrap();
-            FileExt::write_file("out.log", "string: ".to_string().as_bytes()).unwrap();
-            FileExt::write_file("out.log", string.to_string().as_bytes()).unwrap();
-
-            let string = StringExt::filter_ascii_control_characters(&string);
-            let string = StringExt::truncate_new_line_carriage_return(&string);
+            // FileExt::write_file("out.log", "string: ".to_string().as_bytes()).unwrap();
+            // FileExt::write_file("out.log", string.to_string().as_bytes()).unwrap();
 
             current_string_is_empty = string.trim().len() == 0;
 
@@ -129,17 +127,17 @@ impl FormMultipartData {
                 current_string_is_boundary = string.starts_with(&boundary);
 
                 if current_string_is_boundary {
-                    let buffer_ref : &[u8] = &body;
-                    let boxed_line = String::from_utf8(Vec::from(buffer_ref));
-                    if boxed_line.is_err() {
-                        let error_message = boxed_line.err().unwrap().to_string();
-                        return Err(error_message);
-                    }
-                    let string = boxed_line.unwrap();
-                    FileExt::write_file("out.log", &body).unwrap();
+                    // let buffer_ref : &[u8] = &body;
+                    // let boxed_line = String::from_utf8(Vec::from(buffer_ref));
+                    // if boxed_line.is_err() {
+                    //     let error_message = boxed_line.err().unwrap().to_string();
+                    //     return Err(error_message);
+                    // }
+                    // let string = boxed_line.unwrap();
+                    // FileExt::write_file("out.log", &body).unwrap();
                     part.body.append(&mut body);
-                    FileExt::write_file("out.log", "string: ".to_string().as_bytes()).unwrap();
-                    FileExt::write_file("out.log", string.to_string().as_bytes()).unwrap();
+                    // FileExt::write_file("out.log", "string: ".to_string().as_bytes()).unwrap();
+                    // FileExt::write_file("out.log", string.to_string().as_bytes()).unwrap();
                 } else {
                     body.append(&mut buf.clone());
                 }
