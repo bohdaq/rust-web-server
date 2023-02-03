@@ -63,6 +63,29 @@ impl FormMultipartData {
         // headers part. by spec it shall have at least Content-Disposition header or more, following
         // by empty line. Headers shall be valid utf-8 encoded strings
         // TODO:
+        let mut current_string_is_empty = false;
+        while !current_string_is_empty {
+            buf = vec![];
+            let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
+            let b : &[u8] = &buf;
+            bytes_read = bytes_read + bytes_offset as i32;
+            // FileExt::write_file("out.log", "bytes_read".to_string().as_bytes()).unwrap();
+            // FileExt::write_file("out.log", bytes_read.to_string().as_bytes()).unwrap();
+
+            let boxed_line = String::from_utf8(Vec::from(b));
+            if boxed_line.is_err() {
+                let error_message = boxed_line.err().unwrap().to_string();
+                return Err(error_message);
+            }
+            let string = boxed_line.unwrap();
+            FileExt::write_file("out.log", "string: ".to_string().as_bytes()).unwrap();
+            FileExt::write_file("out.log", string.to_string().as_bytes()).unwrap();
+
+            let string = StringExt::filter_ascii_control_characters(&string);
+            let string = StringExt::truncate_new_line_carriage_return(&string);
+
+            current_string_is_empty = string.trim().len() == 0;
+        }
 
 
         // body part. it just arbitrary bytes. ends by delimiter.
