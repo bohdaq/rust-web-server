@@ -90,10 +90,19 @@ impl FormMultipartData {
 
         // body part. it just arbitrary bytes. ends by delimiter.
         // TODO:
+        // let mut body: Vec<u8> = vec![];
         let mut current_string_is_boundary = false;
         while !current_string_is_boundary {
             buf = vec![];
             let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
+            let b : &[u8] = &buf;
+            let boxed_line = String::from_utf8(Vec::from(b));
+            if boxed_line.is_err() {
+                let error_message = boxed_line.err().unwrap().to_string();
+                return Err(error_message);
+            }
+            let string = boxed_line.unwrap();
+            // body.append(&mut buf);
             if bytes_offset == 0 { break };
 
             let b : &[u8] = &buf;
@@ -107,6 +116,7 @@ impl FormMultipartData {
                 current_string_is_boundary = string.starts_with(&boundary);
 
                 if current_string_is_boundary {
+                    // FileExt::write_file("out.log", &body).unwrap();
                     FileExt::write_file("out.log", "string: ".to_string().as_bytes()).unwrap();
                     FileExt::write_file("out.log", string.to_string().as_bytes()).unwrap();
                 }
