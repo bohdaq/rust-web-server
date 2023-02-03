@@ -23,13 +23,13 @@ impl FormMultipartData {
 
 
         let mut part_list : Vec<Part> = vec![];
-        FormMultipartData::
+        part_list = FormMultipartData::
             parse_form_part_recursively(
                 cursor,
                 boundary,
                 bytes_read,
                 total_bytes,
-                &part_list
+                part_list
             ).unwrap();
 
 
@@ -37,7 +37,12 @@ impl FormMultipartData {
     }
 
     //TODO: wip
-    fn parse_form_part_recursively(mut cursor: Cursor<&[u8]>, boundary: String, mut bytes_read: i32, total_bytes: usize, mut part_list: &Vec<Part>) -> Result<(), String> {
+    fn parse_form_part_recursively(
+        mut cursor: Cursor<&[u8]>,
+        boundary: String,
+        mut bytes_read: i32,
+        total_bytes: usize,
+        mut part_list: Vec<Part>) -> Result<Vec<Part>, String> {
         let mut buf = vec![];
         let mut part = Part { headers: vec![], body: vec![] };
 
@@ -142,9 +147,11 @@ impl FormMultipartData {
 
         }
 
+        part_list.push(part);
+
 
         if bytes_read == total_bytes as i32 {
-            return Ok(())
+            return Ok(part_list)
         }
 
         FormMultipartData::parse_form_part_recursively(cursor, boundary, bytes_read, total_bytes, part_list)
