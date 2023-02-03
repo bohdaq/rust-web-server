@@ -24,7 +24,7 @@ impl FormMultipartData {
 
         
         FormMultipartData::
-            parse_form_part(
+        parse_form_part_recursively(
                 cursor,
                 boundary,
                 bytes_read,
@@ -36,7 +36,7 @@ impl FormMultipartData {
     }
 
     //TODO: wip
-    fn parse_form_part(mut cursor: Cursor<&[u8]>, boundary: String, mut bytes_read: i32, total_bytes: usize) -> Result<(), String> {
+    fn parse_form_part_recursively(mut cursor: Cursor<&[u8]>, boundary: String, mut bytes_read: i32, total_bytes: usize) -> Result<(), String> {
         let mut buf = vec![];
 
         // first boundary starts parsable payload
@@ -132,7 +132,7 @@ impl FormMultipartData {
             return Ok(())
         }
 
-        FormMultipartData::parse_form_part(cursor, boundary, bytes_read, total_bytes)
+        FormMultipartData::parse_form_part_recursively(cursor, boundary, bytes_read, total_bytes)
     }
 
     pub fn extract_boundary(content_type: &str) -> Result<String, String> {
