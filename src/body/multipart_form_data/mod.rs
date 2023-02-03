@@ -22,21 +22,24 @@ impl FormMultipartData {
         let bytes_read = 0;
         let total_bytes = data.len();
 
+        
         FormMultipartData::
-        parse_input(
-            cursor,
-            boundary,
-            bytes_read,
-            total_bytes
-        ).unwrap();
+            parse_form_part(
+                cursor,
+                boundary,
+                bytes_read,
+                total_bytes
+            ).unwrap();
 
 
         Ok(parts)
     }
 
     //TODO: wip
-    fn parse_input(mut cursor: Cursor<&[u8]>, boundary: String, mut bytes_read: i32, total_bytes: usize) -> Result<(), String> {
+    fn parse_form_part(mut cursor: Cursor<&[u8]>, boundary: String, mut bytes_read: i32, total_bytes: usize) -> Result<(), String> {
         let mut buf = vec![];
+
+        // first boundary starts parsable payload
         if bytes_read == 0 {
             let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
             let b : &[u8] = &buf;
@@ -57,6 +60,13 @@ impl FormMultipartData {
             buf = vec![];
         }
 
+        // headers part. by spec it shall have at least Content-Disposition header or more, following
+        // by empty line. Headers shall be valid utf-8 encoded strings
+        // TODO:
+
+
+        // body part. it just arbitrary bytes. ends by delimiter.
+        // TODO:
 
         let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
         let b : &[u8] = &buf;
@@ -70,7 +80,7 @@ impl FormMultipartData {
             return Ok(())
         }
 
-        FormMultipartData::parse_input(cursor, boundary, bytes_read, total_bytes)
+        FormMultipartData::parse_form_part(cursor, boundary, bytes_read, total_bytes)
     }
 
     pub fn extract_boundary(content_type: &str) -> Result<String, String> {
