@@ -132,6 +132,7 @@ impl FormMultipartData {
                     }
                     let string = boxed_line.unwrap();
                     FileExt::write_file("out.log", &body).unwrap();
+                    part.body.append(&mut body);
                     FileExt::write_file("out.log", "string: ".to_string().as_bytes()).unwrap();
                     FileExt::write_file("out.log", string.to_string().as_bytes()).unwrap();
                 } else {
