@@ -62,7 +62,7 @@ impl FormMultipartData {
             let string = boxed_line.unwrap();
             let string = StringExt::filter_ascii_control_characters(&string);
             let is_start_of_payload = string.starts_with(&boundary);
-            //TODO: handle case if more than one preceeding new line
+            //TODO: handle case if more than one preceding new line
 
 
             // FileExt::write_file("out.log", is_start_of_payload.to_string().as_bytes()).unwrap();
@@ -121,11 +121,13 @@ impl FormMultipartData {
 
 
             let boxed_line = String::from_utf8(Vec::from(b));
+            // body itself may contain new line characters
             if boxed_line.is_ok() {
                 let string = boxed_line.unwrap();
                 let string = StringExt::filter_ascii_control_characters(&string);
                 current_string_is_boundary = string.starts_with(&boundary);
 
+                // indicates end of a body 
                 if current_string_is_boundary {
                     // let buffer_ref : &[u8] = &body;
                     // let boxed_line = String::from_utf8(Vec::from(buffer_ref));

@@ -67,6 +67,11 @@ fn parse_multipart_request_body() {
     FileExt::create_file("out.log").unwrap();
     FileExt::write_file("out.log", raw_payload.len().to_string().as_bytes()).unwrap();
     let part_list = FormMultipartData::parse(raw_payload.as_bytes(), actual_boundary).unwrap();
+    let number_of_parts = 3;
+    assert_eq!(part_list.len(), number_of_parts);
+
+    let first_part = part_list.get(0).unwrap();
+    // assert_eq!(first_part.body, "123".as_bytes())
     // TODO:
 
 }
