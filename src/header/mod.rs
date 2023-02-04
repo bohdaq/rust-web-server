@@ -10,6 +10,8 @@ use crate::symbol::SYMBOL;
 #[cfg(test)]
 mod tests;
 
+pub mod content_disposition;
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Header {
     pub name: String,
