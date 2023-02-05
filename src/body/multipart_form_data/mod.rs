@@ -5,6 +5,7 @@ use std::io;
 use std::io::{BufRead, Cursor};
 use crate::ext::string_ext::StringExt;
 use crate::header::Header;
+use crate::symbol::SYMBOL;
 
 pub struct FormMultipartData;
 
@@ -151,6 +152,17 @@ impl FormMultipartData {
                 }
             }
 
+        }
+
+        // part body may end with a new line or carriage return and a new line
+        // in both cases new line carriage return delimiter is not part of the body
+        let body_length = part.body.len();
+        let is_new_line_carriage_return_enidng =
+            *part.body.get(body_length-2).unwrap() == b'\r'
+                && *part.body.get(body_length-1).unwrap() == b'\n';
+        part.body.remove(body_length - 1); // removing \n
+        if is_new_line_carriage_return_enidng {
+            part.body.remove(body_length - 2); // removing \r
         }
 
         part_list.push(part);

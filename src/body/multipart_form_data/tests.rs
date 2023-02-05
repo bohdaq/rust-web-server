@@ -78,6 +78,7 @@ fn parse_multipart_request_body() {
     assert_eq!(content_disposition.field_name.unwrap(), "some");
     assert_eq!(content_disposition.disposition_type, DISPOSITION_TYPE.form_data);
     assert_eq!(content_disposition.file_name, None);
+    assert_eq!("123".as_bytes(), first_part.body);
     // TODO:
 
 }
