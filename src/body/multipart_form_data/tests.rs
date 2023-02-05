@@ -34,7 +34,7 @@ fn parse_multipart_request_body() {
         content_disposition,
         new_line.to_string(),
         payload,
-        new_line.to_string(),
+        "\n".to_string(),
     ].join(SYMBOL.empty_string);
 
     let filename = "rws.config.toml";
@@ -79,6 +79,14 @@ fn parse_multipart_request_body() {
     assert_eq!(content_disposition.disposition_type, DISPOSITION_TYPE.form_data);
     assert_eq!(content_disposition.file_name, None);
     assert_eq!("123".as_bytes(), first_part.body);
+
+    let second_part = part_list.get(1).unwrap();
+    let disposition : &Header = second_part.get_header("Content-Disposition".to_string()).unwrap();
+    let content_disposition = ContentDisposition::parse(&disposition.value).unwrap();
+    assert_eq!(content_disposition.field_name.unwrap(), "key");
+    assert_eq!(content_disposition.disposition_type, DISPOSITION_TYPE.form_data);
+    assert_eq!(content_disposition.file_name, None);
+    assert_eq!("45678".as_bytes(), second_part.body);
     // TODO:
 
 }
