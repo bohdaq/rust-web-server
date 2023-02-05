@@ -1,4 +1,4 @@
-use crate::header::content_disposition::ContentDisposition;
+use crate::header::content_disposition::{ContentDisposition, DISPOSITION_TYPE};
 
 #[test]
 fn inline() {
@@ -12,4 +12,15 @@ fn attachment() {
     let raw_content_disposition = "attachment";
     let content_disposition = ContentDisposition::parse(raw_content_disposition).unwrap();
     assert_eq!(content_disposition.disposition_type, raw_content_disposition);
+}
+
+#[test]
+fn attachment_filename() {
+    let attachment = "attachment";
+    let filename = "somefile";
+    let raw_content_disposition = format!("{}; filename=\"{}\"", attachment, filename);
+    let content_disposition = ContentDisposition::parse(&raw_content_disposition).unwrap();
+    assert_eq!(content_disposition.disposition_type, DISPOSITION_TYPE.attachment);
+    assert_eq!(content_disposition.file_name.unwrap(), filename);
+    assert_eq!(content_disposition.field_name, None);
 }
