@@ -41,6 +41,7 @@ impl ContentDisposition {
 
         let mut filename = None;
         let mut fieldname = None;
+
         let boxed_second_element = parts.get(1);
         if boxed_second_element.is_some() {
             let second_element = boxed_second_element.unwrap();
@@ -58,6 +59,31 @@ impl ContentDisposition {
             let is_name_field = key == "name";
             if is_name_field  {
                 fieldname = Some(value.to_string().replace(SYMBOL.quotation_mark, SYMBOL.empty_string));
+            }
+        }
+
+        let boxed_third_element = parts.get(2);
+        if boxed_third_element.is_some() {
+            let second_element = boxed_third_element.unwrap();
+            let boxed_split = second_element.split_once(SYMBOL.equals);
+            if boxed_split.is_none() {
+                let message = format!("Unable to parse second property in the Content-Disposition header: {}", second_element);
+                return Err(message)
+            }
+            let (key, value) = boxed_split.unwrap();
+            let key = key.trim();
+            let is_filename_field = key == "filename";
+            if is_filename_field {
+                filename = Some(value.to_string().replace(SYMBOL.quotation_mark, SYMBOL.empty_string));
+            }
+            let is_name_field = key == "name";
+            if is_name_field  {
+                fieldname = Some(value.to_string().replace(SYMBOL.quotation_mark, SYMBOL.empty_string));
+            }
+
+            if !is_filename_field && !is_name_field {
+                let message = format!("Unable to parse property in the Content-Disposition header: {}", raw_content_disposition);
+                return Err(message.to_string())
             }
         }
 
