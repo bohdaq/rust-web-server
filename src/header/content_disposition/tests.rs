@@ -65,3 +65,12 @@ fn not_valid_form_data_field_filename() {
     let content_disposition_error = ContentDisposition::parse(&raw_content_disposition).err().unwrap();
     assert_eq!("Unable to parse property in the Content-Disposition header: form-data; naame=\"somefield\"; ffilename=\"somefilename\"", content_disposition_error);
 }
+
+#[test]
+fn not_valid_form_data_field_filename_v2() {
+    let attachment = "form-data";
+    let filename = "somefilename";
+    let raw_content_disposition = format!("{}; naame; ffilename=\"{}\"", attachment, filename);
+    let content_disposition_error = ContentDisposition::parse(&raw_content_disposition).err().unwrap();
+    assert_eq!("Unable to parse second property in the Content-Disposition header:  naame", content_disposition_error);
+}
