@@ -13,6 +13,13 @@ pub struct Part {
     pub body: Vec<u8>,
 }
 
+impl Part {
+    pub fn get_header(&self, name: String) -> Option<&Header> {
+        let header =  self.headers.iter().find(|x| x.name.to_lowercase() == name.to_lowercase());
+        header
+    }
+}
+
 impl FormMultipartData {
     pub fn parse(data: &[u8], boundary: String) -> Result<Vec<Part>, String> {
 

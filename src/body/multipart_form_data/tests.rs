@@ -1,5 +1,7 @@
 use file_ext::FileExt;
 use crate::body::multipart_form_data::FormMultipartData;
+use crate::header::content_disposition::{ContentDisposition, DISPOSITION_TYPE};
+use crate::header::Header;
 use crate::symbol::SYMBOL;
 
 #[test]
@@ -71,7 +73,11 @@ fn parse_multipart_request_body() {
     assert_eq!(part_list.len(), number_of_parts);
 
     let first_part = part_list.get(0).unwrap();
-    // assert_eq!(first_part.body, "123".as_bytes())
+    let disposition : &Header = first_part.get_header("Content-Disposition".to_string()).unwrap();
+    let content_disposition = ContentDisposition::parse(&disposition.value).unwrap();
+    assert_eq!(content_disposition.field_name.unwrap(), "some");
+    assert_eq!(content_disposition.disposition_type, DISPOSITION_TYPE.form_data);
+    assert_eq!(content_disposition.file_name, None);
     // TODO:
 
 }
