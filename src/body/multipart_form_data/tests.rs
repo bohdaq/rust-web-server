@@ -50,7 +50,7 @@ fn parse_multipart_request_body() {
         payload_boundary,
         content_disposition,
         new_line.to_string(),
-        String::from_utf8(payload).unwrap(), // payload is not escaped, text file used for test
+        String::from_utf8(payload.clone()).unwrap(), // payload is not escaped, text file used for test
         new_line.to_string(),
     ].join(SYMBOL.empty_string);
 
@@ -87,6 +87,13 @@ fn parse_multipart_request_body() {
     assert_eq!(content_disposition.disposition_type, DISPOSITION_TYPE.form_data);
     assert_eq!(content_disposition.file_name, None);
     assert_eq!("45678".as_bytes(), second_part.body);
-    // TODO:
+
+    let third_part = part_list.get(2).unwrap();
+    let disposition : &Header = third_part.get_header("Content-Disposition".to_string()).unwrap();
+    let content_disposition = ContentDisposition::parse(&disposition.value).unwrap();
+    assert_eq!(content_disposition.field_name.unwrap(), "fileupload");
+    assert_eq!(content_disposition.disposition_type, DISPOSITION_TYPE.form_data);
+    assert_eq!(content_disposition.file_name.unwrap(), "rws.config.toml");
+    assert_eq!(payload, third_part.body);
 
 }
