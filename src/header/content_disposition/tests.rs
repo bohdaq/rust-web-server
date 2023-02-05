@@ -4,8 +4,10 @@ use crate::header::content_disposition::{ContentDisposition, DISPOSITION_TYPE};
 #[test]
 fn not_proper_value() {
     let raw_content_disposition = "sometext";
-    let content_disposition_is_error = ContentDisposition::parse(raw_content_disposition).is_err();
+    let boxed_parse = ContentDisposition::parse(raw_content_disposition);
+    let content_disposition_is_error = boxed_parse.is_err();
     assert!(content_disposition_is_error);
+    assert_eq!("Unable to parse Content-Disposition header: sometext", boxed_parse.err().unwrap())
 }
 
 #[test]

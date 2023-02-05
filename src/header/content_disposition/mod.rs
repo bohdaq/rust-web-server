@@ -1,6 +1,4 @@
-use std::fmt::format;
-use crate::ext::string_ext::StringExt;
-use crate::symbol::{Symbol, SYMBOL};
+use crate::symbol::{SYMBOL};
 
 #[cfg(test)]
 mod tests;

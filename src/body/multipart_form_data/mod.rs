@@ -3,7 +3,6 @@ mod tests;
 
 use std::io;
 use std::io::{BufRead, Cursor};
-use file_ext::FileExt;
 use crate::ext::string_ext::StringExt;
 use crate::header::Header;
 
@@ -61,7 +60,7 @@ impl FormMultipartData {
             }
             let string = boxed_line.unwrap();
             let string = StringExt::filter_ascii_control_characters(&string);
-            let is_start_of_payload = string.starts_with(&boundary);
+            let _is_start_of_payload = string.starts_with(&boundary);
             //TODO: handle case if more than one preceding new line
 
 

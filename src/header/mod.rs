@@ -1,4 +1,3 @@
-use file_ext::FileExt;
 use crate::client_hint::ClientHint;
 use crate::cors::Cors;
 use crate::ext::date_time_ext::DateTimeExt;
