@@ -5,6 +5,7 @@ pub mod controller;
 
 use crate::app::controller::favicon::FaviconController;
 use crate::app::controller::form::get_method::FormGetMethodController;
+use crate::app::controller::form::multipart_enctype_post_method::FormMultipartEnctypePostMethodController;
 use crate::app::controller::form::url_encoded_enctype_post_method::FormUrlEncodedEnctypePostMethodController;
 use crate::app::controller::index::IndexController;
 use crate::app::controller::not_found::NotFoundController;
@@ -53,6 +54,11 @@ impl App {
 
         if FormGetMethodController::is_matching_request(&request) {
             response = FormGetMethodController::process_request(&request, response);
+            return (response, request)
+        }
+
+        if FormMultipartEnctypePostMethodController::is_matching_request(&request) {
+            response = FormMultipartEnctypePostMethodController::process_request(&request, response);
             return (response, request)
         }
 
