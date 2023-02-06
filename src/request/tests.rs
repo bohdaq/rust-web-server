@@ -202,7 +202,7 @@ fn test_request_randomcase() {
 }
 
 #[test]
-fn file_upload_text_plain_content_type() {
+fn text_plain_content_type() {
 
     //let raw_request = String::from_utf8(Vec::from(request)).unwrap();
     //println!("\n\n______{}______\n\n", raw_request);
@@ -240,7 +240,7 @@ fn file_upload_text_plain_content_type() {
 
 
 #[test]
-fn file_upload_multipart_form_data_content_type() {
+fn multipart_form_data_content_type() {
 
     //let raw_request = String::from_utf8(Vec::from(request)).unwrap();
     //println!("\n\n______{}______\n\n", raw_request);
@@ -332,7 +332,7 @@ fn file_upload_multipart_form_data_content_type() {
 
 
 #[test]
-fn file_upload_form_urlencoded_content_type() {
+fn form_urlencoded_content_type() {
 
     //let raw_request = String::from_utf8(Vec::from(request)).unwrap();
     //println!("\n\n______{}______\n\n", raw_request);
