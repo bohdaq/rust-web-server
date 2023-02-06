@@ -375,3 +375,48 @@ fn form_urlencoded_content_type() {
     assert_eq!(form.get("some").unwrap(), "1234");
 
 }
+
+#[test]
+fn form_urlencoded_content_type_ends_with_new_line() {
+
+    //let raw_request = String::from_utf8(Vec::from(request)).unwrap();
+    //println!("\n\n______{}______\n\n", raw_request);
+
+    let head = format!("POST /form-upload HTTP/1.1{}", SYMBOL.new_line_carriage_return);
+    let form_urlencoded_content_type = format!("Content-Type: application/x-www-form-urlencoded{}", SYMBOL.new_line_carriage_return);
+    let new_line = SYMBOL.new_line_carriage_return.to_string();
+    let body = format!("some=1234&key=5678{}", SYMBOL.new_line_carriage_return);
+
+    let raw_request = [
+        head,
+        form_urlencoded_content_type,
+        new_line,
+        body.to_string(),
+    ].join(SYMBOL.empty_string);
+
+    let boxed_request = Request::parse_request(raw_request.as_bytes());
+    assert!(boxed_request.is_ok());
+
+    let request = boxed_request.unwrap();
+
+    let uri = "/form-upload";
+    let method = "POST";
+    let http_version = "HTTP/1.1";
+    let content_type = "application/x-www-form-urlencoded";
+
+    assert_eq!(uri, request.request_uri);
+    assert_eq!(method, request.method);
+    assert_eq!(http_version, request.http_version);
+
+    let content_type_header = request.get_header("Content-Type".to_string()).unwrap();
+    assert_eq!(content_type_header.value, content_type);
+
+    assert_eq!(body.as_bytes(), request.body);
+
+    let boxed_parse = FormUrlEncoded::parse(request.body);
+    let form = boxed_parse.unwrap();
+
+    assert_eq!(form.get("key").unwrap(), "5678");
+    assert_eq!(form.get("some").unwrap(), "1234");
+
+}
