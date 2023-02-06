@@ -97,3 +97,54 @@ fn parse_multipart_request_body() {
     assert_eq!(payload, third_part.body);
 
 }
+
+
+#[test]
+fn parse_multipart_request_body_image() {
+    let boundary = "------hdfkjshdfkljashdgkh";
+
+
+    let new_line = SYMBOL.new_line_carriage_return.to_string();
+
+    let filename = "content.png";
+    let path = FileExt::build_path(&["static", filename]);
+    let boxed_payload = FileExt::read_file(&path);
+    assert!(boxed_payload.is_ok());
+
+    let payload = boxed_payload.unwrap();
+    let key = "fileupload";
+    let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
+    let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"{}", key, filename, SYMBOL.new_line_carriage_return);
+    let raw_payload_file = [
+        payload_boundary.as_bytes(),
+        content_disposition.as_bytes(),
+        new_line.as_bytes(),
+        &payload.clone(),
+        new_line.as_bytes(),
+    ].join(SYMBOL.empty_string.as_bytes());
+
+    let raw_payload = [
+        &raw_payload_file,
+        boundary.as_bytes(),
+    ].join(SYMBOL.empty_string.as_bytes());
+
+    let content_type = format!("multipart/form-data; boundary={}", boundary);
+
+    let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
+    assert_eq!(actual_boundary, boundary);
+
+    FileExt::create_file("out.log").unwrap();
+    FileExt::write_file("out.log", raw_payload_file.len().to_string().as_bytes()).unwrap();
+    let part_list = FormMultipartData::parse(&raw_payload, actual_boundary).unwrap();
+    let number_of_parts = 1;
+    assert_eq!(part_list.len(), number_of_parts);
+
+    let first_part = part_list.get(0).unwrap();
+    let disposition : &Header = first_part.get_header("Content-Disposition".to_string()).unwrap();
+    let content_disposition = ContentDisposition::parse(&disposition.value).unwrap();
+    assert_eq!(content_disposition.field_name.unwrap(), "fileupload");
+    assert_eq!(content_disposition.disposition_type, DISPOSITION_TYPE.form_data);
+    assert_eq!(content_disposition.file_name.unwrap(), "content.png");
+    assert_eq!(payload.len(), first_part.body.len());
+
+}

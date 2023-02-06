@@ -118,6 +118,7 @@ impl FormMultipartData {
         let mut current_string_is_boundary = false;
         while !current_string_is_boundary {
             buf = vec![];
+
             let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
 
             if bytes_offset == 0 { break };
@@ -136,20 +137,12 @@ impl FormMultipartData {
 
                 // indicates end of a body 
                 if current_string_is_boundary {
-                    // let buffer_ref : &[u8] = &body;
-                    // let boxed_line = String::from_utf8(Vec::from(buffer_ref));
-                    // if boxed_line.is_err() {
-                    //     let error_message = boxed_line.err().unwrap().to_string();
-                    //     return Err(error_message);
-                    // }
-                    // let string = boxed_line.unwrap();
-                    // FileExt::write_file("out.log", &body).unwrap();
                     part.body.append(&mut body);
-                    // FileExt::write_file("out.log", "string: ".to_string().as_bytes()).unwrap();
-                    // FileExt::write_file("out.log", string.to_string().as_bytes()).unwrap();
-                } else {
-                    body.append(&mut buf.clone());
                 }
+            }
+
+            if !current_string_is_boundary {
+                body.append(&mut buf.clone());
             }
 
         }
@@ -157,11 +150,11 @@ impl FormMultipartData {
         // part body may end with a new line or carriage return and a new line
         // in both cases new line carriage return delimiter is not part of the body
         let body_length = part.body.len();
-        let is_new_line_carriage_return_enidng =
+        let is_new_line_carriage_return_ending =
             *part.body.get(body_length-2).unwrap() == b'\r'
                 && *part.body.get(body_length-1).unwrap() == b'\n';
         part.body.remove(body_length - 1); // removing \n
-        if is_new_line_carriage_return_enidng {
+        if is_new_line_carriage_return_ending {
             part.body.remove(body_length - 2); // removing \r
         }
 
