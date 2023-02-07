@@ -58,8 +58,6 @@ impl FormMultipartData {
             let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
             let b : &[u8] = &buf;
             bytes_read = bytes_read + bytes_offset as i32;
-            // FileExt::write_file("out.log", "bytes_read".to_string().as_bytes()).unwrap();
-            // FileExt::write_file("out.log", bytes_read.to_string().as_bytes()).unwrap();
 
             let boxed_line = String::from_utf8(Vec::from(b));
             if boxed_line.is_err() {
@@ -68,11 +66,11 @@ impl FormMultipartData {
             }
             let string = boxed_line.unwrap();
             let string = StringExt::filter_ascii_control_characters(&string);
-            let _is_start_of_payload = string.starts_with(&boundary);
-            //TODO: handle case if more than one preceding new line
 
+            let _current_string_is_boundary =
+                string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
+                    .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
 
-            // FileExt::write_file("out.log", is_start_of_payload.to_string().as_bytes()).unwrap();
             buf = vec![];
         }
 
@@ -85,8 +83,6 @@ impl FormMultipartData {
             let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
             let b : &[u8] = &buf;
             bytes_read = bytes_read + bytes_offset as i32;
-            // FileExt::write_file("out.log", "bytes_read".to_string().as_bytes()).unwrap();
-            // FileExt::write_file("out.log", bytes_read.to_string().as_bytes()).unwrap();
 
             if bytes_read == total_bytes as i32 {
                 return Ok(part_list)
@@ -98,8 +94,6 @@ impl FormMultipartData {
                 return Err(error_message);
             }
             let string = boxed_line.unwrap();
-            // FileExt::write_file("out.log", "string: ".to_string().as_bytes()).unwrap();
-            // FileExt::write_file("out.log", string.to_string().as_bytes()).unwrap();
 
             current_string_is_empty = string.trim().len() == 0;
 
@@ -138,10 +132,9 @@ impl FormMultipartData {
                 let string = boxed_line.unwrap();
                 let string = StringExt::filter_ascii_control_characters(&string);
 
-                println!("\n\n\n{}\n{}\n\n\n", &string.replace(SYMBOL.hyphen, SYMBOL.empty_string), &boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
                 current_string_is_boundary =
                     string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
-                        .starts_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
+                        .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
 
                 // indicates end of a body 
                 if current_string_is_boundary {
