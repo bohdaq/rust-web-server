@@ -88,6 +88,10 @@ impl FormMultipartData {
             // FileExt::write_file("out.log", "bytes_read".to_string().as_bytes()).unwrap();
             // FileExt::write_file("out.log", bytes_read.to_string().as_bytes()).unwrap();
 
+            if bytes_read == total_bytes as i32 {
+                return Ok(part_list)
+            }
+
             let boxed_line = String::from_utf8(Vec::from(b));
             if boxed_line.is_err() {
                 let error_message = boxed_line.err().unwrap().to_string();
@@ -133,7 +137,11 @@ impl FormMultipartData {
             if boxed_line.is_ok() {
                 let string = boxed_line.unwrap();
                 let string = StringExt::filter_ascii_control_characters(&string);
-                current_string_is_boundary = string.starts_with(&boundary);
+
+                println!("\n\n\n{}\n{}\n\n\n", &string.replace(SYMBOL.hyphen, SYMBOL.empty_string), &boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
+                current_string_is_boundary =
+                    string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
+                        .starts_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
 
                 // indicates end of a body 
                 if current_string_is_boundary {

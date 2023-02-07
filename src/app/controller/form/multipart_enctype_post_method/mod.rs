@@ -48,7 +48,7 @@ impl FormMultipartEnctypePostMethodController {
 
         let mut formatted_list : Vec<String> = vec![];
         for part in part_list.into_iter() {
-            let content_disposition = _request.get_header(Header::_CONTENT_DISPOSITION.to_string()).unwrap();
+            let content_disposition = part.get_header(Header::_CONTENT_DISPOSITION.to_string()).unwrap();
             let formatted_output = format!("Content-Disposition: {} | Length:  {}{}", content_disposition.value, part.body.len(), SYMBOL.new_line_carriage_return);
             formatted_list.push(formatted_output);
         }
