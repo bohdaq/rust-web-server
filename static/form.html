@@ -46,7 +46,10 @@
     </form>
 
 
-    <h4>TODO: wip Form Method Post Multipart Enctype</h4>
+    <h4>Form Method Post Multipart Enctype</h4>
+    <p><a href="https://github.com/bohdaq/rust-web-server/blob/main/src/app/controller/form/multipart_enctype_post_method/mod.rs">FormMultipartEnctypePostMethodController</a> controller capable of handling form with method <i>POST</i> and <i>multipart/form-data</i> enctype.</p>
+
+    <p> Note: Even though such kind of form by spec supports file upload, in practice it won't work, however, server by itself, <a href="https://github.com/bohdaq/rust-web-server/blob/main/src/body/multipart_form_data/tests.rs">supports file upload</a>.</p>
     <form method="post" action="/form-multipart-enctype-post-method" enctype="multipart/form-data">
         <label>Field 1:
             <input name="field-1" />
@@ -54,10 +57,6 @@
 
         <label>Field 2:
             <input name="field-2" />
-        </label>
-
-        <label>Field 3:
-            <input type="file" name="field-3" />
         </label>
 
         <button>Save</button>
