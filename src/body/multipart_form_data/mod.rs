@@ -112,7 +112,7 @@ impl FormMultipartData {
 
         // body part. it just arbitrary bytes. ends by delimiter.
         // TODO:
-        let mut body: Vec<u8> = vec![];
+        // let mut body: Vec<u8> = vec![];
         let mut boundary_position = 0;
         let mut current_string_is_boundary = false;
         while !current_string_is_boundary {
