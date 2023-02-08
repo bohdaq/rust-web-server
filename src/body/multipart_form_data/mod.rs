@@ -25,8 +25,8 @@ impl FormMultipartData {
     pub fn parse(data: &[u8], boundary: String) -> Result<Vec<Part>, String> {
 
         let cursor = io::Cursor::new(data);
-        let bytes_read = 0;
-        let total_bytes = data.len();
+        let bytes_read : i128 = 0;
+        let total_bytes : i128 = data.len() as i128;
 
 
         let mut part_list : Vec<Part> = vec![];
@@ -43,12 +43,11 @@ impl FormMultipartData {
         Ok(part_list)
     }
 
-    //TODO: wip
     fn parse_form_part_recursively(
                 mut cursor: Cursor<&[u8]>,
                 boundary: String,
-                mut bytes_read: i32,
-                total_bytes: usize,
+                mut bytes_read: i128,
+                total_bytes: i128,
                 mut part_list: Vec<Part>) -> Result<Vec<Part>, String> {
         let mut buf = vec![];
         let mut part = Part { headers: vec![], body: vec![] };
@@ -57,7 +56,7 @@ impl FormMultipartData {
         if bytes_read == 0 {
             let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
             let b : &[u8] = &buf;
-            bytes_read = bytes_read + bytes_offset as i32;
+            bytes_read = bytes_read + bytes_offset as i128;
 
             let boxed_line = String::from_utf8(Vec::from(b));
             if boxed_line.is_err() {
@@ -76,15 +75,14 @@ impl FormMultipartData {
 
         // headers part. by spec it shall have at least Content-Disposition header or more, following
         // by empty line. Headers shall be valid utf-8 encoded strings
-        // TODO:
         let mut current_string_is_empty = false;
         while !current_string_is_empty {
             buf = vec![];
             let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
             let b : &[u8] = &buf;
-            bytes_read = bytes_read + bytes_offset as i32;
+            bytes_read = bytes_read + bytes_offset as i128;
 
-            if bytes_read == total_bytes as i32 {
+            if bytes_read == total_bytes as i128 {
                 return Ok(part_list)
             }
 
@@ -111,9 +109,7 @@ impl FormMultipartData {
 
 
         // body part. it just arbitrary bytes. ends by delimiter.
-        // TODO:
-        // let mut body: Vec<u8> = vec![];
-        let mut boundary_position = 0;
+        let mut _boundary_position = 0;
         let mut current_string_is_boundary = false;
         while !current_string_is_boundary {
             buf = vec![];
@@ -124,7 +120,7 @@ impl FormMultipartData {
 
             let b : &[u8] = &buf;
 
-            bytes_read = bytes_read + bytes_offset as i32;
+            bytes_read = bytes_read + bytes_offset as i128;
 
             let escaped_dash_boundary = boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string);
 
@@ -133,34 +129,18 @@ impl FormMultipartData {
                 let boxed_sequence = FormMultipartData::find_subsequence(b, escaped_dash_boundary.as_bytes());
                 if boxed_sequence.is_some() {
                     current_string_is_boundary = true;
-                    boundary_position = boxed_sequence.unwrap();
+                    _boundary_position = boxed_sequence.unwrap();
                 }
             }
 
-
-            // let boxed_line = String::from_utf8(Vec::from(b));
-            // body itself may contain new line characters
-            // if boxed_line.is_ok() {
-                // let string = boxed_line.unwrap();
-                // let string = StringExt::filter_ascii_control_characters(&string);
-
-                // current_string_is_boundary =
-                //     string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
-                //         .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
-
-                // indicates end of a body
-                if !current_string_is_boundary {
-                    part.body.append(&mut buf.clone());
-                }
-            // }
-
-            // if !current_string_is_boundary {
-            //     body.append(&mut buf.clone());
-            // }
+            // indicates end of a body
+            if !current_string_is_boundary {
+                part.body.append(&mut buf.clone());
+            }
 
         }
 
-        // part body may end with a new line or carriage return and a new line
+        // body for specific part may end with a new line or carriage return and a new line
         // in both cases new line carriage return delimiter is not part of the body
         let body_length = part.body.len();
         let is_new_line_carriage_return_ending =
@@ -174,7 +154,7 @@ impl FormMultipartData {
         part_list.push(part);
 
 
-        if bytes_read == total_bytes as i32 {
+        if bytes_read == total_bytes as i128 {
             return Ok(part_list)
         }
 
