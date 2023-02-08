@@ -149,14 +149,14 @@ impl FormMultipartData {
                 //         .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
 
                 // indicates end of a body
-                if current_string_is_boundary {
-                    part.body.append(&mut body);
+                if !current_string_is_boundary {
+                    part.body.append(&mut buf.clone());
                 }
             // }
 
-            if !current_string_is_boundary {
-                body.append(&mut buf.clone());
-            }
+            // if !current_string_is_boundary {
+            //     body.append(&mut buf.clone());
+            // }
 
         }
 
