@@ -125,6 +125,18 @@ impl FormMultipartData {
 
             bytes_read = bytes_read + bytes_offset as i32;
 
+            let escaped_dash_boundary = boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string);
+
+            let mut is_boundary = false;
+            let mut boundary_position = 0;
+            if b.len() >= escaped_dash_boundary.len() {
+                let boxed_sequence = FormMultipartData::find_subsequence(b, escaped_dash_boundary.as_bytes());
+                if boxed_sequence.is_some() {
+                    is_boundary = true;
+                    boundary_position = boxed_sequence.unwrap();
+                }
+            }
+
 
             let boxed_line = String::from_utf8(Vec::from(b));
             // body itself may contain new line characters
@@ -136,13 +148,13 @@ impl FormMultipartData {
                     string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
                         .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
 
-                // indicates end of a body 
-                if current_string_is_boundary {
+                // indicates end of a body
+                if is_boundary {
                     part.body.append(&mut body);
                 }
             }
 
-            if !current_string_is_boundary {
+            if !is_boundary {
                 body.append(&mut buf.clone());
             }
 
@@ -179,5 +191,9 @@ impl FormMultipartData {
 
         let (_, boundary) = boxed_split.unwrap();
         Ok(boundary.to_string())
+    }
+
+    fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+        haystack.windows(needle.len()).position(|window| window == needle)
     }
 }
