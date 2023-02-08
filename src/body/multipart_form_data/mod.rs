@@ -113,6 +113,7 @@ impl FormMultipartData {
         // body part. it just arbitrary bytes. ends by delimiter.
         // TODO:
         let mut body: Vec<u8> = vec![];
+        let mut boundary_position = 0;
         let mut current_string_is_boundary = false;
         while !current_string_is_boundary {
             buf = vec![];
@@ -127,34 +128,33 @@ impl FormMultipartData {
 
             let escaped_dash_boundary = boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string);
 
-            let mut is_boundary = false;
-            let mut boundary_position = 0;
+            current_string_is_boundary = false;
             if b.len() >= escaped_dash_boundary.len() {
                 let boxed_sequence = FormMultipartData::find_subsequence(b, escaped_dash_boundary.as_bytes());
                 if boxed_sequence.is_some() {
-                    is_boundary = true;
+                    current_string_is_boundary = true;
                     boundary_position = boxed_sequence.unwrap();
                 }
             }
 
 
-            let boxed_line = String::from_utf8(Vec::from(b));
+            // let boxed_line = String::from_utf8(Vec::from(b));
             // body itself may contain new line characters
-            if boxed_line.is_ok() {
-                let string = boxed_line.unwrap();
-                let string = StringExt::filter_ascii_control_characters(&string);
+            // if boxed_line.is_ok() {
+                // let string = boxed_line.unwrap();
+                // let string = StringExt::filter_ascii_control_characters(&string);
 
-                current_string_is_boundary =
-                    string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
-                        .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
+                // current_string_is_boundary =
+                //     string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
+                //         .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
 
                 // indicates end of a body
-                if is_boundary {
+                if current_string_is_boundary {
                     part.body.append(&mut body);
                 }
-            }
+            // }
 
-            if !is_boundary {
+            if !current_string_is_boundary {
                 body.append(&mut buf.clone());
             }
 
