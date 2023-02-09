@@ -85,11 +85,17 @@ impl ContentDisposition {
             }
         }
 
-        let content_disposition = ContentDisposition{
+        let content_disposition = ContentDisposition {
             disposition_type: disposition_type.to_string(),
             field_name: fieldname,
             file_name: filename,
         };
+
+        if disposition_type.to_string() == DISPOSITION_TYPE.form_data.to_string()
+            && content_disposition.field_name == None {
+            let message = format!("Field name is not set for Content-Disposition: {}", raw_content_disposition);
+            return Err(message)
+        }
 
         Ok(content_disposition)
     }
