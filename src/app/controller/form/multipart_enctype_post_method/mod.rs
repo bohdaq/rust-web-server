@@ -34,7 +34,11 @@ impl FormMultipartEnctypePostMethodController {
         let is_form_multipart_content_type =
             StringExt::filter_ascii_control_characters(&content_type_header.value.to_lowercase())
                 .starts_with(FormMultipartEnctypePostMethodController::MULTIPART_FORM_DATA_CONTENT_TYPE);
-        if !is_form_multipart_content_type { return false }
+        if !is_form_multipart_content_type {
+            let message = format!("Content-Type header does not start with {} for {} {}", FormMultipartEnctypePostMethodController::MULTIPART_FORM_DATA_CONTENT_TYPE, request.method, request.request_uri);
+            eprintln!("{}", message);
+            return false
+        }
 
         path == "/form-multipart-enctype-post-method" && request.method == METHOD.post
     }
