@@ -67,8 +67,22 @@ impl FormMultipartEnctypePostMethodController {
         }
         let boundary = boxed_boundary.unwrap();
 
-        // TODO: error-handling
         let boxed_part_list = FormMultipartData::parse(&_request.body.clone(), boundary);
+        if boxed_part_list.is_err() {
+            response.status_code = *STATUS_CODE_REASON_PHRASE.n400_bad_request.status_code;
+            response.reason_phrase = STATUS_CODE_REASON_PHRASE.n400_bad_request.reason_phrase.to_string();
+            let message = boxed_part_list.err().unwrap();
+            response.content_range_list = vec![
+                ContentRange{
+                    unit: Range::BYTES.to_string(),
+                    range: Range { start: 0, end: message.len() as u64 },
+                    size: message.len().to_string(),
+                    body: Vec::from(message.as_bytes()),
+                    content_type: MimeType::TEXT_PLAIN.to_string(),
+                }
+            ];
+            return response;
+        }
         let part_list = boxed_part_list.unwrap();
 
         let mut formatted_list : Vec<String> = vec![];
