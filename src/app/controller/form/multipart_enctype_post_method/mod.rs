@@ -1,5 +1,6 @@
 use crate::body::multipart_form_data::FormMultipartData;
 use crate::ext::string_ext::StringExt;
+use crate::header::content_disposition::ContentDisposition;
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
@@ -48,8 +49,10 @@ impl FormMultipartEnctypePostMethodController {
 
         let mut formatted_list : Vec<String> = vec![];
         for part in part_list.into_iter() {
-            let content_disposition = part.get_header(Header::_CONTENT_DISPOSITION.to_string()).unwrap();
-            let formatted_output = format!("Content-Disposition: {} | Length:  {}{}", content_disposition.value, part.body.len(), SYMBOL.new_line_carriage_return);
+            let content_disposition_header = part.get_header(Header::_CONTENT_DISPOSITION.to_string()).unwrap();
+            let boxed_content_disposition = ContentDisposition::parse(&content_disposition_header.value);
+            let content_disposition = boxed_content_disposition.unwrap();
+            let formatted_output = format!("{} is {} {}", content_disposition.field_name.unwrap(), String::from_utf8(part.body.clone()).unwrap(), SYMBOL.new_line_carriage_return);
             formatted_list.push(formatted_output);
         }
 
