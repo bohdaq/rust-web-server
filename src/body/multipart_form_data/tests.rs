@@ -248,3 +248,11 @@ fn parse_multipart_request_body_video() {
     assert_eq!(payload.len(), first_part.body.len());
 
 }
+
+
+#[test]
+fn parse_multipart_request_body_malformed_content_disposition_header() {
+    let content_disposition = format!("form-data; typoname=\"{}\"", "key");
+    let actual_error_content_disposition = ContentDisposition::parse(&content_disposition).err().unwrap();
+    assert_eq!(actual_error_content_disposition, "Field name is not set for Content-Disposition: form-data; typoname=\"key\"");
+}
