@@ -91,6 +91,21 @@ impl FormMultipartEnctypePostMethodController {
             }
             let content_disposition_header = boxed_content_disposition_header.unwrap();
             let boxed_content_disposition = ContentDisposition::parse(&content_disposition_header.value);
+            if boxed_content_disposition.is_err() {
+                response.status_code = *STATUS_CODE_REASON_PHRASE.n400_bad_request.status_code;
+                response.reason_phrase = STATUS_CODE_REASON_PHRASE.n400_bad_request.reason_phrase.to_string();
+                let message = boxed_content_disposition.err().unwrap();
+                response.content_range_list = vec![
+                    ContentRange{
+                        unit: Range::BYTES.to_string(),
+                        range: Range { start: 0, end: message.len() as u64 },
+                        size: message.len().to_string(),
+                        body: Vec::from(message.as_bytes()),
+                        content_type: MimeType::TEXT_PLAIN.to_string(),
+                    }
+                ];
+                return response;
+            }
             let content_disposition = boxed_content_disposition.unwrap();
             let formatted_output = format!("{} is {} {}", content_disposition.field_name.unwrap(), String::from_utf8(part.body.clone()).unwrap(), SYMBOL.new_line_carriage_return);
             formatted_list.push(formatted_output);
