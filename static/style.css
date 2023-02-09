@@ -1,0 +1,51 @@
+@media (prefers-color-scheme: dark) {
+    html, body {
+        background-color: black;
+        font-family: Roboto, sans-serif;
+        color: chartreuse;
+    }
+    a {
+        color: aqua;
+    }
+
+    .accent {
+        color: red;
+    }
+}
+
+@media (prefers-color-scheme: light) {
+    html, body {
+        background-color: whitesmoke;
+        font-family: Roboto, sans-serif;
+        color: grey;
+    }
+    a {
+        color: darkorange;
+    }
+
+    h1, h2 {
+        color: orange;
+    }
+
+    .accent {
+        color: orangered;
+    }
+}
+
+h1 {
+    font-size: 2em;
+}
+
+h2 {
+    font-size: 1.3em;
+}
+
+div {
+    font-size: 1.2em;
+    margin-top: 1em;
+}
+
+div.container {
+    max-width: 35em;
+    margin: 2em;
+}
