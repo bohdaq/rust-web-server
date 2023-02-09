@@ -28,19 +28,23 @@ impl FormMultipartData {
         let bytes_read : i128 = 0;
         let total_bytes : i128 = data.len() as i128;
 
+        let part_list : Vec<Part> = vec![];
 
-        let mut part_list : Vec<Part> = vec![];
-        part_list = FormMultipartData::
+        let boxed_part_list = FormMultipartData::
             parse_form_part_recursively(
                 cursor,
                 boundary,
                 bytes_read,
                 total_bytes,
                 part_list
-            ).unwrap();
+            );
 
+        if boxed_part_list.is_err() {
+            let message  = boxed_part_list.err().unwrap();
+            return Err(message)
+        }
 
-        Ok(part_list)
+        Ok(boxed_part_list.unwrap())
     }
 
     fn parse_form_part_recursively(
@@ -54,7 +58,12 @@ impl FormMultipartData {
 
         // first boundary starts parsable payload
         if bytes_read == 0 {
-            let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
+            let boxed_read = cursor.read_until(b'\n', &mut buf);
+            if boxed_read.is_err() {
+                let message = boxed_read.err().unwrap().to_string();
+                return Err(message);
+            }
+            let bytes_offset = boxed_read.unwrap();
             let b : &[u8] = &buf;
             bytes_read = bytes_read + bytes_offset as i128;
 
@@ -69,8 +78,6 @@ impl FormMultipartData {
             let _current_string_is_boundary =
                 string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
                     .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
-
-            buf = vec![];
         }
 
         // headers part. by spec it shall have at least Content-Disposition header or more, following
@@ -78,7 +85,12 @@ impl FormMultipartData {
         let mut current_string_is_empty = false;
         while !current_string_is_empty {
             buf = vec![];
-            let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
+            let boxed_read = cursor.read_until(b'\n', &mut buf);
+            if boxed_read.is_err() {
+                let message = boxed_read.err().unwrap().to_string();
+                return Err(message);
+            }
+            let bytes_offset = boxed_read.unwrap();
             let b : &[u8] = &buf;
             bytes_read = bytes_read + bytes_offset as i128;
 
@@ -114,7 +126,13 @@ impl FormMultipartData {
         while !current_string_is_boundary {
             buf = vec![];
 
-            let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
+            let boxed_read = cursor.read_until(b'\n', &mut buf);
+            if boxed_read.is_err() {
+                let message = boxed_read.err().unwrap().to_string();
+                return Err(message);
+            }
+
+            let bytes_offset = boxed_read.unwrap();
 
             if bytes_offset == 0 { break };
 
@@ -133,7 +151,6 @@ impl FormMultipartData {
                 }
             }
 
-            // indicates end of a body
             if !current_string_is_boundary {
                 part.body.append(&mut buf.clone());
             }
@@ -143,13 +160,26 @@ impl FormMultipartData {
         // body for specific part may end with a new line or carriage return and a new line
         // in both cases new line carriage return delimiter is not part of the body
         let body_length = part.body.len();
-        let is_new_line_carriage_return_ending =
-            *part.body.get(body_length-2).unwrap() == b'\r'
-                && *part.body.get(body_length-1).unwrap() == b'\n';
-        part.body.remove(body_length - 1); // removing \n
-        if is_new_line_carriage_return_ending {
-            part.body.remove(body_length - 2); // removing \r
+        if body_length > 2 { // check if body itself is present
+            let is_new_line_carriage_return_ending =
+                *part.body.get(body_length-2).unwrap() == b'\r'
+                    && *part.body.get(body_length-1).unwrap() == b'\n';
+
+            let is_new_line_ending =
+                *part.body.get(body_length-2).unwrap() != b'\r'
+                    && *part.body.get(body_length-1).unwrap() == b'\n';
+
+            if is_new_line_carriage_return_ending {
+                part.body.remove(body_length - 1); // removing \n
+                part.body.remove(body_length - 2); // removing \r
+            }
+
+            if is_new_line_ending {
+                part.body.remove(body_length - 1); // removing \n
+            }
         }
+
+
 
         part_list.push(part);
 
