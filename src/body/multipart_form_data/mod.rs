@@ -107,6 +107,12 @@ impl FormMultipartData {
 
             current_string_is_empty = string.trim().len() == 0;
 
+            // part body does not have any header specified
+            if current_string_is_empty && part.headers.len() == 0 {
+                let message = "One of the body parts does not have any header specified. At least Content-Disposition is required";
+                return Err(message.to_string());
+            }
+
             if !current_string_is_empty {
                 let boxed_header = Header::parse_header(&string);
                 if boxed_header.is_err() {

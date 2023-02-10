@@ -256,3 +256,43 @@ fn parse_multipart_request_body_malformed_content_disposition_header() {
     let actual_error_content_disposition = ContentDisposition::parse(&content_disposition).err().unwrap();
     assert_eq!(actual_error_content_disposition, "Field name is not set for Content-Disposition: form-data; typoname=\"key\"");
 }
+
+#[test]
+fn parse_multipart_request_body_video_no_content_disposition() {
+    let boundary = "------hdfkjshdfkljashdgkh";
+
+
+    let new_line = SYMBOL.new_line_carriage_return.to_string();
+
+    let filename = "video.mov";
+    let path = FileExt::build_path(&["static", filename]);
+    let boxed_payload = FileExt::read_file(&path);
+    assert!(boxed_payload.is_ok());
+
+    let payload = boxed_payload.unwrap();
+    let key = "fileupload";
+    let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
+    let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"{}", key, filename, SYMBOL.new_line_carriage_return);
+    let raw_payload_file = [
+        payload_boundary.as_bytes(),
+        new_line.as_bytes(),
+        &payload.clone(),
+        new_line.as_bytes(),
+    ].join(SYMBOL.empty_string.as_bytes());
+
+    let raw_payload = [
+        &raw_payload_file,
+        boundary.as_bytes(),
+    ].join(SYMBOL.empty_string.as_bytes());
+
+    let content_type = format!("multipart/form-data; boundary={}", boundary);
+
+    let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
+    assert_eq!(actual_boundary, boundary);
+
+    FileExt::create_file("out.log").unwrap();
+    FileExt::write_file("out.log", raw_payload_file.len().to_string().as_bytes()).unwrap();
+    let actual_error = FormMultipartData::parse(&raw_payload, actual_boundary).err().unwrap();
+    let expected_error = "One of the body parts does not have any header specified. At least Content-Disposition is required";
+    assert_eq!(actual_error, expected_error);
+}
