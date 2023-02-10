@@ -174,6 +174,11 @@ impl FormMultipartData {
 
         }
 
+        if !current_string_is_boundary && bytes_read == total_bytes as i128 {
+            let message = "No end boundary present in the multipart/form-data request body";
+            return Err(message.to_string());
+        }
+
         // body for specific part may end with a new line or carriage return and a new line
         // in both cases new line carriage return delimiter is not part of the body
         let body_length = part.body.len();
