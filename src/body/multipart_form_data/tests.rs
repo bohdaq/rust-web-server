@@ -272,7 +272,6 @@ fn parse_multipart_request_body_video_no_content_disposition() {
     let payload = boxed_payload.unwrap();
     let key = "fileupload";
     let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
-    let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"{}", key, filename, SYMBOL.new_line_carriage_return);
     let raw_payload_file = [
         payload_boundary.as_bytes(),
         new_line.as_bytes(),
