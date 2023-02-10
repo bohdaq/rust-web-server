@@ -339,3 +339,36 @@ fn parse_multipart_request_body_video_zero_length_payload() {
     assert_eq!(payload.len(), first_part.body.len());
 
 }
+
+#[test]
+fn parse_multipart_request_body_video_no_header_body_delimiter() {
+    let boundary = "------hdfkjshdfkljashdgkh";
+
+
+
+    let filename = "video.mov";
+
+    let key = "fileupload";
+    let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
+    let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"{}", key, filename, SYMBOL.new_line_carriage_return);
+    let raw_payload_file = [
+        payload_boundary.as_bytes(),
+        content_disposition.as_bytes(),
+    ].join(SYMBOL.empty_string.as_bytes());
+
+    let raw_payload = [
+        &raw_payload_file,
+        boundary.as_bytes(),
+    ].join(SYMBOL.empty_string.as_bytes());
+
+    let content_type = format!("multipart/form-data; boundary={}", boundary);
+
+    let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
+    assert_eq!(actual_boundary, boundary);
+
+    FileExt::create_file("out.log").unwrap();
+    FileExt::write_file("out.log", raw_payload_file.len().to_string().as_bytes()).unwrap();
+    let actual_error_message = FormMultipartData::parse(&raw_payload, actual_boundary).err().unwrap();
+    assert_eq!(actual_error_message, "There is at least one missing body part in the multipart/form-data request");
+
+}

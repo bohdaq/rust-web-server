@@ -94,10 +94,6 @@ impl FormMultipartData {
             let b : &[u8] = &buf;
             bytes_read = bytes_read + bytes_offset as i128;
 
-            if bytes_read == total_bytes as i128 {
-                return Ok(part_list)
-            }
-
             let boxed_line = String::from_utf8(Vec::from(b));
             if boxed_line.is_err() {
                 let error_message = boxed_line.err().unwrap().to_string();
@@ -105,9 +101,24 @@ impl FormMultipartData {
             }
             let string = boxed_line.unwrap();
 
+            let string = StringExt::filter_ascii_control_characters(&string);
             current_string_is_empty = string.trim().len() == 0;
 
-            // part body does not have any header specified
+            let _current_string_is_boundary =
+                string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
+                    .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
+
+            if _current_string_is_boundary {
+                let message = "There is at least one missing body part in the multipart/form-data request";
+                return Err(message.to_string())
+            }
+
+            if bytes_read == total_bytes as i128 {
+                return Ok(part_list)
+            }
+
+
+            // multipart/form-data part does not have any header specified
             if current_string_is_empty && part.headers.len() == 0 {
                 let message = "One of the body parts does not have any header specified. At least Content-Disposition is required";
                 return Err(message.to_string());
@@ -126,7 +137,7 @@ impl FormMultipartData {
         }
 
 
-        // body part. it just arbitrary bytes. ends by delimiter.
+        // multipart/form-data body part. it just arbitrary bytes. ends by delimiter.
         let mut _boundary_position = 0;
         let mut current_string_is_boundary = false;
         while !current_string_is_boundary {
