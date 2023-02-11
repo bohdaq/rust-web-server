@@ -81,7 +81,7 @@ impl FormMultipartData {
             let _some_var = _current_string_is_boundary;
 
             if string.chars().count() != 0 && !_current_string_is_boundary {
-                let message = "Request body (excluding ASCII control characters and whitespaces) starts not with a boundary";
+                let message = "Request body (excluding ASCII control characters and whitespace) starts not with a boundary";
                 return Err(message.to_string())
             }
         }

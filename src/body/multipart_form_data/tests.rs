@@ -445,7 +445,7 @@ fn parse_multipart_request_body_image_no_start_boundary() {
     assert_eq!(actual_boundary, boundary);
 
     let actual_error_message = FormMultipartData::parse(&raw_payload, actual_boundary).err().unwrap();
-    let expected_error_message = "Request body (excluding ASCII control characters and whitespaces) starts not with a boundary";
+    let expected_error_message = "Request body (excluding ASCII control characters and whitespace) starts not with a boundary";
     assert_eq!(actual_error_message, expected_error_message);
 
 }
