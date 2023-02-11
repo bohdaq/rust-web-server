@@ -74,14 +74,15 @@ impl FormMultipartData {
             }
             let string = boxed_line.unwrap();
             let string = StringExt::filter_ascii_control_characters(&string);
+            let string = StringExt::truncate_new_line_carriage_return(&string);
 
             let _current_string_is_boundary =
                 string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
                     .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
             let _some_var = _current_string_is_boundary;
 
-            if string.chars().count() != 0 && !_current_string_is_boundary {
-                let message = "Request body (excluding ASCII control characters and whitespace) starts not with a boundary";
+            if !_current_string_is_boundary {
+                let message = format!("Body in multipart/form-data request needs to start with a boundary, actual string: '{}'", string);
                 return Err(message.to_string())
             }
         }
