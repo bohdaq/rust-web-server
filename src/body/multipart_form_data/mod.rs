@@ -79,7 +79,6 @@ impl FormMultipartData {
             let _current_string_is_boundary =
                 string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
                     .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
-            let _some_var = _current_string_is_boundary;
 
             if !_current_string_is_boundary {
                 let message = format!("Body in multipart/form-data request needs to start with a boundary, actual string: '{}'", string);
