@@ -409,3 +409,43 @@ fn parse_multipart_request_body_image_no_end_boundary() {
     assert_eq!(actual_error_message, expected_error_message);
 
 }
+
+#[test]
+fn parse_multipart_request_body_image_no_start_boundary() {
+    let boundary = "------hdfkjshdfkljashdgkh";
+
+
+    let new_line = SYMBOL.new_line_carriage_return.to_string();
+
+    let filename = "content.png";
+    let path = FileExt::build_path(&["static", filename]);
+    let boxed_payload = FileExt::read_file(&path);
+    assert!(boxed_payload.is_ok());
+
+    let payload = boxed_payload.unwrap();
+    let key = "fileupload";
+    let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
+    let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"{}", key, filename, SYMBOL.new_line_carriage_return);
+    let raw_payload_file = [
+        // payload_boundary.as_bytes(),
+        content_disposition.as_bytes(),
+        new_line.as_bytes(),
+        &payload.clone(),
+        new_line.as_bytes(),
+    ].join(SYMBOL.empty_string.as_bytes());
+
+    let raw_payload = [
+        &raw_payload_file,
+        boundary.as_bytes(),
+    ].join(SYMBOL.empty_string.as_bytes());
+
+    let content_type = format!("multipart/form-data; boundary={}", boundary);
+
+    let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
+    assert_eq!(actual_boundary, boundary);
+
+    let actual_error_message = FormMultipartData::parse(&raw_payload, actual_boundary).err().unwrap();
+    let expected_error_message = "Request body (excluding ASCII control characters and whitespaces) starts not with a boundary";
+    assert_eq!(actual_error_message, expected_error_message);
+
+}
