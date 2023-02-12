@@ -234,4 +234,9 @@ impl FormMultipartData {
     fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         haystack.windows(needle.len()).position(|window| window == needle)
     }
+
+    fn generate_part(part: Part) -> Vec<u8> {
+        let part_as_bytes = vec![];
+        part_as_bytes
+    }
 }
