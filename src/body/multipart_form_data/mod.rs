@@ -235,8 +235,28 @@ impl FormMultipartData {
         haystack.windows(needle.len()).position(|window| window == needle)
     }
 
-    fn generate_part(part: Part) -> Vec<u8> {
-        let part_as_bytes = vec![];
-        part_as_bytes
+    fn generate_part(part: Part) -> Result<Vec<u8>, String> {
+        if part.headers.len() == 0 {
+            let message = "One of the body parts does not have any header specified. At least Content-Disposition is required";
+            return Err(message.to_string())
+        }
+
+        let mut formatted_header_list : String = "".to_string();
+        for header in part.headers.into_iter() {
+            let formatted = format!("{}{}", header.as_string(), SYMBOL.new_line_carriage_return.to_string());
+            formatted_header_list = [formatted_header_list, formatted].join(SYMBOL.empty_string);
+        }
+
+        let header_body_delimiter = SYMBOL.new_line_carriage_return.to_string();
+
+        let body = part.body;
+
+        let part = [
+            formatted_header_list.as_bytes().to_vec(),
+            header_body_delimiter.as_bytes().to_vec(),
+            body
+        ].join(SYMBOL.empty_string.as_bytes());
+
+        Ok(part)
     }
 }

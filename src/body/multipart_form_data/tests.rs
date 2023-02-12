@@ -1,5 +1,5 @@
 use file_ext::FileExt;
-use crate::body::multipart_form_data::FormMultipartData;
+use crate::body::multipart_form_data::{FormMultipartData, Part};
 use crate::header::content_disposition::{ContentDisposition, DISPOSITION_TYPE};
 use crate::header::Header;
 use crate::symbol::SYMBOL;
@@ -489,4 +489,12 @@ fn parse_multipart_request_body_image_extra_new_line_before_starting_payload_bou
     let expected_error_message = "Body in multipart/form-data request needs to start with a boundary, actual string: ''";
     assert_eq!(actual_error_message, expected_error_message);
 
+}
+
+#[test]
+fn generate_part_no_headers() {
+    let part = Part { headers: vec![], body: vec![] };
+    let boxed_part = FormMultipartData::generate_part(part);
+    assert!(boxed_part.is_err());
+    assert_eq!("One of the body parts does not have any header specified. At least Content-Disposition is required", boxed_part.err().unwrap())
 }

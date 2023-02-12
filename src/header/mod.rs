@@ -19,6 +19,11 @@ pub struct Header {
 
 impl Header {
 
+    pub fn as_string(&self) -> String {
+        let formatted = format!("{}: {}", self.name, self.value);
+        formatted
+    }
+
     pub const _ACCESS_CONTROL_REQUEST_METHOD: &'static str = "Access-Control-Request-Method";
     pub const _ACCESS_CONTROL_REQUEST_HEADERS: &'static str = "Access-Control-Request-Headers";
     pub const _ACCESS_CONTROL_ALLOW_ORIGIN: &'static str = "Access-Control-Allow-Origin";
