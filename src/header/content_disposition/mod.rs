@@ -21,11 +21,29 @@ impl ContentDisposition {
         let mut formatted = "".to_string();
         let is_inline = self.disposition_type.to_string() == DISPOSITION_TYPE.inline.to_string();
         if is_inline {
+            let is_file_name_specified = self.file_name.is_some();
+            if is_file_name_specified {
+                let message = "For Content-Disposition of type inline 'filename' property is redundant";
+                return Err(message.to_string());
+            }
+            let is_field_name_specified = self.field_name.is_some();
+            if is_field_name_specified {
+                let message = "For Content-Disposition of type inline 'name' property is redundant";
+                return Err(message.to_string());
+            }
+
             formatted = format!("{}: {}", Header::_CONTENT_DISPOSITION.to_string(), self.disposition_type);
         }
 
         let is_attachment = self.disposition_type.to_string() == DISPOSITION_TYPE.attachment.to_string();
         if is_attachment {
+            let is_field_name_specified = self.field_name.is_some();
+            if is_field_name_specified {
+                let message = "For Content-Disposition of type attachment 'name' property is redundant";
+                return Err(message.to_string());
+            }
+
+
             let is_file_name_specified = self.file_name.is_some();
             if is_file_name_specified {
                 let file_name = self.file_name.clone().unwrap();

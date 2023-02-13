@@ -172,3 +172,52 @@ fn as_string_attachment() {
     let actual_message = boxed_content_dispostion.unwrap();
     assert_eq!("Content-Disposition: attachment; filename=\"filename\"", actual_message);
 }
+
+#[test]
+fn as_string_attachment_extra_name() {
+    let filename = "filename".to_string();
+    let fieldname = "field".to_string();
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.attachment.to_string(),
+        field_name: Some(fieldname),
+        file_name: Some(filename),
+    };
+
+    let boxed_content_dispostion = content_disposition.as_string();
+    assert!(boxed_content_dispostion.is_err());
+
+    let actual_message = boxed_content_dispostion.err().unwrap();
+    assert_eq!("For Content-Disposition of type attachment 'name' property is redundant", actual_message);
+}
+
+#[test]
+fn as_string_inline_extra_name() {
+    let fieldname = "field".to_string();
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.inline.to_string(),
+        field_name: Some(fieldname),
+        file_name: None,
+    };
+
+    let boxed_content_dispostion = content_disposition.as_string();
+    assert!(boxed_content_dispostion.is_err());
+
+    let actual_message = boxed_content_dispostion.err().unwrap();
+    assert_eq!("For Content-Disposition of type inline 'name' property is redundant", actual_message);
+}
+
+#[test]
+fn as_string_inline_extra_filename() {
+    let filename = "filename".to_string();
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.inline.to_string(),
+        field_name: None,
+        file_name: Some(filename),
+    };
+
+    let boxed_content_dispostion = content_disposition.as_string();
+    assert!(boxed_content_dispostion.is_err());
+
+    let actual_message = boxed_content_dispostion.err().unwrap();
+    assert_eq!("For Content-Disposition of type inline 'filename' property is redundant", actual_message);
+}
