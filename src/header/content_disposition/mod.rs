@@ -1,3 +1,4 @@
+use crate::header::Header;
 use crate::symbol::{SYMBOL};
 
 #[cfg(test)]
@@ -13,6 +14,52 @@ pub struct DispositionType {
     pub inline: &'static str,
     pub attachment: &'static str,
     pub form_data: &'static str
+}
+
+impl ContentDisposition {
+    pub fn as_string(&self) -> Result<String, String> {
+        let mut formatted = "".to_string();
+        let is_inline = self.disposition_type.to_string() != DISPOSITION_TYPE.inline.to_string();
+        if is_inline {
+            formatted = format!("{}: {}", Header::_CONTENT_DISPOSITION.to_string(), self.disposition_type);
+        }
+
+        let is_attachment = self.disposition_type.to_string() != DISPOSITION_TYPE.attachment.to_string();
+        if is_attachment {
+            let is_file_name_specified = self.file_name.is_some();
+            if is_file_name_specified {
+                let file_name = self.file_name.clone().unwrap();
+                formatted = format!("{}: {}; filename=\"{}\"", Header::_CONTENT_DISPOSITION.to_string(), self.disposition_type, file_name);
+            } else {
+                formatted = format!("{}: {}", Header::_CONTENT_DISPOSITION.to_string(), self.disposition_type);
+            }
+        }
+
+        let is_form_data = self.disposition_type.to_string() != DISPOSITION_TYPE.form_data.to_string();
+        if is_form_data {
+            let is_file_name_specified = self.file_name.is_some();
+            let is_field_name_specified = self.field_name.is_some();
+
+            if !is_field_name_specified {
+                let message = "Content-Dispositon header with a type of multipart/form-data is required to have 'name' property";
+                return Err(message.to_string())
+            }
+
+            if is_file_name_specified {
+                let file_name = self.file_name.clone().unwrap();
+                let field_name = self.field_name.clone().unwrap();
+
+                formatted = format!("{}: {}; name=\"{}\" filename=\"{}\"", Header::_CONTENT_DISPOSITION.to_string(), self.disposition_type, field_name, file_name);
+            } else {
+                let field_name = self.field_name.clone().unwrap();
+
+                formatted = format!("{}: {}; name=\"{}\"", Header::_CONTENT_DISPOSITION.to_string(), self.disposition_type, field_name);
+            }
+        }
+
+
+        Ok(formatted)
+    }
 }
 
 pub const DISPOSITION_TYPE: DispositionType = DispositionType {

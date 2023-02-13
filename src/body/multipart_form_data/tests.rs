@@ -498,3 +498,16 @@ fn generate_part_no_headers() {
     assert!(boxed_part.is_err());
     assert_eq!("One of the body parts does not have any header specified. At least Content-Disposition is required", boxed_part.err().unwrap())
 }
+
+#[test]
+fn generate_part() {
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.form_data.to_string(),
+        field_name: Some("field1".to_string()),
+        file_name: None,
+    };
+    let part = Part { headers: vec![], body: vec![] };
+    let boxed_part = FormMultipartData::generate_part(part);
+    assert!(boxed_part.is_err());
+    assert_eq!("One of the body parts does not have any header specified. At least Content-Disposition is required", boxed_part.err().unwrap())
+}
