@@ -259,4 +259,9 @@ impl FormMultipartData {
 
         Ok(part)
     }
+
+    fn generate(part_list: Vec<Part>) -> Result<Vec<u8>, String> {
+        let bytes = vec![];
+        Ok(bytes)
+    }
 }
