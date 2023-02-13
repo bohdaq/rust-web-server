@@ -552,3 +552,50 @@ fn generate_part_image() {
 
     assert_eq!(expected_part, boxed_part.unwrap())
 }
+
+#[test]
+fn generate() {
+    let mut part_list = vec![];
+
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.form_data.to_string(),
+        field_name: Some("field1".to_string()),
+        file_name: None,
+    };
+
+    let header = Header::parse_header(&content_disposition.as_string().unwrap()).unwrap();
+
+    let filename = "content.png";
+    let path = FileExt::build_path(&["static", filename]);
+    let boxed_payload = FileExt::read_file(&path);
+    assert!(boxed_payload.is_ok());
+
+
+    let body = boxed_payload.unwrap();
+    let part = Part { headers: vec![header], body: body.clone() };
+
+    part_list.push(part);
+
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.form_data.to_string(),
+        field_name: Some("field2".to_string()),
+        file_name: None,
+    };
+
+    let header = Header::parse_header(&content_disposition.as_string().unwrap()).unwrap();
+
+    let filename = "audio.m4a";
+    let path = FileExt::build_path(&["static", filename]);
+    let boxed_payload = FileExt::read_file(&path);
+    assert!(boxed_payload.is_ok());
+
+
+    let body = boxed_payload.unwrap();
+    let part = Part { headers: vec![header], body: body.clone() };
+
+    part_list.push(part);
+
+    let actual_form = FormMultipartData::generate(part_list).unwrap();
+
+    // TODO: WIP
+}
