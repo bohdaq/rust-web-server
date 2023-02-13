@@ -235,7 +235,7 @@ impl FormMultipartData {
         haystack.windows(needle.len()).position(|window| window == needle)
     }
 
-    fn generate_part(part: Part) -> Result<Vec<u8>, String> {
+    pub fn generate_part(part: Part) -> Result<Vec<u8>, String> {
         if part.headers.len() == 0 {
             let message = "One of the body parts does not have any header specified. At least Content-Disposition is required";
             return Err(message.to_string())
