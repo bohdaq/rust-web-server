@@ -76,3 +76,99 @@ fn not_valid_form_data_field_filename_v2() {
     let content_disposition_error = ContentDisposition::parse(&raw_content_disposition).err().unwrap();
     assert_eq!("Unable to parse second property in the Content-Disposition header:  naame", content_disposition_error);
 }
+
+#[test]
+fn as_string_form_data_no_field() {
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.form_data.to_string(),
+        field_name: None,
+        file_name: None,
+    };
+
+    let boxed_content_dispostion = content_disposition.as_string();
+    assert!(boxed_content_dispostion.is_err());
+
+    let actual_message = boxed_content_dispostion.err().unwrap();
+    assert_eq!("Content-Dispositon header with a type of multipart/form-data is required to have 'name' property", actual_message);
+}
+
+#[test]
+fn as_string_form_data_field_specified() {
+    let field = "somefield".to_string();
+
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.form_data.to_string(),
+        field_name: Some(field),
+        file_name: None,
+    };
+
+    let boxed_content_dispostion = content_disposition.as_string();
+    assert!(boxed_content_dispostion.is_ok());
+
+    let actual_message = boxed_content_dispostion.unwrap();
+    assert_eq!("Content-Disposition: form-data; name=\"somefield\"", actual_message);
+}
+
+#[test]
+fn as_string_form_data_field_filename() {
+    let field = "somefield".to_string();
+    let file = "somefile".to_string();
+
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.form_data.to_string(),
+        field_name: Some(field),
+        file_name: Some(file),
+    };
+
+    let boxed_content_dispostion = content_disposition.as_string();
+    assert!(boxed_content_dispostion.is_ok());
+
+    let actual_message = boxed_content_dispostion.unwrap();
+    assert_eq!("Content-Disposition: form-data; name=\"somefield\"; filename=\"somefile\"", actual_message);
+}
+
+#[test]
+fn as_string_inline_no_field() {
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.inline.to_string(),
+        field_name: None,
+        file_name: None,
+    };
+
+    let boxed_content_dispostion = content_disposition.as_string();
+    assert!(boxed_content_dispostion.is_ok());
+
+    let actual_message = boxed_content_dispostion.unwrap();
+    assert_eq!("Content-Disposition: inline", actual_message);
+}
+
+#[test]
+fn as_string_attachment_no_field() {
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.attachment.to_string(),
+        field_name: None,
+        file_name: None,
+    };
+
+    let boxed_content_dispostion = content_disposition.as_string();
+    assert!(boxed_content_dispostion.is_ok());
+
+    let actual_message = boxed_content_dispostion.unwrap();
+    assert_eq!("Content-Disposition: attachment", actual_message);
+}
+
+#[test]
+fn as_string_attachment() {
+    let filename = "filename".to_string();
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.attachment.to_string(),
+        field_name: None,
+        file_name: Some(filename),
+    };
+
+    let boxed_content_dispostion = content_disposition.as_string();
+    assert!(boxed_content_dispostion.is_ok());
+
+    let actual_message = boxed_content_dispostion.unwrap();
+    assert_eq!("Content-Disposition: attachment; filename=\"filename\"", actual_message);
+}

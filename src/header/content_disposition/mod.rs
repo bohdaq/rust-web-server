@@ -19,12 +19,12 @@ pub struct DispositionType {
 impl ContentDisposition {
     pub fn as_string(&self) -> Result<String, String> {
         let mut formatted = "".to_string();
-        let is_inline = self.disposition_type.to_string() != DISPOSITION_TYPE.inline.to_string();
+        let is_inline = self.disposition_type.to_string() == DISPOSITION_TYPE.inline.to_string();
         if is_inline {
             formatted = format!("{}: {}", Header::_CONTENT_DISPOSITION.to_string(), self.disposition_type);
         }
 
-        let is_attachment = self.disposition_type.to_string() != DISPOSITION_TYPE.attachment.to_string();
+        let is_attachment = self.disposition_type.to_string() == DISPOSITION_TYPE.attachment.to_string();
         if is_attachment {
             let is_file_name_specified = self.file_name.is_some();
             if is_file_name_specified {
@@ -35,7 +35,7 @@ impl ContentDisposition {
             }
         }
 
-        let is_form_data = self.disposition_type.to_string() != DISPOSITION_TYPE.form_data.to_string();
+        let is_form_data = self.disposition_type.to_string() == DISPOSITION_TYPE.form_data.to_string();
         if is_form_data {
             let is_file_name_specified = self.file_name.is_some();
             let is_field_name_specified = self.field_name.is_some();
@@ -49,7 +49,7 @@ impl ContentDisposition {
                 let file_name = self.file_name.clone().unwrap();
                 let field_name = self.field_name.clone().unwrap();
 
-                formatted = format!("{}: {}; name=\"{}\" filename=\"{}\"", Header::_CONTENT_DISPOSITION.to_string(), self.disposition_type, field_name, file_name);
+                formatted = format!("{}: {}; name=\"{}\"; filename=\"{}\"", Header::_CONTENT_DISPOSITION.to_string(), self.disposition_type, field_name, file_name);
             } else {
                 let field_name = self.field_name.clone().unwrap();
 
