@@ -506,8 +506,19 @@ fn generate_part() {
         field_name: Some("field1".to_string()),
         file_name: None,
     };
-    let part = Part { headers: vec![], body: vec![] };
+
+    let header = Header::parse_header(&content_disposition.as_string().unwrap()).unwrap();
+
+    let body = "some-data".as_bytes().to_vec();
+    let part = Part { headers: vec![header], body: body.clone() };
     let boxed_part = FormMultipartData::generate_part(part);
-    assert!(boxed_part.is_err());
-    assert_eq!("One of the body parts does not have any header specified. At least Content-Disposition is required", boxed_part.err().unwrap())
+    assert!(boxed_part.is_ok());
+
+    let expected_part: Vec<u8> = [
+        "Content-Disposition: form-data; name=\"field1\"\r\n".as_bytes().to_vec(),
+        "\r\n".as_bytes().to_vec(),
+        body.clone()
+    ].join(SYMBOL.empty_string.as_bytes());
+
+    assert_eq!(expected_part, boxed_part.unwrap())
 }
