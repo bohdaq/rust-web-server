@@ -522,3 +522,33 @@ fn generate_part() {
 
     assert_eq!(expected_part, boxed_part.unwrap())
 }
+
+#[test]
+fn generate_part_image() {
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.form_data.to_string(),
+        field_name: Some("field1".to_string()),
+        file_name: None,
+    };
+
+    let header = Header::parse_header(&content_disposition.as_string().unwrap()).unwrap();
+
+    let filename = "content.png";
+    let path = FileExt::build_path(&["static", filename]);
+    let boxed_payload = FileExt::read_file(&path);
+    assert!(boxed_payload.is_ok());
+
+
+    let body = boxed_payload.unwrap();
+    let part = Part { headers: vec![header], body: body.clone() };
+    let boxed_part = FormMultipartData::generate_part(part);
+    assert!(boxed_part.is_ok());
+
+    let expected_part: Vec<u8> = [
+        "Content-Disposition: form-data; name=\"field1\"\r\n".as_bytes().to_vec(),
+        "\r\n".as_bytes().to_vec(),
+        body.clone()
+    ].join(SYMBOL.empty_string.as_bytes());
+
+    assert_eq!(expected_part, boxed_part.unwrap())
+}
