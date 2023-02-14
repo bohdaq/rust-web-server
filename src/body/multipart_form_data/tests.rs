@@ -602,6 +602,8 @@ fn generate() {
 
     let first_part = form.get(0).unwrap();
     assert_eq!(first_part.body.len(), first_body.len());
+    assert_eq!(first_part.headers.len(), 1);
+    assert_eq!(first_part.body, first_body);
 
     let first_content_disposition = first_part.get_header("Content-Disposition".to_string()).unwrap();
     assert_eq!(first_content_disposition.name, "Content-Disposition");
@@ -609,6 +611,8 @@ fn generate() {
 
     let second_part = form.get(1).unwrap();
     assert_eq!(second_part.body.len(), second_body.len());
+    assert_eq!(second_part.headers.len(), 1);
+    assert_eq!(second_part.body, second_body);
 
     let second_content_disposition = second_part.get_header("Content-Disposition".to_string()).unwrap();
     assert_eq!(second_content_disposition.name, "Content-Disposition");
