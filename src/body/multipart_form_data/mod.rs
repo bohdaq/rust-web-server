@@ -280,7 +280,7 @@ impl FormMultipartData {
             bytes.push(boundary.as_bytes().to_vec());
         }
 
-        let result = bytes.join(SYMBOL.empty_string.as_bytes());
+        let result = bytes.join(SYMBOL.new_line_carriage_return.as_bytes());
 
         Ok(result)
     }
