@@ -261,8 +261,13 @@ impl FormMultipartData {
     }
 
     fn generate(part_list: Vec<Part>, boundary: &str) -> Result<Vec<u8>, String> {
-        let bytes = vec![];
-        // TODO: WIP
+        if part_list.len() == 0 {
+            let message = "List of the multipart/form-data request body parts is empty";
+            return Err(message.to_string());
+        }
+
+        let mut bytes = vec![];
+        bytes.push(boundary.as_bytes().to_vec());
 
         for part in part_list.into_iter() {
             let boxed_part_as_bytes = FormMultipartData::generate_part(part);
@@ -271,9 +276,12 @@ impl FormMultipartData {
                 return Err(message);
             }
             let part_as_bytes = boxed_part_as_bytes.unwrap();
-
+            bytes.push(part_as_bytes);
+            bytes.push(boundary.as_bytes().to_vec());
         }
 
-        Ok(bytes)
+        let result = bytes.join(SYMBOL.empty_string.as_bytes());
+
+        Ok(result)
     }
 }
