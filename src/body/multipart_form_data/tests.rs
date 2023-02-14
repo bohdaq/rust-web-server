@@ -424,10 +424,8 @@ fn parse_multipart_request_body_image_no_start_boundary() {
 
     let payload = boxed_payload.unwrap();
     let key = "fileupload";
-    let payload_boundary = format!("{}{}", boundary,  SYMBOL.new_line_carriage_return);
     let content_disposition = format!("Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"{}", key, filename, SYMBOL.new_line_carriage_return);
     let raw_payload_file = [
-        // payload_boundary.as_bytes(),
         content_disposition.as_bytes(),
         new_line.as_bytes(),
         &payload.clone(),
@@ -571,8 +569,8 @@ fn generate() {
     assert!(boxed_payload.is_ok());
 
 
-    let body = boxed_payload.unwrap();
-    let part = Part { headers: vec![header], body: body.clone() };
+    let first_body = boxed_payload.unwrap();
+    let part = Part { headers: vec![header.clone()], body: first_body.clone() };
 
     part_list.push(part);
 
@@ -590,8 +588,8 @@ fn generate() {
     assert!(boxed_payload.is_ok());
 
 
-    let body = boxed_payload.unwrap();
-    let part = Part { headers: vec![header], body: body.clone() };
+    let second_body = boxed_payload.unwrap();
+    let part = Part { headers: vec![header.clone()], body: second_body.clone() };
 
     part_list.push(part);
 
@@ -599,5 +597,20 @@ fn generate() {
     let boundary = "------someboundary------";
     let actual_form = FormMultipartData::generate(part_list, boundary).unwrap();
 
-    // TODO: WIP
+    let form = FormMultipartData::parse(&actual_form, boundary.to_string()).unwrap();
+    assert_eq!(form.len(), 2);
+
+    let first_part = form.get(0).unwrap();
+    assert_eq!(first_part.body.len(), first_body.len());
+
+    let first_content_disposition = first_part.get_header("Content-Disposition".to_string()).unwrap();
+    assert_eq!(first_content_disposition.name, "Content-Disposition");
+    assert_eq!(first_content_disposition.value, "form-data; name=\"field1\"");
+
+    let second_part = form.get(1).unwrap();
+    assert_eq!(second_part.body.len(), second_body.len());
+
+    let second_content_disposition = second_part.get_header("Content-Disposition".to_string()).unwrap();
+    assert_eq!(second_content_disposition.name, "Content-Disposition");
+    assert_eq!(second_content_disposition.value, "form-data; name=\"field2\"");
 }
