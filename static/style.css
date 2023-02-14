@@ -19,6 +19,13 @@
         padding: .2em;
         border: none;
     }
+    button {
+        background-color: darkgreen;
+        border: none;
+        padding: 0.5em 1em;
+        color: white;
+        font-size: 1em;
+    }
 }
 
 @media (prefers-color-scheme: light) {
@@ -45,6 +52,14 @@
         font-size: 1.5em;
         padding: .2em;
         border: none;
+    }
+
+    button {
+        background-color: darkorange;
+        border: none;
+        padding: 0.5em 1em;
+        color: white;
+        font-size: 1em;
     }
 }
 
