@@ -11,6 +11,14 @@
     .accent {
         color: red;
     }
+
+    input {
+        background-color: green;
+        color: white;
+        font-size: 1.5em;
+        padding: .2em;
+        border: none;
+    }
 }
 
 @media (prefers-color-scheme: light) {
@@ -29,6 +37,14 @@
 
     .accent {
         color: orangered;
+    }
+
+    input {
+        background-color: orange;
+        color: white;
+        font-size: 1.5em;
+        padding: .2em;
+        border: none;
     }
 }
 
