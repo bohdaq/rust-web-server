@@ -15,7 +15,6 @@ pub mod symbol;
 pub mod thread_pool;
 pub mod log;
 pub mod body;
-mod experimental;
 extern crate core;
 
 use crate::entry_point::{bootstrap, get_ip_port_thread_count, set_default_values};
