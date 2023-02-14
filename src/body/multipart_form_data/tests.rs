@@ -595,7 +595,9 @@ fn generate() {
 
     part_list.push(part);
 
-    let actual_form = FormMultipartData::generate(part_list).unwrap();
+
+    let boundary = "------someboundary------";
+    let actual_form = FormMultipartData::generate(part_list, boundary).unwrap();
 
     // TODO: WIP
 }

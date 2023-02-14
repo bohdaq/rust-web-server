@@ -260,10 +260,20 @@ impl FormMultipartData {
         Ok(part)
     }
 
-    fn generate(part_list: Vec<Part>) -> Result<Vec<u8>, String> {
+    fn generate(part_list: Vec<Part>, boundary: &str) -> Result<Vec<u8>, String> {
         let bytes = vec![];
         // TODO: WIP
-        
+
+        for part in part_list.into_iter() {
+            let boxed_part_as_bytes = FormMultipartData::generate_part(part);
+            if boxed_part_as_bytes.is_err() {
+                let message = boxed_part_as_bytes.err().unwrap();
+                return Err(message);
+            }
+            let part_as_bytes = boxed_part_as_bytes.unwrap();
+
+        }
+
         Ok(bytes)
     }
 }
