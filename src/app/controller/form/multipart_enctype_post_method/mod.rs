@@ -8,7 +8,6 @@ use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::symbol::SYMBOL;
 
-// TODO: wip
 pub struct FormMultipartEnctypePostMethodController;
 
 impl FormMultipartEnctypePostMethodController {
