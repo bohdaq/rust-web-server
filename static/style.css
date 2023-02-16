@@ -80,3 +80,9 @@ div.container {
     max-width: 35em;
     margin: 2em;
 }
+
+form label {
+    display: flex;
+    flex-direction: column;
+    max-width: 30em;
+}
