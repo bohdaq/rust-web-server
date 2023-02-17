@@ -29,7 +29,23 @@
         const onchange = (ev) => {
             const file_list = ev.target.files;
             console.log(file_list);
+
+            for (const file of file_list) {
+                let start = 0;
+                let end = 10;
+                let blob = file.slice(start, end);
+                reader.readAsBinaryString(blob);
+            }
         };
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            if (ev.target.readyState == FileReader.DONE) {
+                let result = ev.target.result;
+                console.log('FileReader done.');
+                console.log(result);
+            }
+        }
 
         file_input.addEventListener('change', onchange);
     </script>
