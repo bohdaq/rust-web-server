@@ -21,9 +21,18 @@
     <p><b>Work In Progress</b></p>
     <form>
         <label>File:
-            <input type="file" name="file" />
+            <input type="file" name="file" id="input-file" />
         </label>
     </form>
+    <script>
+        const file_input = document.querySelector("#input-file");
+        const onchange = (ev) => {
+            const file_list = ev.target.files;
+            console.log(file_list);
+        };
+
+        file_input.addEventListener('change', onchange);
+    </script>
 
 </body>
 </html>
