@@ -35,6 +35,18 @@
                 let end = 10;
                 let blob = file.slice(start, end);
                 reader.readAsBinaryString(blob);
+
+                let search_params = new URLSearchParams();
+                search_params.set("name", encodeURIComponent(file.name));
+                search_params.set("lastModified", file.lastModified);
+                search_params.set("size", file.size);
+                let url = "/file-upload/initiate?" + search_params.toString();
+
+                const request = new XMLHttpRequest();
+                request.open("POST", url);
+                request.send();
+
+                console.log(url);
             }
         };
 

@@ -4,6 +4,7 @@ mod tests;
 pub mod controller;
 
 use crate::app::controller::favicon::FaviconController;
+use crate::app::controller::file::initiate::FileUploadInitiateController;
 use crate::app::controller::form::get_method::FormGetMethodController;
 use crate::app::controller::form::multipart_enctype_post_method::FormMultipartEnctypePostMethodController;
 use crate::app::controller::form::url_encoded_enctype_post_method::FormUrlEncodedEnctypePostMethodController;
@@ -44,6 +45,11 @@ impl App {
 
         if ScriptController::is_matching_request(&request) {
             response = ScriptController::process_request(&request, response);
+            return (response, request)
+        }
+
+        if FileUploadInitiateController::is_matching_request(&request) {
+            response = FileUploadInitiateController::process_request(&request, response);
             return (response, request)
         }
 
