@@ -5,4 +5,5 @@ pub mod style;
 pub mod favicon;
 pub mod script;
 pub mod form;
+pub mod file;
 
