@@ -4,6 +4,7 @@ use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::symbol::SYMBOL;
+use crate::entry_point::get_request_allocation_size;
 
 pub struct FileUploadInitiateController;
 
@@ -56,6 +57,11 @@ impl FileUploadInitiateController {
             let formatted_output = format!("{} is {}{}", key, value, SYMBOL.new_line_carriage_return);
             formatted_list.push(formatted_output);
         }
+
+        let request_allocation_size = get_request_allocation_size();
+        let formatted_output = format!("{} is {}{}", "request_allocation_size_in_bytes", request_allocation_size, SYMBOL.new_line_carriage_return);
+        formatted_list.push(formatted_output);
+
 
         response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
