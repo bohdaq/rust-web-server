@@ -58,8 +58,11 @@ impl FileUploadInitiateController {
             formatted_list.push(formatted_output);
         }
 
+        let mut request_allocation_size = get_request_allocation_size();
         let offset = 4000;
-        let request_allocation_size = get_request_allocation_size() - offset;
+        if request_allocation_size > offset {
+            request_allocation_size = get_request_allocation_size() - offset;
+        }
         let formatted_output = format!("{} is {}{}", "request_allocation_size_in_bytes", request_allocation_size, SYMBOL.new_line_carriage_return);
         formatted_list.push(formatted_output);
 
