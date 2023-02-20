@@ -6,6 +6,16 @@ use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::symbol::SYMBOL;
 use crate::entry_point::get_request_allocation_size;
 
+pub struct FileUpload {
+    pub name: String,
+    pub last_modified: u128,
+    pub size: u128
+}
+
+impl FileUpload {
+
+}
+
 pub struct FileUploadInitiateController;
 
 //TODO:
