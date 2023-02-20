@@ -25,6 +25,6 @@ pub struct Null {}
 pub trait FromAndToJSON {
     fn list_properties() -> Vec<JSONProperty>;
 
-    fn get_property(name: String) -> JSONValue;
+    fn get_property(property: JSONProperty) -> JSONValue;
 }
 
