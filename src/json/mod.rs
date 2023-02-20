@@ -31,5 +31,7 @@ pub trait FromAndToJSON {
     fn list_properties() -> Vec<JSONProperty>;
 
     fn get_property(property: JSONProperty) -> JSONValue;
+
+    fn to_json_string() -> String;
 }
 
