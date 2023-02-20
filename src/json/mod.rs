@@ -15,8 +15,12 @@ pub struct JSONValue {
     pub i128: Option<i128>,
     pub u128: Option<u128>,
     pub usize: Option<usize>,
-    pub vec_u8: Option<Vec<u8>>
+    pub vec_u8: Option<Vec<u8>>,
+    pub boolean: Option<bool>,
+    pub null: Option<Null>,
 }
+
+pub struct Null {}
 
 pub trait FromAndToJSON {
     fn list_properties() -> Vec<JSONProperty>;
