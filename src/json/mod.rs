@@ -34,6 +34,6 @@ pub trait FromAndToJSON {
 
     fn to_json_string() -> String;
 
-    fn from_json_string() -> Self;
+    fn from_json_string(json_string: String) -> Self;
 }
 
