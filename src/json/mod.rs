@@ -33,5 +33,7 @@ pub trait FromAndToJSON {
     fn get_property(property: JSONProperty) -> JSONValue;
 
     fn to_json_string() -> String;
+
+    fn from_json_string() -> Self;
 }
 
