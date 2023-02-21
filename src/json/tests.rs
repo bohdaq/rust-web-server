@@ -12,10 +12,10 @@ fn parse() {
         fn list_properties() -> Vec<JSONProperty> {
             let mut list = vec![];
 
-            let property = JSONProperty { property_name: "propA".to_string(), property_type: "String".to_string() };
+            let property = JSONProperty { property_name: "prop_a".to_string(), property_type: "String".to_string() };
             list.push(property);
 
-            let property = JSONProperty { property_name: "propB".to_string(), property_type: "bool".to_string() };
+            let property = JSONProperty { property_name: "prop_b".to_string(), property_type: "bool".to_string() };
             list.push(property);
 
             list
@@ -40,12 +40,12 @@ fn parse() {
                 null: None,
             };
 
-            if property_name == "propA".to_string() {
+            if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
                 value.string = Some(string);
             }
 
-            if property_name == "propB".to_string() {
+            if property_name == "prop_b".to_string() {
                 let boolean : bool = self.prop_b;
                 value.boolean = Some(boolean);
             }
@@ -88,7 +88,7 @@ fn parse() {
     let obj = SomeObject { prop_a: "123abc".to_string(), prop_b: true };
 
     let json_string = obj.to_json_string();
-    let expected_json_string = "{\r\n  \"propA\": \"123abc\"\r\n  \"propB\": true\r\n}";
+    let expected_json_string = "{\r\n  \"prop_a\": \"123abc\"\r\n  \"prop_b\": true\r\n}";
 
     assert_eq!(expected_json_string, json_string)
 }
