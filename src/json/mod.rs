@@ -1,3 +1,5 @@
+use crate::symbol::SYMBOL;
+
 #[cfg(test)]
 mod tests;
 
@@ -57,6 +59,20 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
         boolean: None,
         null: None,
     };
+
+    let boxed_split = raw_string.trim().split_once(SYMBOL.semicolon);
+    if boxed_split.is_none() {
+        let message = format!("Not a valid string as a key-value: {}", raw_string);
+        return Err(message);
+    }
+
+    let (_key, _value) = boxed_split.unwrap();
+    if !_key.starts_with(SYMBOL.quotation_mark) {
+        let message = format!("Key is not properly defined: {}", _key);
+        return Err(message);
+    }
+
+    
 
     Ok((property, value))
 }
