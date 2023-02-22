@@ -38,3 +38,26 @@ pub trait FromAndToJSON {
     fn from_json_string(json_string: String) -> Self;
 }
 
+pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue), String> {
+    let mut property = JSONProperty { property_name: "".to_string(), property_type: "".to_string() };
+    let mut value = JSONValue {
+        i8: None,
+        u8: None,
+        i16: None,
+        u16: None,
+        i32: None,
+        u32: None,
+        i64: None,
+        u64: None,
+        i128: None,
+        u128: None,
+        usize: None,
+        isize: None,
+        string: None,
+        boolean: None,
+        null: None,
+    };
+
+    Ok((property, value))
+}
+
