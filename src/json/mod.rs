@@ -66,13 +66,36 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
         return Err(message);
     }
 
-    let (_key, _value) = boxed_split.unwrap();
+    let (mut _key, mut _value) = boxed_split.unwrap();
+    _key = _key.trim();
+    _value = _value.trim();
+
     if !_key.starts_with(SYMBOL.quotation_mark) {
         let message = format!("Key is not properly defined: {}", _key);
         return Err(message);
     }
 
-    
+    let is_null = _value == "null";
+    let is_string = _value.starts_with(SYMBOL.semicolon);
+    let is_number = !is_string && !is_null;
+
+    if is_null {
+
+    }
+
+    if is_string {
+
+    }
+
+    if is_number {
+
+    }
+
+
+
+    if _value.starts_with(SYMBOL.semicolon) {
+
+    }
 
     Ok((property, value))
 }
