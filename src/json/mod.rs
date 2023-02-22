@@ -23,8 +23,8 @@ pub struct JSONValue {
     pub u128: Option<u128>,
     pub usize: Option<usize>,
     pub isize: Option<isize>,
-    pub string: Option<String>,
-    pub boolean: Option<bool>,
+    pub String: Option<String>,
+    pub bool: Option<bool>,
     pub null: Option<Null>,
 }
 
@@ -55,8 +55,8 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
         u128: None,
         usize: None,
         isize: None,
-        string: None,
-        boolean: None,
+        String: None,
+        bool: None,
         null: None,
     };
 
@@ -77,7 +77,9 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
 
     let is_null = _value == "null";
     let is_string = _value.starts_with(SYMBOL.semicolon);
-    let is_number = !is_string && !is_null;
+    let is_array = _value.starts_with(SYMBOL.opening_square_bracket);
+    let is_object = _value.starts_with(SYMBOL.opening_curly_bracket);
+    let is_number = !is_string && !is_null && !is_array && !is_object;
 
     if is_null {
 
@@ -91,9 +93,11 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
 
     }
 
+    if is_array {
 
+    }
 
-    if _value.starts_with(SYMBOL.semicolon) {
+    if is_object {
 
     }
 

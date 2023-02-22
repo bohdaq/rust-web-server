@@ -35,19 +35,19 @@ fn parse() {
                 u128: None,
                 usize: None,
                 isize: None,
-                string: None,
-                boolean: None,
+                String: None,
+                bool: None,
                 null: None,
             };
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
-                value.string = Some(string);
+                value.String = Some(string);
             }
 
             if property_name == "prop_b".to_string() {
                 let boolean : bool = self.prop_b;
-                value.boolean = Some(boolean);
+                value.bool = Some(boolean);
             }
 
             value
@@ -62,13 +62,13 @@ fn parse() {
                 let value = self.get_property(property.property_name.to_string());
 
                 if &property.property_type == "String" {
-                    let raw_value = value.string.unwrap();
+                    let raw_value = value.String.unwrap();
                     let formatted_property = format!("  \"{}\": \"{}\"", &property.property_name, raw_value);
                     json_list.push(formatted_property.to_string());
                 }
 
                 if &property.property_type == "bool" {
-                    let raw_value = value.boolean.unwrap();
+                    let raw_value = value.bool.unwrap();
                     let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
                     json_list.push(formatted_property.to_string());
                 }
@@ -104,5 +104,5 @@ fn parse_raw_property() {
 
     assert_eq!(key.property_name, property_key);
     assert_eq!(key.property_type, property_type);
-    assert_eq!(value.string.unwrap(), property_value);
+    assert_eq!(value.String.unwrap(), property_value);
 }
