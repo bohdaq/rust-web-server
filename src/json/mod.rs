@@ -70,16 +70,18 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
     _key = _key.trim();
     _value = _value.trim();
 
-    if !_key.starts_with(SYMBOL.quotation_mark) {
-        let message = format!("Key is not properly defined: {}", _key);
+    let is_null = _value == "null";
+    let is_string = _value.starts_with(SYMBOL.quotation_mark) && _value.ends_with(SYMBOL.quotation_mark);
+    let is_array = _value.starts_with(SYMBOL.opening_square_bracket) && _value.ends_with(SYMBOL.closing_square_bracket);
+    let is_object = _value.starts_with(SYMBOL.opening_curly_bracket) && _value.ends_with(SYMBOL.closing_curly_bracket);
+    let is_number = !is_string && !is_null && !is_array && !is_object;
+
+    if !is_null && !is_string && !is_array && !is_object && !is_number {
+        let message = format!("Is not valid key value pair: {} {}", _key, _value);
         return Err(message);
     }
 
-    let is_null = _value == "null";
-    let is_string = _value.starts_with(SYMBOL.semicolon);
-    let is_array = _value.starts_with(SYMBOL.opening_square_bracket);
-    let is_object = _value.starts_with(SYMBOL.opening_curly_bracket);
-    let is_number = !is_string && !is_null && !is_array && !is_object;
+
 
     if is_null {
 
