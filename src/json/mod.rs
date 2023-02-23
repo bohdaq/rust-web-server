@@ -5,6 +5,24 @@ mod key_value;
 
 // TODO: wip
 
+pub struct JSONType {
+    pub string: &'static str,
+    pub boolean: &'static str,
+    pub object: &'static str,
+    pub array: &'static str,
+    pub number: &'static str,
+    pub null: &'static str,
+}
+
+pub const JSON_TYPE: JSONType = JSONType{
+    string: "String",
+    boolean: "bool",
+    object: "object",
+    array: "array",
+    number: "u128",
+    null: "null",
+};
+
 pub struct JSONProperty {
     pub property_name: String,
     pub property_type: String,
