@@ -1,4 +1,4 @@
-use crate::json::{JSONProperty, JSONValue};
+use crate::json::{JSON_TYPE, JSONProperty, JSONValue, Null};
 use crate::symbol::SYMBOL;
 
 #[cfg(test)]
@@ -48,11 +48,14 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
 
 
     if is_null {
+        property.property_type = JSON_TYPE.string.to_string();
+        property.property_name = _key.replace(SYMBOL.quotation_mark, SYMBOL.empty_string).to_string();
+        value.null = Some(Null{});
 
     }
 
     if is_string {
-        property.property_type = "String".to_string();
+        property.property_type = JSON_TYPE.string.to_string();
         property.property_name = _key.replace(SYMBOL.quotation_mark, SYMBOL.empty_string).to_string();
         value.String = Some(_value.replace(SYMBOL.quotation_mark, SYMBOL.empty_string).to_string());
     }
