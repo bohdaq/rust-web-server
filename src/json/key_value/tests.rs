@@ -28,3 +28,31 @@ fn parse_raw_property_null() {
     assert_eq!(key.property_type, property_type);
     assert!(value.null.is_some());
 }
+
+#[test]
+fn parse_raw_property_number_integer() {
+    let property_key = "key";
+    let property_value = "255";
+    let property_type = JSON_TYPE.integer;
+
+    let raw_string = format!("\"{}\": {}", property_key, property_value);
+    let (key, value) = parse_json_property(&raw_string).unwrap();
+
+    assert_eq!(key.property_name, property_key);
+    assert_eq!(key.property_type, property_type);
+    assert_eq!(value.i128.unwrap(), property_value.parse::<i128>().unwrap());
+}
+
+#[test]
+fn parse_raw_property_number_float() {
+    let property_key = "key";
+    let property_value = "255.200";
+    let property_type = JSON_TYPE.number;
+
+    let raw_string = format!("\"{}\": {}", property_key, property_value);
+    let (key, value) = parse_json_property(&raw_string).unwrap();
+
+    assert_eq!(key.property_name, property_key);
+    assert_eq!(key.property_type, property_type);
+    assert_eq!(value.f64.unwrap(), property_value.parse::<f64>().unwrap());
+}

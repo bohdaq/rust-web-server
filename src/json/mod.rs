@@ -10,6 +10,7 @@ pub struct JSONType {
     pub boolean: &'static str,
     pub object: &'static str,
     pub array: &'static str,
+    pub integer: &'static str,
     pub number: &'static str,
     pub null: &'static str,
 }
@@ -19,7 +20,8 @@ pub const JSON_TYPE: JSONType = JSONType{
     boolean: "bool",
     object: "object",
     array: "array",
-    number: "u128",
+    integer: "i128",
+    number: "f64",
     null: "null",
 };
 
@@ -29,18 +31,8 @@ pub struct JSONProperty {
 }
 
 pub struct JSONValue {
-    pub i8: Option<i32>,
-    pub u8: Option<u32>,
-    pub i16: Option<i32>,
-    pub u16: Option<u32>,
-    pub i32: Option<i32>,
-    pub u32: Option<u32>,
-    pub i64: Option<i64>,
-    pub u64: Option<u64>,
+    pub f64: Option<f64>,
     pub i128: Option<i128>,
-    pub u128: Option<u128>,
-    pub usize: Option<usize>,
-    pub isize: Option<isize>,
     pub String: Option<String>,
     pub bool: Option<bool>,
     pub null: Option<Null>,

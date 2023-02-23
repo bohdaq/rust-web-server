@@ -7,18 +7,8 @@ mod tests;
 pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue), String> {
     let mut property = JSONProperty { property_name: "".to_string(), property_type: "".to_string() };
     let mut value = JSONValue {
-        i8: None,
-        u8: None,
-        i16: None,
-        u16: None,
-        i32: None,
-        u32: None,
-        i64: None,
-        u64: None,
+        f64: None,
         i128: None,
-        u128: None,
-        usize: None,
-        isize: None,
         String: None,
         bool: None,
         null: None,
@@ -61,7 +51,24 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
     }
 
     if is_number {
-
+        let boxed_i128_parse = _value.parse::<i128>();
+        if boxed_i128_parse.is_err() {
+            let boxed_f64_parse = _value.parse::<f64>();
+            if boxed_f64_parse.is_err() {
+                let message = format!("unable to parse number: {}: {}", _key, _value);
+                return Err(message);
+            } else {
+                property.property_type = JSON_TYPE.number.to_string();
+                property.property_name = _key.replace(SYMBOL.quotation_mark, SYMBOL.empty_string).to_string();
+                let f64 = boxed_f64_parse.unwrap();
+                value.f64 = Some(f64);
+            }
+        } else {
+            property.property_type = JSON_TYPE.integer.to_string();
+            property.property_name = _key.replace(SYMBOL.quotation_mark, SYMBOL.empty_string).to_string();
+            let i128 = boxed_i128_parse.unwrap();
+            value.i128 = Some(i128);
+        }
     }
 
     if is_array {

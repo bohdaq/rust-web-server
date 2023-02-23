@@ -23,18 +23,8 @@ fn parse() {
 
         fn get_property(&self, property_name: String) -> JSONValue {
             let mut value = JSONValue {
-                i8: None,
-                u8: None,
-                i16: None,
-                u16: None,
-                i32: None,
-                u32: None,
-                i64: None,
-                u64: None,
+                f64: None,
                 i128: None,
-                u128: None,
-                usize: None,
-                isize: None,
                 String: None,
                 bool: None,
                 null: None,
