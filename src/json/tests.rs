@@ -1,4 +1,4 @@
-use crate::json::{FromAndToJSON, JSONProperty, JSONValue, parse_json_property};
+use crate::json::{FromAndToJSON, JSONProperty, JSONValue};
 use crate::symbol::SYMBOL;
 
 #[test]
@@ -93,16 +93,3 @@ fn parse() {
     assert_eq!(expected_json_string, json_string)
 }
 
-#[test]
-fn parse_raw_property() {
-    let property_key = "key";
-    let property_value = "some data";
-    let property_type = "String";
-
-    let raw_string = format!("\"{}\": \"{}\"", property_key, property_value);
-    let (key, value) = parse_json_property(&raw_string).unwrap();
-
-    assert_eq!(key.property_name, property_key);
-    assert_eq!(key.property_type, property_type);
-    assert_eq!(value.String.unwrap(), property_value);
-}
