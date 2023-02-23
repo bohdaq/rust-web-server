@@ -67,3 +67,14 @@ fn parse_raw_property_number_float_parse_error() {
 
     assert_eq!("unable to parse number: \"key\": 255.200asdf", error_message);
 }
+
+#[test]
+fn parse_raw_property_number_integer_parse_error() {
+    let property_key = "key";
+    let property_value = "255200asdf";
+
+    let raw_string = format!("\"{}\": {}", property_key, property_value);
+    let error_message = parse_json_property(&raw_string).err().unwrap();
+
+    assert_eq!("unable to parse number: \"key\": 255200asdf", error_message);
+}
