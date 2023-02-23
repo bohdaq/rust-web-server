@@ -2,7 +2,7 @@ use crate::json::{JSON_TYPE, JSONType};
 use crate::json::key_value::parse_json_property;
 
 #[test]
-fn parse_raw_property() {
+fn parse_raw_property_string() {
     let property_key = "key";
     let property_value = "some data";
     let property_type = JSON_TYPE.string;
