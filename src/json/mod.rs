@@ -60,7 +60,7 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
         null: None,
     };
 
-    let boxed_split = raw_string.trim().split_once(SYMBOL.semicolon);
+    let boxed_split = raw_string.trim().split_once(SYMBOL.colon);
     if boxed_split.is_none() {
         let message = format!("Not a valid string as a key-value: {}", raw_string);
         return Err(message);
@@ -88,7 +88,9 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
     }
 
     if is_string {
-
+        property.property_type = "String".to_string();
+        property.property_name = _key.replace(SYMBOL.quotation_mark, SYMBOL.empty_string).to_string();
+        value.String = Some(_value.replace(SYMBOL.quotation_mark, SYMBOL.empty_string).to_string());
     }
 
     if is_number {
