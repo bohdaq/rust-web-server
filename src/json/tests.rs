@@ -12,6 +12,14 @@ fn parse() {
         fn from_json_string(&self, json_string: String) -> Result<SomeObject, String> {
             let result= SomeObject{ prop_a: "".to_string(), prop_b: false };
 
+            // escape \r\n
+            // read obj start '{'
+            // read until key starts '"', save to buffer
+            // read until key ends '"', append to buffer
+            // read until delimiter ':', append to buffer
+            // read until value starts '"', append to buffer
+            // read until value ends '"', append to buffer, add additional check on escaped quotation mark (last char in buffer is not '\')
+            // read until key-value pair delimiter ',' or end of the obj '}', parse key-value pair, in case of delimiter continue
 
             Ok(result)
         }
