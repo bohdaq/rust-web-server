@@ -40,13 +40,11 @@ pub struct JSONValue {
 
 pub struct Null {}
 
-pub trait FromAndToJSON {
+pub trait ToJSON {
     fn list_properties() -> Vec<JSONProperty>;
 
     fn get_property(&self, property_name: String) -> JSONValue;
 
     fn to_json_string(&self) -> String;
-
-    fn from_json_string(json_string: String) -> Self;
 }
 

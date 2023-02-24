@@ -1,4 +1,4 @@
-use crate::json::{FromAndToJSON, JSONProperty, JSONValue};
+use crate::json::{ToJSON, JSONProperty, JSONValue};
 use crate::symbol::SYMBOL;
 
 #[test]
@@ -8,7 +8,16 @@ fn parse() {
         prop_b: bool
     }
 
-    impl FromAndToJSON for SomeObject {
+    impl SomeObject {
+        fn from_json_string(&self, json_string: String) -> Result<SomeObject, String> {
+            let result= SomeObject{ prop_a: "".to_string(), prop_b: false };
+
+
+            Ok(result)
+        }
+    }
+
+    impl ToJSON for SomeObject {
         fn list_properties() -> Vec<JSONProperty> {
             let mut list = vec![];
 
@@ -47,6 +56,9 @@ fn parse() {
             let mut json_list = vec![];
             json_list.push(SYMBOL.opening_curly_bracket.to_string());
 
+
+            let mut properties_list = vec![];
+
             let properties = SomeObject::list_properties();
             for property in properties {
                 let value = self.get_property(property.property_name.to_string());
@@ -54,32 +66,34 @@ fn parse() {
                 if &property.property_type == "String" {
                     let raw_value = value.String.unwrap();
                     let formatted_property = format!("  \"{}\": \"{}\"", &property.property_name, raw_value);
-                    json_list.push(formatted_property.to_string());
+                    properties_list.push(formatted_property.to_string());
                 }
 
                 if &property.property_type == "bool" {
                     let raw_value = value.bool.unwrap();
                     let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
-                    json_list.push(formatted_property.to_string());
+                    properties_list.push(formatted_property.to_string());
                 }
             }
+
+
+            let comma_new_line_carriage_return = format!("{}{}", SYMBOL.comma, SYMBOL.new_line_carriage_return);
+            let properties = properties_list.join(&comma_new_line_carriage_return);
+
+            json_list.push(properties);
             json_list.push(SYMBOL.closing_curly_bracket.to_string());
-
-
-            let json = json_list.join(SYMBOL.new_line_carriage_return);
+            let json= json_list.join(SYMBOL.new_line_carriage_return);
             json
-        }
-
-        fn from_json_string(json_string: String) -> Self {
-            todo!()
         }
     }
 
     let obj = SomeObject { prop_a: "123abc".to_string(), prop_b: true };
 
     let json_string = obj.to_json_string();
-    let expected_json_string = "{\r\n  \"prop_a\": \"123abc\"\r\n  \"prop_b\": true\r\n}";
+    let expected_json_string = "{\r\n  \"prop_a\": \"123abc\",\r\n  \"prop_b\": true\r\n}";
 
-    assert_eq!(expected_json_string, json_string)
+    assert_eq!(expected_json_string, json_string);
+
+    let parsed_json_object : SomeObject = obj.from_json_string(json_string.to_string()).unwrap();
 }
 
