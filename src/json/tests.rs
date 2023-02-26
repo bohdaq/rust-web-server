@@ -90,7 +90,7 @@ fn parse() {
             let line = boxed_line.unwrap();
             key_value_pair = [key_value_pair, line].join(SYMBOL.empty_string);
 
-            // read until value starts '"', append to buffer
+            // read in a while loop until char is not ascii control char and not whitespace, append to buffer
             let mut buf = vec![];
             let boxed_read = cursor.read_until(b'"', &mut buf);
             if boxed_read.is_err() {
