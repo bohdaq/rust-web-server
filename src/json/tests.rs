@@ -132,8 +132,14 @@ fn parse() {
             // read until key starts '"', save to buffer
             // read until key ends '"', append to buffer
             // read until delimiter ':', append to buffer
-            // read until value starts '"', append to buffer
-            // read until value ends '"', append to buffer, add additional check on escaped quotation mark (last char in buffer is not '\')
+            // read in a while loop until char is not ascii control char and not whitespace, append to buffer
+               // if char is '"' - mark as string
+               // if char is 't' or 'f' mark as bool
+               // if char is 'n' mark as null
+            // read until value ends, append to buffer, add additional check on escaped quotation mark (last char in buffer is not '\')
+               // if string it means char is '"' and last in buffer not the '\'
+               // if bool it means t(true) f(false)
+               // if null it means null
             // read until key-value pair delimiter ',' or end of the obj '}', parse key-value pair, in case of delimiter continue
 
             Ok(result)
