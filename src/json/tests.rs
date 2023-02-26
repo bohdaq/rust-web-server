@@ -136,7 +136,7 @@ fn parse() {
                // if char is '"' - mark as string
                // if char is 't' or 'f' mark as bool
                // if char is 'n' mark as null
-            // read until value ends, append to buffer, add additional check on escaped quotation mark (last char in buffer is not '\')
+            // read until value ends, append to buffer
                // if string it means char is '"' and last in buffer not the '\'
                // if bool it means t(true) f(false)
                // if null it means null
