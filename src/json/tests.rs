@@ -1,5 +1,5 @@
 use std::io;
-use std::io::BufRead;
+use std::io::{BufRead, Read};
 use crate::json::{ToJSON, JSONProperty, JSONValue};
 use crate::symbol::SYMBOL;
 
@@ -91,6 +91,50 @@ fn parse() {
             key_value_pair = [key_value_pair, line].join(SYMBOL.empty_string);
 
             // read in a while loop until char is not ascii control char and not whitespace, append to buffer
+            let mut is_whitespace = true;
+            let mut is_string = false;
+            let mut is_number = false;
+            let mut is_null = false;
+            let mut is_boolean = false;
+
+            while is_whitespace {
+                let bytes_to_read = 1;
+                let mut char_buffer = vec![0u8, bytes_to_read];
+
+                cursor.read_exact(&mut char_buffer).unwrap();
+                let char = String::from_utf8(char_buffer).unwrap();
+
+                if char != " " {
+                    if char == "\"" {
+                        // read till non escaped '"'
+                        is_string = true;
+                    }
+
+                    if char == "n" {
+                        // read 'ull'
+                        is_null = true;
+                    }
+
+                    if char == "t" {
+                        // read 'rue'
+                        is_boolean = true;
+                    }
+
+                    if char == "f" {
+                        // read 'alse'
+                        is_boolean = true;
+                    }
+
+                    if !is_string && !is_null && !is_boolean  {
+                        // read till not number and decimal point, minus, exponent
+                    }
+
+                    break;
+                }
+
+
+            }
+
             let mut buf = vec![];
             let boxed_read = cursor.read_until(b'"', &mut buf);
             if boxed_read.is_err() {
