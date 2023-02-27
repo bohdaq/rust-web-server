@@ -96,6 +96,8 @@ fn parse() {
             let mut is_number = false;
             let mut is_null = false;
             let mut is_boolean = false;
+            let mut is_array = false;
+            let mut is_object = false;
 
             while is_whitespace {
                 let bytes_to_read = 1;
@@ -125,7 +127,17 @@ fn parse() {
                         is_boolean = true;
                     }
 
-                    if !is_string && !is_null && !is_boolean  {
+                    if char == "[" {
+                        // read 'alse'
+                        is_array = true;
+                    }
+
+                    if char == "{" {
+                        // read 'alse'
+                        is_object = true;
+                    }
+
+                    if !is_string && !is_null && !is_boolean && !is_array && !is_object {
                         // read till not number and decimal point, minus, exponent
                         is_number = true;
                     }
