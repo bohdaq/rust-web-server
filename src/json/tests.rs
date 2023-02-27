@@ -127,6 +127,7 @@ fn parse() {
 
                     if !is_string && !is_null && !is_boolean  {
                         // read till not number and decimal point, minus, exponent
+                        is_number = true;
                     }
 
                     break;
