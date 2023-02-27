@@ -128,12 +128,12 @@ fn parse() {
                     }
 
                     if char == "[" {
-                        // read 'alse'
+                        // read the array (including nested objects and arrays)
                         is_array = true;
                     }
 
                     if char == "{" {
-                        // read 'alse'
+                        // read the object (including nested objects and arrays)
                         is_object = true;
                     }
 
