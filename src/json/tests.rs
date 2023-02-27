@@ -101,7 +101,7 @@ fn parse() {
 
             while is_whitespace {
                 let bytes_to_read = 1;
-                let mut char_buffer = vec![0u8, bytes_to_read];
+                let mut char_buffer = vec![bytes_to_read];
 
                 cursor.read_exact(&mut char_buffer).unwrap();
                 let char = String::from_utf8(char_buffer).unwrap();
