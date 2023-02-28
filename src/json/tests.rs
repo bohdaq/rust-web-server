@@ -92,7 +92,6 @@ fn parse() {
 
             // read in a while loop until char is not ascii control char and not whitespace, append to buffer
             let mut is_whitespace = true;
-            let mut is_boolean = false;
             let mut is_array = false;
             let mut is_object = false;
 
@@ -126,14 +125,14 @@ fn parse() {
                         // read 'ull'
                     }
 
-                    if char == "t" {
+                    let is_boolean_true = char == "t";
+                    if is_boolean_true {
                         // read 'rue'
-                        is_boolean = true;
                     }
 
-                    if char == "f" {
+                    let is_boolean_false = char == "f";
+                    if is_boolean_false {
                         // read 'alse'
-                        is_boolean = true;
                     }
 
                     if char == "[" {
@@ -146,7 +145,13 @@ fn parse() {
                         is_object = true;
                     }
 
-                    let is_number = !is_string && !is_null && !is_boolean && !is_array && !is_object;
+                    let is_number =
+                            !is_string &&
+                            !is_null &&
+                            !is_boolean_true &&
+                            !is_boolean_false &&
+                            !is_array &&
+                            !is_object;
                     if is_number {
                         // read till not number and decimal point, minus, exponent
                     }
