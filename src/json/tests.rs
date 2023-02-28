@@ -92,8 +92,6 @@ fn parse() {
 
             // read in a while loop until char is not ascii control char and not whitespace, append to buffer
             let mut is_whitespace = true;
-            let mut is_array = false;
-            let mut is_object = false;
 
             while is_whitespace {
                 let bytes_to_read = 1;
@@ -135,14 +133,14 @@ fn parse() {
                         // read 'alse'
                     }
 
-                    if char == "[" {
+                    let is_array = char == "[";
+                    if is_array {
                         // read the array (including nested objects and arrays)
-                        is_array = true;
                     }
 
-                    if char == "{" {
+                    let is_object = char == "{";
+                    if is_object {
                         // read the object (including nested objects and arrays)
-                        is_object = true;
                     }
 
                     let is_number =
