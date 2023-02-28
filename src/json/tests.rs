@@ -153,7 +153,7 @@ fn parse() {
                             !is_array &&
                             !is_object;
                     if is_number {
-                        // read till not number and decimal point, minus, exponent
+                        // read until char is not number and decimal point, minus, exponent
                     }
 
                     is_whitespace = false;
