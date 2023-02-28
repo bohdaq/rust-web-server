@@ -92,7 +92,6 @@ fn parse() {
 
             // read in a while loop until char is not ascii control char and not whitespace, append to buffer
             let mut is_whitespace = true;
-            let mut is_null = false;
             let mut is_boolean = false;
             let mut is_array = false;
             let mut is_object = false;
@@ -122,9 +121,9 @@ fn parse() {
                         }
                     }
 
-                    if char == "n" {
+                    let is_null = char == "n";
+                    if is_null {
                         // read 'ull'
-                        is_null = true;
                     }
 
                     if char == "t" {
