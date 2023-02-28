@@ -111,14 +111,14 @@ fn parse() {
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
 
                         // read till non escaped '"'
-                        let mut not_escaped_quotation = true;
-                        while not_escaped_quotation {
+                        let mut not_end_of_string_property_value = true;
+                        while not_end_of_string_property_value {
 
                             char_buffer = vec![bytes_to_read];
                             cursor.read_exact(&mut char_buffer).unwrap();
                             let _char = String::from_utf8(char_buffer).unwrap();
                             let last_char_in_buffer = key_value_pair.chars().last().unwrap().to_string();
-                            not_escaped_quotation = _char == "\"" && last_char_in_buffer == "\\";
+                            not_end_of_string_property_value = _char != "\"" && last_char_in_buffer != "\\";
                             key_value_pair = [key_value_pair, _char].join(SYMBOL.empty_string);
                         }
                         is_string = true;
@@ -160,25 +160,9 @@ fn parse() {
 
             }
 
+            // logic here is to read till comma and repeat block above. if bytes_read == total_bytes return result.
             let mut buf = vec![];
-            let boxed_read = cursor.read_until(b'"', &mut buf);
-            if boxed_read.is_err() {
-                let message = boxed_read.err().unwrap().to_string();
-                return Err(message);
-            }
-            let b : &[u8] = &buf;
-
-            let boxed_line = String::from_utf8(Vec::from(b));
-            if boxed_line.is_err() {
-                let error_message = boxed_line.err().unwrap().to_string();
-                return Err(error_message);
-            }
-            let line = boxed_line.unwrap();
-            key_value_pair = [key_value_pair, line].join(SYMBOL.empty_string);
-
-            // read until value ends '"', append to buffer
-            let mut buf = vec![];
-            let boxed_read = cursor.read_until(b'"', &mut buf);
+            let boxed_read = cursor.read_until(b',', &mut buf);
             if boxed_read.is_err() {
                 let message = boxed_read.err().unwrap().to_string();
                 return Err(message);
