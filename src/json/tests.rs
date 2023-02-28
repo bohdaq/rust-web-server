@@ -92,7 +92,6 @@ fn parse() {
 
             // read in a while loop until char is not ascii control char and not whitespace, append to buffer
             let mut is_whitespace = true;
-            let mut is_string = false;
             let mut is_number = false;
             let mut is_null = false;
             let mut is_boolean = false;
@@ -107,7 +106,8 @@ fn parse() {
                 let char = String::from_utf8(char_buffer).unwrap();
 
                 if char != " " {
-                    if char == "\"" {
+                    let is_string = char == "\"";
+                    if is_string {
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
 
                         // read till non escaped '"'
@@ -121,7 +121,6 @@ fn parse() {
                             not_end_of_string_property_value = _char != "\"" && last_char_in_buffer != "\\";
                             key_value_pair = [key_value_pair, _char].join(SYMBOL.empty_string);
                         }
-                        is_string = true;
                     }
 
                     if char == "n" {
