@@ -19,75 +19,75 @@ fn parse() {
 
             // read obj start '{'
             let mut buf = vec![];
-            let boxed_read = cursor.read_until(b'{', &mut buf);
+            let mut boxed_read = cursor.read_until(b'{', &mut buf);
             if boxed_read.is_err() {
                 let message = boxed_read.err().unwrap().to_string();
                 return Err(message);
             }
-            let b : &[u8] = &buf;
+            let mut b : &[u8] = &buf;
 
-            let boxed_line = String::from_utf8(Vec::from(b));
+            let mut boxed_line = String::from_utf8(Vec::from(b));
             if boxed_line.is_err() {
                 let error_message = boxed_line.err().unwrap().to_string();
                 return Err(error_message);
             }
-            let line = boxed_line.unwrap();
+            let mut line = boxed_line.unwrap();
 
             let mut key_value_pair : String = "".to_string();
 
             // read until key starts '"', save to buffer
-            let mut buf = vec![];
-            let boxed_read = cursor.read_until(b'\"', &mut buf);
+            buf = vec![];
+            boxed_read = cursor.read_until(b'\"', &mut buf);
             if boxed_read.is_err() {
                 let message = boxed_read.err().unwrap().to_string();
                 return Err(message);
             }
-            let b : &[u8] = &buf;
+            b  = &buf;
 
-            let boxed_line = String::from_utf8(Vec::from(b));
+            boxed_line = String::from_utf8(Vec::from(b));
             if boxed_line.is_err() {
                 let error_message = boxed_line.err().unwrap().to_string();
                 return Err(error_message);
             }
 
-            let line = boxed_line.unwrap();
+            line = boxed_line.unwrap();
             key_value_pair = [key_value_pair, line].join(SYMBOL.empty_string);
 
 
 
             // read until key ends '"', append to buffer
-            let mut buf = vec![];
-            let boxed_read = cursor.read_until(b'\"', &mut buf);
+            buf = vec![];
+            boxed_read = cursor.read_until(b'\"', &mut buf);
             if boxed_read.is_err() {
                 let message = boxed_read.err().unwrap().to_string();
                 return Err(message);
             }
-            let b : &[u8] = &buf;
+            b = buf.as_slice();
 
-            let boxed_line = String::from_utf8(Vec::from(b));
+            boxed_line = String::from_utf8(Vec::from(b));
             if boxed_line.is_err() {
                 let error_message = boxed_line.err().unwrap().to_string();
                 return Err(error_message);
             }
-            let line = boxed_line.unwrap();
+            line = boxed_line.unwrap();
             key_value_pair = [key_value_pair, line].join(SYMBOL.empty_string);
 
 
             // read until delimiter ':', append to buffer
-            let mut buf = vec![];
-            let boxed_read = cursor.read_until(b':', &mut buf);
+            buf = vec![];
+            boxed_read = cursor.read_until(b':', &mut buf);
             if boxed_read.is_err() {
                 let message = boxed_read.err().unwrap().to_string();
                 return Err(message);
             }
-            let b : &[u8] = &buf;
+            b = buf.as_slice();
 
-            let boxed_line = String::from_utf8(Vec::from(b));
+            boxed_line = String::from_utf8(Vec::from(b));
             if boxed_line.is_err() {
                 let error_message = boxed_line.err().unwrap().to_string();
                 return Err(error_message);
             }
-            let line = boxed_line.unwrap();
+            line = boxed_line.unwrap();
             key_value_pair = [key_value_pair, line].join(SYMBOL.empty_string);
 
             // read in a while loop until char is not ascii control char and not whitespace, append to buffer
@@ -108,7 +108,19 @@ fn parse() {
 
                 if char != " " {
                     if char == "\"" {
+                        key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
+
                         // read till non escaped '"'
+                        let mut not_escaped_quotation = true;
+                        while not_escaped_quotation {
+
+                            char_buffer = vec![bytes_to_read];
+                            cursor.read_exact(&mut char_buffer).unwrap();
+                            let _char = String::from_utf8(char_buffer).unwrap();
+                            let last_char_in_buffer = key_value_pair.chars().last().unwrap().to_string();
+                            not_escaped_quotation = _char == "\"" && last_char_in_buffer == "\\";
+                            key_value_pair = [key_value_pair, _char].join(SYMBOL.empty_string);
+                        }
                         is_string = true;
                     }
 
