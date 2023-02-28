@@ -154,7 +154,7 @@ fn parse() {
                         is_number = true;
                     }
 
-                    break;
+                    is_whitespace = false;
                 }
 
 
