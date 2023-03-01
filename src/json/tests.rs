@@ -37,12 +37,14 @@ fn parse() {
             }
             let mut line = boxed_line.unwrap();
 
-            let mut key_value_pair : String = "".to_string();
 
             let mut is_there_a_key_value = true;
             while is_there_a_key_value {
                 // read until key starts '"', save to buffer
                 // it will work for first and consecutive key value pair
+                let mut key_value_pair : String = "".to_string();
+
+
                 buf = vec![];
                 boxed_read = cursor.read_until(b'\"', &mut buf);
                 if boxed_read.is_err() {
