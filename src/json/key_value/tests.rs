@@ -58,6 +58,34 @@ fn parse_raw_property_number_float() {
 }
 
 #[test]
+fn parse_raw_property_boolean_true() {
+    let property_key = "key";
+    let property_value = "true";
+    let property_type = JSON_TYPE.boolean;
+
+    let raw_string = format!("\"{}\": {}", property_key, property_value);
+    let (key, value) = parse_json_property(&raw_string).unwrap();
+
+    assert_eq!(key.property_name, property_key);
+    assert_eq!(key.property_type, property_type);
+    assert_eq!(value.bool.unwrap(), property_value.parse::<bool>().unwrap());
+}
+
+#[test]
+fn parse_raw_property_boolean_false() {
+    let property_key = "key";
+    let property_value = "false";
+    let property_type = JSON_TYPE.boolean;
+
+    let raw_string = format!("\"{}\": {}", property_key, property_value);
+    let (key, value) = parse_json_property(&raw_string).unwrap();
+
+    assert_eq!(key.property_name, property_key);
+    assert_eq!(key.property_type, property_type);
+    assert_eq!(value.bool.unwrap(), property_value.parse::<bool>().unwrap());
+}
+
+#[test]
 fn parse_raw_property_number_float_parse_error() {
     let property_key = "key";
     let property_value = "255.200asdf";

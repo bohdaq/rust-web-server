@@ -1,6 +1,7 @@
 use std::io;
 use std::io::{BufRead, Read};
 use crate::json::{ToJSON, JSONProperty, JSONValue};
+use crate::json::key_value::parse_json_property;
 use crate::symbol::SYMBOL;
 
 #[test]
@@ -13,6 +14,7 @@ fn parse() {
     impl SomeObject {
         fn from_json_string(&self, json_string: String) -> Result<SomeObject, String> {
             let result = SomeObject { prop_a: "".to_string(), prop_b: false };
+            let mut properties = vec![];
 
             let data = json_string.as_bytes();
             let mut cursor = io::Cursor::new(data);
@@ -198,8 +200,10 @@ fn parse() {
                     is_there_a_key_value = false;
                 };
 
-                println!("{}", key_value_pair);
+                let (property, value) = parse_json_property(&key_value_pair).unwrap();
 
+
+                properties.push((property, value));
 
             }
 

@@ -28,9 +28,10 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
     let is_string = _value.starts_with(SYMBOL.quotation_mark) && _value.ends_with(SYMBOL.quotation_mark);
     let is_array = _value.starts_with(SYMBOL.opening_square_bracket) && _value.ends_with(SYMBOL.closing_square_bracket);
     let is_object = _value.starts_with(SYMBOL.opening_curly_bracket) && _value.ends_with(SYMBOL.closing_curly_bracket);
-    let is_number = !is_string && !is_null && !is_array && !is_object;
+    let is_boolean = (_value == "true") || (_value == "false");
+    let is_number = !is_string && !is_null && !is_array && !is_object && !is_boolean;
 
-    if !is_null && !is_string && !is_array && !is_object && !is_number {
+    if !is_null && !is_string && !is_array && !is_object && !is_number && !is_boolean {
         let message = format!("Is not valid key value pair: {} {}", _key, _value);
         return Err(message);
     }
@@ -77,6 +78,13 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
 
     if is_object {
 
+    }
+
+    if is_boolean {
+        let is_true = _value == "true";
+        property.property_type = JSON_TYPE.boolean.to_string();
+        property.property_name = _key.replace(SYMBOL.quotation_mark, SYMBOL.empty_string).to_string();
+        value.bool = Some(is_true);
     }
 
     Ok((property, value))
