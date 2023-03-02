@@ -1,6 +1,6 @@
 use std::io;
 use std::io::{BufRead, Read};
-use crate::json::{ToJSON, JSONProperty, JSONValue, FromJSON};
+use crate::json::{ToJSON, JSONProperty, JSONValue, FromJSON, JSONType, JSON_TYPE};
 use crate::json::key_value::parse_json_property;
 use crate::symbol::SYMBOL;
 
@@ -308,5 +308,15 @@ fn parse() {
     let properties  = obj.parse_json_to_properties(json_string.to_string()).unwrap();
     assert_eq!(properties.len(), 2);
 
+    let (prop_a_type, prop_a_value) = properties.get(0).unwrap();
+    assert_eq!(prop_a_type.property_type, JSON_TYPE.string);
+    assert_eq!(prop_a_type.property_name, "prop_a");
+    assert_eq!(prop_a_value.String.clone().unwrap(), "123abc");
+
+
+    let (prop_b_type, prop_b_value) = properties.get(1).unwrap();
+    assert_eq!(prop_b_type.property_type, JSON_TYPE.boolean);
+    assert_eq!(prop_b_type.property_name, "prop_b");
+    assert_eq!(prop_b_value.bool.unwrap(), true);
 }
 
