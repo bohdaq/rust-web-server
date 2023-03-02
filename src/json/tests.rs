@@ -1,6 +1,6 @@
 use std::io;
 use std::io::{BufRead, Read};
-use crate::json::{ToJSON, JSONProperty, JSONValue};
+use crate::json::{ToJSON, JSONProperty, JSONValue, FromJSON};
 use crate::json::key_value::parse_json_property;
 use crate::symbol::SYMBOL;
 
@@ -11,7 +11,7 @@ fn parse() {
         prop_b: bool
     }
 
-    impl SomeObject {
+    impl FromJSON for SomeObject {
         fn parse_json_to_properties(&self, json_string: String) -> Result<Vec<(JSONProperty, JSONValue)>, String> {
             let mut properties = vec![];
 

@@ -48,3 +48,7 @@ pub trait ToJSON {
     fn to_json_string(&self) -> String;
 }
 
+pub trait FromJSON {
+    fn parse_json_to_properties(&self, json_string: String) -> Result<Vec<(JSONProperty, JSONValue)>, String>;
+}
+
