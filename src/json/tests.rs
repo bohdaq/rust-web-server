@@ -12,8 +12,7 @@ fn parse() {
     }
 
     impl SomeObject {
-        fn from_json_string(&self, json_string: String) -> Result<SomeObject, String> {
-            let result = SomeObject { prop_a: "".to_string(), prop_b: false };
+        fn parse_json_to_properties(&self, json_string: String) -> Result<Vec<(JSONProperty, JSONValue)>, String> {
             let mut properties = vec![];
 
             let data = json_string.as_bytes();
@@ -225,7 +224,7 @@ fn parse() {
                // if null it means null
             // read until key-value pair delimiter ',' or end of the obj '}', parse key-value pair, in case of delimiter continue
 
-            Ok(result)
+            Ok(properties)
         }
     }
 
@@ -306,6 +305,8 @@ fn parse() {
 
     assert_eq!(expected_json_string, json_string);
 
-    let parsed_json_object : SomeObject = obj.from_json_string(json_string.to_string()).unwrap();
+    let properties  = obj.parse_json_to_properties(json_string.to_string()).unwrap();
+    assert_eq!(properties.len(), 2);
+
 }
 
