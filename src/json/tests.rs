@@ -11,6 +11,20 @@ fn parse() {
         prop_b: bool
     }
 
+    impl SomeObject {
+        pub fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String> {
+            for (property, value) in properties {
+                if property.property_name == "prop_a" {
+                    self.prop_a = value.String.unwrap();
+                }
+                if property.property_name == "prop_b" {
+                    self.prop_b = value.bool.unwrap();
+                }
+            }
+            Ok(())
+        }
+    }
+
     impl FromJSON for SomeObject {
         fn parse_json_to_properties(&self, json_string: String) -> Result<Vec<(JSONProperty, JSONValue)>, String> {
             let boxed_parse = JSON::parse_as_properties(json_string);
@@ -93,7 +107,7 @@ fn parse() {
         }
     }
 
-    let obj = SomeObject { prop_a: "123abc".to_string(), prop_b: true };
+    let mut obj = SomeObject { prop_a: "123abc".to_string(), prop_b: true };
 
     let json_string = obj.to_json_string();
     let expected_json_string = "{\r\n  \"prop_a\": \"123abc\",\r\n  \"prop_b\": true\r\n}";
@@ -113,5 +127,9 @@ fn parse() {
     assert_eq!(prop_b_type.property_type, JSON_TYPE.boolean);
     assert_eq!(prop_b_type.property_name, "prop_b");
     assert_eq!(prop_b_value.bool.unwrap(), true);
+
+    obj.set_properties(properties).unwrap();
+    assert_eq!("123abc", obj.prop_a);
+    assert_eq!(true, obj.prop_b);
 }
 
