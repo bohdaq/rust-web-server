@@ -255,5 +255,6 @@ pub trait ToJSON {
 pub trait FromJSON {
     fn parse_json_to_properties(&self, json_string: String) -> Result<Vec<(JSONProperty, JSONValue)>, String>;
     fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String>;
+    fn parse(&mut self, json_string: String) -> Result<(), String>;
 }
 
