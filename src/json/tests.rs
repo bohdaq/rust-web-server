@@ -149,7 +149,8 @@ fn parse() {
 fn parse_direct() {
     struct SomeObject {
         prop_a: String,
-        prop_b: bool
+        prop_b: bool,
+        prop_c: bool
     }
 
     impl FromJSON for SomeObject {
@@ -169,6 +170,10 @@ fn parse_direct() {
                 }
                 if property.property_name == "prop_b" {
                     self.prop_b = value.bool.unwrap();
+                }
+
+                if property.property_name == "prop_c" {
+                    self.prop_c = value.bool.unwrap();
                 }
             }
             Ok(())
@@ -199,6 +204,9 @@ fn parse_direct() {
             let property = JSONProperty { property_name: "prop_b".to_string(), property_type: "bool".to_string() };
             list.push(property);
 
+            let property = JSONProperty { property_name: "prop_c".to_string(), property_type: "bool".to_string() };
+            list.push(property);
+
             list
         }
 
@@ -221,6 +229,11 @@ fn parse_direct() {
                 value.bool = Some(boolean);
             }
 
+            if property_name == "prop_c".to_string() {
+                let boolean : bool = self.prop_c;
+                value.bool = Some(boolean);
+            }
+
             value
         }
 
@@ -238,18 +251,23 @@ fn parse_direct() {
         }
     }
 
-    let mut obj = SomeObject { prop_a: "123abc".to_string(), prop_b: true };
+    let mut obj = SomeObject { prop_a: "123abc".to_string(), prop_b: true, prop_c: false };
 
     let json_string = obj.to_json_string();
-    let expected_json_string = "{\r\n  \"prop_a\": \"123abc\",\r\n  \"prop_b\": true\r\n}";
+    let expected_json_string = "{\r\n  \"prop_a\": \"123abc\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false\r\n}";
 
     assert_eq!(expected_json_string, json_string);
 
-    let mut deserealized_object = SomeObject { prop_a: "".to_string(), prop_b: false };
+    let mut deserealized_object = SomeObject {
+        prop_a: "".to_string(),
+        prop_b: false,
+        prop_c: true
+    };
     deserealized_object.parse(json_string.to_string()).unwrap();
 
     assert_eq!("123abc", deserealized_object.prop_a);
     assert_eq!(true, deserealized_object.prop_b);
+    assert_eq!(false, deserealized_object.prop_c);
 }
 
 
