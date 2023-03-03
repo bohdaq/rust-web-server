@@ -136,6 +136,18 @@ impl  JSON {
                     let is_null = char == "n";
                     if is_null {
                         // read 'ull'
+                        key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
+                        let byte = 0;
+                        let mut char_buffer = vec![byte, byte, byte];
+                        let length = char_buffer.len();
+                        cursor.read_exact(&mut char_buffer).unwrap();
+                        bytes_read = bytes_read + length as i128;
+                        let remaining_bool = String::from_utf8(char_buffer).unwrap();
+                        if remaining_bool != "ull" {
+                            let message = format!("Unable to parse null: {}", key_value_pair);
+                            return Err(message)
+                        }
+                        key_value_pair = [key_value_pair, remaining_bool].join(SYMBOL.empty_string);
                     }
 
                     let is_boolean_true = char == "t";

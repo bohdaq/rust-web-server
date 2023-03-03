@@ -271,4 +271,132 @@ fn parse_direct() {
 }
 
 
+#[test]
+fn parse_null() {
+    struct SomeObject {
+        prop_a: String,
+        prop_b: bool,
+        prop_c: bool
+    }
+
+    impl FromJSON for SomeObject {
+        fn parse_json_to_properties(&self, json_string: String) -> Result<Vec<(JSONProperty, JSONValue)>, String> {
+            let boxed_parse = JSON::parse_as_properties(json_string);
+            if boxed_parse.is_err() {
+                let message = boxed_parse.err().unwrap();
+                return Err(message)
+            }
+            let properties = boxed_parse.unwrap();
+            Ok(properties)
+        }
+        fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String> {
+            for (property, value) in properties {
+                if property.property_name == "prop_a" {
+                    if value.null.is_none() {
+                        self.prop_a = value.String.unwrap();
+                    }
+                }
+                if property.property_name == "prop_b" {
+                    if value.null.is_none() {
+                        self.prop_b = value.bool.unwrap();
+                    }
+                }
+
+                if property.property_name == "prop_c" {
+                    if value.null.is_none() {
+                        self.prop_c = value.bool.unwrap();
+                    }
+                }
+            }
+            Ok(())
+        }
+        fn parse(&mut self, json_string: String) -> Result<(), String> {
+            let boxed_properties = self.parse_json_to_properties(json_string);
+            if boxed_properties.is_err() {
+                let message = boxed_properties.err().unwrap();
+                return Err(message);
+            }
+            let properties = boxed_properties.unwrap();
+            let boxed_set = self.set_properties(properties);
+            if boxed_set.is_err() {
+                let message = boxed_set.err().unwrap();
+                return Err(message);
+            }
+            Ok(())
+        }
+    }
+
+    impl ToJSON for SomeObject {
+        fn list_properties() -> Vec<JSONProperty> {
+            let mut list = vec![];
+
+            let property = JSONProperty { property_name: "prop_a".to_string(), property_type: "String".to_string() };
+            list.push(property);
+
+            let property = JSONProperty { property_name: "prop_b".to_string(), property_type: "bool".to_string() };
+            list.push(property);
+
+            let property = JSONProperty { property_name: "prop_c".to_string(), property_type: "bool".to_string() };
+            list.push(property);
+
+            list
+        }
+
+        fn get_property(&self, property_name: String) -> JSONValue {
+            let mut value = JSONValue {
+                f64: None,
+                i128: None,
+                String: None,
+                bool: None,
+                null: None,
+            };
+
+            if property_name == "prop_a".to_string() {
+                let string : String = self.prop_a.to_owned();
+                value.String = Some(string);
+            }
+
+            if property_name == "prop_b".to_string() {
+                let boolean : bool = self.prop_b;
+                value.bool = Some(boolean);
+            }
+
+            if property_name == "prop_c".to_string() {
+                let boolean : bool = self.prop_c;
+                value.bool = Some(boolean);
+            }
+
+            value
+        }
+
+        fn to_json_string(&self) -> String {
+            let mut processed_data = vec![];
+
+            let properties = SomeObject::list_properties();
+            for property in properties {
+                let value = self.get_property(property.property_name.to_string());
+                processed_data.push((property, value));
+
+            }
+
+            JSON::to_json_string(processed_data)
+        }
+    }
+
+    let json_string_with_null = "{\r\n  \"prop_a\": null,\r\n  \"prop_b\": null,\r\n  \"prop_c\": null\r\n}";
+
+
+    let mut deserealized_object = SomeObject {
+        prop_a: "default".to_string(),
+        prop_b: true,
+        prop_c: false
+    };
+    deserealized_object.parse(json_string_with_null.to_string()).unwrap();
+
+    assert_eq!("default", deserealized_object.prop_a);
+    assert_eq!(true, deserealized_object.prop_b);
+    assert_eq!(false, deserealized_object.prop_c);
+}
+
+
 
