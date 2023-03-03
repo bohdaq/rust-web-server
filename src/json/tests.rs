@@ -266,8 +266,8 @@ fn parse_direct() {
 
     assert_eq!(expected_json_string, json_string);
 
-    let properties  = obj.parse(json_string.to_string()).unwrap();
-   
+    obj.parse(json_string.to_string()).unwrap();
+
     assert_eq!("123abc", obj.prop_a);
     assert_eq!(true, obj.prop_b);
 }
