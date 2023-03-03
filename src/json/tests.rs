@@ -266,10 +266,11 @@ fn parse_direct() {
 
     assert_eq!(expected_json_string, json_string);
 
-    obj.parse(json_string.to_string()).unwrap();
+    let mut deserealized_object = SomeObject { prop_a: "".to_string(), prop_b: false };
+    deserealized_object.parse(json_string.to_string()).unwrap();
 
-    assert_eq!("123abc", obj.prop_a);
-    assert_eq!(true, obj.prop_b);
+    assert_eq!("123abc", deserealized_object.prop_a);
+    assert_eq!(true, deserealized_object.prop_b);
 }
 
 
