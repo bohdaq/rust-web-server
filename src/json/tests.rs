@@ -11,20 +11,6 @@ fn parse() {
         prop_b: bool
     }
 
-    impl SomeObject {
-        pub fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String> {
-            for (property, value) in properties {
-                if property.property_name == "prop_a" {
-                    self.prop_a = value.String.unwrap();
-                }
-                if property.property_name == "prop_b" {
-                    self.prop_b = value.bool.unwrap();
-                }
-            }
-            Ok(())
-        }
-    }
-
     impl FromJSON for SomeObject {
         fn parse_json_to_properties(&self, json_string: String) -> Result<Vec<(JSONProperty, JSONValue)>, String> {
             let boxed_parse = JSON::parse_as_properties(json_string);
@@ -34,6 +20,17 @@ fn parse() {
             }
             let properties = boxed_parse.unwrap();
             Ok(properties)
+        }
+        fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String> {
+            for (property, value) in properties {
+                if property.property_name == "prop_a" {
+                    self.prop_a = value.String.unwrap();
+                }
+                if property.property_name == "prop_b" {
+                    self.prop_b = value.bool.unwrap();
+                }
+            }
+            Ok(())
         }
     }
 
