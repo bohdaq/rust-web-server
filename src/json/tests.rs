@@ -225,37 +225,16 @@ fn parse_direct() {
         }
 
         fn to_json_string(&self) -> String {
-            let mut json_list = vec![];
-            json_list.push(SYMBOL.opening_curly_bracket.to_string());
-
-
-            let mut properties_list = vec![];
+            let mut processed_data = vec![];
 
             let properties = SomeObject::list_properties();
             for property in properties {
                 let value = self.get_property(property.property_name.to_string());
+                processed_data.push((property, value));
 
-                if &property.property_type == "String" {
-                    let raw_value = value.String.unwrap();
-                    let formatted_property = format!("  \"{}\": \"{}\"", &property.property_name, raw_value);
-                    properties_list.push(formatted_property.to_string());
-                }
-
-                if &property.property_type == "bool" {
-                    let raw_value = value.bool.unwrap();
-                    let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
-                    properties_list.push(formatted_property.to_string());
-                }
             }
 
-
-            let comma_new_line_carriage_return = format!("{}{}", SYMBOL.comma, SYMBOL.new_line_carriage_return);
-            let properties = properties_list.join(&comma_new_line_carriage_return);
-
-            json_list.push(properties);
-            json_list.push(SYMBOL.closing_curly_bracket.to_string());
-            let json= json_list.join(SYMBOL.new_line_carriage_return);
-            json
+            JSON::to_json_string(processed_data)
         }
     }
 
