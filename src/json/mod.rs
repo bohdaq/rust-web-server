@@ -203,9 +203,53 @@ impl  JSON {
                             !is_object;
                     if is_number {
                         // read until char is not number and decimal point, minus, exponent
-                        let mut is_point_symbol = false;
-                        let mut is_exponent_symbol = false;
-                        let mut is_minus_symbol = false;
+                        key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
+
+                        let mut is_point_symbol_already_used = false;
+                        let mut is_exponent_symbol_already_used = false;
+                        let mut is_minus_symbol_already_used = false;
+
+                        let mut read_char = true;
+                        while read_char {
+
+                            let byte = 0;
+                            let mut char_buffer = vec![byte];
+                            let length = char_buffer.len();
+                            cursor.read_exact(&mut char_buffer).unwrap();
+                            bytes_read = bytes_read + length as i128;
+                            let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+
+                            let is_numeric = char.is_numeric();
+
+                            let is_point_symbol = char == '.';
+                            if is_point_symbol && is_point_symbol_already_used {
+                                let message = format!("unable to parse number: {}", key_value_pair);
+                                return Err(message)
+                            }
+                            is_point_symbol_already_used = true;
+
+                            let is_exponent_symbol = char == 'e';
+                            if is_exponent_symbol && is_exponent_symbol_already_used {
+                                let message = format!("unable to parse number: {}", key_value_pair);
+                                return Err(message)
+                            }
+                            is_exponent_symbol_already_used = true;
+
+                            let is_minus_symbol = char == '-';
+                            if is_minus_symbol && is_minus_symbol_already_used {
+                                let message = format!("unable to parse number: {}", key_value_pair);
+                                return Err(message)
+                            }
+                            is_minus_symbol_already_used = true;
+
+                            let char_is_part_of_number = is_numeric || is_point_symbol || is_exponent_symbol || is_minus_symbol;
+
+                            if char_is_part_of_number {
+                                key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
+                            } else {
+                                read_char = false;
+                            }
+                        }
                     }
 
                     is_whitespace = false;
@@ -252,6 +296,12 @@ impl  JSON {
 
             if &property.property_type == "bool" {
                 let raw_value = value.bool.unwrap();
+                let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
+                properties_list.push(formatted_property.to_string());
+            }
+
+            if &property.property_type == "i128" {
+                let raw_value = value.i128.unwrap();
                 let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
                 properties_list.push(formatted_property.to_string());
             }
