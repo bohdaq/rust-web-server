@@ -203,6 +203,9 @@ impl  JSON {
                             !is_object;
                     if is_number {
                         // read until char is not number and decimal point, minus, exponent
+                        let mut is_point_symbol = false;
+                        let mut is_exponent_symbol = false;
+                        let mut is_minus_symbol = false;
                     }
 
                     is_whitespace = false;
