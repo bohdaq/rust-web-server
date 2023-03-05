@@ -279,7 +279,7 @@ impl  JSON {
             }
 
 
-            let (property, value) = parse_json_property(&key_value_pair).unwrap();
+            let (property, value) = JSONProperty::parse(&key_value_pair).unwrap();
 
 
             properties.push((property, value));
@@ -356,6 +356,12 @@ pub const JSON_TYPE: JSONType = JSONType{
 pub struct JSONProperty {
     pub property_name: String,
     pub property_type: String,
+}
+
+impl JSONProperty {
+    pub fn parse(raw_string: &str) -> Result<(JSONProperty, JSONValue), String> {
+        parse_json_property(raw_string)
+    }
 }
 
 pub struct JSONValue {

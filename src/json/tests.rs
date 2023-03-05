@@ -1,7 +1,6 @@
 use std::io;
 use std::io::{BufRead, Read};
 use crate::json::{ToJSON, JSONProperty, JSONValue, FromJSON, JSONType, JSON_TYPE, JSON};
-use crate::json::key_value::parse_json_property;
 use crate::symbol::SYMBOL;
 
 #[test]
