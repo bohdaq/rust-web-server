@@ -110,6 +110,7 @@ impl  JSON {
             while is_whitespace {
                 let bytes_to_read = 1;
                 let mut char_buffer = vec![bytes_to_read];
+                comma_delimiter_read_already = false;
 
                 cursor.read_exact(&mut char_buffer).unwrap();
                 bytes_read = bytes_read + bytes_to_read as i128;
