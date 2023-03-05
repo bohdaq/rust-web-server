@@ -312,7 +312,8 @@ fn parse_null() {
         prop_a: String,
         prop_b: bool,
         prop_c: bool,
-        prop_d: i128
+        prop_d: i128,
+        prop_e: f64
     }
 
     impl FromJSON for SomeObject {
@@ -347,6 +348,12 @@ fn parse_null() {
                 if property.property_name == "prop_d" {
                     if value.null.is_none() {
                         self.prop_d = value.i128.unwrap();
+                    }
+                }
+
+                if property.property_name == "prop_e" {
+                    if value.null.is_none() {
+                        self.prop_e = value.f64.unwrap();
                     }
                 }
             }
@@ -384,6 +391,9 @@ fn parse_null() {
             let property = JSONProperty { property_name: "prop_d".to_string(), property_type: "i128".to_string() };
             list.push(property);
 
+            let property = JSONProperty { property_name: "prop_e".to_string(), property_type: "f64".to_string() };
+            list.push(property);
+
             list
         }
 
@@ -416,6 +426,11 @@ fn parse_null() {
                 value.i128 = Some(integer);
             }
 
+            if property_name == "prop_e".to_string() {
+                let integer : f64 = self.prop_e;
+                value.f64 = Some(integer);
+            }
+
             value
         }
 
@@ -433,7 +448,7 @@ fn parse_null() {
         }
     }
 
-    let json_string_with_null = "{\r\n  \"prop_a\": null,\r\n  \"prop_b\": null,\r\n  \"prop_c\": null,\r\n  \"prop_d\": null\r\n}";
+    let json_string_with_null = "{\r\n  \"prop_a\": null,\r\n  \"prop_b\": null,\r\n  \"prop_c\": null,\r\n  \"prop_d\": null,\r\n  \"prop_e\": null\r\n}";
 
 
     let mut deserealized_object = SomeObject {
@@ -441,6 +456,7 @@ fn parse_null() {
         prop_b: true,
         prop_c: false,
         prop_d: 100,
+        prop_e: 100.1,
     };
     deserealized_object.parse(json_string_with_null.to_string()).unwrap();
 
@@ -448,6 +464,7 @@ fn parse_null() {
     assert_eq!(true, deserealized_object.prop_b);
     assert_eq!(false, deserealized_object.prop_c);
     assert_eq!(100, deserealized_object.prop_d);
+    assert_eq!(100.1, deserealized_object.prop_e);
 }
 
 
