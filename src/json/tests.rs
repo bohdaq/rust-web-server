@@ -451,20 +451,20 @@ fn parse_null() {
     let json_string_with_null = "{\r\n  \"prop_a\": null,\r\n  \"prop_b\": null,\r\n  \"prop_c\": null,\r\n  \"prop_d\": null,\r\n  \"prop_e\": null\r\n}";
 
 
-    let mut deserealized_object = SomeObject {
+    let mut desirealized_object = SomeObject {
         prop_a: "default".to_string(),
         prop_b: true,
         prop_c: false,
         prop_d: 100,
         prop_e: 100.1,
     };
-    deserealized_object.parse(json_string_with_null.to_string()).unwrap();
+    desirealized_object.parse(json_string_with_null.to_string()).unwrap();
 
-    assert_eq!("default", deserealized_object.prop_a);
-    assert_eq!(true, deserealized_object.prop_b);
-    assert_eq!(false, deserealized_object.prop_c);
-    assert_eq!(100, deserealized_object.prop_d);
-    assert_eq!(100.1, deserealized_object.prop_e);
+    assert_eq!("default", desirealized_object.prop_a);
+    assert_eq!(true, desirealized_object.prop_b);
+    assert_eq!(false, desirealized_object.prop_c);
+    assert_eq!(100, desirealized_object.prop_d);
+    assert_eq!(100.1, desirealized_object.prop_e);
 }
 
 
