@@ -151,7 +151,8 @@ fn parse_direct() {
         prop_a: String,
         prop_b: bool,
         prop_c: bool,
-        prop_d: i128
+        prop_d: i128,
+        prop_e: f64
     }
 
     impl FromJSON for SomeObject {
@@ -179,6 +180,10 @@ fn parse_direct() {
 
                 if property.property_name == "prop_d" {
                     self.prop_d = value.i128.unwrap();
+                }
+
+                if property.property_name == "prop_e" {
+                    self.prop_e = value.f64.unwrap();
                 }
             }
             Ok(())
@@ -215,6 +220,9 @@ fn parse_direct() {
             let property = JSONProperty { property_name: "prop_d".to_string(), property_type: "i128".to_string() };
             list.push(property);
 
+            let property = JSONProperty { property_name: "prop_e".to_string(), property_type: "f64".to_string() };
+            list.push(property);
+
             list
         }
 
@@ -247,6 +255,11 @@ fn parse_direct() {
                 value.i128 = Some(integer);
             }
 
+            if property_name == "prop_e".to_string() {
+                let floating_point_number: f64 = self.prop_e;
+                value.f64 = Some(floating_point_number);
+            }
+
             value
         }
 
@@ -269,10 +282,11 @@ fn parse_direct() {
         prop_b: true,
         prop_c: false,
         prop_d: 4356257,
+        prop_e: 4356.257,
     };
 
     let json_string = obj.to_json_string();
-    let expected_json_string = "{\r\n  \"prop_a\": \"123abc\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 4356257\r\n}";
+    let expected_json_string = "{\r\n  \"prop_a\": \"123abc\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 4356257,\r\n  \"prop_e\": 4356.257\r\n}";
 
     assert_eq!(expected_json_string, json_string);
 
@@ -280,7 +294,8 @@ fn parse_direct() {
         prop_a: "".to_string(),
         prop_b: false,
         prop_c: true,
-        prop_d: 0
+        prop_d: 0,
+        prop_e: 0.0,
     };
     deserealized_object.parse(json_string.to_string()).unwrap();
 
@@ -288,6 +303,7 @@ fn parse_direct() {
     assert_eq!(true, deserealized_object.prop_b);
     assert_eq!(false, deserealized_object.prop_c);
     assert_eq!(4356257, deserealized_object.prop_d);
+    assert_eq!(4356.257, deserealized_object.prop_e);
 }
 
 

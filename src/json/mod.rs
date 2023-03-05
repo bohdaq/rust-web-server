@@ -104,6 +104,7 @@ impl  JSON {
             key_value_pair = [key_value_pair, line].join(SYMBOL.empty_string);
 
             // read in a while loop until char is not ascii control char and not whitespace, append to buffer
+            let mut comma_delimiter_read_already = false;
             let mut is_whitespace = true;
 
             while is_whitespace {
@@ -220,27 +221,28 @@ impl  JSON {
                             let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
                             let is_numeric = char.is_numeric();
+                            let is_comma_symbol = char == ',';
 
                             let is_point_symbol = char == '.';
                             if is_point_symbol && is_point_symbol_already_used {
+                                is_point_symbol_already_used = true;
                                 let message = format!("unable to parse number: {}", key_value_pair);
                                 return Err(message)
                             }
-                            is_point_symbol_already_used = true;
 
                             let is_exponent_symbol = char == 'e';
                             if is_exponent_symbol && is_exponent_symbol_already_used {
+                                is_exponent_symbol_already_used = true;
                                 let message = format!("unable to parse number: {}", key_value_pair);
                                 return Err(message)
                             }
-                            is_exponent_symbol_already_used = true;
 
                             let is_minus_symbol = char == '-';
                             if is_minus_symbol && is_minus_symbol_already_used {
+                                is_minus_symbol_already_used = true;
                                 let message = format!("unable to parse number: {}", key_value_pair);
                                 return Err(message)
                             }
-                            is_minus_symbol_already_used = true;
 
                             let char_is_part_of_number = is_numeric || is_point_symbol || is_exponent_symbol || is_minus_symbol;
 
@@ -248,6 +250,9 @@ impl  JSON {
                                 key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
                             } else {
                                 read_char = false;
+                                if is_comma_symbol {
+                                    comma_delimiter_read_already = true;
+                                }
                             }
                         }
                     }
@@ -259,16 +264,19 @@ impl  JSON {
             }
 
             // attempt to read till comma, indicates presence of another key-value pair
-            buf = vec![];
-            boxed_read = cursor.read_until(b',', &mut buf);
-            if boxed_read.is_err() {
-                let message = boxed_read.err().unwrap().to_string();
-                return Err(message);
+            if !comma_delimiter_read_already {
+                buf = vec![];
+                boxed_read = cursor.read_until(b',', &mut buf);
+                if boxed_read.is_err() {
+                    let message = boxed_read.err().unwrap().to_string();
+                    return Err(message);
+                }
+                bytes_read = bytes_read + boxed_read.unwrap() as i128;
+                if bytes_read == total_bytes {
+                    is_there_a_key_value = false;
+                };
             }
-            bytes_read = bytes_read + boxed_read.unwrap() as i128;
-            if bytes_read == total_bytes {
-                is_there_a_key_value = false;
-            };
+
 
             let (property, value) = parse_json_property(&key_value_pair).unwrap();
 
@@ -302,6 +310,12 @@ impl  JSON {
 
             if &property.property_type == "i128" {
                 let raw_value = value.i128.unwrap();
+                let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
+                properties_list.push(formatted_property.to_string());
+            }
+
+            if &property.property_type == "f64" {
+                let raw_value = value.f64.unwrap();
                 let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
                 properties_list.push(formatted_property.to_string());
             }
