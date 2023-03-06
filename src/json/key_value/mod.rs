@@ -10,6 +10,7 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
         f64: None,
         i128: None,
         String: None,
+        object: None,
         bool: None,
         null: None,
     };
@@ -77,7 +78,9 @@ pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue)
     }
 
     if is_object {
-
+        property.property_type = JSON_TYPE.object.to_string();
+        property.property_name = _key.replace(SYMBOL.quotation_mark, SYMBOL.empty_string).to_string();
+        value.object = Some(_value.to_string());
     }
 
     if is_boolean {

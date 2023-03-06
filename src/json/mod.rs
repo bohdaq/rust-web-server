@@ -194,6 +194,34 @@ impl  JSON {
                     let is_object = char == "{";
                     if is_object {
                         // read the object (including nested objects and arrays)
+                        let mut number_of_open_curly_braces = 1;
+                        let mut number_of_closed_curly_braces = 0;
+
+                        let mut read_char = true;
+                        while read_char {
+
+                            let byte = 0;
+                            let mut char_buffer = vec![byte];
+                            let length = char_buffer.len();
+                            cursor.read_exact(&mut char_buffer).unwrap();
+                            bytes_read = bytes_read + length as i128;
+                            let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+
+                            let is_open_curly_brace = char == '{';
+                            if is_open_curly_brace {
+                                number_of_open_curly_braces = number_of_open_curly_braces + 1;
+                            }
+
+
+                            let is_close_curly_brace = char == '}';
+                            if is_close_curly_brace {
+                                number_of_closed_curly_braces = number_of_closed_curly_braces + 1;
+                            }
+
+                            if number_of_open_curly_braces == number_of_closed_curly_braces {
+                                read_char = false;
+                            }
+                        }
                     }
 
                     let is_number =
@@ -320,6 +348,12 @@ impl  JSON {
                 let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
                 properties_list.push(formatted_property.to_string());
             }
+
+            if &property.property_type == "object" {
+                let raw_value = value.object.unwrap();
+                let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
+                properties_list.push(formatted_property.to_string());
+            }
         }
 
 
@@ -368,6 +402,7 @@ pub struct JSONValue {
     pub f64: Option<f64>,
     pub i128: Option<i128>,
     pub String: Option<String>,
+    pub object: Option<String>,
     pub bool: Option<bool>,
     pub null: Option<Null>,
 }
