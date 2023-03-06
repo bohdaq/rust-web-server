@@ -356,9 +356,11 @@ impl  JSON {
             }
 
             if &property.property_type == "object" {
-                let raw_value = value.object.unwrap();
-                let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
-                properties_list.push(formatted_property.to_string());
+                if value.object.is_some() {
+                    let raw_value = value.object.unwrap();
+                    let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
+                    properties_list.push(formatted_property.to_string());
+                }
             }
         }
 
