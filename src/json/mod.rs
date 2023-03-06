@@ -37,7 +37,7 @@ impl  JSON {
             let error_message = boxed_line.err().unwrap().to_string();
             return Err(error_message);
         }
-        let mut line = boxed_line.unwrap();
+        let mut _line = boxed_line.unwrap();
 
 
         let mut is_there_a_key_value = true;
@@ -62,8 +62,8 @@ impl  JSON {
                 return Err(error_message);
             }
 
-            line = boxed_line.unwrap();
-            key_value_pair = [key_value_pair, line].join(SYMBOL.empty_string);
+            _line = boxed_line.unwrap();
+            key_value_pair = [key_value_pair, _line].join(SYMBOL.empty_string);
 
 
 
@@ -82,8 +82,8 @@ impl  JSON {
                 let error_message = boxed_line.err().unwrap().to_string();
                 return Err(error_message);
             }
-            line = boxed_line.unwrap();
-            key_value_pair = [key_value_pair, line].join(SYMBOL.empty_string);
+            _line = boxed_line.unwrap();
+            key_value_pair = [key_value_pair, _line].join(SYMBOL.empty_string);
 
 
             // read until delimiter ':', append to buffer
@@ -101,8 +101,8 @@ impl  JSON {
                 let error_message = boxed_line.err().unwrap().to_string();
                 return Err(error_message);
             }
-            line = boxed_line.unwrap();
-            key_value_pair = [key_value_pair, line].join(SYMBOL.empty_string);
+            _line = boxed_line.unwrap();
+            key_value_pair = [key_value_pair, _line].join(SYMBOL.empty_string);
 
             // read in a while loop until char is not ascii control char and not whitespace, append to buffer
             let mut comma_delimiter_read_already = false;
@@ -241,9 +241,9 @@ impl  JSON {
                         // read until char is not number and decimal point, minus, exponent
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
 
-                        let mut is_point_symbol_already_used = false;
-                        let mut is_exponent_symbol_already_used = false;
-                        let mut is_minus_symbol_already_used = false;
+                        let mut _is_point_symbol_already_used = false;
+                        let mut _is_exponent_symbol_already_used = false;
+                        let mut _is_minus_symbol_already_used = false;
 
                         let mut read_char = true;
                         while read_char {
@@ -259,22 +259,22 @@ impl  JSON {
                             let is_comma_symbol = char == ',';
 
                             let is_point_symbol = char == '.';
-                            if is_point_symbol && is_point_symbol_already_used {
-                                is_point_symbol_already_used = true;
+                            if is_point_symbol && _is_point_symbol_already_used {
+                                _is_point_symbol_already_used = true;
                                 let message = format!("unable to parse number: {}", key_value_pair);
                                 return Err(message)
                             }
 
                             let is_exponent_symbol = char == 'e';
-                            if is_exponent_symbol && is_exponent_symbol_already_used {
-                                is_exponent_symbol_already_used = true;
+                            if is_exponent_symbol && _is_exponent_symbol_already_used {
+                                _is_exponent_symbol_already_used = true;
                                 let message = format!("unable to parse number: {}", key_value_pair);
                                 return Err(message)
                             }
 
                             let is_minus_symbol = char == '-';
-                            if is_minus_symbol && is_minus_symbol_already_used {
-                                is_minus_symbol_already_used = true;
+                            if is_minus_symbol && _is_minus_symbol_already_used {
+                                _is_minus_symbol_already_used = true;
                                 let message = format!("unable to parse number: {}", key_value_pair);
                                 return Err(message)
                             }
