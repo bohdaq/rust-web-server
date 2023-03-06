@@ -379,19 +379,19 @@ fn parse_null() {
         fn list_properties() -> Vec<JSONProperty> {
             let mut list = vec![];
 
-            let property = JSONProperty { property_name: "prop_a".to_string(), property_type: "String".to_string() };
+            let property = JSONProperty { property_name: "prop_a".to_string(), property_type: JSON_TYPE.string.to_string() };
             list.push(property);
 
-            let property = JSONProperty { property_name: "prop_b".to_string(), property_type: "bool".to_string() };
+            let property = JSONProperty { property_name: "prop_b".to_string(), property_type: JSON_TYPE.boolean.to_string() };
             list.push(property);
 
-            let property = JSONProperty { property_name: "prop_c".to_string(), property_type: "bool".to_string() };
+            let property = JSONProperty { property_name: "prop_c".to_string(), property_type: JSON_TYPE.boolean.to_string() };
             list.push(property);
 
-            let property = JSONProperty { property_name: "prop_d".to_string(), property_type: "i128".to_string() };
+            let property = JSONProperty { property_name: "prop_d".to_string(), property_type: JSON_TYPE.integer.to_string() };
             list.push(property);
 
-            let property = JSONProperty { property_name: "prop_e".to_string(), property_type: "f64".to_string() };
+            let property = JSONProperty { property_name: "prop_e".to_string(), property_type: JSON_TYPE.number.to_string() };
             list.push(property);
 
             list
@@ -513,7 +513,7 @@ fn parse_nested_object() {
         fn list_properties() -> Vec<JSONProperty> {
             let mut list = vec![];
 
-            let property = JSONProperty { property_name: "prop_foo".to_string(), property_type: "bool".to_string() };
+            let property = JSONProperty { property_name: "prop_foo".to_string(), property_type: JSON_TYPE.boolean.to_string() };
             list.push(property);
 
             list
