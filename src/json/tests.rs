@@ -594,7 +594,11 @@ fn parse_nested_object() {
                 if property.property_name == "prop_f" {
                     let mut prop_f = NestedObject { prop_foo: false };
                     let unparsed_object = value.object.unwrap();
-                    prop_f.parse(unparsed_object);
+                    let boxed_parse = prop_f.parse(unparsed_object);
+                    if boxed_parse.is_err() {
+                        let message = boxed_parse.err().unwrap();
+                        return Err(message);
+                    }
                     self.prop_f = Some(prop_f);
                 }
             }
@@ -859,7 +863,11 @@ fn parse_nested_object_none() {
                 if property.property_name == "prop_f" {
                     let mut prop_f = NestedObject { prop_foo: false };
                     let unparsed_object = value.object.unwrap();
-                    prop_f.parse(unparsed_object);
+                    let boxed_parse = prop_f.parse(unparsed_object);
+                    if boxed_parse.is_err() {
+                        let message = boxed_parse.err().unwrap();
+                        return Err(message);
+                    }
                     self.prop_f = Some(prop_f);
                 }
             }
