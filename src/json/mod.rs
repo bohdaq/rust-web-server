@@ -332,7 +332,7 @@ impl  JSON {
         for (property, value) in key_value_list {
 
             if &property.property_type == "String" {
-                let raw_value = value.String.unwrap();
+                let raw_value = value.string.unwrap();
                 let formatted_property = format!("  \"{}\": \"{}\"", &property.property_name, raw_value);
                 properties_list.push(formatted_property.to_string());
             }
@@ -409,7 +409,7 @@ impl JSONProperty {
 pub struct JSONValue {
     pub f64: Option<f64>,
     pub i128: Option<i128>,
-    pub String: Option<String>,
+    pub string: Option<String>,
     pub object: Option<String>,
     pub bool: Option<bool>,
     pub null: Option<Null>,

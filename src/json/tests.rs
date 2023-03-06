@@ -21,7 +21,7 @@ fn parse() {
         fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String> {
             for (property, value) in properties {
                 if property.property_name == "prop_a" {
-                    self.prop_a = value.String.unwrap();
+                    self.prop_a = value.string.unwrap();
                 }
                 if property.property_name == "prop_b" {
                     self.prop_b = value.bool.unwrap();
@@ -62,7 +62,7 @@ fn parse() {
             let mut value = JSONValue {
                 f64: None,
                 i128: None,
-                String: None,
+                string: None,
                 object: None,
                 bool: None,
                 null: None,
@@ -70,7 +70,7 @@ fn parse() {
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
-                value.String = Some(string);
+                value.string = Some(string);
             }
 
             if property_name == "prop_b".to_string() {
@@ -93,7 +93,7 @@ fn parse() {
                 let value = self.get_property(property.property_name.to_string());
 
                 if &property.property_type == "String" {
-                    let raw_value = value.String.unwrap();
+                    let raw_value = value.string.unwrap();
                     let formatted_property = format!("  \"{}\": \"{}\"", &property.property_name, raw_value);
                     properties_list.push(formatted_property.to_string());
                 }
@@ -129,7 +129,7 @@ fn parse() {
     let (prop_a_type, prop_a_value) = properties.get(0).unwrap();
     assert_eq!(prop_a_type.property_type, JSON_TYPE.string);
     assert_eq!(prop_a_type.property_name, "prop_a");
-    assert_eq!(prop_a_value.String.clone().unwrap(), "123abc");
+    assert_eq!(prop_a_value.string.clone().unwrap(), "123abc");
 
 
     let (prop_b_type, prop_b_value) = properties.get(1).unwrap();
@@ -166,7 +166,7 @@ fn parse_direct() {
         fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String> {
             for (property, value) in properties {
                 if property.property_name == "prop_a" {
-                    self.prop_a = value.String.unwrap();
+                    self.prop_a = value.string.unwrap();
                 }
                 if property.property_name == "prop_b" {
                     self.prop_b = value.bool.unwrap();
@@ -228,7 +228,7 @@ fn parse_direct() {
             let mut value = JSONValue {
                 f64: None,
                 i128: None,
-                String: None,
+                string: None,
                 object: None,
                 bool: None,
                 null: None,
@@ -236,7 +236,7 @@ fn parse_direct() {
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
-                value.String = Some(string);
+                value.string = Some(string);
             }
 
             if property_name == "prop_b".to_string() {
@@ -330,7 +330,7 @@ fn parse_null() {
             for (property, value) in properties {
                 if property.property_name == "prop_a" {
                     if value.null.is_none() {
-                        self.prop_a = value.String.unwrap();
+                        self.prop_a = value.string.unwrap();
                     }
                 }
                 if property.property_name == "prop_b" {
@@ -401,7 +401,7 @@ fn parse_null() {
             let mut value = JSONValue {
                 f64: None,
                 i128: None,
-                String: None,
+                string: None,
                 object: None,
                 bool: None,
                 null: None,
@@ -409,7 +409,7 @@ fn parse_null() {
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
-                value.String = Some(string);
+                value.string = Some(string);
             }
 
             if property_name == "prop_b".to_string() {
@@ -523,7 +523,7 @@ fn parse_nested_object() {
             let mut value = JSONValue {
                 f64: None,
                 i128: None,
-                String: None,
+                string: None,
                 object: None,
                 bool: None,
                 null: None,
@@ -573,7 +573,7 @@ fn parse_nested_object() {
         fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String> {
             for (property, value) in properties {
                 if property.property_name == "prop_a" {
-                    self.prop_a = value.String.unwrap();
+                    self.prop_a = value.string.unwrap();
                 }
                 if property.property_name == "prop_b" {
                     self.prop_b = value.bool.unwrap();
@@ -645,7 +645,7 @@ fn parse_nested_object() {
             let mut value = JSONValue {
                 f64: None,
                 i128: None,
-                String: None,
+                string: None,
                 object: None,
                 bool: None,
                 null: None,
@@ -653,7 +653,7 @@ fn parse_nested_object() {
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
-                value.String = Some(string);
+                value.string = Some(string);
             }
 
             if property_name == "prop_b".to_string() {
@@ -788,7 +788,7 @@ fn parse_nested_object_none() {
             let mut value = JSONValue {
                 f64: None,
                 i128: None,
-                String: None,
+                string: None,
                 object: None,
                 bool: None,
                 null: None,
@@ -838,7 +838,7 @@ fn parse_nested_object_none() {
         fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String> {
             for (property, value) in properties {
                 if property.property_name == "prop_a" {
-                    self.prop_a = value.String.unwrap();
+                    self.prop_a = value.string.unwrap();
                 }
                 if property.property_name == "prop_b" {
                     self.prop_b = value.bool.unwrap();
@@ -910,7 +910,7 @@ fn parse_nested_object_none() {
             let mut value = JSONValue {
                 f64: None,
                 i128: None,
-                String: None,
+                string: None,
                 object: None,
                 bool: None,
                 null: None,
@@ -918,7 +918,7 @@ fn parse_nested_object_none() {
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
-                value.String = Some(string);
+                value.string = Some(string);
             }
 
             if property_name == "prop_b".to_string() {

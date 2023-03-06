@@ -12,7 +12,7 @@ fn parse_raw_property_string() {
 
     assert_eq!(key.property_name, property_key);
     assert_eq!(key.property_type, property_type);
-    assert_eq!(value.String.unwrap(), property_value);
+    assert_eq!(value.string.unwrap(), property_value);
 }
 
 #[test]
