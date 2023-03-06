@@ -21,6 +21,7 @@ impl  JSON {
         let total_bytes : i128 = data.len() as i128;
 
         // read obj start '{'
+        let mut is_root_opening_curly_brace = true;
         let mut buf = vec![];
         let mut boxed_read = cursor.read_until(b'{', &mut buf);
         if boxed_read.is_err() {
@@ -191,9 +192,11 @@ impl  JSON {
                         // read the array (including nested objects and arrays)
                     }
 
-                    let is_object = char == "{";
-                    if is_object {
+
+                    let is_nested_object = char == "{" && !is_root_opening_curly_brace;
+                    if is_nested_object {
                         // read the object (including nested objects and arrays)
+                        key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
                         let mut number_of_open_curly_braces = 1;
                         let mut number_of_closed_curly_braces = 0;
 
@@ -218,11 +221,14 @@ impl  JSON {
                                 number_of_closed_curly_braces = number_of_closed_curly_braces + 1;
                             }
 
+                            key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
+
                             if number_of_open_curly_braces == number_of_closed_curly_braces {
                                 read_char = false;
                             }
                         }
                     }
+                    is_root_opening_curly_brace = false;
 
                     let is_number =
                         !is_string &&
@@ -230,7 +236,7 @@ impl  JSON {
                             !is_boolean_true &&
                             !is_boolean_false &&
                             !is_array &&
-                            !is_object;
+                            !is_nested_object;
                     if is_number {
                         // read until char is not number and decimal point, minus, exponent
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
