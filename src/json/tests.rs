@@ -552,11 +552,6 @@ fn parse_nested_object() {
         }
     }
 
-    let nested_obj = NestedObject { prop_foo: true };
-    let serialized_nested_obj = nested_obj.to_json_string();
-
-
-
     struct SomeObject {
         prop_a: String,
         prop_b: bool,
