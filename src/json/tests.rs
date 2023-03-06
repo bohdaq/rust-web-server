@@ -1526,7 +1526,7 @@ fn parse_nested_object_null() {
         prop_c: true,
         prop_d: 0,
         prop_e: 0.0,
-        prop_f: None,
+        prop_f: Some(NestedObject{ prop_foo: true }),
     };
     deserealized_object.parse(json_string.to_string()).unwrap();
 
