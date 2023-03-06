@@ -276,7 +276,7 @@ fn parse_direct() {
         }
     }
 
-    let mut obj = SomeObject {
+    let obj = SomeObject {
         prop_a: "123abc".to_string(),
         prop_b: true,
         prop_c: false,
@@ -677,7 +677,7 @@ fn parse_nested_object() {
             }
 
             if property_name == "prop_f".to_string() {
-                let mut prop_f = self.prop_f.as_ref().unwrap();
+                let prop_f = self.prop_f.as_ref().unwrap();
                 let serialized_nested_object = prop_f.to_json_string();
                 value.object = Some(serialized_nested_object);
             }
@@ -943,7 +943,7 @@ fn parse_nested_object_none() {
 
             if property_name == "prop_f".to_string() {
                 if self.prop_f.is_some() {
-                    let mut prop_f = self.prop_f.as_ref().unwrap();
+                    let prop_f = self.prop_f.as_ref().unwrap();
                     let serialized_nested_object = prop_f.to_json_string();
                     value.object = Some(serialized_nested_object);
                 }
