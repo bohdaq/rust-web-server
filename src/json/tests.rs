@@ -1827,7 +1827,8 @@ fn nested_object_none_to_string() {
 #[test]
 fn parse_multi_nested_object() {
     pub struct NestedObject {
-        prop_foo: bool
+        prop_foo: bool,
+        prop_baz: Option<AnotherNestedObject>
     }
 
     impl FromJSON for NestedObject {
@@ -1844,6 +1845,21 @@ fn parse_multi_nested_object() {
             for (property, value) in properties {
                 if property.property_name == "prop_foo" {
                     self.prop_foo = value.bool.unwrap();
+                }
+                if property.property_name == "prop_baz" {
+                    let mut prop_baz = AnotherNestedObject { prop_bar: 1.1 };
+                    if value.object.is_some() {
+                        let unparsed_object = value.object.unwrap();
+                        let boxed_parse = prop_baz.parse(unparsed_object);
+                        if boxed_parse.is_err() {
+                            let message = boxed_parse.err().unwrap();
+                            return Err(message);
+                        }
+                        self.prop_baz = Some(prop_baz);
+                    } else {
+                        self.prop_baz = None;
+                    }
+
                 }
 
             }
@@ -1872,6 +1888,9 @@ fn parse_multi_nested_object() {
             let property = JSONProperty { property_name: "prop_foo".to_string(), property_type: JSON_TYPE.boolean.to_string() };
             list.push(property);
 
+            let property = JSONProperty { property_name: "prop_baz".to_string(), property_type: JSON_TYPE.object.to_string() };
+            list.push(property);
+
             list
         }
 
@@ -1889,6 +1908,14 @@ fn parse_multi_nested_object() {
                 let boolean : bool = self.prop_foo;
                 value.bool = Some(boolean);
             }
+
+            if property_name == "prop_baz".to_string() {
+                let prop_baz = self.prop_baz.as_ref().unwrap();
+                let serialized_nested_object = prop_baz.to_json_string();
+                value.object = Some(serialized_nested_object);
+            }
+
+
 
             value
         }
@@ -2029,7 +2056,7 @@ fn parse_multi_nested_object() {
                 }
 
                 if property.property_name == "prop_f" {
-                    let mut prop_f = NestedObject { prop_foo: false };
+                    let mut prop_f = NestedObject { prop_foo: false, prop_baz: None };
                     if value.object.is_some() {
                         let unparsed_object = value.object.unwrap();
                         let boxed_parse = prop_f.parse(unparsed_object);
@@ -2145,7 +2172,14 @@ fn parse_multi_nested_object() {
         }
     }
 
-    let nested_obj = NestedObject { prop_foo: true };
+    let nested_obj = NestedObject
+    {
+        prop_foo: true,
+        prop_baz: Some(AnotherNestedObject {
+            prop_bar: 2.2
+        })
+    };
+
     let obj = SomeObject {
         prop_a: "123abc".to_string(),
         prop_b: true,
@@ -2156,7 +2190,7 @@ fn parse_multi_nested_object() {
     };
 
     let json_string = obj.to_json_string();
-    let expected_json_string = "{\r\n  \"prop_a\": \"123abc\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 4356257,\r\n  \"prop_e\": 4356.257,\r\n  \"prop_f\": {\r\n  \"prop_foo\": true\r\n}\r\n}";
+    let expected_json_string = "{\r\n  \"prop_a\": \"123abc\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 4356257,\r\n  \"prop_e\": 4356.257,\r\n  \"prop_f\": {\r\n  \"prop_foo\": true,\r\n  \"prop_baz\": {\r\n  \"prop_bar\": 2.2\r\n}\r\n}\r\n}";
 
     assert_eq!(expected_json_string, json_string);
 
@@ -2175,5 +2209,10 @@ fn parse_multi_nested_object() {
     assert_eq!(false, deserealized_object.prop_c);
     assert_eq!(4356257, deserealized_object.prop_d);
     assert_eq!(4356.257, deserealized_object.prop_e);
-    assert_eq!(true, deserealized_object.prop_f.unwrap().prop_foo);
+
+    let nested_obj = deserealized_object.prop_f.unwrap();
+    assert_eq!(true, nested_obj.prop_foo);
+
+    let another_nested_obj = nested_obj.prop_baz.unwrap();
+    assert_eq!(another_nested_obj.prop_bar, 2.2);
 }
