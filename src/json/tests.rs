@@ -1,4 +1,4 @@
-use crate::json::{ToJSON, JSONProperty, JSONValue, FromJSON, JSON_TYPE, JSON};
+use crate::json::{ToJSON, JSONProperty, JSONValue, FromJSON, JSON_TYPE, JSON, JSONArray};
 use crate::symbol::SYMBOL;
 
 #[test]
@@ -2215,4 +2215,12 @@ fn parse_multi_nested_object() {
 
     let another_nested_obj = nested_obj.prop_baz.unwrap();
     assert_eq!(another_nested_obj.prop_bar, 2.2);
+}
+
+#[test]
+fn json_array() {
+    let array = "[123, 456, 6,7 ,8]";
+    let actual = JSONArray::parse(array.to_string()).unwrap();
+    let expected = vec!["123", "456", "6", "7", "8"];
+    assert_eq!(actual, expected);
 }

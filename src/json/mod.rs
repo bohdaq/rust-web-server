@@ -420,8 +420,51 @@ pub struct JSONArray {
 }
 
 impl JSONArray {
-    pub fn parse(&self, _json_string: String) -> Result<Vec<String>, String> {
+    pub fn parse(_json_string: String) -> Result<Vec<String>, String> {
         let list : Vec<String> = vec![];
+
+        // cursor
+        let mut cursor = io::Cursor::new(_json_string.to_string());
+        let mut bytes_read : i128 = 0;
+        let total_bytes : i128 = _json_string.len() as i128;
+
+
+        // read the start of the array
+        let mut buf = vec![];
+        let mut boxed_read = cursor.read_until(b'[', &mut buf);
+        if boxed_read.is_err() {
+            let message = boxed_read.err().unwrap().to_string();
+            return Err(message);
+        }
+        bytes_read = bytes_read + boxed_read.unwrap() as i128;
+
+        let mut b : &[u8] = &buf;
+
+        let mut boxed_line = String::from_utf8(Vec::from(b));
+        if boxed_line.is_err() {
+            let error_message = boxed_line.err().unwrap().to_string();
+            return Err(error_message);
+        }
+        let mut _line = boxed_line.unwrap();
+
+
+
+        let mut read_char = true;
+        while read_char {
+
+            let byte = 0;
+            let mut char_buffer = vec![byte];
+            let length = char_buffer.len();
+            cursor.read_exact(&mut char_buffer).unwrap();
+            bytes_read = bytes_read + length as i128;
+            let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+
+
+
+           if char == ']' {
+               read_char = false;
+           }
+        }
 
         Ok(list)
     }
