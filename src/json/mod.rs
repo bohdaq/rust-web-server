@@ -415,6 +415,18 @@ pub struct JSONValue {
     pub null: Option<Null>,
 }
 
+pub struct JSONArray {
+
+}
+
+impl JSONArray {
+    pub fn parse(&self, _json_string: String) -> Result<Vec<String>, String> {
+        let list : Vec<String> = vec![];
+
+        Ok(list)
+    }
+}
+
 pub struct Null {}
 
 pub trait ToJSON {
