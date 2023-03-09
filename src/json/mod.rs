@@ -421,7 +421,7 @@ pub struct JSONArray {
 
 impl JSONArray {
     pub fn parse(_json_string: String) -> Result<Vec<String>, String> {
-        let list : Vec<String> = vec![];
+        let mut list : Vec<String> = vec![];
 
         // cursor
         let mut cursor = io::Cursor::new(_json_string.to_string());
@@ -458,7 +458,7 @@ impl JSONArray {
             let length = char_buffer.len();
             cursor.read_exact(&mut char_buffer).unwrap();
             bytes_read = bytes_read + length as i128;
-            let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+            let mut char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
             if char != ' ' {
                 let is_string = char == '\"';
@@ -500,22 +500,25 @@ impl JSONArray {
                         !is_array &&
                         !is_nested_object;
                 if is_number {
+                    token = "".to_string();
                     // read until char is not number and decimal point, minus, exponent
-                    token = [token, char.to_string()].join(SYMBOL.empty_string);
+                    if char != ',' {
+                        token = ["".to_string(), char.to_string()].join(SYMBOL.empty_string);
+                    }
 
                     let mut _is_point_symbol_already_used = false;
                     let mut _is_exponent_symbol_already_used = false;
                     let mut _is_minus_symbol_already_used = false;
 
-                    let mut read_char = true;
-                    while read_char {
+                    let mut read_number = true;
+                    while read_number {
 
                         let byte = 0;
                         let mut char_buffer = vec![byte];
                         let length = char_buffer.len();
                         cursor.read_exact(&mut char_buffer).unwrap();
                         bytes_read = bytes_read + length as i128;
-                        let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+                        char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
                         let is_numeric = char.is_numeric();
                         let is_comma_symbol = char == ',';
@@ -546,12 +549,13 @@ impl JSONArray {
                         if char_is_part_of_number {
                             token = [token, char.to_string()].join(SYMBOL.empty_string);
                         } else {
-                            read_char = false;
+                            read_number = false;
                             if is_comma_symbol {
-                                comma_delimiter_read_already = true;
+                                let comma_delimiter_read_already = true;
                             }
                         }
                     }
+                    list.push(token);
                 }
 
             }
