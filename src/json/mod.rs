@@ -424,6 +424,7 @@ impl JSONArray {
         let mut list : Vec<String> = vec![];
 
         // cursor
+        let mut is_end_of_json_string = false;
         let mut cursor = io::Cursor::new(_json_string.to_string());
         let mut bytes_read : i128 = 0;
         let total_bytes : i128 = _json_string.len() as i128;
@@ -437,6 +438,11 @@ impl JSONArray {
             return Err(message);
         }
         bytes_read = bytes_read + boxed_read.unwrap() as i128;
+        is_end_of_json_string = total_bytes == bytes_read;
+        if is_end_of_json_string {
+            let message = format!("not proper start of the json array: {}", _json_string.to_string());
+            return Err(message);
+        }
 
         let mut b : &[u8] = &buf;
 
@@ -451,7 +457,6 @@ impl JSONArray {
 
         let mut read_char = true;
         let mut token = "".to_string();
-        let mut is_end_of_json_string = false;
         while read_char {
 
             if is_end_of_json_string {

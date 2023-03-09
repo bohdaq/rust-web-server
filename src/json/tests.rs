@@ -2275,3 +2275,13 @@ fn json_array_no_closing_square_bracket() {
     let message = result.err().unwrap();
     assert_eq!("not proper end of the json array:  [ 123, 456, 6,7 ,8  ", message);
 }
+
+#[test]
+fn json_array_no_starting_square_bracket() {
+    let array = "  123, 456, 6,7 ,8  ]";
+    let result = JSONArray::parse(array.to_string());
+    assert!(result.is_err());
+
+    let message = result.err().unwrap();
+    assert_eq!("not proper start of the json array:   123, 456, 6,7 ,8  ]", message);
+}
