@@ -450,6 +450,7 @@ impl JSONArray {
 
 
         let mut read_char = true;
+        let mut token = "".to_string();
         while read_char {
 
             let byte = 0;
@@ -459,6 +460,101 @@ impl JSONArray {
             bytes_read = bytes_read + length as i128;
             let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
+            if char != ' ' {
+                let is_string = char == '\"';
+                if is_string {
+
+                }
+
+                let is_null = char == 'n';
+                if is_null {
+                    // read 'ull'
+                }
+
+                let is_boolean_true = char == 't';
+                if is_boolean_true {
+                    // read 'rue'
+                }
+
+                let is_boolean_false = char == 'f';
+                if is_boolean_false {
+                    // read 'alse'
+                }
+
+                let is_array = char == '[';
+                if is_array {
+                    // read the array (including nested objects and arrays)
+                }
+
+
+                let is_nested_object = char == '{';
+                if is_nested_object {
+                    // read the object (including nested objects and arrays)
+                }
+
+                let is_number =
+                    !is_string &&
+                        !is_null &&
+                        !is_boolean_true &&
+                        !is_boolean_false &&
+                        !is_array &&
+                        !is_nested_object;
+                if is_number {
+                    // read until char is not number and decimal point, minus, exponent
+                    token = [token, char.to_string()].join(SYMBOL.empty_string);
+
+                    let mut _is_point_symbol_already_used = false;
+                    let mut _is_exponent_symbol_already_used = false;
+                    let mut _is_minus_symbol_already_used = false;
+
+                    let mut read_char = true;
+                    while read_char {
+
+                        let byte = 0;
+                        let mut char_buffer = vec![byte];
+                        let length = char_buffer.len();
+                        cursor.read_exact(&mut char_buffer).unwrap();
+                        bytes_read = bytes_read + length as i128;
+                        let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+
+                        let is_numeric = char.is_numeric();
+                        let is_comma_symbol = char == ',';
+
+                        let is_point_symbol = char == '.';
+                        if is_point_symbol && _is_point_symbol_already_used {
+                            _is_point_symbol_already_used = true;
+                            let message = format!("unable to parse number: {}", token);
+                            return Err(message)
+                        }
+
+                        let is_exponent_symbol = char == 'e';
+                        if is_exponent_symbol && _is_exponent_symbol_already_used {
+                            _is_exponent_symbol_already_used = true;
+                            let message = format!("unable to parse number: {}", token);
+                            return Err(message)
+                        }
+
+                        let is_minus_symbol = char == '-';
+                        if is_minus_symbol && _is_minus_symbol_already_used {
+                            _is_minus_symbol_already_used = true;
+                            let message = format!("unable to parse number: {}", token);
+                            return Err(message)
+                        }
+
+                        let char_is_part_of_number = is_numeric || is_point_symbol || is_exponent_symbol || is_minus_symbol;
+
+                        if char_is_part_of_number {
+                            token = [token, char.to_string()].join(SYMBOL.empty_string);
+                        } else {
+                            read_char = false;
+                            if is_comma_symbol {
+                                comma_delimiter_read_already = true;
+                            }
+                        }
+                    }
+                }
+
+            }
 
 
            if char == ']' {
