@@ -460,7 +460,11 @@ impl JSONArray {
             bytes_read = bytes_read + length as i128;
             let mut char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
-            if char != ' ' {
+            if char == ']' {
+                read_char = false;
+            }
+
+            if char != ' ' && char != ']' {
                 let is_string = char == '\"';
                 if is_string {
 
