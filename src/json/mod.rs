@@ -537,7 +537,6 @@ impl JSONArray {
                         char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
                         let is_numeric = char.is_numeric();
-                        let is_comma_symbol = char == ',';
 
                         let is_point_symbol = char == '.';
                         if is_point_symbol && _is_point_symbol_already_used {
@@ -593,9 +592,6 @@ impl JSONArray {
                             token = [token, char.to_string()].join(SYMBOL.empty_string);
                         } else {
                             read_number = false;
-                            if is_comma_symbol {
-                                let comma_delimiter_read_already = true;
-                            }
                         }
                     }
                     list.push(token);
