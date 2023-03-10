@@ -2226,6 +2226,14 @@ fn json_array() {
 }
 
 #[test]
+fn json_array_float() {
+    let array = "[123.123, 456.456, 6.534e123,7 ,8.0]";
+    let actual = JSONArray::parse(array.to_string()).unwrap();
+    let expected = vec!["123.123", "456.456", "6.534e123", "7", "8.0"];
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn json_array_whitespace_before_first_element() {
     let array = "[ 123, 456, 6,7 ,8]";
     let actual = JSONArray::parse(array.to_string()).unwrap();
