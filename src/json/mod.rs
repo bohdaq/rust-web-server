@@ -428,6 +428,7 @@ impl JSONArray {
         let mut cursor = io::Cursor::new(_json_string.to_string());
         let mut bytes_read : i128 = 0;
         let total_bytes : i128 = _json_string.len() as i128;
+        let mut is_end_of_array = false;
 
 
         // read the start of the array
@@ -576,8 +577,14 @@ impl JSONArray {
                                     is_whitespace = false;
                                     read_till_end_of_whitespace = false
                                 } else {
-                                    let message = format!("Missing comma between array items or closing square bracket at the end of array: {}", _json_string);
-                                    return Err(message);
+                                    if char == ']' {
+                                        is_whitespace = false;
+                                        read_till_end_of_whitespace = false;
+                                        is_end_of_array = true;
+                                    } else {
+                                        let message = format!("Missing comma between array items or closing square bracket at the end of array: {}", _json_string);
+                                        return Err(message);
+                                    }
                                 }
                             }
                         }
@@ -597,7 +604,9 @@ impl JSONArray {
             }
 
 
-            let is_end_of_array = char == ']';
+            if !is_end_of_array {
+                is_end_of_array = char == ']';
+            }
             is_end_of_json_string = total_bytes == bytes_read;
 
            if is_end_of_array {
