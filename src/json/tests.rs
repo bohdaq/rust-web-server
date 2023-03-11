@@ -2253,7 +2253,7 @@ fn json_array_strings_multichar() {
 fn json_array_wrong_element() {
     let array = "[ asdfg, 456, 6,7 ,8]";
     let actual = JSONArray::parse(array.to_string()).err().unwrap();
-    let expected = "not supported type: a in [ asdfg, 456, 6,7 ,8]";
+    let expected = "unknown type: a in [ asdfg, 456, 6,7 ,8]";
     assert_eq!(actual, expected);
 }
 

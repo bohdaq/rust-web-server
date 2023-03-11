@@ -655,7 +655,7 @@ impl JSONArray {
                         !is_comma_separator &&
                         !is_numeric;
                 if is_not_supported_type {
-                    let message = format!("not supported type: {} in {}", char, _json_string);
+                    let message = format!("unknown type: {} in {}", char, _json_string);
                     return Err(message);
                 }
 
