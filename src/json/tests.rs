@@ -2250,6 +2250,14 @@ fn json_array_strings_multichar() {
 }
 
 #[test]
+fn json_array_wrong_element() {
+    let array = "[ asdfg, 456, 6,7 ,8]";
+    let actual = JSONArray::parse(array.to_string()).err().unwrap();
+    let expected = "not supported type: a in [ asdfg, 456, 6,7 ,8]";
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn json_array_whitespace_before_first_element() {
     let array = "[ 123, 456, 6,7 ,8]";
     let actual = JSONArray::parse(array.to_string()).unwrap();
