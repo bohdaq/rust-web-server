@@ -574,6 +574,9 @@ impl JSONArray {
                     let mut _is_point_symbol_already_used = false;
                     let mut _is_exponent_symbol_already_used = false;
                     let mut _is_minus_symbol_already_used = false;
+                    if char == '-' {
+                        _is_minus_symbol_already_used = true;
+                    }
 
                     let mut read_number = true;
                     while read_number {
@@ -590,21 +593,21 @@ impl JSONArray {
                         let is_point_symbol = char == '.';
                         if is_point_symbol && _is_point_symbol_already_used {
                             _is_point_symbol_already_used = true;
-                            let message = format!("unable to parse number: {}", token);
+                            let message = format!("unable to parse number: {} in {}", token, _json_string);
                             return Err(message)
                         }
 
                         let is_exponent_symbol = char == 'e';
                         if is_exponent_symbol && _is_exponent_symbol_already_used {
                             _is_exponent_symbol_already_used = true;
-                            let message = format!("unable to parse number: {}", token);
+                            let message = format!("unable to parse number: {} in {}", token, _json_string);
                             return Err(message)
                         }
 
                         let is_minus_symbol = char == '-';
                         if is_minus_symbol && _is_minus_symbol_already_used {
                             _is_minus_symbol_already_used = true;
-                            let message = format!("unable to parse number: {}", token);
+                            let message = format!("unable to parse number: {} in {}", token, _json_string);
                             return Err(message)
                         }
 
