@@ -551,8 +551,9 @@ impl JSONArray {
                     // read the object (including nested objects and arrays)
                 }
 
-                let is_comma_separator = char == ',';
+                let mut is_comma_separator = char == ',';
                 let is_numeric = char.is_numeric();
+                let is_minus = char == '-';
 
                 let is_number =
                     !is_string &&
@@ -562,7 +563,7 @@ impl JSONArray {
                         !is_array &&
                         !is_nested_object &&
                         !is_comma_separator &&
-                        is_numeric;
+                        (is_numeric || is_minus);
                 if is_number {
                     token = "".to_string();
                     // read until char is not number and decimal point, minus, exponent
@@ -645,6 +646,7 @@ impl JSONArray {
                     list.push(token);
                 }
 
+                is_comma_separator = char == ',';
                 let is_not_supported_type =
                         !is_string &&
                         !is_null &&
