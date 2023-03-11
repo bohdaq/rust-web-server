@@ -479,7 +479,50 @@ impl JSONArray {
             if char != ' ' && char != ']' {
                 let is_string = char == '\"';
                 if is_string {
+                    token = ["".to_string(), char.to_string()].join(SYMBOL.empty_string);
 
+                    // read till non escaped '"'
+                    let mut not_end_of_string_property_value = true;
+                    while not_end_of_string_property_value {
+                        let byte = 0;
+                        char_buffer = vec![byte];
+                        cursor.read_exact(&mut char_buffer).unwrap();
+                        let length = char_buffer.len();
+                        bytes_read = bytes_read + length as i128;
+                        let _char = String::from_utf8(char_buffer).unwrap();
+                        let last_char_in_buffer = token.chars().last().unwrap().to_string();
+                        not_end_of_string_property_value = _char != "\"" && last_char_in_buffer != "\\";
+                        token = [token, _char.to_string()].join(SYMBOL.empty_string);
+                    }
+                    list.push(token);
+
+                    // if char is whitespace read until non whitespace and check it is comma, if not return error
+                    let mut is_whitespace = char == ' ';
+                    if is_whitespace {
+                        let mut read_till_end_of_whitespace = true;
+                        while read_till_end_of_whitespace {
+                            let byte = 0;
+                            let mut char_buffer = vec![byte];
+                            let length = char_buffer.len();
+                            cursor.read_exact(&mut char_buffer).unwrap();
+                            bytes_read = bytes_read + length as i128;
+                            char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+
+                            if char == ',' {
+                                is_whitespace = false;
+                                read_till_end_of_whitespace = false
+                            } else {
+                                if char == ']' {
+                                    is_whitespace = false;
+                                    read_till_end_of_whitespace = false;
+                                    is_end_of_array = true;
+                                } else {
+                                    let message = format!("Missing comma between array items or closing square bracket at the end of array: {}", _json_string);
+                                    return Err(message);
+                                }
+                            }
+                        }
+                    }
                 }
 
                 let is_null = char == 'n';
@@ -508,13 +551,16 @@ impl JSONArray {
                     // read the object (including nested objects and arrays)
                 }
 
+                let is_comma_separator = char == ',';
+
                 let is_number =
                     !is_string &&
                         !is_null &&
                         !is_boolean_true &&
                         !is_boolean_false &&
                         !is_array &&
-                        !is_nested_object;
+                        !is_nested_object &&
+                        !is_comma_separator;
                 if is_number {
                     token = "".to_string();
                     // read until char is not number and decimal point, minus, exponent
