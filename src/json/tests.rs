@@ -2282,6 +2282,14 @@ fn json_array_wrong_element_duplicate_point() {
 }
 
 #[test]
+fn json_array_wrong_element_rundom_char() {
+    let array = "[ 6h2]";
+    let actual = JSONArray::parse(array.to_string()).err().unwrap();
+    let expected = "unable to parse number: h in [ 6h2]";
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn json_array_whitespace_before_first_element() {
     let array = "[ 123.76, -456, 0,7.5e4 ,8]";
     let actual = JSONArray::parse(array.to_string()).unwrap();

@@ -651,6 +651,12 @@ impl JSONArray {
                             token = [token, char.to_string()].join(SYMBOL.empty_string);
                         } else {
                             read_number = false;
+                            // if char is not array element separator or end of the array
+                            if char != ',' && char != ']' {
+                                let message = format!("unable to parse number: {} in {}", char, _json_string);
+                                return Err(message)
+                            }
+
                         }
                     }
                     list.push(token);
