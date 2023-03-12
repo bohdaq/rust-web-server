@@ -597,6 +597,9 @@ impl JSONArray {
                             let message = format!("unable to parse number: {} in {}", token, _json_string);
                             return Err(message)
                         }
+                        if is_point_symbol {
+                            _is_point_symbol_already_used = true;
+                        }
 
                         let is_exponent_symbol = char == 'e';
                         if is_exponent_symbol && _is_exponent_symbol_already_used {
