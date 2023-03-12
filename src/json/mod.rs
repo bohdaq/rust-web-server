@@ -554,6 +554,7 @@ impl JSONArray {
                 let mut is_comma_separator = char == ',';
                 let is_numeric = char.is_numeric();
                 let is_minus = char == '-';
+                let is_exponent = char == 'e';
 
                 let is_number =
                     !is_string &&
@@ -602,6 +603,9 @@ impl JSONArray {
                             _is_exponent_symbol_already_used = true;
                             let message = format!("unable to parse number: {} in {}", token, _json_string);
                             return Err(message)
+                        }
+                        if is_exponent_symbol {
+                            _is_exponent_symbol_already_used = true;
                         }
 
                         let is_minus_symbol = char == '-';
