@@ -434,7 +434,6 @@ impl JSONArray {
         // read the start of the array
 
         let mut read_until_start_of_array = true;
-        let mut token = "".to_string();
         while read_until_start_of_array {
 
             if is_end_of_json_string {
