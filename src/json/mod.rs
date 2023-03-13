@@ -689,6 +689,33 @@ impl JSONArray {
 
         }
 
+
+        is_end_of_json_string = total_bytes == bytes_read;
+        let mut read_after_end_of_array = !is_end_of_json_string;
+        while read_after_end_of_array {
+
+            let byte = 0;
+            let mut char_buffer = vec![byte];
+            let length = char_buffer.len();
+            let boxed_read = cursor.read_exact(&mut char_buffer);
+            if boxed_read.is_err() {
+                let message = boxed_read.err().unwrap().to_string();
+                return Err(message);
+            }
+            boxed_read.unwrap();
+            bytes_read = bytes_read + length as i128;
+            let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+
+            if !char.is_whitespace(){
+                let message = format!("after array there are some characters: {} in {}", char, _json_string);
+                return Err(message);
+            }
+
+            if bytes_read == total_bytes {
+                read_after_end_of_array = false;
+            }
+        }
+
         Ok(list)
     }
 }

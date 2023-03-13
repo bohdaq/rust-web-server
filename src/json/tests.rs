@@ -2339,6 +2339,14 @@ fn json_array_starts_with_random_chars() {
 }
 
 #[test]
+fn json_array_ends_with_random_chars() {
+    let array = " [ 123, 456, 6,7 ,8 ] adgsfdg";
+    let actual = JSONArray::parse(array.to_string()).err().unwrap();
+    let expected = "after array there are some characters: a in  [ 123, 456, 6,7 ,8 ] adgsfdg";
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn json_array_no_closing_square_bracket() {
     let array = " [ 123, 456, 6,7 ,8  ";
     let result = JSONArray::parse(array.to_string());
