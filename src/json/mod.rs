@@ -474,11 +474,6 @@ impl JSONArray {
         let mut token;
         while read_char {
 
-            if is_end_of_json_string {
-                let message = format!("not proper end of the json array: {}", _json_string.to_string());
-                return Err(message);
-            }
-
             let byte = 0;
             let mut char_buffer = vec![byte];
             let length = char_buffer.len();
@@ -692,7 +687,6 @@ impl JSONArray {
             if !is_end_of_array {
                 is_end_of_array = char == ']';
             }
-            is_end_of_json_string = total_bytes == bytes_read;
 
            if is_end_of_array {
                read_char = false;
