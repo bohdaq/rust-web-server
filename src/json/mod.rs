@@ -568,7 +568,6 @@ impl JSONArray {
                 let mut is_comma_separator = char == ',';
                 let is_numeric = char.is_numeric();
                 let is_minus = char == '-';
-                let is_exponent = char == 'e';
 
                 let is_number =
                     !is_string &&
