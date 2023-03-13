@@ -2218,6 +2218,14 @@ fn parse_multi_nested_object() {
 }
 
 #[test]
+fn json_array_null_element() {
+    let array = "[null]";
+    let actual = JSONArray::parse(array.to_string()).unwrap();
+    let expected = vec!["null"];
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn json_array() {
     let array = "[123, 456, 6,7 ,8]";
     let actual = JSONArray::parse(array.to_string()).unwrap();

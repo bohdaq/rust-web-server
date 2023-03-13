@@ -470,7 +470,7 @@ impl JSONArray {
 
 
         let mut is_end_of_array = false;
-        let mut token;
+        let mut token = "".to_string();
         while !is_end_of_array {
 
             let byte = 0;
@@ -502,7 +502,7 @@ impl JSONArray {
                         not_end_of_string_property_value = _char != "\"" && last_char_in_buffer != "\\";
                         token = [token, _char.to_string()].join(SYMBOL.empty_string);
                     }
-                    list.push(token);
+                    list.push(token.to_string());
 
                     // if char is whitespace read until non whitespace and check it is comma, if not return error
                     let is_whitespace = char == ' ';
@@ -534,6 +534,19 @@ impl JSONArray {
                 let is_null = char == 'n';
                 if is_null {
                     // read 'ull'
+                    token = [token.to_string(), char.to_string()].join(SYMBOL.empty_string);
+                    let byte = 0;
+                    let mut char_buffer = vec![byte, byte, byte];
+                    let length = char_buffer.len();
+                    cursor.read_exact(&mut char_buffer).unwrap();
+                    bytes_read = bytes_read + length as i128;
+                    let remaining_bool = String::from_utf8(char_buffer).unwrap();
+                    if remaining_bool != "ull" {
+                        let message = format!("Unable to parse null: {} in {}", remaining_bool, _json_string);
+                        return Err(message)
+                    }
+                    token = [token.to_string(), remaining_bool.to_string()].join(SYMBOL.empty_string);
+                    list.push(token.to_string());
                 }
 
                 let is_boolean_true = char == 't';
@@ -662,7 +675,7 @@ impl JSONArray {
 
                         }
                     }
-                    list.push(token);
+                    list.push(token.to_string());
                 }
 
                 is_comma_separator = char == ',';
