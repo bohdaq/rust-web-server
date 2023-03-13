@@ -511,7 +511,7 @@ impl JSONArray {
                     list.push(token);
 
                     // if char is whitespace read until non whitespace and check it is comma, if not return error
-                    let mut is_whitespace = char == ' ';
+                    let is_whitespace = char == ' ';
                     if is_whitespace {
                         let mut read_till_end_of_whitespace = true;
                         while read_till_end_of_whitespace {
@@ -631,7 +631,7 @@ impl JSONArray {
 
                         let char_is_part_of_number = is_numeric || is_point_symbol || is_exponent_symbol || is_minus_symbol;
                         // if char is whitespace read until non whitespace and check it is comma, if not return error
-                        let mut is_whitespace = char == ' ';
+                        let is_whitespace = char == ' ';
                         if is_whitespace {
                             let mut read_till_end_of_whitespace = true;
                             while read_till_end_of_whitespace {
