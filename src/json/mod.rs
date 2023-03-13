@@ -471,7 +471,7 @@ impl JSONArray {
 
 
         let mut read_char = true;
-        let mut token = "".to_string();
+        let mut token;
         while read_char {
 
             if is_end_of_json_string {
