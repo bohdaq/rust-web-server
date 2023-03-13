@@ -2226,10 +2226,26 @@ fn json_array_true_element() {
 }
 
 #[test]
+fn json_array_false_element() {
+    let array = "[false]";
+    let actual = JSONArray::parse(array.to_string()).unwrap();
+    let expected = vec!["false"];
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn json_array_multiple_true_elements() {
     let array = "[ true,true]";
     let actual = JSONArray::parse(array.to_string()).unwrap();
     let expected = vec!["true", "true"];
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn json_array_multiple_false_elements() {
+    let array = "[false , false]";
+    let actual = JSONArray::parse(array.to_string()).unwrap();
+    let expected = vec!["false", "false"];
     assert_eq!(actual, expected);
 }
 
@@ -2251,9 +2267,9 @@ fn json_array_multiple_null_elements() {
 
 #[test]
 fn json_array_multiple_elements() {
-    let array = "[true,0, null, -1, 2.0, \"text\"]";
+    let array = "[true,0, null, -1, 2.0, \"text\", false]";
     let actual = JSONArray::parse(array.to_string()).unwrap();
-    let expected = vec!["true", "0", "null", "-1", "2.0", "\"text\""];
+    let expected = vec!["true", "0", "null", "-1", "2.0", "\"text\"", "false"];
     assert_eq!(actual, expected);
 }
 
