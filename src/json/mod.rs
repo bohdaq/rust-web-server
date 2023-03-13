@@ -428,7 +428,6 @@ impl JSONArray {
         let mut cursor = io::Cursor::new(_json_string.to_string());
         let mut bytes_read : i128 = 0;
         let total_bytes : i128 = _json_string.len() as i128;
-        let mut is_end_of_array = false;
 
 
         // read the start of the array
@@ -470,9 +469,9 @@ impl JSONArray {
 
 
 
-        let mut read_char = true;
+        let mut is_end_of_array = false;
         let mut token;
-        while read_char {
+        while !is_end_of_array {
 
             let byte = 0;
             let mut char_buffer = vec![byte];
@@ -482,7 +481,7 @@ impl JSONArray {
             let mut char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
             if char == ']' {
-                read_char = false;
+                is_end_of_array = true;
             }
 
             if char != ' ' && char != ']' {
@@ -687,10 +686,6 @@ impl JSONArray {
             if !is_end_of_array {
                 is_end_of_array = char == ']';
             }
-
-           if is_end_of_array {
-               read_char = false;
-           }
 
         }
 
