@@ -2226,10 +2226,18 @@ fn json_array_null_element() {
 }
 
 #[test]
-fn json_array_multiple_null_element() {
+fn json_array_multiple_null_elements() {
     let array = "[null ,null]";
     let actual = JSONArray::parse(array.to_string()).unwrap();
     let expected = vec!["null", "null"];
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn json_array_multiple_elements() {
+    let array = "[0, null, -1, 2.0]";
+    let actual = JSONArray::parse(array.to_string()).unwrap();
+    let expected = vec!["0", "null", "-1", "2.0"];
     assert_eq!(actual, expected);
 }
 
