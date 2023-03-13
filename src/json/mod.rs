@@ -523,11 +523,9 @@ impl JSONArray {
                             char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
                             if char == ',' {
-                                is_whitespace = false;
                                 read_till_end_of_whitespace = false
                             } else {
                                 if char == ']' {
-                                    is_whitespace = false;
                                     read_till_end_of_whitespace = false;
                                     is_end_of_array = true;
                                 } else {
@@ -645,11 +643,9 @@ impl JSONArray {
                                 char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
                                 if char == ',' {
-                                    is_whitespace = false;
                                     read_till_end_of_whitespace = false
                                 } else {
                                     if char == ']' {
-                                        is_whitespace = false;
                                         read_till_end_of_whitespace = false;
                                         is_end_of_array = true;
                                     } else {
