@@ -2331,6 +2331,14 @@ fn json_empty_array() {
 }
 
 #[test]
+fn json_array_starts_with_random_chars() {
+    let array = "adgsfdg [ 123, 456, 6,7 ,8 ] ";
+    let actual = JSONArray::parse(array.to_string()).err().unwrap();
+    let expected = "input string does not start with opening square bracket: a in adgsfdg [ 123, 456, 6,7 ,8 ] ";
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn json_array_no_closing_square_bracket() {
     let array = " [ 123, 456, 6,7 ,8  ";
     let result = JSONArray::parse(array.to_string());
@@ -2347,7 +2355,17 @@ fn json_array_no_starting_square_bracket() {
     assert!(result.is_err());
 
     let message = result.err().unwrap();
-    assert_eq!("not proper start of the json array:   123, 456, 6,7 ,8  ]", message);
+    assert_eq!("input string does not start with opening square bracket: 1 in   123, 456, 6,7 ,8  ]", message);
+}
+
+#[test]
+fn json_array_whitespaces() {
+    let array = "  ";
+    let result = JSONArray::parse(array.to_string());
+    assert!(result.is_err());
+
+    let message = result.err().unwrap();
+    assert_eq!("not proper start of the json array:   ", message);
 }
 
 #[test]

@@ -432,27 +432,42 @@ impl JSONArray {
 
 
         // read the start of the array
-        let mut buf = vec![];
-        let mut boxed_read = cursor.read_until(b'[', &mut buf);
-        if boxed_read.is_err() {
-            let message = boxed_read.err().unwrap().to_string();
-            return Err(message);
-        }
-        bytes_read = bytes_read + boxed_read.unwrap() as i128;
-        is_end_of_json_string = total_bytes == bytes_read;
-        if is_end_of_json_string {
-            let message = format!("not proper start of the json array: {}", _json_string.to_string());
-            return Err(message);
-        }
 
-        let mut b : &[u8] = &buf;
+        let mut read_until_start_of_array = true;
+        let mut token = "".to_string();
+        while read_until_start_of_array {
 
-        let mut boxed_line = String::from_utf8(Vec::from(b));
-        if boxed_line.is_err() {
-            let error_message = boxed_line.err().unwrap().to_string();
-            return Err(error_message);
+            if is_end_of_json_string {
+                let message = format!("not proper end of the json array: {}", _json_string.to_string());
+                return Err(message);
+            }
+
+            let byte = 0;
+            let mut char_buffer = vec![byte];
+            let length = char_buffer.len();
+            let boxed_read = cursor.read_exact(&mut char_buffer);
+            if boxed_read.is_err() {
+                let message = boxed_read.err().unwrap().to_string();
+                return Err(message);
+            }
+            boxed_read.unwrap();
+            bytes_read = bytes_read + length as i128;
+            is_end_of_json_string = total_bytes == bytes_read;
+            if is_end_of_json_string {
+                let message = format!("not proper start of the json array: {}", _json_string.to_string());
+                return Err(message);
+            }
+            let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+
+            if !char.is_whitespace() && char != '['{
+                let message = format!("input string does not start with opening square bracket: {} in {}", char, _json_string);
+                return Err(message);
+            }
+
+            if char == '[' {
+                read_until_start_of_array = false;
+            }
         }
-        let mut _line = boxed_line.unwrap();
 
 
 
