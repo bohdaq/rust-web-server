@@ -470,7 +470,7 @@ impl JSONArray {
 
 
         let mut is_end_of_array = false;
-        let mut token = "".to_string();
+        let mut token;
         while !is_end_of_array {
 
             let byte = 0;
@@ -534,7 +534,7 @@ impl JSONArray {
                 let is_null = char == 'n';
                 if is_null {
                     // read 'ull'
-                    token = [token.to_string(), char.to_string()].join(SYMBOL.empty_string);
+                    token = ["".to_string(), char.to_string()].join(SYMBOL.empty_string);
                     let byte = 0;
                     let mut char_buffer = vec![byte, byte, byte];
                     let length = char_buffer.len();
