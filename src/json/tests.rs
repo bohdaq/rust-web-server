@@ -2235,9 +2235,9 @@ fn json_array_multiple_null_elements() {
 
 #[test]
 fn json_array_multiple_elements() {
-    let array = "[0, null, -1, 2.0]";
+    let array = "[0, null, -1, 2.0, \"text\"]";
     let actual = JSONArray::parse(array.to_string()).unwrap();
-    let expected = vec!["0", "null", "-1", "2.0"];
+    let expected = vec!["0", "null", "-1", "2.0", "\"text\""];
     assert_eq!(actual, expected);
 }
 
