@@ -2218,6 +2218,22 @@ fn parse_multi_nested_object() {
 }
 
 #[test]
+fn json_array_true_element() {
+    let array = "[true]";
+    let actual = JSONArray::parse(array.to_string()).unwrap();
+    let expected = vec!["true"];
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn json_array_multiple_true_elements() {
+    let array = "[ true,true]";
+    let actual = JSONArray::parse(array.to_string()).unwrap();
+    let expected = vec!["true", "true"];
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn json_array_null_element() {
     let array = "[null]";
     let actual = JSONArray::parse(array.to_string()).unwrap();
@@ -2235,9 +2251,9 @@ fn json_array_multiple_null_elements() {
 
 #[test]
 fn json_array_multiple_elements() {
-    let array = "[0, null, -1, 2.0, \"text\"]";
+    let array = "[true,0, null, -1, 2.0, \"text\"]";
     let actual = JSONArray::parse(array.to_string()).unwrap();
-    let expected = vec!["0", "null", "-1", "2.0", "\"text\""];
+    let expected = vec!["true", "0", "null", "-1", "2.0", "\"text\""];
     assert_eq!(actual, expected);
 }
 

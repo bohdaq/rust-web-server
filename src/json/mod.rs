@@ -552,6 +552,19 @@ impl JSONArray {
                 let is_boolean_true = char == 't';
                 if is_boolean_true {
                     // read 'rue'
+                    token = ["".to_string(), char.to_string()].join(SYMBOL.empty_string);
+                    let byte = 0;
+                    let mut char_buffer = vec![byte, byte, byte];
+                    let length = char_buffer.len();
+                    cursor.read_exact(&mut char_buffer).unwrap();
+                    bytes_read = bytes_read + length as i128;
+                    let remaining_bool = String::from_utf8(char_buffer).unwrap();
+                    if remaining_bool != "rue" {
+                        let message = format!("Unable to parse true: {} in {}", remaining_bool, _json_string);
+                        return Err(message)
+                    }
+                    token = [token.to_string(), remaining_bool.to_string()].join(SYMBOL.empty_string);
+                    list.push(token.to_string());
                 }
 
                 let is_boolean_false = char == 'f';
