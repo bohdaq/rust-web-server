@@ -1,4 +1,4 @@
-use crate::json::key_value::parse_json_property;
+use crate::json::key_value::{JSONProperty};
 
 #[cfg(test)]
 mod tests;
@@ -28,16 +28,7 @@ pub const JSON_TYPE: JSONType = JSONType{
     null: "null",
 };
 
-pub struct JSONProperty {
-    pub property_name: String,
-    pub property_type: String,
-}
 
-impl JSONProperty {
-    pub fn parse(raw_string: &str) -> Result<(JSONProperty, JSONValue), String> {
-        parse_json_property(raw_string)
-    }
-}
 
 pub struct JSONValue {
     pub f64: Option<f64>,

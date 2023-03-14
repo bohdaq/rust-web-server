@@ -1,8 +1,19 @@
-use crate::json::{JSON_TYPE, JSONProperty, JSONValue, Null};
+use crate::json::{JSON_TYPE, JSONValue, Null};
 use crate::symbol::SYMBOL;
 
 #[cfg(test)]
 mod tests;
+
+pub struct JSONProperty {
+    pub property_name: String,
+    pub property_type: String,
+}
+
+impl JSONProperty {
+    pub fn parse(raw_string: &str) -> Result<(JSONProperty, JSONValue), String> {
+        parse_json_property(raw_string)
+    }
+}
 
 pub fn parse_json_property(raw_string: &str) -> Result<(JSONProperty, JSONValue), String> {
     let mut property = JSONProperty { property_name: "".to_string(), property_type: "".to_string() };

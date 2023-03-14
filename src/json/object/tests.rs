@@ -1,4 +1,5 @@
-use crate::json::{ToJSON, JSONProperty, JSONValue, FromJSON, JSON_TYPE};
+use crate::json::{ToJSON, JSONValue, FromJSON, JSON_TYPE};
+use crate::json::key_value::JSONProperty;
 use crate::json::object::JSON;
 use crate::symbol::SYMBOL;
 
