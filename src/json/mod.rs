@@ -588,6 +588,38 @@ impl JSONArray {
                 let is_array = char == '[';
                 if is_array {
                     // read the array (including nested objects and arrays)
+                    token = ["".to_string(), char.to_string()].join(SYMBOL.empty_string);
+                    let mut number_of_open_square_brackets = 1;
+                    let mut number_of_closed_square_brackets = 0;
+
+                    let mut read_nested_array = true;
+                    while read_nested_array {
+
+                        let byte = 0;
+                        let mut char_buffer = vec![byte];
+                        let length = char_buffer.len();
+                        cursor.read_exact(&mut char_buffer).unwrap();
+                        bytes_read = bytes_read + length as i128;
+                        let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+
+                        let is_open_square_bracket = char == '[';
+                        if is_open_square_bracket {
+                            number_of_open_square_brackets = number_of_open_square_brackets + 1;
+                        }
+
+
+                        let is_close_square_bracket = char == ']';
+                        if is_close_square_bracket {
+                            number_of_closed_square_brackets = number_of_closed_square_brackets + 1;
+                        }
+
+                        token = [token.to_string(), char.to_string()].join(SYMBOL.empty_string);
+
+                        if number_of_open_square_brackets == number_of_closed_square_brackets {
+                            list.push(token.to_string());
+                            read_nested_array = false;
+                        }
+                    }
                 }
 
 
