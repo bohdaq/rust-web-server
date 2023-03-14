@@ -2242,6 +2242,30 @@ fn json_array_nested_array() {
 }
 
 #[test]
+fn json_array_nested_object() {
+    let array = "[ {\"key\": 123} ]";
+    let actual = JSONArray::parse(array.to_string()).unwrap();
+    let expected = vec!["{\"key\": 123}"];
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn json_array_nested_empty_object() {
+    let array = "[ {} ]";
+    let actual = JSONArray::parse(array.to_string()).unwrap();
+    let expected = vec!["{}"];
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn json_array_nested_object_nested_array() {
+    let array = "[ {\"key\": [123, 456, 789, 10]} ]";
+    let actual = JSONArray::parse(array.to_string()).unwrap();
+    let expected = vec!["{\"key\": [123, 456, 789, 10]}"];
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn json_array_nested_array_multiple_items() {
     let array = "[ [true,0, null, -1, 2.0, \"text\", false] ]";
     let actual = JSONArray::parse(array.to_string()).unwrap();

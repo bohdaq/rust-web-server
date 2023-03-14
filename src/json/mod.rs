@@ -626,6 +626,38 @@ impl JSONArray {
                 let is_nested_object = char == '{';
                 if is_nested_object {
                     // read the object (including nested objects and arrays)
+                    token = ["".to_string(), char.to_string()].join(SYMBOL.empty_string);
+                    let mut number_of_open_curly_braces = 1;
+                    let mut number_of_closed_curly_braces = 0;
+
+                    let mut read_nested_object = true;
+                    while read_nested_object {
+
+                        let byte = 0;
+                        let mut char_buffer = vec![byte];
+                        let length = char_buffer.len();
+                        cursor.read_exact(&mut char_buffer).unwrap();
+                        bytes_read = bytes_read + length as i128;
+                        let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+
+                        let is_open_curly_brace = char == '{';
+                        if is_open_curly_brace {
+                            number_of_open_curly_braces = number_of_open_curly_braces + 1;
+                        }
+
+
+                        let is_close_curly_brace = char == '}';
+                        if is_close_curly_brace {
+                            number_of_closed_curly_braces = number_of_closed_curly_braces + 1;
+                        }
+
+                        token = [token.to_string(), char.to_string()].join(SYMBOL.empty_string);
+
+                        if number_of_open_curly_braces == number_of_closed_curly_braces {
+                            list.push(token.to_string());
+                            read_nested_object = false;
+                        }
+                    }
                 }
 
                 let mut is_comma_separator = char == ',';
