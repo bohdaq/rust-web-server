@@ -168,6 +168,9 @@ fn json_array_nested_object() {
     obj.set_properties(properties).unwrap();
     assert_eq!("123abc", obj.prop_a);
     assert_eq!(true, obj.prop_b);
+
+    let expected_json = "{\r\n  \"prop_a\": \"123abc\",\r\n  \"prop_b\": true\r\n}";
+    assert_eq!(obj.to_json_string(), expected_json);
 }
 
 #[test]
