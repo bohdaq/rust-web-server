@@ -7,6 +7,17 @@ use crate::symbol::SYMBOL;
 #[cfg(test)]
 mod tests;
 
+pub trait ToJSON {
+    fn list_properties() -> Vec<JSONProperty>;
+    fn get_property(&self, property_name: String) -> JSONValue;
+    fn to_json_string(&self) -> String;
+}
+
+pub trait FromJSON {
+    fn parse_json_to_properties(&self, json_string: String) -> Result<Vec<(JSONProperty, JSONValue)>, String>;
+    fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String>;
+    fn parse(&mut self, json_string: String) -> Result<(), String>;
+}
 
 pub struct JSON;
 
