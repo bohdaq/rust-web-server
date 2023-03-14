@@ -2250,6 +2250,14 @@ fn json_array_nested_array_multiple_items() {
 }
 
 #[test]
+fn json_array_multi_nested_array_multiple_items() {
+    let array = "[ [true,0, [null, -1], 2.0, \"text\", false] ]";
+    let actual = JSONArray::parse(array.to_string()).unwrap();
+    let expected = vec!["[true,0, [null, -1], 2.0, \"text\", false]"];
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn json_array_multiple_true_elements() {
     let array = "[ true,true]";
     let actual = JSONArray::parse(array.to_string()).unwrap();
