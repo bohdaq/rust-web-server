@@ -1,5 +1,5 @@
 use crate::json::{JSON_TYPE};
-use crate::json::key_value::parse_json_property;
+use crate::json::property::{JSONProperty};
 
 #[test]
 fn parse_raw_property_string() {
@@ -8,7 +8,7 @@ fn parse_raw_property_string() {
     let property_type = JSON_TYPE.string;
 
     let raw_string = format!("\"{}\": \"{}\"", property_key, property_value);
-    let (key, value) = parse_json_property(&raw_string).unwrap();
+    let (key, value) = JSONProperty::parse(&raw_string).unwrap();
 
     assert_eq!(key.property_name, property_key);
     assert_eq!(key.property_type, property_type);
@@ -22,7 +22,7 @@ fn parse_raw_property_null() {
     let property_type = JSON_TYPE.string;
 
     let raw_string = format!("\"{}\": {}", property_key, property_value);
-    let (key, value) = parse_json_property(&raw_string).unwrap();
+    let (key, value) = JSONProperty::parse(&raw_string).unwrap();
 
     assert_eq!(key.property_name, property_key);
     assert_eq!(key.property_type, property_type);
@@ -36,7 +36,7 @@ fn parse_raw_property_number_integer() {
     let property_type = JSON_TYPE.integer;
 
     let raw_string = format!("\"{}\": {}", property_key, property_value);
-    let (key, value) = parse_json_property(&raw_string).unwrap();
+    let (key, value) = JSONProperty::parse(&raw_string).unwrap();
 
     assert_eq!(key.property_name, property_key);
     assert_eq!(key.property_type, property_type);
@@ -50,7 +50,7 @@ fn parse_raw_property_number_float() {
     let property_type = JSON_TYPE.number;
 
     let raw_string = format!("\"{}\": {}", property_key, property_value);
-    let (key, value) = parse_json_property(&raw_string).unwrap();
+    let (key, value) = JSONProperty::parse(&raw_string).unwrap();
 
     assert_eq!(key.property_name, property_key);
     assert_eq!(key.property_type, property_type);
@@ -64,7 +64,7 @@ fn parse_raw_property_boolean_true() {
     let property_type = JSON_TYPE.boolean;
 
     let raw_string = format!("\"{}\": {}", property_key, property_value);
-    let (key, value) = parse_json_property(&raw_string).unwrap();
+    let (key, value) = JSONProperty::parse(&raw_string).unwrap();
 
     assert_eq!(key.property_name, property_key);
     assert_eq!(key.property_type, property_type);
@@ -78,7 +78,7 @@ fn parse_raw_property_boolean_false() {
     let property_type = JSON_TYPE.boolean;
 
     let raw_string = format!("\"{}\": {}", property_key, property_value);
-    let (key, value) = parse_json_property(&raw_string).unwrap();
+    let (key, value) = JSONProperty::parse(&raw_string).unwrap();
 
     assert_eq!(key.property_name, property_key);
     assert_eq!(key.property_type, property_type);
@@ -91,7 +91,7 @@ fn parse_raw_property_number_float_parse_error() {
     let property_value = "255.200asdf";
 
     let raw_string = format!("\"{}\": {}", property_key, property_value);
-    let error_message = parse_json_property(&raw_string).err().unwrap();
+    let error_message = JSONProperty::parse(&raw_string).err().unwrap();
 
     assert_eq!("unable to parse number: \"key\": 255.200asdf", error_message);
 }
@@ -102,7 +102,7 @@ fn parse_raw_property_number_integer_parse_error() {
     let property_value = "255200asdf";
 
     let raw_string = format!("\"{}\": {}", property_key, property_value);
-    let error_message = parse_json_property(&raw_string).err().unwrap();
+    let error_message = JSONProperty::parse(&raw_string).err().unwrap();
 
     assert_eq!("unable to parse number: \"key\": 255200asdf", error_message);
 }

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests;
-pub mod key_value;
+pub mod property;
 pub mod array;
 pub mod object;
 
