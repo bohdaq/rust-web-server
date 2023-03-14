@@ -151,10 +151,8 @@ fn json_array_nested_object() {
     let mut obj = SomeObject { prop_a: "default".to_string(), prop_b: false };
 
     let json = expected.get(0).unwrap();
-    let properties  = obj.parse_json_to_properties(json.to_string()).unwrap();
-    assert_eq!(properties.len(), 2);
+    obj.parse(json.to_string()).unwrap();
 
-    obj.set_properties(properties).unwrap();
     assert_eq!("123abc", obj.prop_a);
     assert_eq!(true, obj.prop_b);
 
