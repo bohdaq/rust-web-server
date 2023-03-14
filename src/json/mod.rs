@@ -26,8 +26,6 @@ pub const JSON_TYPE: JSONType = JSONType{
     null: "null",
 };
 
-
-
 pub struct JSONValue {
     pub f64: Option<f64>,
     pub i128: Option<i128>,
