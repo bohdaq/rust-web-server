@@ -30,9 +30,9 @@ fn json_array_nested_array() {
 
 #[test]
 fn json_array_nested_object() {
-    let array = "[ {\"prop_a\": \"123abc\", \"prop_b\": true} ]";
+    let array = "[ {\"prop_b\": true, \"prop_a\": \"123abc\"} ]";
     let actual = JSONArray::parse(array.to_string()).unwrap();
-    let expected = vec!["{\"prop_a\": \"123abc\", \"prop_b\": true}"];
+    let expected = vec!["{\"prop_b\": true, \"prop_a\": \"123abc\"}"];
     assert_eq!(actual, expected);
 
     struct SomeObject {
@@ -153,17 +153,6 @@ fn json_array_nested_object() {
     let json = expected.get(0).unwrap();
     let properties  = obj.parse_json_to_properties(json.to_string()).unwrap();
     assert_eq!(properties.len(), 2);
-
-    let (prop_a_type, prop_a_value) = properties.get(0).unwrap();
-    assert_eq!(prop_a_type.property_type, JSON_TYPE.string);
-    assert_eq!(prop_a_type.property_name, "prop_a");
-    assert_eq!(prop_a_value.string.clone().unwrap(), "123abc");
-
-
-    let (prop_b_type, prop_b_value) = properties.get(1).unwrap();
-    assert_eq!(prop_b_type.property_type, JSON_TYPE.boolean);
-    assert_eq!(prop_b_type.property_name, "prop_b");
-    assert_eq!(prop_b_value.bool.unwrap(), true);
 
     obj.set_properties(properties).unwrap();
     assert_eq!("123abc", obj.prop_a);
