@@ -48,15 +48,11 @@ pub struct JSONValue {
     pub null: Option<Null>,
 }
 
-
-
 pub struct Null {}
 
 pub trait ToJSON {
     fn list_properties() -> Vec<JSONProperty>;
-
     fn get_property(&self, property_name: String) -> JSONValue;
-
     fn to_json_string(&self) -> String;
 }
 
