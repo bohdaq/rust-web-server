@@ -91,14 +91,7 @@ fn json_array_nested_object() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();

@@ -220,14 +220,7 @@ fn parse_direct() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
@@ -393,14 +386,7 @@ fn parse_null() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
@@ -515,14 +501,7 @@ fn parse_nested_object() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_foo".to_string() {
                 let boolean : bool = self.prop_foo;
@@ -646,14 +625,7 @@ fn parse_nested_object() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
@@ -789,14 +761,7 @@ fn parse_nested_object_none() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_foo".to_string() {
                 let boolean : bool = self.prop_foo;
@@ -919,14 +884,7 @@ fn parse_nested_object_none() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
@@ -1065,14 +1023,7 @@ fn parse_nested_object_property_null() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_foo".to_string() {
                 let boolean : bool = self.prop_foo;
@@ -1195,14 +1146,7 @@ fn parse_nested_object_property_null() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
@@ -1333,14 +1277,7 @@ fn parse_nested_object_null() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_foo".to_string() {
                 let boolean : bool = self.prop_foo;
@@ -1463,14 +1400,7 @@ fn parse_nested_object_null() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
@@ -1601,14 +1531,7 @@ fn nested_object_none_to_string() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_foo".to_string() {
                 let boolean : bool = self.prop_foo;
@@ -1731,14 +1654,7 @@ fn nested_object_none_to_string() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
@@ -1890,14 +1806,7 @@ fn parse_multi_nested_object() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_foo".to_string() {
                 let boolean : bool = self.prop_foo;
@@ -1979,14 +1888,7 @@ fn parse_multi_nested_object() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_bar".to_string() {
                 let number : f64 = self.prop_bar;
@@ -2110,14 +2012,7 @@ fn parse_multi_nested_object() {
         }
 
         fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue {
-                f64: None,
-                i128: None,
-                string: None,
-                object: None,
-                bool: None,
-                null: None,
-            };
+            let mut value = JSONValue::new();
 
             if property_name == "prop_a".to_string() {
                 let string : String = self.prop_a.to_owned();
