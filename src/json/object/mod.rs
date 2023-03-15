@@ -6,6 +6,7 @@ use crate::symbol::SYMBOL;
 
 #[cfg(test)]
 mod tests;
+mod examples;
 
 pub trait ToJSON {
     fn list_properties() -> Vec<JSONProperty>;
