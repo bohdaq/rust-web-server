@@ -23,7 +23,7 @@ fn convert_to_and_from_json_string_to_object_with_property_of_a_string_type() {
         }
         fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String> {
             for (property, value) in properties {
-                if property.property_name == "prop_a" {
+                if property.property_name == "prop_a" && value.string.is_some() {
                     self.prop_a = value.string.unwrap();
                 }
             }
