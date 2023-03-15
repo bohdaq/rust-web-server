@@ -5,7 +5,7 @@ use crate::symbol::SYMBOL;
 
 #[test]
 fn convert_to_and_from_json_string_to_object_with_property_of_a_bool_type() {
-    // declare object with String property
+    // declare object with bool property
     struct SomeObject {
         prop_a: bool,
     }
