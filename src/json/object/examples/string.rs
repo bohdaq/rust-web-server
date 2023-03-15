@@ -80,10 +80,12 @@ fn convert_to_and_from_json_string_to_object_with_property_of_a_string_type() {
             for property in properties {
                 let value = self.get_property(property.property_name.to_string());
 
-                if &property.property_type == "String" {
-                    let raw_value = value.string.unwrap();
-                    let formatted_property = format!("  \"{}\": \"{}\"", &property.property_name, raw_value);
-                    properties_list.push(formatted_property.to_string());
+                if &property.property_type == JSON_TYPE.string {
+                    if value.string.is_some() {
+                        let raw_value = value.string.unwrap();
+                        let formatted_property = format!("  \"{}\": \"{}\"", &property.property_name, raw_value);
+                        properties_list.push(formatted_property.to_string());
+                    }
                 }
 
             }
