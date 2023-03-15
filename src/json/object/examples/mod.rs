@@ -1,1 +1,2 @@
 mod string;
+mod bool;
