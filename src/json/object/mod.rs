@@ -124,7 +124,12 @@ impl JSON {
                 let mut char_buffer = vec![bytes_to_read];
                 comma_delimiter_read_already = false;
 
-                cursor.read_exact(&mut char_buffer).unwrap();
+                let boxed_read = cursor.read_exact(&mut char_buffer);
+                if boxed_read.is_err() {
+                    let message = boxed_read.err().unwrap().to_string();
+                    return Err(message)
+                }
+                boxed_read.unwrap();
                 bytes_read = bytes_read + bytes_to_read as i128;
                 let char = String::from_utf8(char_buffer).unwrap();
 
@@ -138,9 +143,19 @@ impl JSON {
                         while not_end_of_string_property_value {
 
                             char_buffer = vec![bytes_to_read];
-                            cursor.read_exact(&mut char_buffer).unwrap();
+                            let boxed_read = cursor.read_exact(&mut char_buffer);
+                            if boxed_read.is_err() {
+                                let message = boxed_read.err().unwrap().to_string();
+                                return Err(message)
+                            }
+                            boxed_read.unwrap();
                             bytes_read = bytes_read + bytes_to_read as i128;
-                            let _char = String::from_utf8(char_buffer).unwrap();
+                            let boxed_parse = String::from_utf8(char_buffer);
+                            if boxed_parse.is_err() {
+                                let message = boxed_parse.err().unwrap().to_string();
+                                return Err(message)
+                            }
+                            let _char = boxed_parse.unwrap();
                             let last_char_in_buffer = key_value_pair.chars().last().unwrap().to_string();
                             not_end_of_string_property_value = _char != "\"" && last_char_in_buffer != "\\";
                             key_value_pair = [key_value_pair, _char].join(SYMBOL.empty_string);
