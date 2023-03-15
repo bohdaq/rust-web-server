@@ -35,6 +35,19 @@ pub struct JSONValue {
     pub null: Option<Null>,
 }
 
+impl JSONValue {
+    pub fn new() -> JSONValue {
+        JSONValue {
+            f64: None,
+            i128: None,
+            string: None,
+            object: None,
+            bool: None,
+            null: None,
+        }
+    }
+}
+
 pub struct Null {}
 
 
