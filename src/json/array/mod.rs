@@ -30,7 +30,7 @@ impl<T: ToJSON> JSONArrayOfObjects<T> {
 
 impl<T: FromJSON + Default> JSONArrayOfObjects<T> {
     pub fn from_json(json : String) -> Result<Vec<T>, String> {
-        let items = RawUnprocessedJSONArray::split_into_vector_of_items(json).unwrap();
+        let items = RawUnprocessedJSONArray::split_into_vector_of_strings(json).unwrap();
         let mut list: Vec<T> = vec![];
         for item in items {
             let mut object = T::default();
@@ -43,7 +43,7 @@ impl<T: FromJSON + Default> JSONArrayOfObjects<T> {
 
 pub struct RawUnprocessedJSONArray;
 impl RawUnprocessedJSONArray {
-    pub fn split_into_vector_of_items(_json_string: String) -> Result<Vec<String>, String> {
+    pub fn split_into_vector_of_strings(_json_string: String) -> Result<Vec<String>, String> {
         let mut list : Vec<String> = vec![];
 
         // cursor

@@ -136,7 +136,7 @@ fn vector_to_json() {
 fn json_array_true_element() {
     let array = "[true]";
     //TODO: JSONArrayOfPrimitives::parse(array.to_string()).unwrap();
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["true"];
     assert_eq!(actual, expected);
 }
@@ -144,7 +144,7 @@ fn json_array_true_element() {
 #[test]
 fn json_array_false_element() {
     let array = "[false]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["false"];
     assert_eq!(actual, expected);
 }
@@ -152,7 +152,7 @@ fn json_array_false_element() {
 #[test]
 fn json_array_nested_array() {
     let array = "[ [false] ]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["[false]"];
     assert_eq!(actual, expected);
 }
@@ -160,7 +160,7 @@ fn json_array_nested_array() {
 #[test]
 fn json_array_nested_object() {
     let array = "[ {\"prop_b\": true, \"prop_a\": \"123abc\"} ]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["{\"prop_b\": true, \"prop_a\": \"123abc\"}"];
     assert_eq!(actual, expected);
 
@@ -285,7 +285,7 @@ fn json_array_nested_object() {
 #[test]
 fn json_array_nested_empty_object() {
     let array = "[ {} ]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["{}"];
     assert_eq!(actual, expected);
 }
@@ -293,7 +293,7 @@ fn json_array_nested_empty_object() {
 #[test]
 fn json_array_nested_object_nested_array() {
     let array = "[ {\"key\": [123, 456, 789, 10]} ]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["{\"key\": [123, 456, 789, 10]}"];
     assert_eq!(actual, expected);
 }
@@ -301,7 +301,7 @@ fn json_array_nested_object_nested_array() {
 #[test]
 fn json_array_nested_array_multiple_items() {
     let array = "[ [true,0, null, -1, 2.0, \"text\", false] ]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["[true,0, null, -1, 2.0, \"text\", false]"];
     assert_eq!(actual, expected);
 }
@@ -309,7 +309,7 @@ fn json_array_nested_array_multiple_items() {
 #[test]
 fn json_array_multi_nested_array_multiple_items() {
     let array = "[ [true,0, [null, -1], 2.0, \"text\", false] ]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["[true,0, [null, -1], 2.0, \"text\", false]"];
     assert_eq!(actual, expected);
 }
@@ -317,7 +317,7 @@ fn json_array_multi_nested_array_multiple_items() {
 #[test]
 fn json_array_multiple_true_elements() {
     let array = "[ true,true]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["true", "true"];
     assert_eq!(actual, expected);
 }
@@ -325,7 +325,7 @@ fn json_array_multiple_true_elements() {
 #[test]
 fn json_array_multiple_false_elements() {
     let array = "[false , false]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["false", "false"];
     assert_eq!(actual, expected);
 }
@@ -333,7 +333,7 @@ fn json_array_multiple_false_elements() {
 #[test]
 fn json_array_null_element() {
     let array = "[null]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["null"];
     assert_eq!(actual, expected);
 }
@@ -341,7 +341,7 @@ fn json_array_null_element() {
 #[test]
 fn json_array_multiple_null_elements() {
     let array = "[null ,null]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["null", "null"];
     assert_eq!(actual, expected);
 }
@@ -349,7 +349,7 @@ fn json_array_multiple_null_elements() {
 #[test]
 fn json_array_multiple_elements() {
     let array = "[true,0, null, -1, 2.0, \"text\", false]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["true", "0", "null", "-1", "2.0", "\"text\"", "false"];
     assert_eq!(actual, expected);
 }
@@ -357,7 +357,7 @@ fn json_array_multiple_elements() {
 #[test]
 fn json_array() {
     let array = "[123, 456, 6,7 ,8]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["123", "456", "6", "7", "8"];
     assert_eq!(actual, expected);
 }
@@ -365,7 +365,7 @@ fn json_array() {
 #[test]
 fn json_array_float() {
     let array = "[123.123, 456.456, 6.534e123,7 ,8.0]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["123.123", "456.456", "6.534e123", "7", "8.0"];
     assert_eq!(actual, expected);
 }
@@ -373,7 +373,7 @@ fn json_array_float() {
 #[test]
 fn json_array_strings() {
     let array = "[\"a\", \"b\", \"c\",\"d\" ,\"e\"]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["\"a\"", "\"b\"", "\"c\"", "\"d\"", "\"e\""];
     assert_eq!(actual, expected);
 }
@@ -381,7 +381,7 @@ fn json_array_strings() {
 #[test]
 fn json_array_strings_multichar() {
     let array = "[\"ab\", \"bb\", \"bc\",\"db\" ,\"eb\"]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["\"ab\"", "\"bb\"", "\"bc\"", "\"db\"", "\"eb\""];
     assert_eq!(actual, expected);
 }
@@ -389,7 +389,7 @@ fn json_array_strings_multichar() {
 #[test]
 fn json_array_wrong_element() {
     let array = "[ asdfg, 456, 6,7 ,8]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).err().unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).err().unwrap();
     let expected = "unknown type: a in [ asdfg, 456, 6,7 ,8]";
     assert_eq!(actual, expected);
 }
@@ -397,7 +397,7 @@ fn json_array_wrong_element() {
 #[test]
 fn json_array_wrong_element_duplicate_minus() {
     let array = "[ --35346, 456, 6,7 ,8]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).err().unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).err().unwrap();
     let expected = "unable to parse number: - in [ --35346, 456, 6,7 ,8]";
     assert_eq!(actual, expected);
 }
@@ -405,7 +405,7 @@ fn json_array_wrong_element_duplicate_minus() {
 #[test]
 fn json_array_wrong_element_duplicate_exponent() {
     let array = "[ 6e2e2]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).err().unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).err().unwrap();
     let expected = "unable to parse number: 6e2 in [ 6e2e2]";
     assert_eq!(actual, expected);
 }
@@ -413,7 +413,7 @@ fn json_array_wrong_element_duplicate_exponent() {
 #[test]
 fn json_array_wrong_element_duplicate_point() {
     let array = "[ 6.2.2]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).err().unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).err().unwrap();
     let expected = "unable to parse number: 6.2 in [ 6.2.2]";
     assert_eq!(actual, expected);
 }
@@ -421,7 +421,7 @@ fn json_array_wrong_element_duplicate_point() {
 #[test]
 fn json_array_wrong_element_rundom_char() {
     let array = "[ 6h2]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).err().unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).err().unwrap();
     let expected = "unable to parse number: h in [ 6h2]";
     assert_eq!(actual, expected);
 }
@@ -429,7 +429,7 @@ fn json_array_wrong_element_rundom_char() {
 #[test]
 fn json_array_whitespace_before_first_element() {
     let array = "[ 123.76, -456, 0,7.5e4 ,8]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["123.76", "-456", "0", "7.5e4", "8"];
     assert_eq!(actual, expected);
 }
@@ -437,7 +437,7 @@ fn json_array_whitespace_before_first_element() {
 #[test]
 fn json_array_whitespace_after_last_element() {
     let array = "[ 123, 456, 6,7 ,8 ]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["123", "456", "6", "7", "8"];
     assert_eq!(actual, expected);
 }
@@ -445,7 +445,7 @@ fn json_array_whitespace_after_last_element() {
 #[test]
 fn json_array_whitespace_before_array() {
     let array = " [ 123, 456, 6,7 ,8 ]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["123", "456", "6", "7", "8"];
     assert_eq!(actual, expected);
 }
@@ -454,7 +454,7 @@ fn json_array_whitespace_before_array() {
 #[test]
 fn json_array_whitespace_after_array() {
     let array = " [ 123, 456, 6,7 ,8 ] ";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected = vec!["123", "456", "6", "7", "8"];
     assert_eq!(actual, expected);
 }
@@ -462,7 +462,7 @@ fn json_array_whitespace_after_array() {
 #[test]
 fn json_empty_array() {
     let array = " [  ] ";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
     let expected : Vec<String> = vec![];
     assert_eq!(actual, expected);
 }
@@ -470,7 +470,7 @@ fn json_empty_array() {
 #[test]
 fn json_array_starts_with_random_chars() {
     let array = "adgsfdg [ 123, 456, 6,7 ,8 ] ";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).err().unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).err().unwrap();
     let expected = "input string does not start with opening square bracket: a in adgsfdg [ 123, 456, 6,7 ,8 ] ";
     assert_eq!(actual, expected);
 }
@@ -478,7 +478,7 @@ fn json_array_starts_with_random_chars() {
 #[test]
 fn json_array_ends_with_random_chars() {
     let array = " [ 123, 456, 6,7 ,8 ] adgsfdg";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string()).err().unwrap();
+    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).err().unwrap();
     let expected = "after array there are some characters: a in  [ 123, 456, 6,7 ,8 ] adgsfdg";
     assert_eq!(actual, expected);
 }
@@ -486,7 +486,7 @@ fn json_array_ends_with_random_chars() {
 #[test]
 fn json_array_no_closing_square_bracket() {
     let array = " [ 123, 456, 6,7 ,8  ";
-    let result = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string());
+    let result = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string());
     assert!(result.is_err());
 
     let message = result.err().unwrap();
@@ -496,7 +496,7 @@ fn json_array_no_closing_square_bracket() {
 #[test]
 fn json_array_no_starting_square_bracket() {
     let array = "  123, 456, 6,7 ,8  ]";
-    let result = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string());
+    let result = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string());
     assert!(result.is_err());
 
     let message = result.err().unwrap();
@@ -506,7 +506,7 @@ fn json_array_no_starting_square_bracket() {
 #[test]
 fn json_array_whitespaces() {
     let array = "  ";
-    let result = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string());
+    let result = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string());
     assert!(result.is_err());
 
     let message = result.err().unwrap();
@@ -516,7 +516,7 @@ fn json_array_whitespaces() {
 #[test]
 fn json_array_missing_comma() {
     let array = "[  123, 456 6,7 ,8  ]";
-    let result = RawUnprocessedJSONArray::split_into_vector_of_items(array.to_string());
+    let result = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string());
     assert!(result.is_err());
 
     let message = result.err().unwrap();
