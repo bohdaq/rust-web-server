@@ -122,6 +122,14 @@ fn vector_to_json() {
 
     let parsed_list = JSONArrayOfObjects::<SomeObject>::from_json(actual).unwrap();
     assert_eq!(2, parsed_list.len());
+
+    let parsed_obj = parsed_list.get(0).unwrap();
+    assert_eq!(parsed_obj.prop_a, "default");
+    assert_eq!(parsed_obj.prop_b, false);
+
+    let parsed_obj = parsed_list.get(1).unwrap();
+    assert_eq!(parsed_obj.prop_a, "default2");
+    assert_eq!(parsed_obj.prop_b, true);
 }
 
 #[test]
