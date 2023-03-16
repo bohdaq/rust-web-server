@@ -115,7 +115,7 @@ fn vector_to_json() {
 
     let obj = SomeObject { prop_a: "default".to_string(), prop_b: false };
     let obj2 = SomeObject { prop_a: "default2".to_string(), prop_b: true };
-    //TODO: JSONArrayOfObjects::<SomeObject>::to_json(vec![obj, obj2]).unwrap();
+
     let actual = JSONArrayOfObjects::<SomeObject>::to_json(vec![obj, obj2]).unwrap();
     let expected = "[{\r\n  \"prop_a\": \"default\",\r\n  \"prop_b\": false\r\n},\r\n{\r\n  \"prop_a\": \"default2\",\r\n  \"prop_b\": true\r\n}]".to_string();
     assert_eq!(actual, expected);
