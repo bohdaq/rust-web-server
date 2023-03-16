@@ -28,9 +28,9 @@ impl<T: ToJSON> JSONArrayOfObjects<T> {
     }
 }
 
-pub struct JSONArrayOfPrimitives;
-impl JSONArrayOfPrimitives {
-    pub fn parse(_json_string: String) -> Result<Vec<String>, String> {
+pub struct RawUnprocessedJSONArray;
+impl RawUnprocessedJSONArray {
+    pub fn split_into_vector_of_items(_json_string: String) -> Result<Vec<String>, String> {
         let mut list : Vec<String> = vec![];
 
         // cursor
