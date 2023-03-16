@@ -270,7 +270,12 @@ impl JSON {
                             }
                             boxed_read.unwrap();
                             bytes_read = bytes_read + length as i128;
-                            let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+                            let boxed_parse = String::from_utf8(char_buffer);
+                            if boxed_parse.is_err() {
+                                let message = boxed_parse.err().unwrap().to_string();
+                                return Err(message)
+                            }
+                            let char = boxed_parse.unwrap().chars().last().unwrap();
 
                             let is_open_curly_brace = char == '{';
                             if is_open_curly_brace {
