@@ -223,7 +223,12 @@ impl JSON {
                         let byte = 0;
                         let mut char_buffer = vec![byte, byte, byte, byte];
                         let length = char_buffer.len();
-                        cursor.read_exact(&mut char_buffer).unwrap();
+                        let boxed_read = cursor.read_exact(&mut char_buffer);
+                        if boxed_read.is_err() {
+                            let message = boxed_read.err().unwrap().to_string();
+                            return Err(message)
+                        }
+                        boxed_read.unwrap();
                         bytes_read = bytes_read + length as i128;
                         let remaining_bool = String::from_utf8(char_buffer).unwrap();
                         if remaining_bool != "alse" {
