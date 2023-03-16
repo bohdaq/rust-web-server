@@ -1,6 +1,6 @@
 use std::io;
 use std::io::Read;
-use crate::json::object::ToJSON;
+use crate::json::object::{FromJSON, ToJSON};
 use crate::symbol::SYMBOL;
 
 #[cfg(test)]
@@ -25,6 +25,19 @@ impl<T: ToJSON> JSONArrayOfObjects<T> {
 
         let result = json_vec.join(SYMBOL.empty_string);
         Ok(result)
+    }
+}
+
+impl<T: FromJSON + Default> JSONArrayOfObjects<T> {
+    pub fn from_json(json : String) -> Result<Vec<T>, String> {
+        let items = RawUnprocessedJSONArray::split_into_vector_of_items(json).unwrap();
+        let mut list: Vec<T> = vec![];
+        for item in items {
+            let mut object = T::default();
+            object.parse(item).unwrap();
+            list.push(object);
+        }
+        Ok(list)
     }
 }
 
@@ -379,6 +392,8 @@ impl RawUnprocessedJSONArray {
                 }
 
                 is_comma_separator = char == ',';
+                let is_carriage_return = char == '\r';
+                let is_newline = char == '\n';
                 let is_not_supported_type =
                     !is_string &&
                         !is_null &&
@@ -387,6 +402,8 @@ impl RawUnprocessedJSONArray {
                         !is_array &&
                         !is_nested_object &&
                         !is_comma_separator &&
+                        !is_carriage_return &&
+                        !is_newline &&
                         !is_numeric;
                 if is_not_supported_type {
                     let message = format!("unknown type: {} in {}", char, _json_string);
