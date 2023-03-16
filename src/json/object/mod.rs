@@ -176,7 +176,12 @@ impl JSON {
                         }
                         boxed_read.unwrap();
                         bytes_read = bytes_read + length as i128;
-                        let remaining_bool = String::from_utf8(char_buffer).unwrap();
+                        let boxed_parse = String::from_utf8(char_buffer);
+                        if boxed_parse.is_err() {
+                            let message = boxed_parse.err().unwrap().to_string();
+                            return Err(message)
+                        }
+                        let remaining_bool = boxed_parse.unwrap();
                         if remaining_bool != "ull" {
                             let message = format!("Unable to parse null: {}", key_value_pair);
                             return Err(message)
@@ -191,7 +196,12 @@ impl JSON {
                         let byte = 0;
                         let mut char_buffer = vec![byte, byte, byte];
                         let length = char_buffer.len();
-                        cursor.read_exact(&mut char_buffer).unwrap();
+                        let boxed_read = cursor.read_exact(&mut char_buffer);
+                        if boxed_read.is_err() {
+                            let message = boxed_read.err().unwrap().to_string();
+                            return Err(message)
+                        }
+                        boxed_read.unwrap();
                         bytes_read = bytes_read + length as i128;
                         let remaining_bool = String::from_utf8(char_buffer).unwrap();
                         if remaining_bool != "rue" {
