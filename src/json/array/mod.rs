@@ -6,11 +6,11 @@ use crate::symbol::SYMBOL;
 #[cfg(test)]
 mod tests;
 
-pub struct JSONArray<T> {
+pub struct JSONArrayOfObjects<T> {
     _items: T, // added to eliminate compiler error
 }
 
-impl<T: ToJSON> JSONArray<T> {
+impl<T: ToJSON> JSONArrayOfObjects<T> {
     pub fn to_json(items : Vec<T>) -> Result<String, String> {
         let mut json_vec = vec![];
         json_vec.push(SYMBOL.opening_square_bracket.to_string());
