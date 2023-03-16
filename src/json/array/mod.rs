@@ -28,7 +28,8 @@ impl<T: ToJSON> JSONArray<T> {
     }
 }
 
-impl<T> JSONArray<T> {
+pub struct JSONArrayOfPrimitives;
+impl JSONArrayOfPrimitives {
     pub fn parse(_json_string: String) -> Result<Vec<String>, String> {
         let mut list : Vec<String> = vec![];
 
