@@ -117,9 +117,9 @@ impl JSON {
 
             // read in a while loop until char is not ascii control char and not whitespace, append to buffer
             let mut comma_delimiter_read_already = false;
-            let mut is_whitespace = true;
+            let mut is_whitespace_or_new_line_or_carriage_return = true;
 
-            while is_whitespace {
+            while is_whitespace_or_new_line_or_carriage_return {
                 let bytes_to_read = 1;
                 let mut char_buffer = vec![bytes_to_read];
                 comma_delimiter_read_already = false;
@@ -133,7 +133,7 @@ impl JSON {
                 bytes_read = bytes_read + bytes_to_read as i128;
                 let char = String::from_utf8(char_buffer).unwrap();
 
-                if char != " " {
+                if char != " " && char != "\n" && char != "\r" {
                     let is_string = char == "\"";
                     if is_string {
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
@@ -359,7 +359,7 @@ impl JSON {
                         }
                     }
 
-                    is_whitespace = false;
+                    is_whitespace_or_new_line_or_carriage_return = false;
                 }
 
 
