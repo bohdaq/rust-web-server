@@ -27,8 +27,14 @@ fn json_to_vector() {
     let parsed_obj = parsed_list.get(0).unwrap();
     assert_eq!(parsed_obj.prop_a, "");
     assert_eq!(parsed_obj.prop_b, false);
+    assert_eq!(parsed_obj.prop_c, false);
+    assert_eq!(parsed_obj.prop_d, 0);
+    assert_eq!(parsed_obj.prop_e, 0.0);
 
     let parsed_obj = parsed_list.get(1).unwrap();
     assert_eq!(parsed_obj.prop_a, "test");
     assert_eq!(parsed_obj.prop_b, true);
+    assert_eq!(parsed_obj.prop_c, false);
+    assert_eq!(parsed_obj.prop_d, 10);
+    assert_eq!(parsed_obj.prop_e, 2.2);
 }
