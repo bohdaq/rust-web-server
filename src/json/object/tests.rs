@@ -2005,5 +2005,3 @@ fn parse_multi_nested_object() {
     assert_eq!(another_nested_obj.prop_bar, 2.2);
 }
 
-// TODO add tests with newline carriage return before and after key and value
-
