@@ -5,6 +5,8 @@ use crate::symbol::SYMBOL;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod examples;
 
 pub struct JSONArrayOfObjects<T> {
     _items: T, // added to eliminate compiler error
