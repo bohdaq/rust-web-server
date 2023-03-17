@@ -14,7 +14,7 @@ pub trait New {
     fn new() -> Self;
 }
 
-impl<T : New> JSONArrayOfObjects<T> {
+impl<T: New> JSONArrayOfObjects<T> {
     pub fn new() -> T {
         T::new()
     }
