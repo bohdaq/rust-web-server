@@ -36,22 +36,33 @@ impl FromJSON for ExampleObject {
     fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String> {
         for (property, value) in properties {
             if property.property_name == "prop_a" {
-                self.prop_a = value.string.unwrap();
+                if value.string.is_some() {
+                    self.prop_a = value.string.unwrap();
+                }
             }
             if property.property_name == "prop_b" {
-                self.prop_b = value.bool.unwrap();
+                if value.bool.is_some() {
+                    self.prop_b = value.bool.unwrap();
+                }
             }
 
             if property.property_name == "prop_c" {
-                self.prop_c = value.bool.unwrap();
+                if value.bool.is_some() {
+                    self.prop_c = value.bool.unwrap();
+                }
             }
 
             if property.property_name == "prop_d" {
-                self.prop_d = value.i128.unwrap();
+                if value.i128.is_some() {
+                    self.prop_d = value.i128.unwrap();
+                }
             }
 
             if property.property_name == "prop_e" {
-                self.prop_e = value.f64.unwrap();
+                if value.f64.is_some() {
+                    self.prop_e = value.f64.unwrap();
+
+                }
             }
         }
         Ok(())

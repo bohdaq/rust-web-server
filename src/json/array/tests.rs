@@ -1,142 +1,34 @@
 use crate::json::array::{JSONArrayOfObjects, New, RawUnprocessedJSONArray};
 use crate::json::{JSON_TYPE, JSONValue};
+use crate::json::example_object::ExampleObject;
 use crate::json::object::{FromJSON, JSON, ToJSON};
 use crate::json::property::JSONProperty;
 use crate::symbol::SYMBOL;
 
 #[test]
 fn vector_to_json() {
-    struct SomeObject {
-        prop_a: String,
-        prop_b: bool
-    }
+    let obj = ExampleObject::new();
+    let obj2 = ExampleObject {
+        prop_a: "test".to_string(),
+        prop_b: true,
+        prop_c: false,
+        prop_d: 10,
+        prop_e: 2.2,
+    };
 
-    impl New for SomeObject {
-        fn new() -> Self {
-            SomeObject {
-                prop_a: "default".to_string(),
-                prop_b: false
-            }
-        }
-    }
-
-    impl FromJSON for SomeObject {
-        fn parse_json_to_properties(&self, json_string: String) -> Result<Vec<(JSONProperty, JSONValue)>, String> {
-            let boxed_parse = JSON::parse_as_properties(json_string);
-            if boxed_parse.is_err() {
-                let message = boxed_parse.err().unwrap();
-                return Err(message)
-            }
-            let properties = boxed_parse.unwrap();
-            Ok(properties)
-        }
-        fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String> {
-            for (property, value) in properties {
-                if property.property_name == "prop_a" {
-                    self.prop_a = value.string.unwrap();
-                }
-                if property.property_name == "prop_b" {
-                    self.prop_b = value.bool.unwrap();
-                }
-            }
-            Ok(())
-        }
-        fn parse(&mut self, json_string: String) -> Result<(), String> {
-            let boxed_properties = self.parse_json_to_properties(json_string);
-            if boxed_properties.is_err() {
-                let message = boxed_properties.err().unwrap();
-                return Err(message);
-            }
-            let properties = boxed_properties.unwrap();
-            let boxed_set = self.set_properties(properties);
-            if boxed_set.is_err() {
-                let message = boxed_set.err().unwrap();
-                return Err(message);
-            }
-            Ok(())
-        }
-    }
-
-    impl ToJSON for SomeObject {
-        fn list_properties() -> Vec<JSONProperty> {
-            let mut list = vec![];
-
-            let property = JSONProperty { property_name: "prop_a".to_string(), property_type: JSON_TYPE.string.to_string() };
-            list.push(property);
-
-            let property = JSONProperty { property_name: "prop_b".to_string(), property_type: JSON_TYPE.boolean.to_string() };
-            list.push(property);
-
-            list
-        }
-
-        fn get_property(&self, property_name: String) -> JSONValue {
-            let mut value = JSONValue::new();
-
-            if property_name == "prop_a".to_string() {
-                let string : String = self.prop_a.to_owned();
-                value.string = Some(string);
-            }
-
-            if property_name == "prop_b".to_string() {
-                let boolean : bool = self.prop_b;
-                value.bool = Some(boolean);
-            }
-
-            value
-        }
-
-        fn to_json_string(&self) -> String {
-            let mut json_list = vec![];
-            json_list.push(SYMBOL.opening_curly_bracket.to_string());
-
-
-            let mut properties_list = vec![];
-
-            let properties = SomeObject::list_properties();
-            for property in properties {
-                let value = self.get_property(property.property_name.to_string());
-
-                if &property.property_type == "String" {
-                    let raw_value = value.string.unwrap();
-                    let formatted_property = format!("  \"{}\": \"{}\"", &property.property_name, raw_value);
-                    properties_list.push(formatted_property.to_string());
-                }
-
-                if &property.property_type == "bool" {
-                    let raw_value = value.bool.unwrap();
-                    let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
-                    properties_list.push(formatted_property.to_string());
-                }
-            }
-
-
-            let comma_new_line_carriage_return = format!("{}{}", SYMBOL.comma, SYMBOL.new_line_carriage_return);
-            let properties = properties_list.join(&comma_new_line_carriage_return);
-
-            json_list.push(properties);
-            json_list.push(SYMBOL.closing_curly_bracket.to_string());
-            let json= json_list.join(SYMBOL.new_line_carriage_return);
-            json
-        }
-    }
-
-    let obj = SomeObject { prop_a: "default".to_string(), prop_b: false };
-    let obj2 = SomeObject { prop_a: "default2".to_string(), prop_b: true };
-
-    let actual = JSONArrayOfObjects::<SomeObject>::to_json(vec![obj, obj2]).unwrap();
-    let expected = "[{\r\n  \"prop_a\": \"default\",\r\n  \"prop_b\": false\r\n},\r\n{\r\n  \"prop_a\": \"default2\",\r\n  \"prop_b\": true\r\n}]".to_string();
+    let actual = JSONArrayOfObjects::<ExampleObject>::to_json(vec![obj, obj2]).unwrap();
+    let expected = "[{\r\n  \"prop_a\": \"\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 0,\r\n  \"prop_e\": 0\r\n},\r\n{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 10,\r\n  \"prop_e\": 2.2\r\n}]".to_string();
     assert_eq!(actual, expected);
 
-    let parsed_list = JSONArrayOfObjects::<SomeObject>::from_json(actual).unwrap();
+    let parsed_list = JSONArrayOfObjects::<ExampleObject>::from_json(actual).unwrap();
     assert_eq!(2, parsed_list.len());
 
     let parsed_obj = parsed_list.get(0).unwrap();
-    assert_eq!(parsed_obj.prop_a, "default");
+    assert_eq!(parsed_obj.prop_a, "");
     assert_eq!(parsed_obj.prop_b, false);
 
     let parsed_obj = parsed_list.get(1).unwrap();
-    assert_eq!(parsed_obj.prop_a, "default2");
+    assert_eq!(parsed_obj.prop_a, "test");
     assert_eq!(parsed_obj.prop_b, true);
 }
 

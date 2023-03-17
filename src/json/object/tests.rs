@@ -1,11 +1,9 @@
 use crate::json::{JSONValue, JSON_TYPE};
 use crate::json::array::New;
+use crate::json::example_object::ExampleObject;
 use crate::json::property::JSONProperty;
 use crate::json::object::{FromJSON, JSON, ToJSON};
-use crate::json::object::tests::example_object::ExampleObject;
 use crate::symbol::SYMBOL;
-
-mod example_object;
 
 #[test]
 fn parse() {

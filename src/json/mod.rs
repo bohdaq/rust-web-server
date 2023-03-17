@@ -3,6 +3,7 @@ mod tests;
 pub mod property;
 pub mod array;
 pub mod object;
+mod example_object;
 
 // TODO: wip
 
