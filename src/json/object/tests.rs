@@ -1,4 +1,5 @@
 use crate::json::{JSONValue, JSON_TYPE};
+use crate::json::array::New;
 use crate::json::property::JSONProperty;
 use crate::json::object::{FromJSON, JSON, ToJSON};
 use crate::json::object::tests::example_object::ExampleObject;
@@ -175,13 +176,7 @@ fn parse_direct() {
 fn parse_new_lines_carriage_returns() {
     let json_string = "{\r\n  \r\n\"prop_a\"\r\n:\r\n \r\n\"123abc\"\r\n,\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 4356257,\r\n  \"prop_e\": 4356.257\r\n}";
 
-    let mut deserealized_object = ExampleObject {
-        prop_a: "".to_string(),
-        prop_b: false,
-        prop_c: true,
-        prop_d: 0,
-        prop_e: 0.0,
-    };
+    let mut deserealized_object = ExampleObject::new();
     deserealized_object.parse(json_string.to_string()).unwrap();
 
     assert_eq!("123abc", deserealized_object.prop_a);
