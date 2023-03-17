@@ -1,4 +1,4 @@
-use crate::json::array::{JSONArrayOfObjects, RawUnprocessedJSONArray};
+use crate::json::array::{JSONArrayOfObjects, New, RawUnprocessedJSONArray};
 use crate::json::{JSON_TYPE, JSONValue};
 use crate::json::object::{FromJSON, JSON, ToJSON};
 use crate::json::property::JSONProperty;
@@ -6,10 +6,18 @@ use crate::symbol::SYMBOL;
 
 #[test]
 fn vector_to_json() {
-    #[derive(Default)]
     struct SomeObject {
         prop_a: String,
         prop_b: bool
+    }
+
+    impl New for SomeObject {
+        fn new() -> Self {
+            SomeObject {
+                prop_a: "default".to_string(),
+                prop_b: false
+            }
+        }
     }
 
     impl FromJSON for SomeObject {

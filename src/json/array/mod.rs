@@ -10,6 +10,16 @@ pub struct JSONArrayOfObjects<T> {
     _items: T, // added to eliminate compiler error
 }
 
+pub trait New {
+    fn new() -> Self;
+}
+
+impl<T : New> JSONArrayOfObjects<T> {
+    pub fn new() -> T {
+        T::new()
+    }
+}
+
 impl<T: ToJSON> JSONArrayOfObjects<T> {
     pub fn to_json(items : Vec<T>) -> Result<String, String> {
         let mut json_vec = vec![];
@@ -28,12 +38,12 @@ impl<T: ToJSON> JSONArrayOfObjects<T> {
     }
 }
 
-impl<T: FromJSON + Default> JSONArrayOfObjects<T> {
+impl<T: FromJSON + New> JSONArrayOfObjects<T> {
     pub fn from_json(json : String) -> Result<Vec<T>, String> {
         let items = RawUnprocessedJSONArray::split_into_vector_of_strings(json).unwrap();
         let mut list: Vec<T> = vec![];
         for item in items {
-            let mut object = T::default();
+            let mut object = T::new();
             object.parse(item).unwrap();
             list.push(object);
         }
