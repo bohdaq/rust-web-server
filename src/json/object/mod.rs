@@ -249,6 +249,47 @@ impl JSON {
                     let is_array = char == '[';
                     if is_array {
                         // read the array (including nested objects and arrays)
+                        key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
+                        let mut number_of_open_square_brackets = 1;
+                        let mut number_of_closed_square_brackets = 0;
+
+                        let mut read_char = true;
+                        while read_char {
+
+                            let byte = 0;
+                            let mut char_buffer = vec![byte];
+                            let length = char_buffer.len();
+                            let boxed_read = cursor.read_exact(&mut char_buffer);
+                            if boxed_read.is_err() {
+                                let message = boxed_read.err().unwrap().to_string();
+                                return Err(message)
+                            }
+                            boxed_read.unwrap();
+                            bytes_read = bytes_read + length as i128;
+                            let boxed_parse = String::from_utf8(char_buffer);
+                            if boxed_parse.is_err() {
+                                let message = boxed_parse.err().unwrap().to_string();
+                                return Err(message)
+                            }
+                            let char = boxed_parse.unwrap().chars().last().unwrap();
+
+                            let is_open_square_bracket = char == '[';
+                            if is_open_square_bracket {
+                                number_of_open_square_brackets = number_of_open_square_brackets + 1;
+                            }
+
+
+                            let is_close_square_bracket = char == ']';
+                            if is_close_square_bracket {
+                                number_of_closed_square_brackets = number_of_closed_square_brackets + 1;
+                            }
+
+                            key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
+
+                            if number_of_open_square_brackets == number_of_closed_square_brackets {
+                                read_char = false;
+                            }
+                        }
                     }
 
 
