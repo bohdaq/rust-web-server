@@ -1,34 +1,29 @@
 use crate::json::{JSON_TYPE, JSONValue};
-use crate::json::array::{JSONArrayOfObjects, New};
-use crate::json::example_nested_object::ExampleNestedObject;
+use crate::json::array::New;
 use crate::json::object::{FromJSON, JSON, ToJSON};
 use crate::json::property::JSONProperty;
 
-pub struct ExampleObject {
+pub struct ExampleNestedObject {
     pub prop_a: String,
     pub prop_b: bool,
     pub prop_c: bool,
     pub prop_d: i128,
-    pub prop_e: f64,
-    pub prop_f: Option<Vec<ExampleNestedObject>>,
-    pub prop_g: Option<ExampleNestedObject>
+    pub prop_e: f64
 }
 
-impl New for ExampleObject {
+impl New for ExampleNestedObject {
     fn new() -> Self {
-        ExampleObject {
+        ExampleNestedObject {
             prop_a: "".to_string(),
             prop_b: false,
             prop_c: false,
             prop_d: 0,
             prop_e: 0.0,
-            prop_f: None,
-            prop_g: None,
         }
     }
 }
 
-impl FromJSON for ExampleObject {
+impl FromJSON for ExampleNestedObject {
     fn parse_json_to_properties(&self, json_string: String) -> Result<Vec<(JSONProperty, JSONValue)>, String> {
         let boxed_parse = JSON::parse_as_properties(json_string);
         if boxed_parse.is_err() {
@@ -69,32 +64,6 @@ impl FromJSON for ExampleObject {
 
                 }
             }
-
-            if property.property_name == "prop_f" {
-                if value.array.is_some() {
-                    let boxed_array = JSONArrayOfObjects::<ExampleNestedObject>::from_json(value.array.unwrap());
-                    if boxed_array.is_ok() {
-                        self.prop_f = Some(boxed_array.unwrap());
-                    }
-
-                }
-            }
-
-            if property.property_name == "prop_g" {
-                let mut prop_g = ExampleNestedObject::new();
-                if value.object.is_some() {
-                    let unparsed_object = value.object.unwrap();
-                    let boxed_parse = prop_g.parse(unparsed_object);
-                    if boxed_parse.is_err() {
-                        let message = boxed_parse.err().unwrap();
-                        return Err(message);
-                    }
-                    self.prop_g = Some(prop_g);
-                } else {
-                    self.prop_g = None;
-                }
-
-            }
         }
         Ok(())
     }
@@ -114,7 +83,7 @@ impl FromJSON for ExampleObject {
     }
 }
 
-impl ToJSON for ExampleObject {
+impl ToJSON for ExampleNestedObject {
     fn list_properties() -> Vec<JSONProperty> {
         let mut list = vec![];
 
@@ -170,7 +139,7 @@ impl ToJSON for ExampleObject {
     fn to_json_string(&self) -> String {
         let mut processed_data = vec![];
 
-        let properties = ExampleObject::list_properties();
+        let properties = ExampleNestedObject::list_properties();
         for property in properties {
             let value = self.get_property(property.property_name.to_string());
             processed_data.push((property, value));

@@ -10,6 +10,8 @@ fn vector_to_json() {
         prop_c: false,
         prop_d: 10,
         prop_e: 2.2,
+        prop_f: None,
+        prop_g: None,
     };
 
     let actual = JSONArrayOfObjects::<ExampleObject>::to_json(vec![obj, obj2]).unwrap();

@@ -147,6 +147,8 @@ fn parse_direct() {
         prop_c: false,
         prop_d: 4356257,
         prop_e: 4356.257,
+        prop_f: None,
+        prop_g: None,
     };
 
     let json_string = obj.to_json_string();
@@ -160,6 +162,8 @@ fn parse_direct() {
         prop_c: true,
         prop_d: 0,
         prop_e: 0.0,
+        prop_f: None,
+        prop_g: None,
     };
     deserealized_object.parse(json_string.to_string()).unwrap();
 

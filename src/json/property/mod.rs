@@ -17,6 +17,7 @@ impl JSONProperty {
             i128: None,
             string: None,
             object: None,
+            array: None,
             bool: None,
             null: None,
         };

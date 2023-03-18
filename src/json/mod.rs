@@ -4,6 +4,7 @@ pub mod property;
 pub mod array;
 pub mod object;
 mod example_object;
+mod example_nested_object;
 
 // TODO: wip
 
@@ -32,6 +33,7 @@ pub struct JSONValue {
     pub i128: Option<i128>,
     pub string: Option<String>,
     pub object: Option<String>,
+    pub array: Option<String>,
     pub bool: Option<bool>,
     pub null: Option<Null>,
 }
@@ -43,6 +45,7 @@ impl JSONValue {
             i128: None,
             string: None,
             object: None,
+            array: None,
             bool: None,
             null: None,
         }
