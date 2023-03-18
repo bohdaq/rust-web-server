@@ -170,6 +170,16 @@ impl ToJSON for ExampleObject {
             value.f64 = Some(floating_point_number);
         }
 
+        if property_name == "prop_f".to_string() {
+            if self.prop_f.is_some() {
+                let array = self.prop_f.as_ref().unwrap();
+                let boxed_json = JSONArrayOfObjects::<ExampleNestedObject>::to_json(array);
+                if boxed_json.is_ok() {
+                    value.array = Some(boxed_json.unwrap());
+                }
+            }
+        }
+
         value
     }
 

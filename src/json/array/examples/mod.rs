@@ -14,7 +14,8 @@ fn vector_to_json() {
         prop_g: None,
     };
 
-    let actual = JSONArrayOfObjects::<ExampleObject>::to_json(vec![obj, obj2]).unwrap();
+    let list  = vec![obj, obj2];
+    let actual = JSONArrayOfObjects::<ExampleObject>::to_json(list.as_ref()).unwrap();
     let expected = "[{\r\n  \"prop_a\": \"\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 0,\r\n  \"prop_e\": 0\r\n},\r\n{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 10,\r\n  \"prop_e\": 2.2\r\n}]".to_string();
     assert_eq!(actual, expected);
 }

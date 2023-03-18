@@ -23,7 +23,7 @@ impl<T: New> JSONArrayOfObjects<T> {
 }
 
 impl<T: ToJSON> JSONArrayOfObjects<T> {
-    pub fn to_json(items : Vec<T>) -> Result<String, String> {
+    pub fn to_json(items : &Vec<T>) -> Result<String, String> {
         let mut json_vec = vec![];
         json_vec.push(SYMBOL.opening_square_bracket.to_string());
         for (pos, item) in items.iter().enumerate() {
