@@ -404,6 +404,7 @@ impl RawUnprocessedJSONArray {
                 }
 
                 is_comma_separator = char == ',';
+                let is_ascii_control = char.is_ascii_control();
                 let is_carriage_return = char == '\r';
                 let is_newline = char == '\n';
                 let is_not_supported_type =
@@ -416,6 +417,7 @@ impl RawUnprocessedJSONArray {
                         !is_comma_separator &&
                         !is_carriage_return &&
                         !is_newline &&
+                        !is_ascii_control &&
                         !is_numeric;
                 if is_not_supported_type {
                     let message = format!("unknown type: {} in {}", char, _json_string);

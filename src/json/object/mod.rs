@@ -133,9 +133,10 @@ impl JSON {
                 boxed_read.unwrap();
                 bytes_read = bytes_read + bytes_to_read as i128;
                 let char = String::from_utf8(char_buffer).unwrap();
+                let char = char.chars().last().unwrap();
 
-                if char != " " && char != "\n" && char != "\r" {
-                    let is_string = char == "\"";
+                if char != ' ' && char != '\n' && char != '\r' && !char.is_ascii_control() {
+                    let is_string = char == '\"';
                     if is_string {
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
 
@@ -163,7 +164,7 @@ impl JSON {
                         }
                     }
 
-                    let is_null = char == "n";
+                    let is_null = char == 'n';
                     if is_null {
                         // read 'ull'
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
@@ -190,7 +191,7 @@ impl JSON {
                         key_value_pair = [key_value_pair, remaining_bool].join(SYMBOL.empty_string);
                     }
 
-                    let is_boolean_true = char == "t";
+                    let is_boolean_true = char == 't';
                     if is_boolean_true {
                         // read 'rue'
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
@@ -217,7 +218,7 @@ impl JSON {
                         key_value_pair = [key_value_pair, remaining_bool].join(SYMBOL.empty_string);
                     }
 
-                    let is_boolean_false = char == "f";
+                    let is_boolean_false = char == 'f';
                     if is_boolean_false {
                         // read 'alse'
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
@@ -245,13 +246,13 @@ impl JSON {
                         key_value_pair = [key_value_pair, remaining_bool].join(SYMBOL.empty_string);
                     }
 
-                    let is_array = char == "[";
+                    let is_array = char == '[';
                     if is_array {
                         // read the array (including nested objects and arrays)
                     }
 
 
-                    let is_nested_object = char == "{" && !is_root_opening_curly_brace;
+                    let is_nested_object = char == '{' && !is_root_opening_curly_brace;
                     if is_nested_object {
                         // read the object (including nested objects and arrays)
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
