@@ -180,6 +180,14 @@ impl ToJSON for ExampleObject {
             }
         }
 
+        if property_name == "prop_g".to_string() {
+            if self.prop_g.is_some() {
+                let object = self.prop_g.as_ref().unwrap();
+                let json = object.to_json_string();
+                value.object = Some(json);
+            }
+        }
+
         value
     }
 
