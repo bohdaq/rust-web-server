@@ -9,7 +9,7 @@ mod tests;
 mod examples;
 
 pub struct JSONArrayOfObjects<T> {
-    _items: T, // added to eliminate compiler error
+    _item: T, // added to eliminate compiler error
 }
 
 pub trait New {
