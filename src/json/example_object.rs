@@ -133,6 +133,12 @@ impl ToJSON for ExampleObject {
         let property = JSONProperty { property_name: "prop_e".to_string(), property_type: JSON_TYPE.number.to_string() };
         list.push(property);
 
+        let property = JSONProperty { property_name: "prop_f".to_string(), property_type: JSON_TYPE.array.to_string() };
+        list.push(property);
+
+        let property = JSONProperty { property_name: "prop_g".to_string(), property_type: JSON_TYPE.object.to_string() };
+        list.push(property);
+
         list
     }
 
