@@ -472,6 +472,14 @@ impl JSON {
                     properties_list.push(formatted_property.to_string());
                 }
             }
+
+            if &property.property_type == "array" {
+                if value.array.is_some() {
+                    let raw_value = value.array.unwrap();
+                    let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
+                    properties_list.push(formatted_property.to_string());
+                }
+            }
         }
 
 

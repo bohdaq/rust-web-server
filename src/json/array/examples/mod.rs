@@ -1,4 +1,5 @@
 use crate::json::array::{JSONArrayOfObjects, New};
+use crate::json::example_nested_object::ExampleNestedObject;
 use crate::json::example_object::ExampleObject;
 
 #[test]
@@ -17,6 +18,51 @@ fn vector_to_json() {
     let list  = vec![obj, obj2];
     let actual = JSONArrayOfObjects::<ExampleObject>::to_json(list.as_ref()).unwrap();
     let expected = "[{\r\n  \"prop_a\": \"\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 0,\r\n  \"prop_e\": 0\r\n},\r\n{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 10,\r\n  \"prop_e\": 2.2\r\n}]".to_string();
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn vector_to_json_on_struct_with_nested_object_and_list_of_nested_objects() {
+    let nested_object = ExampleNestedObject {
+        prop_a: "test".to_string(),
+        prop_b: false,
+        prop_c: true,
+        prop_d: 1,
+        prop_e: 2.2,
+    };
+
+    let nested_object_2 = ExampleNestedObject {
+        prop_a: "test".to_string(),
+        prop_b: false,
+        prop_c: true,
+        prop_d: 1,
+        prop_e: 2.2,
+    };
+
+    let nested_object_3 = ExampleNestedObject {
+        prop_a: "test string".to_string(),
+        prop_b: true,
+        prop_c: false,
+        prop_d: 11,
+        prop_e: 21.12,
+    };
+
+    let nested_list = vec![nested_object_2, nested_object_3];
+
+    let obj = ExampleObject::new();
+    let obj2 = ExampleObject {
+        prop_a: "test".to_string(),
+        prop_b: true,
+        prop_c: false,
+        prop_d: 10,
+        prop_e: 2.2,
+        prop_f: Some(nested_list),
+        prop_g: Some(nested_object),
+    };
+
+    let list  = vec![obj, obj2];
+    let actual = JSONArrayOfObjects::<ExampleObject>::to_json(list.as_ref()).unwrap();
+    let expected = "[{\r\n  \"prop_a\": \"\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 0,\r\n  \"prop_e\": 0\r\n},\r\n{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 10,\r\n  \"prop_e\": 2.2,\r\n  \"prop_f\": [{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": true,\r\n  \"prop_d\": 1,\r\n  \"prop_e\": 2.2\r\n},\r\n{\r\n  \"prop_a\": \"test string\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 11,\r\n  \"prop_e\": 21.12\r\n}],\r\n  \"prop_g\": {\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": true,\r\n  \"prop_d\": 1,\r\n  \"prop_e\": 2.2\r\n}\r\n}]".to_string();
     assert_eq!(actual, expected);
 }
 

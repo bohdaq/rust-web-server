@@ -175,7 +175,8 @@ impl ToJSON for ExampleObject {
                 let array = self.prop_f.as_ref().unwrap();
                 let boxed_json = JSONArrayOfObjects::<ExampleNestedObject>::to_json(array);
                 if boxed_json.is_ok() {
-                    value.array = Some(boxed_json.unwrap());
+                    let json = boxed_json.unwrap();
+                    value.array = Some(json);
                 }
             }
         }
