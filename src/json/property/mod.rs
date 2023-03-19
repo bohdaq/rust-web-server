@@ -81,7 +81,9 @@ impl JSONProperty {
         }
 
         if is_array {
-
+            property.property_type = JSON_TYPE.array.to_string();
+            property.property_name = _key.replace(SYMBOL.quotation_mark, SYMBOL.empty_string).to_string();
+            value.array = Some(_value.to_string());
         }
 
         if is_object {
