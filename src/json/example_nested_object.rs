@@ -6,8 +6,8 @@ use crate::json::property::JSONProperty;
 pub struct ExampleNestedObject {
     pub prop_a: String,
     pub prop_b: bool,
-    pub prop_d: i128,
-    pub prop_e: f64
+    pub prop_c: i128,
+    pub prop_d: f64
 }
 
 impl New for ExampleNestedObject {
@@ -15,8 +15,8 @@ impl New for ExampleNestedObject {
         ExampleNestedObject {
             prop_a: "".to_string(),
             prop_b: false,
-            prop_d: 0,
-            prop_e: 0.0,
+            prop_c: 0,
+            prop_d: 0.0,
         }
     }
 }
@@ -47,13 +47,13 @@ impl FromJSON for ExampleNestedObject {
 
             if property.property_name == "prop_d" {
                 if value.i128.is_some() {
-                    self.prop_d = value.i128.unwrap();
+                    self.prop_c = value.i128.unwrap();
                 }
             }
 
             if property.property_name == "prop_e" {
                 if value.f64.is_some() {
-                    self.prop_e = value.f64.unwrap();
+                    self.prop_d = value.f64.unwrap();
 
                 }
             }
@@ -111,12 +111,12 @@ impl ToJSON for ExampleNestedObject {
 
 
         if property_name == "prop_d".to_string() {
-            let integer : i128 = self.prop_d;
+            let integer : i128 = self.prop_c;
             value.i128 = Some(integer);
         }
 
         if property_name == "prop_e".to_string() {
-            let floating_point_number: f64 = self.prop_e;
+            let floating_point_number: f64 = self.prop_d;
             value.f64 = Some(floating_point_number);
         }
 

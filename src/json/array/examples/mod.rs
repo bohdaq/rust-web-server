@@ -26,22 +26,22 @@ fn vector_to_json_on_struct_with_nested_object_and_list_of_nested_objects() {
     let nested_object = ExampleNestedObject {
         prop_a: "test".to_string(),
         prop_b: false,
-        prop_d: 1,
-        prop_e: 2.2,
+        prop_c: 1,
+        prop_d: 2.2,
     };
 
     let nested_object_2 = ExampleNestedObject {
         prop_a: "test".to_string(),
         prop_b: false,
-        prop_d: 1,
-        prop_e: 2.2,
+        prop_c: 1,
+        prop_d: 2.2,
     };
 
     let nested_object_3 = ExampleNestedObject {
         prop_a: "test string".to_string(),
         prop_b: true,
-        prop_d: 11,
-        prop_e: 21.12,
+        prop_c: 11,
+        prop_d: 21.12,
     };
 
     let nested_list = vec![nested_object_2, nested_object_3];
@@ -113,8 +113,8 @@ fn json_on_struct_with_nested_object_and_list_of_nested_objects_to_vector() {
     let nested_obj = parsed_obj.prop_g.as_ref().unwrap();
     assert_eq!(nested_obj.prop_a, "test");
     assert_eq!(nested_obj.prop_b, false);
-    assert_eq!(nested_obj.prop_d, 1);
-    assert_eq!(nested_obj.prop_e, 2.2);
+    assert_eq!(nested_obj.prop_c, 1);
+    assert_eq!(nested_obj.prop_d, 2.2);
 
 
     let nested_list = parsed_obj.prop_f.as_ref().unwrap();
@@ -123,12 +123,12 @@ fn json_on_struct_with_nested_object_and_list_of_nested_objects_to_vector() {
     let nested_obj =  nested_list.get(0).unwrap();
     assert_eq!("test", nested_obj.prop_a);
     assert_eq!(false, nested_obj.prop_b);
-    assert_eq!(1, nested_obj.prop_d);
-    assert_eq!(2.2, nested_obj.prop_e);
+    assert_eq!(1, nested_obj.prop_c);
+    assert_eq!(2.2, nested_obj.prop_d);
 
     let nested_obj =  nested_list.get(1).unwrap();
     assert_eq!("test string", nested_obj.prop_a);
     assert_eq!(true, nested_obj.prop_b);
-    assert_eq!(11, nested_obj.prop_d);
-    assert_eq!(21.12, nested_obj.prop_e);
+    assert_eq!(11, nested_obj.prop_c);
+    assert_eq!(21.12, nested_obj.prop_d);
 }
