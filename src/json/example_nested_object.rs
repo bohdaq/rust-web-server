@@ -6,7 +6,6 @@ use crate::json::property::JSONProperty;
 pub struct ExampleNestedObject {
     pub prop_a: String,
     pub prop_b: bool,
-    pub prop_c: bool,
     pub prop_d: i128,
     pub prop_e: f64
 }
@@ -16,7 +15,6 @@ impl New for ExampleNestedObject {
         ExampleNestedObject {
             prop_a: "".to_string(),
             prop_b: false,
-            prop_c: false,
             prop_d: 0,
             prop_e: 0.0,
         }
@@ -46,11 +44,6 @@ impl FromJSON for ExampleNestedObject {
                 }
             }
 
-            if property.property_name == "prop_c" {
-                if value.bool.is_some() {
-                    self.prop_c = value.bool.unwrap();
-                }
-            }
 
             if property.property_name == "prop_d" {
                 if value.i128.is_some() {
@@ -93,8 +86,6 @@ impl ToJSON for ExampleNestedObject {
         let property = JSONProperty { property_name: "prop_b".to_string(), property_type: JSON_TYPE.boolean.to_string() };
         list.push(property);
 
-        let property = JSONProperty { property_name: "prop_c".to_string(), property_type: JSON_TYPE.boolean.to_string() };
-        list.push(property);
 
         let property = JSONProperty { property_name: "prop_d".to_string(), property_type: JSON_TYPE.integer.to_string() };
         list.push(property);
@@ -118,10 +109,6 @@ impl ToJSON for ExampleNestedObject {
             value.bool = Some(boolean);
         }
 
-        if property_name == "prop_c".to_string() {
-            let boolean : bool = self.prop_c;
-            value.bool = Some(boolean);
-        }
 
         if property_name == "prop_d".to_string() {
             let integer : i128 = self.prop_d;

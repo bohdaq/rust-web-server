@@ -26,7 +26,6 @@ fn vector_to_json_on_struct_with_nested_object_and_list_of_nested_objects() {
     let nested_object = ExampleNestedObject {
         prop_a: "test".to_string(),
         prop_b: false,
-        prop_c: true,
         prop_d: 1,
         prop_e: 2.2,
     };
@@ -34,7 +33,6 @@ fn vector_to_json_on_struct_with_nested_object_and_list_of_nested_objects() {
     let nested_object_2 = ExampleNestedObject {
         prop_a: "test".to_string(),
         prop_b: false,
-        prop_c: true,
         prop_d: 1,
         prop_e: 2.2,
     };
@@ -42,7 +40,6 @@ fn vector_to_json_on_struct_with_nested_object_and_list_of_nested_objects() {
     let nested_object_3 = ExampleNestedObject {
         prop_a: "test string".to_string(),
         prop_b: true,
-        prop_c: false,
         prop_d: 11,
         prop_e: 21.12,
     };
@@ -62,7 +59,7 @@ fn vector_to_json_on_struct_with_nested_object_and_list_of_nested_objects() {
 
     let list  = vec![obj, obj2];
     let actual = JSONArrayOfObjects::<ExampleObject>::to_json(list.as_ref()).unwrap();
-    let expected = "[{\r\n  \"prop_a\": \"\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 0,\r\n  \"prop_e\": 0.0\r\n},\r\n{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 10,\r\n  \"prop_e\": 2.2,\r\n  \"prop_f\": [{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": true,\r\n  \"prop_d\": 1,\r\n  \"prop_e\": 2.2\r\n},\r\n{\r\n  \"prop_a\": \"test string\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 11,\r\n  \"prop_e\": 21.12\r\n}],\r\n  \"prop_g\": {\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": true,\r\n  \"prop_d\": 1,\r\n  \"prop_e\": 2.2\r\n}\r\n}]".to_string();
+    let expected = "[{\r\n  \"prop_a\": \"\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 0,\r\n  \"prop_e\": 0.0\r\n},\r\n{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 10,\r\n  \"prop_e\": 2.2,\r\n  \"prop_f\": [{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": false,\r\n  \"prop_d\": 1,\r\n  \"prop_e\": 2.2\r\n},\r\n{\r\n  \"prop_a\": \"test string\",\r\n  \"prop_b\": true,\r\n  \"prop_d\": 11,\r\n  \"prop_e\": 21.12\r\n}],\r\n  \"prop_g\": {\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": false,\r\n  \"prop_d\": 1,\r\n  \"prop_e\": 2.2\r\n}\r\n}]".to_string();
     assert_eq!(actual, expected);
 }
 
@@ -116,7 +113,6 @@ fn json_on_struct_with_nested_object_and_list_of_nested_objects_to_vector() {
     let nested_obj = parsed_obj.prop_g.as_ref().unwrap();
     assert_eq!(nested_obj.prop_a, "test");
     assert_eq!(nested_obj.prop_b, false);
-    assert_eq!(nested_obj.prop_c, true);
     assert_eq!(nested_obj.prop_d, 1);
     assert_eq!(nested_obj.prop_e, 2.2);
 
@@ -127,14 +123,12 @@ fn json_on_struct_with_nested_object_and_list_of_nested_objects_to_vector() {
     let nested_obj =  nested_list.get(0).unwrap();
     assert_eq!("test", nested_obj.prop_a);
     assert_eq!(false, nested_obj.prop_b);
-    assert_eq!(true, nested_obj.prop_c);
     assert_eq!(1, nested_obj.prop_d);
     assert_eq!(2.2, nested_obj.prop_e);
 
     let nested_obj =  nested_list.get(1).unwrap();
     assert_eq!("test string", nested_obj.prop_a);
     assert_eq!(true, nested_obj.prop_b);
-    assert_eq!(false, nested_obj.prop_c);
     assert_eq!(11, nested_obj.prop_d);
     assert_eq!(21.12, nested_obj.prop_e);
 }
