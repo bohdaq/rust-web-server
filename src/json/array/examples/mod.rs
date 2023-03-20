@@ -131,5 +131,10 @@ fn json_on_struct_with_nested_object_and_list_of_nested_objects_to_vector() {
     assert_eq!(1, nested_obj.prop_d);
     assert_eq!(2.2, nested_obj.prop_e);
 
-
+    let nested_obj =  nested_list.get(1).unwrap();
+    assert_eq!("test string", nested_obj.prop_a);
+    assert_eq!(true, nested_obj.prop_b);
+    assert_eq!(false, nested_obj.prop_c);
+    assert_eq!(11, nested_obj.prop_d);
+    assert_eq!(21.12, nested_obj.prop_e);
 }
