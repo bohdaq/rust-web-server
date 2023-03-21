@@ -442,31 +442,39 @@ impl JSON {
         for (property, value) in key_value_list {
 
             if &property.property_type == "String" {
-                let raw_value = value.string.unwrap();
-                let formatted_property = format!("  \"{}\": \"{}\"", &property.property_name, raw_value);
-                properties_list.push(formatted_property.to_string());
+                if value.string.is_some() {
+                    let raw_value = value.string.unwrap();
+                    let formatted_property = format!("  \"{}\": \"{}\"", &property.property_name, raw_value);
+                    properties_list.push(formatted_property.to_string());
+                }
             }
 
             if &property.property_type == "bool" {
-                let raw_value = value.bool.unwrap();
-                let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
-                properties_list.push(formatted_property.to_string());
+                if value.bool.is_some() {
+                    let raw_value = value.bool.unwrap();
+                    let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
+                    properties_list.push(formatted_property.to_string());
+                }
             }
 
             if &property.property_type == "i128" {
-                let raw_value = value.i128.unwrap();
-                let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
-                properties_list.push(formatted_property.to_string());
+                if value.i128.is_some() {
+                    let raw_value = value.i128.unwrap();
+                    let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
+                    properties_list.push(formatted_property.to_string());
+                }
             }
 
             if &property.property_type == "f64" {
-                let raw_value = value.f64.unwrap();
-                let mut _parsed_float = "0.0".to_string();
-                if raw_value != 0.0 {
-                    _parsed_float = raw_value.to_string();
+                if value.f64.is_some() {
+                    let raw_value = value.f64.unwrap();
+                    let mut _parsed_float = "0.0".to_string();
+                    if raw_value != 0.0 {
+                        _parsed_float = raw_value.to_string();
+                    }
+                    let formatted_property = format!("  \"{}\": {}", &property.property_name, _parsed_float);
+                    properties_list.push(formatted_property.to_string());
                 }
-                let formatted_property = format!("  \"{}\": {}", &property.property_name, _parsed_float);
-                properties_list.push(formatted_property.to_string());
             }
 
             if &property.property_type == "object" {
