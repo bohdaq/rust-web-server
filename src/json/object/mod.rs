@@ -154,8 +154,9 @@ impl JSON {
                             bytes_read = bytes_read + bytes_to_read as i128;
                             let boxed_parse = String::from_utf8(char_buffer);
                             if boxed_parse.is_err() {
-                                let message = boxed_parse.err().unwrap().to_string();
-                                return Err(message)
+                                let error = boxed_parse.err().unwrap().to_string();
+                                let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
+                                return Err(message);
                             }
                             let _char = boxed_parse.unwrap();
                             let last_char_in_buffer = key_value_pair.chars().last().unwrap().to_string();
