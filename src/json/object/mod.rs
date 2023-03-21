@@ -235,7 +235,8 @@ impl JSON {
                         let boxed_parse = String::from_utf8(char_buffer);
 
                         if boxed_parse.is_err() {
-                            let message = boxed_parse.err().unwrap().to_string();
+                            let error = boxed_parse.err().unwrap().to_string();
+                            let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
                             return Err(message);
                         }
                         let remaining_bool = boxed_parse.unwrap();
