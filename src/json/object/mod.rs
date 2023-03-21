@@ -318,7 +318,13 @@ impl JSON {
                                 let message = boxed_parse.err().unwrap().to_string();
                                 return Err(message)
                             }
-                            let char = boxed_parse.unwrap().chars().last().unwrap();
+                            let boxed_last_char = boxed_parse.unwrap().chars().last();
+                            if boxed_last_char.is_none() {
+                                let error = "last char is empty";
+                                let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
+                                return Err(message);
+                            }
+                            let char = boxed_last_char.unwrap();
 
                             let is_open_curly_brace = char == '{';
                             if is_open_curly_brace {
