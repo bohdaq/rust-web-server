@@ -363,7 +363,13 @@ impl JSON {
                             let length = char_buffer.len();
                             cursor.read_exact(&mut char_buffer).unwrap();
                             bytes_read = bytes_read + length as i128;
-                            let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
+                            let boxed_parse = String::from_utf8(char_buffer);
+                            if boxed_parse.is_err() {
+                                let error = boxed_parse.err().unwrap().to_string();
+                                let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
+                                return Err(message);
+                            }
+                            let char = boxed_parse.unwrap().chars().last().unwrap();
 
                             let is_numeric = char.is_numeric();
                             let is_comma_symbol = char == ',';
