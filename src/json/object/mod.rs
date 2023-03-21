@@ -173,8 +173,9 @@ impl JSON {
                         let length = char_buffer.len();
                         let boxed_read = cursor.read_exact(&mut char_buffer);
                         if boxed_read.is_err() {
-                            let message = boxed_read.err().unwrap().to_string();
-                            return Err(message)
+                            let error = boxed_read.err().unwrap().to_string();
+                            let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
+                            return Err(message);
                         }
                         boxed_read.unwrap();
                         bytes_read = bytes_read + length as i128;
