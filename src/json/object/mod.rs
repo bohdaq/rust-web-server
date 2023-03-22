@@ -138,7 +138,14 @@ impl JSON {
                     let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
                     return Err(message);
                 }
-                let char = boxed_char.unwrap().chars().last().unwrap();
+
+                let boxed_last_char = boxed_char.unwrap().chars().last();
+                if boxed_last_char.is_none() {
+                    let error = "last char is none (after ':')";
+                    let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
+                    return Err(message);
+                }
+                let char = boxed_last_char.unwrap();
 
                 if char != ' ' && char != '\n' && char != '\r' && !char.is_ascii_control() {
                     let is_string = char == '\"';
