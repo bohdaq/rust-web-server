@@ -85,13 +85,13 @@ impl ToJSON for SomeObject {
         for property in properties {
             let value = self.get_property(property.property_name.to_string());
 
-            if &property.property_type == "String" {
+            if &property.property_type == JSON_TYPE.string {
                 let raw_value = value.string.unwrap();
                 let formatted_property = format!("  \"{}\": \"{}\"", &property.property_name, raw_value);
                 properties_list.push(formatted_property.to_string());
             }
 
-            if &property.property_type == "bool" {
+            if &property.property_type == JSON_TYPE.boolean {
                 let raw_value = value.bool.unwrap();
                 let formatted_property = format!("  \"{}\": {}", &property.property_name, raw_value);
                 properties_list.push(formatted_property.to_string());
