@@ -132,8 +132,13 @@ impl JSON {
                 }
                 boxed_read.unwrap();
                 bytes_read = bytes_read + bytes_to_read as i128;
-                let char = String::from_utf8(char_buffer).unwrap();
-                let char = char.chars().last().unwrap();
+                let boxed_char = String::from_utf8(char_buffer);
+                if boxed_char.is_err() {
+                    let error = boxed_char.err().unwrap().to_string();
+                    let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
+                    return Err(message);
+                }
+                let char = boxed_char.unwrap().chars().last().unwrap();
 
                 if char != ' ' && char != '\n' && char != '\r' && !char.is_ascii_control() {
                     let is_string = char == '\"';
