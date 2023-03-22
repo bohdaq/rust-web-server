@@ -96,8 +96,9 @@ impl JSON {
 
             boxed_line = String::from_utf8(Vec::from(b));
             if boxed_line.is_err() {
-                let error_message = boxed_line.err().unwrap().to_string();
-                return Err(error_message);
+                let error = boxed_line.err().unwrap().to_string();
+                let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
+                return Err(message);
             }
             _line = boxed_line.unwrap();
             key_value_pair = [key_value_pair, _line].join(SYMBOL.empty_string);
