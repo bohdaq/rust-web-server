@@ -87,7 +87,8 @@ impl JSON {
             buf = vec![];
             boxed_read = cursor.read_until(b'\"', &mut buf);
             if boxed_read.is_err() {
-                let message = boxed_read.err().unwrap().to_string();
+                let error = boxed_read.err().unwrap().to_string();
+                let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
                 return Err(message);
             }
             bytes_read = bytes_read + boxed_read.unwrap() as i128;
