@@ -1,0 +1,10 @@
+{
+  "prop_a": "123abc",
+  "prop_b": true,
+  "prop_c": false,
+  "prop_d": 4356257,
+  "prop_e": 4356.257,
+  "prop_f": {
+    "prop_foo": true
+  }
+}
