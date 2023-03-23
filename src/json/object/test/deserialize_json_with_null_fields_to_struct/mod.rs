@@ -8,7 +8,7 @@ mod some_object;
 fn parse_null() {
 
     let path = FileExt::build_path(&["src", "json", "object", "test", "deserialize_json_with_null_fields_to_struct", "some-object.json"]);
-    let pwd = FileExt::get_static_filepath("").unwrap();
+    let pwd = FileExt::working_directory().unwrap();
 
     let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
     let file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();

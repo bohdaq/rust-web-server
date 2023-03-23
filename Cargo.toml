@@ -11,6 +11,6 @@ rust-version = "1.66"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-file-ext = "9.0.3"
-url-search-params = "9.0.0"
-url-build-parse = "9.0.0"
+file-ext = "10.0.0"
+url-search-params = "10.0.0"
+url-build-parse = "10.0.0"
