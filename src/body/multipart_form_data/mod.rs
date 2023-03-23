@@ -260,7 +260,7 @@ impl FormMultipartData {
         Ok(part)
     }
 
-    fn generate(part_list: Vec<Part>, boundary: &str) -> Result<Vec<u8>, String> {
+    pub fn generate(part_list: Vec<Part>, boundary: &str) -> Result<Vec<u8>, String> {
         if part_list.len() == 0 {
             let message = "List of the multipart/form-data request body parts is empty";
             return Err(message.to_string());
