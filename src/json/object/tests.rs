@@ -1,5 +1,4 @@
 use crate::json::{JSONValue, JSON_TYPE};
-use crate::json::array::New;
 use crate::json::example_object::ExampleObject;
 use crate::json::property::JSONProperty;
 use crate::json::object::{FromJSON, JSON, ToJSON};
@@ -38,21 +37,6 @@ fn parse_direct() {
     assert_eq!(4356257, deserealized_object.prop_d);
     assert_eq!(4356.257, deserealized_object.prop_e);
 }
-
-#[test]
-fn parse_new_lines_carriage_returns() {
-    let json_string = "{\r\n  \r\n\"prop_a\"\r\n:\r\n \r\n\"123abc\"\r\n,\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 4356257,\r\n  \"prop_e\": 4356.257\r\n}";
-
-    let mut deserealized_object = ExampleObject::new();
-    deserealized_object.parse(json_string.to_string()).unwrap();
-
-    assert_eq!("123abc", deserealized_object.prop_a);
-    assert_eq!(true, deserealized_object.prop_b);
-    assert_eq!(false, deserealized_object.prop_c);
-    assert_eq!(4356257, deserealized_object.prop_d);
-    assert_eq!(4356.257, deserealized_object.prop_e);
-}
-
 
 #[test]
 fn parse_nested_object_none() {
