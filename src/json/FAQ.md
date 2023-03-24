@@ -16,4 +16,12 @@ However, it is common to use `\r\n` as a new line across `rust-web-server`.
 Make sure while working with text files to set new lines to be `\r\n` in your editor of choice.
 
 
+## Problem #2
+While using `to_json_string` method I get not properly formatted (indented) json output. Why is so?
 
+### Solution
+JSON itself does not care about indentation. It is designed to transfer data, not represent it to the end user.
+With this in mind `to_json_string` does not perform indentation formatting for nested objects and arrays.
+
+However, it adds `\r\n` new lines and whitespace at a new property, object and array.
+You can always take the output and reformat json manually using your IDE or online services.
