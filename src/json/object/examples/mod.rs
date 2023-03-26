@@ -1,2 +1,0 @@
-mod string;
-mod bool;
