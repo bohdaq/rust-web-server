@@ -1,3 +1,4 @@
+use file_ext::FileExt;
 use crate::json::object::{FromJSON, ToJSON};
 use crate::json::object::test::deserialize_json_with_nested_object_null_to_struct_check_overrides::nested_object::NestedObject;
 use crate::json::object::test::deserialize_json_with_nested_object_null_to_struct_check_overrides::some_object::SomeObject;
@@ -7,7 +8,12 @@ mod some_object;
 
 #[test]
 fn deserialize_json_with_nested_object_null_to_struct_check_overrides() {
-    let json_string = "{\r\n  \"prop_a\": \"123abc\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 4356257,\r\n  \"prop_e\": 4356.257,\r\n  \"prop_f\": null\r\n}";
+    let path = FileExt::build_path(&["src", "json", "object", "test", "deserialize_json_with_nested_object_null_to_struct_check_overrides", "some-object.from.json"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let file_as_bytes = FileExt::read_file(file_path.as_str()).unwrap();
+    let json_string = String::from_utf8(file_as_bytes).unwrap();
 
     let mut deserealized_object = SomeObject {
         prop_a: "".to_string(),
