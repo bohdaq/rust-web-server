@@ -1,13 +1,14 @@
 use file_ext::FileExt;
 use crate::json::object::FromJSON;
-use crate::json::object::test::deserialize_json_with_nested_object_null_field_to_struct::some_object::SomeObject;
+use crate::json::object::tests::deserialize_json_with_nested_object_null_to_struct::nested_object::NestedObject;
+use crate::json::object::tests::deserialize_json_with_nested_object_null_to_struct::some_object::SomeObject;
 
 mod nested_object;
 mod some_object;
 
 #[test]
-fn parse_nested_object_property_null() {
-    let path = FileExt::build_path(&["src", "json", "object", "test", "deserialize_json_with_nested_object_null_field_to_struct", "some-object.json"]);
+fn deserialize_json_with_nested_object_null_to_struct() {
+    let path = FileExt::build_path(&["src", "json", "object", "tests", "deserialize_json_with_nested_object_null_to_struct", "some-object.json"]);
     let pwd = FileExt::working_directory().unwrap();
 
     let file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
@@ -21,7 +22,7 @@ fn parse_nested_object_property_null() {
         prop_c: true,
         prop_d: 0,
         prop_e: 0.0,
-        prop_f: None,
+        prop_f: Some(NestedObject{ prop_foo: true }),
     };
     deserealized_object.parse(json_string.to_string()).unwrap();
 
@@ -30,5 +31,5 @@ fn parse_nested_object_property_null() {
     assert_eq!(false, deserealized_object.prop_c);
     assert_eq!(4356257, deserealized_object.prop_d);
     assert_eq!(4356.257, deserealized_object.prop_e);
-    assert_eq!(false, deserealized_object.prop_f.unwrap().prop_foo);
+    assert!(deserealized_object.prop_f.is_none());
 }

@@ -1,14 +1,14 @@
 use file_ext::FileExt;
 use crate::json::object::{FromJSON, ToJSON};
-use crate::json::object::test::deserialize_json_with_nested_object_null_to_struct_check_overrides::nested_object::NestedObject;
-use crate::json::object::test::deserialize_json_with_nested_object_null_to_struct_check_overrides::some_object::SomeObject;
+use crate::json::object::tests::deserialize_json_with_nested_object_null_to_struct_check_overrides::nested_object::NestedObject;
+use crate::json::object::tests::deserialize_json_with_nested_object_null_to_struct_check_overrides::some_object::SomeObject;
 
 mod nested_object;
 mod some_object;
 
 #[test]
 fn deserialize_json_with_nested_object_null_to_struct_check_overrides() {
-    let path = FileExt::build_path(&["src", "json", "object", "test", "deserialize_json_with_nested_object_null_to_struct_check_overrides", "some-object.from.json"]);
+    let path = FileExt::build_path(&["src", "json", "object", "tests", "deserialize_json_with_nested_object_null_to_struct_check_overrides", "some-object.from.json"]);
     let pwd = FileExt::working_directory().unwrap();
 
     let file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
@@ -34,7 +34,7 @@ fn deserialize_json_with_nested_object_null_to_struct_check_overrides() {
 
     let json = deserealized_object.to_json_string();
 
-    let path = FileExt::build_path(&["src", "json", "object", "test", "deserialize_json_with_nested_object_null_to_struct_check_overrides", "some-object.to.json"]);
+    let path = FileExt::build_path(&["src", "json", "object", "tests", "deserialize_json_with_nested_object_null_to_struct_check_overrides", "some-object.to.json"]);
     let pwd = FileExt::working_directory().unwrap();
 
     let file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);

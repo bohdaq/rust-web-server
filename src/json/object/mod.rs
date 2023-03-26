@@ -7,8 +7,6 @@ use crate::symbol::SYMBOL;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
-mod test;
-#[cfg(test)]
 mod examples;
 
 pub trait ToJSON {

@@ -16,7 +16,7 @@ fn deserialize_json_to_struct_another_example() {
 
     let json_string = obj.to_json_string();
 
-    let path = FileExt::build_path(&["src", "json", "object", "test", "deserialize_json_to_struct_another_example", "some-object.json"]);
+    let path = FileExt::build_path(&["src", "json", "object", "tests", "deserialize_json_to_struct_another_example", "some-object.json"]);
     let pwd = FileExt::working_directory().unwrap();
 
     let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);

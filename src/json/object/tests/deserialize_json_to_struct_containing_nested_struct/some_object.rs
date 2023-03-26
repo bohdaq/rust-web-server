@@ -1,6 +1,6 @@
 use crate::json::{JSON_TYPE, JSONValue};
 use crate::json::object::{FromJSON, JSON, ToJSON};
-use crate::json::object::test::deserialize_json_with_nested_object_null_to_struct::nested_object::NestedObject;
+use crate::json::object::tests::deserialize_json_to_struct_containing_nested_struct::nested_object::NestedObject;
 use crate::json::property::JSONProperty;
 
 pub struct SomeObject {
@@ -56,6 +56,7 @@ impl FromJSON for SomeObject {
                 } else {
                     self.prop_f = None;
                 }
+
             }
         }
         Ok(())
@@ -130,11 +131,9 @@ impl ToJSON for SomeObject {
         }
 
         if property_name == "prop_f".to_string() {
-            if self.prop_f.is_some() {
-                let prop_f = self.prop_f.as_ref().unwrap();
-                let serialized_nested_object = prop_f.to_json_string();
-                value.object = Some(serialized_nested_object);
-            }
+            let prop_f = self.prop_f.as_ref().unwrap();
+            let serialized_nested_object = prop_f.to_json_string();
+            value.object = Some(serialized_nested_object);
         }
 
         value

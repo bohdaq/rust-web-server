@@ -1,13 +1,13 @@
 use file_ext::FileExt;
 use crate::json::object::FromJSON;
-use crate::json::object::test::deserialize_json_with_null_fields_to_struct::some_object::SomeObject;
+use crate::json::object::tests::deserialize_json_with_null_fields_to_struct::some_object::SomeObject;
 
 mod some_object;
 
 #[test]
 fn parse_null() {
 
-    let path = FileExt::build_path(&["src", "json", "object", "test", "deserialize_json_with_null_fields_to_struct", "some-object.json"]);
+    let path = FileExt::build_path(&["src", "json", "object", "tests", "deserialize_json_with_null_fields_to_struct", "some-object.json"]);
     let pwd = FileExt::working_directory().unwrap();
 
     let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);

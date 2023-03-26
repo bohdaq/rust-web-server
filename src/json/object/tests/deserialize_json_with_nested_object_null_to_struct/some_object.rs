@@ -1,6 +1,6 @@
 use crate::json::{JSON_TYPE, JSONValue};
 use crate::json::object::{FromJSON, JSON, ToJSON};
-use crate::json::object::test::deserialize_json_with_nested_object_none_to_struct::nested_object::NestedObject;
+use crate::json::object::tests::deserialize_json_with_nested_object_null_to_struct::nested_object::NestedObject;
 use crate::json::property::JSONProperty;
 
 pub struct SomeObject {
