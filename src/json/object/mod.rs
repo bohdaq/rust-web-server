@@ -1,3 +1,4 @@
+use std::fmt::format;
 use std::io;
 use std::io::{BufRead, Read};
 use crate::ext::string_ext::StringExt;
@@ -484,15 +485,25 @@ impl JSON {
                             }
 
                             let char_is_part_of_number = is_numeric || is_point_symbol || is_exponent_symbol || is_minus_symbol;
+                            let is_delimiter = char == '\r' || char == '\n' || char == ' ';
 
-                            if char_is_part_of_number {
-                                key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
-                            } else {
-                                read_char = false;
-                                if is_comma_symbol {
-                                    comma_delimiter_read_already = true;
+                            if !is_delimiter {
+                                if char_is_part_of_number {
+                                    key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
+                                } else {
+                                    read_char = false;
+                                    if char != '}' { // case where property is at the end of json object
+                                        if is_comma_symbol {
+                                            comma_delimiter_read_already = true;
+                                        } else {
+                                            let message = format!("there are not expected characters after number (expected comma): {} after {}", char,  key_value_pair);
+                                            return Err(message);
+                                        }
+                                    }
                                 }
                             }
+
+
                         }
                     }
 
