@@ -15,3 +15,4 @@ mod deserialize_json_missing_comma_after_float;
 mod deserialize_json_missing_comma_after_string;
 mod deserialize_json_missing_comma_after_null;
 mod deserialize_json_missing_comma_after_array;
+mod deserialize_json_missing_comma_after_object;

@@ -498,6 +498,30 @@ impl JSON {
                                 read_char = false;
                             }
                         }
+                        
+                        // read till comma
+                        buf = vec![];
+                        let boxed_read = cursor.read_until(b',', &mut buf);
+                        if boxed_read.is_err() {
+                            let error = boxed_read.err().unwrap().to_string();
+                            let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
+                            return Err(message);
+                        }
+                        bytes_read = bytes_read + boxed_read.unwrap() as i128;
+                        if bytes_read == total_bytes {
+                            is_there_a_key_value = false;
+                        };
+
+                        let boxed_parse = String::from_utf8(buf);
+                        let buffer_before_comma = boxed_parse.unwrap();
+                        let buffer_filtered_control_chars = StringExt::filter_ascii_control_characters(buffer_before_comma.as_str());
+
+                        if buffer_filtered_control_chars.chars().count() != 0 && buffer_filtered_control_chars != "}" && buffer_filtered_control_chars != "," {
+                            let message = format!("before comma there are some unexpected characters: {}", buffer_before_comma);
+                            return Err(message);
+                        } else {
+                            comma_delimiter_read_already = true;
+                        }
                     }
                     is_root_opening_curly_brace = false;
 
