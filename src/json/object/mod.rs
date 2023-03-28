@@ -78,6 +78,12 @@ impl JSON {
             }
 
             _line = boxed_line.unwrap();
+            let buffer_filtered_control_chars = StringExt::filter_ascii_control_characters(_line.as_str());
+            if buffer_filtered_control_chars != "\"" {
+                let message = format!("while trying to seek for property, found random characters: `{}`. check if your json does not have extra comma after last property", json_string);
+                return Err(message);
+            }
+
             key_value_pair = [key_value_pair, _line].join(SYMBOL.empty_string);
 
 
