@@ -32,7 +32,7 @@ impl JSON {
         let total_bytes : i128 = data.len() as i128;
 
         // read obj start '{'
-        let mut is_root_opening_curly_brace = true;
+        let mut _is_root_opening_curly_brace = true;
         let mut buf = vec![];
         let mut boxed_read = cursor.read_until(b'{', &mut buf);
         if boxed_read.is_err() {
@@ -162,6 +162,10 @@ impl JSON {
                 let char = boxed_last_char.unwrap();
 
                 if char != ' ' && char != '\n' && char != '\r' && !char.is_ascii_control() {
+                    // we passed opening curly brace at the beginning, at this point only nested objects can have '{'
+                    _is_root_opening_curly_brace = false;
+
+
                     let is_string = char == '\"';
                     if is_string {
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
@@ -452,7 +456,7 @@ impl JSON {
                     }
 
 
-                    let is_nested_object = char == '{' && !is_root_opening_curly_brace;
+                    let is_nested_object = char == '{' && !_is_root_opening_curly_brace;
                     if is_nested_object {
                         // read the object (including nested objects and arrays)
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
@@ -529,7 +533,6 @@ impl JSON {
                             comma_delimiter_read_already = true;
                         }
                     }
-                    is_root_opening_curly_brace = false;
 
                     let is_number =
                         !is_string &&
