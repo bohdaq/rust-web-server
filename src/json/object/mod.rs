@@ -80,7 +80,7 @@ impl JSON {
             _line = boxed_line.unwrap();
             let buffer_filtered_control_chars = StringExt::filter_ascii_control_characters(_line.as_str());
             if buffer_filtered_control_chars != "\"" {
-                let message = format!("while trying to seek for property, found random characters: `{}`. check if your json does not have extra comma after last property", json_string);
+                let message = format!("provided json is not valid. error near byte {} of {} `{}`", bytes_read, total_bytes, json_string);
                 return Err(message);
             }
 

@@ -24,7 +24,7 @@ fn deserialize_json_extra_comma_after_float_property() {
     assert!(json_without_comma.is_err());
 
     let message = json_without_comma.err().unwrap();
-    assert_eq!("while trying to seek for property, found random characters: `{\r\n  \"prop_b\": 64356735.684678,\r\n}`. check if your json does not have extra comma after last property", message);
+    assert_eq!("provided json is not valid. error near byte 34 of 34 `{\r\n  \"prop_b\": 64356735.684678,\r\n}`", message);
 
 
 }
