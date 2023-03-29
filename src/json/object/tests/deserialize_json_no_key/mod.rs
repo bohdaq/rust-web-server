@@ -24,7 +24,7 @@ fn deserialize_json_no_key() {
     assert!(json_without_comma.is_err());
 
     let message = json_without_comma.err().unwrap();
-    assert_eq!("provided json is not valid. error near byte 15 of 15 `{\r\n  : false\r\n}`", message);
+    assert_eq!("provided json is not valid", message);
 
 
 }

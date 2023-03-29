@@ -24,7 +24,7 @@ fn deserialize_json_extra_comma_after_boolean_false_property() {
     assert!(json_without_comma.is_err());
 
     let message = json_without_comma.err().unwrap();
-    assert_eq!("provided json is not valid. error near byte 24 of 24 `{\r\n  \"prop_b\": false,\r\n}`", message);
+    assert_eq!("provided json is not valid", message);
 
 
 }
