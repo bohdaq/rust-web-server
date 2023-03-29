@@ -110,24 +110,46 @@ impl JSON {
 
 
             // read until delimiter ':', append to buffer
-            buf = vec![];
-            boxed_read = cursor.read_until(b':', &mut buf);
-            if boxed_read.is_err() {
-                let error = boxed_read.err().unwrap().to_string();
-                let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
-                return Err(message);
-            }
-            bytes_read = bytes_read + boxed_read.unwrap() as i128;
-            b = buf.as_slice();
+            let mut not_delimiter = true;
+            while not_delimiter {
+                let bytes_to_read = 1;
+                let mut char_buffer = vec![bytes_to_read];
 
-            boxed_line = String::from_utf8(Vec::from(b));
-            if boxed_line.is_err() {
-                let error = boxed_line.err().unwrap().to_string();
-                let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
-                return Err(message);
+                let boxed_read = cursor.read_exact(&mut char_buffer);
+                if boxed_read.is_err() {
+                    let error = boxed_read.err().unwrap().to_string();
+                    let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
+                    return Err(message);
+                }
+                boxed_read.unwrap();
+                bytes_read = bytes_read + bytes_to_read as i128;
+                let boxed_char = String::from_utf8(char_buffer);
+                if boxed_char.is_err() {
+                    let error = boxed_char.err().unwrap().to_string();
+                    let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
+                    return Err(message);
+                }
+
+                let boxed_last_char = boxed_char.unwrap().chars().last();
+                if boxed_last_char.is_none() {
+                    let error = "last char is none (after ':')";
+                    let message = format!("error at byte {} of {} bytes, message: {} ", bytes_read, total_bytes, error);
+                    return Err(message);
+                }
+                let char = boxed_last_char.unwrap();
+
+                if char != ' ' && char != '\n' && char != '\r' && !char.is_ascii_control() {
+                    if char == ':' {
+                        not_delimiter = false;
+                        key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
+                    } else {
+                        let message = format!("while seeking for property delimiter ':', found unexpected character: {}", char);
+                        return Err(message);
+                    }
+                }
             }
-            _line = boxed_line.unwrap();
-            key_value_pair = [key_value_pair, _line].join(SYMBOL.empty_string);
+
+
 
             // read in a while loop until char is not ascii control char and not whitespace, append to buffer
             let mut comma_delimiter_read_already = false;

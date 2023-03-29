@@ -24,3 +24,4 @@ mod deserialize_json_extra_comma_after_float_property;
 mod deserialize_json_extra_comma_after_string_property;
 mod deserialize_json_extra_comma_after_array_property;
 mod deserialize_json_extra_comma_after_object_property;
+mod deserialize_json_no_delimiter;
