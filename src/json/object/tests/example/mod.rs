@@ -20,7 +20,7 @@ fn parse_json() {
         // 3. error handler in case of malformed input json
     }
     // 4. now _some_object represents json
-    let _some_object = parse_result.unwrap();
+    let _some_object : SomeObject = parse_result.unwrap();
 }
 
 #[test]
