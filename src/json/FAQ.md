@@ -25,3 +25,9 @@ With this in mind `to_json_string` does not perform indentation formatting for n
 
 However, it adds `\r\n` new lines and whitespace at a new property, object and array.
 You can always take the output and reformat json manually using your IDE or online services.
+
+## Problem #3
+Why do I need to implement `New` trait?
+
+### Solution
+`New` trait is required if you are planning to use your struct in array. In most of the cases you are. Internally JSON module needs a way to instantiate a struct while working with json array, this functionality is achieved through `New` trait.
