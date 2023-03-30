@@ -556,15 +556,11 @@ impl JSON {
                         }
                     }
 
-                    let is_number =
-                        !is_string &&
-                            !is_null &&
-                            !is_boolean_true &&
-                            !is_boolean_false &&
-                            !is_array &&
-                            !is_nested_object;
+
+                    let is_number = char.is_numeric();
                     if is_number {
                         // read until char is not number and decimal point, minus, exponent
+
                         key_value_pair = [key_value_pair, char.to_string()].join(SYMBOL.empty_string);
 
                         let mut _is_point_symbol_already_used = false;
@@ -632,6 +628,19 @@ impl JSON {
 
 
                         }
+                    }
+
+                    let is_unknown_type =
+                        !is_string &&
+                            !is_null &&
+                            !is_boolean_true &&
+                            !is_boolean_false &&
+                            !is_array &&
+                            !is_number &&
+                            !is_nested_object;
+                    if is_unknown_type {
+                        let message  = "provided json is not valid";
+                        return Err(message.to_string());
                     }
 
                     is_whitespace_or_new_line_or_carriage_return = false;
