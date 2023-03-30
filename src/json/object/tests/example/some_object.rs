@@ -126,7 +126,7 @@ impl FromJSON for SomeObject {
     }
 }
 
-// it is basically shortcut for instantiation and parse
+// it is basically shortcut for instantiation and parse, replace SomeObject with your struct name, can be copy-pasted
 //     let mut some_object = SomeObject::new();
 //     let parse_result = some_object.parse(json);
 impl SomeObject {
