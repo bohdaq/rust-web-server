@@ -31,5 +31,5 @@ fn to_json() {
     // 1. initiate struct
     let some_object = SomeObject{ prop_a: "example".to_string(), prop_b: false };
     // 2. call to_json_string
-    some_object.to_json_string();
+    let json = some_object.to_json_string();
 }
