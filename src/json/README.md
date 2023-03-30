@@ -18,7 +18,7 @@ Within module itself, in tests section you may find examples on how to use it.
 
 Examples:
 
-- [Object](object/tests/deserialize_json_to_struct)
+- [Object](object/tests/example)
 - [Nested Object](object/tests/deserialize_json_with_multiple_nested_objects_to_struct)
 - Array TODO
 - Nested Array TODO

@@ -1,4 +1,5 @@
 use crate::json::{JSON_TYPE, JSONValue};
+use crate::json::array::New;
 use crate::json::object::{FromJSON, JSON, ToJSON};
 use crate::json::property::JSONProperty;
 use crate::symbol::SYMBOL;
@@ -6,6 +7,12 @@ use crate::symbol::SYMBOL;
 pub struct SomeObject {
     pub prop_a: String,
     pub prop_b: bool
+}
+
+impl New for SomeObject {
+    fn new() -> Self {
+        SomeObject { prop_a: "".to_string(), prop_b: false }
+    }
 }
 
 impl FromJSON for SomeObject {
