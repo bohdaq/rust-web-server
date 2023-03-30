@@ -23,7 +23,7 @@ fn parse_json() {
     if parse_result.is_err() {
         // 4. error handler in case of malformed input json
     }
-    // now some_object represents json
+    // 5. now some_object represents json
 }
 
 #[test]
