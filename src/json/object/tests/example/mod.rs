@@ -19,7 +19,7 @@ fn parse_json() {
     if parse_result.is_err() {
         // 3. error handler in case of malformed input json
     }
-    // 4. now some_object represents json
+    // 4. now _some_object represents json
     let _some_object = parse_result.unwrap();
 }
 
