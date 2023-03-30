@@ -27,3 +27,4 @@ mod deserialize_json_extra_comma_after_object_property;
 mod deserialize_json_no_delimiter;
 mod deserialize_json_no_key;
 mod deserialize_json_no_value;
+mod deserialize_json_no_opening_curly_brace;
