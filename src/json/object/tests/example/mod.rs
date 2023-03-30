@@ -1,7 +1,6 @@
 use file_ext::FileExt;
-use crate::json::array::New;
 use crate::json::object::tests::example::some_object::SomeObject;
-use crate::json::object::{FromJSON, ToJSON};
+use crate::json::object::{ToJSON};
 
 mod some_object;
 
@@ -15,15 +14,13 @@ fn parse_json() {
     let file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
     let json = String::from_utf8(file_as_bytes).unwrap();
 
-
-    // 2. create instance of struct
-    let mut some_object = SomeObject::new();
-    // 3. parse json
-    let parse_result = some_object.parse(json);
+    // 2. parse json
+    let parse_result = SomeObject::parse_json(json.as_str());
     if parse_result.is_err() {
-        // 4. error handler in case of malformed input json
+        // 3. error handler in case of malformed input json
     }
-    // 5. now some_object represents json
+    // 4. now some_object represents json
+    let _some_object = parse_result.unwrap();
 }
 
 #[test]

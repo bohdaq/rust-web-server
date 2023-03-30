@@ -125,3 +125,19 @@ impl FromJSON for SomeObject {
         Ok(())
     }
 }
+
+// it is basically shortcut for instantiation and parse
+//     let mut some_object = SomeObject::new();
+//     let parse_result = some_object.parse(json);
+impl SomeObject {
+    pub fn parse_json(json: &str) -> Result<SomeObject, String> {
+        let mut some_object = SomeObject::new();
+        let parse_result = some_object.parse(json.to_string());
+        if parse_result.is_err() {
+            let message = parse_result.err().unwrap();
+            return Err(message);
+        }
+
+        Ok(some_object)
+    }
+}
