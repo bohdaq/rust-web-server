@@ -73,3 +73,16 @@ There are 2 reasons why JSON module is written:
 
 - Rust Web Server does not use any 3rd party dependencies except standard Rust library, again, concise decision to have control over codebase
 - Tools like `serde` hiding all the implementation details by forcing user to use [procedural macros](https://doc.rust-lang.org/reference/procedural-macros.html) like: `#[serde(default)]` and it's totally fine, but on other hand, again, you don't have granular control over the process of conversion to and from json, and if you're developing something more complex than TODO app, later, it will become a bottleneck. So JSON module on other-hand provides a trait-like implementation with prebuilt JSON conversion functions that are invoked from `your` codebase. So during whole development phase you're in charge of the process. And I think it's a great advantage and totally costs a bit of boilerplate which is required to set JSON serialization.
+
+## Problem #9
+I have json with property `"prop_e": 4356.257`, when I parse this json to struct, the field has value of `4356.2569999999996`, why is so and how to eliminate this?
+
+### Solution
+
+It is a general problem among programming languages. The best option is to avoid floating points when possible. 
+
+As an example, if you want to use floating point for money representation, let's say $2 50 cents, don't use floats like 2.5, instead use 250 integer type and you'll be fine.
+
+Another example, if you want to represent latitude or longitude, instead of using float point number, is to use 2 separate integers. So 49.842957 will become two numbers 49 and 842957. 
+
+Another way to work around this issue, is to round the number `let rounded : String = format!("{:.N}", 4356.2569999999996);`, where `N` is the number of digits after floating point.

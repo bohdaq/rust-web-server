@@ -30,6 +30,13 @@ fn parse_json() {
 }
 
 #[test]
+fn round_sample() {
+    let rounded : String = format!("{:.3}", 4356.2569999999996);
+    let number : f64 = rounded.parse().unwrap();
+    println!("debug")
+}
+
+#[test]
 fn example_multi_nested_object() {
     let another_nested_obj = AnotherNestedObject {
         prop_bar: 2.2
