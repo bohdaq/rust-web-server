@@ -83,6 +83,6 @@ It is a general problem among programming languages. The best option is to avoid
 
 As an example, if you want to use floating point for money representation, let's say `$2 50 cents`, don't use floats like `2.5`, instead use `250` integer type and you'll be fine.
 
-Another example, if you want to represent latitude or longitude, instead of using float point number, is to use 2 separate integers. So `49.842957` will become two numbers `49` and `842957`. 
+Another example, if you want to represent latitude or longitude, instead of using float point number, simply use 2 separate integers. So `49.842957` will become two numbers `49` and `842957`. 
 
 Another way to work around this issue, is to round the number `let rounded : String = format!("{:.N}", 4356.2569999999996);`, where `N` is the number of digits after floating point.
