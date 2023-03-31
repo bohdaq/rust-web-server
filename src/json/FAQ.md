@@ -64,7 +64,7 @@ JSON does not know about different number types, the same as JavaScript does. So
 
 If you have strong requirement to use smaller numbers, you can change your implementation for FromJSON trait and add casting to specific type.
 
-## Problem #7
+## Problem #8
 Why do I need to use JSON module if I can use [serde](https://serde.rs/)?
 
 ### Solution

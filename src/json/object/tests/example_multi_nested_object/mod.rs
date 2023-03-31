@@ -8,6 +8,27 @@ pub mod another_nested_object;
 pub mod nested_object;
 pub mod some_object;
 
+
+#[test]
+fn parse_json() {
+    // 1. retrieve json string, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "json", "object", "tests", "example_multi_nested_object", "some-object.to.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+    let json = String::from_utf8(file_as_bytes).unwrap();
+
+    // 2. parse json
+    let parse_result = SomeObject::parse_json(json.as_str());
+    if parse_result.is_err() {
+        // 3. error handler in case of malformed input json
+    }
+    // 4. now _some_object represents json
+    let _some_object : SomeObject = parse_result.unwrap();
+    println!("debug")
+}
+
 #[test]
 fn example_multi_nested_object() {
     let another_nested_obj = AnotherNestedObject {
@@ -33,7 +54,7 @@ fn example_multi_nested_object() {
 
 
     // human readable formatted json is 'some-object.to.formatted.json'
-    let path = FileExt::build_path(&["src", "json", "object", "tests", "deserialize_json_with_multiple_nested_objects_to_struct", "some-object.to.txt"]);
+    let path = FileExt::build_path(&["src", "json", "object", "tests", "example_multi_nested_object", "some-object.to.txt"]);
     let pwd = FileExt::working_directory().unwrap();
 
     let file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);

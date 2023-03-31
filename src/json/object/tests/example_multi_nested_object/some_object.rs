@@ -182,7 +182,7 @@ impl FromJSON for SomeObject {
 //     let mut some_object = SomeObject::new();
 //     let parse_result = some_object.parse(json);
 impl SomeObject {
-    pub fn _parse_json(json: &str) -> Result<SomeObject, String> {
+    pub fn parse_json(json: &str) -> Result<SomeObject, String> {
         let mut some_object = SomeObject::new();
         let parse_result = some_object.parse(json.to_string());
         if parse_result.is_err() {
