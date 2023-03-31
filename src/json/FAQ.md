@@ -63,3 +63,13 @@ Why are you using `i128` for integers and `f64` for floating point numbers? Is i
 JSON does not know about different number types, the same as JavaScript does. So to keep compatability between various possible variants of software decision was made to use the biggest numbers available.
 
 If you have strong requirement to use smaller numbers, you can change your implementation for FromJSON trait and add casting to specific type.
+
+## Problem #7
+Why do I need to use JSON module if I can use [serde](https://serde.rs/)?
+
+### Solution
+
+There are 2 reasons why JSON module is written:
+
+- Rust Web Server does not use any 3rd party dependencies except standard Rust library, again, concise decision to have control over codebase
+- Tools like `serde` hiding all the implementation details by forcing user to use procedural macros like: `#[serde(default)]` and it's totally fine, but on other hand, again, you don't have granular control over the process of conversion to and from json, and if you're developing something more complex than TODO app, later, it will become a bottleneck. So JSON module on other-hand provides a trait-like implementation with prebuilt JSON conversion functions that are invoked from `your` codebase. So during whole development phase you're in charge of the process. And I think it's a great advantage and totally costs a bit of boilerplate which is required to set JSON serialization.
