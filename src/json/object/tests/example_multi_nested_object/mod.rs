@@ -1,15 +1,15 @@
 use file_ext::FileExt;
-use crate::json::object::tests::deserialize_json_with_multiple_nested_objects_to_struct::another_nested_object::AnotherNestedObject;
-use crate::json::object::tests::deserialize_json_with_multiple_nested_objects_to_struct::nested_object::NestedObject;
-use crate::json::object::tests::deserialize_json_with_multiple_nested_objects_to_struct::some_object::SomeObject;
+use crate::json::object::tests::example_multi_nested_object::another_nested_object::AnotherNestedObject;
+use crate::json::object::tests::example_multi_nested_object::nested_object::NestedObject;
+use crate::json::object::tests::example_multi_nested_object::some_object::SomeObject;
 use crate::json::object::{FromJSON, ToJSON};
 
-mod another_nested_object;
-mod nested_object;
-mod some_object;
+pub mod another_nested_object;
+pub mod nested_object;
+pub mod some_object;
 
 #[test]
-fn deserialize_json_with_multiple_nested_objects_to_struct() {
+fn example_multi_nested_object() {
 
     let nested_obj = NestedObject
     {
