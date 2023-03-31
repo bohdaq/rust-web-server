@@ -49,3 +49,9 @@ I want to convert tuple to json or vice versa. How can I do it?
 Closest variant of a tuple in json is array, so you can apply same workaround as discussed in `Problem 4`. 
 
 But generally it's more of an antipattern and is not recommended.
+
+## Problem #6
+I looked at source code, and it looks like some undergraduate student work, nested loops, a bunch of ifs, are you kidding?
+
+### Solution
+Such design is comparably easy to maintain and add iterative enhancements. So it's concise decision, liking you this or not. Also, there's a high probability such implementation has performance superiority over more traditional approach (not tested, just a hypothesis).
