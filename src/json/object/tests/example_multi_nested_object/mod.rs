@@ -10,13 +10,14 @@ pub mod some_object;
 
 #[test]
 fn example_multi_nested_object() {
+    let another_nested_obj = AnotherNestedObject {
+        prop_bar: 2.2
+    };
 
     let nested_obj = NestedObject
     {
         prop_foo: true,
-        prop_baz: Some(AnotherNestedObject {
-            prop_bar: 2.2
-        })
+        prop_baz: Some(another_nested_obj)
     };
 
     let obj = SomeObject {
