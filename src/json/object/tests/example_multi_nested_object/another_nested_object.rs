@@ -1,12 +1,60 @@
 use crate::json::{JSON_TYPE, JSONValue};
+use crate::json::array::New;
 use crate::json::object::{FromJSON, JSON, ToJSON};
 use crate::json::property::JSONProperty;
 
+// define your struct
 pub struct AnotherNestedObject {
     pub prop_bar: f64
 }
 
+impl New for AnotherNestedObject {
+    // initiate struct with default values
+    fn new() -> Self {
+        AnotherNestedObject { prop_bar: 0.0 }
+    }
+}
+
+impl ToJSON for AnotherNestedObject {
+    // here you need to list fields used in your struct
+    fn list_properties() -> Vec<JSONProperty> {
+        let mut list = vec![];
+
+        let property = JSONProperty { property_name: "prop_bar".to_string(), property_type: JSON_TYPE.number.to_string() };
+        list.push(property);
+
+        list
+    }
+
+    // here you need to use fields used in your struct
+    fn get_property(&self, property_name: String) -> JSONValue {
+        let mut value = JSONValue::new();
+
+        if property_name == "prop_bar".to_string() {
+            let number : f64 = self.prop_bar;
+            value.f64 = Some(number);
+        }
+
+        value
+    }
+
+    // change AnotherNestedObject to your struct, update nested if statements in for loop according to your struct fields
+    fn to_json_string(&self) -> String {
+        let mut processed_data = vec![];
+
+        let properties = AnotherNestedObject::list_properties();
+        for property in properties {
+            let value = self.get_property(property.property_name.to_string());
+            processed_data.push((property, value));
+
+        }
+
+        JSON::to_json_string(processed_data)
+    }
+}
+
 impl FromJSON for AnotherNestedObject {
+    // can be copy-pasted
     fn parse_json_to_properties(&self, json_string: String) -> Result<Vec<(JSONProperty, JSONValue)>, String> {
         let boxed_parse = JSON::parse_as_properties(json_string);
         if boxed_parse.is_err() {
@@ -16,6 +64,8 @@ impl FromJSON for AnotherNestedObject {
         let properties = boxed_parse.unwrap();
         Ok(properties)
     }
+
+    // here you need to change if statements inside for loop corresponding to your struct fields
     fn set_properties(&mut self, properties: Vec<(JSONProperty, JSONValue)>) -> Result<(), String> {
         for (property, value) in properties {
             if property.property_name == "prop_bar" {
@@ -25,6 +75,8 @@ impl FromJSON for AnotherNestedObject {
         }
         Ok(())
     }
+
+    // can be copy-pasted
     fn parse(&mut self, json_string: String) -> Result<(), String> {
         let boxed_properties = self.parse_json_to_properties(json_string);
         if boxed_properties.is_err() {
@@ -41,37 +93,19 @@ impl FromJSON for AnotherNestedObject {
     }
 }
 
-impl ToJSON for AnotherNestedObject {
-    fn list_properties() -> Vec<JSONProperty> {
-        let mut list = vec![];
 
-        let property = JSONProperty { property_name: "prop_bar".to_string(), property_type: JSON_TYPE.number.to_string() };
-        list.push(property);
-
-        list
-    }
-
-    fn get_property(&self, property_name: String) -> JSONValue {
-        let mut value = JSONValue::new();
-
-        if property_name == "prop_bar".to_string() {
-            let number : f64 = self.prop_bar;
-            value.f64 = Some(number);
+// it is basically shortcut for instantiation and parse, replace SomeObject with your struct name, can be copy-pasted
+//     let mut some_object = SomeObject::new();
+//     let parse_result = some_object.parse(json);
+impl AnotherNestedObject {
+    pub fn _parse_json(json: &str) -> Result<AnotherNestedObject, String> {
+        let mut some_object = AnotherNestedObject::new();
+        let parse_result = some_object.parse(json.to_string());
+        if parse_result.is_err() {
+            let message = parse_result.err().unwrap();
+            return Err(message);
         }
 
-        value
-    }
-
-    fn to_json_string(&self) -> String {
-        let mut processed_data = vec![];
-
-        let properties = AnotherNestedObject::list_properties();
-        for property in properties {
-            let value = self.get_property(property.property_name.to_string());
-            processed_data.push((property, value));
-
-        }
-
-        JSON::to_json_string(processed_data)
+        Ok(some_object)
     }
 }
