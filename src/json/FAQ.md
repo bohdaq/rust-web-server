@@ -31,3 +31,21 @@ Why do I need to implement `New` trait?
 
 ### Solution
 `New` trait is required if you are planning to use your struct in array. In most of the cases you are. Internally JSON module needs a way to instantiate a struct while working with json array, this functionality is achieved through `New` trait.
+
+## Problem #4
+I have a json list `[1, true, "text"]`, how can I parse it?
+
+### Solution
+As JSON module works with structs, there is _no way_ to logically map json array of different types (number, boolean and string) to list of structs of a particular type.
+
+If you have such need, most likely, you are trying to describe struct itself containing these types. So, after remodeling, array of different types becomes array of structs containing these types as fields `[{1, true, "text"}]`.
+
+Or as a workaround you may try to call `RawUnprocessedJSONArray::split_into_vector_of_strings(json)` to retrieve a list with strings that can be individually parsed to specific type.
+
+## Problem #5
+I want to convert tuple to json or vice versa. How can I do it?
+
+### Solution
+Closest variant of a tuple in json is array, so you can apply same workaround as discussed in `Problem 4`. 
+
+But generally it's more of an antipattern and is not recommended.
