@@ -55,3 +55,11 @@ I looked at source code, and it looks like some undergraduate student work, nest
 
 ### Solution
 Such design is comparably easy to maintain and add iterative enhancements. So it's concise decision, liking you this or not. Also, there's a high probability such implementation has performance superiority over more traditional approach (not tested, just a hypothesis).
+
+## Problem #7
+Why are you using `i128` for integers and `f64` for floating point numbers? Is it possible to use u8 i8 e.g.?
+
+### Solution
+JSON does not know about different number types, the same as JavaScript does. So to keep compatability between various possible variants of software decision was made to use the biggest numbers available.
+
+If you have strong requirement to use smaller numbers, you can change your implementation for FromJSON trait and add casting to specific type.
