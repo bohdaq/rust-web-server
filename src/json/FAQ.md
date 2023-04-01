@@ -79,7 +79,7 @@ I have json with property `"prop_e": 4356.257`, when I parse this json to struct
 
 ### Solution
 
-It is a general problem among programming languages. The best option is to avoid floating points when possible. 
+It is a [general problem](https://www.youtube.com/watch?v=WJgLKO-qac0) among programming languages. The best option is to avoid floating points when possible. 
 
 As an example, if you want to use floating point for money representation, let's say `$2 50 cents`, don't use floats like `2.5`, instead use `250` integer type and you'll be fine.
 
