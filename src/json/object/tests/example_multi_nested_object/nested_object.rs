@@ -122,7 +122,8 @@ impl FromJSON for NestedObject {
 }
 
 
-// it is basically shortcut for instantiation and parse, replace NestedObject with your struct name, can be copy-pasted
+// it is basically shortcut for instantiation and parse,
+// replace NestedObject with your struct name, can be copy-pasted
 //     let mut object = NestedObject::new();
 //     let parse_result = object.parse(json);
 impl NestedObject {
