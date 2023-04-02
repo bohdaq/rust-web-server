@@ -10,3 +10,6 @@ mod json_array_multiple_true_elements;
 mod json_array_multiple_false_elements;
 mod json_array_null_element;
 mod json_array_multiple_null_elements;
+mod json_array_multiple_elements;
+mod json_array;
+mod json_array_float;
