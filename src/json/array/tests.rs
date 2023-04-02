@@ -1,22 +1,6 @@
 use crate::json::array::{RawUnprocessedJSONArray};
 
 #[test]
-fn json_array_strings() {
-    let array = "[\"a\", \"b\", \"c\",\"d\" ,\"e\"]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
-    let expected = vec!["\"a\"", "\"b\"", "\"c\"", "\"d\"", "\"e\""];
-    assert_eq!(actual, expected);
-}
-
-#[test]
-fn json_array_strings_multichar() {
-    let array = "[\"ab\", \"bb\", \"bc\",\"db\" ,\"eb\"]";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).unwrap();
-    let expected = vec!["\"ab\"", "\"bb\"", "\"bc\"", "\"db\"", "\"eb\""];
-    assert_eq!(actual, expected);
-}
-
-#[test]
 fn json_array_wrong_element() {
     let array = "[ asdfg, 456, 6,7 ,8]";
     let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).err().unwrap();

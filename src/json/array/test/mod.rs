@@ -13,3 +13,5 @@ mod json_array_multiple_null_elements;
 mod json_array_multiple_elements;
 mod json_array;
 mod json_array_float;
+mod json_array_strings;
+mod json_array_strings_multichar;
