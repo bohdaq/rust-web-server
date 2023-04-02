@@ -17,3 +17,6 @@ mod json_array_strings;
 mod json_array_strings_multichar;
 mod json_array_wrong_element;
 mod json_array_wrong_element_duplicate_minus;
+mod json_array_wrong_element_duplicate_exponent;
+mod json_array_wrong_element_duplicate_point;
+mod json_array_wrong_element_random_char;
