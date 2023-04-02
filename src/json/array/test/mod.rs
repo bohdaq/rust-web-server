@@ -22,3 +22,6 @@ mod json_array_wrong_element_duplicate_point;
 mod json_array_wrong_element_random_char;
 mod json_array_whitespace_before_first_element;
 mod json_array_whitespace_after_last_element;
+mod json_array_whitespace_before_array;
+mod json_array_whitespace_after_array;
+mod json_empty_array;
