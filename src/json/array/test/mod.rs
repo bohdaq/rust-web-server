@@ -25,3 +25,5 @@ mod json_array_whitespace_after_last_element;
 mod json_array_whitespace_before_array;
 mod json_array_whitespace_after_array;
 mod json_empty_array;
+mod json_array_starts_with_random_chars;
+mod json_array_ends_with_random_chars;

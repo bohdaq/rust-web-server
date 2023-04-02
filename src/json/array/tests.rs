@@ -1,22 +1,6 @@
 use crate::json::array::{RawUnprocessedJSONArray};
 
 #[test]
-fn json_array_starts_with_random_chars() {
-    let array = "adgsfdg [ 123, 456, 6,7 ,8 ] ";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).err().unwrap();
-    let expected = "input string does not start with opening square bracket: a in adgsfdg [ 123, 456, 6,7 ,8 ] ";
-    assert_eq!(actual, expected);
-}
-
-#[test]
-fn json_array_ends_with_random_chars() {
-    let array = " [ 123, 456, 6,7 ,8 ] adgsfdg";
-    let actual = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string()).err().unwrap();
-    let expected = "after array there are some characters: a in  [ 123, 456, 6,7 ,8 ] adgsfdg";
-    assert_eq!(actual, expected);
-}
-
-#[test]
 fn json_array_no_closing_square_bracket() {
     let array = " [ 123, 456, 6,7 ,8  ";
     let result = RawUnprocessedJSONArray::split_into_vector_of_strings(array.to_string());
