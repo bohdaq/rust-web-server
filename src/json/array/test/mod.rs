@@ -27,3 +27,7 @@ mod json_array_whitespace_after_array;
 mod json_empty_array;
 mod json_array_starts_with_random_chars;
 mod json_array_ends_with_random_chars;
+mod json_array_no_closing_square_bracket;
+mod json_array_no_starting_square_bracket;
+mod json_array_whitespaces;
+mod json_array_missing_comma;
