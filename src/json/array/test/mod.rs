@@ -15,3 +15,5 @@ mod json_array;
 mod json_array_float;
 mod json_array_strings;
 mod json_array_strings_multichar;
+mod json_array_wrong_element;
+mod json_array_wrong_element_duplicate_minus;
