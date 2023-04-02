@@ -5,3 +5,4 @@ mod json_array_nested_object;
 mod json_array_nested_empty_object;
 mod json_array_nested_object_nested_array;
 mod json_array_nested_array_multiple_items;
+mod json_array_multi_nested_array_multiple_items;
