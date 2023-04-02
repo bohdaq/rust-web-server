@@ -1,7 +1,7 @@
 mod some_object;
 
 use crate::json::array::RawUnprocessedJSONArray;
-use crate::json::array::test::json_array_nested_object::some_object::SomeObject;
+use crate::json::array::tests::json_array_nested_object::some_object::SomeObject;
 use crate::json::object::{FromJSON, ToJSON};
 
 #[test]
