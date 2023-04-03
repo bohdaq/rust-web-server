@@ -7,7 +7,7 @@ use crate::json::object::tests::deserialize_json_extra_comma_after_object_proper
 
 #[test]
 fn deserialize_json_extra_comma_after_object_property() {
-    let path = FileExt::build_path(&["src", "json", "object", "tests", "deserialize_json_extra_comma_after_object_property", "some-object.json"]);
+    let path = FileExt::build_path(&["src", "json", "object", "tests", "deserialize_json_extra_comma_after_object_property", "example-object.json"]);
     let pwd = FileExt::working_directory().unwrap();
 
     let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
