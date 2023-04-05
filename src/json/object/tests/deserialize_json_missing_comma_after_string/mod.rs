@@ -1,6 +1,9 @@
+mod example_nested_object;
+mod example_object;
+
 use file_ext::FileExt;
-use crate::json::example_object::ExampleObject;
 use crate::json::object::{FromJSON};
+use crate::json::object::tests::deserialize_json_missing_comma_after_string::example_object::ExampleObject;
 
 #[test]
 fn deserialize_json_missing_comma_after_string() {
