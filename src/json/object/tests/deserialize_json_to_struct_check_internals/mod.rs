@@ -1,16 +1,16 @@
 use file_ext::FileExt;
 use crate::json::JSON_TYPE;
-use crate::json::object::tests::deserialize_json_to_struct::some_object::SomeObject;
 use crate::json::object::{FromJSON, ToJSON};
+use crate::json::object::tests::deserialize_json_to_struct_check_internals::some_object::SomeObject;
 
 mod some_object;
 
 #[test]
-fn deserialize_json_to_struct() {
+fn deserialize_json_to_struct_check_internals() {
     let mut obj = SomeObject { prop_a: "123abc".to_string(), prop_b: true };
     let json_string = obj.to_json_string();
 
-    let path = FileExt::build_path(&["src", "json", "object", "tests", "deserialize_json_to_struct", "some-object.json"]);
+    let path = FileExt::build_path(&["src", "json", "object", "tests", "deserialize_json_to_struct_check_internals", "some-object.json"]);
     let pwd = FileExt::working_directory().unwrap();
 
     let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);

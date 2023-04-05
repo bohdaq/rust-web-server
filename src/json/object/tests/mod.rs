@@ -31,3 +31,4 @@ mod deserialize_json_no_opening_curly_brace;
 mod deserialize_json_no_closing_curly_brace;
 mod deserialize_json_random_text;
 mod example_multi_nested_object;
+mod deserialize_json_to_struct_check_internals;
