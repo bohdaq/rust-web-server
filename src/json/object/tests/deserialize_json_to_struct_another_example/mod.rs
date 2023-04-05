@@ -1,6 +1,9 @@
+mod example_object;
+mod example_nested_object;
+
 use file_ext::FileExt;
-use crate::json::example_object::ExampleObject;
 use crate::json::object::{FromJSON, ToJSON};
+use crate::json::object::tests::deserialize_json_to_struct_another_example::example_object::ExampleObject;
 
 #[test]
 fn deserialize_json_to_struct_another_example() {
@@ -16,7 +19,7 @@ fn deserialize_json_to_struct_another_example() {
 
     let json_string = obj.to_json_string();
 
-    let path = FileExt::build_path(&["src", "json", "object", "tests", "deserialize_json_to_struct_another_example", "some-object.json"]);
+    let path = FileExt::build_path(&["src", "json", "object", "tests", "deserialize_json_to_struct_another_example", "example-object.json"]);
     let pwd = FileExt::working_directory().unwrap();
 
     let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
