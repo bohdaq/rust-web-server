@@ -60,6 +60,7 @@ fn vector_to_json_on_struct_with_nested_object_and_list_of_nested_objects() {
 
     let nested_list = vec![first_object_from_nested_list, second_object_from_nested_list];
 
+    // second object itself
     let second_object = ExampleObject {
         prop_a: "test".to_string(),
         prop_b: true,
