@@ -3,8 +3,6 @@ mod tests;
 pub mod property;
 pub mod array;
 pub mod object;
-mod example_object;
-mod example_nested_object;
 
 // TODO: wip
 
