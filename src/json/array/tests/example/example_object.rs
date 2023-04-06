@@ -205,3 +205,11 @@ impl ToJSON for ExampleObject {
         JSON::to_json_string(processed_data)
     }
 }
+
+impl ExampleObject {
+    // it is basically shortcut for JSONArrayOfObjects::<ExampleObject>::to_json,
+    // replace ExampleObject with your struct name, can be copy-pasted
+    pub fn to_json_list(list: Vec<ExampleObject>) -> Result<String, String> {
+        JSONArrayOfObjects::<ExampleObject>::to_json(list.as_ref())
+    }
+}
