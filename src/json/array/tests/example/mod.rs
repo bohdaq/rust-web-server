@@ -2,8 +2,8 @@ mod example_nested_object;
 mod example_object;
 
 use crate::json::array::{JSONArrayOfObjects, New};
-use crate::json::array::example::example_nested_object::ExampleNestedObject;
-use crate::json::array::example::example_object::ExampleObject;
+use crate::json::array::tests::example::example_nested_object::ExampleNestedObject;
+use crate::json::array::tests::example::example_object::ExampleObject;
 
 #[test]
 fn vector_to_json() {

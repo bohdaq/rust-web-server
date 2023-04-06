@@ -31,3 +31,4 @@ mod json_array_no_closing_square_bracket;
 mod json_array_no_starting_square_bracket;
 mod json_array_whitespaces;
 mod json_array_missing_comma;
+mod example;
