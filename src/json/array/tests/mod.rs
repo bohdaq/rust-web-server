@@ -32,3 +32,4 @@ mod json_array_no_starting_square_bracket;
 mod json_array_whitespaces;
 mod json_array_missing_comma;
 mod example;
+mod example_multi_nested_object;
