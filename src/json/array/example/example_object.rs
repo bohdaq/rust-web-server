@@ -1,6 +1,6 @@
 use crate::json::{JSON_TYPE, JSONValue};
 use crate::json::array::{JSONArrayOfObjects, New};
-use crate::json::array::examples::example_nested_object::ExampleNestedObject;
+use crate::json::array::example::example_nested_object::ExampleNestedObject;
 use crate::json::object::{FromJSON, JSON, ToJSON};
 use crate::json::property::JSONProperty;
 
