@@ -2,8 +2,8 @@ mod example_object;
 mod example_nested_object;
 
 use file_ext::FileExt;
-use crate::json::example_object::ExampleObject;
 use crate::json::object::{FromJSON};
+use crate::json::object::tests::deserialize_json_no_opening_curly_brace::example_object::ExampleObject;
 
 #[test]
 fn deserialize_json_no_opening_curly_brace() {
