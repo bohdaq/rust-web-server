@@ -2,8 +2,6 @@
 
 # JSON 
 
-_Work in Progress_
-
 JSON module is designed to convert JSON string into corresponding hierarchy of structs in Rust and vice versa.
 
 JSON needs to be valid, the module itself is not formatter or validator. However, it will return an error if provided json string is not appropriate.
