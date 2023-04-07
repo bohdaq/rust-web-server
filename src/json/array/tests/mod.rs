@@ -33,3 +33,4 @@ mod json_array_whitespaces;
 mod json_array_missing_comma;
 mod example;
 mod example_multi_nested_object;
+mod example_multi_nested_object_with_asserts;
