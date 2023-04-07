@@ -53,7 +53,16 @@ fn vector_to_json() {
 
 
     let actual = ExampleObject::to_json_list(list).unwrap();
-    let expected = "[{\r\n  \"prop_a\": \"\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 0,\r\n  \"prop_e\": 0.0\r\n},\r\n{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 10,\r\n  \"prop_e\": 2.2,\r\n  \"prop_f\": [{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": false,\r\n  \"prop_d\": 1,\r\n  \"prop_e\": 2.2\r\n},\r\n{\r\n  \"prop_a\": \"test string\",\r\n  \"prop_b\": true,\r\n  \"prop_d\": 11,\r\n  \"prop_e\": 21.12\r\n}],\r\n  \"prop_g\": {\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": false,\r\n  \"prop_d\": 1,\r\n  \"prop_e\": 2.2\r\n}\r\n}]".to_string();
+
+
+    // expected json, in this example it is done via reading a file
+    // take a look at `list.example_object.to.formatted.json`
+    let path = FileExt::build_path(&["src", "json", "array", "tests", "example_multi_nested_object", "list.example_object.to.json"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+    let expected = String::from_utf8(file_as_bytes).unwrap();
 
 
     assert_eq!(actual, expected);

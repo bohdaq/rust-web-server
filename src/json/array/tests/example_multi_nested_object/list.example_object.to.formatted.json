@@ -1,0 +1,36 @@
+[
+  {
+    "prop_a": "",
+    "prop_b": false,
+    "prop_c": false,
+    "prop_d": 0,
+    "prop_e": 0.0
+  },
+  {
+    "prop_a": "test",
+    "prop_b": true,
+    "prop_c": false,
+    "prop_d": 10,
+    "prop_e": 2.2,
+    "prop_f": [
+      {
+        "prop_a": "test",
+        "prop_b": false,
+        "prop_d": 1,
+        "prop_e": 2.2
+      },
+      {
+        "prop_a": "test string",
+        "prop_b": true,
+        "prop_d": 11,
+        "prop_e": 21.12
+      }
+    ],
+    "prop_g": {
+      "prop_a": "test",
+      "prop_b": false,
+      "prop_d": 1,
+      "prop_e": 2.2
+    }
+  }
+]
