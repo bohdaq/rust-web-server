@@ -1,6 +1,7 @@
 mod example_object;
 mod example_nested_object;
 
+use file_ext::FileExt;
 use crate::json::array::{New};
 use crate::json::array::tests::example::example_object::ExampleObject;
 
@@ -30,8 +31,16 @@ fn vector_to_json() {
 
 #[test]
 fn json_to_vector() {
-    let json = "[{\r\n  \"prop_a\": \"\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 0,\r\n  \"prop_e\": 0\r\n},\r\n{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 10,\r\n  \"prop_e\": 2.2\r\n}]".to_string();
+    // 1. retrieve json string, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "json", "array", "tests", "example", "list.example_object.from.formatted.json"]);
+    let pwd = FileExt::working_directory().unwrap();
 
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+    let json = String::from_utf8(file_as_bytes).unwrap();
+
+
+    //  2. parse json String
     let parsed_list : Vec<ExampleObject> = ExampleObject::from_json_list(json).unwrap();
     assert_eq!(2, parsed_list.len());
 
