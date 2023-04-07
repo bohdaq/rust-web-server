@@ -1,0 +1,16 @@
+[
+  {
+    "prop_a": "",
+    "prop_b": false,
+    "prop_c": false,
+    "prop_d": 0,
+    "prop_e": 0.0
+  },
+  {
+    "prop_a": "test",
+    "prop_b": true,
+    "prop_c": false,
+    "prop_d": 10,
+    "prop_e": 2.2
+  }
+]

@@ -23,7 +23,15 @@ fn vector_to_json() {
 
 
     let actual = ExampleObject::to_json_list(list).unwrap();
-    let expected = "[{\r\n  \"prop_a\": \"\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 0,\r\n  \"prop_e\": 0.0\r\n},\r\n{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 10,\r\n  \"prop_e\": 2.2\r\n}]".to_string();
+
+
+    // expected json string
+    let path = FileExt::build_path(&["src", "json", "array", "tests", "example", "list.example_object.to.json"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+    let expected = String::from_utf8(file_as_bytes).unwrap();
 
 
     assert_eq!(actual, expected);
@@ -31,7 +39,7 @@ fn vector_to_json() {
 
 #[test]
 fn json_to_vector() {
-    // 1. retrieve json string, in this example it is done via reading a file
+    // retrieve json string, in this example it is done via reading a file
     let path = FileExt::build_path(&["src", "json", "array", "tests", "example", "list.example_object.from.formatted.json"]);
     let pwd = FileExt::working_directory().unwrap();
 
@@ -40,7 +48,7 @@ fn json_to_vector() {
     let json = String::from_utf8(file_as_bytes).unwrap();
 
 
-    //  2. parse json String
+    //  parse json String
     let parsed_list : Vec<ExampleObject> = ExampleObject::from_json_list(json).unwrap();
     assert_eq!(2, parsed_list.len());
 
