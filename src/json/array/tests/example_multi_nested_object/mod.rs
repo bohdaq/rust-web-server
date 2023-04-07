@@ -1,7 +1,7 @@
 mod example_nested_object;
 mod example_object;
 
-use crate::json::array::{JSONArrayOfObjects, New};
+use crate::json::array::{New};
 use crate::json::array::tests::example_multi_nested_object::example_nested_object::ExampleNestedObject;
 use crate::json::array::tests::example_multi_nested_object::example_object::ExampleObject;
 
@@ -64,7 +64,7 @@ fn json_to_vector() {
     let json = "[{\r\n  \"prop_a\": \"\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 0,\r\n  \"prop_e\": 0\r\n},\r\n{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 10,\r\n  \"prop_e\": 2.2,\r\n  \"prop_f\": [{\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": true,\r\n  \"prop_d\": 1,\r\n  \"prop_e\": 2.2\r\n},\r\n{\r\n  \"prop_a\": \"test string\",\r\n  \"prop_b\": true,\r\n  \"prop_c\": false,\r\n  \"prop_d\": 11,\r\n  \"prop_e\": 21.12\r\n}],\r\n  \"prop_g\": {\r\n  \"prop_a\": \"test\",\r\n  \"prop_b\": false,\r\n  \"prop_c\": true,\r\n  \"prop_d\": 1,\r\n  \"prop_e\": 2.2\r\n}\r\n}]".to_string();
 
 
-    let parsed_list : Vec<ExampleObject> = JSONArrayOfObjects::<ExampleObject>::from_json(json).unwrap();
+    let parsed_list : Vec<ExampleObject> = ExampleObject::from_json_list(json).unwrap();
     assert_eq!(2, parsed_list.len());
 
     let parsed_obj = parsed_list.get(0).unwrap();

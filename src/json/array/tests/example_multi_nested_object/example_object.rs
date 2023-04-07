@@ -212,4 +212,10 @@ impl ExampleObject {
     pub fn to_json_list(list: Vec<ExampleObject>) -> Result<String, String> {
         JSONArrayOfObjects::<ExampleObject>::to_json(list.as_ref())
     }
+
+    // it is basically shortcut for JSONArrayOfObjects::<ExampleObject>::from_json,
+    // replace ExampleObject with your struct name, can be copy-pasted
+    pub fn from_json_list(json_array: String) -> Result<Vec<ExampleObject>, String> {
+        JSONArrayOfObjects::<ExampleObject>::from_json(json_array)
+    }
 }
