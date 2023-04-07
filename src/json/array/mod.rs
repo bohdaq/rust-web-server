@@ -461,3 +461,21 @@ impl RawUnprocessedJSONArray {
         Ok(list)
     }
 }
+
+pub struct JSONArrayOfIntegers;
+impl JSONArrayOfIntegers {
+    pub fn parse_as_list_i128(json : String) -> Result<Vec<i128>, String> {
+        let items = RawUnprocessedJSONArray::split_into_vector_of_strings(json).unwrap();
+        let mut list: Vec<i128> = vec![];
+        for item in items {
+            let boxed_parse = item.parse::<i128>();
+            if boxed_parse.is_err() {
+                let message = boxed_parse.err().unwrap().to_string();
+                return Err(message);
+            }
+            let num : i128 = boxed_parse.unwrap();
+            list.push(num);
+        }
+        Ok(list)
+    }
+}

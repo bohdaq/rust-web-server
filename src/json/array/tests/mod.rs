@@ -35,3 +35,5 @@ mod example;
 mod example_multi_nested_object;
 mod example_multi_nested_object_with_asserts;
 mod example_with_asserts;
+mod example_list_i128;
+mod example_list_i128_with_asserts;
