@@ -3,7 +3,7 @@ mod example_nested_object;
 
 use file_ext::FileExt;
 use crate::json::array::{New};
-use crate::json::array::tests::example::example_object::ExampleObject;
+use crate::json::array::tests::example_with_asserts::example_object::ExampleObject;
 
 #[test]
 fn vector_to_json() {
