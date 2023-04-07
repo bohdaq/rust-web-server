@@ -18,8 +18,9 @@ Examples:
 
 - [Object](object/tests/example)
 - [Nested Object](object/tests/example_multi_nested_object)
-- [Array](array/tests/example)
-- [Nested Array](array/tests/example_multi_nested_object)
+- [Array of Objects](array/tests/example)
+- [Array of Objects with Nested Array](array/tests/example_multi_nested_object)
+- [Array of i128](array/tests/example_list_i128)
 
 Links:
 - [FAQ](FAQ.md)
