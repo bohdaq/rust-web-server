@@ -92,20 +92,3 @@ impl FromJSON for AnotherNestedObject {
         Ok(())
     }
 }
-
-
-// it is basically shortcut for instantiation and parse, replace AnotherNestedObject with your struct name, can be copy-pasted
-//     let mut object = AnotherNestedObject::new();
-//     let parse_result = object.parse(json);
-impl AnotherNestedObject {
-    pub fn _parse_json(json: &str) -> Result<AnotherNestedObject, String> {
-        let mut some_object = AnotherNestedObject::new();
-        let parse_result = some_object.parse(json.to_string());
-        if parse_result.is_err() {
-            let message = parse_result.err().unwrap();
-            return Err(message);
-        }
-
-        Ok(some_object)
-    }
-}
