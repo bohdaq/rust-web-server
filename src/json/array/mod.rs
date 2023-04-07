@@ -478,4 +478,19 @@ impl JSONArrayOfIntegers {
         }
         Ok(list)
     }
+
+    pub fn to_json_from_list_i128(items : &Vec<i128>) -> Result<String, String> {
+        let mut json_vec = vec![];
+        json_vec.push(SYMBOL.opening_square_bracket.to_string());
+        for (pos, item) in items.iter().enumerate() {
+            json_vec.push(item.to_string());
+            if pos != items.len() - 1 {
+                json_vec.push(SYMBOL.comma.to_string());
+            }
+        }
+        json_vec.push(SYMBOL.closing_square_bracket.to_string());
+
+        let result = json_vec.join(SYMBOL.empty_string);
+        Ok(result)
+    }
 }

@@ -14,7 +14,12 @@ fn json_to_vector() {
 
 #[test]
 fn vector_to_json() {
-    let _json_array : Vec<i128> = vec![-2, 0, 5];
+    let json_array: Vec<i128> = vec![-2, 0, 5];
 
-    //TODO
+    let result = JSONArrayOfIntegers::to_json_from_list_i128(&json_array);
+    if result.is_err() {
+        // handle error
+    }
+
+    let _json_array = result.unwrap();
 }
