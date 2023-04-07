@@ -93,3 +93,10 @@ What's the difference between json array, list and vector?
 ### Solution
 
 No difference. Across this module you may find `array`, `list`, and `vector`, it is basically the same.
+
+## Problem #11
+I want to use `enum` in my struct, how can I do it?
+
+### Solution
+
+There's no such thing like `enum` in json. So to work around this issue in your struct, you can define 2 properties, one of integer or string type, and second of enum type. During parsing or converting simply read or set another property of enum type.
