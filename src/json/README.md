@@ -14,14 +14,14 @@ Luckily, all internal cumbersome functionally is done by JSON module, developer 
 
 JSON module supports nested objects and arrays.
 
-Within module itself, in tests section you may find examples on how to use it. 
+Within module itself, in a tests section, you may find examples on how to use it. 
 
 Examples:
 
 - [Object](object/tests/example)
 - [Nested Object](object/tests/example_multi_nested_object)
-- Array TODO
-- Nested Array TODO
+- [Array](array/tests/example)
+- [Nested Array](array/tests/example_multi_nested_object)
 
 Links:
 - [FAQ](FAQ.md)
