@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
 use crate::json::array::New;
