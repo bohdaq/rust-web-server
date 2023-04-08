@@ -1,4 +1,5 @@
-use crate::json::{JSON_TYPE, Null};
+use crate::json::{JSON_TYPE};
+use crate::null::Null;
 
 #[test]
 fn json_types() {

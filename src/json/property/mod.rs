@@ -1,4 +1,5 @@
-use crate::json::{JSON_TYPE, JSONValue, Null};
+use crate::json::{JSON_TYPE, JSONValue};
+use crate::null::Null;
 use crate::symbol::SYMBOL;
 
 #[cfg(test)]

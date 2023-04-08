@@ -1,5 +1,5 @@
 use crate::json::array::{JSONArrayOfNulls, New};
-use crate::json::Null;
+use crate::null::Null;
 
 #[test]
 fn json_to_vector() {

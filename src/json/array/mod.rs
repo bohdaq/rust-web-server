@@ -1,7 +1,7 @@
 use std::io;
 use std::io::Read;
-use crate::json::Null;
 use crate::json::object::{FromJSON, ToJSON};
+use crate::null::Null;
 use crate::symbol::SYMBOL;
 
 #[cfg(test)]

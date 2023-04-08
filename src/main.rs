@@ -16,6 +16,7 @@ pub mod thread_pool;
 pub mod log;
 pub mod body;
 pub mod json;
+pub mod null;
 
 extern crate core;
 
