@@ -5,6 +5,8 @@ use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
 use crate::json::array::New;
 
+pub const NULL: &'static Null = &Null{};
+
 pub struct Null {}
 
 pub struct ParseNullError {

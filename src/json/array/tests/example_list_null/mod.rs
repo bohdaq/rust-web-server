@@ -1,5 +1,5 @@
-use crate::json::array::{JSONArrayOfNulls, New};
-use crate::null::Null;
+use crate::json::array::{JSONArrayOfNulls};
+use crate::null::{Null, NULL};
 
 #[test]
 fn json_to_vector() {
@@ -17,8 +17,7 @@ fn json_to_vector() {
 
 #[test]
 fn vector_to_json() {
-    let null = Null::new();
-    let json_array: Vec<Null> = vec![null.clone(), null.clone()];
+    let json_array: Vec<&Null> = vec![NULL, NULL];
 
     let result = JSONArrayOfNulls::to_json_from_list_null(&json_array);
     if result.is_err() {

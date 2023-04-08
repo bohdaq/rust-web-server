@@ -1,19 +1,19 @@
-use crate::null::Null;
+use crate::null::{Null, NULL};
 
 #[test]
-fn null() {
-    let null = Null{};
+fn null_check() {
 
-    let clone = null.clone();
+    let clone = NULL.clone();
+    assert_eq!(*NULL, clone);
 
-    let to_string = clone.to_string();
+    let to_string = NULL.to_string();
     assert_eq!("null".to_string(), to_string);
 
-    let debug = format!("{:?}", null);
+    let debug = format!("{:?}", NULL);
     assert_eq!("null".to_string(), debug);
 
     let parsed : Null = "null".parse::<Null>().unwrap();
-    assert_eq!(parsed, Null{});
+    assert_eq!(parsed, *NULL);
 
     let parse_error = "notnull".parse::<Null>();
     assert!(parse_error.is_err());
