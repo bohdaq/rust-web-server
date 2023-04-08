@@ -21,6 +21,7 @@ Examples:
 - [Array of Objects](array/tests/example)
 - [Array of Objects with Nested Array](array/tests/example_multi_nested_object)
 - [Array of i128](array/tests/example_list_i128)
+- [Array of u128](array/tests/example_list_u128)
 
 Links:
 - [FAQ](FAQ.md)
