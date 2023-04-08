@@ -39,3 +39,4 @@ mod example_list_i128;
 mod example_list_i128_with_asserts;
 mod example_list_u128_with_asserts;
 mod example_list_u128;
+mod example_list_null_with_asserts;
