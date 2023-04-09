@@ -25,6 +25,7 @@ Examples:
 - [Array of null](array/tests/example_list_null)
 - [Array of String](array/tests/example_list_string)
 - [Array of bool](array/tests/example_list_bool)
+- [Array of f64](array/tests/example_list_f64)
 
 Links:
 - [FAQ](FAQ.md)
