@@ -1,5 +1,4 @@
-use crate::json::array::{JSONArrayOfNulls, JSONArrayOfStrings};
-use crate::null::{Null, NULL};
+use crate::json::array::{JSONArrayOfStrings};
 
 #[test]
 fn json_to_vector() {
@@ -24,13 +23,13 @@ fn json_to_vector() {
 
 #[test]
 fn vector_to_json() {
-    let json_array: Vec<&Null> = vec![NULL, NULL];
+    let json_array: Vec<String> = vec!["one".to_string(), "two".to_string()];
 
-    let result = JSONArrayOfNulls::to_json_from_list_null(&json_array);
+    let result = JSONArrayOfStrings::to_json_from_list_string(&json_array);
     if result.is_err() {
         // handle error
     }
 
     let json_array = result.unwrap();
-    assert_eq!("[null,null]", json_array);
+    assert_eq!("[one,two]", json_array);
 }

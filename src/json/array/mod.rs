@@ -568,11 +568,13 @@ impl JSONArrayOfStrings {
         let mut list: Vec<String> = vec![];
         for item in items {
             let boxed_parse = item.parse::<String>();
-            if boxed_parse.is_err() {
-                let message = boxed_parse.err().unwrap().to_string();
-                return Err(message);
+            let mut string: String = boxed_parse.unwrap().trim().to_string();
+            let starts_with_quotation_mark = string.chars().next().unwrap() == '"';
+            let ends_with_quotation_mark = string.chars().last().unwrap() == '"';
+            if starts_with_quotation_mark && ends_with_quotation_mark {
+                let number_of_characters = string.len() - 1;
+                string = string[1..number_of_characters].to_string();
             }
-            let string: String = boxed_parse.unwrap().trim().to_string();
             list.push(string);
         }
         Ok(list)
