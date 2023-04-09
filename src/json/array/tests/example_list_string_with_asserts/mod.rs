@@ -31,5 +31,5 @@ fn vector_to_json() {
     }
 
     let json_array = result.unwrap();
-    assert_eq!("[one,two]", json_array);
+    assert_eq!("[\"one\",\"two\"]", json_array);
 }

@@ -587,7 +587,9 @@ impl JSONArrayOfStrings {
         let mut json_vec = vec![];
         json_vec.push(SYMBOL.opening_square_bracket.to_string());
         for (pos, item) in items.iter().enumerate() {
+            json_vec.push(SYMBOL.quotation_mark.to_string());
             json_vec.push(item.to_string());
+            json_vec.push(SYMBOL.quotation_mark.to_string());
             if pos != items.len() - 1 {
                 json_vec.push(SYMBOL.comma.to_string());
             }
