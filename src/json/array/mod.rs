@@ -544,7 +544,41 @@ impl JSONArrayOfNulls {
         Ok(list)
     }
 
-    pub fn to_json_from_list_null(items : &Vec<Null>) -> Result<String, String> {
+    pub fn to_json_from_list_null(items : &Vec<&Null>) -> Result<String, String> {
+        let mut json_vec = vec![];
+        json_vec.push(SYMBOL.opening_square_bracket.to_string());
+        for (pos, item) in items.iter().enumerate() {
+            json_vec.push(item.to_string());
+            if pos != items.len() - 1 {
+                json_vec.push(SYMBOL.comma.to_string());
+            }
+        }
+        json_vec.push(SYMBOL.closing_square_bracket.to_string());
+
+        let result = json_vec.join(SYMBOL.empty_string);
+        Ok(result)
+    }
+
+}
+
+pub struct JSONArrayOfStrings;
+impl JSONArrayOfStrings {
+    pub fn parse_as_list_string(json : String) -> Result<Vec<String>, String> {
+        let items = RawUnprocessedJSONArray::split_into_vector_of_strings(json).unwrap();
+        let mut list: Vec<String> = vec![];
+        for item in items {
+            let boxed_parse = item.parse::<String>();
+            if boxed_parse.is_err() {
+                let message = boxed_parse.err().unwrap().to_string();
+                return Err(message);
+            }
+            let string: String = boxed_parse.unwrap().trim().to_string();
+            list.push(string);
+        }
+        Ok(list)
+    }
+
+    pub fn to_json_from_list_string(items : &Vec<String>) -> Result<String, String> {
         let mut json_vec = vec![];
         json_vec.push(SYMBOL.opening_square_bracket.to_string());
         for (pos, item) in items.iter().enumerate() {
