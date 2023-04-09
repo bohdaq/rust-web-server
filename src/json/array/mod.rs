@@ -574,6 +574,9 @@ impl JSONArrayOfStrings {
             if starts_with_quotation_mark && ends_with_quotation_mark {
                 let number_of_characters = string.len() - 1;
                 string = string[1..number_of_characters].to_string();
+            } else {
+                let message = format!("not a string: {}", item.to_string());
+                return Err(message);
             }
             list.push(string);
         }
