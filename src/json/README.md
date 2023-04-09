@@ -24,6 +24,7 @@ Examples:
 - [Array of u128](array/tests/example_list_u128)
 - [Array of null](array/tests/example_list_null)
 - [Array of String](array/tests/example_list_string)
+- [Array of String](array/tests/example_list_bool)
 
 Links:
 - [FAQ](FAQ.md)

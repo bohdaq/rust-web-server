@@ -43,3 +43,5 @@ mod example_list_null_with_asserts;
 mod example_list_null;
 mod example_list_string_with_asserts;
 mod example_list_string;
+mod example_list_bool_with_asserts;
+mod example_list_bool;
