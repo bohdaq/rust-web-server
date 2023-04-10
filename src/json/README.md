@@ -21,11 +21,13 @@ Examples:
 - [Array of Objects](array/tests/example)
 - [Array of Objects with Nested Array](array/tests/example_multi_nested_object)
 - [Array of i128](array/tests/example_list_i128)
+- [Array of i64](array/tests/example_list_i64)
 - [Array of u128](array/tests/example_list_u128)
 - [Array of null](array/tests/example_list_null)
 - [Array of String](array/tests/example_list_string)
 - [Array of bool](array/tests/example_list_bool)
 - [Array of f64](array/tests/example_list_f64)
+- [Array of f32](array/tests/example_list_f32)
 
 Links:
 - [FAQ](FAQ.md)
