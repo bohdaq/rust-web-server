@@ -48,3 +48,4 @@ mod example_list_bool;
 mod example_list_f64_with_asserts;
 mod example_list_f64;
 mod example_list_f32_with_asserts;
+mod example_list_f32;
