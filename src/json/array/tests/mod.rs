@@ -51,3 +51,5 @@ mod example_list_f32_with_asserts;
 mod example_list_f32;
 mod example_list_i64_with_asserts;
 mod example_list_i64;
+mod example_list_i32_with_asserts;
+mod example_list_i32;
