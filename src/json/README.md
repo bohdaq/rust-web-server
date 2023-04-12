@@ -22,6 +22,7 @@ Examples:
 - [Array of Objects with Nested Array](array/tests/example_multi_nested_object)
 - [Array of i128](array/tests/example_list_i128)
 - [Array of i64](array/tests/example_list_i64)
+- [Array of i32](array/tests/example_list_i32)
 - [Array of u128](array/tests/example_list_u128)
 - [Array of null](array/tests/example_list_null)
 - [Array of String](array/tests/example_list_string)
