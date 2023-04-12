@@ -59,3 +59,5 @@ mod example_list_i8_with_asserts;
 mod example_list_i8;
 mod example_list_u64_with_asserts;
 mod example_list_u64;
+mod example_list_u32_with_asserts;
+mod example_list_u32;
