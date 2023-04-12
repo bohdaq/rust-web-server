@@ -24,6 +24,7 @@ Examples:
 - [Array of i64](array/tests/example_list_i64)
 - [Array of i32](array/tests/example_list_i32)
 - [Array of i16](array/tests/example_list_i16)
+- [Array of i8](array/tests/example_list_i8)
 - [Array of u128](array/tests/example_list_u128)
 - [Array of null](array/tests/example_list_null)
 - [Array of String](array/tests/example_list_string)
