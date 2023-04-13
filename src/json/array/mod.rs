@@ -9,7 +9,7 @@ mod tests;
 pub mod boolean;
 pub mod string;
 pub mod null;
-mod float;
+pub mod float;
 
 pub struct JSONArrayOfObjects<T> {
     _item: T, // added to eliminate compiler error
