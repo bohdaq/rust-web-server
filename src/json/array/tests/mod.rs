@@ -63,3 +63,5 @@ mod example_list_u32_with_asserts;
 mod example_list_u32;
 mod example_list_u16_with_asserts;
 mod example_list_u16;
+mod example_list_u8_with_asserts;
+mod example_list_u8;
