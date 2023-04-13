@@ -1,4 +1,4 @@
-use crate::json::array::{JSONArrayOfNulls};
+use crate::json::array::null::JSONArrayOfNulls;
 use crate::null::{Null, NULL};
 
 #[test]
