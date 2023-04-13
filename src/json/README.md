@@ -28,6 +28,7 @@ Examples:
 - [Array of u128](array/tests/example_list_u128)
 - [Array of u64](array/tests/example_list_u64)
 - [Array of u32](array/tests/example_list_u32)
+- [Array of u16](array/tests/example_list_u16)
 - [Array of null](array/tests/example_list_null)
 - [Array of String](array/tests/example_list_string)
 - [Array of bool](array/tests/example_list_bool)
