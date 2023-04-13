@@ -1,4 +1,4 @@
-use crate::json::array::{JSONArrayOfBooleans};
+use crate::json::array::boolean::JSONArrayOfBooleans;
 
 #[test]
 fn json_to_vector() {
