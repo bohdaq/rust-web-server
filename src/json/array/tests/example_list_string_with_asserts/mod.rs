@@ -1,4 +1,4 @@
-use crate::json::array::{JSONArrayOfStrings};
+use crate::json::array::string::JSONArrayOfStrings;
 
 #[test]
 fn json_to_vector() {
