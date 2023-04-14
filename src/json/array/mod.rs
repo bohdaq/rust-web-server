@@ -4,6 +4,7 @@ use crate::symbol::SYMBOL;
 
 #[cfg(test)]
 mod tests;
+
 pub mod boolean;
 pub mod string;
 pub mod null;
