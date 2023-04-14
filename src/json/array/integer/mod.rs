@@ -2,6 +2,27 @@ use std::num::ParseIntError;
 use crate::json::array::RawUnprocessedJSONArray;
 use crate::symbol::SYMBOL;
 
+#[cfg(test)]
+mod example_list_i128;
+#[cfg(test)]
+mod example_list_i128_with_asserts;
+#[cfg(test)]
+mod example_list_i64_with_asserts;
+#[cfg(test)]
+mod example_list_i64;
+#[cfg(test)]
+mod example_list_i32_with_asserts;
+#[cfg(test)]
+mod example_list_i32;
+#[cfg(test)]
+mod example_list_i16_with_asserts;
+#[cfg(test)]
+mod example_list_i16;
+#[cfg(test)]
+mod example_list_i8_with_asserts;
+#[cfg(test)]
+mod example_list_i8;
+
 pub struct JSONArrayOfIntegers;
 impl JSONArrayOfIntegers {
     pub fn parse_as_list_i128(json : String) -> Result<Vec<i128>, String> {
