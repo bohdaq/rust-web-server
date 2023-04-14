@@ -232,6 +232,10 @@ impl JSON {
                         };
 
                         let boxed_parse = String::from_utf8(buf);
+                        if boxed_parse.is_err() {
+                            let message = boxed_parse.err().unwrap().to_string();
+                            return Err(message);
+                        }
                         let buffer_before_comma = boxed_parse.unwrap();
                         let buffer_filtered_control_chars = StringExt::filter_ascii_control_characters(buffer_before_comma.as_str());
 
@@ -286,6 +290,10 @@ impl JSON {
                         };
 
                         let boxed_parse = String::from_utf8(buf);
+                        if boxed_parse.is_err() {
+                            let message = boxed_parse.err().unwrap().to_string();
+                            return Err(message)
+                        }
                         let buffer_before_comma = boxed_parse.unwrap();
                         let buffer_filtered_control_chars = StringExt::filter_ascii_control_characters(buffer_before_comma.as_str());
 
@@ -340,6 +348,10 @@ impl JSON {
                         };
 
                         let boxed_parse = String::from_utf8(buf);
+                        if boxed_parse.is_err() {
+                            let message = boxed_parse.err().unwrap().to_string();
+                            return Err(message);
+                        }
                         let buffer_before_comma = boxed_parse.unwrap();
                         let buffer_filtered_control_chars = StringExt::filter_ascii_control_characters(buffer_before_comma.as_str());
 
@@ -394,6 +406,10 @@ impl JSON {
                         };
 
                         let boxed_parse = String::from_utf8(buf);
+                        if boxed_parse.is_err() {
+                            let message = boxed_parse.err().unwrap().to_string();
+                            return Err(message);
+                        }
                         let buffer_before_comma = boxed_parse.unwrap();
                         let buffer_filtered_control_chars = StringExt::filter_ascii_control_characters(buffer_before_comma.as_str());
 
@@ -466,6 +482,10 @@ impl JSON {
                         };
 
                         let boxed_parse = String::from_utf8(buf);
+                        if boxed_parse.is_err() {
+                            let message = boxed_parse.err().unwrap().to_string();
+                            return Err(message);
+                        }
                         let buffer_before_comma = boxed_parse.unwrap();
                         let buffer_filtered_control_chars = StringExt::filter_ascii_control_characters(buffer_before_comma.as_str());
 
@@ -545,6 +565,10 @@ impl JSON {
                         };
 
                         let boxed_parse = String::from_utf8(buf);
+                        if boxed_parse.is_err() {
+                            let message = boxed_parse.err().unwrap().to_string();
+                            return Err(message);
+                        }
                         let buffer_before_comma = boxed_parse.unwrap();
                         let buffer_filtered_control_chars = StringExt::filter_ascii_control_characters(buffer_before_comma.as_str());
 
@@ -573,7 +597,11 @@ impl JSON {
                             let byte = 0;
                             let mut char_buffer = vec![byte];
                             let length = char_buffer.len();
-                            cursor.read_exact(&mut char_buffer).unwrap();
+                            let boxed_read = cursor.read_exact(&mut char_buffer);
+                            if boxed_read.is_err() {
+                                let message = boxed_read.err().unwrap().to_string();
+                                return Err(message);
+                            }
                             bytes_read = bytes_read + length as i128;
                             let boxed_parse = String::from_utf8(char_buffer);
                             if boxed_parse.is_err() {
@@ -665,7 +693,12 @@ impl JSON {
             }
 
 
-            let (property, value) = JSONProperty::parse(&key_value_pair).unwrap();
+            let boxed_parse = JSONProperty::parse(&key_value_pair);
+            if boxed_parse.is_err() {
+                let message = boxed_parse.err().unwrap().to_string();
+                return Err(message);
+            }
+            let (property, value) = boxed_parse.unwrap();
 
 
             properties.push((property, value));
