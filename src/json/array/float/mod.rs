@@ -1,6 +1,15 @@
 use crate::json::array::RawUnprocessedJSONArray;
 use crate::symbol::SYMBOL;
 
+#[cfg(test)]
+mod example_list_f64_with_asserts;
+#[cfg(test)]
+mod example_list_f64;
+#[cfg(test)]
+mod example_list_f32_with_asserts;
+#[cfg(test)]
+mod example_list_f32;
+
 pub struct JSONArrayOfFloats;
 impl JSONArrayOfFloats {
     pub fn parse_as_list_f64(json : String) -> Result<Vec<f64>, String> {
