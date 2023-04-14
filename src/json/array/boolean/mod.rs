@@ -1,6 +1,11 @@
 use crate::json::array::RawUnprocessedJSONArray;
 use crate::symbol::SYMBOL;
 
+#[cfg(test)]
+mod example_list_bool_with_asserts;
+#[cfg(test)]
+mod example_list_bool;
+
 pub struct JSONArrayOfBooleans;
 impl JSONArrayOfBooleans {
     pub fn parse_as_list_bool(json : String) -> Result<Vec<bool>, String> {
