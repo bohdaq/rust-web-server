@@ -2,6 +2,11 @@ use crate::json::array::RawUnprocessedJSONArray;
 use crate::null::Null;
 use crate::symbol::SYMBOL;
 
+#[cfg(test)]
+mod example_list_null_with_asserts;
+#[cfg(test)]
+mod example_list_null;
+
 // hard to think about real use case
 pub struct JSONArrayOfNulls;
 impl JSONArrayOfNulls {
