@@ -35,5 +35,3 @@ mod example;
 mod example_multi_nested_object;
 mod example_multi_nested_object_with_asserts;
 mod example_with_asserts;
-mod example_list_string_with_asserts;
-mod example_list_string;

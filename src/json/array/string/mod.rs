@@ -1,6 +1,11 @@
 use crate::json::array::RawUnprocessedJSONArray;
 use crate::symbol::SYMBOL;
 
+#[cfg(test)]
+mod example_list_string_with_asserts;
+#[cfg(test)]
+mod example_list_string;
+
 pub struct JSONArrayOfStrings;
 impl JSONArrayOfStrings {
     pub fn parse_as_list_string(json : String) -> Result<Vec<String>, String> {
