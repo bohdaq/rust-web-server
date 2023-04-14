@@ -2,6 +2,11 @@ use crate::json::array::{New, RawUnprocessedJSONArray};
 use crate::json::object::{FromJSON, ToJSON};
 use crate::symbol::SYMBOL;
 
+#[cfg(test)]
+mod example_multi_nested_object;
+#[cfg(test)]
+mod example_multi_nested_object_with_asserts;
+
 pub struct JSONArrayOfObjects<T> {
     _item: T, // added to eliminate compiler error
 }

@@ -3,8 +3,8 @@ mod example_object;
 
 use file_ext::FileExt;
 use crate::json::array::{New};
-use crate::json::array::tests::example_multi_nested_object_with_asserts::example_nested_object::ExampleNestedObject;
-use crate::json::array::tests::example_multi_nested_object_with_asserts::example_object::ExampleObject;
+use crate::json::array::object::example_multi_nested_object_with_asserts::example_nested_object::ExampleNestedObject;
+use crate::json::array::object::example_multi_nested_object_with_asserts::example_object::ExampleObject;
 
 #[test]
 fn vector_to_json() {
@@ -57,7 +57,7 @@ fn vector_to_json() {
 
     // expected json, in this example it is done via reading a file
     // take a look at `list.example_object.to.formatted.json`
-    let path = FileExt::build_path(&["src", "json", "array", "tests", "example_multi_nested_object", "list.example_object.to.json"]);
+    let path = FileExt::build_path(&["src", "json", "array", "object", "example_multi_nested_object_with_asserts", "list.example_object.to.json"]);
     let pwd = FileExt::working_directory().unwrap();
 
     let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
@@ -72,7 +72,7 @@ fn vector_to_json() {
 #[test]
 fn json_to_vector() {
     // 1. retrieve json string, in this example it is done via reading a file
-    let path = FileExt::build_path(&["src", "json", "array", "tests", "example_multi_nested_object", "list.example_object.from.formatted.json"]);
+    let path = FileExt::build_path(&["src", "json", "array", "object", "example_multi_nested_object_with_asserts", "list.example_object.from.formatted.json"]);
     let pwd = FileExt::working_directory().unwrap();
 
     let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
