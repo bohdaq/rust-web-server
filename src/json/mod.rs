@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use crate::null::Null;
 
 #[cfg(test)]
@@ -51,6 +52,20 @@ impl JSONValue {
         }
     }
 }
+
+impl Display for JSONValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.f64.is_some() {
+            let f64 = self.f64.unwrap();
+            let formatted : String = format!("{:.13}", f64);
+            return f.write_str(formatted.as_str());
+        }
+
+        f.write_str("Something Went Wrong")
+
+    }
+}
+
 
 
 
