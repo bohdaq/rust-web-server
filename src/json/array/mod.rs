@@ -78,7 +78,12 @@ impl RawUnprocessedJSONArray {
             let byte = 0;
             let mut char_buffer = vec![byte];
             let length = char_buffer.len();
-            cursor.read_exact(&mut char_buffer).unwrap();
+            let boxed_read = cursor.read_exact(&mut char_buffer);
+            if boxed_read.is_err() {
+                let message = boxed_read.err().unwrap().to_string();
+                return Err(message);
+            }
+            boxed_read.unwrap();
             bytes_read = bytes_read + length as i128;
             let mut char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
@@ -96,7 +101,12 @@ impl RawUnprocessedJSONArray {
                     while not_end_of_string_property_value {
                         let byte = 0;
                         char_buffer = vec![byte];
-                        cursor.read_exact(&mut char_buffer).unwrap();
+                        let boxed_read = cursor.read_exact(&mut char_buffer);
+                        if boxed_read.is_err() {
+                            let message = boxed_read.err().unwrap().to_string();
+                            return Err(message);
+                        }
+                        boxed_read.unwrap();
                         let length = char_buffer.len();
                         bytes_read = bytes_read + length as i128;
                         let _char = String::from_utf8(char_buffer).unwrap();
@@ -114,7 +124,12 @@ impl RawUnprocessedJSONArray {
                             let byte = 0;
                             let mut char_buffer = vec![byte];
                             let length = char_buffer.len();
-                            cursor.read_exact(&mut char_buffer).unwrap();
+                            let boxed_read = cursor.read_exact(&mut char_buffer);
+                            if boxed_read.is_err() {
+                                let message = boxed_read.err().unwrap().to_string();
+                                return Err(message);
+                            }
+                            boxed_read.unwrap();
                             bytes_read = bytes_read + length as i128;
                             char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
@@ -140,7 +155,12 @@ impl RawUnprocessedJSONArray {
                     let byte = 0;
                     let mut char_buffer = vec![byte, byte, byte];
                     let length = char_buffer.len();
-                    cursor.read_exact(&mut char_buffer).unwrap();
+                    let boxed_read = cursor.read_exact(&mut char_buffer);
+                    if boxed_read.is_err() {
+                        let message = boxed_read.err().unwrap().to_string();
+                        return Err(message);
+                    }
+                    boxed_read.unwrap();
                     bytes_read = bytes_read + length as i128;
                     let remaining_bool = String::from_utf8(char_buffer).unwrap();
                     if remaining_bool != "ull" {
@@ -158,7 +178,12 @@ impl RawUnprocessedJSONArray {
                     let byte = 0;
                     let mut char_buffer = vec![byte, byte, byte];
                     let length = char_buffer.len();
-                    cursor.read_exact(&mut char_buffer).unwrap();
+                    let boxed_read = cursor.read_exact(&mut char_buffer);
+                    if boxed_read.is_err() {
+                        let message = boxed_read.err().unwrap().to_string();
+                        return Err(message);
+                    }
+                    boxed_read.unwrap();
                     bytes_read = bytes_read + length as i128;
                     let remaining_bool = String::from_utf8(char_buffer).unwrap();
                     if remaining_bool != "rue" {
@@ -176,7 +201,12 @@ impl RawUnprocessedJSONArray {
                     let byte = 0;
                     let mut char_buffer = vec![byte, byte, byte, byte];
                     let length = char_buffer.len();
-                    cursor.read_exact(&mut char_buffer).unwrap();
+                    let boxed_read = cursor.read_exact(&mut char_buffer);
+                    if boxed_read.is_err() {
+                        let message = boxed_read.err().unwrap().to_string();
+                        return Err(message);
+                    }
+                    boxed_read.unwrap();
                     bytes_read = bytes_read + length as i128;
                     let remaining_bool = String::from_utf8(char_buffer).unwrap();
                     if remaining_bool != "alse" {
@@ -200,7 +230,12 @@ impl RawUnprocessedJSONArray {
                         let byte = 0;
                         let mut char_buffer = vec![byte];
                         let length = char_buffer.len();
-                        cursor.read_exact(&mut char_buffer).unwrap();
+                        let boxed_read = cursor.read_exact(&mut char_buffer);
+                        if boxed_read.is_err() {
+                            let message = boxed_read.err().unwrap().to_string();
+                            return Err(message);
+                        }
+                        boxed_read.unwrap();
                         bytes_read = bytes_read + length as i128;
                         let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
@@ -238,7 +273,12 @@ impl RawUnprocessedJSONArray {
                         let byte = 0;
                         let mut char_buffer = vec![byte];
                         let length = char_buffer.len();
-                        cursor.read_exact(&mut char_buffer).unwrap();
+                        let boxed_read = cursor.read_exact(&mut char_buffer);
+                        if boxed_read.is_err() {
+                            let message = boxed_read.err().unwrap().to_string();
+                            return Err(message);
+                        }
+                        boxed_read.unwrap();
                         bytes_read = bytes_read + length as i128;
                         let char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
@@ -295,7 +335,12 @@ impl RawUnprocessedJSONArray {
                         let byte = 0;
                         let mut char_buffer = vec![byte];
                         let length = char_buffer.len();
-                        cursor.read_exact(&mut char_buffer).unwrap();
+                        let boxed_read = cursor.read_exact(&mut char_buffer);
+                        if boxed_read.is_err() {
+                            let message = boxed_read.err().unwrap().to_string();
+                            return Err(message);
+                        }
+                        boxed_read.unwrap();
                         bytes_read = bytes_read + length as i128;
                         char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
@@ -337,7 +382,12 @@ impl RawUnprocessedJSONArray {
                                 let byte = 0;
                                 let mut char_buffer = vec![byte];
                                 let length = char_buffer.len();
-                                cursor.read_exact(&mut char_buffer).unwrap();
+                                let boxed_read = cursor.read_exact(&mut char_buffer);
+                                if boxed_read.is_err() {
+                                    let message = boxed_read.err().unwrap().to_string();
+                                    return Err(message);
+                                }
+                                boxed_read.unwrap();
                                 bytes_read = bytes_read + length as i128;
                                 char = String::from_utf8(char_buffer).unwrap().chars().last().unwrap();
 
