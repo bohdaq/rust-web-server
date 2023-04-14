@@ -22,6 +22,26 @@ mod example_list_i16;
 mod example_list_i8_with_asserts;
 #[cfg(test)]
 mod example_list_i8;
+#[cfg(test)]
+mod example_list_u128_with_asserts;
+#[cfg(test)]
+mod example_list_u128;
+#[cfg(test)]
+mod example_list_u64_with_asserts;
+#[cfg(test)]
+mod example_list_u64;
+#[cfg(test)]
+mod example_list_u32_with_asserts;
+#[cfg(test)]
+mod example_list_u32;
+#[cfg(test)]
+mod example_list_u16_with_asserts;
+#[cfg(test)]
+mod example_list_u16;
+#[cfg(test)]
+mod example_list_u8_with_asserts;
+#[cfg(test)]
+mod example_list_u8;
 
 pub struct JSONArrayOfIntegers;
 impl JSONArrayOfIntegers {
