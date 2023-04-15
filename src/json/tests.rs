@@ -93,3 +93,27 @@ fn to_string_not_set() {
     let to_string = json_value.to_string();
     assert_eq!("Something Went Wrong. There is no value for any type.", to_string);
 }
+
+#[test]
+fn to_string_f64_precision() {
+    let mut json_value = JSONValue::new();
+    json_value.f64 = Some(-11.1);
+    let to_string : String = json_value.float_number_with_precision(2);
+    assert_eq!("-11.10", to_string);
+}
+
+#[test]
+fn to_string_f64_precision_2() {
+    let mut json_value = JSONValue::new();
+    json_value.f64 = Some(1.100056);
+    let to_string : String = json_value.float_number_with_precision(5);
+    assert_eq!("1.10006", to_string);
+}
+
+#[test]
+fn to_string_f64_precision_3() {
+    let mut json_value = JSONValue::new();
+    json_value.f64 = Some(0.0);
+    let to_string : String = json_value.float_number_with_precision(5);
+    assert_eq!("0.00000", to_string);
+}

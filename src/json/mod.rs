@@ -51,6 +51,12 @@ impl JSONValue {
             null: None,
         }
     }
+
+    pub fn float_number_with_precision(&self, number_of_digits: u8) -> String {
+        let number = self.f64.as_ref().unwrap();
+        let formatted = format!("{0:.1$}", number, number_of_digits as usize);
+        formatted.to_string()
+    }
 }
 
 impl Display for JSONValue {
