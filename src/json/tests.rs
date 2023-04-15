@@ -16,7 +16,7 @@ fn json_types() {
 }
 
 #[test]
-fn to_string() {
+fn to_string_f64() {
     let mut json_value = JSONValue::new();
     json_value.f64 = Some(49.2569999999996);
     let to_string : String = json_value.to_string();
@@ -24,7 +24,7 @@ fn to_string() {
 }
 
 #[test]
-fn to_string_2() {
+fn to_string_f64_2() {
     let mut json_value = JSONValue::new();
     json_value.f64 = Some(0.0);
     let to_string : String = json_value.to_string();
@@ -32,9 +32,17 @@ fn to_string_2() {
 }
 
 #[test]
-fn to_string_3() {
+fn to_string_f64_3() {
     let mut json_value = JSONValue::new();
     json_value.f64 = Some(-11.1);
     let to_string : String = json_value.to_string();
     assert_eq!("-11.1000000000000", to_string);
+}
+
+#[test]
+fn to_string_int() {
+    let mut json_value = JSONValue::new();
+    json_value.i128 = Some(-11);
+    let to_string : String = json_value.to_string();
+    assert_eq!("-11", to_string);
 }

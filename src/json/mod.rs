@@ -61,6 +61,11 @@ impl Display for JSONValue {
             return f.write_str(formatted.as_str());
         }
 
+        if self.i128.is_some() {
+            let formatted = self.i128.unwrap().to_string();
+            return f.write_str(formatted.as_str());
+        }
+
         f.write_str("Something Went Wrong")
 
     }
