@@ -54,3 +54,11 @@ fn to_string_string() {
     let to_string = json_value.to_string();
     assert_eq!("text", to_string);
 }
+
+#[test]
+fn to_string_array() {
+    let mut json_value = JSONValue::new();
+    json_value.array = Some("[1, 2]".to_string());
+    let to_string = json_value.to_string();
+    assert_eq!("[1, 2]", to_string);
+}
