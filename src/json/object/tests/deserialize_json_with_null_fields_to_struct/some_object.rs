@@ -1,6 +1,6 @@
-use crate::json::{JSON_TYPE, JSONValue};
+use crate::json::{JSON_TYPE};
 use crate::json::object::{FromJSON, JSON, ToJSON};
-use crate::json::property::JSONProperty;
+use crate::json::property::{JSONProperty, JSONValue};
 
 pub struct SomeObject {
     pub prop_a: String,

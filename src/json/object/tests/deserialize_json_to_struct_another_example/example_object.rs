@@ -1,9 +1,9 @@
-use crate::json::{JSON_TYPE, JSONValue};
+use crate::json::{JSON_TYPE};
 use crate::json::array::{New};
 use crate::json::array::object::JSONArrayOfObjects;
 use crate::json::object::{FromJSON, JSON, ToJSON};
 use crate::json::object::tests::deserialize_json_to_struct_another_example::example_nested_object::ExampleNestedObject;
-use crate::json::property::JSONProperty;
+use crate::json::property::{JSONProperty, JSONValue};
 
 pub struct ExampleObject {
     pub prop_a: String,

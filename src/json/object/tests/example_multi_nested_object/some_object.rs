@@ -1,8 +1,8 @@
-use crate::json::{JSON_TYPE, JSONValue};
+use crate::json::{JSON_TYPE};
 use crate::json::array::New;
 use crate::json::object::{FromJSON, JSON, ToJSON};
 use crate::json::object::tests::example_multi_nested_object::nested_object::NestedObject;
-use crate::json::property::JSONProperty;
+use crate::json::property::{JSONProperty, JSONValue};
 
 // define your struct
 pub struct SomeObject {

@@ -1,8 +1,7 @@
 use std::io;
 use std::io::{BufRead, Read};
 use crate::ext::string_ext::StringExt;
-use crate::json::{JSONValue};
-use crate::json::property::JSONProperty;
+use crate::json::property::{JSONProperty, JSONValue};
 use crate::symbol::SYMBOL;
 
 #[cfg(test)]

@@ -1,4 +1,5 @@
-use crate::json::{JSON_TYPE, JSONValue};
+use crate::json::{JSON_TYPE};
+use std::fmt::{Display, Formatter};
 use crate::null::Null;
 use crate::symbol::SYMBOL;
 
@@ -8,6 +9,78 @@ mod tests;
 pub struct JSONProperty {
     pub property_name: String,
     pub property_type: String,
+}
+
+pub struct JSONValue {
+    pub f64: Option<f64>,
+    pub i128: Option<i128>,
+    pub string: Option<String>,
+    pub object: Option<String>,
+    pub array: Option<String>,
+    pub bool: Option<bool>,
+    pub null: Option<Null>,
+}
+
+impl JSONValue {
+    pub fn new() -> JSONValue {
+        JSONValue {
+            f64: None,
+            i128: None,
+            string: None,
+            object: None,
+            array: None,
+            bool: None,
+            null: None,
+        }
+    }
+
+    pub fn float_number_with_precision(&self, number_of_digits: u8) -> String {
+        let number = self.f64.as_ref().unwrap();
+        let formatted = format!("{0:.1$}", number, number_of_digits as usize);
+        formatted.to_string()
+    }
+}
+
+impl Display for JSONValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.f64.is_some() {
+            let f64 = self.f64.unwrap();
+            let formatted : String = format!("{:.13}", f64);
+            return f.write_str(formatted.as_str());
+        }
+
+        if self.i128.is_some() {
+            let formatted = self.i128.unwrap().to_string();
+            return f.write_str(formatted.as_str());
+        }
+
+        if self.string.is_some() {
+            let formatted = self.string.as_ref().unwrap();
+            return f.write_str(formatted.as_str());
+        }
+
+        if self.array.is_some() {
+            let formatted = self.array.as_ref().unwrap();
+            return f.write_str(formatted.as_str());
+        }
+
+        if self.null.is_some() {
+            return f.write_str("null");
+        }
+
+        if self.object.is_some() {
+            let formatted = self.object.as_ref().unwrap();
+            return f.write_str(formatted.as_str());
+        }
+
+        if self.bool.is_some() {
+            let formatted = self.bool.as_ref().unwrap();
+            return f.write_str(formatted.to_string().as_str());
+        }
+
+        f.write_str("Something Went Wrong. There is no value for any type.")
+
+    }
 }
 
 impl JSONProperty {
