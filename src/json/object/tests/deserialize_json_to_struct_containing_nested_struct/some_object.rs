@@ -1,4 +1,5 @@
 use crate::json::{JSON_TYPE};
+use crate::json::array::New;
 use crate::json::object::{FromJSON, JSON, ToJSON};
 use crate::json::object::tests::deserialize_json_to_struct_containing_nested_struct::nested_object::NestedObject;
 use crate::json::property::{JSONProperty, JSONValue};

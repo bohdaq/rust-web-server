@@ -1,5 +1,6 @@
 use crate::json::{JSON_TYPE};
 use std::fmt::{Display, Formatter};
+use crate::json::array::New;
 use crate::null::Null;
 use crate::symbol::SYMBOL;
 
@@ -21,8 +22,8 @@ pub struct JSONValue {
     pub null: Option<Null>,
 }
 
-impl JSONValue {
-    pub fn new() -> JSONValue {
+impl New for JSONValue {
+    fn new() -> JSONValue {
         JSONValue {
             f64: None,
             i128: None,
@@ -33,7 +34,9 @@ impl JSONValue {
             null: None,
         }
     }
+}
 
+impl JSONValue {
     pub fn float_number_with_precision(&self, number_of_digits: u8) -> String {
         let number = self.f64.as_ref().unwrap();
         let formatted = format!("{0:.1$}", number, number_of_digits as usize);
