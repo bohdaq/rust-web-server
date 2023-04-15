@@ -1,4 +1,4 @@
-[Read Me](README.md) > JSON > Property
+[Read Me](README.md) > [JSON](https://github.com/bohdaq/rust-web-server/tree/main/src/json) > Property
 
 # JSON Property
 
