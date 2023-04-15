@@ -2,7 +2,7 @@
 
 # JSON Array
 
-JSON array module designed to parse raw json array (like `[ { "somekey": "text", "anotherkey": 1234 } ]`) to struct instance.
+JSON array module designed to parse raw json array (like `[ { "somekey": "text", "anotherkey": 1234 } ]`) to list of struct instances.
 
 First you need to design your [struct](https://github.com/bohdaq/rust-web-server/blob/main/src/json/object/tests/example_multi_nested_object/some_object.rs#L8) by specifying fields. Then you need to implement [New](https://github.com/bohdaq/rust-web-server/blob/main/src/json/array/object/example_multi_nested_object/example_object.rs#L18), [FromJSON](https://github.com/bohdaq/rust-web-server/blob/main/src/json/array/object/example_multi_nested_object/example_object.rs#L32) and [ToJSON](https://github.com/bohdaq/rust-web-server/blob/main/src/json/array/object/example_multi_nested_object/example_object.rs#L118) traits for the struct.
 
