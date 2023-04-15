@@ -70,3 +70,11 @@ fn to_string_null() {
     let to_string = json_value.to_string();
     assert_eq!("null", to_string);
 }
+
+#[test]
+fn to_string_object() {
+    let mut json_value = JSONValue::new();
+    json_value.object = Some("{ a: 1 }".to_string());
+    let to_string = json_value.to_string();
+    assert_eq!("{ a: 1 }", to_string);
+}

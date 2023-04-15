@@ -80,6 +80,11 @@ impl Display for JSONValue {
             return f.write_str("null");
         }
 
+        if self.object.is_some() {
+            let formatted = self.object.as_ref().unwrap();
+            return f.write_str(formatted.as_str());
+        }
+
         f.write_str("Something Went Wrong")
 
     }
