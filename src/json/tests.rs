@@ -78,3 +78,18 @@ fn to_string_object() {
     let to_string = json_value.to_string();
     assert_eq!("{ a: 1 }", to_string);
 }
+
+#[test]
+fn to_string_boolean() {
+    let mut json_value = JSONValue::new();
+    json_value.bool = Some(true);
+    let to_string = json_value.to_string();
+    assert_eq!("true", to_string);
+}
+
+#[test]
+fn to_string_not_set() {
+    let json_value = JSONValue::new();
+    let to_string = json_value.to_string();
+    assert_eq!("Something Went Wrong. There is no value for any type.", to_string);
+}

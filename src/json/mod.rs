@@ -85,7 +85,12 @@ impl Display for JSONValue {
             return f.write_str(formatted.as_str());
         }
 
-        f.write_str("Something Went Wrong")
+        if self.bool.is_some() {
+            let formatted = self.bool.as_ref().unwrap();
+            return f.write_str(formatted.to_string().as_str());
+        }
+
+        f.write_str("Something Went Wrong. There is no value for any type.")
 
     }
 }
