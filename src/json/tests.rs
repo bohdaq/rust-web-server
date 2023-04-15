@@ -46,3 +46,11 @@ fn to_string_int() {
     let to_string : String = json_value.to_string();
     assert_eq!("-11", to_string);
 }
+
+#[test]
+fn to_string_string() {
+    let mut json_value = JSONValue::new();
+    json_value.string = Some("text".to_string());
+    let to_string = json_value.to_string();
+    assert_eq!("text", to_string);
+}
