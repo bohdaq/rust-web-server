@@ -2,7 +2,7 @@ mod example_object;
 mod example_nested_object;
 
 use file_ext::FileExt;
-use crate::json::array::New;
+use crate::core::New;
 use crate::json::object::FromJSON;
 use crate::json::object::tests::deserialize_json_with_extra_new_lines_to_struct::example_object::ExampleObject;
 

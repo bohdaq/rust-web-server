@@ -12,14 +12,6 @@ pub mod float;
 pub mod integer;
 pub mod object;
 
-
-
-pub trait New {
-    fn new() -> Self;
-}
-
-
-
 pub struct RawUnprocessedJSONArray;
 impl RawUnprocessedJSONArray {
     pub fn split_into_vector_of_strings(_json_string: String) -> Result<Vec<String>, String> {

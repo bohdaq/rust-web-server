@@ -1,6 +1,6 @@
 use crate::json::{JSON_TYPE};
 use std::fmt::{Display, Formatter};
-use crate::json::array::New;
+use crate::core::New;
 use crate::null::Null;
 use crate::symbol::SYMBOL;
 

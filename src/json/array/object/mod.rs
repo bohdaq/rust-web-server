@@ -1,4 +1,5 @@
-use crate::json::array::{New, RawUnprocessedJSONArray};
+use crate::core::New;
+use crate::json::array::RawUnprocessedJSONArray;
 use crate::json::object::{FromJSON, ToJSON};
 use crate::symbol::SYMBOL;
 

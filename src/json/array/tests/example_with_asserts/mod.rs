@@ -2,7 +2,7 @@ mod example_object;
 mod example_nested_object;
 
 use file_ext::FileExt;
-use crate::json::array::{New};
+use crate::core::New;
 use crate::json::array::tests::example_with_asserts::example_object::ExampleObject;
 
 #[test]

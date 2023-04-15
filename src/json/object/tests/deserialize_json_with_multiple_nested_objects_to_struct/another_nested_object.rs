@@ -1,5 +1,5 @@
 use crate::json::{JSON_TYPE};
-use crate::json::array::New;
+use crate::core::New;
 use crate::json::object::{FromJSON, JSON, ToJSON};
 use crate::json::property::{JSONProperty, JSONValue};
 

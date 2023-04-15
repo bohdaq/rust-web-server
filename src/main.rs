@@ -17,8 +17,8 @@ pub mod log;
 pub mod body;
 pub mod json;
 pub mod null;
+pub mod core;
 
-extern crate core;
 
 use crate::entry_point::{bootstrap, get_ip_port_thread_count, set_default_values};
 use crate::server::Server;

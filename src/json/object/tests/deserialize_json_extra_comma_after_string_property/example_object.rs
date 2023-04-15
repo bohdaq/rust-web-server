@@ -1,5 +1,5 @@
 use crate::json::{JSON_TYPE};
-use crate::json::array::New;
+use crate::core::New;
 use crate::json::array::object::JSONArrayOfObjects;
 use crate::json::object::{FromJSON, JSON, ToJSON};
 use crate::json::object::tests::deserialize_json_extra_comma_after_string_property::example_nested_object::ExampleNestedObject;
