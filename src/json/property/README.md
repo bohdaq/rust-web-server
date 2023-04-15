@@ -2,7 +2,7 @@
 
 # JSON Property
 
-JSON property designed to parse raw json property (like `somekey: "text"`) to JSONProperty and JSONValue instances.
+JSON property designed to parse raw json property (like `"somekey": "text"`) to JSONProperty and JSONValue instances.
 
 JSONProperty contains two fields `property_name` and `property_type`.
 
