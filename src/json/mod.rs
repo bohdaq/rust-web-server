@@ -76,6 +76,10 @@ impl Display for JSONValue {
             return f.write_str(formatted.as_str());
         }
 
+        if self.null.is_some() {
+            return f.write_str("null");
+        }
+
         f.write_str("Something Went Wrong")
 
     }

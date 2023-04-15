@@ -1,5 +1,5 @@
 use crate::json::{JSON_TYPE, JSONValue};
-use crate::null::Null;
+use crate::null::{Null, NULL};
 
 #[test]
 fn json_types() {
@@ -61,4 +61,12 @@ fn to_string_array() {
     json_value.array = Some("[1, 2]".to_string());
     let to_string = json_value.to_string();
     assert_eq!("[1, 2]", to_string);
+}
+
+#[test]
+fn to_string_null() {
+    let mut json_value = JSONValue::new();
+    json_value.null = Some(NULL.clone());
+    let to_string = json_value.to_string();
+    assert_eq!("null", to_string);
 }
