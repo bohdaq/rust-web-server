@@ -66,8 +66,6 @@ fn parse_multipart_request_body() {
     let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
     assert_eq!(actual_boundary, boundary);
 
-    FileExt::create_file("out.log").unwrap();
-    FileExt::write_file("out.log", raw_payload.len().to_string().as_bytes()).unwrap();
     let part_list = FormMultipartData::parse(raw_payload.as_bytes(), actual_boundary).unwrap();
     let number_of_parts = 3;
     assert_eq!(part_list.len(), number_of_parts);
@@ -133,8 +131,6 @@ fn parse_multipart_request_body_image() {
     let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
     assert_eq!(actual_boundary, boundary);
 
-    FileExt::create_file("out.log").unwrap();
-    FileExt::write_file("out.log", raw_payload_file.len().to_string().as_bytes()).unwrap();
     let part_list = FormMultipartData::parse(&raw_payload, actual_boundary).unwrap();
     let number_of_parts = 1;
     assert_eq!(part_list.len(), number_of_parts);
@@ -183,8 +179,6 @@ fn parse_multipart_request_body_audio() {
     let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
     assert_eq!(actual_boundary, boundary);
 
-    FileExt::create_file("out.log").unwrap();
-    FileExt::write_file("out.log", raw_payload_file.len().to_string().as_bytes()).unwrap();
     let part_list = FormMultipartData::parse(&raw_payload, actual_boundary).unwrap();
     let number_of_parts = 1;
     assert_eq!(part_list.len(), number_of_parts);
@@ -233,8 +227,6 @@ fn parse_multipart_request_body_video() {
     let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
     assert_eq!(actual_boundary, boundary);
 
-    FileExt::create_file("out.log").unwrap();
-    FileExt::write_file("out.log", raw_payload_file.len().to_string().as_bytes()).unwrap();
     let part_list = FormMultipartData::parse(&raw_payload, actual_boundary).unwrap();
     let number_of_parts = 1;
     assert_eq!(part_list.len(), number_of_parts);
@@ -288,8 +280,6 @@ fn parse_multipart_request_body_video_no_content_disposition() {
     let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
     assert_eq!(actual_boundary, boundary);
 
-    FileExt::create_file("out.log").unwrap();
-    FileExt::write_file("out.log", raw_payload_file.len().to_string().as_bytes()).unwrap();
     let actual_error = FormMultipartData::parse(&raw_payload, actual_boundary).err().unwrap();
     let expected_error = "One of the body parts does not have any header specified. At least Content-Disposition is required";
     assert_eq!(actual_error, expected_error);
@@ -324,8 +314,6 @@ fn parse_multipart_request_body_video_zero_length_payload() {
     let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
     assert_eq!(actual_boundary, boundary);
 
-    FileExt::create_file("out.log").unwrap();
-    FileExt::write_file("out.log", raw_payload_file.len().to_string().as_bytes()).unwrap();
     let part_list = FormMultipartData::parse(&raw_payload, actual_boundary).unwrap();
     let number_of_parts = 1;
     assert_eq!(part_list.len(), number_of_parts);
@@ -366,8 +354,6 @@ fn parse_multipart_request_body_video_no_header_body_delimiter() {
     let actual_boundary = FormMultipartData::extract_boundary(&content_type).unwrap();
     assert_eq!(actual_boundary, boundary);
 
-    FileExt::create_file("out.log").unwrap();
-    FileExt::write_file("out.log", raw_payload_file.len().to_string().as_bytes()).unwrap();
     let actual_error_message = FormMultipartData::parse(&raw_payload, actual_boundary).err().unwrap();
     assert_eq!(actual_error_message, "There is at least one missing body part in the multipart/form-data request");
 
