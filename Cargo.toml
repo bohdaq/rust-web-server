@@ -6,7 +6,7 @@ repository = "https://github.com/bohdaq/rust-web-server"
 description = "rust-web-server (rws) is a static content web-server written in Rust"
 edition = "2021"
 license = "MIT OR Apache-2.0 OR ISC OR LGPL-3.0-or-later OR CC-BY-4.0"
-rust-version = "1.66"
+rust-version = "1.68"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
