@@ -106,6 +106,11 @@ impl Request {
         method_list
     }
 
+    // same as _generate_request, not renamed original for backward compatability
+    pub fn generate_request(request: Request) -> String {
+        Request::_generate_request(request)
+    }
+
     pub fn _generate_request(request: Request) -> String {
         let status = [
             request.method,
