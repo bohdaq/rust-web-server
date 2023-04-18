@@ -27,6 +27,7 @@ fn parse_array_of_bytes_as_request() {
     let method = "POST";
     let http_version = "HTTP/1.1";
     let content_type = "application/x-www-form-urlencoded";
+    let host = "localhost";
     let body = "some=1234&key=5678";
 
     assert_eq!(uri, request.request_uri);
@@ -36,6 +37,9 @@ fn parse_array_of_bytes_as_request() {
     // how to retrieve header from request
     let content_type_header = request.get_header("Content-Type".to_string()).unwrap();
     assert_eq!(content_type_header.value, content_type);
+
+    let host_header = request.get_header("Host".to_string()).unwrap();
+    assert_eq!(host_header.value, host);
 
     // body is u8 byte array
     assert_eq!(body.as_bytes(), request.body);
