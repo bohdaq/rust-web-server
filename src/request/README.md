@@ -29,4 +29,4 @@ Body (Request Body Here) is the arbitrary sequence (array) of bytes and goes aft
 Even though initially HTTP protocol was designed to transfer text based information, request body can be any set of bytes from image, video, audio, etc.
 
 ### Usage
-To parse byte array to [Request](https://github.com/bohdaq/rust-web-server/blob/main/src/request/mod.rs#L16), simply call [Request::parse_request](https://github.com/bohdaq/rust-web-server/blob/main/src/request/example/mod.rs#L16) method.
+To parse byte array to [Request](https://github.com/bohdaq/rust-web-server/blob/main/src/request/mod.rs#L16), simply call [Request::parse](https://github.com/bohdaq/rust-web-server/blob/main/src/request/example/mod.rs#L16) method.
