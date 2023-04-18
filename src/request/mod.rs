@@ -142,6 +142,10 @@ impl Request {
         request
     }
 
+    pub fn parse(request_vec_u8: &[u8]) ->  Result<Request, String> {
+        Request::parse_request(request_vec_u8)
+    }
+
     pub fn parse_request(request_vec_u8: &[u8]) ->  Result<Request, String> {
         let mut cursor = io::Cursor::new(request_vec_u8);
 

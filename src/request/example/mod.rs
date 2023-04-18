@@ -13,7 +13,7 @@ fn parse_array_of_bytes_as_request() {
     let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
 
     // convert byte array to request
-    let boxed_request = Request::parse_request(request_file_as_bytes.as_ref());
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
     if boxed_request.is_err() {
         let _error_message = boxed_request.as_ref().err().unwrap();
         // handle error
