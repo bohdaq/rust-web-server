@@ -1,6 +1,9 @@
+use std::collections::HashMap;
 use file_ext::FileExt;
 use crate::body::form_urlencoded::FormUrlEncoded;
-use crate::request::Request;
+use crate::header::Header;
+use crate::http::{VERSION};
+use crate::request::{METHOD, Request};
 
 #[test]
 fn parse_array_of_bytes_as_request() {
@@ -53,4 +56,37 @@ fn parse_array_of_bytes_as_request() {
     assert_eq!(form.get("key").unwrap(), "5678");
     assert_eq!(form.get("some").unwrap(), "1234");
 
+}
+
+
+#[test]
+fn generate() {
+    let mut params_map: HashMap<String, String> = HashMap::new();
+    params_map.insert("key1".to_string(), "test1".to_string());
+    params_map.insert("key2".to_string(), "test2".to_string());
+
+    let form_url_encoded : String = FormUrlEncoded::generate(params_map);
+
+    let host = Header { name: Header::_HOST.to_string(), value: "localhost".to_string() };
+
+    let endpoint = "/endpoint";
+
+    let request = Request {
+        method: METHOD.post.to_string(),
+        request_uri: endpoint.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![host],
+        body: form_url_encoded.as_bytes().to_vec(),
+    };
+
+    let raw_request : Vec<u8> = request.generate();
+
+    // asserts, replace with your logic
+    let path = FileExt::build_path(&["src", "request", "example", "expected_request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let expected_request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    assert_eq!(expected_request_file_as_bytes, raw_request);
 }

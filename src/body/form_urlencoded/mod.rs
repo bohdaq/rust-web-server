@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use url_search_params::parse_url_search_params;
+use url_search_params::{build_url_search_params, parse_url_search_params};
 use crate::symbol::SYMBOL;
 
 pub struct FormUrlEncoded;
@@ -16,5 +16,16 @@ impl FormUrlEncoded {
 
 
         Ok(parse_url_search_params(&string))
+    }
+
+    pub fn generate(map: HashMap<String, String>) -> String {
+        let search_params = build_url_search_params(map);
+
+        let mut params_as_list : Vec<&str> = search_params.split("&").collect::<Vec<&str>>();
+        params_as_list.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+
+        let params = params_as_list.join("&");
+
+        params
     }
 }
