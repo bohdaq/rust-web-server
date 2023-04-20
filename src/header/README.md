@@ -17,10 +17,10 @@ Header needs to be UTF-8 encoded and does not contain any extra [control charact
 There are predefined list of headers to cover most use cases. 
 
 ### Usage
-To parse string to [Header](), simply call [Header::parse]() method.
+To parse string to [Header](https://github.com/bohdaq/rust-web-server/blob/main/src/header/mod.rs#L18), simply call [Header::parse](https://github.com/bohdaq/rust-web-server/blob/main/src/header/example/mod.rs#L10) method.
 
-To convert header instance to string invoke [generate]() method.
+To convert header instance to string invoke [generate](https://github.com/bohdaq/rust-web-server/blob/main/src/header/example/mod.rs#L30) method.
 
 #### Links
-- [List of HTTP headers]()
+- [List of HTTP headers](https://github.com/bohdaq/rust-web-server/blob/main/src/header/mod.rs#L30)
 
