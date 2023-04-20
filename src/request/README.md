@@ -35,4 +35,4 @@ To convert request instance to byte array invoke [generate](https://github.com/b
 
 #### Links
 - [List of HTTP methods](https://github.com/bohdaq/rust-web-server/blob/main/src/request/mod.rs#L37)
-
+- [Header](https://github.com/bohdaq/rust-web-server/tree/main/src/header)

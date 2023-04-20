@@ -23,4 +23,5 @@ To convert header instance to string invoke [generate](https://github.com/bohdaq
 
 #### Links
 - [List of HTTP headers](https://github.com/bohdaq/rust-web-server/blob/main/src/header/mod.rs#L30)
+- [Request](https://github.com/bohdaq/rust-web-server/tree/main/src/request)
 
