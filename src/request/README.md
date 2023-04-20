@@ -32,3 +32,7 @@ Even though initially HTTP protocol was designed to transfer text based informat
 To parse byte array to [Request](https://github.com/bohdaq/rust-web-server/blob/main/src/request/mod.rs#L16), simply call [Request::parse](https://github.com/bohdaq/rust-web-server/blob/main/src/request/example/mod.rs#L19) method.
 
 To convert request instance to byte array invoke [generate](https://github.com/bohdaq/rust-web-server/blob/main/src/request/example/mod.rs#L82) method.
+
+#### Links
+- [List of HTTP methods](https://github.com/bohdaq/rust-web-server/blob/main/src/request/mod.rs#L37)
+

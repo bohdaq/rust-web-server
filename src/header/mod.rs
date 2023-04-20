@@ -11,6 +11,9 @@ mod tests;
 
 pub mod content_disposition;
 
+#[cfg(test)]
+mod example;
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Header {
     pub name: String,
@@ -220,6 +223,14 @@ impl Header {
         };
 
         Ok(header)
+    }
+
+    pub fn parse(raw_header: &str) -> Result<Header, String> {
+        Header::parse_header(raw_header)
+    }
+
+    pub fn generate(&self) -> String {
+        self.as_string()
     }
 
 }
