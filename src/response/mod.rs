@@ -600,4 +600,80 @@ impl Response {
 
         response
     }
+
+    pub fn generate(&mut self) -> Vec<u8> {
+        let response = &mut self.clone();
+
+        if response.content_range_list.len() == 1 {
+            let content_range_index = 0;
+            let content_range = response.content_range_list.get(content_range_index).unwrap();
+            self.headers.push(Header {
+                name: Header::_CONTENT_TYPE.to_string(),
+                value: content_range.content_type.to_string()
+            });
+
+            let content_range_header_value = [
+                Range::BYTES,
+                SYMBOL.whitespace,
+                &content_range.range.start.to_string(),
+                SYMBOL.hyphen,
+                &content_range.range.end.to_string(),
+                SYMBOL.slash,
+                &content_range.size
+            ].join("");
+            response.headers.push(Header {
+                name: Header::_CONTENT_RANGE.to_string(),
+                value: content_range_header_value.to_string()
+            });
+
+            response.headers.push(Header {
+                name: Header::_CONTENT_LENGTH.to_string(),
+                value: content_range.body.len().to_string()
+            });
+        }
+
+        if response.content_range_list.len() > 1 {
+            let content_range_header_value = [
+                Range::MULTIPART,
+                SYMBOL.slash,
+                Range::BYTERANGES,
+                SYMBOL.semicolon,
+                SYMBOL.whitespace,
+                Range::BOUNDARY,
+                SYMBOL.equals,
+                Range::STRING_SEPARATOR
+            ].join("");
+            response.headers.push(Header {
+                name: Header::_CONTENT_TYPE.to_string(),
+                value: content_range_header_value,
+            });
+        }
+
+        let response_clone = response.clone();
+        let body = Response::generate_body(response_clone.content_range_list);
+
+        let mut headers_str = SYMBOL.new_line_carriage_return.to_string();
+
+        let header_list = response.headers.clone();
+        for header in header_list {
+            let mut header_string = SYMBOL.empty_string.to_string();
+            header_string.push_str(&header.name);
+            header_string.push_str(Header::NAME_VALUE_SEPARATOR);
+            header_string.push_str(&header.value);
+            header_string.push_str(SYMBOL.new_line_carriage_return);
+            headers_str.push_str(&header_string);
+        }
+
+        let response_clone = response.clone();
+        let status = [response_clone.http_version, response.status_code.to_string(), response_clone.reason_phrase].join(SYMBOL.whitespace);
+        let response_without_body = format!(
+            "{}{}{}",
+            status,
+            headers_str,
+            SYMBOL.new_line_carriage_return,
+        );
+
+
+        [response_without_body.into_bytes(), body].concat()
+    }
 }
