@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod example;
 
 use std::io;
 use std::io::{BufRead, Cursor, Read};
