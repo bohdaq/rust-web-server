@@ -15,7 +15,12 @@ fn parse() {
     let response_raw_bytes : Vec<u8> = FileExt::read_file(absolute_file_path.as_str()).unwrap();
 
     // TODO wip
-    let response = Response::_parse_response(response_raw_bytes.as_ref());
+    let response_parse = Response::parse(response_raw_bytes.as_ref());
+    if response_parse.is_err() {
+        let _message = response_parse.clone().err().unwrap();
+        // handle error
+    }
+    let response = response_parse.unwrap();
 
 
     // asserts, replace with your logic

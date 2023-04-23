@@ -680,4 +680,115 @@ impl Response {
     pub fn get_header(&self, name: String) -> Option<&Header> {
         self._get_header(name)
     }
+
+    pub fn parse(response_vec_u8: &[u8]) -> Result<Response, String> {
+        let mut cursor = io::Cursor::new(response_vec_u8);
+
+        let mut response = Response {
+            http_version: "".to_string(),
+            status_code: 0,
+            reason_phrase: "".to_string(),
+            headers: vec![],
+            content_range_list: vec![],
+        };
+
+        let content_length: usize = 0;
+        let iteration_number : usize = 0;
+
+        Response::_parse_raw_response_via_cursor(&mut cursor, iteration_number, &mut response, content_length);
+
+        return Ok(response);
+    }
+
+    pub fn parse_raw_response_via_cursor(
+        cursor: &mut Cursor<&[u8]>,
+        mut iteration_number: usize,
+        response: &mut Response,
+        mut content_length: usize) {
+
+        let mut buffer = vec![];
+        let boxed_read = cursor.read_until(b'\n', &mut buffer);
+        if boxed_read.is_err() {
+            eprintln!("unable to parse raw response via cursor {}", boxed_read.err().unwrap());
+            return;
+        }
+        let bytes_offset = boxed_read.unwrap();
+        let mut buffer_as_u8_array: &[u8] = &buffer;
+        let string = String::from_utf8(Vec::from(buffer_as_u8_array)).unwrap();
+
+        let is_first_iteration = iteration_number == 0;
+        let new_line_char_found = bytes_offset != 0;
+        let current_string_is_empty = string.trim().len() == 0;
+
+        if is_first_iteration {
+            let boxed_http_version_status_code_reason_phrase = Response::_parse_http_version_status_code_reason_phrase_string(&string);
+            if boxed_http_version_status_code_reason_phrase.is_err() {
+                let error = boxed_http_version_status_code_reason_phrase.err().unwrap();
+                eprintln!("{}", error);
+                return;
+            }
+
+            let (http_version, status_code, reason_phrase) = boxed_http_version_status_code_reason_phrase.unwrap();
+
+            response.http_version = http_version;
+            response.status_code = status_code;
+            response.reason_phrase = reason_phrase;
+        }
+
+        if current_string_is_empty {
+            let content_type = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+            let is_multipart = Response::_is_multipart_byteranges_content_type(&content_type);
+
+            if is_multipart {
+                let content_range_list : Vec<ContentRange> = vec![];
+
+                let mut buf = vec![];
+                cursor.read_until(b'\n', &mut buf).unwrap();
+                let boxed_value = Range::_parse_multipart_body(cursor, content_range_list);
+                let mut range_list = vec![];
+                if boxed_value.is_ok() {
+                    range_list = boxed_value.unwrap();
+                }
+                response.content_range_list = range_list;
+            } else {
+                buffer = vec![];
+                let boxed_read = cursor.read_to_end(&mut buffer);
+                if boxed_read.is_ok() {
+                    buffer_as_u8_array = &buffer;
+
+                    let content_range = ContentRange {
+                        unit: Range::BYTES.to_string(),
+                        range: Range {
+                            start: 0,
+                            end: buffer_as_u8_array.len() as u64
+                        },
+                        size: buffer_as_u8_array.len().to_string(),
+                        body: Vec::from(buffer_as_u8_array),
+                        content_type: content_type.value.to_string()
+                    };
+                    response.content_range_list = vec![content_range];
+                } else {
+                    let reason = boxed_read.err().unwrap();
+                    eprintln!("error reading file: {}", reason.to_string())
+                }
+
+            }
+
+            return;
+        }
+
+        if new_line_char_found && !current_string_is_empty {
+            let mut header = Header { name: "".to_string(), value: "".to_string() };
+            if !is_first_iteration {
+                header = Response::_parse_http_response_header_string(&string);
+                if header.name == Header::_CONTENT_LENGTH {
+                    content_length = header.value.parse().unwrap();
+                }
+            }
+
+            response.headers.push(header);
+            iteration_number += 1;
+            Response::_parse_raw_response_via_cursor(cursor, iteration_number, response, content_length);
+        }
+    }
 }
