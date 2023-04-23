@@ -7,17 +7,46 @@ use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 
 #[test]
 fn parse() {
-    // TODO
-
+    // in this example response is from reading a file
     let path = FileExt::build_path(&["src", "response", "example", "response.multipart.txt"]);
     let pwd = FileExt::working_directory().unwrap();
 
     let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
     let response_raw_bytes : Vec<u8> = FileExt::read_file(absolute_file_path.as_str()).unwrap();
 
+    // TODO wip
     let response = Response::_parse_response(response_raw_bytes.as_ref());
 
+
+    // asserts, replace with your logic
     assert_eq!(&response.status_code, STATUS_CODE_REASON_PHRASE.n200_ok.status_code);
+    assert_eq!(&response.reason_phrase, STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase);
+    assert_eq!(&response.http_version, VERSION.http_1_1);
+
+    let host_header = response.get_header(Header::_HOST.to_string()).unwrap();
+    assert_eq!(host_header.value, "localhost");
+
+    let content_type_header = response.get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    assert_eq!(content_type_header.value, "multipart/byteranges; boundary=String_separator");
+
+    let body = response.content_range_list;
+    let number_of_parts = body.len();
+    assert_eq!(2, number_of_parts);
+
+    let first_part = body.get(0).unwrap();
+    assert_eq!(first_part.content_type, MimeType::TEXT_PLAIN);
+    assert_eq!(first_part.range.start, 0);
+    assert_eq!(first_part.range.end, 9);
+    assert_eq!(first_part.size, "9");
+    assert_eq!(first_part.body, "some text".as_bytes());
+
+    let second_part = body.get(1).unwrap();
+    assert_eq!(second_part.content_type, MimeType::TEXT_PLAIN);
+    assert_eq!(second_part.range.start, 0);
+    assert_eq!(second_part.range.end, 12);
+    assert_eq!(second_part.size, "12");
+    assert_eq!(second_part.body, "another text".as_bytes());
+
 }
 
 #[test]

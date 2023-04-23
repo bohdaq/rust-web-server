@@ -676,4 +676,8 @@ impl Response {
 
         [response_without_body.into_bytes(), body].concat()
     }
+
+    pub fn get_header(&self, name: String) -> Option<&Header> {
+        self._get_header(name)
+    }
 }
