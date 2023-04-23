@@ -695,7 +695,11 @@ impl Response {
         let content_length: usize = 0;
         let iteration_number : usize = 0;
 
-        Response::_parse_raw_response_via_cursor(&mut cursor, iteration_number, &mut response, content_length);
+        let boxed_parse = Response::parse_raw_response_via_cursor(&mut cursor, iteration_number, &mut response, content_length);
+        if boxed_parse.is_err() {
+            let message = boxed_parse.err().unwrap();
+            return Err(message);
+        }
 
         return Ok(response);
     }
@@ -704,13 +708,13 @@ impl Response {
         cursor: &mut Cursor<&[u8]>,
         mut iteration_number: usize,
         response: &mut Response,
-        mut content_length: usize) {
+        mut content_length: usize) -> Result<(), String> {
 
         let mut buffer = vec![];
         let boxed_read = cursor.read_until(b'\n', &mut buffer);
         if boxed_read.is_err() {
-            eprintln!("unable to parse raw response via cursor {}", boxed_read.err().unwrap());
-            return;
+            let message = format!("unable to parse raw response via cursor {}", boxed_read.err().unwrap());
+            return Err(message);
         }
         let bytes_offset = boxed_read.unwrap();
         let mut buffer_as_u8_array: &[u8] = &buffer;
@@ -723,9 +727,8 @@ impl Response {
         if is_first_iteration {
             let boxed_http_version_status_code_reason_phrase = Response::_parse_http_version_status_code_reason_phrase_string(&string);
             if boxed_http_version_status_code_reason_phrase.is_err() {
-                let error = boxed_http_version_status_code_reason_phrase.err().unwrap();
-                eprintln!("{}", error);
-                return;
+                let message = boxed_http_version_status_code_reason_phrase.err().unwrap();
+                return Err(message);
             }
 
             let (http_version, status_code, reason_phrase) = boxed_http_version_status_code_reason_phrase.unwrap();
@@ -774,7 +777,7 @@ impl Response {
 
             }
 
-            return;
+            return Ok(());
         }
 
         if new_line_char_found && !current_string_is_empty {
@@ -788,7 +791,9 @@ impl Response {
 
             response.headers.push(header);
             iteration_number += 1;
-            Response::_parse_raw_response_via_cursor(cursor, iteration_number, response, content_length);
+            return Response::parse_raw_response_via_cursor(cursor, iteration_number, response, content_length);
+        } else {
+            return Err("unable to parse".to_string());
         }
     }
 }
