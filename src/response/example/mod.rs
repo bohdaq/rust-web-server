@@ -8,6 +8,16 @@ use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 #[test]
 fn parse() {
     // TODO
+
+    let path = FileExt::build_path(&["src", "response", "example", "response.multipart.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let response_raw_bytes : Vec<u8> = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    let response = Response::_parse_response(response_raw_bytes.as_ref());
+
+    assert_eq!(&response.status_code, STATUS_CODE_REASON_PHRASE.n200_ok.status_code);
 }
 
 #[test]
