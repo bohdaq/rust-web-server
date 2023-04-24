@@ -14,7 +14,6 @@ fn parse() {
     let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
     let response_raw_bytes : Vec<u8> = FileExt::read_file(absolute_file_path.as_str()).unwrap();
 
-    // TODO wip
     let response_parse = Response::parse(response_raw_bytes.as_ref());
     if response_parse.is_err() {
         let _message = response_parse.clone().err().unwrap();
