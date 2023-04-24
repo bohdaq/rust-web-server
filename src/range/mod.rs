@@ -520,7 +520,6 @@ impl Range {
             return Ok(content_range_list)
         };
 
-        // wip
         let mut content_range: ContentRange = ContentRange {
             unit: Range::BYTES.to_string(),
             range: Range { start: 0, end: 0 },
