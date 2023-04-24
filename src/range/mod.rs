@@ -549,7 +549,13 @@ impl Range {
 
         let content_type_is_not_parsed = content_range.content_type.len() == 0;
         if string.starts_with(Header::_CONTENT_TYPE) && content_type_is_not_parsed {
-            let content_type = Response::_parse_http_response_header_string(string.as_str());
+            let boxed_content_type = Response::parse_http_response_header_string(string.as_str());
+            if boxed_content_type.is_err() {
+                let message = boxed_content_type.err().unwrap();
+                return Err(message);
+            }
+            let content_type = boxed_content_type.unwrap();
+
             content_range.content_type = content_type.value.trim().to_string();
 
             //read next line - Content-Range
