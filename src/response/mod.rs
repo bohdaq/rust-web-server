@@ -803,20 +803,19 @@ impl Response {
         }
 
         if new_line_char_found && !current_string_is_empty {
-            let mut header = Header { name: "".to_string(), value: "".to_string() };
             if !is_first_iteration {
                 let boxed_header = Response::parse_http_response_header_string(&string);
                 if boxed_header.is_err() {
                     let message = boxed_header.err().unwrap();
                     return Err(message);
                 }
-                header = boxed_header.unwrap();
+                let header = boxed_header.unwrap();
                 if header.name == Header::_CONTENT_LENGTH {
                     content_length = header.value.parse().unwrap();
                 }
+                response.headers.push(header);
             }
 
-            response.headers.push(header);
             iteration_number += 1;
             return Response::parse_raw_response_via_cursor(cursor, iteration_number, response, content_length);
         } else {
