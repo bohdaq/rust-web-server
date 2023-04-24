@@ -793,7 +793,12 @@ impl Response {
         if new_line_char_found && !current_string_is_empty {
             let mut header = Header { name: "".to_string(), value: "".to_string() };
             if !is_first_iteration {
-                header = Response::_parse_http_response_header_string(&string);
+                let boxed_header = Response::parse_http_response_header_string(&string);
+                if boxed_header.is_err() {
+                    let message = boxed_header.err().unwrap();
+                    return Err(message);
+                }
+                header = boxed_header.unwrap();
                 if header.name == Header::_CONTENT_LENGTH {
                     content_length = header.value.parse().unwrap();
                 }
@@ -805,5 +810,20 @@ impl Response {
         } else {
             return Err("unable to parse".to_string());
         }
+    }
+
+    pub fn parse_http_response_header_string(header_string: &str) -> Result<Header, String> {
+        let header_parts: Option<(&str, &str)> = header_string.split_once(Header::NAME_VALUE_SEPARATOR);
+        if header_parts.is_none() {
+            let message = format!("unable to parse header: {}", header_string);
+            return Err(message);
+        }
+        let (header_name, raw_header_value) = header_parts.unwrap();
+        let header_value = StringExt::truncate_new_line_carriage_return(&raw_header_value);
+
+        Ok(Header {
+            name: header_name.to_string(),
+            value: header_value.to_string()
+        })
     }
 }
