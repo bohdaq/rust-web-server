@@ -8,6 +8,7 @@ use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
 use crate::ext::string_ext::StringExt;
 use crate::http::{HTTP, VERSION};
+use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Request};
 use crate::symbol::SYMBOL;
@@ -739,8 +740,17 @@ impl Response {
         }
 
         if current_string_is_empty {
-            let content_type = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
-            let is_multipart = Response::_is_multipart_byteranges_content_type(&content_type);
+            let mut is_multipart = false;
+            // if response does not contain Content-Type, it will be defaulted to APPLICATION_OCTET_STREAM
+            let mut content_type = MimeType::APPLICATION_OCTET_STREAM;
+
+            let boxed_content_type = response.get_header(Header::_CONTENT_TYPE.to_string());
+            if boxed_content_type.is_some() {
+                let content_type_header = response.get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+                content_type = content_type_header.value.as_str();
+                is_multipart = Response::_is_multipart_byteranges_content_type(&content_type_header);
+            }
+
 
             if is_multipart {
                 let content_range_list : Vec<ContentRange> = vec![];
@@ -767,7 +777,7 @@ impl Response {
                         },
                         size: buffer_as_u8_array.len().to_string(),
                         body: Vec::from(buffer_as_u8_array),
-                        content_type: content_type.value.to_string()
+                        content_type: content_type.to_string()
                     };
                     response.content_range_list = vec![content_range];
                 } else {
