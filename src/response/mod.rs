@@ -719,7 +719,12 @@ impl Response {
         }
         let bytes_offset = boxed_read.unwrap();
         let mut buffer_as_u8_array: &[u8] = &buffer;
-        let string = String::from_utf8(Vec::from(buffer_as_u8_array)).unwrap();
+        let boxed_string = String::from_utf8(Vec::from(buffer_as_u8_array));
+        if boxed_string.is_err() {
+            let message = boxed_string.err().unwrap().to_string();
+            return Err(message);
+        }
+        let string = boxed_string.unwrap();
 
         let is_first_iteration = iteration_number == 0;
         let new_line_char_found = bytes_offset != 0;
