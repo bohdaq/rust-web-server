@@ -533,8 +533,19 @@ impl Range {
         let separator = [SYMBOL.hyphen, SYMBOL.hyphen, Range::STRING_SEPARATOR].join("");
         if string.starts_with(separator.as_str()) && content_range_is_not_parsed {
             //read next line - Content-Type
-            buffer = Range::_parse_line_as_bytes(cursor);
-            string = Range::_convert_bytes_array_to_string(buffer);
+            let boxed_line = Range::parse_line_as_bytes(cursor);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            buffer = boxed_line.unwrap();
+
+            let boxed_line = Range::convert_bytes_array_to_string(buffer);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            string = boxed_line.unwrap();
         }
 
         let content_type_is_not_parsed = content_range.content_type.len() == 0;
@@ -543,8 +554,19 @@ impl Range {
             content_range.content_type = content_type.value.trim().to_string();
 
             //read next line - Content-Range
-            buffer = Range::_parse_line_as_bytes(cursor);
-            string = Range::_convert_bytes_array_to_string(buffer);
+            let boxed_line = Range::parse_line_as_bytes(cursor);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            buffer = boxed_line.unwrap();
+
+            let boxed_line = Range::convert_bytes_array_to_string(buffer);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            string = boxed_line.unwrap();
         }
 
         let content_range_is_not_parsed = content_range.size.len() == 0;
@@ -565,16 +587,38 @@ impl Range {
 
 
             // read next line - empty line
-            buffer = Range::_parse_line_as_bytes(cursor);
-            string = Range::_convert_bytes_array_to_string(buffer);
+            let boxed_line = Range::parse_line_as_bytes(cursor);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            buffer = boxed_line.unwrap();
+
+            let boxed_line = Range::convert_bytes_array_to_string(buffer);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            string = boxed_line.unwrap();
 
             if string.trim().len() > 0 {
                 return Err(Range::_ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY.to_string());
             }
 
             // read next line - separator between content ranges
-            buffer = Range::_parse_line_as_bytes(cursor);
-            string = Range::_convert_bytes_array_to_string(buffer);
+            let boxed_line = Range::parse_line_as_bytes(cursor);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            buffer = boxed_line.unwrap();
+
+            let boxed_line = Range::convert_bytes_array_to_string(buffer);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            string = boxed_line.unwrap();
         }
 
         let content_range_is_parsed = content_range.size.len() != 0;
