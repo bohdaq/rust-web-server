@@ -767,7 +767,7 @@ impl Response {
                     return Err(message);
                 }
                 boxed_read.unwrap();
-                let boxed_value = Range::_parse_multipart_body(cursor, content_range_list);
+                let boxed_value = Range::parse_multipart_body(cursor, content_range_list);
                 let mut range_list = vec![];
                 if boxed_value.is_ok() {
                     range_list = boxed_value.unwrap();
