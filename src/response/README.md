@@ -99,5 +99,11 @@ In practice, it means when you work with any response, except for the `multipart
 
 When you are working with `multipart/byteranges` response, the `content_range_list` field will contain each individual part of the Range response. 
 
+#### Links
+- [List of status codes](https://github.com/bohdaq/rust-web-server/blob/2db963550eb254132566a316974223ba8981c6ff/src/response/mod.rs#L102)
+- [Header](https://github.com/bohdaq/rust-web-server/tree/main/src/header)
+- [Request](https://github.com/bohdaq/rust-web-server/tree/main/src/request)
+
+
 
 
