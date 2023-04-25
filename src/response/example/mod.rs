@@ -14,12 +14,12 @@ fn parse() {
     let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
     let response_raw_bytes : Vec<u8> = FileExt::read_file(absolute_file_path.as_str()).unwrap();
 
-    let response_parse = Response::parse(response_raw_bytes.as_ref());
+    let response_parse : Result<Response, String> = Response::parse(response_raw_bytes.as_ref());
     if response_parse.is_err() {
         let _message = response_parse.clone().err().unwrap();
         // handle error
     }
-    let response = response_parse.unwrap();
+    let response : Response = response_parse.unwrap();
 
 
     // asserts, replace with your logic
@@ -27,24 +27,24 @@ fn parse() {
     assert_eq!(&response.reason_phrase, STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase);
     assert_eq!(&response.http_version, VERSION.http_1_1);
 
-    let host_header = response.get_header(Header::_HOST.to_string()).unwrap();
+    let host_header : &Header = response.get_header(Header::_HOST.to_string()).unwrap();
     assert_eq!(host_header.value, "localhost");
 
-    let content_type_header = response.get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    let content_type_header : &Header = response.get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
     assert_eq!(content_type_header.value, "multipart/byteranges; boundary=String_separator");
 
-    let body = response.content_range_list;
-    let number_of_parts = body.len();
+    let body : Vec<ContentRange> = response.content_range_list;
+    let number_of_parts : usize = body.len();
     assert_eq!(2, number_of_parts);
 
-    let first_part = body.get(0).unwrap();
+    let first_part : &ContentRange = body.get(0).unwrap();
     assert_eq!(first_part.content_type, MimeType::TEXT_PLAIN);
     assert_eq!(first_part.range.start, 0);
     assert_eq!(first_part.range.end, 9);
     assert_eq!(first_part.size, "9");
     assert_eq!(first_part.body, "some text".as_bytes());
 
-    let second_part = body.get(1).unwrap();
+    let second_part : &ContentRange = body.get(1).unwrap();
     assert_eq!(second_part.content_type, MimeType::TEXT_PLAIN);
     assert_eq!(second_part.range.start, 0);
     assert_eq!(second_part.range.end, 12);
@@ -87,7 +87,7 @@ fn build() {
         content_range_list: vec![content_range],
     };
 
-    let response_as_array = response.generate();
+    let response_as_array : Vec<u8> = response.generate();
 
 
     // asserts, replace with your logic
@@ -95,7 +95,7 @@ fn build() {
     let pwd = FileExt::working_directory().unwrap();
 
     let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
-    let expected_file = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+    let expected_file : Vec<u8> = FileExt::read_file(absolute_file_path.as_str()).unwrap();
 
     assert_eq!(expected_file, response_as_array);
 
