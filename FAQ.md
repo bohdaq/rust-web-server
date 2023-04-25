@@ -169,13 +169,13 @@ Delete `Cargo.lock`, it will be regenerated automatically.
 > rm Cargo.lock
 
 
-## Problem 15
+## Problem 16
 Why some methods start from `_` (like `pub fn _generate_request(request: Request) -> String ` in `Request`)? 
 
 ### Solution
 Compiler will throw a warning, to eliminate this warning some of the methods named starting with underscore `_`.
 
-## Problem 16
+## Problem 17
 I can see logs in the commandline, how can I see logs from server via http?
 
 ### Solution
