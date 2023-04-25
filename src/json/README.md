@@ -14,7 +14,20 @@ JSON module supports nested objects and arrays.
 
 Within module itself, in a tests section, you may find examples on how to use it. 
 
-Examples:
+### Array
+
+Take a look at [json array](https://github.com/bohdaq/rust-web-server/tree/main/src/json/array) module.
+
+### Object
+
+Take a look at [json object](https://github.com/bohdaq/rust-web-server/tree/main/src/json/object) module.
+
+### Property
+
+Take a look at [json property](https://github.com/bohdaq/rust-web-server/tree/main/src/json/property) module.
+
+
+#### Examples:
 
 - [Object](object/tests/example)
 - [Nested Object](object/tests/example_multi_nested_object)
