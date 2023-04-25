@@ -37,7 +37,7 @@ Even though initially HTTP protocol was designed to transfer text based informat
 ### Multipart response
 Response may contain several bodies for different resources. Such functionality achieved through Range requests. 
 
-Example `multipart range` HTTP Response (1-6 are line numbers, not part of the request):
+Example `multipart range` HTTP Response (1-15 are line numbers, not part of the request):
 
 >1 HTTP/1.1 200 OK
 > 
@@ -84,4 +84,20 @@ Each part structure is similar to plain response without response line.
 Empty line (number 8) is delimiter between parts headers and body. First parts body (payload) starts immediately after, up to the next boundary.
 
 Same process repeated for the second part.
+
+Any other response except `multipart/byteranges` considered to contain only one part. 
+
+### Usage
+To convert response instance to byte array invoke [generate](https://github.com/bohdaq/rust-web-server/blob/71e4df81ed3b89807502df5897c84cfdbaebe94d/src/response/example/mod.rs#L90) method.
+
+To parse byte array to [Response](https://github.com/bohdaq/rust-web-server/blob/71e4df81ed3b89807502df5897c84cfdbaebe94d/src/response/mod.rs#L23), simply call [Response::parse](https://github.com/bohdaq/rust-web-server/blob/71e4df81ed3b89807502df5897c84cfdbaebe94d/src/response/example/mod.rs#L17) method.
+
+Response struct contains common fields representing http response, however, instead
+ of the body field there is a list of ContentRange. 
+
+In practice, it means when you work with any response, except for the `multipart/byteranges` Content-Type, the body of the request is contained as a `ContentRange` instance within `content_range_list` field.
+
+When you are working with `multipart/byteranges` response, the `content_range_list` field will contain each individual part of the Range response. 
+
+
 
