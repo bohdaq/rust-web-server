@@ -88,9 +88,9 @@ Same process repeated for the second part.
 Any other response except `multipart/byteranges` considered to contain only one part. 
 
 ### Usage
-To convert response instance to byte array invoke [generate](https://github.com/bohdaq/rust-web-server/blob/71e4df81ed3b89807502df5897c84cfdbaebe94d/src/response/example/mod.rs#L90) method.
+To convert response instance to byte array invoke [generate](https://github.com/bohdaq/rust-web-server/blob/161f6058d6c646d9ea89120b6aab861cdebf42d9/src/response/example/mod.rs#L90) method.
 
-To parse byte array to [Response](https://github.com/bohdaq/rust-web-server/blob/71e4df81ed3b89807502df5897c84cfdbaebe94d/src/response/mod.rs#L23), simply call [Response::parse](https://github.com/bohdaq/rust-web-server/blob/71e4df81ed3b89807502df5897c84cfdbaebe94d/src/response/example/mod.rs#L17) method.
+To parse byte array to [Response](https://github.com/bohdaq/rust-web-server/blob/71e4df81ed3b89807502df5897c84cfdbaebe94d/src/response/mod.rs#L23), simply call [Response::parse](https://github.com/bohdaq/rust-web-server/blob/161f6058d6c646d9ea89120b6aab861cdebf42d9/src/response/example/mod.rs#L17) method.
 
 Response struct contains common fields representing http response, however, instead
  of the body field there is a list of ContentRange. 
