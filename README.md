@@ -9,7 +9,14 @@ rust-web-server (**rws**) is a static content web-server written in Rust.
 1. [X-Content-Type-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options)
 1. [X-Frame-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options)
 1. [Symlinks](https://en.wikipedia.org/wiki/Symbolic_link)
-1. No third party dependencies. ([file-ext](https://github.com/bohdaq/file-ext) is written by me)
+1. No third party dependencies.
+
+## Docs
+1. [Request](https://github.com/bohdaq/rust-web-server/tree/main/src/request)
+1. [Header](https://github.com/bohdaq/rust-web-server/tree/main/src/header)
+1. [Response](https://github.com/bohdaq/rust-web-server/tree/main/src/response)
+1. [JSON](https://github.com/bohdaq/rust-web-server/tree/main/src/json)
+1. [Null](https://github.com/bohdaq/rust-web-server/tree/main/src/null)
 
 ## Download
 [Download binary](https://github.com/bohdaq/rust-web-server/releases) from releases page.  There is a mirror for downloads on [Google Drive](https://drive.google.com/drive/folders/13iSR3VxmfFvZgOZ0LddP_EJp7GJ-lQd8?usp=share_link).
