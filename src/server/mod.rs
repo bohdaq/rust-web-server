@@ -9,7 +9,7 @@ use std::str::FromStr;
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::app::App;
-use crate::core::{Application};
+use crate::core::{Application, New};
 use crate::entry_point::{bootstrap, get_ip_port_thread_count, get_request_allocation_size, set_default_values};
 use crate::header::Header;
 use crate::log::Log;
@@ -217,7 +217,7 @@ impl Server {
 
     pub fn run(listener : TcpListener,
                pool: ThreadPool,
-               app: impl Application + Send + 'static + Copy) {
+               app: impl Application + New + Send + 'static + Copy) {
         for boxed_stream in listener.incoming() {
             if boxed_stream.is_err() {
                 eprintln!("unable to get TCP stream: {}", boxed_stream.err().unwrap());
