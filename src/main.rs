@@ -20,10 +20,12 @@ pub mod null;
 pub mod core;
 
 
-use crate::entry_point::{bootstrap, get_ip_port_thread_count, set_default_values};
-use crate::server::Server;
+use std::net::TcpListener;
+use crate::entry_point::{bootstrap, get_ip_port_thread_count, get_request_allocation_size, set_default_values};
+use crate::server::{Address, ConnectionInfo, Server};
 use crate::thread_pool::ThreadPool;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
+use crate::app::App;
+use crate::core::New;
 use crate::symbol::SYMBOL;
 use crate::log::Log;
 
@@ -64,6 +66,7 @@ pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i
     let boxed_listener = TcpListener::bind(&bind_addr);
     if boxed_listener.is_err() {
         eprintln!("unable to set up TCP listener: {}", boxed_listener.err().unwrap());
+        return;
     } else {
         let listener = boxed_listener.unwrap();
         let pool = ThreadPool::new(thread_count as usize);
@@ -76,6 +79,7 @@ pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i
         for boxed_stream in listener.incoming() {
             if boxed_stream.is_err() {
                 eprintln!("unable to get TCP stream: {}", boxed_stream.err().unwrap());
+                return;
             } else {
                 let stream = boxed_stream.unwrap();
 
@@ -86,26 +90,44 @@ pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i
                     print!("local addr: {}", boxed_local_addr.unwrap())
                 } else {
                     eprintln!("\nunable to read local addr");
+                    return;
                 }
 
                 let boxed_peer_addr = stream.peer_addr();
-                if boxed_peer_addr.is_ok() {
-                    print!(", peer addr: {}\n", boxed_peer_addr.unwrap())
-                } else {
+                if boxed_peer_addr.is_err() {
                     eprintln!("\nunable to read peer addr");
+                    return;
                 }
+                let peer_addr = boxed_peer_addr.unwrap();
+                print!(", peer addr: {}\n", peer_addr.to_string());
+
+                let (server_ip, server_port, _thread_count) = get_ip_port_thread_count();
+                let client_ip = peer_addr.ip().to_string();
+                let client_port = peer_addr.port() as i32;
+                let request_allocation_size = get_request_allocation_size();
+
+                let connection = ConnectionInfo {
+                    client: Address {
+                        ip: client_ip.to_string(),
+                        port: client_port
+                    },
+                    server: Address {
+                        ip: server_ip,
+                        port: server_port
+                    },
+                    request_size: request_allocation_size,
+                };
+
+
 
                 pool.execute(move || {
+                    let app = App::new();
 
-                    let mut peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
-                    let boxed_peer_addr = stream.peer_addr();
-                    if boxed_peer_addr.is_ok() {
-                        peer_addr = boxed_peer_addr.unwrap()
-                    } else {
-                        eprintln!("\nunable to read peer addr");
+                    let boxed_process = Server::process(stream, connection, app);
+                    if boxed_process.is_err() {
+                        let message = boxed_process.err().unwrap();
+                        eprintln!("{}", message);
                     }
-
-                    Server::process_request(stream, peer_addr);
                 });
             }
         }

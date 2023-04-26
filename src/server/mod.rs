@@ -3,7 +3,8 @@ pub mod tests;
 
 use std::io::prelude::*;
 use std::borrow::Borrow;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
+use std::str::FromStr;
 
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
@@ -148,30 +149,13 @@ impl Server {
 
         let request: Request = boxed_request.unwrap();
 
-        // let (server_ip, server_port, _thread_count) = get_ip_port_thread_count();
-        // let client_ip = peer_addr.ip().to_string();
-        // let client_port = peer_addr.port() as i32;
-        //
-        // let connection = ConnectionInfo {
-        //     client: Address {
-        //         ip: client_ip.to_string(),
-        //         port: client_port
-        //     },
-        //     server: Address {
-        //         ip: server_ip,
-        //         port: server_port
-        //     },
-        //     request_size: request_allocation_size,
-        // };
-        //
-        //
-        // let response = App::execute(request.clone(), connection).unwrap();
-
-        let response = app.execute(request.clone(), connection).unwrap();
+        let response = app.execute(request.clone(), connection.clone()).unwrap();
 
 
-        // let log_request_response = Log::request_response(&request, &response, &peer_addr);
-        // println!("{}", log_request_response);
+        let client = connection.client;
+        let client_addr = SocketAddr::new(IpAddr::from_str(client.ip.as_str()).unwrap(), client.port as u16);
+        let log_request_response = Log::request_response(&request, &response, &client_addr);
+        println!("{}", log_request_response);
 
         let raw_response = Response::generate_response(response, request);
 
@@ -188,12 +172,14 @@ impl Server {
 
 }
 
+#[derive(Clone)]
 pub struct ConnectionInfo {
     pub client: Address,
     pub server: Address,
     pub request_size: i64
 }
 
+#[derive(Clone)]
 pub struct Address {
     pub ip: String,
     pub port: i32
