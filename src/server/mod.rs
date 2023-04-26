@@ -9,7 +9,7 @@ use std::str::FromStr;
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::app::App;
-use crate::core::{Application, New};
+use crate::core::{Application};
 use crate::entry_point::{bootstrap, get_ip_port_thread_count, get_request_allocation_size, set_default_values};
 use crate::header::Header;
 use crate::log::Log;
@@ -104,7 +104,7 @@ impl Server {
 
     pub fn process(mut stream: impl Read + Write + Unpin,
                    connection: ConnectionInfo,
-                   app: impl Application + New) -> Result<(), String> {
+                   app: impl Application) -> Result<(), String> {
 
         let request_allocation_size = connection.request_size;
         let mut buffer = vec![0; request_allocation_size as usize];
@@ -213,6 +213,67 @@ impl Server {
         println!("{}", server_url_thread_count);
 
         Ok((listener, pool))
+    }
+
+    pub fn run(listener : TcpListener,
+               pool: ThreadPool,
+               app: impl Application + Send + 'static + Copy) {
+        for boxed_stream in listener.incoming() {
+            if boxed_stream.is_err() {
+                eprintln!("unable to get TCP stream: {}", boxed_stream.err().unwrap());
+                return;
+            }
+
+            let stream = boxed_stream.unwrap();
+
+            print!("Connection established, ");
+
+            let boxed_local_addr = stream.local_addr();
+            if boxed_local_addr.is_ok() {
+                print!("local addr: {}", boxed_local_addr.unwrap())
+            } else {
+                eprintln!("\nunable to read local addr");
+                return;
+            }
+
+            let boxed_peer_addr = stream.peer_addr();
+            if boxed_peer_addr.is_err() {
+                eprintln!("\nunable to read peer addr");
+                return;
+            }
+            let peer_addr = boxed_peer_addr.unwrap();
+            print!(", peer addr: {}\n", peer_addr.to_string());
+
+            let (server_ip, server_port, _thread_count) = get_ip_port_thread_count();
+            let client_ip = peer_addr.ip().to_string();
+            let client_port = peer_addr.port() as i32;
+            let request_allocation_size = get_request_allocation_size();
+
+            let connection = ConnectionInfo {
+                client: Address {
+                    ip: client_ip.to_string(),
+                    port: client_port
+                },
+                server: Address {
+                    ip: server_ip,
+                    port: server_port
+                },
+                request_size: request_allocation_size,
+            };
+
+
+
+            pool.execute(move || {
+                let boxed_process = Server::process(stream, connection, app);
+                if boxed_process.is_err() {
+                    let message = boxed_process.err().unwrap();
+                    eprintln!("{}", message);
+                }
+            });
+
+        }
+
+
     }
 
 }

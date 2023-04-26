@@ -20,7 +20,7 @@ use crate::request::{Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
 
-
+#[derive(Copy, Clone)]
 pub struct App {}
 
 impl New for App {
