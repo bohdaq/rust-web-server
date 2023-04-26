@@ -14,6 +14,7 @@ use crate::header::Header;
 use crate::log::Log;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
+use crate::symbol::SYMBOL;
 
 pub struct Server {}
 impl Server {
@@ -101,19 +102,23 @@ impl Server {
 
     pub fn process(mut stream: impl Read + Write + Unpin,
                    connection: ConnectionInfo,
-                   mut app: impl Application + New) -> Result<(), String> {
-        let request_allocation_size = get_request_allocation_size();
+                   app: impl Application + New) -> Result<(), String> {
+
+        let request_allocation_size = connection.request_size;
         let mut buffer = vec![0; request_allocation_size as usize];
         let boxed_read = stream.read(&mut buffer);
         if boxed_read.is_err() {
-            let message = boxed_read.err().unwrap().to_string();
-            eprintln!("unable to read TCP stream {}", &message);
-
-            let raw_response = Server::bad_request_response(message.clone());
+            let read_message = boxed_read.err().unwrap().to_string();
+            let raw_response = Server::bad_request_response(read_message.clone());
             let boxed_stream = stream.write(raw_response.borrow());
             if boxed_stream.is_ok() {
                 stream.flush().unwrap();
+            } else {
+                let write_message = boxed_stream.err().unwrap().to_string();
+                let combined_error = [read_message, SYMBOL.comma.to_string(), write_message].join(SYMBOL.empty_string);
+                return Err(combined_error);
             };
+
             return Err(message);
         }
 
@@ -124,15 +129,18 @@ impl Server {
         // println!("\n\n______{}______\n\n", raw_request);
 
 
-        let boxed_request = Request::parse_request(request);
+        let boxed_request = Request::parse(request);
         if boxed_request.is_err() {
             let message = boxed_request.err().unwrap();
-            eprintln!("unable to parse request: {}", &message);
 
             let raw_response = Server::bad_request_response(message.clone());
             let boxed_stream = stream.write(raw_response.borrow());
             if boxed_stream.is_ok() {
                 stream.flush().unwrap();
+            } else {
+                let write_message = boxed_stream.err().unwrap().to_string();
+                let combined_error = [read_message, SYMBOL.comma.to_string(), write_message].join(SYMBOL.empty_string);
+                return Err(combined_error);
             };
             return Err(message);
         }
@@ -164,11 +172,15 @@ impl Server {
 
         // let log_request_response = Log::request_response(&request, &response, &peer_addr);
         // println!("{}", log_request_response);
+
         let raw_response = Response::generate_response(response, request);
 
         let boxed_stream = stream.write(raw_response.borrow());
         if boxed_stream.is_ok() {
             stream.flush().unwrap();
+        } else {
+            let write_message = boxed_stream.err().unwrap().to_string();
+            return Err(write_message);
         };
 
         Ok(())
