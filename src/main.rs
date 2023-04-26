@@ -26,57 +26,21 @@ use crate::server::{Address, ConnectionInfo, Server};
 use crate::thread_pool::ThreadPool;
 use crate::app::App;
 use crate::core::New;
-use crate::symbol::SYMBOL;
-use crate::log::Log;
 
 fn main() {
     start();
 }
 
 pub fn start() {
-    let info = Log::info("Rust Web Server");
-    println!("{}", info);
-
-    let usage_info = Log::usage_information();
-    println!("{}", usage_info);
-
-
-    println!("RWS Configuration Start: \n");
-
-    set_default_values();
-    bootstrap();
-
-    println!("\nRWS Configuration End\n\n");
-
-
-    let (ip, port, thread_count) = get_ip_port_thread_count();
-    create_tcp_listener_with_thread_pool(ip.as_str(), port, thread_count);
+    let new_server = Server::setup();
+    if new_server.is_err() {
+        eprintln!("{}", new_server.as_ref().err().unwrap());
+    }
+    let (listener, pool) = new_server.unwrap();
+    run(listener, pool);
 }
 
-pub fn create_tcp_listener_with_thread_pool(ip: &str, port: i32, thread_count: i32) {
-    let mut ip_readable = ip.to_string();
-
-    if ip.contains(":") {
-        ip_readable = [SYMBOL.opening_square_bracket, ip, SYMBOL.closing_square_bracket].join("");
-    }
-
-    let bind_addr = [ip_readable, SYMBOL.colon.to_string(), port.to_string()].join(SYMBOL.empty_string);
-    println!("Setting up http://{}...", &bind_addr);
-
-    let boxed_listener = TcpListener::bind(&bind_addr);
-    if boxed_listener.is_err() {
-        eprintln!("unable to set up TCP listener: {}", boxed_listener.err().unwrap());
-        return;
-    }
-
-    let listener = boxed_listener.unwrap();
-    let pool = ThreadPool::new(thread_count as usize);
-
-
-    let server_url_thread_count = Log::server_url_thread_count("http", &bind_addr, thread_count);
-    println!("{}", server_url_thread_count);
-
-
+pub fn run(listener : TcpListener, pool: ThreadPool) {
     for boxed_stream in listener.incoming() {
         if boxed_stream.is_err() {
             eprintln!("unable to get TCP stream: {}", boxed_stream.err().unwrap());

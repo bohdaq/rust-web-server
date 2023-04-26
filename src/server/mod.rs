@@ -3,19 +3,20 @@ pub mod tests;
 
 use std::io::prelude::*;
 use std::borrow::Borrow;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::str::FromStr;
 
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::app::App;
 use crate::core::{Application, New};
-use crate::entry_point::{get_request_allocation_size};
+use crate::entry_point::{bootstrap, get_ip_port_thread_count, get_request_allocation_size, set_default_values};
 use crate::header::Header;
 use crate::log::Log;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 use crate::symbol::SYMBOL;
+use crate::thread_pool::ThreadPool;
 
 pub struct Server {}
 impl Server {
@@ -168,6 +169,50 @@ impl Server {
         };
 
         Ok(())
+    }
+
+    pub fn setup() -> Result<(TcpListener, ThreadPool), String> {
+        let info = Log::info("Rust Web Server");
+        println!("{}", info);
+
+        let usage_info = Log::usage_information();
+        println!("{}", usage_info);
+
+
+        println!("RWS Configuration Start: \n");
+
+        set_default_values();
+        bootstrap();
+
+        println!("\nRWS Configuration End\n\n");
+
+
+        let (ip, port, thread_count) = get_ip_port_thread_count();
+
+
+        let mut ip_readable = ip.to_string();
+
+        if ip.contains(":") {
+            ip_readable = [SYMBOL.opening_square_bracket, &ip, SYMBOL.closing_square_bracket].join("");
+        }
+
+        let bind_addr = [ip_readable, SYMBOL.colon.to_string(), port.to_string()].join(SYMBOL.empty_string);
+        println!("Setting up http://{}...", &bind_addr);
+
+        let boxed_listener = TcpListener::bind(&bind_addr);
+        if boxed_listener.is_err() {
+            let message = format!("unable to set up TCP listener: {}", boxed_listener.err().unwrap());
+            return Err(message);
+        }
+
+        let listener = boxed_listener.unwrap();
+        let pool = ThreadPool::new(thread_count as usize);
+
+
+        let server_url_thread_count = Log::server_url_thread_count("http", &bind_addr, thread_count);
+        println!("{}", server_url_thread_count);
+
+        Ok((listener, pool))
     }
 
 }
