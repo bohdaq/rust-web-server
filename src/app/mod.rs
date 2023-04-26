@@ -30,7 +30,7 @@ impl New for App {
 }
 
 impl Application for App {
-    fn execute(&self, request: Request, _connection: ConnectionInfo) -> Result<Response, String> {
+    fn execute(&self, request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
         let header_list = Header::get_header_list(&request);
 
         let mut response: Response = Response::get_response(

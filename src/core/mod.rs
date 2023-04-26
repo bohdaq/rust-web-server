@@ -7,5 +7,5 @@ pub trait New {
 }
 
 pub trait Application {
-    fn execute(&self, request: Request, connection: ConnectionInfo) -> Result<Response, String>;
+    fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String>;
 }

@@ -149,7 +149,7 @@ impl Server {
 
         let request: Request = boxed_request.unwrap();
 
-        let response = app.execute(request.clone(), connection.clone()).unwrap();
+        let response = app.execute(&request, &connection).unwrap();
 
 
         let client = connection.client;
