@@ -115,11 +115,11 @@ impl Server {
                 stream.flush().unwrap();
             } else {
                 let write_message = boxed_stream.err().unwrap().to_string();
-                let combined_error = [read_message, SYMBOL.comma.to_string(), write_message].join(SYMBOL.empty_string);
+                let combined_error = [read_message.clone(), SYMBOL.comma.to_string(), write_message].join(SYMBOL.empty_string);
                 return Err(combined_error);
             };
 
-            return Err(message);
+            return Err(read_message);
         }
 
         boxed_read.unwrap();
@@ -139,7 +139,7 @@ impl Server {
                 stream.flush().unwrap();
             } else {
                 let write_message = boxed_stream.err().unwrap().to_string();
-                let combined_error = [read_message, SYMBOL.comma.to_string(), write_message].join(SYMBOL.empty_string);
+                let combined_error = [message, SYMBOL.comma.to_string(), write_message].join(SYMBOL.empty_string);
                 return Err(combined_error);
             };
             return Err(message);
