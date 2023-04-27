@@ -1,5 +1,7 @@
 #[cfg(test)]
 pub mod tests;
+#[cfg(test)]
+mod example;
 
 use std::io::prelude::*;
 use std::borrow::Borrow;
