@@ -8,9 +8,9 @@ User Application is responsible for processing the request. By processing reques
 
 
 ### Usage
-First, you need to start a new server instance via calling [Server::setup]() method. Then you need to make an instance of your [Application]() and pass it to the [Server::run]() method.
+First, you need to start a new server instance via calling [Server::setup](https://github.com/bohdaq/rust-web-server/blob/main/src/server/example/mod.rs#L8) method. Then you need to make an instance of your [Application](https://github.com/bohdaq/rust-web-server/blob/main/src/server/example/mod.rs#L15) and pass it to the [Server::run](https://github.com/bohdaq/rust-web-server/blob/main/src/server/example/mod.rs#L19) method.
 
 #### Links
-- [Request]()
+- [Request](https://github.com/bohdaq/rust-web-server/tree/main/src/request)
 - [Header](https://github.com/bohdaq/rust-web-server/tree/main/src/header)
-- [Response]()
+- [Response](https://github.com/bohdaq/rust-web-server/tree/main/src/response)
