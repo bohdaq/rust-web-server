@@ -23,6 +23,7 @@ pub mod json;
 pub mod null;
 pub mod core;
 pub mod application;
+pub mod controller;
 
 
 fn main() {

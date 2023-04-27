@@ -1,5 +1,5 @@
 use file_ext::FileExt;
-use crate::core::Controller;
+use crate::controller::Controller;
 use crate::mime_type::MimeType;
 use crate::range::Range;
 use crate::request::Request;

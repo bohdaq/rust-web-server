@@ -14,7 +14,8 @@ use crate::app::controller::script::ScriptController;
 use crate::app::controller::static_resource::StaticResourceController;
 use crate::app::controller::style::StyleController;
 use crate::application::Application;
-use crate::core::{Controller, New};
+use crate::controller::Controller;
+use crate::core::{New};
 use crate::header::Header;
 
 use crate::request::{Request};
