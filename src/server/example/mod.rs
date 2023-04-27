@@ -4,7 +4,7 @@ use crate::server::Server;
 
 // not a test because Server::run runs infinite loop to listen for incoming connections
 // it means test would never finish
-fn example() {
+fn _example() {
     let new_server = Server::setup();
     if new_server.is_err() {
         eprintln!("{}", new_server.as_ref().err().unwrap());

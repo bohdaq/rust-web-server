@@ -13,7 +13,7 @@ use crate::app::controller::not_found::NotFoundController;
 use crate::app::controller::script::ScriptController;
 use crate::app::controller::static_resource::StaticResourceController;
 use crate::app::controller::style::StyleController;
-use crate::core::{Application, New};
+use crate::core::{Application, Controller, New};
 use crate::header::Header;
 
 use crate::request::{Request};
@@ -30,7 +30,7 @@ impl New for App {
 }
 
 impl Application for App {
-    fn execute(&self, request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
+    fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         let header_list = Header::get_header_list(&request);
 
         let mut response: Response = Response::get_response(
@@ -41,8 +41,8 @@ impl Application for App {
 
 
 
-        if IndexController::is_matching_request(&request) {
-            response = IndexController::process_request(&request, response);
+        if IndexController::is_matching(&request, connection) {
+            response = IndexController::process(&request, response, connection);
             return Ok(response)
         }
 
