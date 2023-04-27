@@ -13,7 +13,8 @@ use crate::app::controller::not_found::NotFoundController;
 use crate::app::controller::script::ScriptController;
 use crate::app::controller::static_resource::StaticResourceController;
 use crate::app::controller::style::StyleController;
-use crate::core::{Application, Controller, New};
+use crate::application::Application;
+use crate::core::{Controller, New};
 use crate::header::Header;
 
 use crate::request::{Request};
