@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod example;
+
 use crate::request::Request;
 use crate::response::Response;
 use crate::server::ConnectionInfo;
