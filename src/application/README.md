@@ -1,4 +1,4 @@
-[Read Me](https://github.com/bohdaq/rust-web-server/tree/main) > Application 
+[Read Me](https://github.com/bohdaq/rust-web-server/tree/main) > [Documentation](https://github.com/bohdaq/rust-web-server/tree/main/src/README.md) > Application 
 
 # Application 
 
