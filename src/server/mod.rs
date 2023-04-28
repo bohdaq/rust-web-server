@@ -153,7 +153,20 @@ impl Server {
 
         let request: Request = boxed_request.unwrap();
 
-        let response = app.execute(&request, &connection).unwrap();
+        let app_processing = app.execute(&request, &connection);
+        if app_processing.is_err() {
+            let message = app_processing.as_ref().err().unwrap().to_string();
+            let response = Server::bad_request_response(message);
+
+            let boxed_stream = stream.write(response.borrow());
+            if boxed_stream.is_ok() {
+                stream.flush().unwrap();
+            } else {
+                let write_message = boxed_stream.err().unwrap().to_string();
+                return Err(write_message);
+            };
+        }
+        let response = app_processing.unwrap();
 
 
         let client = connection.client;
