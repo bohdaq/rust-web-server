@@ -20,6 +20,14 @@ Matching can be done using any request field and connection info supplied to a f
 As you can see `is_matching` method does return a boolean. It is done without explicitly using `return` keyword (line [18](https://github.com/bohdaq/rust-web-server/blob/149d608841ad77b69e2147143928220d29195988/src/controller/example/mod.rs#L18)), as at the end of line there is no a semicolon, which means the line returns result of evaluation (boolean) to the outer context (`is_matching` function). Such line is called `expression`. If you add a semicolon at the end of the line, it will not return a result of evaluation to the outer context, such line is called `statement`. Statement always returns empty result tuple  `()`, called [unit](https://doc.rust-lang.org/std/primitive.unit.html).
 
 #### Preparing the response
+The result of a `process` method is Response instance. 
+
+In case of an error, a `process` method will return a response. It may be modified content or error message. 
+
+The server returns the response to the client
+and doesn't have the ability to process errors happening in the user application.
+
+So it's up to application developer to make sure errors are handled properly and corresponding responses are sent.
 
 
 
