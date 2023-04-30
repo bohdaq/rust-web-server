@@ -1,8 +1,8 @@
 use file_ext::FileExt;
 use crate::controller::Controller;
 use crate::mime_type::MimeType;
-use crate::range::Range;
-use crate::request::Request;
+use crate::range::{ContentRange, Range};
+use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
 use crate::symbol::SYMBOL;
@@ -15,7 +15,7 @@ impl IndexController {
 
 impl Controller for IndexController {
     fn is_matching(request: &Request, _connection: &ConnectionInfo) -> bool {
-        request.request_uri == SYMBOL.slash
+        request.method == METHOD.get && request.request_uri == SYMBOL.slash
     }
 
     fn process(_request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
@@ -28,7 +28,7 @@ impl Controller for IndexController {
                 Range::get_content_range_of_a_file(IndexController::INDEX_FILEPATH);
 
             if boxed_content_range.is_ok() {
-                let content_range = boxed_content_range.unwrap();
+                let content_range: ContentRange = boxed_content_range.unwrap();
                 let content_range_list = vec![content_range];
                 response.content_range_list = content_range_list;
             } else {
