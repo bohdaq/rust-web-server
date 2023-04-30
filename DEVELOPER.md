@@ -18,6 +18,27 @@ On macOS to get IDE work properly run it as an administrator:
 
 > sudo /Applications/IntelliJ\ IDEA\ CE.app/Contents/MacOS/idea
 
+or if you're using CLion
+
+> sudo /Applications/CLion.app/Contents/MacOS/clion
+
+UPDATE 30.04.2023: You may encounter problems on `macOS` even when you're running IDE as root. To fix it make sure you have clonned the gihub repo as root as well. To clone repository as `root` on `macOS`, add user public and private keys to `/var/root/.ssh` folder.
+
+> sudo mkdir -p /var/root/.ssh
+> 
+> sudo cp ~/.ssh/id_rsa /var/root/.ssh/
+> 
+> sudo cp ~/.ssh/id_rsa.pub /var/root/.ssh/
+
+
+and then clone the repo:
+
+> mkdir -p ~/git
+
+> cd ~/git
+
+> sudo git clone git@github.com:bohdaq/rust-web-server.git
+
 UPDATE 28.01.2023: I've got an [open source license](https://www.jetbrains.com/community/opensource/) from JetBrains on all products. They also have [academic licenses](https://www.jetbrains.com/community/education/) available.
 
 However, I **run and test from terminal**. 
