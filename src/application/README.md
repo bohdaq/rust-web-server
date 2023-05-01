@@ -27,3 +27,4 @@ As response instance is mutable, controller can change fields contained by the r
 - [Header](https://github.com/bohdaq/rust-web-server/tree/main/src/header)
 - [Response](https://github.com/bohdaq/rust-web-server/tree/main/src/response)
 - [Server](https://github.com/bohdaq/rust-web-server/tree/main/src/server)
+- [Controller](https://github.com/bohdaq/rust-web-server/tree/main/src/controller)
