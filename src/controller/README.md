@@ -29,7 +29,11 @@ and doesn't have the ability to process errors happening in the user application
 
 So it's up to application developer to make sure errors are handled properly and corresponding responses are sent.
 
+On high level `IndexController` checks if there is a file named `index.html` in server's root folder (line [26](https://github.com/bohdaq/rust-web-server/blob/348d1051e7b04ec0eb254d8d62864f0d23bf6ae2/src/controller/example/mod.rs#L26)). If such file exists, the controller will try to open and read the contents of the file, and return it as http response (line [27](https://github.com/bohdaq/rust-web-server/blob/348d1051e7b04ec0eb254d8d62864f0d23bf6ae2/src/controller/example/mod.rs#L27) - [45](https://github.com/bohdaq/rust-web-server/blob/348d1051e7b04ec0eb254d8d62864f0d23bf6ae2/src/controller/example/mod.rs#L45)).
 
+If there is no file `index.html` inside server root folder, controller will put the contents of the default [index.html](https://github.com/bohdaq/rust-web-server/blob/main/src/controller/example/index.html) (line [48](https://github.com/bohdaq/rust-web-server/blob/348d1051e7b04ec0eb254d8d62864f0d23bf6ae2/src/controller/example/mod.rs#L48) - [55](https://github.com/bohdaq/rust-web-server/blob/348d1051e7b04ec0eb254d8d62864f0d23bf6ae2/src/controller/example/mod.rs#L55)).
+
+Default `index.html` file is shipped as the part of the binary (line [48](https://github.com/bohdaq/rust-web-server/blob/main/src/controller/example/index.html)) via `include_bytes!` macro.
 
 
 #### Links
