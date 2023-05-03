@@ -1,3 +1,6 @@
+use crate::body::multipart_form_data::{FormMultipartData, Part};
+use crate::header::content_disposition::{ContentDisposition, DISPOSITION_TYPE};
+use crate::header::Header;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
@@ -51,6 +54,53 @@ fn body_in_response() {
 
     // replace with your logic
     assert_eq!(Vec::from("request body can be anything"), response_body.body);
+}
+
+#[test]
+fn multipart_form_data_body_in_request() {
+    let mut part_list : Vec<Part> = vec![];
+
+    // part one
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.form_data.to_string(),
+        field_name: Some("field1".to_string()),
+        file_name: None,
+    };
+
+    let header = Header::parse_header(&content_disposition.as_string().unwrap()).unwrap();
+
+    let body = "some-data".as_bytes().to_vec();
+    let part = Part { headers: vec![header], body: body.clone() };
+
+    part_list.push(part);
+
+    // part two
+    let content_disposition = ContentDisposition {
+        disposition_type: DISPOSITION_TYPE.form_data.to_string(),
+        field_name: Some("field2".to_string()),
+        file_name: None,
+    };
+
+    let header = Header::parse_header(&content_disposition.as_string().unwrap()).unwrap();
+
+    let body = "another-data".as_bytes().to_vec();
+    let part = Part { headers: vec![header], body: body.clone() };
+
+    part_list.push(part);
+    let boundary = "------someboundary------";
+    let body: Vec<u8> = FormMultipartData::generate(part_list, boundary).unwrap();
+    let expected_body : Vec<u8> = body.to_vec();
+
+    let request : Request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/some/path".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body, // same as `body: body`
+    };
+
+    // replace with your logic
+    assert_eq!(expected_body, request.body);
 }
 
 
