@@ -22,7 +22,7 @@ TODO example
 
 #### Multipart Form Data
 
-TODO example
+Example on how to use `multipart/form-data` body within [request](https://github.com/bohdaq/rust-web-server/blob/d018cf7d8acd854aacb04e068ff29305e651f9e8/src/body/example/mod.rs#L60).
 
 #### JSON
 

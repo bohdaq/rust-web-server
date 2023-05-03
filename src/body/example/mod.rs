@@ -89,7 +89,7 @@ fn multipart_form_data_body_in_request() {
     part_list.push(part);
     let boundary = "------someboundary------";
     let body: Vec<u8> = FormMultipartData::generate(part_list, boundary).unwrap();
-    let expected_body : Vec<u8> = body.to_vec();
+    let expected_body : Vec<u8> = body.to_vec(); // creates copy of the vector
 
     let request : Request = Request {
         method: METHOD.get.to_string(),
