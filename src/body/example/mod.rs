@@ -7,7 +7,7 @@ use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 #[test]
 fn body_in_request() {
     // can be any piece of data
-    let body : Vec<u8> = Vec::from("request body can be anythings");
+    let body : Vec<u8> = Vec::from("request body can be anything");
 
     let request : Request = Request {
         method: METHOD.get.to_string(),
@@ -18,13 +18,13 @@ fn body_in_request() {
     };
 
     // replace with your logic
-    assert_eq!(Vec::from("request body can be anythings"), request.body);
+    assert_eq!(Vec::from("request body can be anything"), request.body);
 }
 
 #[test]
 fn body_in_response() {
     // can be any piece of data
-    let body : Vec<u8> = Vec::from("request body can be anythings");
+    let body : Vec<u8> = Vec::from("request body can be anything");
     let start = 0;
     let length = body.len();
 
@@ -50,7 +50,7 @@ fn body_in_response() {
     let response_body : &ContentRange = response.content_range_list.get(0).unwrap();
 
     // replace with your logic
-    assert_eq!(Vec::from("request body can be anythings"), response_body.body);
+    assert_eq!(Vec::from("request body can be anything"), response_body.body);
 }
 
 
