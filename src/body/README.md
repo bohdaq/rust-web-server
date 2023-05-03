@@ -8,8 +8,11 @@ Body is an arbitrary sequence of bytes (array of bytes `Vec<u8>` in request).
 
 In response, it is represented via an array of ContentRange (`Vec<ContentRange>`) because response can contain several bodies if `multipart/byteranges` content type is set. Usually response does not contain multiple bodies, so the size of vector is one.
 
+`ContentRange` is a container struct for storing data and information about this data such as what part of originating file it is (either the file is sent fully or only a specific portion of the file is sent from byte M to byte N).
+
 ### Usage
 
+Example on how to use body within request and response.
 
 
 #### Links

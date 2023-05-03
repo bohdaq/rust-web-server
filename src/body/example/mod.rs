@@ -30,7 +30,10 @@ fn body_in_response() {
 
     let content_range = ContentRange {
         unit: Range::BYTES.to_string(),
-        range: Range { start: start, end: length as u64 },
+        range: Range {
+            start, // same as `start: start,`
+            end: length as u64
+        },
         size: length.to_string(),
         body,
         content_type: MimeType::TEXT_PLAIN.to_string(),
