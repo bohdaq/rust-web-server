@@ -1,7 +1,7 @@
 [Read Me](https://github.com/bohdaq/rust-web-server/tree/main) > [Documentation](https://github.com/bohdaq/rust-web-server/tree/main/src/README.md) > Body 
 
 # Body 
-Body is part of [request](https://github.com/bohdaq/rust-web-server/blob/fd45e7842ff66c85454e772c1f782da28d8166cb/src/request/mod.rs#L21) and [response](https://github.com/bohdaq/rust-web-server/blob/fd45e7842ff66c85454e772c1f782da28d8166cb/src/response/mod.rs#L28). It goes after the last header (if any present) and an empty line. 
+Body is a part of [request](https://github.com/bohdaq/rust-web-server/blob/fd45e7842ff66c85454e772c1f782da28d8166cb/src/request/mod.rs#L21) and [response](https://github.com/bohdaq/rust-web-server/blob/fd45e7842ff66c85454e772c1f782da28d8166cb/src/response/mod.rs#L28). It goes after the last header (if any present) and an empty line. 
 
 ### High level overview
 Body is an arbitrary sequence of bytes (array of bytes `Vec<u8>` in request).
@@ -12,7 +12,21 @@ In response, it is represented via an array of ContentRange (`Vec<ContentRange>`
 
 ### Usage
 
-Example on how to use raw body within [request](https://github.com/bohdaq/rust-web-server/blob/1be7b0851d7056a5a84310229adf61e01fc76843/src/body/example/mod.rs#L8) and [response](https://github.com/bohdaq/rust-web-server/blob/1be7b0851d7056a5a84310229adf61e01fc76843/src/body/example/mod.rs#L25).
+Example on how to use raw body within [request](https://github.com/bohdaq/rust-web-server/blob/1be7b0851d7056a5a84310229adf61e01fc76843/src/body/example/mod.rs#L8) and [response](https://github.com/bohdaq/rust-web-server/blob/1be7b0851d7056a5a84310229adf61e01fc76843/src/body/example/mod.rs#L25). In case response body contains several parts, apply the same logic to each `ContentRange`.
+
+Except raw bytes, body can be `urlencoded form`, `multipart/form-data` or `json`.
+
+#### FormUrlEncoded 
+
+TODO example
+
+#### Multipart Form Data
+
+TODO example
+
+#### JSON
+
+TODO example
 
 
 #### Links
