@@ -12,7 +12,7 @@ In response, it is represented via an array of ContentRange (`Vec<ContentRange>`
 
 ### Usage
 
-Example on how to use body within request and response.
+Example on how to use raw body within [request](https://github.com/bohdaq/rust-web-server/blob/1be7b0851d7056a5a84310229adf61e01fc76843/src/body/example/mod.rs#L8) and [response](https://github.com/bohdaq/rust-web-server/blob/1be7b0851d7056a5a84310229adf61e01fc76843/src/body/example/mod.rs#L25).
 
 
 #### Links
