@@ -24,6 +24,10 @@ TODO example
 
 Example on how to use `multipart/form-data` body within [request](https://github.com/bohdaq/rust-web-server/blob/c0300d300c823a7f795ed65f28cab19000f7db98/src/body/example/mod.rs#L60) and [response](https://github.com/bohdaq/rust-web-server/blob/c0300d300c823a7f795ed65f28cab19000f7db98/src/body/example/mod.rs#L117).
 
+How to [handle request](https://github.com/bohdaq/rust-web-server/blob/a0a304f7cfb3734fdbd56e304f771a9ac322e386/src/app/controller/form/multipart_enctype_post_method/mod.rs#L13) via controller.
+
+How to [generate such request](https://github.com/bohdaq/rust-web-server/blob/a0a304f7cfb3734fdbd56e304f771a9ac322e386/src/request/tests.rs#L243).
+
 #### JSON
 
 TODO example
