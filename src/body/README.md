@@ -16,7 +16,7 @@ Example on how to use raw body within [request](https://github.com/bohdaq/rust-w
 
 Except raw bytes, body can be `application/x-www-form-urlencoded`, `multipart/form-data` or `application/json`.
 
-#### FormUrlEncoded 
+#### Form Url Encoded 
 
 TODO example
 
