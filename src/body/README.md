@@ -14,7 +14,7 @@ In response, it is represented via an array of ContentRange (`Vec<ContentRange>`
 
 Example on how to use raw body within [request](https://github.com/bohdaq/rust-web-server/blob/c0300d300c823a7f795ed65f28cab19000f7db98/src/body/example/mod.rs#L8) and [response](https://github.com/bohdaq/rust-web-server/blob/c0300d300c823a7f795ed65f28cab19000f7db98/src/body/example/mod.rs#L25). In case response body contains several parts, apply the same logic to each `ContentRange`.
 
-Except raw bytes, body can be `urlencoded form`, `multipart/form-data` or `json`.
+Except raw bytes, body can be `application/x-www-form-urlencoded`, `multipart/form-data` or `application/json`.
 
 #### FormUrlEncoded 
 
