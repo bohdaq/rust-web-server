@@ -12,7 +12,7 @@ In response, it is represented via an array of ContentRange (`Vec<ContentRange>`
 
 ### Usage
 
-Example on how to use raw body within [request](https://github.com/bohdaq/rust-web-server/blob/1be7b0851d7056a5a84310229adf61e01fc76843/src/body/example/mod.rs#L8) and [response](https://github.com/bohdaq/rust-web-server/blob/1be7b0851d7056a5a84310229adf61e01fc76843/src/body/example/mod.rs#L25). In case response body contains several parts, apply the same logic to each `ContentRange`.
+Example on how to use raw body within [request](https://github.com/bohdaq/rust-web-server/blob/c0300d300c823a7f795ed65f28cab19000f7db98/src/body/example/mod.rs#L8) and [response](https://github.com/bohdaq/rust-web-server/blob/c0300d300c823a7f795ed65f28cab19000f7db98/src/body/example/mod.rs#L25). In case response body contains several parts, apply the same logic to each `ContentRange`.
 
 Except raw bytes, body can be `urlencoded form`, `multipart/form-data` or `json`.
 
@@ -22,7 +22,7 @@ TODO example
 
 #### Multipart Form Data
 
-Example on how to use `multipart/form-data` body within [request](https://github.com/bohdaq/rust-web-server/blob/d018cf7d8acd854aacb04e068ff29305e651f9e8/src/body/example/mod.rs#L60).
+Example on how to use `multipart/form-data` body within [request](https://github.com/bohdaq/rust-web-server/blob/c0300d300c823a7f795ed65f28cab19000f7db98/src/body/example/mod.rs#L60) and [response](https://github.com/bohdaq/rust-web-server/blob/c0300d300c823a7f795ed65f28cab19000f7db98/src/body/example/mod.rs#L117).
 
 #### JSON
 
