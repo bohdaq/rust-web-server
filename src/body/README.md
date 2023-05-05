@@ -18,7 +18,7 @@ Except raw bytes, body can be `application/x-www-form-urlencoded`, `multipart/fo
 
 #### Form Url Encoded 
 
-TODO example
+Form Url Encoded request contains url query string as body payload.
 
 #### Multipart Form Data
 
