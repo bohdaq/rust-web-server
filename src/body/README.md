@@ -20,6 +20,8 @@ Except raw bytes, body can be `application/x-www-form-urlencoded`, `multipart/fo
 
 Form Url Encoded request contains [url query](https://en.wikipedia.org/wiki/Query_string) string as body payload.
 
+Example on how to use `application/x-www-form-urlencoded` body within [request](https://github.com/bohdaq/rust-web-server/blob/3c6d0aef9b02dfea97c97bd204df856f0a1ae73f/src/body/example/mod.rs#L194).
+
 #### Multipart Form Data
 
 Multipart form data request contains several parts of the same resource (`ContentRange`). Each part is an arbitrary sequence of bytes and consists of headers, where `Content-Disposition` header is mandatory and body containing the payload.
