@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use crate::body::form_urlencoded::FormUrlEncoded;
 use crate::body::multipart_form_data::{FormMultipartData, Part};
 use crate::header::content_disposition::{ContentDisposition, DISPOSITION_TYPE};
 use crate::header::Header;
@@ -190,7 +192,35 @@ fn multipart_form_data_body_in_response() {
 
 #[test]
 fn form_urlencoded() {
+    // u may need to encode key values before inserting into map
+    // https://en.wikipedia.org/wiki/URL_encoding
+    let mut params_map: HashMap<String, String> = HashMap::new();
+    params_map.insert("key1".to_string(), "test1".to_string());
+    params_map.insert("key2".to_string(), "test2".to_string());
 
+    let body: Vec<u8> = FormUrlEncoded::generate(params_map).as_bytes().to_vec();
+    let expected_body : Vec<u8> = body.to_vec(); // creates copy of the vector
+
+    let host = Header {
+        name: Header::_HOST.to_string(),
+        value: "localhost".to_string()
+    };
+
+    let content_type = Header {
+        name: Header::_CONTENT_TYPE.to_string(),
+        value: "application/x-www-form-urlencoded".to_string()
+    };
+
+    let request : Request = Request {
+        method: METHOD.post.to_string(), // in get request query string is sent as part of request_uri, not a body
+        request_uri: "/some/path".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![host, content_type],
+        body, // same as `body: body`
+    };
+
+    // replace with your logic
+    assert_eq!(expected_body, request.body);
 }
 
 
