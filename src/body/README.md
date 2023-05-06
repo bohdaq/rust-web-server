@@ -34,7 +34,7 @@ How to [generate such request](https://github.com/bohdaq/rust-web-server/blob/a0
 
 #### JSON
 
-How to [generate and parse](https://github.com/bohdaq/rust-web-server/blob/0d027c86e68511345e3bd9075f7b057f0e463b3d/src/body/example/mod.rs#L234) JSON body in `application/json` request.
+How to [generate and parse](https://github.com/bohdaq/rust-web-server/blob/938ddc5e946699f5d9e5a20b78241a296fbfd597/src/body/example/mod.rs#L234) JSON body in `application/json` request.
 
 Same applies to [response](https://github.com/bohdaq/rust-web-server/blob/938ddc5e946699f5d9e5a20b78241a296fbfd597/src/body/example/mod.rs#L282).
 
