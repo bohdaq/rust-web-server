@@ -6,7 +6,7 @@ use crate::core::New;
 use crate::header::content_disposition::{ContentDisposition, DISPOSITION_TYPE};
 use crate::header::Header;
 use crate::http::VERSION;
-use crate::json::object::{FromJSON, ToJSON};
+use crate::json::object::{ToJSON};
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Request};
@@ -331,9 +331,8 @@ fn json_body_in_response() {
 
     // replace with your logic
     assert_eq!(expected_body, response_body.body);
-    let mut parsed_object = ExampleObject::new();
     let json_string = String::from_utf8(response_body.body.to_vec()).unwrap();
-    parsed_object.parse(json_string).unwrap();
+    ExampleObject::parse(json_string).unwrap();
 }
 
 

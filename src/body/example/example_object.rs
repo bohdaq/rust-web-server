@@ -229,4 +229,21 @@ impl ExampleObject {
     pub fn from_json_list(json_array: String) -> Result<Vec<ExampleObject>, String> {
         JSONArrayOfObjects::<ExampleObject>::from_json(json_array)
     }
+
+    // can be copy-pasted
+    pub fn parse(json_string: String) -> Result<(), String> {
+        let mut parsed_object = ExampleObject::new();
+        let boxed_properties = parsed_object.parse_json_to_properties(json_string);
+        if boxed_properties.is_err() {
+            let message = boxed_properties.err().unwrap();
+            return Err(message);
+        }
+        let properties = boxed_properties.unwrap();
+        let boxed_set = parsed_object.set_properties(properties);
+        if boxed_set.is_err() {
+            let message = boxed_set.err().unwrap();
+            return Err(message);
+        }
+        Ok(())
+    }
 }
