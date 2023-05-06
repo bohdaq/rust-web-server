@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use crate::body::example::example_object::ExampleObject;
 use crate::body::form_urlencoded::FormUrlEncoded;
 use crate::body::multipart_form_data::{FormMultipartData, Part};
+use crate::core::New;
 use crate::header::content_disposition::{ContentDisposition, DISPOSITION_TYPE};
 use crate::header::Header;
 use crate::http::VERSION;
@@ -8,6 +10,10 @@ use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+// user defined jsons
+mod example_object;
+mod example_nested_object;
 
 #[test]
 fn body_in_request() {
@@ -221,6 +227,54 @@ fn form_urlencoded() {
 
     // replace with your logic
     assert_eq!(expected_body, request.body);
+}
+
+
+#[test]
+fn json() {
+    let first_object = ExampleObject::new();
+
+    let second_object = ExampleObject {
+        prop_a: "test".to_string(),
+        prop_b: true,
+        prop_c: false,
+        prop_d: 10,
+        prop_e: 2.2,
+        prop_f: None,
+        prop_g: None,
+    };
+
+    let list  = vec![first_object, second_object];
+
+
+    let json_array : String = ExampleObject::to_json_list(list).unwrap();
+
+    let body: Vec<u8> = json_array.as_bytes().to_vec();
+    let expected_body : Vec<u8> = body.to_vec(); // creates copy of the vector
+
+    let host = Header {
+        name: Header::_HOST.to_string(),
+        value: "localhost".to_string()
+    };
+
+    let content_type = Header {
+        name: Header::_CONTENT_TYPE.to_string(),
+        value: "application/x-www-form-urlencoded".to_string()
+    };
+
+    let request : Request = Request {
+        method: METHOD.post.to_string(), // in get request query string is sent as part of request_uri, not a body
+        request_uri: "/some/path".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![host, content_type],
+        body, // same as `body: body`
+    };
+
+    // replace with your logic
+    assert_eq!(expected_body, request.body);
+
+    let actual_json_string = String::from_utf8(request.body).unwrap();
+    let _actual_list : Vec<ExampleObject> = ExampleObject::from_json_list(actual_json_string).unwrap();
 }
 
 
