@@ -6,6 +6,7 @@ use crate::core::New;
 use crate::header::content_disposition::{ContentDisposition, DISPOSITION_TYPE};
 use crate::header::Header;
 use crate::http::VERSION;
+use crate::json::object::{FromJSON, ToJSON};
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Request};
@@ -275,6 +276,64 @@ fn json_in_request() {
 
     let actual_json_string = String::from_utf8(request.body).unwrap();
     let _actual_list : Vec<ExampleObject> = ExampleObject::from_json_list(actual_json_string).unwrap();
+}
+
+#[test]
+fn json_body_in_response() {
+    let object = ExampleObject {
+        prop_a: "test".to_string(),
+        prop_b: true,
+        prop_c: false,
+        prop_d: 10,
+        prop_e: 2.2,
+        prop_f: None,
+        prop_g: None,
+    };
+
+    let json_object : String = object.to_json_string();
+
+    let body: Vec<u8> = json_object.as_bytes().to_vec();
+    let expected_body : Vec<u8> = body.to_vec(); // creates copy of the vector
+
+    let start = 0;
+    let length = body.len();
+
+    let content_range = ContentRange {
+        unit: Range::BYTES.to_string(),
+        range: Range {
+            start, // same as `start: start,`
+            end: length as u64
+        },
+        size: length.to_string(),
+        body,
+        content_type: MimeType::TEXT_PLAIN.to_string(),
+    };
+
+    let host = Header {
+        name: Header::_HOST.to_string(),
+        value: "localhost".to_string()
+    };
+
+    let content_type = Header {
+        name: Header::_CONTENT_TYPE.to_string(),
+        value: "application/json".to_string()
+    };
+
+    let response = Response {
+        http_version: VERSION.http_1_1.to_string(),
+        status_code: *STATUS_CODE_REASON_PHRASE.n200_ok.status_code,
+        reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
+        headers: vec![host, content_type],
+        content_range_list: vec![content_range],
+    };
+
+    let response_body : &ContentRange = response.content_range_list.get(0).unwrap();
+
+    // replace with your logic
+    assert_eq!(expected_body, response_body.body);
+    let mut parsed_object = ExampleObject::new();
+    let json_string = String::from_utf8(response_body.body.to_vec()).unwrap();
+    parsed_object.parse(json_string).unwrap();
 }
 
 
