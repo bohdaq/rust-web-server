@@ -38,6 +38,8 @@ How to [generate and parse](https://github.com/bohdaq/rust-web-server/blob/0d027
 
 Same applies to response.
 
+More on [handling JSON](https://github.com/bohdaq/rust-web-server/tree/main/src/json).
+
 
 #### Links
 - [Request](https://github.com/bohdaq/rust-web-server/tree/main/src/request)
