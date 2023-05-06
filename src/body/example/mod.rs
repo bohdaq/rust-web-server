@@ -231,7 +231,7 @@ fn form_urlencoded() {
 
 
 #[test]
-fn json() {
+fn json_in_request() {
     let first_object = ExampleObject::new();
 
     let second_object = ExampleObject {

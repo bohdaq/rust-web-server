@@ -34,7 +34,9 @@ How to [generate such request](https://github.com/bohdaq/rust-web-server/blob/a0
 
 #### JSON
 
-TODO example
+How to generate and parse JSON as body in request.
+
+Same applies to response.
 
 
 #### Links
