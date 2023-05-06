@@ -34,7 +34,7 @@ How to [generate such request](https://github.com/bohdaq/rust-web-server/blob/a0
 
 #### JSON
 
-How to generate and parse JSON as body in request.
+How to [generate and parse](https://github.com/bohdaq/rust-web-server/blob/0d027c86e68511345e3bd9075f7b057f0e463b3d/src/body/example/mod.rs#L234) JSON as body in request.
 
 Same applies to response.
 
