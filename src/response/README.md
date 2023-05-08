@@ -79,7 +79,7 @@ For multipart response, body starts with boundary (line 5), indicating first par
 
 Each part structure is similar to plain response without response line. 
 
-`Content-Type` header shows type of data contained within the part. `Content-Range` header shows number of bytes (bytes 0-9/`12`) in the part and theirs position (bytes `0-9`/9) in the original file. 
+`Content-Type` header shows type of data contained within the part. `Content-Range` header shows number of bytes (bytes 0-9/`12`) in the part and theirs position (bytes `0-9`/12) in the original file. 
 
 Empty line (number 8) is delimiter between parts headers and body. First parts body (payload) starts immediately after, up to the next boundary.
 
