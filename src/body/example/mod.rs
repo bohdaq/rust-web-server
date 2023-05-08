@@ -336,3 +336,45 @@ fn json_body_in_response() {
 }
 
 
+#[test]
+fn multipart_body_in_response() {
+    let resource_uri = "/static/content.png";
+
+    // building body (content_range_list)
+    let range = Header {
+        name: Header::_RANGE.to_string(),
+        value: "bytes=200-1000, 1200-1400".to_string()
+    };
+
+    let content_range_list : Vec<ContentRange> = Range::get_content_range_list(resource_uri, &range).unwrap();
+
+    // building response
+    let host = Header {
+        name: Header::_HOST.to_string(),
+        value: "localhost".to_string()
+    };
+
+    let content_type = Header {
+        name: Header::_CONTENT_TYPE.to_string(),
+        value: "multipart/byteranges; boundary=String_separator".to_string()
+    };
+
+    let response = Response {
+        http_version: VERSION.http_1_1.to_string(),
+        status_code: *STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code,
+        reason_phrase: STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase.to_string(),
+        headers: vec![host, content_type],
+        content_range_list
+    };
+
+
+    // replace with your logic
+    let response_body : &ContentRange = response.content_range_list.get(0).unwrap();
+    assert_eq!(801, response_body.body.len());
+
+    let response_body : &ContentRange = response.content_range_list.get(1).unwrap();
+    assert_eq!(201, response_body.body.len());
+
+}
+
+
