@@ -49,7 +49,7 @@ Example `multipart/byteranges` HTTP Response.
 - `HEAD` and `OPTIONS` request does not have body.
 
 - `multipart/byteranges` applies only to response body.
-- `multipart/form-data` applies only to request body
+- `multipart/form-data` and `application/x-www-form-urlencoded` applies only to request body
 
 
 #### Links
