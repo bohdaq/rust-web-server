@@ -35,9 +35,9 @@ Body (Response Body Here) is the arbitrary sequence (array) of bytes and goes af
 Even though initially HTTP protocol was designed to transfer text based information, request body can be any set of bytes from image, video, audio, etc.
 
 ### Multipart response
-Response may contain several bodies for different resources. Such functionality achieved through Range requests. 
+Response may contain several different parts of the same resource. Such functionality achieved through Range requests. 
 
-Example `multipart range` HTTP Response (1-15 are line numbers, not part of the request):
+Example `multipart/byteranges` HTTP Response (1-15 are line numbers, not part of the request):
 
 >1 HTTP/1.1 200 OK
 > 
@@ -52,7 +52,7 @@ Example `multipart range` HTTP Response (1-15 are line numbers, not part of the 
 > 
 >6 Content-Type:  text/plain
 > 
->7 Content-Range:  bytes 0-9/9
+>7 Content-Range:  bytes 0-9/12
 > 
 >8
 > 
@@ -62,11 +62,11 @@ Example `multipart range` HTTP Response (1-15 are line numbers, not part of the 
 >
 >11 Content-Type:  text/plain
 > 
->12 Content-Range:  bytes 0-12/12
+>12 Content-Range:  bytes 9-12/12
 > 
 >13
 > 
->14 another text
+>14 qwe
 > 
 >15 --String_separator
 
@@ -79,7 +79,7 @@ For multipart response, body starts with boundary (line 5), indicating first par
 
 Each part structure is similar to plain response without response line. 
 
-`Content-Type` header shows type of data contained within the part. `Content-Range` header shows number of bytes (bytes 0-9/`9`) in the part and theirs position (bytes `0-9`/9) in the original file. 
+`Content-Type` header shows type of data contained within the part. `Content-Range` header shows number of bytes (bytes 0-9/`12`) in the part and theirs position (bytes `0-9`/9) in the original file. 
 
 Empty line (number 8) is delimiter between parts headers and body. First parts body (payload) starts immediately after, up to the next boundary.
 
