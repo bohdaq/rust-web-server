@@ -40,7 +40,7 @@ Same applies to [response](https://github.com/bohdaq/rust-web-server/blob/25d9ea
 
 More on [handling JSON](https://github.com/bohdaq/rust-web-server/tree/main/src/json).
 
-#### Multipart response
+#### Multipart Response
 Response may contain several different parts of the same resource. Such functionality achieved through Range requests.
 
 Example `multipart/byteranges` HTTP Response.
