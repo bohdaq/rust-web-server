@@ -364,7 +364,7 @@ fn multipart_body_in_response() {
         status_code: *STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code,
         reason_phrase: STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase.to_string(),
         headers: vec![host, content_type],
-        content_range_list
+        content_range_list // same as `content_range_list: content_range_list`
     };
 
 
