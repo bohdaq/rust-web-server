@@ -327,9 +327,9 @@ fn json_body_in_response() {
         content_range_list: vec![content_range],
     };
 
-    let response_body : &ContentRange = response.content_range_list.get(0).unwrap();
-
     // replace with your logic
+
+    let response_body : &ContentRange = response.content_range_list.get(0).unwrap();
     assert_eq!(expected_body, response_body.body);
     let json_string = String::from_utf8(response_body.body.to_vec()).unwrap();
     ExampleObject::parse(json_string).unwrap();
