@@ -23,8 +23,8 @@ fn parse() {
 
 
     // asserts, replace with your logic
-    assert_eq!(&response.status_code, STATUS_CODE_REASON_PHRASE.n200_ok.status_code);
-    assert_eq!(&response.reason_phrase, STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase);
+    assert_eq!(&response.status_code, STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code);
+    assert_eq!(&response.reason_phrase, STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase);
     assert_eq!(&response.http_version, VERSION.http_1_1);
 
     let host_header : &Header = response.get_header(Header::_HOST.to_string()).unwrap();
