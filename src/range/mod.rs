@@ -33,6 +33,7 @@ impl Range {
     pub const BYTERANGES: &'static str = "byteranges";
     pub const MULTIPART: &'static str = "multipart";
     pub const BYTES: &'static str = "bytes";
+    pub const MULTIPART_BYTERANGES_CONTENT_TYPE: &'static str = "multipart/byteranges; boundary=String_separator";
 
 
     pub const _ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";

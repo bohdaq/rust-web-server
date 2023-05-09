@@ -356,7 +356,7 @@ fn multipart_body_in_response() {
 
     let content_type = Header {
         name: Header::_CONTENT_TYPE.to_string(),
-        value: "multipart/byteranges; boundary=String_separator".to_string()
+        value: Range::MULTIPART_BYTERANGES_CONTENT_TYPE.to_string()
     };
 
     let response = Response {
