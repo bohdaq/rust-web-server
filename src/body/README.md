@@ -43,7 +43,7 @@ More on [handling JSON](https://github.com/bohdaq/rust-web-server/tree/main/src/
 #### Multipart Response
 Response may contain several different parts of the same resource. Such functionality achieved through Range requests.
 
-Example `multipart/byteranges` [response body](https://github.com/bohdaq/rust-web-server/blob/a34e1f83f2077010670116c03170b65f77f5e92f/src/body/example/mod.rs#L340).
+Example `multipart/byteranges` [response body](https://github.com/bohdaq/rust-web-server/blob/a34e1f83f2077010670116c03170b65f77f5e92f/src/body/example/mod.rs#L340). How raw `multipart/byteranges` [response](https://github.com/bohdaq/rust-web-server/blob/507cf0ca22659d8c574ad47caa7f7aed339e6a41/src/response/example/response.multipart.txt#L1) looks like.
 
 #### Notes
 - `HEAD` and `OPTIONS` request does not have body.
