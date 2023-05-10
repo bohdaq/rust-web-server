@@ -21,6 +21,7 @@ impl URL {
         _result = _result.replace(SYMBOL.closing_bracket, "%29");
         _result = _result.replace(SYMBOL.asterisk, "%2A");
         _result = _result.replace(SYMBOL.plus, "%2B");
+        _result = _result.replace(SYMBOL.comma, "%2C");
 
 
         return _result
@@ -41,6 +42,7 @@ impl URL {
         _result = _result.replace ("%29", SYMBOL.closing_bracket);
         _result = _result.replace ("%2A", SYMBOL.asterisk);
         _result = _result.replace ("%2B", SYMBOL.plus);
+        _result = _result.replace ("%2C", SYMBOL.comma);
 
         return _result
     }
