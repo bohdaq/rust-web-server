@@ -23,6 +23,7 @@ pub struct Symbol {
     pub single_quote: &'static str,
     pub percent: &'static str,
     pub exclamation_mark: &'static str,
+    pub dollar: &'static str,
 }
 
 pub const SYMBOL: Symbol = Symbol {
@@ -47,4 +48,5 @@ pub const SYMBOL: Symbol = Symbol {
     single_quote: "'",
     percent: "%",
     exclamation_mark: "!",
+    dollar: "$",
 };
