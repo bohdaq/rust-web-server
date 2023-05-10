@@ -22,6 +22,7 @@ impl URL {
         _result = _result.replace(SYMBOL.asterisk, "%2A");
         _result = _result.replace(SYMBOL.plus, "%2B");
         _result = _result.replace(SYMBOL.comma, "%2C");
+        _result = _result.replace(SYMBOL.slash, "%2F");
 
 
         return _result
@@ -43,6 +44,7 @@ impl URL {
         _result = _result.replace ("%2A", SYMBOL.asterisk);
         _result = _result.replace ("%2B", SYMBOL.plus);
         _result = _result.replace ("%2C", SYMBOL.comma);
+        _result = _result.replace ("%2F", SYMBOL.slash);
 
         return _result
     }
