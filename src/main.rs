@@ -21,6 +21,7 @@ pub mod log;
 pub mod body;
 pub mod json;
 pub mod null;
+pub mod url;
 pub mod core;
 pub mod application;
 pub mod controller;
