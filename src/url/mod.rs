@@ -10,6 +10,7 @@ impl URL {
         let mut _result = component.replace(SYMBOL.whitespace, "%20");
         _result = _result.replace(SYMBOL.carriage_return, "%0D");
         _result = _result.replace(SYMBOL.new_line, "%0A");
+        _result = _result.replace(SYMBOL.quotation_mark, "%22");
 
         return _result
     }
@@ -18,6 +19,7 @@ impl URL {
         let mut _result = component.replace( "%20", SYMBOL.whitespace);
         _result = _result.replace("%0A", SYMBOL.new_line);
         _result = _result.replace ("%0D", SYMBOL.carriage_return);
+        _result = _result.replace ("%22", SYMBOL.quotation_mark);
 
         return _result
     }
