@@ -25,6 +25,8 @@ pub struct Symbol {
     pub exclamation_mark: &'static str,
     pub dollar: &'static str,
     pub ampersand: &'static str,
+    pub opening_bracket: &'static str,
+    pub closing_bracket: &'static str,
 }
 
 pub const SYMBOL: Symbol = Symbol {
@@ -51,4 +53,6 @@ pub const SYMBOL: Symbol = Symbol {
     exclamation_mark: "!",
     dollar: "$",
     ampersand: "&",
+    opening_bracket: "(",
+    closing_bracket: ")",
 };

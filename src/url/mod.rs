@@ -17,6 +17,8 @@ impl URL {
         _result = _result.replace(SYMBOL.dollar, "%24");
         _result = _result.replace(SYMBOL.ampersand, "%26");
         _result = _result.replace(SYMBOL.single_quote, "%27");
+        _result = _result.replace(SYMBOL.opening_bracket, "%28");
+        _result = _result.replace(SYMBOL.closing_bracket, "%29");
 
 
         return _result
@@ -33,6 +35,8 @@ impl URL {
         _result = _result.replace ("%25", SYMBOL.percent);
         _result = _result.replace ("%26", SYMBOL.ampersand);
         _result = _result.replace ("%27", SYMBOL.single_quote);
+        _result = _result.replace ("%28", SYMBOL.opening_bracket);
+        _result = _result.replace ("%29", SYMBOL.closing_bracket);
 
         return _result
     }
