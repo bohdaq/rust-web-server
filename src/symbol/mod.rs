@@ -21,6 +21,7 @@ pub struct Symbol {
     pub quotation_mark: &'static str,
     pub underscore: &'static str,
     pub single_quote: &'static str,
+    pub percent: &'static str,
 }
 
 pub const SYMBOL: Symbol = Symbol {
@@ -43,4 +44,5 @@ pub const SYMBOL: Symbol = Symbol {
     quotation_mark: "\"",
     underscore: "_",
     single_quote: "'",
+    percent: "%",
 };
