@@ -27,6 +27,8 @@ pub struct Symbol {
     pub ampersand: &'static str,
     pub opening_bracket: &'static str,
     pub closing_bracket: &'static str,
+    pub asterisk: &'static str,
+    pub plus: &'static str,
 }
 
 pub const SYMBOL: Symbol = Symbol {
@@ -55,4 +57,6 @@ pub const SYMBOL: Symbol = Symbol {
     ampersand: "&",
     opening_bracket: "(",
     closing_bracket: ")",
+    asterisk: "*",
+    plus: "+",
 };

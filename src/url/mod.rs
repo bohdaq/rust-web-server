@@ -19,6 +19,8 @@ impl URL {
         _result = _result.replace(SYMBOL.single_quote, "%27");
         _result = _result.replace(SYMBOL.opening_bracket, "%28");
         _result = _result.replace(SYMBOL.closing_bracket, "%29");
+        _result = _result.replace(SYMBOL.asterisk, "%2A");
+        _result = _result.replace(SYMBOL.plus, "%2B");
 
 
         return _result
@@ -37,6 +39,8 @@ impl URL {
         _result = _result.replace ("%27", SYMBOL.single_quote);
         _result = _result.replace ("%28", SYMBOL.opening_bracket);
         _result = _result.replace ("%29", SYMBOL.closing_bracket);
+        _result = _result.replace ("%2A", SYMBOL.asterisk);
+        _result = _result.replace ("%2B", SYMBOL.plus);
 
         return _result
     }
