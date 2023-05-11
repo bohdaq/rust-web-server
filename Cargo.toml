@@ -11,5 +11,5 @@ license = "MIT OR Apache-2.0 OR ISC OR LGPL-3.0-or-later OR CC-BY-4.0"
 
 [dependencies]
 file-ext = "10.0.0"
-url-search-params = "10.0.0"
+url-search-params = "11.0.0"
 url-build-parse = "10.0.0"
