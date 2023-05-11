@@ -30,6 +30,7 @@ pub struct Symbol {
     pub asterisk: &'static str,
     pub plus: &'static str,
     pub question_mark: &'static str,
+    pub at: &'static str,
 }
 
 pub const SYMBOL: Symbol = Symbol {
@@ -61,4 +62,5 @@ pub const SYMBOL: Symbol = Symbol {
     asterisk: "*",
     plus: "+",
     question_mark: "?",
+    at: "@",
 };

@@ -26,7 +26,9 @@ impl URL {
         _result = _result.replace(SYMBOL.colon, "%3A");
         _result = _result.replace(SYMBOL.semicolon, "%3B");
         _result = _result.replace(SYMBOL.equals, "%3D");
-        _result = _result.replace(SYMBOL.question_mark, "%3F");
+        _result = _result.replace(SYMBOL.at, "%40");
+        _result = _result.replace(SYMBOL.opening_square_bracket, "%5B");
+        _result = _result.replace(SYMBOL.closing_square_bracket, "%5D");
 
 
         return _result
@@ -53,6 +55,9 @@ impl URL {
         _result = _result.replace ("%3B", SYMBOL.semicolon);
         _result = _result.replace ("%3D", SYMBOL.equals);
         _result = _result.replace ("%3F", SYMBOL.question_mark);
+        _result = _result.replace ("%40", SYMBOL.at);
+        _result = _result.replace ("%5B", SYMBOL.opening_square_bracket);
+        _result = _result.replace ("%5D", SYMBOL.closing_square_bracket);
 
         return _result
     }
