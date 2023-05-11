@@ -29,6 +29,7 @@ pub struct Symbol {
     pub closing_bracket: &'static str,
     pub asterisk: &'static str,
     pub plus: &'static str,
+    pub question_mark: &'static str,
 }
 
 pub const SYMBOL: Symbol = Symbol {
@@ -59,4 +60,5 @@ pub const SYMBOL: Symbol = Symbol {
     closing_bracket: ")",
     asterisk: "*",
     plus: "+",
+    question_mark: "?",
 };

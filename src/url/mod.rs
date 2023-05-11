@@ -25,6 +25,8 @@ impl URL {
         _result = _result.replace(SYMBOL.slash, "%2F");
         _result = _result.replace(SYMBOL.colon, "%3A");
         _result = _result.replace(SYMBOL.semicolon, "%3B");
+        _result = _result.replace(SYMBOL.equals, "%3D");
+        _result = _result.replace(SYMBOL.question_mark, "%3F");
 
 
         return _result
@@ -49,6 +51,8 @@ impl URL {
         _result = _result.replace ("%2F", SYMBOL.slash);
         _result = _result.replace ("%3A", SYMBOL.colon);
         _result = _result.replace ("%3B", SYMBOL.semicolon);
+        _result = _result.replace ("%3D", SYMBOL.equals);
+        _result = _result.replace ("%3F", SYMBOL.question_mark);
 
         return _result
     }
