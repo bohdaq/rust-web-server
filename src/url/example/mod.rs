@@ -24,3 +24,16 @@ fn build_query() {
     let query : String = URL::build_query(hash);
     assert_eq!("key%26%3D%21%40=%25val%2Aue%25&key=value", query);
 }
+
+#[test]
+fn parse_query() {
+    let mut hash : HashMap<String, String> = HashMap::new();
+    hash.insert("key".to_string(), "value".to_string());
+    hash.insert("key&=!@".to_string(), "%val*ue%".to_string());
+
+    let query = "key%26%3D%21%40=%25val%2Aue%25&key=value";
+    let hash : HashMap<String, String> = URL::parse_query(query);
+
+    assert_eq!("value", hash.get("key").unwrap());
+    assert_eq!("%val*ue%", hash.get("key&=!@").unwrap());
+}
