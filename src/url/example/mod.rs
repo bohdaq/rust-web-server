@@ -61,3 +61,23 @@ fn build_url() {
     assert_eq!("https://localhost/path?key%26%3D%21%40=%25val%2Aue%25&key=value#fragment-sample", url);
 
 }
+
+#[test]
+fn parse_url() {
+    let url = "https://localhost/path?key%26%3D%21%40=%25val%2Aue%25&key=value#fragment-sample";
+
+    let url_components: UrlComponents = URL::parse(url).unwrap();
+    assert_eq!("https", url_components.scheme);
+
+    assert_eq!("/path", url_components.path);
+
+    let fragment = url_components.fragment.unwrap();
+    assert_eq!("fragment-sample", fragment);
+
+    let authority = url_components.authority.unwrap();
+    assert_eq!("localhost", authority.host);
+
+    let query_map : HashMap<String, String> = url_components.query.unwrap();
+    assert_eq!("value", query_map.get("key").unwrap());
+    assert_eq!("%val*ue%", query_map.get("key&=!@").unwrap());
+}

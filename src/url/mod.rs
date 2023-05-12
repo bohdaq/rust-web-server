@@ -31,7 +31,7 @@ impl URL {
         build_url(components)
     }
 
-    pub fn parse(component: &str) -> Result<UrlComponents, String> {
-        parse_url(component)
+    pub fn parse(url: &str) -> Result<UrlComponents, String> {
+        parse_url(url)
     }
 }
