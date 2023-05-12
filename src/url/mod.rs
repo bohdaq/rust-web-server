@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod example;
 
 use std::collections::HashMap;
 use url_build_parse::{build_url, parse_url, UrlComponents};
