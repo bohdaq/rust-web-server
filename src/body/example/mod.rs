@@ -260,7 +260,7 @@ fn json_in_request() {
 
     let content_type = Header {
         name: Header::_CONTENT_TYPE.to_string(),
-        value: "application/x-www-form-urlencoded".to_string()
+        value: "application/json".to_string()
     };
 
     let request : Request = Request {
