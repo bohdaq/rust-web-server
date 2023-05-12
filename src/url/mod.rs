@@ -2,6 +2,7 @@
 mod tests;
 
 use std::collections::HashMap;
+use url_build_parse::{build_url, parse_url, UrlComponents};
 use url_search_params::{build_url_search_params, encode_uri_component, parse_url_search_params};
 use url_search_params::decode_uri_component;
 
@@ -22,5 +23,13 @@ impl URL {
 
     pub fn parse_query(component: &str) -> HashMap<String, String> {
         parse_url_search_params(component)
+    }
+
+    pub fn build(components: UrlComponents) -> Result<String, String> {
+        build_url(components)
+    }
+
+    pub fn parse(component: &str) -> Result<UrlComponents, String> {
+        parse_url(component)
     }
 }
