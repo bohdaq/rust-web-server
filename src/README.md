@@ -9,4 +9,5 @@ Below are the links to the documentation for each specific module.
 1. [Controller](https://github.com/bohdaq/rust-web-server/tree/main/src/controller)
 1. [Body](https://github.com/bohdaq/rust-web-server/tree/main/src/body)
 1. [JSON](https://github.com/bohdaq/rust-web-server/tree/main/src/json)
+1. [URL](https://github.com/bohdaq/rust-web-server/tree/main/src/url)
 1. [Null](https://github.com/bohdaq/rust-web-server/tree/main/src/null)
