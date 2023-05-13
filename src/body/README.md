@@ -1,4 +1,4 @@
-[Read Me](https://github.com/bohdaq/rust-web-server/tree/main) > [Documentation](https://github.com/bohdaq/rust-web-server/tree/main/src/README.md) > Body 
+[Read Me](https://github.com/bohdaq/rust-web-server/blob/main/README.md) > [Documentation](https://github.com/bohdaq/rust-web-server/tree/main/src/README.md) > Body 
 
 # Body 
 Body is a part of [request](https://github.com/bohdaq/rust-web-server/blob/754e18a94548df7f4fb1fcebf3a6caddefb862cf/src/request/mod.rs#L21) and [response](https://github.com/bohdaq/rust-web-server/blob/754e18a94548df7f4fb1fcebf3a6caddefb862cf/src/response/mod.rs#L28). It goes after the last header (if any present) and an empty line.
