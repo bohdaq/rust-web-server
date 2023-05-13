@@ -52,9 +52,8 @@ Example `multipart/byteranges` [response body](https://github.com/bohdaq/rust-we
 - `multipart/form-data` and `application/x-www-form-urlencoded` applies only to request body
 
 
-#### Links
-- [Request](https://github.com/bohdaq/rust-web-server/tree/main/src/request)
-- [Header](https://github.com/bohdaq/rust-web-server/tree/main/src/header)
-- [Response](https://github.com/bohdaq/rust-web-server/tree/main/src/response)
-- [Server](https://github.com/bohdaq/rust-web-server/tree/main/src/server)
-- [Controller](https://github.com/bohdaq/rust-web-server/tree/main/src/controller)
+
+Previous topic | Current Topic | Next Topic
+--- |---------------| ---
+[Controller](https://github.com/bohdaq/rust-web-server/tree/main/src/controller) | Body          | [JSON](https://github.com/bohdaq/rust-web-server/tree/main/src/json)
+
