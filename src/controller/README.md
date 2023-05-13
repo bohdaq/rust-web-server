@@ -39,8 +39,6 @@ Default `index.html` file is shipped as the part of the binary (line [48](https:
 
 
 #### Links
-- [Request](https://github.com/bohdaq/rust-web-server/tree/main/src/request)
-- [Header](https://github.com/bohdaq/rust-web-server/tree/main/src/header)
-- [Response](https://github.com/bohdaq/rust-web-server/tree/main/src/response)
-- [Server](https://github.com/bohdaq/rust-web-server/tree/main/src/server)
-- [Application](https://github.com/bohdaq/rust-web-server/tree/main/src/application)
+Previous topic | Current Topic | Next Topic
+--- |---------------| ---
+[Application](https://github.com/bohdaq/rust-web-server/tree/main/src/application) | Controller          | [Body](https://github.com/bohdaq/rust-web-server/tree/main/src/body)
