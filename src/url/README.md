@@ -15,5 +15,9 @@ Build(`URL::build_query`) and parse(`URL::parse_query`) URL query by using [buil
 
 Build(`URL::build`) and parse(`URL::parse`) URL by using [build](https://github.com/bohdaq/rust-web-server/blob/18f0ec949fc744ee71a740f1098c8b2a5d0b50e8/src/url/example/mod.rs#L43) and [parse](https://github.com/bohdaq/rust-web-server/blob/18f0ec949fc744ee71a740f1098c8b2a5d0b50e8/src/url/example/mod.rs#L66) methods.
 
+Previous topic | Current Topic | Next Topic
+--- |---------------| ---
+[JSON](https://github.com/bohdaq/rust-web-server/tree/main/src/json) | URL           | [Null](https://github.com/bohdaq/rust-web-server/tree/main/src/null)
+
 
 
