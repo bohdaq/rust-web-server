@@ -49,8 +49,9 @@ Take a look at [json property](https://github.com/bohdaq/rust-web-server/tree/ma
 - [Array of f64](array/float/example_list_f64)
 - [Array of f32](array/float/example_list_f32)
 
-Links:
-- [FAQ](FAQ.md)
+Previous topic | Current Topic | Next Topic
+--- |---------------| ---
+[Body](https://github.com/bohdaq/rust-web-server/tree/main/src/body) | JSON          | [URL](https://github.com/bohdaq/rust-web-server/tree/main/src/url)
 
 
 
