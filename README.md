@@ -11,7 +11,7 @@ rust-web-server (**rws**) is a static content web-server written in Rust.
 1. [Symlinks](https://en.wikipedia.org/wiki/Symbolic_link)
 1. No third party dependencies.
 
-## Docs
+## Documentation
 Open [documentation](src/README.md) for details.
 
 ## Download

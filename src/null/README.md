@@ -16,5 +16,8 @@ Additionaly implements Rust Web Server trait `New`.
 
 In case of parse error returns `ParseNullError`. Error details specified within `message` field.
 
+Previous topic | Current Topic 
+--- |---------------
+[URL](https://github.com/bohdaq/rust-web-server/tree/main/src/url) | Null          
 
 
