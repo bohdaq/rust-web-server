@@ -22,9 +22,7 @@ Internal implementation for the `execute` method is done via creating mutable in
 As response instance is mutable, the controller can change fields contained by the response. As an example, controller can set appropriate status code, reason phrase, add headers and set response body.
 
 
-#### Links
-- [Request](https://github.com/bohdaq/rust-web-server/tree/main/src/request)
-- [Header](https://github.com/bohdaq/rust-web-server/tree/main/src/header)
-- [Response](https://github.com/bohdaq/rust-web-server/tree/main/src/response)
-- [Server](https://github.com/bohdaq/rust-web-server/tree/main/src/server)
-- [Controller](https://github.com/bohdaq/rust-web-server/tree/main/src/controller)
+
+Previous topic | Current Topic | Next Topic
+--- |---------------| ---
+[Server](https://github.com/bohdaq/rust-web-server/tree/main/src/server) | Application          | [Controller](https://github.com/bohdaq/rust-web-server/tree/main/src/controller)

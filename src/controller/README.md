@@ -38,7 +38,6 @@ If there is no file `index.html` inside server root folder, controller will put 
 Default `index.html` file is shipped as the part of the binary (line [48](https://github.com/bohdaq/rust-web-server/blob/main/src/controller/example/index.html)) via `include_bytes!` macro.
 
 
-#### Links
 Previous topic | Current Topic | Next Topic
 --- |---------------| ---
 [Application](https://github.com/bohdaq/rust-web-server/tree/main/src/application) | Controller          | [Body](https://github.com/bohdaq/rust-web-server/tree/main/src/body)
