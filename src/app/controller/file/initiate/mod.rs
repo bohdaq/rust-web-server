@@ -40,7 +40,7 @@ impl FileUploadInitiateController {
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n400_bad_request.reason_phrase.to_string();
 
 
-        let boxed_query_option = _request.get_uri_query();
+        let boxed_query_option = _request.get_query();
         if boxed_query_option.is_err() {
             let error_message = boxed_query_option.clone().err().unwrap().to_string();
             eprintln!("unable to extract query from url: {}", error_message)
