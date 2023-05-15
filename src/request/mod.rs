@@ -54,6 +54,10 @@ impl Request {
         header
     }
 
+    pub fn get_query(&self) -> Result<Option<HashMap<String, String>>, String> {
+        self.get_uri_query()
+    }
+
     pub fn get_uri_query(&self) -> Result<Option<HashMap<String, String>>, String> {
         // it will return an error if unable to parse url
         // it will return None if there are no query params
@@ -67,6 +71,10 @@ impl Request {
             return Err(message)
         }
         Ok(boxed_url_components.unwrap().query)
+    }
+
+    pub fn get_path(&self) -> Result<String, String> {
+        self.get_uri_path()
     }
 
     pub fn get_uri_path(&self) -> Result<String, String> {
