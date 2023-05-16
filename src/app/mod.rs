@@ -73,8 +73,8 @@ impl Application for App {
             return Ok(response)
         }
 
-        if FormMultipartEnctypePostMethodController::is_matching_request(&request) {
-            response = FormMultipartEnctypePostMethodController::process_request(&request, response);
+        if FormMultipartEnctypePostMethodController::is_matching(&request, connection) {
+            response = FormMultipartEnctypePostMethodController::process(&request, response, connection);
             return Ok(response)
         }
 
