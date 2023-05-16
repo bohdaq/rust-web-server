@@ -53,8 +53,8 @@ impl Application for App {
             return Ok(response)
         }
 
-        if ScriptController::is_matching_request(&request) {
-            response = ScriptController::process_request(&request, response);
+        if ScriptController::is_matching(&request, connection) {
+            response = ScriptController::process(&request, response, connection);
             return Ok(response)
         }
 
