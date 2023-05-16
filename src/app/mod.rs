@@ -48,8 +48,8 @@ impl Application for App {
             return Ok(response)
         }
 
-        if StyleController::is_matching_request(&request) {
-            response = StyleController::process_request(&request, response);
+        if StyleController::is_matching(&request, connection) {
+            response = StyleController::process(&request, response, connection);
             return Ok(response)
         }
 
