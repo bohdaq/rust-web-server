@@ -63,8 +63,8 @@ impl Application for App {
             return Ok(response)
         }
 
-        if FormUrlEncodedEnctypePostMethodController::is_matching_request(&request) {
-            response = FormUrlEncodedEnctypePostMethodController::process_request(&request, response);
+        if FormUrlEncodedEnctypePostMethodController::is_matching(&request, connection) {
+            response = FormUrlEncodedEnctypePostMethodController::process(&request, response, connection);
             return Ok(response)
         }
 
