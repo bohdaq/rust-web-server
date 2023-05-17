@@ -78,8 +78,8 @@ impl Application for App {
             return Ok(response)
         }
 
-        if FaviconController::is_matching_request(&request) {
-            response = FaviconController::process_request(&request, response);
+        if FaviconController::is_matching(&request, connection) {
+            response = FaviconController::process(&request, response, connection);
             return Ok(response)
         }
 
