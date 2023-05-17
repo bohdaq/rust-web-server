@@ -83,8 +83,8 @@ impl Application for App {
             return Ok(response)
         }
 
-        if StaticResourceController::is_matching_request(&request) {
-            response = StaticResourceController::process_request(&request, response);
+        if StaticResourceController::is_matching(&request, connection) {
+            response = StaticResourceController::process(&request, response, connection);
             return Ok(response)
         }
 
