@@ -88,8 +88,8 @@ impl Application for App {
             return Ok(response)
         }
 
-        if NotFoundController::is_matching_request(&request) {
-            response = NotFoundController::process_request(&request, response);
+        if NotFoundController::is_matching(&request, connection) {
+            response = NotFoundController::process(&request, response, connection);
             return Ok(response)
         }
 
