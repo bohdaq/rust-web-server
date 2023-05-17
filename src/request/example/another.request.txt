@@ -1,0 +1,4 @@
+GET /path?some=1234&key=5678 HTTP/1.1
+Host: localhost
+Content-Type: application/x-www-form-urlencoded
+

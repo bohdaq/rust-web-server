@@ -90,3 +90,76 @@ fn generate() {
 
     assert_eq!(expected_request_file_as_bytes, raw_request);
 }
+
+#[test]
+fn path() {
+    // retrieve request byte array, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "request", "example", "another.request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    // convert byte array to request
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
+    if boxed_request.is_err() {
+        let _error_message = boxed_request.as_ref().err().unwrap();
+        // handle error
+    }
+
+    let request = boxed_request.unwrap();
+    let path = request.get_path().unwrap();
+    assert_eq!("/path", path);
+}
+
+#[test]
+fn query() {
+    // retrieve request byte array, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "request", "example", "another.request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    // convert byte array to request
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
+    if boxed_request.is_err() {
+        let _error_message = boxed_request.as_ref().err().unwrap();
+        // handle error
+    }
+
+    let request = boxed_request.unwrap();
+
+
+    // get_query returns a result
+    let boxed_query : Result<Option<HashMap<String, String>>, String> = request.get_query();
+    if boxed_query.is_err() {
+        // handle error
+    }
+
+    // result itself contains an option
+    let query_option : Option<HashMap<String, String>>  = boxed_query.unwrap();
+
+    // if there is no query in the url, option is empty
+    if query_option.is_none() {
+        // handle query absence in the url
+    }
+
+    let query = query_option.unwrap();
+
+    let boxed_first_param : Option<&String> = query.get("some");
+    if boxed_first_param.is_none() {
+        // handle error, assumption is query parameter "some" is required
+    }
+
+    let first_param : &String = boxed_first_param.unwrap();
+    assert_eq!("1234", first_param);
+
+
+    // example how to handle optional parameter
+    let boxed_second_param : Option<&String> = query.get("key");
+    if boxed_second_param.is_some() {
+        let second_param : &String = boxed_second_param.unwrap();
+        assert_eq!("5678", second_param);
+    }
+}
