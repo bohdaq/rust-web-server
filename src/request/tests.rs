@@ -725,3 +725,59 @@ fn get_query() {
     assert!(domain_option.is_some());
 
 }
+
+#[test]
+fn get_path_no_path() {
+
+    // retrieve request byte array, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "request", "no-path.query.request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    // convert byte array to request
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
+    if boxed_request.is_err() {
+        let _error_message = boxed_request.as_ref().err().unwrap();
+        // handle error
+    }
+
+    let request = boxed_request.unwrap();
+
+    let boxed_path: Result<String, String> = request.get_path();
+    if boxed_path.is_err() {
+        // handle error
+    }
+
+    assert!(boxed_path.is_ok());
+    assert_eq!(boxed_path.unwrap(), "");
+}
+
+#[test]
+fn get_path() {
+
+    // retrieve request byte array, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "request", "path.query.request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    // convert byte array to request
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
+    if boxed_request.is_err() {
+        let _error_message = boxed_request.as_ref().err().unwrap();
+        // handle error
+    }
+
+    let request = boxed_request.unwrap();
+
+    let boxed_path: Result<String, String> = request.get_path();
+    if boxed_path.is_err() {
+        // handle error
+    }
+
+    assert!(boxed_path.is_ok());
+    assert_eq!(boxed_path.unwrap(), "/path");
+}
