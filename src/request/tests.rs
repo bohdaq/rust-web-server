@@ -420,3 +420,249 @@ fn form_urlencoded_content_type_ends_with_new_line() {
     assert_eq!(form.get("some").unwrap(), "1234");
 
 }
+
+
+#[test]
+fn get_port() {
+
+    // retrieve request byte array, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "request", "port.request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    // convert byte array to request
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
+    if boxed_request.is_err() {
+        let _error_message = boxed_request.as_ref().err().unwrap();
+        // handle error
+    }
+
+    let request = boxed_request.unwrap();
+
+    let boxed_port : Result<Option<i128>, String> = request.get_port();
+    if boxed_port.is_err() {
+        // handle error
+    }
+
+    let port_option : Option<i128> = boxed_port.unwrap();
+    if port_option.is_none() {
+        // handle port absence
+    }
+
+    let port : i128 = port_option.unwrap();
+    assert_eq!(7888, port);
+
+}
+
+#[test]
+fn get_port_no_port() {
+
+    // retrieve request byte array, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "request", "no-port.request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    // convert byte array to request
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
+    if boxed_request.is_err() {
+        let _error_message = boxed_request.as_ref().err().unwrap();
+        // handle error
+    }
+
+    let request = boxed_request.unwrap();
+
+    let boxed_port : Result<Option<i128>, String> = request.get_port();
+    if boxed_port.is_err() {
+        // handle error
+    }
+
+    let port_option : Option<i128> = boxed_port.unwrap();
+    assert!(port_option.is_none())
+
+
+}
+
+#[test]
+fn get_port_no_host() {
+
+    // retrieve request byte array, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "request", "no-host.request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    // convert byte array to request
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
+    if boxed_request.is_err() {
+        let _error_message = boxed_request.as_ref().err().unwrap();
+        // handle error
+    }
+
+    let request = boxed_request.unwrap();
+
+    let boxed_port : Result<Option<i128>, String> = request.get_port();
+    if boxed_port.is_err() {
+        // handle error
+    }
+
+    let port_option : Option<i128> = boxed_port.unwrap();
+    assert!(port_option.is_none())
+
+
+}
+
+#[test]
+fn get_port_empty_host() {
+
+    // retrieve request byte array, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "request", "empty-host.request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    // convert byte array to request
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
+    if boxed_request.is_err() {
+        let _error_message = boxed_request.as_ref().err().unwrap();
+        // handle error
+    }
+
+    let request = boxed_request.unwrap();
+
+    let boxed_port : Result<Option<i128>, String> = request.get_port();
+    if boxed_port.is_err() {
+        // handle error
+    }
+
+    let port_option : Option<i128> = boxed_port.unwrap();
+    assert!(port_option.is_none())
+
+
+}
+
+
+#[test]
+fn get_domain_no_host() {
+
+    // retrieve request byte array, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "request", "no-host.request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    // convert byte array to request
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
+    if boxed_request.is_err() {
+        let _error_message = boxed_request.as_ref().err().unwrap();
+        // handle error
+    }
+
+    let request = boxed_request.unwrap();
+
+    let boxed_domain: Result<Option<String>, String> = request.get_domain();
+    if boxed_domain.is_err() {
+        // handle error
+    }
+
+    let domain_option: Option<String> = boxed_domain.unwrap();
+    assert!(domain_option.is_none())
+
+
+}
+
+#[test]
+fn get_domain_empty_host() {
+
+    // retrieve request byte array, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "request", "empty-host.request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    // convert byte array to request
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
+    if boxed_request.is_err() {
+        let _error_message = boxed_request.as_ref().err().unwrap();
+        // handle error
+    }
+
+    let request = boxed_request.unwrap();
+
+    let boxed_domain: Result<Option<String>, String> = request.get_domain();
+    if boxed_domain.is_err() {
+        // handle error
+    }
+
+    let domain_option: Option<String> = boxed_domain.unwrap();
+    assert!(domain_option.is_none())
+
+
+}
+
+#[test]
+fn get_domain_no_port() {
+
+    // retrieve request byte array, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "request", "no-port.request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    // convert byte array to request
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
+    if boxed_request.is_err() {
+        let _error_message = boxed_request.as_ref().err().unwrap();
+        // handle error
+    }
+
+    let request = boxed_request.unwrap();
+
+    let boxed_domain: Result<Option<String>, String> = request.get_domain();
+    if boxed_domain.is_err() {
+        // handle error
+    }
+
+    let domain_option: Option<String> = boxed_domain.unwrap();
+    assert_eq!("127.0.0.1", domain_option.unwrap());
+
+
+}
+
+#[test]
+fn get_domain_port_present() {
+
+    // retrieve request byte array, in this example it is done via reading a file
+    let path = FileExt::build_path(&["src", "request", "port.request.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let request_file_as_bytes = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    // convert byte array to request
+    let boxed_request = Request::parse(request_file_as_bytes.as_ref());
+    if boxed_request.is_err() {
+        let _error_message = boxed_request.as_ref().err().unwrap();
+        // handle error
+    }
+
+    let request = boxed_request.unwrap();
+
+    let boxed_domain: Result<Option<String>, String> = request.get_domain();
+    if boxed_domain.is_err() {
+        // handle error
+    }
+
+    let domain_option: Option<String> = boxed_domain.unwrap();
+    assert_eq!("127.0.0.1", domain_option.unwrap());
+
+
+}

@@ -54,6 +54,52 @@ impl Request {
         header
     }
 
+    pub fn get_domain(&self) -> Result<Option<String>, String> {
+        let boxed_host = &self.get_header(Header::_HOST.to_string());
+        if boxed_host.is_none() {
+            return Ok(None);
+        }
+
+        let host_header = boxed_host.unwrap();
+        let host = host_header.value.to_string();
+
+        let boxed_host_port = host.split_once(&SYMBOL.colon.to_string());
+        if boxed_host_port.is_none() {
+            return Ok(Some(host))
+        }
+
+        let (domain, _port_str) = boxed_host_port.unwrap();
+
+        Ok(Some(domain.to_string()))
+    }
+
+    pub fn get_port(&self) -> Result<Option<i128>, String> {
+        let boxed_host = &self.get_header(Header::_HOST.to_string());
+        if boxed_host.is_none() {
+            return Ok(None);
+        }
+
+        let host_header = boxed_host.unwrap();
+        let host = host_header.value.to_string();
+
+        let boxed_host_port = host.split_once(&SYMBOL.colon.to_string());
+        if boxed_host_port.is_none() {
+            return Ok(None)
+        }
+
+        let (_domain, port_str) = boxed_host_port.unwrap();
+
+        let boxed_port_i128 = port_str.parse::<i128>();
+        if boxed_port_i128.is_err() {
+            let message = boxed_port_i128.err().unwrap().to_string();
+            return Err(message);
+        }
+
+        let port = boxed_port_i128.unwrap();
+
+        Ok(Some(port))
+    }
+
     pub fn get_query(&self) -> Result<Option<HashMap<String, String>>, String> {
         self.get_uri_query()
     }
