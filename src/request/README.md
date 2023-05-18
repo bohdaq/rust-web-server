@@ -37,6 +37,10 @@ To retrieve url query from the request invoke `request.get_query()` method on re
 
 To get url path from the request call `request.get_path()` method on request instance.
 
+To retrieve domain from the request invoke `request.get_domain()` method on request instance.
+
+To get port from the request call `request.get_port()` method on request instance. Port is taken from `Host` header of the request, not from underlying networking. 
+
 #### Links
 - [List of HTTP methods](https://github.com/bohdaq/rust-web-server/blob/main/src/request/mod.rs#L37)
 
