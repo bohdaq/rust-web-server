@@ -33,7 +33,7 @@ To parse byte array to [Request](https://github.com/bohdaq/rust-web-server/blob/
 
 To convert request instance to byte array invoke [generate](https://github.com/bohdaq/rust-web-server/blob/main/src/request/example/mod.rs#L82) method.
 
-To retrieve url query from the request invoke `request.get_query()` method on request instance.
+To retrieve url query from the request invoke [request.get_query()](https://github.com/bohdaq/rust-web-server/blob/b1465a0687bcff1c7376b470d5ca7cb17419aa63/src/request/tests.rs#L701) method on request instance.
 
 To get url path from the request call `request.get_path()` method on request instance.
 
