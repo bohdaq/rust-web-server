@@ -35,11 +35,11 @@ To convert request instance to byte array invoke [generate](https://github.com/b
 
 To retrieve url query from the request invoke [request.get_query()](https://github.com/bohdaq/rust-web-server/blob/b1465a0687bcff1c7376b470d5ca7cb17419aa63/src/request/tests.rs#L701) method on request instance.
 
-To get url path from the request call `request.get_path()` method on request instance.
+To get url path from the request call [request.get_path()](https://github.com/bohdaq/rust-web-server/blob/b1465a0687bcff1c7376b470d5ca7cb17419aa63/src/request/tests.rs#L758) method on request instance.
 
-To retrieve domain from the request invoke `request.get_domain()` method on request instance.
+To retrieve domain from the request invoke [request.get_domain()](https://github.com/bohdaq/rust-web-server/blob/b1465a0687bcff1c7376b470d5ca7cb17419aa63/src/request/tests.rs#L612) method on request instance.
 
-To get port from the request call `request.get_port()` method on request instance. Port is taken from `Host` header of the request, not from underlying networking. 
+To get port from the request call [request.get_port()](https://github.com/bohdaq/rust-web-server/blob/b1465a0687bcff1c7376b470d5ca7cb17419aa63/src/request/tests.rs#L427) method on request instance. Port is taken from `Host` header of the request, not from underlying networking. 
 
 #### Links
 - [List of HTTP methods](https://github.com/bohdaq/rust-web-server/blob/main/src/request/mod.rs#L37)
