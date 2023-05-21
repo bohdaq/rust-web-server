@@ -119,6 +119,62 @@ impl Base64 {
             return Ok(result);
         }
 
+        if bytes.len() == 2 {
+            let boxed_byte = bytes.get(0);
+            if boxed_byte.is_none() {
+                return Err("byte at pos 1 is empty".to_string());
+            }
+
+            let byte = boxed_byte.unwrap();
+            let _byte_as_string = format!("{byte:b}");
+            let shifted_first_sextet = byte >> 2;
+            let _shifted_first_sextet_as_string = format!("{shifted_first_sextet:b}");
+
+
+
+            let mut result_buffer: Vec<String> = vec![];
+
+            let boxed_encoded_char = Base64::convert_number_to_base64_char(shifted_first_sextet);
+            if boxed_encoded_char.is_err() {
+                return Err(boxed_encoded_char.err().unwrap());
+            }
+
+            let char : String =  boxed_encoded_char.unwrap().to_string();
+            result_buffer.push(char);
+
+
+            let shifted_second_sextet = (byte & 0b00000011) << 4;
+            let _shifted_second_sextet_as_string = format!("{shifted_second_sextet:b}");
+
+
+            let boxed_encoded_char = Base64::convert_number_to_base64_char(shifted_second_sextet);
+            if boxed_encoded_char.is_err() {
+                return Err(boxed_encoded_char.err().unwrap());
+            }
+
+            //second byte
+            let boxed_byte = bytes.get(1);
+            if boxed_byte.is_none() {
+                return Err("byte at pos 1 is empty".to_string());
+            }
+
+            let second_byte = boxed_byte.unwrap();
+            let shifted_second_byte = second_byte >> 4;
+
+            let boxed_second_encoded_char = Base64::convert_number_to_base64_char(shifted_second_byte);
+            if boxed_second_encoded_char.is_err() {
+                return Err(boxed_second_encoded_char.err().unwrap());
+            }
+
+            let char : String =  boxed_second_encoded_char.unwrap().to_string();
+            result_buffer.push(char);
+
+            result_buffer.push(SYMBOL.equals.to_string());
+
+            let result : String = result_buffer.join(SYMBOL.empty_string);
+            return Ok(result);
+        }
+
         Ok("".to_string())
     }
 
