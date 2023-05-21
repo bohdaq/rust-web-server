@@ -143,25 +143,23 @@ impl Base64 {
             result_buffer.push(char);
 
 
-            let shifted_second_sextet = (byte & 0b00000011) << 4;
-            let _shifted_second_sextet_as_string = format!("{shifted_second_sextet:b}");
+            // base64 second sextet part 1 (from first u8)
+            let shifted_second_sextet_part_one = (byte & 0b00000011) << 4;
+            let _shifted_second_sextet_as_string = format!("{shifted_second_sextet_part_one:b}");
 
 
-            let boxed_encoded_char = Base64::convert_number_to_base64_char(shifted_second_sextet);
-            if boxed_encoded_char.is_err() {
-                return Err(boxed_encoded_char.err().unwrap());
-            }
-
-            //second byte
+            // base64 second sextet part 2 (from second u8)
             let boxed_byte = bytes.get(1);
             if boxed_byte.is_none() {
                 return Err("byte at pos 1 is empty".to_string());
             }
 
             let second_byte = boxed_byte.unwrap();
-            let shifted_second_byte = second_byte >> 4;
+            let shifted_second_byte_part_two = second_byte >> 4;
 
-            let boxed_second_encoded_char = Base64::convert_number_to_base64_char(shifted_second_byte);
+
+            let second_sextet = shifted_second_sextet_part_one | shifted_second_byte_part_two;
+            let boxed_second_encoded_char = Base64::convert_number_to_base64_char(second_sextet);
             if boxed_second_encoded_char.is_err() {
                 return Err(boxed_second_encoded_char.err().unwrap());
             }
