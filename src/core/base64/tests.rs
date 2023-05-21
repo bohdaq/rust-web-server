@@ -6,6 +6,6 @@ fn encode() {
     let encoded = Base64::encode(data).unwrap();
     assert_eq!("TQ==", encoded);
 
-    //let decoded = Base64::decode(encoded);
-    //assert_eq!("M".as_bytes().to_vec(), decoded);
+    let decoded = Base64::decode(encoded).unwrap();
+    assert_eq!("M".as_bytes().to_vec(), decoded);
 }

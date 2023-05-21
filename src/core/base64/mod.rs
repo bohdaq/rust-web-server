@@ -1,4 +1,4 @@
-
+use std::collections::HashMap;
 use crate::symbol::SYMBOL;
 
 #[cfg(test)]
@@ -6,14 +6,15 @@ mod tests;
 
 pub struct Base64;
 
+//WIP
 impl Base64 {
-    //WIP
+
     pub fn encode(bytes: &[u8]) -> Result<String, String> {
 
 
         let mut result : Vec<String> = vec![];
 
-        //encode in 3 bytes sequence
+        // WIP encode in 3 bytes sequence
         let boxed_encode = Base64::encode_sequence(bytes);
         if boxed_encode.is_err() {
             return Err(boxed_encode.err().unwrap());
@@ -26,8 +27,50 @@ impl Base64 {
         Ok(encoded_string)
     }
 
-    pub fn decode(_text: String) -> Vec<u8> {
-        vec![]
+    pub fn decode(_text: String) -> Result<Vec<u8>, String> {
+        // WIP decode 4 chars at once
+        Base64::decode_sequence(_text)
+    }
+
+    pub fn decode_sequence(text: String) -> Result<Vec<u8>, String> {
+        let result : Vec<u8> = vec![];
+
+        let number_of_equal_signs = text.matches(SYMBOL.equals).count();
+
+        if number_of_equal_signs == 2 {
+            let boxed_first_byte = text.chars().nth(0);
+            if boxed_first_byte.is_none() {
+                return Err("unexpected error, unable to get char at position 0".to_string());
+            }
+            let first_byte = boxed_first_byte.unwrap() as u8;
+            let _first_byte_as_string = format!("{first_byte:b}");
+
+            let converted_first_byte = Base64::convert_base64_char_to_number(first_byte as char).unwrap();
+            let shifted_converted_first_byte = converted_first_byte << 2;
+            let _shifted_converted_first_byte_as_string = format!("{converted_first_byte:b}");
+
+
+
+            let boxed_second_byte = text.chars().nth(1);
+            if boxed_second_byte.is_none() {
+                return Err("unexpected error, unable to get char at position 0".to_string());
+            }
+            let second_byte = boxed_second_byte.unwrap() as u8;
+            let _second_byte_as_string = format!("{second_byte:b}");
+
+            let converted_second_byte = Base64::convert_base64_char_to_number(second_byte as char).unwrap();
+
+
+            let shifted_converted_second_byte = converted_second_byte >> 4;
+            let _shifted_second_byte_as_string = format!("{shifted_converted_second_byte:b}");
+
+
+            let resulted_byte = shifted_converted_first_byte | shifted_converted_second_byte;
+            return Ok(vec![resulted_byte]);
+
+        }
+
+        Ok(result)
     }
 
     pub fn encode_sequence(bytes: &[u8]) -> Result<String, String> {
@@ -79,11 +122,20 @@ impl Base64 {
         Ok("".to_string())
     }
 
-    pub fn convert_number_to_base64_char(number: u8) -> Result<char, String> {
-        if number > 63 {
-            return Err("number exceeds range 0 - 63".to_string());
+    pub fn convert_base64_char_to_number(_char: char) -> Result<u8, String> {
+        let base64_char_list : Vec<char> = Base64::get_base64_char_list();
+        let mut map : HashMap<char, u8> = HashMap::new();
+
+        for (index, char) in base64_char_list.iter().enumerate() {
+            map.insert(*char, index as u8);
         }
 
+        let index = map.get(&_char).unwrap();
+
+        Ok(*index)
+    }
+
+    pub fn get_base64_char_list() -> Vec<char> {
         let mut base64_table : Vec<char> = vec![];
 
         let mut uppercase = ('A'..'Z').into_iter().collect::<Vec<char>>();
@@ -97,6 +149,16 @@ impl Base64 {
 
         base64_table.push('+');
         base64_table.push('/');
+
+        base64_table
+    }
+
+    pub fn convert_number_to_base64_char(number: u8) -> Result<char, String> {
+        if number > 63 {
+            return Err("number exceeds range 0 - 63".to_string());
+        }
+
+        let base64_table : Vec<char> = Base64::get_base64_char_list();
 
         let boxed_get : Option<char> = base64_table.get(number as usize).copied();
         if boxed_get.is_none() {
