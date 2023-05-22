@@ -98,7 +98,7 @@ impl Base64 {
             let _shifted_second_byte_as_string = format!("{shifted_converted_second_byte:b}");
 
 
-            let resulted_byte = shifted_converted_first_byte | shifted_converted_second_byte;
+            let first_char_as_byte = shifted_converted_first_byte | shifted_converted_second_byte;
 
 
 
@@ -115,7 +115,7 @@ impl Base64 {
 
             let second_char_as_byte = shifted_third_byte | second_char_part_one;
 
-            return Ok(vec![resulted_byte, second_char_as_byte]);
+            return Ok(vec![first_char_as_byte, second_char_as_byte]);
 
         }
 
