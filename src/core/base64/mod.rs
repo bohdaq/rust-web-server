@@ -128,7 +128,7 @@ impl Base64 {
         }
 
         if bytes.len() == 0 {
-            return Err("sequence encodes at least 1 bytes".to_string());
+            return Err("sequence encodes at least 1 byte".to_string());
         }
 
         if bytes.len() == 1 {
