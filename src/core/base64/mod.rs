@@ -304,9 +304,13 @@ impl Base64 {
             let char : String =  boxed_third_encoded_char.unwrap().to_string();
             result_buffer.push(char);
 
-
-
-            result_buffer.push(SYMBOL.equals.to_string());
+            let fourth_encoded_char = third_byte & 0b00111111;
+            let boxed_fourth_encoded_char = Base64::convert_number_to_base64_char(fourth_encoded_char);
+            if boxed_fourth_encoded_char.is_err() {
+                return Err(boxed_fourth_encoded_char.err().unwrap());
+            }
+            let char : String =  boxed_fourth_encoded_char.unwrap().to_string();
+            result_buffer.push(char);
 
             let result : String = result_buffer.join(SYMBOL.empty_string);
             return Ok(result);
@@ -331,10 +335,10 @@ impl Base64 {
     pub fn get_base64_char_list() -> Vec<char> {
         let mut base64_table : Vec<char> = vec![];
 
-        let mut uppercase = ('A'..'Z').into_iter().collect::<Vec<char>>();
+        let mut uppercase = ('A'..='Z').into_iter().collect::<Vec<char>>();
         base64_table.append(&mut uppercase);
 
-        let mut lowercase = ('a'..'z').into_iter().collect::<Vec<char>>();
+        let mut lowercase = ('a'..='z').into_iter().collect::<Vec<char>>();
         base64_table.append(&mut lowercase);
 
         let mut numbers = ('0'..'9').into_iter().collect::<Vec<char>>();
