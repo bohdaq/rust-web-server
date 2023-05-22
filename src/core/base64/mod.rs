@@ -234,6 +234,84 @@ impl Base64 {
             return Ok(result);
         }
 
+        if bytes.len() == 3 {
+            let boxed_byte = bytes.get(0);
+            if boxed_byte.is_none() {
+                return Err("byte at pos 1 is empty".to_string());
+            }
+
+            let byte = boxed_byte.unwrap();
+            let _byte_as_string = format!("{byte:b}");
+            let shifted_first_sextet = byte >> 2;
+            let _shifted_first_sextet_as_string = format!("{shifted_first_sextet:b}");
+
+
+
+            let mut result_buffer: Vec<String> = vec![];
+
+            let boxed_encoded_char = Base64::convert_number_to_base64_char(shifted_first_sextet);
+            if boxed_encoded_char.is_err() {
+                return Err(boxed_encoded_char.err().unwrap());
+            }
+
+            let char : String =  boxed_encoded_char.unwrap().to_string();
+            result_buffer.push(char);
+
+
+            // base64 second sextet part 1 (from first u8)
+            let shifted_second_sextet_part_one = (byte & 0b00000011) << 4;
+            let _shifted_second_sextet_as_string = format!("{shifted_second_sextet_part_one:b}");
+
+
+            // base64 second sextet part 2 (from second u8)
+            let boxed_byte = bytes.get(1);
+            if boxed_byte.is_none() {
+                return Err("byte at pos 1 is empty".to_string());
+            }
+
+            let second_byte = boxed_byte.unwrap();
+            let shifted_second_byte_part_two = second_byte >> 4;
+
+
+            let second_sextet = shifted_second_sextet_part_one | shifted_second_byte_part_two;
+            let boxed_second_encoded_char = Base64::convert_number_to_base64_char(second_sextet);
+            if boxed_second_encoded_char.is_err() {
+                return Err(boxed_second_encoded_char.err().unwrap());
+            }
+
+            let char : String =  boxed_second_encoded_char.unwrap().to_string();
+            result_buffer.push(char);
+
+
+            // base64 third char
+            let base64_third_char = (second_byte & 0b00001111) << 2;
+
+
+            let boxed_byte = bytes.get(2);
+            if boxed_byte.is_none() {
+                return Err("byte at pos 1 is empty".to_string());
+            }
+
+            let third_byte = boxed_byte.unwrap();
+            let third_encoded_char_part2 = (third_byte & 0b11000000) >> 6;
+
+            let third_encoded_char = base64_third_char | third_encoded_char_part2;
+
+            let boxed_third_encoded_char = Base64::convert_number_to_base64_char(third_encoded_char);
+            if boxed_third_encoded_char.is_err() {
+                return Err(boxed_third_encoded_char.err().unwrap());
+            }
+            let char : String =  boxed_third_encoded_char.unwrap().to_string();
+            result_buffer.push(char);
+
+
+
+            result_buffer.push(SYMBOL.equals.to_string());
+
+            let result : String = result_buffer.join(SYMBOL.empty_string);
+            return Ok(result);
+        }
+
         Ok("".to_string())
     }
 
