@@ -14,14 +14,38 @@ impl Base64 {
 
         let mut result : Vec<String> = vec![];
 
-        // WIP encode in 3 bytes sequence
-        let boxed_encode = Base64::encode_sequence(bytes);
-        if boxed_encode.is_err() {
-            return Err(boxed_encode.err().unwrap());
-        }
 
-        let encoded = boxed_encode.unwrap();
-        result.push(encoded);
+        let mut index = 0;
+        let length = bytes.len();
+
+        while index < length {
+            let mut to_encrypt_chunk = vec![];
+            to_encrypt_chunk.push(*bytes.get(index).unwrap());
+
+            if index + 1 < length {
+                index = index + 1;
+
+                to_encrypt_chunk.push(*bytes.get(index).unwrap());
+            }
+
+            if index + 1 < length {
+                index = index + 1;
+
+                to_encrypt_chunk.push(*bytes.get(index).unwrap());
+            }
+
+            let chunk : &[u8] = &to_encrypt_chunk.as_ref();
+            let boxed_encrypted_chunk = Base64::encode_sequence(chunk);
+            if boxed_encrypted_chunk.is_err() {
+                return Err(boxed_encrypted_chunk.err().unwrap());
+            }
+
+            let encrypted_chunk = boxed_encrypted_chunk.unwrap();
+            result.push(encrypted_chunk);
+
+            index = index + 1
+
+        }
 
         let encoded_string = result.join(SYMBOL.empty_string);
         Ok(encoded_string)
