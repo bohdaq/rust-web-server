@@ -27,6 +27,6 @@ fn encode_three_chars() {
     let encoded = Base64::encode(data).unwrap();
     assert_eq!("TWFu", encoded);
 
-    //let decoded = Base64::decode(encoded).unwrap();
-    //assert_eq!("Man".as_bytes().to_vec(), decoded);
+    let decoded = Base64::decode(encoded).unwrap();
+    assert_eq!("Man".as_bytes().to_vec(), decoded);
 }

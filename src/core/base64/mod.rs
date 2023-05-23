@@ -119,6 +119,55 @@ impl Base64 {
 
         }
 
+        if number_of_equal_signs == 0 {
+            let boxed_first_byte = text.chars().nth(0);
+            if boxed_first_byte.is_none() {
+                return Err("unexpected error, unable to get char at position 0".to_string());
+            }
+            let first_byte = boxed_first_byte.unwrap() as u8;
+            let _first_byte_as_string = format!("{first_byte:b}");
+
+            let converted_first_byte = Base64::convert_base64_char_to_number(first_byte as char).unwrap();
+            let shifted_converted_first_byte = converted_first_byte << 2;
+            let _shifted_converted_first_byte_as_string = format!("{converted_first_byte:b}");
+
+
+
+            let boxed_second_byte = text.chars().nth(1);
+            if boxed_second_byte.is_none() {
+                return Err("unexpected error, unable to get char at position 1".to_string());
+            }
+            let second_byte = boxed_second_byte.unwrap() as u8;
+            let _second_byte_as_string = format!("{second_byte:b}");
+
+            let converted_second_byte = Base64::convert_base64_char_to_number(second_byte as char).unwrap();
+
+
+            let shifted_converted_second_byte = converted_second_byte >> 4;
+            let _shifted_second_byte_as_string = format!("{shifted_converted_second_byte:b}");
+
+
+            let first_char_as_byte = shifted_converted_first_byte | shifted_converted_second_byte;
+
+
+
+
+            // second char
+            let second_char_part_one = (converted_second_byte & 0b00001111) << 4;
+            let boxed_third_byte = text.chars().nth(2);
+            if boxed_third_byte.is_none() {
+                return Err("unexpected error, unable to get char at position 2".to_string());
+            }
+            let third_byte = boxed_third_byte.unwrap() as u8;
+            let converted_third_byte = Base64::convert_base64_char_to_number(third_byte as char).unwrap();
+            let shifted_third_byte = (0b00111100 & converted_third_byte)  >> 2;
+
+            let second_char_as_byte = shifted_third_byte | second_char_part_one;
+
+            return Ok(vec![first_char_as_byte, second_char_as_byte]);
+
+        }
+
         Ok(result)
     }
 
