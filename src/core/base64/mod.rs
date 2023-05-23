@@ -10,6 +10,9 @@ pub struct Base64;
 impl Base64 {
 
     pub fn encode(bytes: &[u8]) -> Result<String, String> {
+        if bytes.len() == 0 {
+            return Ok("".to_string())
+        }
 
 
         let mut result : Vec<String> = vec![];
@@ -52,10 +55,11 @@ impl Base64 {
     }
 
     pub fn decode(text: String) -> Result<Vec<u8>, String> {
+        if text.chars().count() == 0 {
+            return Ok(vec![])
+        }
+
         let mut result : Vec<u8> = vec![];
-
-
-
 
         let mut index = 0;
         let length = text.len();

@@ -39,7 +39,14 @@ fn basic_text_encode() {
 
     let decoded = Base64::decode(encoded).unwrap();
     assert_eq!(data, decoded);
+}
 
+#[test]
+fn no_text_encode() {
+    let data = "".as_bytes();
+    let encoded = Base64::encode(data).unwrap();
+    assert_eq!("", encoded);
 
-
+    let decoded = Base64::decode(encoded).unwrap();
+    assert_eq!(data, decoded);
 }
