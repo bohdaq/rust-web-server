@@ -51,9 +51,52 @@ impl Base64 {
         Ok(encoded_string)
     }
 
-    pub fn decode(_text: String) -> Result<Vec<u8>, String> {
-        // WIP decode 4 chars at once
-        Base64::decode_sequence(_text)
+    pub fn decode(text: String) -> Result<Vec<u8>, String> {
+        let mut result : Vec<u8> = vec![];
+
+
+
+
+        let mut index = 0;
+        let length = text.len();
+
+        while index < length {
+            let mut to_decrypt_chunk = vec![];
+            to_decrypt_chunk.push(text.chars().nth(index).unwrap() as u8);
+
+            if index + 1 < length {
+                index = index + 1;
+
+                to_decrypt_chunk.push(text.chars().nth(index).unwrap() as u8);
+            }
+
+            if index + 1 < length {
+                index = index + 1;
+
+                to_decrypt_chunk.push(text.chars().nth(index).unwrap() as u8);
+            }
+
+            if index + 1 < length {
+                index = index + 1;
+
+                to_decrypt_chunk.push(text.chars().nth(index).unwrap() as u8);
+            }
+
+            let chunk : String = String::from_utf8(to_decrypt_chunk).unwrap();
+            let boxed_decrypted_chunk = Base64::decode_sequence(chunk);
+            if boxed_decrypted_chunk.is_err() {
+                return Err(boxed_decrypted_chunk.err().unwrap());
+            }
+
+            let encrypted_chunk = boxed_decrypted_chunk.unwrap();
+            result.extend(encrypted_chunk);
+
+            index = index + 1
+
+        }
+
+
+        Ok(result)
     }
 
     pub fn decode_sequence(text: String) -> Result<Vec<u8>, String> {
