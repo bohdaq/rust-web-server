@@ -164,7 +164,23 @@ impl Base64 {
 
             let second_char_as_byte = shifted_third_byte | second_char_part_one;
 
-            return Ok(vec![first_char_as_byte, second_char_as_byte]);
+            let boxed_fourth_byte = text.chars().nth(3);
+            if boxed_fourth_byte.is_none() {
+                return Err("unexpected error, unable to get char at position 3".to_string());
+            }
+            let fourth_byte = boxed_fourth_byte.unwrap() as u8;
+
+            let converted_third_byte = Base64::convert_base64_char_to_number( third_byte as char).unwrap();
+            let masked_third_byte = converted_third_byte & 0b00000011;
+            let shifted_masked_third_byte = masked_third_byte << 6;
+
+            let converted_fourth_byte = Base64::convert_base64_char_to_number( fourth_byte as char).unwrap();
+            let masked_fourth_byte = converted_fourth_byte & 0b00111111;
+
+            let third_char_as_byte = shifted_masked_third_byte | masked_fourth_byte;
+
+
+            return Ok(vec![first_char_as_byte, second_char_as_byte, third_char_as_byte]);
 
         }
 
