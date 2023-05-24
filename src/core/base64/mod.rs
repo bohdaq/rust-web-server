@@ -49,7 +49,7 @@ impl Base64 {
                 to_encrypt_chunk.push(*boxed_char_as_u8.unwrap());
             }
 
-            let chunk : &[u8] = &to_encrypt_chunk.as_ref();
+            let chunk : &[u8] = to_encrypt_chunk.as_ref();
             let boxed_encrypted_chunk = Base64::encode_sequence(chunk);
             if boxed_encrypted_chunk.is_err() {
                 return Err(boxed_encrypted_chunk.err().unwrap());
