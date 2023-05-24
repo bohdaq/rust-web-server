@@ -32,13 +32,21 @@ impl Base64 {
             if index + 1 < length {
                 index = index + 1;
 
-                to_encrypt_chunk.push(*bytes.get(index).unwrap());
+                let boxed_char_as_u8 = bytes.get(index);
+                if boxed_char_as_u8.is_none() {
+                    return Err(format!("unable to get char at index: {}", index));
+                }
+                to_encrypt_chunk.push(*boxed_char_as_u8.unwrap());
             }
 
             if index + 1 < length {
                 index = index + 1;
 
-                to_encrypt_chunk.push(*bytes.get(index).unwrap());
+                let boxed_char_as_u8 = bytes.get(index);
+                if boxed_char_as_u8.is_none() {
+                    return Err(format!("unable to get char at index: {}", index));
+                }
+                to_encrypt_chunk.push(*boxed_char_as_u8.unwrap());
             }
 
             let chunk : &[u8] = &to_encrypt_chunk.as_ref();
