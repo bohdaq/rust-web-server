@@ -552,6 +552,11 @@ impl Base64 {
             map.insert(*char, index as u8);
         }
 
+        let boxed_get = map.get(&char);
+        if boxed_get.is_none() {
+            let message = format!("unable to get char number: {}", char);
+            return Err(message);
+        }
         let index : &u8 = map.get(&char).unwrap();
 
         Ok(*index)
