@@ -302,7 +302,13 @@ impl Base64 {
                 return Err("unexpected error, unable to get char at position 2".to_string());
             }
             let third_byte = boxed_third_byte.unwrap() as u8;
-            let converted_third_byte = Base64::convert_base64_char_to_number(third_byte as char).unwrap();
+
+            let boxed_conversion = Base64::convert_base64_char_to_number(third_byte as char);
+            if boxed_conversion.is_err() {
+                let message = boxed_conversion.err().unwrap();
+                return Err(message);
+            }
+            let converted_third_byte = boxed_conversion.unwrap();
             let shifted_third_byte = (0b00111100 & converted_third_byte)  >> 2;
 
             let second_char_as_byte = shifted_third_byte | second_char_part_one;
