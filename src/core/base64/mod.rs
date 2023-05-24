@@ -22,8 +22,12 @@ impl Base64 {
         let length = bytes.len();
 
         while index < length {
-            let mut to_encrypt_chunk = vec![];
-            to_encrypt_chunk.push(*bytes.get(index).unwrap());
+            let mut to_encrypt_chunk: Vec<u8> = vec![];
+            let boxed_char_as_u8 = bytes.get(index);
+            if boxed_char_as_u8.is_none() {
+                return Err(format!("unable to get char at index: {}", index));
+            }
+            to_encrypt_chunk.push(*boxed_char_as_u8.unwrap());
 
             if index + 1 < length {
                 index = index + 1;
