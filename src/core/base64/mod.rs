@@ -150,7 +150,12 @@ impl Base64 {
             let first_byte = boxed_first_byte.unwrap() as u8;
             let _first_byte_as_string = format!("{first_byte:b}");
 
-            let converted_first_byte = Base64::convert_base64_char_to_number(first_byte as char).unwrap();
+            let boxed_conversion = Base64::convert_base64_char_to_number(first_byte as char);
+            if boxed_conversion.is_err() {
+                let message = boxed_conversion.err().unwrap();
+                return Err(message);
+            }
+            let converted_first_byte = boxed_conversion.unwrap();
             let shifted_converted_first_byte = converted_first_byte << 2;
             let _shifted_converted_first_byte_as_string = format!("{converted_first_byte:b}");
 
