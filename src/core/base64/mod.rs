@@ -571,7 +571,7 @@ impl Base64 {
         let mut lowercase = ('a'..='z').into_iter().collect::<Vec<char>>();
         base64_table.append(&mut lowercase);
 
-        let mut numbers = ('0'..'9').into_iter().collect::<Vec<char>>();
+        let mut numbers = ('0'..='9').into_iter().collect::<Vec<char>>();
         base64_table.append(&mut numbers);
 
         base64_table.push('+');
