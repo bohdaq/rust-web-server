@@ -278,7 +278,12 @@ impl Base64 {
             let second_byte = boxed_second_byte.unwrap() as u8;
             let _second_byte_as_string = format!("{second_byte:b}");
 
-            let converted_second_byte = Base64::convert_base64_char_to_number(second_byte as char).unwrap();
+            let boxed_conversion = Base64::convert_base64_char_to_number(second_byte as char);
+            if boxed_conversion.is_err() {
+                let message = boxed_conversion.err().unwrap();
+                return Err(message);
+            }
+            let converted_second_byte = boxed_conversion.unwrap();
 
 
             let shifted_converted_second_byte = converted_second_byte >> 4;
