@@ -115,13 +115,18 @@ impl Base64 {
                 to_decrypt_chunk.push(boxed_char_as_u8.unwrap() as u8);
             }
 
-            let chunk : String = String::from_utf8(to_decrypt_chunk).unwrap();
+            let boxed_string = String::from_utf8(to_decrypt_chunk);
+            if boxed_string.is_err() {
+                let message = boxed_string.err().unwrap().to_string();
+                return Err(message)
+            }
+            let chunk : String = boxed_string.unwrap();
             let boxed_decrypted_chunk = Base64::decode_sequence(chunk);
             if boxed_decrypted_chunk.is_err() {
                 return Err(boxed_decrypted_chunk.err().unwrap());
             }
 
-            let encrypted_chunk = boxed_decrypted_chunk.unwrap();
+            let encrypted_chunk : Vec<u8> = boxed_decrypted_chunk.unwrap();
             result.extend(encrypted_chunk);
 
             index = index + 1
