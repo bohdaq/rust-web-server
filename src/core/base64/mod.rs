@@ -438,8 +438,8 @@ impl Base64 {
                 return Err(boxed_second_encoded_char.err().unwrap());
             }
 
-            let char : String =  boxed_second_encoded_char.unwrap().to_string();
-            result_buffer.push(char);
+            let char =  boxed_second_encoded_char.unwrap();
+            result_buffer.push(char.to_string());
 
 
             // base64 third char
@@ -448,8 +448,8 @@ impl Base64 {
             if boxed_third_encoded_char.is_err() {
                 return Err(boxed_third_encoded_char.err().unwrap());
             }
-            let char : String =  boxed_third_encoded_char.unwrap().to_string();
-            result_buffer.push(char);
+            let char =  boxed_third_encoded_char.unwrap();
+            result_buffer.push(char.to_string());
 
 
 
