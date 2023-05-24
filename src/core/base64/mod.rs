@@ -526,16 +526,16 @@ impl Base64 {
             if boxed_third_encoded_char.is_err() {
                 return Err(boxed_third_encoded_char.err().unwrap());
             }
-            let char : String =  boxed_third_encoded_char.unwrap().to_string();
-            result_buffer.push(char);
+            let char =  boxed_third_encoded_char.unwrap();
+            result_buffer.push(char.to_string());
 
             let fourth_encoded_char = third_byte & 0b00111111;
             let boxed_fourth_encoded_char = Base64::convert_number_to_base64_char(fourth_encoded_char);
             if boxed_fourth_encoded_char.is_err() {
                 return Err(boxed_fourth_encoded_char.err().unwrap());
             }
-            let char : String =  boxed_fourth_encoded_char.unwrap().to_string();
-            result_buffer.push(char);
+            let char =  boxed_fourth_encoded_char.unwrap();
+            result_buffer.push(char.to_string());
 
             let result : String = result_buffer.join(SYMBOL.empty_string);
             return Ok(result);
