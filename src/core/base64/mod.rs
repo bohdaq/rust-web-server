@@ -544,7 +544,7 @@ impl Base64 {
         Ok("".to_string())
     }
 
-    pub fn convert_base64_char_to_number(_char: char) -> Result<u8, String> {
+    pub fn convert_base64_char_to_number(char: char) -> Result<u8, String> {
         let base64_char_list : Vec<char> = Base64::get_base64_char_list();
         let mut map : HashMap<char, u8> = HashMap::new();
 
@@ -552,7 +552,7 @@ impl Base64 {
             map.insert(*char, index as u8);
         }
 
-        let index = map.get(&_char).unwrap();
+        let index : &u8 = map.get(&char).unwrap();
 
         Ok(*index)
     }
