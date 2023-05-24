@@ -78,24 +78,41 @@ impl Base64 {
 
         while index < length {
             let mut to_decrypt_chunk = vec![];
-            to_decrypt_chunk.push(text.chars().nth(index).unwrap() as u8);
+
+            let boxed_char_as_u8 = text.chars().nth(index);
+            if boxed_char_as_u8.is_none() {
+                return Err(format!("unable to get char at index: {}", index));
+            }
+            to_decrypt_chunk.push(boxed_char_as_u8.unwrap() as u8);
 
             if index + 1 < length {
                 index = index + 1;
 
-                to_decrypt_chunk.push(text.chars().nth(index).unwrap() as u8);
+                let boxed_char_as_u8 = text.chars().nth(index);
+                if boxed_char_as_u8.is_none() {
+                    return Err(format!("unable to get char at index: {}", index));
+                }
+                to_decrypt_chunk.push(boxed_char_as_u8.unwrap() as u8);
             }
 
             if index + 1 < length {
                 index = index + 1;
 
-                to_decrypt_chunk.push(text.chars().nth(index).unwrap() as u8);
+                let boxed_char_as_u8 = text.chars().nth(index);
+                if boxed_char_as_u8.is_none() {
+                    return Err(format!("unable to get char at index: {}", index));
+                }
+                to_decrypt_chunk.push(boxed_char_as_u8.unwrap() as u8);
             }
 
             if index + 1 < length {
                 index = index + 1;
 
-                to_decrypt_chunk.push(text.chars().nth(index).unwrap() as u8);
+                let boxed_char_as_u8 = text.chars().nth(index);
+                if boxed_char_as_u8.is_none() {
+                    return Err(format!("unable to get char at index: {}", index));
+                }
+                to_decrypt_chunk.push(boxed_char_as_u8.unwrap() as u8);
             }
 
             let chunk : String = String::from_utf8(to_decrypt_chunk).unwrap();
