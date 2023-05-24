@@ -589,7 +589,7 @@ impl Base64 {
 
         let boxed_get : Option<char> = base64_table.get(number as usize).copied();
         if boxed_get.is_none() {
-            return Err("unknown error".to_string())
+            return Err(format!("unable to convert number to base64 char: {}", number).to_string())
         }
 
         let char: char = boxed_get.unwrap();
