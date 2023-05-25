@@ -6,6 +6,12 @@ Core module contains several commonly used functions and acts like a container f
 
 In terms of developer terminology core can be seen as `util` package.
 
+### Modules
+  - Base64
+
+### Traits 
+  - New
+
 
 Previous topic | Current Topic
 --- |---------------
