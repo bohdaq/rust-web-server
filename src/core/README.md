@@ -4,7 +4,7 @@
 
 Core module contains several commonly used functions and acts like a container for other utility modules.
 
-In terms of developers terminology core can be seen as `util` package.
+In terms of developer terminology core can be seen as `util` package.
 
 
 Previous topic | Current Topic
