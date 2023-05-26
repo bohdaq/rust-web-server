@@ -10,7 +10,7 @@ In terms of developer terminology core can be seen as `util` package.
   - [Base64](https://github.com/bohdaq/rust-web-server/tree/main/src/core/base64)
 
 ### Traits 
-  - New
+  - `New` trait is used to retrieve new instance of an struct. Similar to `Default` trait in Rust.
 
 
 Previous topic | Current Topic
