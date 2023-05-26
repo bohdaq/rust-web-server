@@ -7,7 +7,7 @@ Core module contains several commonly used functions and acts like a container f
 In terms of developer terminology core can be seen as `util` package.
 
 ### Modules
-  - Base64
+  - [Base64](https://github.com/bohdaq/rust-web-server/tree/main/src/core/base64)
 
 ### Traits 
   - New
