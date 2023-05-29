@@ -2,7 +2,9 @@
 
 # Range 
 
-Range module is designed to handle [range requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests).
+Response may contain several different parts of the same resource.
+
+ Such functionality achieved through [range requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests).
 
 Previous topic | Current Topic | Next Topic
 --- |---------------| ---
