@@ -54,7 +54,7 @@ fn no_text_encode() {
 
 //long running test
 //#[test]
-fn non_text_encode() {
+fn _non_text_encode() {
     let path = FileExt::build_path(&["static", "audio.m4a"]);
     let pwd = FileExt::working_directory().unwrap();
 
