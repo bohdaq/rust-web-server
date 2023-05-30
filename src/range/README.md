@@ -6,7 +6,7 @@ Response may contain several different parts of the same resource.
 
  Such functionality achieved through [range requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests).
 
-Response body is a vector of a ContentRange instances.
+Response body is a vector (list) of a ContentRange instances.
 
 ### Structs
 
