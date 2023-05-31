@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod example;
+
 use std::io::prelude::*;
 use std::fs::{metadata};
 use std::io::{Cursor};
