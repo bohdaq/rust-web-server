@@ -23,3 +23,16 @@ fn as_response() {
         content_range_list: vec![content_range],
     };
 }
+
+fn as_response_range_shortcut() {
+    let data : Vec<u8> = "any sequence of bytes".as_bytes().to_vec();
+    let content_range = Range::get_content_range(data, MimeType::APPLICATION_OCTET_STREAM.to_string());
+
+    let _response = Response {
+        http_version: VERSION.http_1_1.to_string(),
+        status_code: *STATUS_CODE_REASON_PHRASE.n200_ok.status_code,
+        reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
+        headers: vec![],
+        content_range_list: vec![content_range],
+    };
+}
