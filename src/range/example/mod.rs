@@ -24,6 +24,7 @@ fn as_response() {
     };
 }
 
+#[test]
 fn as_response_range_shortcut() {
     let data : Vec<u8> = "any sequence of bytes".as_bytes().to_vec();
     let content_range = Range::get_content_range(data, MimeType::APPLICATION_OCTET_STREAM.to_string());
