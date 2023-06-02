@@ -6,7 +6,6 @@ mod tests;
 
 pub struct Base64;
 
-//WIP
 impl Base64 {
 
     pub fn encode(bytes: &[u8]) -> Result<String, String> {
