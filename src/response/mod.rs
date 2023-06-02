@@ -192,6 +192,16 @@ pub const STATUS_CODE_REASON_PHRASE: ResponseStatusCodeReasonPhrase = ResponseSt
 
 impl Response {
 
+    pub fn build(status: StatusCodeReasonPhrase, header_list : Vec<Header>, body: Vec<ContentRange>) -> Response {
+        Response {
+            http_version: VERSION.http_1_1.to_string(),
+            status_code: *status.status_code,
+            reason_phrase: status.reason_phrase.to_string(),
+            headers: header_list,
+            content_range_list: body,
+        }
+    }
+
     pub fn status_code_reason_phrase_list() -> Vec<&'static StatusCodeReasonPhrase> {
         let list = vec![
             STATUS_CODE_REASON_PHRASE.n100_continue,
