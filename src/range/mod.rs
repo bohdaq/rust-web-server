@@ -667,6 +667,175 @@ impl Range {
 
     }
 
+    pub fn parse_multipart_body_with_boundary(cursor: &mut Cursor<&[u8]>,
+                                mut content_range_list: Vec<ContentRange>,
+                                boundary: String)
+                                -> Result<Vec<ContentRange>, String> {
+
+        let boxed_line = Range::parse_line_as_bytes(cursor);
+        if boxed_line.is_err() {
+            let message = boxed_line.err().unwrap();
+            return Err(message);
+        }
+        let mut buffer = boxed_line.unwrap();
+
+
+        let new_line_char_found = buffer.len() != 0;
+
+
+        let boxed_line = Range::convert_bytes_array_to_string(buffer);
+        if boxed_line.is_err() {
+            let message = boxed_line.err().unwrap();
+            return Err(message);
+        }
+        let mut string = boxed_line.unwrap();
+
+        if !new_line_char_found {
+            return Ok(content_range_list)
+        };
+
+        let mut content_range: ContentRange = ContentRange {
+            unit: Range::BYTES.to_string(),
+            range: Range { start: 0, end: 0 },
+            size: "".to_string(),
+            body: vec![],
+            content_type: "".to_string()
+        };
+
+        let content_range_is_not_parsed = content_range.body.len() == 0;
+        if string.contains(boundary.as_str()) && content_range_is_not_parsed {
+            //read next line - Content-Type
+            let boxed_line = Range::parse_line_as_bytes(cursor);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            buffer = boxed_line.unwrap();
+
+            let boxed_line = Range::convert_bytes_array_to_string(buffer);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            string = boxed_line.unwrap();
+        }
+
+        let content_type_is_not_parsed = content_range.content_type.len() == 0;
+        if string.starts_with(Header::_CONTENT_TYPE) && content_type_is_not_parsed {
+            let boxed_content_type = Response::parse_http_response_header_string(string.as_str());
+            if boxed_content_type.is_err() {
+                let message = boxed_content_type.err().unwrap();
+                return Err(message);
+            }
+            let content_type = boxed_content_type.unwrap();
+
+            content_range.content_type = content_type.value.trim().to_string();
+
+            //read next line - Content-Range
+            let boxed_line = Range::parse_line_as_bytes(cursor);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            buffer = boxed_line.unwrap();
+
+            let boxed_line = Range::convert_bytes_array_to_string(buffer);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            string = boxed_line.unwrap();
+        }
+
+        let content_range_is_not_parsed = content_range.size.len() == 0;
+        if string.starts_with(Header::_CONTENT_RANGE) && content_range_is_not_parsed {
+            let content_range_header = Response::_parse_http_response_header_string(string.as_str());
+
+            let boxed_result = Range::_parse_content_range_header_value(content_range_header.value);
+            if boxed_result.is_ok() {
+                let (start, end, size) = boxed_result.unwrap();
+
+                content_range.size = size.to_string();
+                content_range.range.start = start as u64;
+                content_range.range.end = end as u64;
+            } else {
+                return Err(boxed_result.err().unwrap())
+            }
+
+
+
+            // read next line - empty line
+            let boxed_line = Range::parse_line_as_bytes(cursor);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            buffer = boxed_line.unwrap();
+
+            let boxed_line = Range::convert_bytes_array_to_string(buffer);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            string = boxed_line.unwrap();
+
+            if string.trim().len() > 0 {
+                return Err(Range::_ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY.to_string());
+            }
+
+            // read next line - separator between content ranges
+            let boxed_line = Range::parse_line_as_bytes(cursor);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            buffer = boxed_line.unwrap();
+
+            let boxed_line = Range::convert_bytes_array_to_string(buffer);
+            if boxed_line.is_err() {
+                let message = boxed_line.err().unwrap();
+                return Err(message);
+            }
+            string = boxed_line.unwrap();
+        }
+
+        let content_range_is_parsed = content_range.size.len() != 0;
+        let content_type_is_parsed = content_range.content_type.len() != 0;
+        if content_range_is_parsed && content_type_is_parsed {
+            let mut body : Vec<u8> = vec![];
+            body = [body, string.as_bytes().to_vec()].concat();
+
+            let mut buf = Vec::from(string.as_bytes());
+            let separator = [SYMBOL.hyphen, SYMBOL.hyphen, Range::STRING_SEPARATOR].join("");
+            while !buf.starts_with(separator.as_bytes()) {
+                buf = vec![];
+                cursor.read_until(b'\n', &mut buf).unwrap();
+                let separator = [SYMBOL.hyphen, SYMBOL.hyphen, Range::STRING_SEPARATOR].join("");
+                if !buf.starts_with(separator.as_bytes()) {
+                    body = [body, buf.to_vec()].concat();
+                }
+            }
+
+            let mut mutable_body : Vec<u8>  = body;
+            mutable_body.pop(); // remove /r
+            mutable_body.pop(); // remove /n
+
+
+            content_range.body = mutable_body;
+
+            content_range_list.push(content_range);
+        }
+
+        let boxed_result = Range::_parse_multipart_body(cursor, content_range_list);
+        return if boxed_result.is_ok() {
+            Ok(boxed_result.unwrap())
+        } else {
+            let error = boxed_result.err().unwrap();
+            Err(error)
+        }
+
+    }
+
     pub fn parse_line_as_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Vec<u8>, String> {
         let mut buffer = vec![];
         let boxed_read = cursor.read_until(b'\n', &mut buffer);

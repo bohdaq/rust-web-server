@@ -5,6 +5,7 @@ mod example;
 
 use std::io;
 use std::io::{BufRead, Cursor, Read};
+use crate::body::multipart_form_data::FormMultipartData;
 use crate::header::Header;
 use crate::ext::string_ext::StringExt;
 use crate::http::{HTTP, VERSION};
@@ -777,7 +778,20 @@ impl Response {
                     return Err(message);
                 }
                 boxed_read.unwrap();
-                let boxed_content_range_list = Range::parse_multipart_body(cursor, content_range_list);
+
+
+                let boxed_content_type = response.get_header(Header::_CONTENT_TYPE.to_string());
+                if boxed_content_type.is_none() {
+                    return Err("Content-Type is missing".to_string());
+                }
+                let content_type = boxed_content_type.unwrap();
+                let boxed_boundary = FormMultipartData::extract_boundary(content_type.value.as_str());
+                if boxed_boundary.is_err() {
+                    return Err("unable to extract boundary from Content-Type".to_string());
+                }
+                let boundary = boxed_boundary.unwrap();
+
+                let boxed_content_range_list = Range::parse_multipart_body_with_boundary(cursor, content_range_list, boundary);
                 if boxed_content_range_list.is_err() {
                     let message = boxed_content_range_list.err().unwrap();
                     return Err(message);
