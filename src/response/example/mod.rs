@@ -31,7 +31,7 @@ fn parse() {
     assert_eq!(host_header.value, "localhost");
 
     let content_type_header : &Header = response.get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
-    assert_eq!(content_type_header.value, "multipart/byteranges; boundary=String_separator");
+    assert_eq!(content_type_header.value, "multipart/byteranges; boundary=dfgksjdfgk");
 
     let body : Vec<ContentRange> = response.content_range_list;
     let number_of_parts : usize = body.len();

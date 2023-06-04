@@ -8,6 +8,7 @@ use std::io::prelude::*;
 use std::fs::{metadata};
 use std::io::{Cursor};
 use file_ext::FileExt;
+use crate::core::New;
 
 use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
 use crate::header::Header;
@@ -29,6 +30,17 @@ pub struct ContentRange {
     pub content_type: String,
 }
 
+impl New for ContentRange {
+    fn new() -> Self {
+        ContentRange {
+            unit: Range::BYTES.to_string(),
+            range: Range { start: 0, end: 0 },
+            size: "".to_string(),
+            body: vec![],
+            content_type: "".to_string()
+        }
+    }
+}
 
 impl Range {
     pub const STRING_SEPARATOR: &'static str = "String_separator";
@@ -694,13 +706,7 @@ impl Range {
             return Ok(content_range_list)
         };
 
-        let mut content_range: ContentRange = ContentRange {
-            unit: Range::BYTES.to_string(),
-            range: Range { start: 0, end: 0 },
-            size: "".to_string(),
-            body: vec![],
-            content_type: "".to_string()
-        };
+        let mut content_range: ContentRange = ContentRange::new();
 
         let content_range_is_not_parsed = content_range.body.len() == 0;
         if string.contains(boundary.as_str()) && content_range_is_not_parsed {
@@ -783,37 +789,34 @@ impl Range {
                 return Err(Range::_ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY.to_string());
             }
 
-            // read next line - separator between content ranges
-            let boxed_line = Range::parse_line_as_bytes(cursor);
-            if boxed_line.is_err() {
-                let message = boxed_line.err().unwrap();
-                return Err(message);
-            }
-            buffer = boxed_line.unwrap();
-
-            let boxed_line = Range::convert_bytes_array_to_string(buffer);
-            if boxed_line.is_err() {
-                let message = boxed_line.err().unwrap();
-                return Err(message);
-            }
-            string = boxed_line.unwrap();
         }
 
         let content_range_is_parsed = content_range.size.len() != 0;
         let content_type_is_parsed = content_range.content_type.len() != 0;
         if content_range_is_parsed && content_type_is_parsed {
             let mut body : Vec<u8> = vec![];
-            body = [body, string.as_bytes().to_vec()].concat();
 
-            let mut buf = Vec::from(string.as_bytes());
-            let separator = [SYMBOL.hyphen, SYMBOL.hyphen, Range::STRING_SEPARATOR].join("");
-            while !buf.starts_with(separator.as_bytes()) {
-                buf = vec![];
+            let mut is_not_boundary = true;
+
+            while is_not_boundary {
+                let mut buf: Vec<u8> = vec![];
                 cursor.read_until(b'\n', &mut buf).unwrap();
-                let separator = [SYMBOL.hyphen, SYMBOL.hyphen, Range::STRING_SEPARATOR].join("");
-                if !buf.starts_with(separator.as_bytes()) {
+
+                let boxed_line = Range::convert_bytes_array_to_string(buf.clone());
+                if boxed_line.is_err() {
+                    // non utf-8 body, continue
+                    body = [body, buf.to_vec()].concat();
+                    continue;
+                }
+
+                string = boxed_line.unwrap();
+
+                is_not_boundary = !string.contains(boundary.as_str());
+
+                if is_not_boundary {
                     body = [body, buf.to_vec()].concat();
                 }
+
             }
 
             let mut mutable_body : Vec<u8>  = body;
@@ -826,7 +829,7 @@ impl Range {
             content_range_list.push(content_range);
         }
 
-        let boxed_result = Range::_parse_multipart_body(cursor, content_range_list);
+        let boxed_result = Range::parse_multipart_body_with_boundary(cursor, content_range_list, boundary);
         return if boxed_result.is_ok() {
             Ok(boxed_result.unwrap())
         } else {
