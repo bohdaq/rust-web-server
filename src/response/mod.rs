@@ -694,6 +694,8 @@ impl Response {
     }
 
     pub fn parse(response_vec_u8: &[u8]) -> Result<Response, String> {
+        let total_bytes : i32 = response_vec_u8.len() as i32;
+        let bytes_read = 0;
         let mut cursor = io::Cursor::new(response_vec_u8);
 
         let mut response = Response {
@@ -707,7 +709,13 @@ impl Response {
         let content_length: usize = 0;
         let iteration_number : usize = 0;
 
-        let boxed_parse = Response::parse_raw_response_via_cursor(&mut cursor, iteration_number, &mut response, content_length);
+        let boxed_parse = Response::parse_raw_response_via_cursor(
+            &mut cursor, iteration_number,
+            &mut response,
+            content_length,
+            total_bytes,
+            bytes_read
+        );
         if boxed_parse.is_err() {
             let message = boxed_parse.err().unwrap();
             return Err(message);
@@ -720,7 +728,9 @@ impl Response {
         cursor: &mut Cursor<&[u8]>,
         mut iteration_number: usize,
         response: &mut Response,
-        mut content_length: usize) -> Result<(), String> {
+        mut content_length: usize,
+        total_bytes: i32,
+        mut bytes_read: i32) -> Result<(), String> {
 
         let mut buffer = vec![];
         let boxed_read = cursor.read_until(b'\n', &mut buffer);
@@ -729,6 +739,11 @@ impl Response {
             return Err(message);
         }
         let bytes_offset = boxed_read.unwrap();
+        bytes_read = bytes_read + bytes_offset as i32;
+        if bytes_read == total_bytes {
+            // end of stream
+            println!("123");
+        }
         let mut buffer_as_u8_array: &[u8] = &buffer;
         let boxed_string = String::from_utf8(Vec::from(buffer_as_u8_array));
         if boxed_string.is_err() {
@@ -777,7 +792,12 @@ impl Response {
                     let message = boxed_read.err().unwrap().to_string();
                     return Err(message);
                 }
-                boxed_read.unwrap();
+                let bytes_offset = boxed_read.unwrap();
+                bytes_read = bytes_read + bytes_offset as i32;
+                if bytes_read == total_bytes {
+                    // end of stream
+                    println!("123");
+                }
 
 
                 let boxed_content_type = response.get_header(Header::_CONTENT_TYPE.to_string());
@@ -791,7 +811,8 @@ impl Response {
                 }
                 let boundary = boxed_boundary.unwrap();
 
-                let boxed_content_range_list = Range::parse_multipart_body_with_boundary(cursor, content_range_list, boundary);
+                let boxed_content_range_list =
+                    Range::parse_multipart_body_with_boundary(cursor, content_range_list, boundary, total_bytes, bytes_read);
                 if boxed_content_range_list.is_err() {
                     let message = boxed_content_range_list.err().unwrap();
                     return Err(message);
@@ -804,6 +825,12 @@ impl Response {
                 if boxed_read.is_err() {
                     let message = boxed_read.err().unwrap().to_string();
                     return Err(message);
+                }
+                let bytes_offset = boxed_read.unwrap();
+                bytes_read = bytes_read + bytes_offset as i32;
+                if bytes_read == total_bytes {
+                    // end of stream
+                    println!("123");
                 }
 
                 buffer_as_u8_array = &buffer;
@@ -841,7 +868,7 @@ impl Response {
             }
 
             iteration_number += 1;
-            return Response::parse_raw_response_via_cursor(cursor, iteration_number, response, content_length);
+            return Response::parse_raw_response_via_cursor(cursor, iteration_number, response, content_length, total_bytes, bytes_read );
         } else {
             return Err("unable to parse".to_string());
         }

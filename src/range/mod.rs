@@ -680,16 +680,24 @@ impl Range {
     }
 
     pub fn parse_multipart_body_with_boundary(cursor: &mut Cursor<&[u8]>,
-                                mut content_range_list: Vec<ContentRange>,
-                                boundary: String)
-                                -> Result<Vec<ContentRange>, String> {
+                                              mut content_range_list: Vec<ContentRange>,
+                                              boundary: String,
+                                              total_bytes: i32,
+                                              mut bytes_read: i32)
+                                              -> Result<Vec<ContentRange>, String> {
 
-        let boxed_line = Range::parse_line_as_bytes(cursor);
-        if boxed_line.is_err() {
-            let message = boxed_line.err().unwrap();
+        let mut buffer = vec![];
+        let boxed_read = cursor.read_until(b'\n', &mut buffer);
+        if boxed_read.is_err() {
+            let message = boxed_read.err().unwrap().to_string();
             return Err(message);
         }
-        let mut buffer = boxed_line.unwrap();
+
+        let bytes_offset = boxed_read.unwrap();
+        bytes_read = bytes_read + bytes_offset as i32;
+        if bytes_read == total_bytes {
+            // end of stream
+        }
 
 
         let new_line_char_found = buffer.len() != 0;
@@ -829,7 +837,7 @@ impl Range {
             content_range_list.push(content_range);
         }
 
-        let boxed_result = Range::parse_multipart_body_with_boundary(cursor, content_range_list, boundary);
+        let boxed_result = Range::parse_multipart_body_with_boundary(cursor, content_range_list, boundary, total_bytes, bytes_read);
         return if boxed_result.is_ok() {
             Ok(boxed_result.unwrap())
         } else {
