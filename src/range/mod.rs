@@ -807,8 +807,15 @@ impl Range {
             let mut is_not_boundary = true;
 
             while is_not_boundary {
+                let mut _bytes_offset = 0;
                 let mut buf: Vec<u8> = vec![];
-                cursor.read_until(b'\n', &mut buf).unwrap();
+                let boxed_read = cursor.read_until(b'\n', &mut buf);
+                if boxed_read.is_err() {
+                    return Err("Unable to read from stream".to_string());
+                }
+                _bytes_offset = boxed_read.unwrap();
+                bytes_read = bytes_read + _bytes_offset as i32;
+
 
                 let boxed_line = Range::convert_bytes_array_to_string(buf.clone());
                 if boxed_line.is_err() {
@@ -823,6 +830,9 @@ impl Range {
 
                 if is_not_boundary {
                     body = [body, buf.to_vec()].concat();
+                    if (bytes_read == total_bytes) || _bytes_offset == 0 {
+                        return Err("Unable to parse multipart form body, reached the end of stream and it does not contain boundary".to_string());
+                    }
                 }
 
             }
