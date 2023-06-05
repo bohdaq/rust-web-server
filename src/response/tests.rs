@@ -436,3 +436,20 @@ fn parse_no_boundary_at_the_end() {
         assert_eq!("Unable to parse multipart form body, reached the end of stream and it does not contain boundary", message);
     }
 }
+
+#[test]
+fn parse_no_boundary_at_the_beginning() {
+    // in this example response is from reading a file
+    let path = FileExt::build_path(&["src", "response", "response.multipart.no_boundary_at_the_beginning.txt"]);
+    let pwd = FileExt::working_directory().unwrap();
+
+    let absolute_file_path = FileExt::build_path(&[pwd.as_str(), path.as_str()]);
+    let response_raw_bytes : Vec<u8> = FileExt::read_file(absolute_file_path.as_str()).unwrap();
+
+    let response_parse : Result<Response, String> = Response::parse(response_raw_bytes.as_ref());
+    if response_parse.is_err() {
+        let message = response_parse.clone().err().unwrap();
+        assert_eq!("Unable to parse multipart form body, reached the end of stream and it does not contain boundary", message);
+    }
+}
+
