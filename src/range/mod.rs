@@ -683,7 +683,8 @@ impl Range {
                                               mut content_range_list: Vec<ContentRange>,
                                               boundary: String,
                                               total_bytes: i32,
-                                              mut bytes_read: i32)
+                                              mut bytes_read: i32,
+                                              mut is_opening_boundary_read: bool)
                                               -> Result<Vec<ContentRange>, String> {
 
         let mut buffer = vec![];
@@ -717,7 +718,15 @@ impl Range {
         let mut content_range: ContentRange = ContentRange::new();
 
         let content_range_is_not_parsed = content_range.body.len() == 0;
+
+        if string.trim().len() != 0 && !is_opening_boundary_read && !string.contains(boundary.as_str()) {
+            return Err("Response body doesn't start with a boundary".to_string())
+        }
+
         if string.contains(boundary.as_str()) && content_range_is_not_parsed {
+            if !is_opening_boundary_read {
+                is_opening_boundary_read = true;
+            }
             //read next line - Content-Type
             let boxed_line = Range::parse_line_as_bytes(cursor);
             if boxed_line.is_err() {
@@ -847,7 +856,13 @@ impl Range {
             content_range_list.push(content_range);
         }
 
-        let boxed_result = Range::parse_multipart_body_with_boundary(cursor, content_range_list, boundary, total_bytes, bytes_read);
+        let boxed_result = Range::parse_multipart_body_with_boundary(
+            cursor,
+            content_range_list,
+            boundary,
+            total_bytes,
+            bytes_read,
+            is_opening_boundary_read);
         return if boxed_result.is_ok() {
             Ok(boxed_result.unwrap())
         } else {

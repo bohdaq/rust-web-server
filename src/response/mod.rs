@@ -785,21 +785,6 @@ impl Response {
 
             if is_multipart {
                 let content_range_list : Vec<ContentRange> = vec![];
-
-                let mut buf = vec![];
-                let boxed_read = cursor.read_until(b'\n', &mut buf);
-                if boxed_read.is_err() {
-                    let message = boxed_read.err().unwrap().to_string();
-                    return Err(message);
-                }
-                let bytes_offset = boxed_read.unwrap();
-                bytes_read = bytes_read + bytes_offset as i32;
-                if bytes_read == total_bytes {
-                    // end of stream
-                    println!("123");
-                }
-
-
                 let boxed_content_type = response.get_header(Header::_CONTENT_TYPE.to_string());
                 if boxed_content_type.is_none() {
                     return Err("Content-Type is missing".to_string());
@@ -811,8 +796,15 @@ impl Response {
                 }
                 let boundary = boxed_boundary.unwrap();
 
+                let is_opening_boundary_read = false;
                 let boxed_content_range_list =
-                    Range::parse_multipart_body_with_boundary(cursor, content_range_list, boundary, total_bytes, bytes_read);
+                    Range::parse_multipart_body_with_boundary(
+                        cursor,
+                        content_range_list,
+                        boundary,
+                        total_bytes,
+                        bytes_read,
+                        is_opening_boundary_read);
                 if boxed_content_range_list.is_err() {
                     let message = boxed_content_range_list.err().unwrap();
                     return Err(message);
