@@ -742,7 +742,6 @@ impl Response {
         bytes_read = bytes_read + bytes_offset as i32;
         if bytes_read == total_bytes {
             // end of stream
-            println!("123");
         }
         let mut buffer_as_u8_array: &[u8] = &buffer;
         let boxed_string = String::from_utf8(Vec::from(buffer_as_u8_array));
@@ -822,7 +821,6 @@ impl Response {
                 bytes_read = bytes_read + bytes_offset as i32;
                 if bytes_read == total_bytes {
                     // end of stream
-                    println!("123");
                 }
 
                 buffer_as_u8_array = &buffer;
