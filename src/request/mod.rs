@@ -11,6 +11,7 @@ use crate::ext::string_ext::StringExt;
 use crate::http::HTTP;
 use crate::symbol::SYMBOL;
 use url_build_parse::parse_url;
+use crate::url::URL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Request {
@@ -111,7 +112,7 @@ impl Request {
         let url_array = ["http://", "localhost/", &self.request_uri];
         let url = url_array.join(SYMBOL.empty_string);
 
-        let boxed_url_components = parse_url(&url);
+        let boxed_url_components = URL::parse(&url);
         if boxed_url_components.is_err() {
             let message = boxed_url_components.err().unwrap().to_string();
             return Err(message)

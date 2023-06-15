@@ -14,6 +14,7 @@ use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::symbol::SYMBOL;
+use crate::url::URL;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Range {
@@ -214,7 +215,20 @@ impl Range {
 
     pub fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, Error> {
         let mut content_range_list : Vec<ContentRange> = vec![];
-        let file_path_part = request_uri.replace(SYMBOL.slash, &FileExt::get_path_separator());
+
+        let url_array = ["http://", "localhost", &request_uri];
+        let url = url_array.join(SYMBOL.empty_string);
+
+        let boxed_url_components = URL::parse(&url);
+        if boxed_url_components.is_err() {
+            let message = boxed_url_components.as_ref().err().unwrap().to_string();
+            // unfallable
+            println!("unexpected error, {}", message);
+        }
+
+        let components = boxed_url_components.unwrap();
+
+        let file_path_part = components.path.replace(SYMBOL.slash, &FileExt::get_path_separator());
 
         let boxed_static_filepath = FileExt::get_static_filepath(&file_path_part);
         if boxed_static_filepath.is_err() {

@@ -9,6 +9,7 @@ use crate::request::{METHOD, Request};
 use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
 use crate::symbol::SYMBOL;
+use crate::url::URL;
 
 pub struct StaticResourceController;
 
@@ -18,7 +19,19 @@ impl Controller for StaticResourceController {
             return false;
         }
 
-        let boxed_static_filepath = FileExt::get_static_filepath(&request.request_uri);
+        let url_array = ["http://", "localhost", &request.request_uri];
+        let url = url_array.join(SYMBOL.empty_string);
+
+        let boxed_url_components = URL::parse(&url);
+        if boxed_url_components.is_err() {
+            let message = boxed_url_components.as_ref().err().unwrap().to_string();
+            // unfallable
+            println!("unexpected error, {}", message);
+        }
+
+        let components = boxed_url_components.unwrap();
+
+        let boxed_static_filepath = FileExt::get_static_filepath(&components.path);
         if boxed_static_filepath.is_err() {
             return false
         }
@@ -66,7 +79,20 @@ impl Controller for StaticResourceController {
 
                 let dir = env::current_dir().unwrap();
                 let working_directory = dir.as_path().to_str().unwrap();
-                let static_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
+
+                let url_array = ["http://", "localhost", &request.request_uri];
+                let url = url_array.join(SYMBOL.empty_string);
+
+                let boxed_url_components = URL::parse(&url);
+                if boxed_url_components.is_err() {
+                    let message = boxed_url_components.as_ref().err().unwrap().to_string();
+                    // unfallable
+                    println!("unexpected error, {}", message);
+                }
+
+                let components = boxed_url_components.unwrap();
+
+                let static_filepath = [working_directory, components.path.as_str()].join(SYMBOL.empty_string);
                 let boxed_modified_date_time = FileExt::file_modified_utc(&static_filepath);
 
                 if boxed_modified_date_time.is_ok() {
@@ -191,7 +217,20 @@ impl StaticResourceController {
     pub fn process_static_resources(request: &Request) -> Result<Vec<ContentRange>, Error> {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
-        let static_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
+
+        let url_array = ["http://", "localhost", &request.request_uri];
+        let url = url_array.join(SYMBOL.empty_string);
+
+        let boxed_url_components = URL::parse(&url);
+        if boxed_url_components.is_err() {
+            let message = boxed_url_components.as_ref().err().unwrap().to_string();
+            // unfallable
+            println!("unexpected error, {}", message);
+        }
+
+        let components = boxed_url_components.unwrap();
+
+        let static_filepath = [working_directory, components.path.as_str()].join(SYMBOL.empty_string);
 
         let mut content_range_list = Vec::new();
 
