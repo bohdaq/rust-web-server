@@ -11,6 +11,9 @@ use crate::server::ConnectionInfo;
 use crate::symbol::SYMBOL;
 use crate::url::URL;
 
+#[cfg(test)]
+mod tests;
+
 pub struct StaticResourceController;
 
 impl Controller for StaticResourceController {
