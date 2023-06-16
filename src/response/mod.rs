@@ -6,6 +6,7 @@ mod example;
 use std::io;
 use std::io::{BufRead, Cursor, Read};
 use crate::body::multipart_form_data::FormMultipartData;
+use crate::core::New;
 use crate::header::Header;
 use crate::ext::string_ext::StringExt;
 use crate::http::{HTTP, VERSION};
@@ -877,5 +878,17 @@ impl Response {
             name: header_name.to_string(),
             value: header_value.to_string()
         })
+    }
+}
+
+impl New for Response {
+    fn new() -> Self {
+        Response {
+            http_version: VERSION.http_1_1.to_string(),
+            status_code: *STATUS_CODE_REASON_PHRASE.n501_not_implemented.status_code,
+            reason_phrase: STATUS_CODE_REASON_PHRASE.n501_not_implemented.reason_phrase.to_string(),
+            headers: vec![],
+            content_range_list: vec![],
+        }
     }
 }

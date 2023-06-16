@@ -1,14 +1,19 @@
+use file_ext::FileExt;
 use crate::app::controller::static_resource::StaticResourceController;
 use crate::controller::Controller;
+use crate::core::New;
 use crate::http::VERSION;
 use crate::request::{METHOD, Request};
+use crate::response::Response;
 use crate::server::{Address, ConnectionInfo};
 
 #[test]
 fn file_retrieval() {
+    let path = "/static/test.txt";
+
     let request = Request {
         method: METHOD.get.to_string(),
-        request_uri: "/static/test.txt".to_string(),
+        request_uri: path.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
         body: vec![],
@@ -22,4 +27,15 @@ fn file_retrieval() {
 
     let is_matching = StaticResourceController::is_matching(&request, &connection_info);
     assert!(is_matching);
+
+    let mut response = Response::new();
+    response = StaticResourceController::process(&request, response, &connection_info);
+
+
+    let path_array = vec!["static", "test.txt"];
+    let path = FileExt::build_path(&path_array);
+    let expected_text = FileExt::read_file(path.as_str()).unwrap();
+
+    let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(actual_text, expected_text);
 }
