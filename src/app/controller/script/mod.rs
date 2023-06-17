@@ -6,6 +6,9 @@ use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
 
+#[cfg(test)]
+mod tests;
+
 pub struct ScriptController;
 
 impl Controller for ScriptController {
