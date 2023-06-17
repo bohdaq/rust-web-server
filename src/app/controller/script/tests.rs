@@ -1,6 +1,5 @@
 use file_ext::FileExt;
 use crate::app::controller::script::ScriptController;
-use crate::app::controller::static_resource::StaticResourceController;
 use crate::controller::Controller;
 use crate::core::New;
 use crate::http::VERSION;
