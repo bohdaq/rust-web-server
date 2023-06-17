@@ -37,5 +37,5 @@ fn file_retrieval() {
     let expected_text = FileExt::read_file(path.as_str()).unwrap();
 
     let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
-    assert_eq!(actual_text, expected_text);
+    assert_eq!(actual_text, expected_text.to_vec());
 }
