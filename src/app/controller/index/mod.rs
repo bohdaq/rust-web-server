@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use file_ext::FileExt;
 use crate::controller::Controller;
 use crate::mime_type::MimeType;
