@@ -150,18 +150,14 @@ fn copy_file_partially(from: Vec<&str>, to: Vec<&str>, start: u64, end: u64) -> 
 
 
     let to_path = FileExt::build_path(&to);
-    if FileExt::does_file_exist(to_path.as_str()) {
-        let boxed_delete = FileExt::delete_file(to_path.as_str());
-        if boxed_delete.is_err() {
-            let message = boxed_delete.err().unwrap();
+    if !FileExt::does_file_exist(to_path.as_str()) {
+        let boxed_create = FileExt::create_file(to_path.as_str());
+        if boxed_create.is_err() {
+            let message = boxed_create.err().unwrap();
             return Err(message);
         }
     }
-    let boxed_create = FileExt::create_file(to_path.as_str());
-    if boxed_create.is_err() {
-        let message = boxed_create.err().unwrap();
-        return Err(message);
-    }
+
 
     let boxed_write =
         FileExt::write_file(to_path.as_str(), content_to_copy.as_slice());
