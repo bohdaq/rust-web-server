@@ -106,6 +106,49 @@ fn copy_file(from: Vec<&str>, to: Vec<&str>) -> Result<(), String> {
         return Err(message);
     }
     let content_to_copy = boxed_content_to_copy.unwrap();
+
+
+    let to_path = FileExt::build_path(&to);
+    if FileExt::does_file_exist(to_path.as_str()) {
+        let boxed_delete = FileExt::delete_file(to_path.as_str());
+        if boxed_delete.is_err() {
+            let message = boxed_delete.err().unwrap();
+            return Err(message);
+        }
+    }
+    let boxed_create = FileExt::create_file(to_path.as_str());
+    if boxed_create.is_err() {
+        let message = boxed_create.err().unwrap();
+        return Err(message);
+    }
+
+    let boxed_write =
+        FileExt::write_file(to_path.as_str(), content_to_copy.as_slice());
+    if boxed_write.is_err() {
+        let message = boxed_write.err().unwrap();
+        return Err(message);
+    }
+    Ok(boxed_write.unwrap())
+}
+
+
+fn copy_file_partially(from: Vec<&str>, to: Vec<&str>, start: u64, end: u64) -> Result<(), String> {
+    let from_path = FileExt::build_path(&from);
+    let file_exists = FileExt::does_file_exist(from_path.as_str());
+    if !file_exists {
+        let message = format!("file at given path {} does not exist", from_path.as_str());
+        return Err(message);
+    }
+
+
+    let boxed_content_to_copy = FileExt::read_file_partially(from_path.as_str(), start, end);
+    if boxed_content_to_copy.is_err() {
+        let message = boxed_content_to_copy.err().unwrap();
+        return Err(message);
+    }
+    let content_to_copy = boxed_content_to_copy.unwrap();
+
+
     let to_path = FileExt::build_path(&to);
     if FileExt::does_file_exist(to_path.as_str()) {
         let boxed_delete = FileExt::delete_file(to_path.as_str());
