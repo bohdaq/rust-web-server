@@ -85,6 +85,15 @@ fn file_retrieval() {
 
 fn copy_file(from: Vec<&str>, to: Vec<&str>) -> Result<(), String> {
     let from_path = FileExt::build_path(&from);
+
+    let pwd = FileExt::working_directory().unwrap();
+    let path = format!("{}{}", pwd, from_path.as_str());
+    let file_exists = FileExt::does_file_exist(path.as_str());
+    if file_exists {
+        let message = format!("file at given path {} does not exist", from_path.as_str());
+        return Err(message);
+    }
+
     let boxed_content_to_copy = FileExt::read_file(from_path.as_str());
     if boxed_content_to_copy.is_err() {
         let message = boxed_content_to_copy.err().unwrap();
