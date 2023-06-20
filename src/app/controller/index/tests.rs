@@ -10,6 +10,8 @@ use crate::server::{Address, ConnectionInfo};
 #[test]
 fn file_retrieval() {
     // user provided html file
+    let pwd = FileExt::working_directory().unwrap();
+
     let path = "/";
 
     let request = Request {
@@ -33,7 +35,7 @@ fn file_retrieval() {
     response = IndexController::process(&request, response, &connection_info);
 
 
-    let path_array = vec!["index.html"];
+    let path_array = vec![pwd.as_str(), "index.html"];
     let path = FileExt::build_path(&path_array);
     let expected_text = FileExt::read_file(path.as_str()).unwrap();
 
@@ -45,7 +47,7 @@ fn file_retrieval() {
 
     // default index.html
 
-    copy_file(vec!["index.html"], vec!["index_copy.html"]).unwrap();
+    copy_file(vec![pwd.as_str(), "index.html"], vec![pwd.as_str(), "index_copy.html"]).unwrap();
 
     FileExt::delete_file("index.html").unwrap();
 
@@ -72,25 +74,29 @@ fn file_retrieval() {
     response = IndexController::process(&request, response, &connection_info);
 
 
-    let path_array = vec!["src", "app", "controller", "index", "index.html"];
+    let path_array = vec![pwd.as_str(), "src", "app", "controller", "index", "index.html"];
     let path = FileExt::build_path(&path_array);
     let expected_text = FileExt::read_file(path.as_str()).unwrap();
 
     let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
     assert_eq!(actual_text, expected_text.to_vec());
 
-    copy_file(vec!["index_copy.html"], vec!["index.html"]).unwrap();
+    copy_file(vec![pwd.as_str(), "index_copy.html"], vec![pwd.as_str(), "index.html"]).unwrap();
     FileExt::delete_file("index_copy.html").unwrap();
 }
 
 fn copy_file(from: Vec<&str>, to: Vec<&str>) -> Result<(), String> {
     let from_path = FileExt::build_path(&from);
-
-    let pwd = FileExt::working_directory().unwrap();
-    let path = format!("{}{}", pwd, from_path.as_str());
-    let file_exists = FileExt::does_file_exist(path.as_str());
-    if file_exists {
+    let file_exists = FileExt::does_file_exist(from_path.as_str());
+    if !file_exists {
         let message = format!("file at given path {} does not exist", from_path.as_str());
+        return Err(message);
+    }
+
+    let to_path = FileExt::build_path(&to);
+    let file_exists = FileExt::does_file_exist(to_path.as_str());
+    if file_exists {
+        let message = format!("file at given path {} already exists", to_path.as_str());
         return Err(message);
     }
 
