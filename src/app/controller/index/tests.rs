@@ -98,7 +98,13 @@ fn file_length(path: Vec<&str>) -> Result<u64, String> {
 }
 
 fn copy_file(from: Vec<&str>, to: Vec<&str>)-> Result<(), String> {
-    let file_length = file_length(from.clone()).unwrap();
+    let boxed_length = file_length(from.clone());
+    if boxed_length.is_err() {
+        let message = boxed_length.err().unwrap();
+        return Err(message);
+    }
+
+    let file_length = boxed_length.unwrap();
     let _100kb = 102400;
     let step = _100kb;
     let mut start = 0;
@@ -109,12 +115,19 @@ fn copy_file(from: Vec<&str>, to: Vec<&str>)-> Result<(), String> {
 
     let mut continue_copying = true;
     while continue_copying {
-        copy_part_of_file(
+        let boxed_copy = copy_part_of_file(
             from.clone(),
             to.clone(),
             start,
             end
-        ).unwrap();
+        );
+
+        if boxed_copy.is_err() {
+            let message = boxed_copy.err().unwrap();
+            return Err(message);
+        }
+
+        boxed_copy.unwrap();
 
         if end == file_length - 1 {
             continue_copying = false;
