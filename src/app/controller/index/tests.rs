@@ -48,7 +48,7 @@ fn file_retrieval() {
 
     // default index.html
 
-    copy_file(vec![pwd.as_str(), "index.html"], vec![pwd.as_str(), "index_copy.html"]).unwrap();
+    _copy_file(vec![pwd.as_str(), "index.html"], vec![pwd.as_str(), "index_copy.html"]).unwrap();
 
     FileExt::delete_file("index.html").unwrap();
 
@@ -82,9 +82,25 @@ fn file_retrieval() {
     let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
     assert_eq!(actual_text, expected_text.to_vec());
 
-    let path = vec![pwd.as_str(), "index_copy.html"];
-    let file_length = file_length(path).unwrap();
-    let step = 100000;
+    copy_file(vec![pwd.as_str(), "index_copy.html"], vec![pwd.as_str(), "index.html"]).unwrap();
+    FileExt::delete_file("index_copy.html").unwrap();
+}
+
+fn file_length(path: Vec<&str>) -> Result<u64, String> {
+    let filepath = FileExt::build_path(path.as_slice());
+    let boxed_length = fs::metadata(filepath);
+    if boxed_length.is_err() {
+        let message = boxed_length.err().unwrap().to_string();
+        return Err(message)
+    }
+    let length = boxed_length.unwrap().len();
+    Ok(length)
+}
+
+fn copy_file(from: Vec<&str>, to: Vec<&str>)-> Result<(), String> {
+    let file_length = file_length(from.clone()).unwrap();
+    let _100kb = 102400;
+    let step = _100kb;
     let mut start = 0;
     let mut end = step;
     if step >= file_length {
@@ -94,8 +110,8 @@ fn file_retrieval() {
     let mut continue_copying = true;
     while continue_copying {
         copy_part_of_file(
-            vec![pwd.as_str(), "index_copy.html"],
-            vec![pwd.as_str(), "index.html"],
+            from.clone(),
+            to.clone(),
             start,
             end
         ).unwrap();
@@ -112,22 +128,10 @@ fn file_retrieval() {
 
     }
 
-    // copy_file(vec![pwd.as_str(), "index_copy.html"], vec![pwd.as_str(), "index.html"]).unwrap();
-    FileExt::delete_file("index_copy.html").unwrap();
+    Ok(())
 }
 
-fn file_length(path: Vec<&str>) -> Result<u64, String> {
-    let filepath = FileExt::build_path(path.as_slice());
-    let boxed_length = fs::metadata(filepath);
-    if boxed_length.is_err() {
-        let message = boxed_length.err().unwrap().to_string();
-        return Err(message)
-    }
-    let length = boxed_length.unwrap().len();
-    Ok(length)
-}
-
-fn copy_file(from: Vec<&str>, to: Vec<&str>) -> Result<(), String> {
+fn _copy_file(from: Vec<&str>, to: Vec<&str>) -> Result<(), String> {
     let from_path = FileExt::build_path(&from);
     let file_exists = FileExt::does_file_exist(from_path.as_str());
     if !file_exists {
