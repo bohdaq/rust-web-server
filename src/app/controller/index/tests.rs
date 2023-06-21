@@ -84,11 +84,11 @@ fn file_retrieval() {
 
     let path = vec![pwd.as_str(), "index_copy.html"];
     let file_length = file_length(path).unwrap();
-    let step = 10;
+    let step = 100000;
     let mut start = 0;
     let mut end = step;
     if step >= file_length {
-        end = file_length;
+        end = file_length - 1;
     }
 
     let mut continue_copying = true;
