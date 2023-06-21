@@ -47,8 +47,8 @@ fn file_retrieval() {
 
 
     // default index.html
-
-    copy_file(vec![pwd.as_str(), "index.html"], vec![pwd.as_str(), "index_copy.html"]).unwrap();
+    let progress = |start, end, total| println!("progress {} of {}", end, total);
+    copy_file(vec![pwd.as_str(), "index.html"], vec![pwd.as_str(), "index_copy.html"], progress).unwrap();
 
     FileExt::delete_file("index.html").unwrap();
 
@@ -82,7 +82,7 @@ fn file_retrieval() {
     let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
     assert_eq!(actual_text, expected_text.to_vec());
 
-    copy_file(vec![pwd.as_str(), "index_copy.html"], vec![pwd.as_str(), "index.html"]).unwrap();
+    copy_file(vec![pwd.as_str(), "index_copy.html"], vec![pwd.as_str(), "index.html"], progress).unwrap();
     FileExt::delete_file("index_copy.html").unwrap();
 }
 
@@ -97,7 +97,7 @@ fn file_length(path: Vec<&str>) -> Result<u64, String> {
     Ok(length)
 }
 
-fn copy_file(from: Vec<&str>, to: Vec<&str>)-> Result<(), String> {
+fn copy_file<F: Fn(u64, u64, u64)>(from: Vec<&str>, to: Vec<&str>, f: F)-> Result<(), String> {
     let boxed_length = file_length(from.clone());
     if boxed_length.is_err() {
         let message = boxed_length.err().unwrap();
@@ -115,6 +115,8 @@ fn copy_file(from: Vec<&str>, to: Vec<&str>)-> Result<(), String> {
 
     let mut continue_copying = true;
     while continue_copying {
+        f(start, end, file_length);
+
         let boxed_copy = copy_part_of_file(
             from.clone(),
             to.clone(),
