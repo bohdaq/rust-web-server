@@ -48,7 +48,7 @@ fn file_retrieval() {
 
     // default index.html
 
-    _copy_file(vec![pwd.as_str(), "index.html"], vec![pwd.as_str(), "index_copy.html"]).unwrap();
+    copy_file(vec![pwd.as_str(), "index.html"], vec![pwd.as_str(), "index_copy.html"]).unwrap();
 
     FileExt::delete_file("index.html").unwrap();
 
