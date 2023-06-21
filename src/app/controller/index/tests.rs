@@ -1,3 +1,4 @@
+use std::fs;
 use file_ext::FileExt;
 use crate::app::controller::index::IndexController;
 use crate::controller::Controller;
@@ -81,8 +82,49 @@ fn file_retrieval() {
     let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
     assert_eq!(actual_text, expected_text.to_vec());
 
-    copy_file(vec![pwd.as_str(), "index_copy.html"], vec![pwd.as_str(), "index.html"]).unwrap();
+    let path = vec![pwd.as_str(), "index_copy.html"];
+    let file_length = file_length(path).unwrap();
+    let step = 10;
+    let mut start = 0;
+    let mut end = step;
+    if step >= file_length {
+        end = file_length;
+    }
+
+    let mut continue_copying = true;
+    while continue_copying {
+        copy_file_partially(
+            vec![pwd.as_str(), "index_copy.html"],
+            vec![pwd.as_str(), "index.html"],
+            start,
+            end
+        ).unwrap();
+
+        if end == file_length - 1 {
+            continue_copying = false;
+        } else {
+            start = end + 1;
+            end = end + step;
+            if start + step >= file_length {
+                end = file_length - 1;
+            }
+        }
+
+    }
+
+    // copy_file(vec![pwd.as_str(), "index_copy.html"], vec![pwd.as_str(), "index.html"]).unwrap();
     FileExt::delete_file("index_copy.html").unwrap();
+}
+
+fn file_length(path: Vec<&str>) -> Result<u64, String> {
+    let filepath = FileExt::build_path(path.as_slice());
+    let boxed_length = fs::metadata(filepath);
+    if boxed_length.is_err() {
+        let message = boxed_length.err().unwrap().to_string();
+        return Err(message)
+    }
+    let length = boxed_length.unwrap().len();
+    Ok(length)
 }
 
 fn copy_file(from: Vec<&str>, to: Vec<&str>) -> Result<(), String> {
