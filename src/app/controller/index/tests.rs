@@ -93,7 +93,7 @@ fn file_retrieval() {
 
     let mut continue_copying = true;
     while continue_copying {
-        copy_file_partially(
+        copy_part_of_file(
             vec![pwd.as_str(), "index_copy.html"],
             vec![pwd.as_str(), "index.html"],
             start,
@@ -174,7 +174,7 @@ fn copy_file(from: Vec<&str>, to: Vec<&str>) -> Result<(), String> {
 }
 
 
-fn copy_file_partially(from: Vec<&str>, to: Vec<&str>, start: u64, end: u64) -> Result<(), String> {
+fn copy_part_of_file(from: Vec<&str>, to: Vec<&str>, start: u64, end: u64) -> Result<(), String> {
     let from_path = FileExt::build_path(&from);
     let file_exists = FileExt::does_file_exist(from_path.as_str());
     if !file_exists {
