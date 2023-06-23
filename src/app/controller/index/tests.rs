@@ -44,11 +44,24 @@ fn file_retrieval() {
     assert_eq!(actual_text, expected_text.to_vec());
 
 
-
+    let mut label = "".to_string();
 
     // default index.html
-    let progress = |start, end, total| println!("progress {} of {}", end, total);
-    copy_file(vec![pwd.as_str(), "index.html"], vec![pwd.as_str(), "index_copy.html"], progress).unwrap();
+    let progress = |_start, _end, _file_length| {
+        label = format!("progress {} of {}", _end, _file_length)
+    };
+
+    let cancel_callback = |_start, _end, _file_length| {
+        // if true stops copying
+        false
+    };
+
+    copy_file(
+        vec![pwd.as_str(), "index.html"],
+        vec![pwd.as_str(), "index_copy.html"],
+        progress,
+        cancel_callback
+    ).unwrap();
 
     FileExt::delete_file("index.html").unwrap();
 
@@ -82,7 +95,21 @@ fn file_retrieval() {
     let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
     assert_eq!(actual_text, expected_text.to_vec());
 
-    copy_file(vec![pwd.as_str(), "index_copy.html"], vec![pwd.as_str(), "index.html"], progress).unwrap();
+    let progress_callback = |_start, end, file_length| {
+        label = format!("progress {} of {}", end, file_length)
+    };
+
+    let cancel_callback = |_start, _end, _file_length| {
+        // if true stops copying
+        false
+    };
+
+    copy_file(
+        vec![pwd.as_str(), "index_copy.html"],
+        vec![pwd.as_str(), "index.html"],
+        progress_callback,
+        cancel_callback
+    ).unwrap();
     FileExt::delete_file("index_copy.html").unwrap();
 }
 
@@ -97,7 +124,8 @@ fn file_length(path: Vec<&str>) -> Result<u64, String> {
     Ok(length)
 }
 
-fn copy_file<F: Fn(u64, u64, u64)>(from: Vec<&str>, to: Vec<&str>, f: F)-> Result<(), String> {
+fn copy_file<F, C>(from: Vec<&str>, to: Vec<&str>, mut f: F, mut c: C)-> Result<(), String>
+  where C: FnMut(u64, u64, u64) -> bool, F: FnMut(u64, u64, u64) {
     let boxed_length = file_length(from.clone());
     if boxed_length.is_err() {
         let message = boxed_length.err().unwrap();
@@ -105,7 +133,7 @@ fn copy_file<F: Fn(u64, u64, u64)>(from: Vec<&str>, to: Vec<&str>, f: F)-> Resul
     }
 
     let file_length = boxed_length.unwrap();
-    let _100kb = 102400;
+    let _100kb = 10;
     let step = _100kb;
     let mut start = 0;
     let mut end = step;
@@ -131,7 +159,9 @@ fn copy_file<F: Fn(u64, u64, u64)>(from: Vec<&str>, to: Vec<&str>, f: F)-> Resul
 
         boxed_copy.unwrap();
 
-        if end == file_length - 1 {
+        let copying_cancelled_by_user = c(start, end, file_length);
+        let reached_end_of_file = end == file_length - 1;
+        if reached_end_of_file || copying_cancelled_by_user {
             continue_copying = false;
         } else {
             start = end + 1;
