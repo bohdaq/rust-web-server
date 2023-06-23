@@ -47,11 +47,11 @@ fn file_retrieval() {
     let mut label = "".to_string();
 
     // default index.html
-    let progress = |_start, _end, _file_length| {
-        label = format!("progress {} of {}", _end, _file_length)
+    let progress_callback  = |_start, _end, _file_length| {
+        label = format!("copying block starting from byte {} to {} of total {} bytes", _start, _end, _file_length)
     };
 
-    let cancel_callback = |_start, _end, _file_length| {
+    let cancel_callback  = |_start, _end, _file_length| {
         // if true stops copying
         false
     };
@@ -59,7 +59,7 @@ fn file_retrieval() {
     copy_file(
         vec![pwd.as_str(), "index.html"],
         vec![pwd.as_str(), "index_copy.html"],
-        progress,
+        progress_callback,
         cancel_callback
     ).unwrap();
 
@@ -95,11 +95,11 @@ fn file_retrieval() {
     let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
     assert_eq!(actual_text, expected_text.to_vec());
 
-    let progress_callback = |_start, end, file_length| {
-        label = format!("progress {} of {}", end, file_length)
+    let progress_callback = |_start, _end, _file_length| {
+        label = format!("copying block starting from byte {} to {} of total {} bytes", _start, _end, _file_length)
     };
 
-    let cancel_callback = |_start, _end, _file_length| {
+    let cancel_callback  = |_start, _end, _file_length| {
         // if true stops copying
         false
     };
