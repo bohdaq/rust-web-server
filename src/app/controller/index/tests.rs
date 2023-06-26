@@ -95,20 +95,9 @@ fn file_retrieval() {
     let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
     assert_eq!(actual_text, expected_text.to_vec());
 
-    let progress_callback = |_start, _end, _file_length| {
-        label = format!("copying block starting from byte {} to {} of total {} bytes", _start, _end, _file_length)
-    };
-
-    let cancel_callback  = |_start, _end, _file_length| {
-        // if true stops copying
-        false
-    };
-
-    copy_file(
+    FileExt::copy_file(
         vec![pwd.as_str(), "index_copy.html"],
-        vec![pwd.as_str(), "index.html"],
-        progress_callback,
-        cancel_callback
+        vec![pwd.as_str(), "index.html"]
     ).unwrap();
     FileExt::delete_file("index_copy.html").unwrap();
 }
