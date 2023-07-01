@@ -9,6 +9,10 @@ use crate::server::{Address, ConnectionInfo};
 
 #[test]
 fn file_retrieval() {
+    if FileExt::does_file_exist("script.js") {
+        FileExt::delete_file("script.js").unwrap();
+    }
+
     let path = "/script.js";
 
     let request = Request {
@@ -35,6 +39,27 @@ fn file_retrieval() {
     let path_array = vec!["src", "app", "controller", "script", "script.js"];
     let path = FileExt::build_path(&path_array);
     let expected_text = FileExt::read_file(path.as_str()).unwrap();
+
+    let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(actual_text, expected_text.to_vec());
+
+    let override_script = "console.log('1234')";
+    FileExt::create_file("script.js").unwrap();
+    FileExt::write_file("script.js", override_script.as_bytes()).unwrap();
+
+
+    let mut response = Response::new();
+    response = ScriptController::process(&request, response, &connection_info);
+
+
+    let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(override_script.as_bytes().to_vec(), actual_text.to_vec());
+
+    FileExt::delete_file("script.js").unwrap();
+
+
+    let mut response = Response::new();
+    response = ScriptController::process(&request, response, &connection_info);
 
     let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
     assert_eq!(actual_text, expected_text.to_vec());
