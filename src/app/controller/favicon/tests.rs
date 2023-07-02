@@ -9,6 +9,10 @@ use crate::server::{Address, ConnectionInfo};
 
 #[test]
 fn favicon_retrieval() {
+    if FileExt::does_file_exist("favicon.svg") {
+        FileExt::delete_file("favicon.svg").unwrap();
+    }
+
     let path = "/favicon.svg";
 
     let request = Request {
@@ -38,4 +42,17 @@ fn favicon_retrieval() {
 
     let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
     assert_eq!(actual_text, expected_text.to_vec());
+
+    let override_favicon = "<svg></svg>";
+    FileExt::create_file("favicon.svg").unwrap();
+    FileExt::write_file("favicon.svg", override_favicon.as_bytes()).unwrap();
+
+    let mut response = Response::new();
+    response = FaviconController::process(&request, response, &connection_info);
+
+
+    let actual_text = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(override_favicon.as_bytes().to_vec(), actual_text.to_vec());
+
+    FileExt::delete_file("favicon.svg").unwrap();
 }
