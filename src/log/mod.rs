@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::thread;
 use file_ext::FileExt;
 use crate::entry_point::command_line_args::CommandLineArgument;
 use crate::request::Request;
@@ -47,7 +48,11 @@ impl Log {
             }
         }
 
-        let log_request_response = format!("\n\nRequest (peer address is {}):\n  {} {} {}  {}\n  Body: {} byte(s) total (including default initialization vector)\nEnd of Request\nResponse:\n  {} {} {}\n\n  Body: {} part(s), {} byte(s) total\nEnd of Response",
+        let current_thread = thread::current();
+        let thread_id = current_thread.name().unwrap();
+
+        let log_request_response = format!("\n\nRequest (thread id: {} peer address is {}):\n  {} {} {}  {}\n  Body: {} byte(s) total (including default initialization vector)\nEnd of Request\nResponse:\n  {} {} {}\n\n  Body: {} part(s), {} byte(s) total\nEnd of Response",
+                                           thread_id,
                                            peer_addr,
                                            &request.http_version,
                                            &request.method,
