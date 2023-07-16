@@ -52,7 +52,9 @@ struct Worker {
 
 impl Worker {
     fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
-        let thread = thread::spawn(move || loop {
+        let builder = thread::Builder::new().name(format!("{}", id));
+
+        let boxed_thread = builder.spawn(move || loop {
 
             let boxed_lock = receiver.lock();
             if boxed_lock.is_err() {
@@ -75,6 +77,10 @@ impl Worker {
 
         });
 
-        Worker { _id: id, _thread: thread }
+        if boxed_thread.is_err() {
+            eprintln!("Failed while creating a thread id: {} error: {}", id, boxed_thread.as_ref().err().unwrap());
+        }
+
+        Worker { _id: id, _thread: boxed_thread.unwrap() }
     }
 }
