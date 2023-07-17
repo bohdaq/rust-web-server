@@ -42,21 +42,43 @@ impl Controller for StaticResourceController {
         let static_filepath = boxed_static_filepath.unwrap();
 
         let boxed_md = metadata(&static_filepath);
-        if boxed_md.is_err() {
-            return false
+        if boxed_md.is_ok() {
+            let md = boxed_md.unwrap();
+            if md.is_dir() {
+                return false
+            }
         }
 
-        let md = boxed_md.unwrap();
-        if md.is_dir() {
-            return false
-        }
+
 
         let boxed_file = File::open(&static_filepath);
 
         let is_get = request.method == METHOD.get;
         let is_head = request.method == METHOD.head;
         let is_options = request.method == METHOD.options;
-        boxed_file.is_ok() && (is_get || is_head || is_options && request.request_uri != SYMBOL.slash)
+
+        let is_matching_method = is_get || is_head || is_options && request.request_uri != SYMBOL.slash;
+
+        if boxed_file.is_ok() {
+            is_matching_method
+        } else {
+            // check if file with same name and .html extension exists
+            if static_filepath.ends_with(".html") {
+                return false
+            }
+
+            let html_suffix = ".html";
+            let html_file = [&components.path, html_suffix].join(SYMBOL.empty_string);
+            let boxed_static_filepath = FileExt::get_static_filepath(&html_file);
+            if boxed_static_filepath.is_err() {
+                return false
+            }
+
+            let static_filepath = boxed_static_filepath.unwrap();
+            let boxed_file = File::open(&static_filepath);
+
+            boxed_file.is_ok() && is_matching_method
+        }
 
     }
 
@@ -257,6 +279,37 @@ impl StaticResourceController {
                 } else {
                     let error = boxed_content_range_list.err().unwrap();
                     return Err(error)
+                }
+            }
+        }
+
+
+        if boxed_file.is_err() {
+            //check if .html file exists
+            let static_filepath = [working_directory, components.path.as_str(), ".html"].join(SYMBOL.empty_string);
+
+            let boxed_file = File::open(&static_filepath);
+            if boxed_file.is_ok()  {
+                let md = metadata(&static_filepath).unwrap();
+                if md.is_file() {
+                    let mut range_header = &Header {
+                        name: Header::_RANGE.to_string(),
+                        value: "bytes=0-".to_string()
+                    };
+
+                    let boxed_header = request.get_header(Header::_RANGE.to_string());
+                    if boxed_header.is_some() {
+                        range_header = boxed_header.unwrap();
+                    }
+
+                    let html_file = [&request.request_uri, ".html"].join(SYMBOL.empty_string);
+                    let boxed_content_range_list = Range::get_content_range_list(&html_file, range_header);
+                    if boxed_content_range_list.is_ok() {
+                        content_range_list = boxed_content_range_list.unwrap();
+                    } else {
+                        let error = boxed_content_range_list.err().unwrap();
+                        return Err(error)
+                    }
                 }
             }
         }
