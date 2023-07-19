@@ -2,6 +2,7 @@
 mod tests;
 #[cfg(test)]
 mod example;
+pub mod path;
 
 use std::collections::HashMap;
 use url_build_parse::{build_url, parse_url, UrlComponents};
