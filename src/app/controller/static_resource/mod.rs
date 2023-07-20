@@ -302,8 +302,23 @@ impl StaticResourceController {
                         range_header = boxed_header.unwrap();
                     }
 
-                    let html_file = [&request.request_uri, ".html"].join(SYMBOL.empty_string);
-                    let boxed_content_range_list = Range::get_content_range_list(&html_file, range_header);
+                    let url_array = ["http://", "localhost", &request.request_uri];
+                    let url = url_array.join(SYMBOL.empty_string);
+
+                    let boxed_url_components = URL::parse(&url);
+                    if boxed_url_components.is_err() {
+                        let message = boxed_url_components.as_ref().err().unwrap().to_string();
+                        // unfallable
+                        println!("unexpected error, {}", message);
+                    }
+
+                    let components = boxed_url_components.unwrap();
+
+                    // let html_file = [SYMBOL.slash, ].join(SYMBOL.empty_string);
+
+
+                    let html_file = [components.path.as_str(), ".html"].join(SYMBOL.empty_string);
+                    let boxed_content_range_list = Range::get_content_range_list(html_file.as_str(), range_header);
                     if boxed_content_range_list.is_ok() {
                         content_range_list = boxed_content_range_list.unwrap();
                     } else {
