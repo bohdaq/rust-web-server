@@ -15,7 +15,7 @@ rust-web-server (**rws**) is a static content web-server written in Rust.
 Open [documentation](src/README.md) for details.
 
 ## Download
-[Download binary](https://github.com/bohdaq/rust-web-server/releases) from releases page.  There is a mirror for downloads on [Google Drive](https://drive.google.com/drive/folders/13iSR3VxmfFvZgOZ0LddP_EJp7GJ-lQd8?usp=share_link).
+Download binary from [Google Drive](https://drive.google.com/drive/folders/13iSR3VxmfFvZgOZ0LddP_EJp7GJ-lQd8?usp=share_link).
 
 
 ## Installation
