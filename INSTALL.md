@@ -3,9 +3,9 @@
 ## Install
 Make sure you removed previous executable:
 
-> sudo rm -f /usr/local/bin/rws #old path
+> sudo rm -f /usr/local/bin/rws #on macOS
 >
-> sudo rm -f /usr/bin/rws
+> sudo rm -f /usr/bin/rws #on Linux
 
 Download precompiled binary for you platform from [Google Drive](https://drive.google.com/drive/folders/13iSR3VxmfFvZgOZ0LddP_EJp7GJ-lQd8?usp=sharing).
 
