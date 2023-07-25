@@ -13,9 +13,9 @@ You can always [build rws binary](DEVELOPER.md) from source.
 
 ## x86_64 Architecture
 ### Apple macOS
-> sudo cp rws /usr/bin
+> sudo cp rws /usr/local/bin
 >
-> sudo chmod ug+rwx,o+r /usr/bin/rws
+> sudo chmod 777 /usr/local/bin/rws
 #### Homebrew macOS
 > brew tap bohdaq/rust-web-server
 >
