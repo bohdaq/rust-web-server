@@ -45,7 +45,13 @@ impl Controller for StaticResourceController {
         if boxed_md.is_ok() {
             let md = boxed_md.unwrap();
             if md.is_dir() {
-                let index_html_in_directory_array = [&static_filepath, "index.html"];
+                let mut directory_index = "index.html";
+
+                let last_char = components.path.chars().last().unwrap();
+                if last_char != '/' {
+                    directory_index = "/index.html"
+                }
+                let index_html_in_directory_array = [&static_filepath, directory_index];
                 let index_html_in_directory = index_html_in_directory_array.join(SYMBOL.empty_string);
 
                 let boxed_file = File::open(&index_html_in_directory);
@@ -280,7 +286,14 @@ impl StaticResourceController {
                     range_header = boxed_header.unwrap();
                 }
 
-                let url_array = [&components.path, "index.html"];
+                let mut directory_index = "index.html";
+
+                let last_char = components.path.chars().last().unwrap();
+                if last_char != '/' {
+                    directory_index = "/index.html"
+                }
+
+                let url_array = [&components.path, directory_index];
                 let directory_index_html_path = url_array.join(SYMBOL.empty_string);
 
                 let boxed_content_range_list = Range::get_content_range_list(&directory_index_html_path, range_header);
