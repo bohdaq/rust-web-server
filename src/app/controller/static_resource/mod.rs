@@ -280,7 +280,7 @@ impl StaticResourceController {
                     range_header = boxed_header.unwrap();
                 }
 
-                let url_array = [&request.request_uri, "index.html"];
+                let url_array = [&components.path, "index.html"];
                 let directory_index_html_path = url_array.join(SYMBOL.empty_string);
 
                 let boxed_content_range_list = Range::get_content_range_list(&directory_index_html_path, range_header);
