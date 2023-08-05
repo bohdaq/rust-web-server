@@ -138,6 +138,8 @@ impl Header {
 
     pub const NAME_VALUE_SEPARATOR: &'static str = ": ";
 
+    pub const _DO_NOT_STORE_CACHE: &'static str = "no-store, no-cache, max-age=0, must-revalidate, proxy-revalidate";
+
 
 
     pub fn get_header_list(request: &Request) -> Vec<Header> {
@@ -173,6 +175,9 @@ impl Header {
         let date_iso_8601_header = Header::get_date_iso_8601_header();
         header_list.push(date_iso_8601_header);
 
+        let no_cache = Header::get_no_cache_header();
+        header_list.push(no_cache);
+
         header_list
     }
 
@@ -202,6 +207,13 @@ impl Header {
         Header {
             name: Header::_DATE_UNIX_EPOCH_NANOS.to_string(),
             value: DateTimeExt::_now_unix_epoch_nanos().to_string(),
+        }
+    }
+
+    pub fn get_no_cache_header() -> Header {
+        Header {
+            name: Header::_CACHE_CONTROL.to_string(),
+            value: Header::_DO_NOT_STORE_CACHE.to_string(),
         }
     }
 
