@@ -11,6 +11,7 @@ rust-web-server (**rws**) is a static content web-server written in Rust.
 1. [Symlinks](https://en.wikipedia.org/wiki/Symbolic_link). You can have symlinks in your folder and they will be resolved correctly.
 1. [Caching](https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching#dealing_with_outdated_implementations) done right. It means no caching and therefore no outdated uncontrollable resources.
 1. Resolving .html files without .html in path. It means if you try to open /some-html-file it will open file some-html-file.html and won't show 404 not found error. Same applies for folders. If you try to open /folder it will open file folder/index.html 
+1. Extensive logging. It means server prints the request-response pairs as they are so you can see all the details like request method, path, version and headers.
 1. No third party dependencies.
 
 ## Documentation
