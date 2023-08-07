@@ -1,6 +1,6 @@
 # rust-web-server
 
-rust-web-server (**rws**) is a static content web-server written in Rust.
+rust-web-server (**rws**) — fast, reliable and secure webserver.
 
 ## Features
 1. [Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS). Allowing resources to be used on other domains can be crucial for providing APIs and services. Knowing how cumberstone and difficult is the process to setup the CORS, server ships with CORS enabled to all requests by default.
