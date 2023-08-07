@@ -7,8 +7,9 @@ rust-web-server (**rws**) is a static content web-server written in Rust.
 1. [HTTP Range Requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests)
 1. [HTTP Client Hints](https://developer.mozilla.org/en-US/docs/Web/HTTP/Client_hints)
 1. [X-Content-Type-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options)
-1. [X-Frame-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options)
-1. [Symlinks](https://en.wikipedia.org/wiki/Symbolic_link)
+1. [X-Frame-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options). Site is not allowed to be embedded into iframe on other domains. 
+1. [Symlinks](https://en.wikipedia.org/wiki/Symbolic_link). You can have a symlinks in your folder and it will be resolved correctly.
+1. [Caching](https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching#dealing_with_outdated_implementations) done right. It means no caching and therefore no outdated uncontrollable resources.
 1. No third party dependencies.
 
 ## Documentation
