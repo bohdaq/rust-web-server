@@ -2,6 +2,12 @@
 
 rust-web-server (**rws**) — fast, reliable and secure webserver.
 
+Fast. Compiled to native binary for maximum performance.
+
+Reliable. Does not rely on garbage collector, no performance degradation.
+
+Secure. Provides read-only access to files, eliminating most of the attacks.
+
 ## Features
 1. [Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS). Allowing resources to be used on other domains can be crucial for providing APIs and services. Knowing how cumberstone and difficult is the process to setup the CORS, server ships with CORS enabled to all requests by default.
 1. [HTTP Range Requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests). Server supports requests for the part of the file, or several different parts of the file.
