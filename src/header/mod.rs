@@ -138,7 +138,7 @@ impl Header {
 
     pub const NAME_VALUE_SEPARATOR: &'static str = ": ";
 
-    pub const _DO_NOT_STORE_CACHE: &'static str = "no-store, no-cache, max-age=0, must-revalidate, proxy-revalidate";
+    pub const _DO_NOT_STORE_CACHE: &'static str = "no-store, no-cache, private, max-age=0, must-revalidate, proxy-revalidate";
 
 
 
