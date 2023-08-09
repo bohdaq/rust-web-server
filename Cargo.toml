@@ -1,6 +1,6 @@
 [package]
 name = "rws"
-version = "15.1.0"
+version = "16.0.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 description = "rust-web-server (rws) is a static content web-server written in Rust"
