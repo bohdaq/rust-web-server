@@ -21,4 +21,11 @@ impl UrlPath {
         let mut map = HashMap::new();
         Ok(map)
     }
+
+    pub fn build(_params: HashMap<String, String>, _pattern: &str) -> Result<String, String> {
+        //TODO
+
+        let mut map = HashMap::new();
+        Ok("generated path here".to_string())
+    }
 }
