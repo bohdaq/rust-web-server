@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use crate::json::object::{FromJSON, ToJSON};
 
 #[cfg(test)]
 mod tests;
@@ -19,17 +20,16 @@ impl UrlPath {
         Ok(true)
     }
 
-    pub fn extract(_path: &str, _pattern: &str) -> Result<HashMap<String, String>, String> {
+    pub fn extract<T: FromJSON + ToJSON>(_path: &str, _pattern: &str) -> Result<HashMap<String, T>, String> {
         //TODO
 
-        let mut map = HashMap::new();
+        let map = HashMap::new();
         Ok(map)
     }
 
-    pub fn build(_params: HashMap<String, String>, _pattern: &str) -> Result<String, String> {
+    pub fn build<T: FromJSON + ToJSON>(_params: HashMap<String, T>, _pattern: &str) -> Result<String, String> {
         //TODO
 
-        let mut _map : HashMap<String, String> = HashMap::new();
         Ok("generated path here".to_string())
     }
 }
