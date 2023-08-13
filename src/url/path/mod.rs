@@ -9,9 +9,8 @@ impl UrlPath {
     pub fn is_matching(_path: &str, _pattern: &str) -> Result<bool, String> {
         //TODO
 
-        let mut map = HashMap::new();
-        map.insert("qwert", "123");
-        map.insert("qwert", "123");
+        // extract static parts and name of keys
+
         Ok(true)
     }
 
