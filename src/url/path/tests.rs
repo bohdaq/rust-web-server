@@ -21,3 +21,14 @@ fn is_matching_whitespace_path() {
     assert!(is_matching_boxed.is_err());
     assert_eq!("path contains control character or whitespace", is_matching_boxed.err().unwrap());
 }
+
+#[test]
+fn is_matching_whitespace_pattern() {
+    let url = "/some/path/1234";
+    let pattern = "/so me/path/[[id]]";
+
+    let is_matching_boxed = UrlPath::is_matching(url, pattern);
+
+    assert!(is_matching_boxed.is_err());
+    assert_eq!("path contains control character or whitespace", is_matching_boxed.err().unwrap());
+}

@@ -17,6 +17,12 @@ impl UrlPath {
             }
         }
 
+        for _char in _pattern.chars() {
+            if _char.is_whitespace() || _char.is_ascii_control() {
+                return Err("path contains control character or whitespace".to_string())
+            }
+        }
+
         Ok(true)
     }
 
