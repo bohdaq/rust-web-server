@@ -30,13 +30,13 @@ impl UrlPath {
 
         for _char in _pattern.chars() {
 
-            if _char == '[' {
+            if _char == '[' && previous_char.is_some() && previous_char.unwrap() == '[' {
                 buffer = vec![];
                 is_static_part = false;
                 return Err("path contains control character or whitespace".to_string())
             } else if is_static_part {
                 buffer.push(_char)
-            } else if _char == ']' {
+            } else if _char == ']' && previous_char.is_some() && previous_char.unwrap() == ']' {
                 is_static_part = true;
             }
 
