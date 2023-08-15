@@ -23,6 +23,26 @@ impl UrlPath {
             }
         }
 
+        let parts: Vec<String> = vec![];
+        let mut buffer: Vec<char> = vec![];
+        let mut is_static_part = true;
+        let mut previous_char: Option<char> = None;
+
+        for _char in _pattern.chars() {
+
+            if _char == '[' {
+                buffer = vec![];
+                is_static_part = false;
+                return Err("path contains control character or whitespace".to_string())
+            } else if is_static_part {
+                buffer.push(_char)
+            } else if _char == ']' {
+                is_static_part = true;
+            }
+
+            previous_char = Some(_char.clone());
+        }
+
         Ok(true)
     }
 
