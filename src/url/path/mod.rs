@@ -7,6 +7,11 @@ mod tests;
 pub struct UrlPath;
 
 impl UrlPath {
+    pub fn extract_parts_from_pattern(_pattern: &str) -> Vec<String>{
+        let parts: Vec<String> = vec![];
+        parts
+    }
+
     pub fn is_matching(_path: &str, _pattern: &str) -> Result<bool, String> {
         //TODO
 
