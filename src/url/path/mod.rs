@@ -6,9 +6,15 @@ mod tests;
 
 pub struct UrlPath;
 
+pub struct Part {
+    pub is_static: bool,
+    pub name: String,
+    pub value: String
+}
+
 impl UrlPath {
-    pub fn extract_parts_from_pattern(_pattern: &str) -> Vec<String>{
-        let parts: Vec<String> = vec![];
+    pub fn extract_parts_from_pattern(_pattern: &str) -> Vec<Part>{
+        let parts: Vec<Part> = vec![];
         parts
     }
 
