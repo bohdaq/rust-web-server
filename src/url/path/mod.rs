@@ -14,8 +14,26 @@ pub struct Part {
 
 impl UrlPath {
     pub fn extract_parts_from_pattern(_pattern: &str) -> Vec<Part>{
-        let parts: Vec<Part> = vec![];
-        parts
+        let part_list: Vec<Part> = vec![];
+        let mut buffer: Vec<char> = vec![];
+        let mut is_static_part = true;
+        let mut previous_char: Option<char> = None;
+
+        for _char in _pattern.chars() {
+
+            if _char == '[' && previous_char.is_some() && previous_char.unwrap() == '[' {
+                buffer = vec![];
+                is_static_part = false;
+            } else if is_static_part {
+                buffer.push(_char)
+            } else if _char == ']' && previous_char.is_some() && previous_char.unwrap() == ']' {
+                is_static_part = true;
+            }
+
+            previous_char = Some(_char.clone());
+        }
+
+        part_list
     }
 
     pub fn is_matching(_path: &str, _pattern: &str) -> Result<bool, String> {
