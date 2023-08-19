@@ -28,6 +28,11 @@ impl UrlPath {
                 buffer.push(_char)
             } else if _char == ']' && previous_char.is_some() && previous_char.unwrap() == ']' {
                 is_static_part = true;
+                let part = Part {
+                    is_static: false,
+                    name: "".to_string(),
+                    value: "".to_string(),
+                };
             }
 
             previous_char = Some(_char.clone());
