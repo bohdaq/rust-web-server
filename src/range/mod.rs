@@ -216,7 +216,7 @@ impl Range {
     pub fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, Error> {
         let mut content_range_list : Vec<ContentRange> = vec![];
 
-        let url_array = ["http://", "localhost", &request_uri];
+        let url_array = ["http://", "localhost", &request_uri.replace(&FileExt::get_path_separator(), SYMBOL.slash)];
         let url = url_array.join(SYMBOL.empty_string);
 
         let boxed_url_components = URL::parse(&url);
