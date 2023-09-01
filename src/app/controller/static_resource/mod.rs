@@ -44,6 +44,8 @@ impl Controller for StaticResourceController {
 
         let static_filepath = boxed_static_filepath.unwrap();
 
+        let mut is_directory_with_index_html = false;
+
         let boxed_md = metadata(&static_filepath);
         if boxed_md.is_ok() {
             let md = boxed_md.unwrap();
@@ -64,6 +66,7 @@ impl Controller for StaticResourceController {
                     return false
                 }
 
+                is_directory_with_index_html = true;
             }
         }
 
@@ -75,9 +78,9 @@ impl Controller for StaticResourceController {
         let is_head = request.method == METHOD.head;
         let is_options = request.method == METHOD.options;
 
-        let is_matching_method = is_get || is_head || is_options && request.request_uri != SYMBOL.slash;
+        let is_matching_method = (is_get || is_head || is_options) && (request.request_uri != SYMBOL.slash);
 
-        if boxed_file.is_ok() {
+        if boxed_file.is_ok() || is_directory_with_index_html {
             is_matching_method
         } else {
             // check if file with same name and .html extension exists
@@ -273,7 +276,12 @@ impl StaticResourceController {
 
         let components = boxed_url_components.unwrap();
 
-        let static_filepath = [working_directory, components.path.as_str()].join(SYMBOL.empty_string);
+        let os_specific_separator : String = FileExt::get_path_separator();
+        let os_specific_path = &components.path.replace(SYMBOL.slash, os_specific_separator.as_str());
+
+        let boxed_static_filepath = FileExt::get_static_filepath(&os_specific_path);
+
+        let static_filepath = boxed_static_filepath.unwrap();
 
         let mut content_range_list = Vec::new();
 
@@ -291,17 +299,17 @@ impl StaticResourceController {
                     range_header = boxed_header.unwrap();
                 }
 
-                let mut directory_index = "index.html";
+                let mut directory_index : String = "index.html".to_string();
 
                 let last_char = components.path.chars().last().unwrap();
                 if last_char != '/' {
-                    directory_index = "/index.html"
+                    let index : String = "index.html".to_string();
+                    directory_index = format!("{}{}", os_specific_separator, index);
                 }
+                let index_html_in_directory = format!("{}{}", os_specific_path, directory_index);
 
-                let url_array = [&components.path, directory_index];
-                let directory_index_html_path = url_array.join(SYMBOL.empty_string);
 
-                let boxed_content_range_list = Range::get_content_range_list(&directory_index_html_path, range_header);
+                let boxed_content_range_list = Range::get_content_range_list(&index_html_in_directory, range_header);
                 if boxed_content_range_list.is_ok() {
                     content_range_list = boxed_content_range_list.unwrap();
                 } else {
