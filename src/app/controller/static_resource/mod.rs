@@ -37,7 +37,7 @@ impl Controller for StaticResourceController {
         let os_specific_separator : String = FileExt::get_path_separator();
         let os_specific_path = &components.path.replace(SYMBOL.slash, os_specific_separator.as_str());
 
-        let boxed_static_filepath = FileExt::get_static_filepath(&components.path);
+        let boxed_static_filepath = FileExt::get_static_filepath(&os_specific_path);
         if boxed_static_filepath.is_err() {
             return false
         }
