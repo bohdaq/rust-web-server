@@ -45,14 +45,17 @@ impl Controller for StaticResourceController {
         if boxed_md.is_ok() {
             let md = boxed_md.unwrap();
             if md.is_dir() {
-                let mut directory_index = "index.html";
+                let mut directory_index : String = "index.html".to_string();
 
                 let last_char = components.path.chars().last().unwrap();
                 if last_char != '/' {
-                    directory_index = "/index.html"
+                    let os_specific_separator : String = FileExt::get_path_separator();
+                    let index : String = "index.html".to_string();
+                    directory_index = format!("{}{}", os_specific_separator, index);
+
                 }
-                let index_html_in_directory_array = [&static_filepath, directory_index];
-                let index_html_in_directory = index_html_in_directory_array.join(SYMBOL.empty_string);
+                let index_html_in_directory = format!("{}{}", static_filepath, directory_index);
+
 
                 let boxed_file = File::open(&index_html_in_directory);
                 if boxed_file.is_err() {
