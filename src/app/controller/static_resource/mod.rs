@@ -34,6 +34,9 @@ impl Controller for StaticResourceController {
 
         let components = boxed_url_components.unwrap();
 
+        let os_specific_separator : String = FileExt::get_path_separator();
+        let os_specific_path = &components.path.replace(SYMBOL.slash, os_specific_separator.as_str());
+
         let boxed_static_filepath = FileExt::get_static_filepath(&components.path);
         if boxed_static_filepath.is_err() {
             return false
@@ -49,7 +52,6 @@ impl Controller for StaticResourceController {
 
                 let last_char = components.path.chars().last().unwrap();
                 if last_char != '/' {
-                    let os_specific_separator : String = FileExt::get_path_separator();
                     let index : String = "index.html".to_string();
                     directory_index = format!("{}{}", os_specific_separator, index);
 
