@@ -13,7 +13,7 @@ pub struct Part {
 }
 
 impl UrlPath {
-    pub fn extract_parts_from_pattern(_pattern: &str) -> Vec<Part>{
+    pub fn extract_parts_from_pattern(_pattern: &str) -> Result<Vec<Part>, String>{
         let part_list: Vec<Part> = vec![];
         let mut buffer: Vec<char> = vec![];
         let mut is_static_part = true;
@@ -38,7 +38,7 @@ impl UrlPath {
             previous_char = Some(_char.clone());
         }
 
-        part_list
+        Ok(part_list)
     }
 
     pub fn is_matching(_path: &str, _pattern: &str) -> Result<bool, String> {
