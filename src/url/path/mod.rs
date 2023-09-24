@@ -8,8 +8,9 @@ pub struct UrlPath;
 
 pub struct Part {
     pub is_static: bool,
-    pub name: String,
-    pub value: String
+    pub name: Option<String>,
+    pub value: Option<String>,
+    pub static_pattern: Option<String>
 }
 
 impl UrlPath {
@@ -30,8 +31,9 @@ impl UrlPath {
                 is_static_part = true;
                 let part = Part {
                     is_static: false,
-                    name: "".to_string(),
-                    value: "".to_string(),
+                    name: Some("".to_string()),
+                    value: Some("".to_string()),
+                    static_pattern: None,
                 };
             }
 
