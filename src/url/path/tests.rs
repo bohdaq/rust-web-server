@@ -4,6 +4,11 @@ use crate::url::path::{Part, UrlPath};
 fn parts() {
     let pattern = "[[name]]/some/path/[[id]]/another/part/[[param]]";
     let parts : Vec<Part> = UrlPath::extract_parts_from_pattern(pattern).unwrap();
+    assert_eq!(parts.len(), 5);
+
+    let name_param = parts.get(0).unwrap();
+    assert_eq!(name_param.is_static, false);
+    assert_eq!(name_param.name.clone().unwrap(), "name");
     println!("123")
 
 }
