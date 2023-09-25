@@ -9,6 +9,8 @@ fn parts() {
     let name_param = parts.get(0).unwrap();
     assert_eq!(name_param.is_static, false);
     assert_eq!(name_param.name.clone().unwrap(), "name");
+    assert!(name_param.value.clone().is_none());
+    assert!(name_param.static_pattern.clone().is_none());
     println!("123")
 
 }
