@@ -17,6 +17,13 @@ fn parts() {
     assert!(name_param.name.clone().is_none());
     assert!(name_param.value.clone().is_none());
     assert_eq!(name_param.static_pattern.clone().unwrap(), "/some/path/");
+
+    let name_param = parts.get(2).unwrap();
+    assert_eq!(name_param.is_static, false);
+    assert_eq!(name_param.name.clone().unwrap(), "id");
+    assert!(name_param.value.clone().is_none());
+    assert!(name_param.static_pattern.clone().is_none());
+
     println!("123")
 
 }
