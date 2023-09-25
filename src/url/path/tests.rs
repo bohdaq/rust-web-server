@@ -24,6 +24,18 @@ fn parts() {
     assert!(name_param.value.clone().is_none());
     assert!(name_param.static_pattern.clone().is_none());
 
+    let name_param = parts.get(3).unwrap();
+    assert_eq!(name_param.is_static, true);
+    assert!(name_param.name.clone().is_none());
+    assert!(name_param.value.clone().is_none());
+    assert_eq!(name_param.static_pattern.clone().unwrap(), "/another/part/");
+
+    let name_param = parts.get(4).unwrap();
+    assert_eq!(name_param.is_static, false);
+    assert_eq!(name_param.name.clone().unwrap(), "param");
+    assert!(name_param.value.clone().is_none());
+    assert!(name_param.static_pattern.clone().is_none());
+
     println!("123")
 
 }
