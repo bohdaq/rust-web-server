@@ -2,9 +2,9 @@ use crate::url::path::{Part, UrlPath};
 
 #[test]
 fn parts() {
-    let pattern = "/some/path/[[id]]";
+    let pattern = "[[name]]/some/path/[[id]]/another/part/[[param]]";
     let parts : Vec<Part> = UrlPath::extract_parts_from_pattern(pattern).unwrap();
-
+    println!("123")
 
 }
 

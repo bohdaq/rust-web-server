@@ -15,26 +15,45 @@ pub struct Part {
 
 impl UrlPath {
     pub fn extract_parts_from_pattern(_pattern: &str) -> Result<Vec<Part>, String>{
-        let part_list: Vec<Part> = vec![];
+        let mut part_list: Vec<Part> = vec![];
         let mut buffer: Vec<char> = vec![];
         let mut is_static_part = true;
         let mut previous_char: Option<char> = None;
 
         for _char in _pattern.chars() {
 
+            buffer.push(_char);
+
             if _char == '[' && previous_char.is_some() && previous_char.unwrap() == '[' {
+                if buffer.len() != 0 {
+                    let without_square_brackets = buffer.len() - 2;
+                    let pattern : String = buffer[0..without_square_brackets].into_iter().collect();
+                    let part = Part {
+                        is_static: true,
+                        name: None,
+                        value: None,
+                        static_pattern: Some(pattern),
+                    };
+                    part_list.push(part);
+                }
                 buffer = vec![];
                 is_static_part = false;
-            } else if is_static_part {
-                buffer.push(_char)
-            } else if _char == ']' && previous_char.is_some() && previous_char.unwrap() == ']' {
-                is_static_part = true;
+            }
+
+            if _char == ']' && previous_char.is_some() && previous_char.unwrap() == ']' {
+                let without_square_brackets = buffer.len() - 2;
+                let key : String = buffer[0..without_square_brackets].into_iter().collect();
                 let part = Part {
                     is_static: false,
-                    name: Some("".to_string()),
-                    value: Some("".to_string()),
+                    name: Some(key),
+                    value: None,
                     static_pattern: None,
                 };
+                part_list.push(part);
+
+                is_static_part = true;
+                buffer = vec![];
+
             }
 
             previous_char = Some(_char.clone());
