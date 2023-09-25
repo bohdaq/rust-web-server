@@ -28,13 +28,15 @@ impl UrlPath {
                 if buffer.len() != 0 {
                     let without_square_brackets = buffer.len() - 2;
                     let pattern : String = buffer[0..without_square_brackets].into_iter().collect();
-                    let part = Part {
-                        is_static: true,
-                        name: None,
-                        value: None,
-                        static_pattern: Some(pattern),
-                    };
-                    part_list.push(part);
+                    if pattern.len() > 0 {
+                        let part = Part {
+                            is_static: true,
+                            name: None,
+                            value: None,
+                            static_pattern: Some(pattern),
+                        };
+                        part_list.push(part);
+                    }
                 }
                 buffer = vec![];
                 is_static_part = false;
