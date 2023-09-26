@@ -44,7 +44,7 @@ fn parts() {
 fn parts_malformed() {
     let pattern = "[[name]][[other_param]]/some/path/[[id]]/another/part/[[param]]";
     let reason : String = UrlPath::extract_parts_from_pattern(pattern).err().unwrap();
-    println!("123")
+    assert_eq!(reason, "two consecutive tokens near: name]]")
 
 }
 
