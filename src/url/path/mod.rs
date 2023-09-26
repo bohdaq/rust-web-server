@@ -43,6 +43,10 @@ impl UrlPath {
             }
 
             if _char == ']' && previous_char.is_some() && previous_char.unwrap() == ']' {
+                if !is_static_part {
+                    let pattern : String = buffer[0..buffer.len()].into_iter().collect();
+                    return Err(format!("two consecutive tokens near: {}", pattern))
+                }
                 let without_square_brackets = buffer.len() - 2;
                 let key : String = buffer[0..without_square_brackets].into_iter().collect();
                 let part = Part {

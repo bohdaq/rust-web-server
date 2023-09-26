@@ -41,6 +41,14 @@ fn parts() {
 }
 
 #[test]
+fn parts_malformed() {
+    let pattern = "[[name]][[other_param]]/some/path/[[id]]/another/part/[[param]]";
+    let reason : String = UrlPath::extract_parts_from_pattern(pattern).err().unwrap();
+    println!("123")
+
+}
+
+#[test]
 fn is_matching() {
     let url = "/some/path/1234";
     let pattern = "/some/path/[[id]]";
