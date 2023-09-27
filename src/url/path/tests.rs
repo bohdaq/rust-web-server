@@ -36,15 +36,21 @@ fn parts() {
     assert!(name_param.value.clone().is_none());
     assert!(name_param.static_pattern.clone().is_none());
 
-    println!("123")
-
 }
 
 #[test]
 fn parts_malformed() {
     let pattern = "[[name]][[other_param]]/some/path/[[id]]/another/part/[[param]]";
     let reason : String = UrlPath::extract_parts_from_pattern(pattern).err().unwrap();
-    assert_eq!(reason, "two consecutive tokens near: name]]")
+    assert_eq!(reason, "two consecutive tokens one after another")
+
+}
+
+#[test]
+fn parts_malformed_whitespace() {
+    let pattern = " [[name]][[other_param]]/some/path/[[id]]/another/part/[[param]]";
+    let reason : String = UrlPath::extract_parts_from_pattern(pattern).err().unwrap();
+    assert_eq!(reason, "pattern contains whitespace")
 
 }
 

@@ -21,6 +21,9 @@ impl UrlPath {
         let mut previous_char: Option<char> = None;
 
         for _char in _pattern.chars() {
+            if _char.is_whitespace() {
+                return Err("pattern contains whitespace".to_string())
+            }
 
             buffer.push(_char);
 
@@ -40,13 +43,14 @@ impl UrlPath {
                 }
                 buffer = vec![];
                 is_static_part = false;
+
+                let previous_part_is_token = part_list.last().is_some() && part_list.last().unwrap().is_static == false;
+                if previous_part_is_token {
+                    return Err("two consecutive tokens one after another".to_string())
+                }
             }
 
             if _char == ']' && previous_char.is_some() && previous_char.unwrap() == ']' {
-                if !is_static_part {
-                    let pattern : String = buffer[0..buffer.len()].into_iter().collect();
-                    return Err(format!("two consecutive tokens near: {}", pattern))
-                }
                 let without_square_brackets = buffer.len() - 2;
                 let key : String = buffer[0..without_square_brackets].into_iter().collect();
                 let part = Part {
