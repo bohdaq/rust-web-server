@@ -74,39 +74,12 @@ impl UrlPath {
 
     pub fn is_matching(_path: &str, _pattern: &str) -> Result<bool, String> {
         //TODO
-
-        // extract static parts and name of keys
-        for _char in _path.chars() {
-            if _char.is_whitespace() || _char.is_ascii_control() {
-                return Err("path contains control character or whitespace".to_string())
-            }
+        let boxed_parts = UrlPath::extract_parts_from_pattern(_pattern);
+        if boxed_parts.is_err() {
+            return Err(boxed_parts.err().unwrap());
         }
 
-        for _char in _pattern.chars() {
-            if _char.is_whitespace() || _char.is_ascii_control() {
-                return Err("path contains control character or whitespace".to_string())
-            }
-        }
-
-        let parts: Vec<String> = vec![];
-        let mut buffer: Vec<char> = vec![];
-        let mut is_static_part = true;
-        let mut previous_char: Option<char> = None;
-
-        for _char in _pattern.chars() {
-
-            if _char == '[' && previous_char.is_some() && previous_char.unwrap() == '[' {
-                buffer = vec![];
-                is_static_part = false;
-                return Err("path contains control character or whitespace".to_string())
-            } else if is_static_part {
-                buffer.push(_char)
-            } else if _char == ']' && previous_char.is_some() && previous_char.unwrap() == ']' {
-                is_static_part = true;
-            }
-
-            previous_char = Some(_char.clone());
-        }
+        let parts : Vec<Part> = boxed_parts.unwrap();
 
         Ok(true)
     }
