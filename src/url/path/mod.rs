@@ -82,23 +82,23 @@ impl UrlPath {
 
         let parts : Vec<Part> = boxed_parts.unwrap();
 
-        let mut pattern = _path.to_string();
+        let mut url_path = _path.to_string();
         let number_of_parts = parts.len();
         for (index, part) in parts.iter().enumerate() {
             let part = part;
             let is_there_next_part = index < number_of_parts - 1;
             if part.is_static {
                 let static_pattern = part.static_pattern.clone().unwrap();
-                if !pattern.starts_with(&static_pattern) {
+                if !url_path.starts_with(&static_pattern) {
                     return Ok(false)
                 }
-                pattern = pattern.replacen(static_pattern.as_str(), SYMBOL.empty_string, 1);
+                url_path = url_path.replacen(static_pattern.as_str(), SYMBOL.empty_string, 1);
             } else {
                 if !is_there_next_part {
                     let _part = Part {
                         is_static: false,
                         name: part.name.clone(),
-                        value: Some(pattern.clone()),
+                        value: Some(url_path.clone()),
                         static_pattern: None,
                     };
                 }
