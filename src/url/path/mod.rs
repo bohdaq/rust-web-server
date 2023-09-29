@@ -74,7 +74,6 @@ impl UrlPath {
     }
 
     pub fn is_matching(_path: &str, _pattern: &str) -> Result<bool, String> {
-        //TODO
         let is_matching = true;
         let is_not_matching = false;
 
