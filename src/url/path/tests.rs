@@ -104,5 +104,5 @@ fn is_matching_whitespace_pattern() {
     let is_matching_boxed = UrlPath::is_matching(url, pattern);
 
     assert!(is_matching_boxed.is_err());
-    assert_eq!("pattern contains whitespace", is_matching_boxed.err().unwrap());
+    assert_eq!("path contains control character or whitespace", is_matching_boxed.err().unwrap());
 }

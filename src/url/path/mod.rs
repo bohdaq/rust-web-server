@@ -23,7 +23,7 @@ impl UrlPath {
 
         for _char in _pattern.chars() {
             if _char.is_whitespace() || _char.is_control() {
-                return Err("pattern contains whitespace".to_string())
+                return Err("path contains control character or whitespace".to_string())
             }
 
             buffer.push(_char);
