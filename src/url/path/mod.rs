@@ -136,14 +136,14 @@ impl UrlPath {
         Ok(is_matching)
     }
 
-    pub fn extract<T: FromJSON + ToJSON>(_path: &str, _pattern: &str) -> Result<HashMap<String, T>, String> {
+    pub fn extract(_path: &str, _pattern: &str) -> Result<HashMap<String, String>, String> {
         //TODO
 
         let map = HashMap::new();
         Ok(map)
     }
 
-    pub fn build<T: FromJSON + ToJSON>(_params: HashMap<String, T>, _pattern: &str) -> Result<String, String> {
+    pub fn build(_params: HashMap<String, String>, _pattern: &str) -> Result<String, String> {
         //TODO
 
         Ok("generated path here".to_string())
