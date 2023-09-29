@@ -78,6 +78,10 @@ impl UrlPath {
         let is_matching = true;
         let is_not_matching = false;
 
+        if _path.find(SYMBOL.whitespace).is_some() {
+            return Err("path contains control character or whitespace".to_string());
+        }
+
         let boxed_parts = UrlPath::extract_parts_from_pattern(_pattern);
         if boxed_parts.is_err() {
             return Err(boxed_parts.err().unwrap());

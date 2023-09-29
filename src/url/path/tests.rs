@@ -75,7 +75,7 @@ fn is_matching_multiple_tokens() {
 }
 
 
-// #[test]
+#[test]
 fn is_matching_whitespace_path() {
     let url = "/so me/path/1234";
     let pattern = "/some/path/[[id]]";
