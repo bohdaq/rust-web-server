@@ -64,5 +64,5 @@ pub const SYMBOL: Symbol = Symbol {
     plus: "+",
     question_mark: "?",
     at: "@",
-    control_char_string_terminator: "",
+    control_char_string_terminator: "\u{009}",
 };
