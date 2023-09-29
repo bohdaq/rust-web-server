@@ -51,7 +51,7 @@ fn parts_malformed() {
 fn parts_malformed_whitespace() {
     let pattern = " [[name]][[other_param]]/some/path/[[id]]/another/part/[[param]]";
     let reason : String = UrlPath::extract_parts_from_pattern(pattern).err().unwrap();
-    assert_eq!(reason, "pattern contains whitespace")
+    assert_eq!(reason, "path contains control character or whitespace")
 
 }
 
