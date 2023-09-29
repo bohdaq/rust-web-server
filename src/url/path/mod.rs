@@ -75,6 +75,9 @@ impl UrlPath {
 
     pub fn is_matching(_path: &str, _pattern: &str) -> Result<bool, String> {
         //TODO
+        let is_matching = true;
+        let is_not_matching = false;
+
         let boxed_parts = UrlPath::extract_parts_from_pattern(_pattern);
         if boxed_parts.is_err() {
             return Err(boxed_parts.err().unwrap());
@@ -90,7 +93,7 @@ impl UrlPath {
             if part.is_static {
                 let static_pattern = part.static_pattern.clone().unwrap();
                 if !url_path.starts_with(&static_pattern) {
-                    return Ok(false)
+                    return Ok(is_not_matching)
                 }
                 url_path = url_path.replacen(static_pattern.as_str(), SYMBOL.empty_string, 1);
             } else {
@@ -106,7 +109,7 @@ impl UrlPath {
                     let delimiter = next_part.static_pattern.clone().unwrap().chars().next().unwrap();
                     let occurence = url_path.find(delimiter);
                     if occurence.is_none() {
-                        return Ok(false)
+                        return Ok(is_not_matching)
                     }
                     let occurence_place = occurence.unwrap();
                     let token = url_path[..occurence_place].to_string();
@@ -124,7 +127,7 @@ impl UrlPath {
             }
         }
         
-        Ok(true)
+        Ok(is_matching)
     }
 
     pub fn extract<T: FromJSON + ToJSON>(_path: &str, _pattern: &str) -> Result<HashMap<String, T>, String> {
