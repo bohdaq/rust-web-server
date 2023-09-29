@@ -22,7 +22,7 @@ impl UrlPath {
         let mut previous_char: Option<char> = None;
 
         for _char in _pattern.chars() {
-            if _char.is_whitespace() {
+            if _char.is_whitespace() || _char.is_control() {
                 return Err("pattern contains whitespace".to_string())
             }
 
