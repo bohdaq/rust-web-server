@@ -31,6 +31,7 @@ pub struct Symbol {
     pub plus: &'static str,
     pub question_mark: &'static str,
     pub at: &'static str,
+    pub control_char_string_terminator: &'static str,
 }
 
 pub const SYMBOL: Symbol = Symbol {
@@ -63,4 +64,5 @@ pub const SYMBOL: Symbol = Symbol {
     plus: "+",
     question_mark: "?",
     at: "@",
+    control_char_string_terminator: "",
 };

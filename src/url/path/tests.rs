@@ -1,3 +1,4 @@
+use crate::symbol::SYMBOL;
 use crate::url::path::{Part, UrlPath};
 
 #[test]
@@ -86,10 +87,10 @@ fn is_matching_whitespace_path() {
 }
 #[test]
 fn is_matching_control_char_path() {
-    let url = "/some/path/1234";
+    let url = format!("/so{}me/path/1234", SYMBOL.control_char_string_terminator);
     let pattern = "/some/path/[[id]]";
 
-    let is_matching_boxed = UrlPath::is_matching(url, pattern);
+    let is_matching_boxed = UrlPath::is_matching(url.as_str(), pattern);
 
     assert!(is_matching_boxed.is_err());
     assert_eq!("path contains control character or whitespace", is_matching_boxed.err().unwrap());
