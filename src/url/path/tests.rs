@@ -64,6 +64,16 @@ fn is_matching() {
     // assert!(is_matching);
 }
 
+#[test]
+fn is_matching_multiple_tokens() {
+    let url = "/some/path/1234/another/path/asd";
+    let pattern = "/some/path/[[id]]/another/path/[[name]]";
+
+    let is_matching = UrlPath::is_matching(url, pattern).unwrap();
+
+    // assert!(is_matching);
+}
+
 
 // #[test]
 fn is_matching_whitespace_path() {

@@ -101,6 +101,25 @@ impl UrlPath {
                         value: Some(url_path.clone()),
                         static_pattern: None,
                     };
+                } else {
+                    let next_part = parts.get(index + 1).unwrap();
+                    let delimiter = next_part.static_pattern.clone().unwrap().chars().next().unwrap();
+                    let occurence = url_path.find(delimiter);
+                    if occurence.is_none() {
+                        return Ok(false)
+                    }
+                    let occurence_place = occurence.unwrap();
+                    let token = url_path[..occurence_place].to_string();
+                    let _part = Part {
+                        is_static: false,
+                        name: part.name.clone(),
+                        value: Some(token.clone()),
+                        static_pattern: None,
+                    };
+
+                    url_path = url_path.chars().skip(occurence_place).collect();
+
+                    println!("123")
                 }
             }
         }
