@@ -41,37 +41,16 @@ fn parts() {
 
 #[test]
 fn parts_extra_opening_bracket() {
-    //TODO
     let pattern = "[[[[[name]]";
-    let parts : Vec<Part> = UrlPath::extract_parts_from_pattern(pattern).unwrap();
-    assert_eq!(parts.len(), 1);
-
-    let name_param = parts.get(0).unwrap();
-    assert_eq!(name_param.is_static, false);
-    assert_eq!(name_param.name.clone().unwrap(), "name");
-    assert!(name_param.value.clone().is_none());
-    assert!(name_param.static_pattern.clone().is_none());
-
+    let reason : String = UrlPath::extract_parts_from_pattern(pattern).err().unwrap();
+    assert_eq!(reason, "at least one extra [ char");
 }
 
 #[test]
 fn parts_extra_nested_token() {
-    //TODO
     let pattern = "[[[[password]]name]]";
-    let parts : Vec<Part> = UrlPath::extract_parts_from_pattern(pattern).unwrap();
-    assert_eq!(parts.len(), 2);
-
-    let name_param = parts.get(0).unwrap();
-    assert_eq!(name_param.is_static, false);
-    assert_eq!(name_param.name.clone().unwrap(), "password");
-    assert!(name_param.value.clone().is_none());
-    assert!(name_param.static_pattern.clone().is_none());
-
-    let name_param = parts.get(1).unwrap();
-    assert_eq!(name_param.is_static, false);
-    assert_eq!(name_param.name.clone().unwrap(), "name");
-    assert!(name_param.value.clone().is_none());
-    assert!(name_param.static_pattern.clone().is_none());
+    let reason : String = UrlPath::extract_parts_from_pattern(pattern).err().unwrap();
+    assert_eq!(reason, "at least one extra [ char");
 
 }
 

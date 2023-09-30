@@ -20,6 +20,7 @@ impl UrlPath {
         let mut buffer: Vec<char> = vec![];
         let mut is_static_part = true;
         let mut previous_char: Option<char> = None;
+        let mut is_opened_token = false;
 
         for _char in _pattern.chars() {
             if _char.is_whitespace() || _char.is_control() {
@@ -29,6 +30,10 @@ impl UrlPath {
             buffer.push(_char);
 
             if _char == '[' && previous_char.is_some() && previous_char.unwrap() == '[' {
+                if is_opened_token {
+                    return Err("at least one extra [ char".to_string());
+                }
+                is_opened_token = true;
                 if buffer.len() != 0 && buffer.len() >= 2 {
                     let without_square_brackets = buffer.len() - 2;
                     let pattern : String = buffer[0..without_square_brackets].into_iter().collect();
@@ -52,6 +57,7 @@ impl UrlPath {
             }
 
             if _char == ']' && previous_char.is_some() && previous_char.unwrap() == ']' {
+                is_opened_token = false;
                 let without_square_brackets = buffer.len() - 2;
                 let key : String = buffer[0..without_square_brackets].into_iter().collect();
                 let part = Part {
