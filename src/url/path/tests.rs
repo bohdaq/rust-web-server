@@ -40,6 +40,20 @@ fn parts() {
 }
 
 #[test]
+fn parts_extra_opening_bracket() {
+    let pattern = "[[[[[name]]";
+    let parts : Vec<Part> = UrlPath::extract_parts_from_pattern(pattern).unwrap();
+    assert_eq!(parts.len(), 1);
+
+    let name_param = parts.get(0).unwrap();
+    assert_eq!(name_param.is_static, false);
+    assert_eq!(name_param.name.clone().unwrap(), "name");
+    assert!(name_param.value.clone().is_none());
+    assert!(name_param.static_pattern.clone().is_none());
+
+}
+
+#[test]
 fn parts_malformed() {
     let pattern = "[[name]][[other_param]]/some/path/[[id]]/another/part/[[param]]";
     let reason : String = UrlPath::extract_parts_from_pattern(pattern).err().unwrap();

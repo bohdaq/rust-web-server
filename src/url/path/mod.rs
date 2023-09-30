@@ -29,7 +29,7 @@ impl UrlPath {
             buffer.push(_char);
 
             if _char == '[' && previous_char.is_some() && previous_char.unwrap() == '[' {
-                if buffer.len() != 0 {
+                if buffer.len() != 0 && buffer.len() >= 2 {
                     let without_square_brackets = buffer.len() - 2;
                     let pattern : String = buffer[0..without_square_brackets].into_iter().collect();
                     if pattern.len() > 0 {
