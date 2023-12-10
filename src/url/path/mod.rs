@@ -183,6 +183,23 @@ impl UrlPath {
     pub fn extract(_path: &str, _pattern: &str) -> Result<HashMap<String, String>, String> {
         //TODO
 
+        let boxed_parts = UrlPath::extract_parts_from_pattern(_pattern);
+        if boxed_parts.is_err() {
+            return Err(boxed_parts.err().unwrap());
+        }
+
+        let parts : Vec<Part> = boxed_parts.unwrap();
+
+        let mut previous_part: Option<Part> = None;
+        for part in parts.iter() {
+            println!("part: {:?} {:?} {:?}", part.name, part.value, part.static_pattern);
+            if previous_part.is_some() {
+                let previous = previous_part.unwrap();
+                println!("previous part: {:?} {:?} {:?}", previous.name, previous.value, previous.static_pattern);
+            }
+            previous_part = Some(part.clone());
+        }
+
         let map = HashMap::new();
         Ok(map)
     }
