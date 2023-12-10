@@ -77,7 +77,7 @@ fn is_matching() {
 
     let is_matching = UrlPath::is_matching(url, pattern).unwrap();
 
-    // assert!(is_matching);
+    assert!(is_matching);
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn is_matching_multiple_tokens() {
 
     let is_matching = UrlPath::is_matching(url, pattern).unwrap();
 
-    // assert!(is_matching);
+    assert!(is_matching);
 }
 
 #[test]

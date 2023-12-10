@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use crate::json::object::{FromJSON, ToJSON};
 use crate::symbol::SYMBOL;
 
@@ -12,6 +13,13 @@ pub struct Part {
     pub name: Option<String>,
     pub value: Option<String>,
     pub static_pattern: Option<String>
+}
+
+impl Display for Part {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        println!("{:?} {:?} {:?} {:?}", &self.is_static, &self.name, &self.value, &self.static_pattern);
+        Ok(())
+    }
 }
 
 impl UrlPath {
@@ -98,8 +106,11 @@ impl UrlPath {
 
         let mut url_path = _path.to_string();
         let number_of_parts = parts.len();
+        println!("number_of_parts, {}", number_of_parts);
+
         for (index, part) in parts.iter().enumerate() {
             let part = part;
+            println!("1, {}", part);
             let is_there_next_part = index < number_of_parts - 1;
             if part.is_static {
                 let static_pattern = part.static_pattern.clone().unwrap();
@@ -115,8 +126,11 @@ impl UrlPath {
                         value: Some(url_path.clone()),
                         static_pattern: None,
                     };
+                    println!("2, {}", part);
+
                 } else {
                     let next_part = parts.get(index + 1).unwrap();
+                    println!("3, {}", part);
                     let delimiter = next_part.static_pattern.clone().unwrap().chars().next().unwrap();
                     let occurence = url_path.find(delimiter);
                     if occurence.is_none() {
@@ -130,6 +144,8 @@ impl UrlPath {
                         value: Some(token.clone()),
                         static_pattern: None,
                     };
+                    println!("4, {}", part);
+
 
                     url_path = url_path.chars().skip(occurence_place).collect();
 
