@@ -177,6 +177,31 @@ impl UrlPath {
     pub fn build(_params: HashMap<String, String>, _pattern: &str) -> Result<String, String> {
         //TODO
 
-        Ok("generated path here".to_string())
+        let boxed_parts = UrlPath::extract_parts_from_pattern(_pattern);
+        if boxed_parts.is_err() {
+            return Err(boxed_parts.err().unwrap());
+        }
+
+        let parts : Vec<Part> = boxed_parts.unwrap();
+
+
+        let mut strings_array = vec![];
+        for part  in parts {
+            if part.is_static {
+                strings_array.push(part.static_pattern.unwrap())
+            } else {
+                let key = part.name.unwrap().to_string();
+                let boxed_value = _params.get(key.as_str());
+                if boxed_value.is_none() {
+                    return Err(format!("specified parameter {} is not found", key))
+                }
+                let value = boxed_value.unwrap();
+                strings_array.push(value.clone());
+            }
+        }
+        let populated_pattern : String = strings_array.join(SYMBOL.empty_string);
+
+        Ok(populated_pattern)
+
     }
 }

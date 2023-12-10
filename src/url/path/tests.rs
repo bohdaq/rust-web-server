@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::symbol::SYMBOL;
 use crate::url::path::{Part, UrlPath};
 
@@ -120,4 +121,16 @@ fn is_matching_whitespace_pattern() {
 
     assert!(is_matching_boxed.is_err());
     assert_eq!("path contains control character or whitespace", is_matching_boxed.err().unwrap());
+}
+
+#[test]
+fn build() {
+    let mut params = HashMap::new();
+    params.insert("name".to_string(), "SomeName".to_string());
+    params.insert("number".to_string(), "12345".to_string());
+
+    let pattern = "[[name]]/somename/[[number]]/somenumber";
+
+    let built_token_string = UrlPath::build(params, pattern).unwrap();
+    assert_eq!("1234".to_string(), built_token_string);
 }
