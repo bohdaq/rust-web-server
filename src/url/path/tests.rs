@@ -4,9 +4,9 @@ use crate::url::path::{Part, UrlPath};
 
 #[test]
 fn parts() {
-    let pattern = "[[name]]/some/path/[[id]]/another/part/[[param]]";
+    let pattern = "[[name]]/some/path/[[id]]/another/part/[[param]]/ending";
     let parts : Vec<Part> = UrlPath::extract_parts_from_pattern(pattern).unwrap();
-    assert_eq!(parts.len(), 5);
+    assert_eq!(parts.len(), 6);
 
     let name_param = parts.get(0).unwrap();
     assert_eq!(name_param.is_static, false);
@@ -37,6 +37,12 @@ fn parts() {
     assert_eq!(name_param.name.clone().unwrap(), "param");
     assert!(name_param.value.clone().is_none());
     assert!(name_param.static_pattern.clone().is_none());
+
+    let name_param = parts.get(5).unwrap();
+    assert_eq!(name_param.is_static, true);
+    assert!(name_param.name.clone().is_none());
+    assert!(name_param.value.clone().is_none());
+    assert_eq!(name_param.static_pattern.clone().unwrap(), "/ending");
 
 }
 
