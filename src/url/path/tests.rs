@@ -132,5 +132,5 @@ fn build() {
     let pattern = "[[name]]/somename/[[number]]/somenumber";
 
     let built_token_string = UrlPath::build(params, pattern).unwrap();
-    assert_eq!("1234".to_string(), built_token_string);
+    assert_eq!("SomeName/somename/12345/somenumber".to_string(), built_token_string);
 }

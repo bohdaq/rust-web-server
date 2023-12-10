@@ -85,6 +85,19 @@ impl UrlPath {
             previous_char = Some(_char.clone());
         }
 
+        if buffer.len() != 0 {
+            let static_ending : String = buffer.into_iter().collect();
+
+            let part = Part {
+                is_static: true,
+                name: None,
+                value: None,
+                static_pattern: Some(static_ending),
+            };
+            part_list.push(part);
+            buffer = vec![];
+        }
+
         Ok(part_list)
     }
 
