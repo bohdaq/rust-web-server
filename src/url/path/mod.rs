@@ -188,8 +188,6 @@ impl UrlPath {
     }
 
     pub fn build(_params: HashMap<String, String>, _pattern: &str) -> Result<String, String> {
-        //TODO
-
         let boxed_parts = UrlPath::extract_parts_from_pattern(_pattern);
         if boxed_parts.is_err() {
             return Err(boxed_parts.err().unwrap());

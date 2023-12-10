@@ -152,3 +152,15 @@ fn build_non_url() {
     let built_token_string = UrlPath::build(params, pattern).unwrap();
     assert_eq!("SomeNamesomename12345somenumber".to_string(), built_token_string);
 }
+
+#[test]
+fn extract() {
+    let mut params = HashMap::new();
+    params.insert("name".to_string(), "SomeName".to_string());
+    params.insert("number".to_string(), "12345".to_string());
+
+    let pattern = "[[name]]/somename/[[number]]/somenumber";
+    let text = "SomeName/somename/12345/somenumber";
+
+    let built_token_string = UrlPath::extract(text, pattern).unwrap();
+}
