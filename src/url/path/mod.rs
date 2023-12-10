@@ -8,6 +8,7 @@ mod tests;
 
 pub struct UrlPath;
 
+#[derive(Clone)]
 pub struct Part {
     pub is_static: bool,
     pub name: Option<String>,
@@ -103,6 +104,7 @@ impl UrlPath {
         }
 
         let parts : Vec<Part> = boxed_parts.unwrap();
+        let mut populated_parts : Vec<Part> = vec![];
 
         let mut url_path = _path.to_string();
         let number_of_parts = parts.len();
@@ -117,6 +119,10 @@ impl UrlPath {
                 if !url_path.starts_with(&static_pattern) {
                     return Ok(is_not_matching)
                 }
+
+                let _part = part.clone();
+                populated_parts.push(_part);
+
                 url_path = url_path.replacen(static_pattern.as_str(), SYMBOL.empty_string, 1);
             } else {
                 if !is_there_next_part {
@@ -126,6 +132,9 @@ impl UrlPath {
                         value: Some(url_path.clone()),
                         static_pattern: None,
                     };
+                    let _part = part.clone();
+                    populated_parts.push(_part);
+
                     println!("2, {}", part);
 
                 } else {
@@ -146,6 +155,7 @@ impl UrlPath {
                     };
                     println!("4, {}", part);
 
+                    populated_parts.push(_part.clone());
 
                     url_path = url_path.chars().skip(occurence_place).collect();
 
