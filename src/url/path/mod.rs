@@ -218,6 +218,11 @@ impl UrlPath {
                 } else {
                     // read the rest of static pattern
                 }
+
+                let static_pattern = part.static_pattern.clone().unwrap();
+                println!("static pattern {:?}", static_pattern);
+                println!("path {:?}", path);
+                path = path.strip_prefix(static_pattern.as_str()).unwrap().to_string();
             } else {
                 // continue, unless the part is last,
                 // if so read to the end of path and add to map
