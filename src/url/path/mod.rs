@@ -209,6 +209,7 @@ impl UrlPath {
                     for char in path.clone().chars() {
                         if char == first_char_to_stop {
                             println!("found {:?}", char);
+                            // read the rest of static pattern
                             break;
                         } else {
                             let _ = path.remove(0);
