@@ -190,14 +190,44 @@ impl UrlPath {
 
         let parts : Vec<Part> = boxed_parts.unwrap();
 
+        let mut path = _path.to_string();
         let mut previous_part: Option<Part> = None;
         for part in parts.iter() {
+            println!("path: {:?}", path);
             println!("part: {:?} {:?} {:?}", part.name, part.value, part.static_pattern);
-            if previous_part.is_some() {
-                let previous = previous_part.unwrap();
-                println!("previous part: {:?} {:?} {:?}", previous.name, previous.value, previous.static_pattern);
+
+            if part.is_static {
+                if previous_part.is_some() {
+                    let unboxed_previous_part = previous_part.unwrap();
+                    println!("previous_part: {:?} {:?} {:?}", unboxed_previous_part.name, unboxed_previous_part.value, unboxed_previous_part.static_pattern);
+
+                    // read until first char of static pattern
+                    // add to map
+                    let static_pattern = part.static_pattern.clone().unwrap();
+                    let first_char_to_stop = static_pattern.chars().next().unwrap();
+
+                    for char in path.clone().chars() {
+                        if char == first_char_to_stop {
+                            println!("found {:?}", char);
+                            break;
+                        } else {
+                            let _ = path.remove(0);
+                        }
+                    }
+                } else {
+                    // read the rest of static pattern
+                }
+            } else {
+                // continue, unless the part is last,
+                // if so read to the end of path and add to map
             }
+
+            // if previous_part.is_some() {
+            //     let previous = previous_part.unwrap();
+            //     println!("previous part: {:?} {:?} {:?}", previous.name, previous.value, previous.static_pattern);
+            // }
             previous_part = Some(part.clone());
+            println!("");
         }
 
         let map = HashMap::new();
