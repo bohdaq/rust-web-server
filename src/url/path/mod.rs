@@ -212,7 +212,8 @@ impl UrlPath {
                             // read the rest of static pattern
                             break;
                         } else {
-                            let _ = path.remove(0);
+                            let removed_char = path.remove(0);
+                            println!("removed char: {:?}", removed_char);
                         }
                     }
                 } else {
