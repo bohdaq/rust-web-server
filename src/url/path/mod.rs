@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use crate::json::object::{FromJSON, ToJSON};
 use crate::symbol::SYMBOL;
 
 #[cfg(test)]
@@ -17,7 +16,7 @@ pub struct Part {
 }
 
 impl Display for Part {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
         println!("{:?} {:?} {:?} {:?}", &self.is_static, &self.name, &self.value, &self.static_pattern);
         Ok(())
     }
@@ -26,8 +25,7 @@ impl Display for Part {
 impl UrlPath {
     pub fn extract_parts_from_pattern(_pattern: &str) -> Result<Vec<Part>, String>{
         let mut part_list: Vec<Part> = vec![];
-        let mut buffer: Vec<char> = vec![];
-        let mut is_static_part = true;
+        let mut _buffer: Vec<char> = vec![];
         let mut previous_char: Option<char> = None;
         let mut is_opened_token = false;
 
@@ -36,16 +34,16 @@ impl UrlPath {
                 return Err("path contains control character or whitespace".to_string())
             }
 
-            buffer.push(_char);
+            _buffer.push(_char);
 
             if _char == '[' && previous_char.is_some() && previous_char.unwrap() == '[' {
                 if is_opened_token {
                     return Err("at least one extra [ char".to_string());
                 }
                 is_opened_token = true;
-                if buffer.len() != 0 && buffer.len() >= 2 {
-                    let without_square_brackets = buffer.len() - 2;
-                    let pattern : String = buffer[0..without_square_brackets].into_iter().collect();
+                if _buffer.len() != 0 && _buffer.len() >= 2 {
+                    let without_square_brackets = _buffer.len() - 2;
+                    let pattern : String = _buffer[0..without_square_brackets].into_iter().collect();
                     if pattern.len() > 0 {
                         let part = Part {
                             is_static: true,
@@ -56,8 +54,7 @@ impl UrlPath {
                         part_list.push(part);
                     }
                 }
-                buffer = vec![];
-                is_static_part = false;
+                _buffer = vec![];
 
                 let previous_part_is_token = part_list.last().is_some() && part_list.last().unwrap().is_static == false;
                 if previous_part_is_token {
@@ -67,8 +64,8 @@ impl UrlPath {
 
             if _char == ']' && previous_char.is_some() && previous_char.unwrap() == ']' {
                 is_opened_token = false;
-                let without_square_brackets = buffer.len() - 2;
-                let key : String = buffer[0..without_square_brackets].into_iter().collect();
+                let without_square_brackets = _buffer.len() - 2;
+                let key : String = _buffer[0..without_square_brackets].into_iter().collect();
                 let part = Part {
                     is_static: false,
                     name: Some(key),
@@ -77,16 +74,15 @@ impl UrlPath {
                 };
                 part_list.push(part);
 
-                is_static_part = true;
-                buffer = vec![];
+                _buffer = vec![];
 
             }
 
             previous_char = Some(_char.clone());
         }
 
-        if buffer.len() != 0 {
-            let static_ending : String = buffer.into_iter().collect();
+        if _buffer.len() != 0 {
+            let static_ending : String = _buffer.into_iter().collect();
 
             let part = Part {
                 is_static: true,
@@ -95,7 +91,7 @@ impl UrlPath {
                 static_pattern: Some(static_ending),
             };
             part_list.push(part);
-            buffer = vec![];
+            _buffer = vec![];
         }
 
         Ok(part_list)

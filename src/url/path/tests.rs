@@ -155,10 +155,6 @@ fn build_non_url() {
 
 #[test]
 fn extract() {
-    let mut params = HashMap::new();
-    params.insert("name".to_string(), "SomeName".to_string());
-    params.insert("number".to_string(), "12345".to_string());
-
     let pattern = "[[name]]/somename/[[number]]/somenumber";
     let text = "SomeName/somename/12345/somenumber";
 
@@ -171,10 +167,6 @@ fn extract() {
 
 #[test]
 fn extract_v2() {
-    let mut params = HashMap::new();
-    params.insert("name".to_string(), "SomeName".to_string());
-    params.insert("number".to_string(), "12345".to_string());
-
     let pattern = "somename/[[name]]/somenumber/[[number]]";
     let text = "somename/SomeName/somenumber/12345";
 
