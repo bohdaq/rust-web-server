@@ -186,3 +186,12 @@ fn extract_v3() {
     let name = resulting_map.get("name").unwrap();
     assert_eq!("SomeName", name);
 }
+#[test]
+fn extract_v4() {
+    let pattern = "[[name]]";
+    let text = "SomeName";
+
+    let resulting_map = UrlPath::extract(text, pattern).unwrap();
+    let name = resulting_map.get("name").unwrap();
+    assert_eq!("SomeName", name);
+}
