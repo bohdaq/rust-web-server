@@ -189,17 +189,18 @@ impl UrlPath {
         }
 
         let parts : Vec<Part> = boxed_parts.unwrap();
+        let mut resulting_parts : Vec<Part> = vec![];
 
         let mut path = _path.to_string();
         let mut previous_part: Option<Part> = None;
         for part in parts.iter() {
-            println!("path: {:?}", path);
-            println!("part: {:?} {:?} {:?}", part.name, part.value, part.static_pattern);
+            // println!("path: {:?}", path);
+            // println!("part: {:?} {:?} {:?}", part.name, part.value, part.static_pattern);
 
             if part.is_static {
                 if previous_part.is_some() {
-                    let unboxed_previous_part = previous_part.unwrap();
-                    println!("previous_part: {:?} {:?} {:?}", unboxed_previous_part.name, unboxed_previous_part.value, unboxed_previous_part.static_pattern);
+                    let unboxed_previous_part = previous_part.clone().unwrap();
+                    // println!("previous_part: {:?} {:?} {:?}", unboxed_previous_part.name, unboxed_previous_part.value, unboxed_previous_part.static_pattern);
 
                     // read until first char of static pattern
                     // add to map
@@ -209,24 +210,28 @@ impl UrlPath {
 
                     for char in path.clone().chars() {
                         if char == first_char_to_stop {
-                            println!("found {:?}", char);
+                            // println!("found {:?}", char);
                             // read the rest of static pattern
                             break;
                         } else {
                             let removed_char = path.remove(0);
                             buffer.push(removed_char);
-                            println!("removed char: {:?}", removed_char);
+                            // println!("removed char: {:?}", removed_char);
                         }
                     }
                     let token : String = buffer.iter().collect();
-                    println!("dynamic part {:?}", token);
+                    // println!("dynamic part {:?}", token);
+                    let mut processed_part = previous_part.clone().unwrap();
+                    processed_part.value = Some(token);
+                    resulting_parts.push(processed_part.clone());
+                    println!("{:?}", processed_part)
                 } else {
                     // read the rest of static pattern
                 }
 
                 let static_pattern = part.static_pattern.clone().unwrap();
-                println!("static pattern {:?}", static_pattern);
-                println!("path {:?}", path);
+                // println!("static pattern {:?}", static_pattern);
+                // println!("path {:?}", path);
                 path = path.strip_prefix(static_pattern.as_str()).unwrap().to_string();
             } else {
                 // continue, unless the part is last,
