@@ -180,7 +180,7 @@ fn extract_v2() {
 
     let resulting_map = UrlPath::extract(text, pattern).unwrap();
     let name = resulting_map.get("name").unwrap();
-    // let number = resulting_map.get("number").unwrap();
+    let number = resulting_map.get("number").unwrap();
     assert_eq!("SomeName", name);
-    // assert_eq!("12345", number);
+    assert_eq!("12345", number);
 }

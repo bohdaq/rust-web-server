@@ -193,7 +193,8 @@ impl UrlPath {
 
         let mut path = _path.to_string();
         let mut previous_part: Option<Part> = None;
-        for part in parts.iter() {
+        let number_of_parts = parts.len();
+        for (index, part) in parts.iter().enumerate() {
             println!("path: {:?}", path);
             println!("part: {:?} {:?} {:?}", part.name, part.value, part.static_pattern);
 
@@ -236,6 +237,16 @@ impl UrlPath {
             } else {
                 // continue, unless the part is last,
                 // if so read to the end of path and add to map
+                if number_of_parts == index + 1 {
+                    // let mut buffer = vec![];
+
+                    // println!("!path {:?}", path);
+                    let mut processed_part = part.clone();
+                    processed_part.value = Some(path.clone());
+                    resulting_parts.push(processed_part.clone());
+                    println!("{:?}", processed_part)
+                }
+
             }
 
             previous_part = Some(part.clone());
