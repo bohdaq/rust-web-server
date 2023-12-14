@@ -168,3 +168,19 @@ fn extract() {
     assert_eq!("SomeName", name);
     assert_eq!("12345", number);
 }
+
+#[test]
+fn extract_v2() {
+    let mut params = HashMap::new();
+    params.insert("name".to_string(), "SomeName".to_string());
+    params.insert("number".to_string(), "12345".to_string());
+
+    let pattern = "somename/[[name]]/somenumber/[[number]]";
+    let text = "somename/SomeName/somenumber/12345";
+
+    let resulting_map = UrlPath::extract(text, pattern).unwrap();
+    let name = resulting_map.get("name").unwrap();
+    // let number = resulting_map.get("number").unwrap();
+    assert_eq!("SomeName", name);
+    // assert_eq!("12345", number);
+}
