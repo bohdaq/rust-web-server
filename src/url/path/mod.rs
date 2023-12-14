@@ -241,7 +241,14 @@ impl UrlPath {
             previous_part = Some(part.clone());
         }
 
-        let map = HashMap::new();
+        let mut map = HashMap::new();
+        for part in resulting_parts {
+            let key = part.name.unwrap();
+            let value = part.value.unwrap();
+
+            map.insert(key, value);
+        }
+
         Ok(map)
     }
 

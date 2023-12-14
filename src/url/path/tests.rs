@@ -162,5 +162,9 @@ fn extract() {
     let pattern = "[[name]]/somename/[[number]]/somenumber";
     let text = "SomeName/somename/12345/somenumber";
 
-    let built_token_string = UrlPath::extract(text, pattern).unwrap();
+    let resulting_map = UrlPath::extract(text, pattern).unwrap();
+    let name = resulting_map.get("name").unwrap();
+    let number = resulting_map.get("number").unwrap();
+    assert_eq!("SomeName", name);
+    assert_eq!("12345", number);
 }
