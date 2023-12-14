@@ -238,11 +238,6 @@ impl UrlPath {
                 // if so read to the end of path and add to map
             }
 
-            // if previous_part.is_some() {
-            //     let previous = previous_part.unwrap();
-            //     println!("previous part: {:?} {:?} {:?}", previous.name, previous.value, previous.static_pattern);
-            // }
-
             previous_part = Some(part.clone());
         }
 
