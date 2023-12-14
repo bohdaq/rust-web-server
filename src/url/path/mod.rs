@@ -8,7 +8,7 @@ mod tests;
 
 pub struct UrlPath;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Part {
     pub is_static: bool,
     pub name: Option<String>,
@@ -205,6 +205,7 @@ impl UrlPath {
                     // add to map
                     let static_pattern = part.static_pattern.clone().unwrap();
                     let first_char_to_stop = static_pattern.chars().next().unwrap();
+                    let mut buffer = vec![];
 
                     for char in path.clone().chars() {
                         if char == first_char_to_stop {
@@ -213,9 +214,12 @@ impl UrlPath {
                             break;
                         } else {
                             let removed_char = path.remove(0);
+                            buffer.push(removed_char);
                             println!("removed char: {:?}", removed_char);
                         }
                     }
+                    let token : String = buffer.iter().collect();
+                    println!("dynamic part {:?}", token);
                 } else {
                     // read the rest of static pattern
                 }
@@ -233,8 +237,8 @@ impl UrlPath {
             //     let previous = previous_part.unwrap();
             //     println!("previous part: {:?} {:?} {:?}", previous.name, previous.value, previous.static_pattern);
             // }
+
             previous_part = Some(part.clone());
-            println!("");
         }
 
         let map = HashMap::new();
