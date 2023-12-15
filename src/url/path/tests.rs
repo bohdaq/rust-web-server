@@ -142,6 +142,17 @@ fn build() {
 }
 
 #[test]
+fn build_v5() {
+    let mut params = HashMap::new();
+    params.insert("name".to_string(), "SomeName".to_string());
+
+    let pattern = "[[name]]/somename/[[number]]/somenumber";
+
+    let error = UrlPath::build(params, pattern).err().unwrap();
+    assert_eq!("specified parameter number is not found".to_string(), error);
+}
+
+#[test]
 fn build_non_url() {
     let mut params = HashMap::new();
     params.insert("name".to_string(), "SomeName".to_string());
