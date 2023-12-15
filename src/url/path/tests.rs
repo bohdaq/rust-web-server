@@ -165,6 +165,28 @@ fn build_v2() {
 }
 
 #[test]
+fn build_v4() {
+    let mut params = HashMap::new();
+    params.insert("name".to_string(), "SomeName".to_string());
+    params.insert("number".to_string(), "12345".to_string());
+
+    let pattern = "somename/[[name]]/";
+
+    let built_token_string = UrlPath::build(params, pattern).unwrap();
+    assert_eq!("somename/SomeName/".to_string(), built_token_string);
+}
+
+#[test]
+fn build_v3() {
+    let  params = HashMap::new();
+
+    let pattern = "";
+
+    let built_token_string = UrlPath::build(params, pattern).unwrap();
+    assert_eq!("".to_string(), built_token_string);
+}
+
+#[test]
 fn extract() {
     let pattern = "[[name]]/somename/[[number]]/somenumber";
     let text = "SomeName/somename/12345/somenumber";
