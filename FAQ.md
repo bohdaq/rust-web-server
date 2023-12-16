@@ -33,16 +33,6 @@ using provided ip.
 
 > ifconfig # find ip address
 
-## Problem #4
-I'm not able to set cookies.
-
-### Solution
-Cookies are not implemented for Rust Web Server. 
-The reason behind it is safety concerns as
-rws is a http server. As a developer you may use
-[localStorage](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage) or [sessionStorage](https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage) to bypass absence
-of the cookies.
-
 ## Problem #5
 I see the following error in the console:
 > unable to parse request: invalid utf-8 sequence of _n_ bytes from index _m_
