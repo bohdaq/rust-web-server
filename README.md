@@ -1,6 +1,6 @@
-# rust-web-server
+# rws
 
-rust-web-server (**rws**) — fast, reliable and secure webserver.
+[rws](https://rws8.pp.ua/) — fast, reliable and secure webserver.
 
 Fast. Compiled to native binary for maximum performance.
 
