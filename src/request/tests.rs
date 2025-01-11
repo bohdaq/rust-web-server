@@ -780,4 +780,11 @@ fn get_path() {
 
     assert!(boxed_path.is_ok());
     assert_eq!(boxed_path.unwrap(), "/path");
+
+    let query_option = request.get_query().unwrap();
+    assert_eq!(query_option.is_some(), true);
+
+    let query = query_option.unwrap();
+    assert_eq!(query.get("key").unwrap(), "5678");
+    assert_eq!(query.get("some").unwrap(), "1234");
 }
