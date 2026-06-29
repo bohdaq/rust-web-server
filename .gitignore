@@ -5,3 +5,4 @@ Cargo.lock
 /workspace.xml
 .DS_Store
 /uploads/
+*.pem

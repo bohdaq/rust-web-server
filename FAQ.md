@@ -171,5 +171,27 @@ I can see logs in the commandline, how can I see logs from server via http?
 ### Solution
 Simply output console output to file `./rws &> out.txt` and open the file via `http://hostname:port/out.txt`. Logs will be appended to file, so the log file may become large and potentially even fill the filesystem.
 
+## Problem 18
+I built rws normally but HTTPS / HTTP/2 is not working.
+
+### Solution
+TLS and HTTP/2 are only available in the `http2` feature build. Rebuild with:
+> cargo build --release --features http2
+
+Then provide certificate and key paths via config. See [CONFIGURE](CONFIGURE.md) for details.
+
+## Problem 19
+I'm getting a TLS error on startup:
+> TLS setup failed: failed to read cert file ...
+
+### Solution
+The paths set in `RWS_CONFIG_TLS_CERT_FILE` and `RWS_CONFIG_TLS_KEY_FILE` (or `--tls-cert-file` / `--tls-key-file`) do not point to readable files. Verify the paths are correct and the process has read permission. Certificate and key files must be in PEM format.
+
+## Problem 20
+My browser shows a security warning when connecting to the local HTTPS server.
+
+### Solution
+This is expected for self-signed certificates. The browser does not trust a certificate that is not signed by a known Certificate Authority. For local development you can add the certificate to your system trust store. For production, use a certificate from [Let's Encrypt](https://letsencrypt.org/) or another CA.
+
 
 

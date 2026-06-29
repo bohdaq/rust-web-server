@@ -1,60 +1,72 @@
 # rws
 
-[rws](https://rws8.pp.ua/) — fast, reliable and secure webserver.
+Static file web server written in Rust. Serves HTTP/1.1 on a synchronous thread pool. Build with `--features http2` to enable TLS and HTTP/2.
 
-Fast. Compiled to native binary for maximum performance.
+## Requirements
 
-Reliable. Does not rely on garbage collector, no performance degradation.
+- [Rust](https://www.rust-lang.org/tools/install) 1.75 or later
 
-Secure. Provides read-only access to files, eliminating most of the attacks.
+## Build
 
-## Download
-Download binary from [Google Drive](https://drive.google.com/drive/folders/13iSR3VxmfFvZgOZ0LddP_EJp7GJ-lQd8?usp=share_link).
+HTTP/1.1 only:
+```bash
+cargo build --release
+```
 
+With HTTPS and HTTP/2 support:
+```bash
+cargo build --release --features http2
+```
 
-## Installation
-Open [INSTALL](INSTALL.md) for details.
+## Run
 
+### HTTP/1.1
 
-## Configuration
-Open [CONFIGURE](CONFIGURE.md) for details.
+```bash
+./target/release/rws
+```
 
-## Frequently Asked Questions
-Open [FAQ](FAQ.md) for details.
+Server starts on `http://127.0.0.1:7878` by default. Place your files in the working directory and open the URL in a browser.
 
-## Documentation
-Open [documentation](src/README.md) for details.
+### HTTPS + HTTP/2
 
-## Development
-Open [DEVELOPER](DEVELOPER.md) for details.
+Generate a self-signed certificate for local development:
+```bash
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes \
+  -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
 
+Start the server:
+```bash
+./target/release/rws --tls-cert-file=cert.pem --tls-key-file=key.pem
+```
 
-## Community
-Use GitHub [discussions](https://github.com/bohdaq/rust-web-server/discussions), [issues](https://github.com/bohdaq/rust-web-server/issues) and [pull requests](https://github.com/bohdaq/rust-web-server/pulls).
+Open `https://127.0.0.1:7878` in a browser. The server negotiates HTTP/2 or HTTP/1.1 automatically via ALPN on the same port.
 
-There is Rust Web Server [Discord](https://discord.gg/zaErjtr5Dm) where you can ask questions and share ideas.
+### Custom port and address
 
-Follow the [Rust code of conduct](https://www.rust-lang.org/policies/code-of-conduct).
+```bash
+./target/release/rws --ip=0.0.0.0 --port=443 --tls-cert-file=cert.pem --tls-key-file=key.pem
+```
 
+See [CONFIGURE](CONFIGURE.md) for all configuration options (env vars, config file, command-line flags).
 
 ## Features
-1. [Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS). Allowing resources to be used on other domains can be crucial for providing APIs and services. Knowing how cumberstone and difficult is the process to setup the CORS, server ships with CORS enabled to all requests by default.
-1. [HTTP Range Requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests). Server supports requests for the part of the file, or several different parts of the file.
-1. [HTTP Client Hints](https://developer.mozilla.org/en-US/docs/Web/HTTP/Client_hints). Proactively asking client browser for suitable additional information about the system.
-1. [X-Content-Type-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options) set to nosniff, prevents from MIME type sniffing attacks.
-1. [X-Frame-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options). Site is not allowed to be embedded into iframe on other domains. 
-1. [Symlinks](https://en.wikipedia.org/wiki/Symbolic_link). You can have symlinks in your folder and they will be resolved correctly.
-1. [Caching](https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching#dealing_with_outdated_implementations) done right. It means no caching and therefore no outdated uncontrollable resources.
-1. Resolving .html files without .html in path. It means if you try to open /some-html-file it will open file some-html-file.html and won't show 404 not found error. Same applies for folders. If you try to open /folder it will open file folder/index.html 
-1. Extensive logging. It means server prints the request-response pairs as they are so you can see all the details like request method, path, version and headers.
-1. No third party dependencies.
 
-## Donations
-[PayPal](https://www.paypal.com/donate/?hosted_button_id=7J69SYZWSP6HJ) page to send donations, so I can buy some whole plant food, or open vinyl pressing facility or spend my time snowboarding, whatever.
+- HTTP/2 with ALPN negotiation alongside HTTP/1.1 on the same port
+- TLS via [rustls](https://github.com/rustls/rustls) (aws-lc-rs backend, no OpenSSL)
+- CORS — allowed for all origins by default, fully configurable
+- HTTP Range Requests — partial file serving and multi-range responses
+- HTTP Client Hints
+- `X-Content-Type-Options: nosniff` and `X-Frame-Options` headers
+- Symlink resolution
+- `.html` extension inference — `/page` serves `page.html`; `/dir` serves `dir/index.html`
+- No caching headers — files are always served fresh
+- Request/response logging to stdout
 
-## Links
-1. [Rust TLS Server](https://github.com/bohdaq/rust-tls-server)
-1. [http-to-https-letsencrypt](https://github.com/bohdaq/http-to-https-letsencrypt)
-1. [Rust Web Framework](https://github.com/bohdaq/rust-web-framework/)
-1. [crypto-ext](https://github.com/bohdaq/crypto-ext/)
-1. [file-ext](https://github.com/bohdaq/file-ext/)
+## Further reading
+
+- [CONFIGURE](CONFIGURE.md) — all configuration options
+- [FAQ](FAQ.md) — common problems and solutions
+- [DEVELOPER](DEVELOPER.md) — building, testing, and contributing
+- [src/README.md](src/README.md) — module-level documentation

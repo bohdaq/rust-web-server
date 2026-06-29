@@ -48,6 +48,12 @@ impl Config {
     pub const RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES: &'static str = "RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES";
     pub const RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES_DEFAULT_VALUE: &'static str = "10000";
 
+    pub const RWS_CONFIG_TLS_CERT_FILE: &'static str = "RWS_CONFIG_TLS_CERT_FILE";
+    pub const RWS_CONFIG_TLS_CERT_FILE_DEFAULT_VALUE: &'static str = "";
+
+    pub const RWS_CONFIG_TLS_KEY_FILE: &'static str = "RWS_CONFIG_TLS_KEY_FILE";
+    pub const RWS_CONFIG_TLS_KEY_FILE_DEFAULT_VALUE: &'static str = "";
+
 
     pub const RWS_DEFAULT_IP: &'static str = "127.0.0.1";
     pub const RWS_DEFAULT_PORT: &'static i32 = &7878;
@@ -158,6 +164,22 @@ pub fn set_default_values() {
         println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_CORS_MAX_AGE);
     }
 
+
+    let is_var_set = env::var(Config::RWS_CONFIG_TLS_CERT_FILE).is_ok();
+    if !is_var_set {
+        env::set_var(Config::RWS_CONFIG_TLS_CERT_FILE, Config::RWS_CONFIG_TLS_CERT_FILE_DEFAULT_VALUE);
+        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_TLS_CERT_FILE, Config::RWS_CONFIG_TLS_CERT_FILE_DEFAULT_VALUE);
+    } else {
+        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_TLS_CERT_FILE);
+    }
+
+    let is_var_set = env::var(Config::RWS_CONFIG_TLS_KEY_FILE).is_ok();
+    if !is_var_set {
+        env::set_var(Config::RWS_CONFIG_TLS_KEY_FILE, Config::RWS_CONFIG_TLS_KEY_FILE_DEFAULT_VALUE);
+        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_TLS_KEY_FILE, Config::RWS_CONFIG_TLS_KEY_FILE_DEFAULT_VALUE);
+    } else {
+        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_TLS_KEY_FILE);
+    }
 
     println!("  End of initializing default values\n");
 }

@@ -7,19 +7,13 @@ Make sure you removed previous executable:
 >
 > sudo rm -f /usr/bin/rws #on Linux
 
-Download precompiled binary for you platform from [Google Drive](https://drive.google.com/drive/folders/13iSR3VxmfFvZgOZ0LddP_EJp7GJ-lQd8?usp=sharing).
-
-You can always [build rws binary](DEVELOPER.md) from source.
+Build the binary from source — see [DEVELOPER](DEVELOPER.md) for instructions.
 
 ## x86_64 Architecture
 ### Apple macOS
 > sudo cp rws /usr/local/bin
 >
 > sudo chmod 777 /usr/local/bin/rws
-#### Homebrew macOS
-> brew tap bohdaq/rust-web-server
->
-> brew install rws
 
 ### Linux
 > sudo cp rws /usr/bin
@@ -31,9 +25,9 @@ You can always [build rws binary](DEVELOPER.md) from source.
 Replace _VERSION_ with version you downloaded.
 > sudo rpm -i --force rws-_VERSION_.rpm
 #### Portage ebuild
-Open **[Rust Web Server Portage ebuild](https://github.com/bohdaq/rws-gentoo-ebuild)** for details.
+Build from source and install manually.
 #### Pacman package
-Open **[Rust Web Server Pacman package](https://github.com/bohdaq/rws-arch-package)** for details.
+Build from source and install manually.
 ### Windows
 Copy executable to _C:\WINDOWS\system32_ folder.
 

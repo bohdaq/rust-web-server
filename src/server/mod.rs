@@ -213,7 +213,16 @@ impl Server {
         }
 
         let bind_addr = [ip_readable, SYMBOL.colon.to_string(), port.to_string()].join(SYMBOL.empty_string);
-        println!("Setting up http://{}...", &bind_addr);
+
+        #[cfg(feature = "http2")]
+        let protocol = {
+            let cert = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_CERT_FILE).unwrap_or_default();
+            if cert.is_empty() { "http" } else { "https" }
+        };
+        #[cfg(not(feature = "http2"))]
+        let protocol = "http";
+
+        println!("Setting up {}://{}...", protocol, &bind_addr);
 
         let boxed_listener = TcpListener::bind(&bind_addr);
         if boxed_listener.is_err() {
@@ -225,7 +234,7 @@ impl Server {
         let pool = ThreadPool::new(thread_count as usize);
 
 
-        let server_url_thread_count = Log::server_url_thread_count("http", &bind_addr, thread_count);
+        let server_url_thread_count = Log::server_url_thread_count(protocol, &bind_addr, thread_count);
         println!("{}", server_url_thread_count);
 
         Ok((listener, pool))
@@ -305,6 +314,143 @@ pub struct ConnectionInfo {
 pub struct Address {
     pub ip: String,
     pub port: i32
+}
+
+#[cfg(feature = "http2")]
+impl Server {
+    pub async fn run_tls(
+        listener: TcpListener,
+        _pool: ThreadPool,
+        app: impl Application + New + Send + 'static + Copy,
+    ) {
+        use crate::tls::create_tls_acceptor;
+        use crate::h2_handler;
+
+        let cert_path = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_CERT_FILE)
+            .unwrap_or_default();
+        let key_path = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_KEY_FILE)
+            .unwrap_or_default();
+
+        let tls_acceptor = match create_tls_acceptor(&cert_path, &key_path) {
+            Ok(a) => a,
+            Err(e) => {
+                eprintln!("TLS setup failed: {}", e);
+                return;
+            }
+        };
+
+        listener
+            .set_nonblocking(true)
+            .expect("failed to set TCP listener to non-blocking");
+        let tokio_listener = tokio::net::TcpListener::from_std(listener)
+            .expect("failed to convert TCP listener to tokio");
+
+        println!("Listening for TLS connections (HTTP/1.1 + HTTP/2)...");
+
+        loop {
+            match tokio_listener.accept().await {
+                Ok((tcp_stream, peer_addr)) => {
+                    let acceptor = tls_acceptor.clone();
+                    tokio::spawn(async move {
+                        match acceptor.accept(tcp_stream).await {
+                            Ok(tls_stream) => {
+                                let protocol = tls_stream
+                                    .get_ref()
+                                    .1
+                                    .alpn_protocol()
+                                    .map(|p| p.to_vec());
+
+                                match protocol.as_deref() {
+                                    Some(b"h2") => {
+                                        if let Err(e) =
+                                            h2_handler::handle_connection(tls_stream, peer_addr, app)
+                                                .await
+                                        {
+                                            eprintln!("H2 connection error: {}", e);
+                                        }
+                                    }
+                                    _ => {
+                                        if let Err(e) =
+                                            Server::process_h1_tls(tls_stream, peer_addr, app).await
+                                        {
+                                            eprintln!("H1 TLS error: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => eprintln!("TLS handshake failed: {}", e),
+                        }
+                    });
+                }
+                Err(e) => eprintln!("TCP accept error: {}", e),
+            }
+        }
+    }
+
+    async fn process_h1_tls(
+        mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+        peer_addr: std::net::SocketAddr,
+        app: impl Application,
+    ) -> Result<(), String> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let (server_ip, server_port, _) = get_ip_port_thread_count();
+        let request_allocation_size = get_request_allocation_size();
+
+        let mut buffer = vec![0u8; request_allocation_size as usize];
+        if let Err(e) = stream.read(&mut buffer).await {
+            let raw = Server::bad_request_response(e.to_string());
+            let _ = stream.write_all(&raw).await;
+            return Ok(());
+        }
+
+        let request = match Request::parse(&buffer) {
+            Ok(r) => r,
+            Err(message) => {
+                let raw = Server::bad_request_response(message);
+                let _ = stream.write_all(&raw).await;
+                return Ok(());
+            }
+        };
+
+        let connection = ConnectionInfo {
+            client: Address {
+                ip: peer_addr.ip().to_string(),
+                port: peer_addr.port() as i32,
+            },
+            server: Address {
+                ip: server_ip,
+                port: server_port,
+            },
+            request_size: request_allocation_size,
+        };
+
+        let mut response = match app.execute(&request, &connection) {
+            Ok(r) => r,
+            Err(message) => {
+                let raw = Server::bad_request_response(message);
+                let _ = stream.write_all(&raw).await;
+                return Ok(());
+            }
+        };
+
+        response.headers.push(Header {
+            name: Header::_ALT_SVC.to_string(),
+            value: format!("h2=\":{}\"", server_port),
+        });
+
+        let log = Log::request_response(&request, &response, &peer_addr);
+        println!("{}", log);
+
+        let raw = Response::generate_response(response, request);
+        stream
+            .write_all(&raw)
+            .await
+            .map_err(|e| e.to_string())?;
+        stream.flush().await.map_err(|e| e.to_string())?;
+
+        Ok(())
+    }
 }
 
 

@@ -114,6 +114,22 @@ impl CommandLineArgument {
         };
         argument_list.push(argument);
 
+        let argument = CommandLineArgument {
+            short_form: "s".to_string(),
+            long_form: "tls-cert-file".to_string(),
+            environment_variable: Config::RWS_CONFIG_TLS_CERT_FILE.to_string(),
+            _hint: Some("Path to TLS certificate PEM file (enables HTTPS and HTTP/2)".to_string())
+        };
+        argument_list.push(argument);
+
+        let argument = CommandLineArgument {
+            short_form: "k".to_string(),
+            long_form: "tls-key-file".to_string(),
+            environment_variable: Config::RWS_CONFIG_TLS_KEY_FILE.to_string(),
+            _hint: Some("Path to TLS private key PEM file (enables HTTPS and HTTP/2)".to_string())
+        };
+        argument_list.push(argument);
+
         argument_list
     }
 

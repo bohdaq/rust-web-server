@@ -12,12 +12,43 @@ during restarts.
 
 There may be a use case when you need to run more than one instance, in such a case config file per instance or command line configuration is an option. 
 
-## Encryption
+## HTTPS and HTTP/2
 
-The rws is an [HTTP server](https://developer.mozilla.org/en-US/docs/Web/HTTP). This means if you are planning to use it somewhere else except the local machine you need to protect transferred data by using encryption.
+The `http2` build of rws has built-in TLS support using [rustls](https://github.com/rustls/rustls) (aws-lc-rs crypto backend — no OpenSSL required). Providing a certificate and key enables HTTPS on the configured port. HTTP/2 is negotiated automatically via ALPN alongside HTTP/1.1 — no separate port or extra config needed.
 
-There is a [Rust TLS Server](https://github.com/bohdaq/rust-tls-server) for handling HTTPS over TLS. 
-You can also use [http-to-https-letsencrypt](https://github.com/bohdaq/http-to-https-letsencrypt) to obtain free certificate from Let's Encrypt.
+To obtain a free certificate for a public domain use [Let's Encrypt](https://letsencrypt.org/).
+
+For local development, generate a self-signed certificate:
+```bash
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes \
+  -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
+
+### TLS configuration
+
+| Environment variable | Config file key | Command-line arg | Description |
+|---|---|---|---|
+| `RWS_CONFIG_TLS_CERT_FILE` | `tls_cert_file` | `--tls-cert-file` / `-s` | Path to PEM certificate file |
+| `RWS_CONFIG_TLS_KEY_FILE` | `tls_key_file` | `--tls-key-file` / `-k` | Path to PEM private key file |
+
+Example — environment variables:
+```bash
+export RWS_CONFIG_TLS_CERT_FILE="/path/to/cert.pem"
+export RWS_CONFIG_TLS_KEY_FILE="/path/to/key.pem"
+```
+
+Example — `rws.config.toml`:
+```toml
+tls_cert_file = '/path/to/cert.pem'
+tls_key_file  = '/path/to/key.pem'
+```
+
+Example — command line:
+```bash
+rws --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
+```
+
+The server must be built with `--features http2` for TLS to take effect.
 
 ## Memory
 As any other application, rws will allocate memory required to serve the request.

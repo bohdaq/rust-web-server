@@ -3,6 +3,11 @@ port = 7888
 thread_count = 200
 request-allocation-size-in-bytes = 12000 # In bytes, how much memory to allocate for each request
 
+# TLS certificate and private key (PEM format). Required for HTTPS and HTTP/2.
+# Build with --features http2 to enable TLS support.
+# tls_cert_file = '/path/to/cert.pem'
+# tls_key_file  = '/path/to/key.pem'
+
 [cors]
 allow_all = false # true will allow all CORS requests and you can omit configuring cors properties below
 allow_origins = ["https://foo.example", "https://bar.example"] # list of allowed origins, this setting won't apply if cors allow_all set to true

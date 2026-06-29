@@ -3,16 +3,23 @@
 # Release Info
 Make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
 
-Minimum rust version is 1.66, as I'm testing on this specific version. However, if needed you may try to build rws on your own using older version with the _--ignore-rust-version_ flag.
-
+Minimum Rust version is **1.75**.
 
 ## Build
 
-> cargo build --release --ignore-rust-version
+Plain HTTP/1.1 binary:
+> cargo build --release
 >
 > cd target/release
 >
 > ./rws --ip=127.0.0.1 --port=8888 --threads=100
+
+HTTPS + HTTP/2 binary:
+> cargo build --release --features http2
+>
+> cd target/release
+>
+> ./rws --ip=127.0.0.1 --port=443 --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
 
 
 # Release
@@ -20,27 +27,18 @@ Build binary on specific platform to prepare release.
 
 For each binary provide sha 256 check sum.
 
-Releases initially being prepared at
-[Drive](https://drive.google.com/drive/folders/13iSR3VxmfFvZgOZ0LddP_EJp7GJ-lQd8?usp=share_link) mirror.
-
-There are additional templates for
-[Homebrew](https://brew.sh/),
-[Portage](https://wiki.gentoo.org/wiki/Portage),
-[Pacman](https://wiki.archlinux.org/title/pacman),
-[Debian](https://www.debian.org/) and
-[RPM](https://rpm.org/) package systems.
+Package formats supported: Homebrew, Portage ebuild, Pacman, Debian (.deb), RPM (.rpm).
 
 
 Here is the list of supported architectures:
 1. x86 64-bit Apple: **x86_64-apple-darwin**
-    1. [Homebrew Formula](https://github.com/bohdaq/homebrew-rust-web-server)
 1. x86 64-bit Linux: **x86_64-unknown-linux-gnu**
-   1.  Debian: **[rws create deb package](https://github.com/bohdaq/rws-create-deb)** 
-   1.  RPM: **[rws create rpm package](https://github.com/bohdaq/rws-rpm-builder)**
-   1.  Portage ebuild: **[rws create portage ebuild](https://github.com/bohdaq/rws-gentoo-ebuild)**
-   1.  Pacman package: **[rws create pacman package](https://github.com/bohdaq/rws-arch-package)**
+   1.  Debian (.deb)
+   1.  RPM (.rpm)
+   1.  Portage ebuild
+   1.  Pacman package
 1. ARM 64-bit Linux: **aarch64_unknown_linux_gnu**
-   1.  Debian: **[rws create deb package](https://github.com/bohdaq/rws-create-deb)**
+   1.  Debian (.deb)
 1. x86 64-bit Windows: **x86_64-pc-windows-msvc**
 
 

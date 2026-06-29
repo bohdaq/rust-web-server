@@ -27,7 +27,7 @@ export RWS_CONFIG_CORS_MAX_AGE="86400"
 # In bytes, how much memory to allocate for each request
 export RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES="16000"
 
-
-
-
-
+# TLS certificate and private key (PEM format). Required for HTTPS and HTTP/2.
+# Build with --features http2 to enable TLS support.
+# export RWS_CONFIG_TLS_CERT_FILE="/path/to/cert.pem"
+# export RWS_CONFIG_TLS_KEY_FILE="/path/to/key.pem"

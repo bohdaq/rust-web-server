@@ -3,3 +3,9 @@ rws --ip=127.0.0.1 --port=7777 --thread-count=100 --cors-allow-all=false --cors-
 
 # which is equivalent to
 rws -i=127.0.0.1 -p=7777 -t=100 -a=false -o=https://foo.example,https://bar.example -m=GET,POST,PUT,DELETE -h=content-type,x-custom-header -c=true -e=content-type,x-custom-header -g=86400 -r=16000
+
+# run with HTTPS and HTTP/2 (requires --features http2 build)
+rws --ip=127.0.0.1 --port=443 --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
+
+# which is equivalent to
+rws -i=127.0.0.1 -p=443 -s=/path/to/cert.pem -k=/path/to/key.pem

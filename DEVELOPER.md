@@ -8,7 +8,7 @@ Make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
 
 Main branch shall work fine for most of the time, but from time to time it may have some issues, as a result of ongoing development. Usually they are resolved as soon as possible. So you may think to base your changes on latest [tag](https://github.com/bohdaq/rust-web-server/tags) instead of `main` branch.
 
-Minimum rust version is 1.66, as I'm testing on this specific version. However, if needed you may try to build rws on your own using older version with the _--ignore-rust-version_ flag.
+Minimum Rust version is **1.75**.
 
 Depending on your setup you may need to run commands listed below as an administrator (open CMD as an administrator on Windows or use `sudo` on Linux and macOS).
 
@@ -30,7 +30,6 @@ UPDATE 30.04.2023: You may encounter problems on `macOS` even when you're runnin
 > 
 > sudo cp ~/.ssh/id_rsa.pub /var/root/.ssh/
 
-
 and then clone the repo:
 
 > mkdir -p ~/git
@@ -47,14 +46,17 @@ Before proceeding, it is a good idea to update rust toolchain:
 > rustup update
 
 ## Run
-> cargo run --ignore-rust-version
+> cargo run
+
+To run with HTTPS and HTTP/2 support (requires `RWS_CONFIG_TLS_CERT_FILE` and `RWS_CONFIG_TLS_KEY_FILE` to be set):
+> cargo run --features http2
 
 ## Test
-> cargo test --ignore-rust-version
+> cargo test
 
 To run specific test (replace client_hint::tests::client_hints_header with test you want to run)
 
-> cargo test --package rws --bin rws client_hint::tests::client_hints_header -- --exact --ignore-rust-version
+> cargo test --package rws --bin rws client_hint::tests::client_hints_header -- --exact
 
 ## Debug
 
@@ -70,7 +72,10 @@ Debugger support is present in [CLion](https://www.jetbrains.com/clion/) and wor
 
 
 ## Build
-> cargo build --ignore-rust-version
+> cargo build
+
+To build with HTTPS and HTTP/2 support:
+> cargo build --features http2
 
 ## Release
 Open [RELEASE](RELEASE.md) for details.
