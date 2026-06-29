@@ -81,6 +81,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Log` | `log` | Combined Log Format access log lines |
 | `CookieJar` | `cookie` | Parse the `Cookie` request header into individual cookies |
 | `SetCookie` | `cookie` | Build `Set-Cookie` response header values with all RFC 6265 attributes |
+| `Router` / `PathParams` | `router` | Standalone dynamic router with `:param` and `*wildcard` path matching |
+| `IntoResponse` / `AppError` | `error` | Typed errors that map to HTTP status codes |
+| `TestClient` | `test_client` | In-process HTTP test client — no TCP socket required |
 
 ---
 
@@ -359,6 +362,94 @@ session=abc123; Path=/; Max-Age=3600; Secure; HttpOnly; SameSite=Lax
 ```
 
 Pass that string as the value of a `Set-Cookie` header.
+
+---
+
+### 14. Dynamic routing with path parameters
+
+`Router` matches a path pattern against an incoming request and extracts named segments into [`PathParams`]. Use it standalone, or call `Router::handle` from inside your own `Application::execute` to add path-parameter routes alongside the static controller chain.
+
+```rust
+use rust_web_server::router::Router;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::range::Range;
+use rust_web_server::mime_type::MimeType;
+use rust_web_server::core::New;
+
+let router = Router::new()
+    .get("/users/:id", |_req, params, _conn| {
+        let id = params.get("id").unwrap_or("unknown");
+        let mut response = Response::new();
+        response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        response.content_range_list = vec![
+            Range::get_content_range(format!("user {}", id).into_bytes(), MimeType::TEXT_PLAIN.to_string())
+        ];
+        response
+    })
+    .get("/files/*path", |_req, params, _conn| {
+        let path = params.get("path").unwrap_or("");
+        // path == "a/b/c.txt" for a request to /files/a/b/c.txt
+        Response::new()
+    });
+```
+
+Wildcard segments (`*name`) must be the last segment in the pattern and capture the remaining path joined with `/`.
+
+---
+
+### 15. Typed error handling
+
+Implement `IntoResponse` on your own error enum, or use the built-in `AppError`:
+
+```rust
+use rust_web_server::error::{AppError, IntoResponse};
+use rust_web_server::response::Response;
+
+fn find_user(id: u64) -> Result<Response, AppError> {
+    if id == 0 {
+        return Err(AppError::NotFound("user not found".to_string()));
+    }
+    // ... build a 200 response
+    Ok(Response::new())
+}
+
+fn process(request: &Request, _response: Response, _connection: &ConnectionInfo) -> Response {
+    find_user(42).unwrap_or_else(|e| e.into_response())
+}
+```
+
+`AppError` variants map to: `BadRequest` → 400, `Unauthorized` → 401, `Forbidden` → 403, `NotFound` → 404, `Conflict` → 409, `UnprocessableEntity` → 422, `Internal` → 500.
+
+---
+
+### 16. Testing with `TestClient`
+
+`TestClient` dispatches requests directly through an `Application` implementation — no TCP socket, no server process.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::test_client::TestClient;
+
+#[test]
+fn healthz_returns_ok() {
+    let client = TestClient::new(App::new());
+    let res = client.get("/healthz").send();
+    assert_eq!(200, res.status());
+    assert_eq!("OK", res.body_text());
+}
+
+#[test]
+fn post_with_headers_and_body() {
+    let client = TestClient::new(App::new());
+    let res = client.post("/echo")
+        .header("Content-Type", "text/plain")
+        .body_text("hello")
+        .send();
+    assert!(res.is_success());
+}
+```
 
 ---
 

@@ -46,7 +46,10 @@
 pub mod app;
 pub mod compression;
 pub mod cookie;
+pub mod error;
 pub mod metrics;
+pub mod router;
+pub mod test_client;
 pub mod application;
 pub mod body;
 pub mod client_hint;

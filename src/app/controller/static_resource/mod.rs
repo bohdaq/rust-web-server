@@ -18,10 +18,6 @@ pub struct StaticResourceController;
 
 impl Controller for StaticResourceController {
     fn is_matching(request: &Request, _connection: &ConnectionInfo) -> bool {
-        if request.method != METHOD.get {
-            return false;
-        }
-
         let url_array = ["http://", "localhost", &request.request_uri];
         let url = url_array.join(SYMBOL.empty_string);
 

@@ -117,84 +117,30 @@ impl Application for App {
 }
 
 impl App {
+    /// Dispatch `request` through the controller chain and return the response.
+    ///
+    /// This is a convenience wrapper over [`Application::execute`] that uses a
+    /// synthetic loopback [`ConnectionInfo`]. Use it in tests or when no real
+    /// connection context is available. Prefer [`TestClient`] for structured
+    /// test code.
+    ///
+    /// [`TestClient`]: crate::test_client::TestClient
     pub fn handle_request(request: Request) -> (Response, Request) {
-        let header_list = Header::get_header_list(&request);
-
-        let mut response: Response = Response::get_response(
-            STATUS_CODE_REASON_PHRASE.n501_not_implemented,
-            Some(header_list),
-            None
-        );
-
-
-
-        if IndexController::is_matching_request(&request) {
-            response = IndexController::process_request(&request, response);
-            return (response, request)
-        }
-
-        if StyleController::is_matching_request(&request) {
-            response = StyleController::process_request(&request, response);
-            return (response, request)
-        }
-
-        if ScriptController::is_matching_request(&request) {
-            response = ScriptController::process_request(&request, response);
-            return (response, request)
-        }
-
-        if FileUploadInitiateController::is_matching_request(&request) {
-            response = FileUploadInitiateController::process_request(&request, response);
-            return (response, request)
-        }
-
-        if FormUrlEncodedEnctypePostMethodController::is_matching_request(&request) {
-            response = FormUrlEncodedEnctypePostMethodController::process_request(&request, response);
-            return (response, request)
-        }
-
-        if FormGetMethodController::is_matching_request(&request) {
-            response = FormGetMethodController::process_request(&request, response);
-            return (response, request)
-        }
-
-        if FormMultipartEnctypePostMethodController::is_matching_request(&request) {
-            response = FormMultipartEnctypePostMethodController::process_request(&request, response);
-            return (response, request)
-        }
-
-        if HealthController::is_matching_request(&request) {
-            response = HealthController::process_request(&request, response);
-            return (response, request)
-        }
-
-        if ReadyController::is_matching_request(&request) {
-            response = ReadyController::process_request(&request, response);
-            return (response, request)
-        }
-
-        if MetricsController::is_matching_request(&request) {
-            response = MetricsController::process_request(&request, response);
-            return (response, request)
-        }
-
-        if FaviconController::is_matching_request(&request) {
-            response = FaviconController::process_request(&request, response);
-            return (response, request)
-        }
-
-        if StaticResourceController::is_matching_request(&request) {
-            response = StaticResourceController::process_request(&request, response);
-            return (response, request)
-        }
-
-        if NotFoundController::is_matching_request(&request) {
-            response = NotFoundController::process_request(&request, response);
-            return (response, request)
-        }
-
-
+        use crate::server::Address;
+        let conn = ConnectionInfo {
+            client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+            server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+            request_size: 16000,
+        };
+        let app = App::new();
+        let response = app.execute(&request, &conn).unwrap_or_else(|_| {
+            let header_list = Header::get_header_list(&request);
+            Response::get_response(
+                STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
+                Some(header_list),
+                None,
+            )
+        });
         (response, request)
     }
-
 }

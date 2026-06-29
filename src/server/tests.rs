@@ -397,7 +397,7 @@ fn it_generates_not_found_page_for_static_directory() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.get;
-    let request_uri = "/static/";
+    let request_uri = "/static/subdir/";
     let request_http_version = VERSION.http_1_1.to_string();
 
 

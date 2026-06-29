@@ -86,6 +86,9 @@ cargo build --release --no-default-features --features http1
 - Combined Log Format (CLF) — access log compatible with GoAccess and AWStats; set `RWS_CONFIG_LOG_FORMAT=json` for structured JSON logs
 - Graceful shutdown — Ctrl+C and SIGTERM stop the server cleanly (async/TLS paths); `/readyz` returns `503` during drain
 - Kubernetes-ready — health probes (`GET /healthz` liveness, `GET /readyz` readiness), Prometheus metrics (`GET /metrics`), `0.0.0.0` default bind, Dockerfile included
+- Dynamic routing — standalone `Router` with `:param` and `*wildcard` path matching
+- Typed errors — `IntoResponse` trait and built-in `AppError` mapping to HTTP status codes
+- In-process test client — `TestClient` dispatches requests without a TCP socket
 - 30-second read timeout per request on plain HTTP/1.1 connections
 - Symlink resolution
 - `.html` extension inference — `/page` serves `page.html`; `/dir` serves `dir/index.html`
