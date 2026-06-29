@@ -85,3 +85,7 @@ cargo build --release --no-default-features --features http1
 - [FAQ](FAQ.md) — common problems and solutions
 - [DEVELOPER](DEVELOPER.md) — building, testing, and contributing
 - [src/README.md](src/README.md) — module-level documentation
+
+## License
+
+MIT
