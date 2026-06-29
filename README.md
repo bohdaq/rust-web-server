@@ -136,12 +136,19 @@ impl Controller for PingController {
 
 See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 18 use case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, and testing.
 
+## AI adoption
+
+This framework is designed to be an AI first class citizen — AI coding assistants (Claude, Cursor, Copilot) generate correct, idiomatic, compiling code on the first try.
+
+See [AI_ADOPTION.md](AI_ADOPTION.md) for the full strategy: using the server as an AI API backend, adding SSE streaming for token-by-token output, implementing an MCP tool server, and the steps to make the framework maximally discoverable by AI tools (`llms.txt`, Cargo examples, ergonomic helpers, system prompt file).
+
 ## Further reading
 
 - [CONFIGURE](CONFIGURE.md) — all configuration options
 - [FAQ](FAQ.md) — common problems and solutions
 - [DEVELOPER](DEVELOPER.md) — building blocks, use cases, building, and testing
 - [src/README.md](src/README.md) — module-level documentation
+- [AI_ADOPTION.md](AI_ADOPTION.md) — AI adoption strategy and roadmap
 
 ## License
 
