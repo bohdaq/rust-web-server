@@ -290,73 +290,116 @@ impl Server {
     }
 
     /// Accepts TCP connections in a loop and dispatches each to the thread pool.
-    /// Blocks forever (plain HTTP/1.1). For TLS/HTTP2/HTTP3 use [`Server::run_tls`].
-    pub fn run(listener : TcpListener,
+    ///
+    /// When built with the `http1` feature, Ctrl+C and SIGTERM stop the accept
+    /// loop gracefully: `SERVER_READY` is cleared and the pool drains all
+    /// in-flight connections before returning.
+    ///
+    /// For TLS/HTTP2/HTTP3 use [`Server::run_tls`].
+    pub fn run(listener: TcpListener,
                pool: ThreadPool,
                app: impl Application + New + Send + 'static + Copy) {
-        for boxed_stream in listener.incoming() {
-            if boxed_stream.is_err() {
-                eprintln!("unable to get TCP stream: {}", boxed_stream.err().unwrap());
-                return;
+        #[cfg(feature = "http1")]
+        {
+            use std::sync::Arc;
+            use std::sync::atomic::{AtomicBool, Ordering};
+
+            let shutdown = Arc::new(AtomicBool::new(false));
+            let s = shutdown.clone();
+            if let Err(e) = ctrlc::set_handler(move || {
+                s.store(true, Ordering::SeqCst);
+            }) {
+                eprintln!("unable to install signal handler: {}", e);
+            }
+            if let Err(e) = listener.set_nonblocking(true) {
+                eprintln!("unable to set non-blocking listener: {}", e);
             }
 
-            let stream = boxed_stream.unwrap();
-
-            print!("Connection established, ");
-
-            let boxed_local_addr = stream.local_addr();
-            if boxed_local_addr.is_ok() {
-                print!("local addr: {}", boxed_local_addr.unwrap())
-            } else {
-                eprintln!("\nunable to read local addr");
-                return;
-            }
-
-            let boxed_peer_addr = stream.peer_addr();
-            if boxed_peer_addr.is_err() {
-                eprintln!("\nunable to read peer addr");
-                return;
-            }
-            let peer_addr = boxed_peer_addr.unwrap();
-            print!(", peer addr: {}\n", peer_addr.to_string());
-
-            let (server_ip, server_port, _thread_count) = get_ip_port_thread_count();
-            let client_ip = peer_addr.ip().to_string();
-            let client_port = peer_addr.port() as i32;
-            let request_allocation_size = get_request_allocation_size();
-
-            let connection = ConnectionInfo {
-                client: Address {
-                    ip: client_ip.to_string(),
-                    port: client_port
-                },
-                server: Address {
-                    ip: server_ip,
-                    port: server_port
-                },
-                request_size: request_allocation_size,
-            };
-
-
-
-            if let Err(e) = stream.set_read_timeout(Some(Duration::from_secs(30))) {
-                eprintln!("failed to set read timeout: {}", e);
-            }
-
-            pool.execute(move || {
-                crate::metrics::connection_open();
-                let boxed_process = Server::process(stream, connection, app);
-                crate::metrics::connection_close();
-                if boxed_process.is_err() {
-                    crate::metrics::record_error();
-                    let message = boxed_process.err().unwrap();
-                    eprintln!("{}", message);
+            loop {
+                if shutdown.load(Ordering::SeqCst) {
+                    break;
                 }
-            });
+                match listener.accept() {
+                    Ok((stream, peer_addr)) => {
+                        Server::dispatch_connection(stream, peer_addr, &pool, app);
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(e) => {
+                        eprintln!("accept error: {}", e);
+                        break;
+                    }
+                }
+            }
 
+            crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+            println!("Shutting down — waiting for in-flight connections to finish");
+            pool.join();
+            println!("Server stopped");
         }
 
+        #[cfg(not(feature = "http1"))]
+        {
+            for boxed_stream in listener.incoming() {
+                match boxed_stream {
+                    Err(e) => {
+                        eprintln!("unable to get TCP stream: {}", e);
+                        return;
+                    }
+                    Ok(stream) => {
+                        let peer_addr = match stream.peer_addr() {
+                            Ok(a) => a,
+                            Err(e) => {
+                                eprintln!("unable to read peer addr: {}", e);
+                                return;
+                            }
+                        };
+                        Server::dispatch_connection(stream, peer_addr, &pool, app);
+                    }
+                }
+            }
+        }
+    }
 
+    fn dispatch_connection(
+        stream: std::net::TcpStream,
+        peer_addr: std::net::SocketAddr,
+        pool: &ThreadPool,
+        app: impl Application + New + Send + 'static + Copy,
+    ) {
+        print!("Connection established, ");
+        if let Ok(local) = stream.local_addr() {
+            print!("local addr: {}", local);
+        }
+        println!(", peer addr: {}", peer_addr);
+
+        let (server_ip, server_port, _thread_count) = get_ip_port_thread_count();
+        let connection = ConnectionInfo {
+            client: Address {
+                ip: peer_addr.ip().to_string(),
+                port: peer_addr.port() as i32,
+            },
+            server: Address {
+                ip: server_ip,
+                port: server_port,
+            },
+            request_size: get_request_allocation_size(),
+        };
+
+        if let Err(e) = stream.set_read_timeout(Some(Duration::from_secs(30))) {
+            eprintln!("failed to set read timeout: {}", e);
+        }
+
+        pool.execute(move || {
+            crate::metrics::connection_open();
+            let result = Server::process(stream, connection, app);
+            crate::metrics::connection_close();
+            if let Err(msg) = result {
+                crate::metrics::record_error();
+                eprintln!("{}", msg);
+            }
+        });
     }
 
 }

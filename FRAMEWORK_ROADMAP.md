@@ -72,18 +72,15 @@ The HTTP/1.1 path blocks one OS thread per connection. With 200 threads (the def
 
 ---
 
-### 6. Typed request extractors
+### ✅ 6. Typed request extractors — _Done (v17.7.0)_
 
-Every handler must manually call `request.body`, `String::from_utf8`, deserialize JSON, and extract fields. This is 5–10 lines of boilerplate before any business logic runs.
+`FromRequest` trait in `src/extract/mod.rs`. Built-in extractors:
+- `Body` — raw bytes (never fails)
+- `BodyText` — UTF-8 string (returns 400 on invalid UTF-8)
+- `Query` — parsed query parameters as `HashMap<String, String>`
+- `RequestHeaders` — all request headers with case-insensitive `get`
 
-**Target API:**
-```rust
-fn create_user(body: Json<CreateUserRequest>, state: &AppState) -> Response {
-    // body.name, body.email are already typed and validated
-}
-```
-
-The framework deserializes and validates automatically; the handler only sees typed values.
+Implement `FromRequest` on your own type for custom extraction logic.
 
 ---
 
@@ -127,9 +124,9 @@ Automatic gzip compression for text responses when the client sends `Accept-Enco
 
 ---
 
-### 13. Incomplete graceful shutdown
+### ✅ 13. Graceful shutdown — _Done (v17.7.0)_
 
-`Server::run` (plain HTTP/1.1 thread pool) has no shutdown path — Ctrl+C kills the process mid-request. The thread pool does not drain in-flight work. The async paths (`run_tls`, `run_quic`) handle both Ctrl+C and SIGTERM and clear `SERVER_READY`.
+`Server::run` (HTTP/1.1 thread pool path, `http1` feature) now installs a Ctrl+C/SIGTERM handler via the `ctrlc` crate. On signal: the accept loop exits, `SERVER_READY` is cleared (causing `/readyz` to return 503), and `ThreadPool::join()` drains all in-flight connections before returning. The async paths (`run_tls`, `run_quic`) have handled graceful shutdown since v17.5.0.
 
 ---
 
@@ -166,14 +163,14 @@ No `Upgrade: websocket` handling. Real-time features (chat, live updates, collab
 | 3 | Middleware pipeline | Pending |
 | 4 | HTTP/1.1 keep-alive | ✅ Done (v17.4.0) |
 | 5 | Async handlers | Pending |
-| 6 | Typed request extractors | Pending |
+| 6 | Typed request extractors | ✅ Done (v17.7.0) |
 | 7 | Duplicate dispatch logic | ✅ Done (v17.6.0) |
 | 8 | Streaming responses | ✅ Done (v17.4.0) |
 | 9 | Typed error handling | ✅ Done (v17.6.0) |
 | 10 | Cookies | ✅ Done (v17.4.0) |
 | 11 | Response compression | ✅ Done (v17.4.0) |
 | 12 | `ConnectionInfo` uses `String` not `SocketAddr` | Pending |
-| 13 | Incomplete graceful shutdown | Partial (async paths only) |
+| 13 | Graceful shutdown | ✅ Done (v17.7.0) |
 | 14 | No test client | ✅ Done (v17.6.0) |
 | 15 | No WebSocket | Pending |
 | 16 | HTTP → HTTPS redirect | ✅ Done (v17.4.0) |

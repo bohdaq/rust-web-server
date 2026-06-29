@@ -88,7 +88,10 @@ cargo build --release --no-default-features --features http1
 - Kubernetes-ready — health probes (`GET /healthz` liveness, `GET /readyz` readiness), Prometheus metrics (`GET /metrics`), `0.0.0.0` default bind, Dockerfile included
 - Dynamic routing — standalone `Router` with `:param` and `*wildcard` path matching
 - Typed errors — `IntoResponse` trait and built-in `AppError` mapping to HTTP status codes
+- Typed request extractors — `FromRequest` trait; built-in `Body`, `BodyText`, `Query`, `RequestHeaders`
+- Per-IP rate limiting — sliding-window `RateLimiter`; configurable via env vars
 - In-process test client — `TestClient` dispatches requests without a TCP socket
+- Graceful shutdown — Ctrl+C and SIGTERM drain in-flight connections on all server paths
 - 30-second read timeout per request on plain HTTP/1.1 connections
 - Symlink resolution
 - `.html` extension inference — `/page` serves `page.html`; `/dir` serves `dir/index.html`
@@ -131,7 +134,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 12 use case examples covering JSON responses, query parameters, form and file upload parsing, redirects, error responses, MIME detection, and access logging.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 18 use case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, and testing.
 
 ## Further reading
 

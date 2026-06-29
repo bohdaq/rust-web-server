@@ -43,6 +43,17 @@ impl ThreadPool {
         }
 
     }
+
+    /// Drain the pool: stop accepting new jobs and wait for all in-flight
+    /// workers to finish. Consumes `self`.
+    pub fn join(mut self) {
+        drop(self.sender);
+        for worker in self._workers.drain(..) {
+            if let Err(e) = worker._thread.join() {
+                eprintln!("worker thread panicked: {:?}", e);
+            }
+        }
+    }
 }
 
 struct Worker {

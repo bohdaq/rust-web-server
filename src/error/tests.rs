@@ -38,6 +38,12 @@ fn unprocessable_entity_maps_to_422() {
 }
 
 #[test]
+fn too_many_requests_maps_to_429() {
+    let r = AppError::TooManyRequests.into_response();
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n429_too_many_requests.status_code, r.status_code);
+}
+
+#[test]
 fn internal_maps_to_500() {
     let r = AppError::Internal("db crash".to_string()).into_response();
     assert_eq!(*STATUS_CODE_REASON_PHRASE.n500_internal_server_error.status_code, r.status_code);

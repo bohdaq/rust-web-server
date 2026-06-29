@@ -84,6 +84,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Router` / `PathParams` | `router` | Standalone dynamic router with `:param` and `*wildcard` path matching |
 | `IntoResponse` / `AppError` | `error` | Typed errors that map to HTTP status codes |
 | `TestClient` | `test_client` | In-process HTTP test client — no TCP socket required |
+| `FromRequest` / `Body` / `BodyText` / `Query` | `extract` | Typed request extractors — parse body or query params, returning a ready error on failure |
+| `RateLimiter` | `rate_limit` | Per-IP sliding-window rate limiter; `global()` reads config from env vars |
 
 ---
 
@@ -449,6 +451,99 @@ fn post_with_headers_and_body() {
         .send();
     assert!(res.is_success());
 }
+```
+
+---
+
+### 17. Typed request extraction
+
+`FromRequest` implementations let you pull typed values out of a request at the start of a handler, returning a ready `Response` on failure rather than writing the error handling inline.
+
+```rust
+use rust_web_server::extract::{BodyText, Query, FromRequest};
+use rust_web_server::controller::Controller;
+use rust_web_server::request::{METHOD, Request};
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::range::Range;
+use rust_web_server::mime_type::MimeType;
+use rust_web_server::server::ConnectionInfo;
+
+pub struct EchoController;
+
+impl Controller for EchoController {
+    fn is_matching(request: &Request, _: &ConnectionInfo) -> bool {
+        request.method == METHOD.post && request.request_uri.starts_with("/echo")
+    }
+
+    fn process(request: &Request, mut response: Response, _: &ConnectionInfo) -> Response {
+        let text = match BodyText::from_request(request) {
+            Ok(t) => t,
+            Err(err_response) => return err_response,
+        };
+        let q = Query::from_request(request).unwrap();
+        let prefix = q.get("prefix").map(String::as_str).unwrap_or("");
+        let body = format!("{}{}", prefix, text.as_str());
+
+        response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        response.content_range_list = vec![
+            Range::get_content_range(body.into_bytes(), MimeType::TEXT_PLAIN.to_string())
+        ];
+        response
+    }
+}
+```
+
+Implement `FromRequest` on your own types for reusable extraction logic:
+
+```rust
+use rust_web_server::extract::FromRequest;
+use rust_web_server::request::Request;
+use rust_web_server::response::Response;
+
+pub struct BearerToken(pub String);
+
+impl FromRequest for BearerToken {
+    fn from_request(request: &Request) -> Result<Self, Response> {
+        use rust_web_server::error::{AppError, IntoResponse};
+        use rust_web_server::header::Header;
+        let auth = request.get_header(Header::_AUTHORIZATION.to_string());
+        match auth {
+            Some(h) if h.value.starts_with("Bearer ") => {
+                Ok(BearerToken(h.value[7..].to_string()))
+            }
+            _ => Err(AppError::Unauthorized.into_response()),
+        }
+    }
+}
+```
+
+---
+
+### 18. Per-IP rate limiting
+
+`RateLimiter` enforces a sliding-window request cap per client key (typically the client IP). Use the process-wide `global()` instance (configured via env vars) or create a custom one.
+
+```rust
+use rust_web_server::response::Response;
+
+// check on every request, e.g. at the top of Application::execute
+fn check_rate_limit(ip: &str) -> Option<Response> {
+    use rust_web_server::error::{AppError, IntoResponse};
+    let limiter = rust_web_server::rate_limit::global();
+    if limiter.check(ip) {
+        None  // allowed
+    } else {
+        Some(AppError::TooManyRequests.into_response())
+    }
+}
+```
+
+Configure limits at startup:
+
+```bash
+RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS=200   # requests per window (default 1000)
+RWS_CONFIG_RATE_LIMIT_WINDOW_SECS=60    # window length in seconds (default 60)
 ```
 
 ---
