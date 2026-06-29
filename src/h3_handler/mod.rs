@@ -121,7 +121,10 @@ async fn handle_stream(
         }
     };
 
-    let log = Log::request_response(&rws_request, &rws_response, &peer_addr);
+    let mut rws_response = rws_response;
+    rws_response.headers.push(Header::get_hsts_header());
+
+    let log = Log::combined(&rws_request, &rws_response, &peer_addr);
     println!("{}", log);
 
     send_h3_response(stream, rws_response).await;

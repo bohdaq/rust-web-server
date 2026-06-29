@@ -145,6 +145,21 @@ impl Controller for StaticResourceController {
                     let modified_date_time = boxed_modified_date_time.unwrap();
                     let last_modified_unix_nanos = Header{ name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.to_string(), value: modified_date_time.to_string() };
                     response.headers.push(last_modified_unix_nanos);
+
+                    let file_size = metadata(&static_filepath).map(|m| m.len()).unwrap_or(0);
+                    let etag_value = format!("\"{}-{}\"", modified_date_time, file_size);
+
+                    let if_none_match = request.get_header(Header::_IF_NONE_MATCH.to_string());
+                    if let Some(inm) = if_none_match {
+                        if inm.value == etag_value || inm.value == "*" {
+                            response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
+                            response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
+                            response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
+                            return response;
+                        }
+                    }
+
+                    response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
                 }
 
                 response.status_code = *status_code_reason_phrase.status_code;
@@ -232,6 +247,21 @@ impl StaticResourceController {
                     let modified_date_time = boxed_modified_date_time.unwrap();
                     let last_modified_unix_nanos = Header{ name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.to_string(), value: modified_date_time.to_string() };
                     response.headers.push(last_modified_unix_nanos);
+
+                    let file_size = metadata(&static_filepath).map(|m| m.len()).unwrap_or(0);
+                    let etag_value = format!("\"{}-{}\"", modified_date_time, file_size);
+
+                    let if_none_match = request.get_header(Header::_IF_NONE_MATCH.to_string());
+                    if let Some(inm) = if_none_match {
+                        if inm.value == etag_value || inm.value == "*" {
+                            response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
+                            response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
+                            response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
+                            return response;
+                        }
+                    }
+
+                    response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
                 }
 
                 response.status_code = *status_code_reason_phrase.status_code;

@@ -7,6 +7,7 @@ use std::io::prelude::*;
 use std::borrow::Borrow;
 use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::str::FromStr;
+use std::time::Duration;
 
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
@@ -64,7 +65,7 @@ impl Server {
         let (response, request) = App::handle_request(request);
 
 
-        let log_request_response = Log::request_response(&request, &response, &peer_addr);
+        let log_request_response = Log::combined(&request, &response, &peer_addr);
         println!("{}", log_request_response);
         let raw_response = Response::generate_response(response, request);
 
@@ -171,7 +172,7 @@ impl Server {
 
         let client = connection.client;
         let client_addr = SocketAddr::new(IpAddr::from_str(client.ip.as_str()).unwrap(), client.port as u16);
-        let log_request_response = Log::request_response(&request, &response, &client_addr);
+        let log_request_response = Log::combined(&request, &response, &client_addr);
         println!("{}", log_request_response);
 
         let raw_response = Response::generate_response(response, request);
@@ -288,6 +289,10 @@ impl Server {
 
 
 
+            if let Err(e) = stream.set_read_timeout(Some(Duration::from_secs(30))) {
+                eprintln!("failed to set read timeout: {}", e);
+            }
+
             pool.execute(move || {
                 let boxed_process = Server::process(stream, connection, app);
                 if boxed_process.is_err() {
@@ -354,41 +359,49 @@ impl Server {
         println!("Listening for TLS connections (HTTP/1.1 + HTTP/2)...");
 
         loop {
-            match tokio_listener.accept().await {
-                Ok((tcp_stream, peer_addr)) => {
-                    let acceptor = tls_acceptor.clone();
-                    tokio::spawn(async move {
-                        match acceptor.accept(tcp_stream).await {
-                            Ok(tls_stream) => {
-                                let protocol = tls_stream
-                                    .get_ref()
-                                    .1
-                                    .alpn_protocol()
-                                    .map(|p| p.to_vec());
+            tokio::select! {
+                result = tokio_listener.accept() => {
+                    match result {
+                        Ok((tcp_stream, peer_addr)) => {
+                            let acceptor = tls_acceptor.clone();
+                            tokio::spawn(async move {
+                                match acceptor.accept(tcp_stream).await {
+                                    Ok(tls_stream) => {
+                                        let protocol = tls_stream
+                                            .get_ref()
+                                            .1
+                                            .alpn_protocol()
+                                            .map(|p| p.to_vec());
 
-                                match protocol.as_deref() {
-                                    Some(b"h2") => {
-                                        if let Err(e) =
-                                            h2_handler::handle_connection(tls_stream, peer_addr, app)
-                                                .await
-                                        {
-                                            eprintln!("H2 connection error: {}", e);
+                                        match protocol.as_deref() {
+                                            Some(b"h2") => {
+                                                if let Err(e) =
+                                                    h2_handler::handle_connection(tls_stream, peer_addr, app)
+                                                        .await
+                                                {
+                                                    eprintln!("H2 connection error: {}", e);
+                                                }
+                                            }
+                                            _ => {
+                                                if let Err(e) =
+                                                    Server::process_h1_tls(tls_stream, peer_addr, app).await
+                                                {
+                                                    eprintln!("H1 TLS error: {}", e);
+                                                }
+                                            }
                                         }
                                     }
-                                    _ => {
-                                        if let Err(e) =
-                                            Server::process_h1_tls(tls_stream, peer_addr, app).await
-                                        {
-                                            eprintln!("H1 TLS error: {}", e);
-                                        }
-                                    }
+                                    Err(e) => eprintln!("TLS handshake failed: {}", e),
                                 }
-                            }
-                            Err(e) => eprintln!("TLS handshake failed: {}", e),
+                            });
                         }
-                    });
+                        Err(e) => eprintln!("TCP accept error: {}", e),
+                    }
                 }
-                Err(e) => eprintln!("TCP accept error: {}", e),
+                _ = tokio::signal::ctrl_c() => {
+                    println!("\nShutting down gracefully.");
+                    break;
+                }
             }
         }
     }
@@ -440,6 +453,8 @@ impl Server {
             }
         };
 
+        response.headers.push(Header::get_hsts_header());
+
         #[cfg(feature = "http3")]
         response.headers.push(Header {
             name: Header::_ALT_SVC.to_string(),
@@ -451,7 +466,7 @@ impl Server {
             value: format!("h2=\":{}\"", server_port),
         });
 
-        let log = Log::request_response(&request, &response, &peer_addr);
+        let log = Log::combined(&request, &response, &peer_addr);
         println!("{}", log);
 
         let raw = Response::generate_response(response, request);
@@ -510,18 +525,32 @@ impl Server {
 
         println!("Listening for QUIC/HTTP3 on UDP {}:{}", server_ip, server_port);
 
-        while let Some(incoming) = endpoint.accept().await {
-            tokio::spawn(async move {
-                match incoming.await {
-                    Ok(conn) => {
-                        let peer_addr = conn.remote_address();
-                        if let Err(e) = h3_handler::handle_connection(conn, peer_addr, app).await {
-                            eprintln!("H3 connection error: {}", e);
+        loop {
+            tokio::select! {
+                maybe = endpoint.accept() => {
+                    match maybe {
+                        Some(incoming) => {
+                            tokio::spawn(async move {
+                                match incoming.await {
+                                    Ok(conn) => {
+                                        let peer_addr = conn.remote_address();
+                                        if let Err(e) = h3_handler::handle_connection(conn, peer_addr, app).await {
+                                            eprintln!("H3 connection error: {}", e);
+                                        }
+                                    }
+                                    Err(e) => eprintln!("QUIC connection error: {}", e),
+                                }
+                            });
                         }
+                        None => break,
                     }
-                    Err(e) => eprintln!("QUIC connection error: {}", e),
                 }
-            });
+                _ = tokio::signal::ctrl_c() => {
+                    println!("\nShutting down QUIC.");
+                    endpoint.close(0u32.into(), b"shutdown");
+                    break;
+                }
+            }
         }
     }
 }

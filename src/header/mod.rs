@@ -133,6 +133,11 @@ impl Header {
     pub const _X_FRAME_OPTIONS_VALUE_DENY: &'static str = "DENY";
     pub const _X_FRAME_OPTIONS_VALUE_SAME_ORIGIN: &'static str = "SAMEORIGIN";
 
+    pub const _STRICT_TRANSPORT_SECURITY_VALUE_DEFAULT: &'static str = "max-age=31536000; includeSubDomains";
+    pub const _REFERRER_POLICY_VALUE_DEFAULT: &'static str = "strict-origin-when-cross-origin";
+    pub const _PERMISSIONS_POLICY_VALUE_DEFAULT: &'static str = "geolocation=(), microphone=(), camera=()";
+    pub const _CONTENT_SECURITY_POLICY_VALUE_DEFAULT: &'static str = "default-src 'self'";
+
 
 
 
@@ -178,6 +183,27 @@ impl Header {
         let no_cache = Header::get_no_cache_header();
         header_list.push(no_cache);
 
+        let referrer_policy = Header {
+            name: Header::_REFERRER_POLICY.to_string(),
+            value: Header::_REFERRER_POLICY_VALUE_DEFAULT.to_string(),
+        };
+        header_list.push(referrer_policy);
+
+        let permissions_policy = Header {
+            name: Header::_PERMISSIONS_POLICY.to_string(),
+            value: Header::_PERMISSIONS_POLICY_VALUE_DEFAULT.to_string(),
+        };
+        header_list.push(permissions_policy);
+
+        let csp_value = std::env::var("RWS_CONFIG_CSP")
+            .unwrap_or_else(|_| Header::_CONTENT_SECURITY_POLICY_VALUE_DEFAULT.to_string());
+        if !csp_value.is_empty() {
+            header_list.push(Header {
+                name: Header::_CONTENT_SECURITY_POLICY.to_string(),
+                value: csp_value,
+            });
+        }
+
         header_list
     }
 
@@ -214,6 +240,13 @@ impl Header {
         Header {
             name: Header::_CACHE_CONTROL.to_string(),
             value: Header::_DO_NOT_STORE_CACHE.to_string(),
+        }
+    }
+
+    pub fn get_hsts_header() -> Header {
+        Header {
+            name: Header::_STRICT_TRANSPORT_SECURITY.to_string(),
+            value: Header::_STRICT_TRANSPORT_SECURITY_VALUE_DEFAULT.to_string(),
         }
     }
 
