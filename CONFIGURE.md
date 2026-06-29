@@ -87,7 +87,7 @@ ip                     = '0.0.0.0'
 | `RWS_CONFIG_CORS_MAX_AGE` | `cors_max_age` | `--cors-max-age` / `-g` | _(none)_ | Preflight cache duration (seconds) |
 | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE` | `request_allocation_size` | `--request-allocation-size-in-bytes` / `-r` | `16000` | Read buffer size per request |
 | `RWS_CONFIG_CSP` | — | — | `default-src 'self'` | `Content-Security-Policy` header value; set to empty string to disable |
-| `RWS_CONFIG_LOG_FORMAT` | `log_format` | — | `combined` | Access log format: `combined` (CLF) or `json` (structured JSON for log aggregators) |
+| `RWS_CONFIG_LOG_FORMAT` | `log_format` | — | `json` | Access log format: `json` (structured JSON for log aggregators) or `combined` (CLF) |
 
 ## Memory
 

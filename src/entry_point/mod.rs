@@ -22,7 +22,7 @@ impl Config {
 
     /// Log format: `"combined"` (default, Combined Log Format) or `"json"` (structured JSON).
     pub const RWS_CONFIG_LOG_FORMAT: &'static str = "RWS_CONFIG_LOG_FORMAT";
-    pub const RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE: &'static str = "combined";
+    pub const RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE: &'static str = "json";
 
     pub const RWS_CONFIG_PORT: &'static str = "RWS_CONFIG_PORT";
     pub const RWS_CONFIG_PORT_DEFAULT_VALUE: &'static str = "7878";
