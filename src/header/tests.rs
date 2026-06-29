@@ -179,4 +179,45 @@ fn header_constants() {
     assert_eq!(Header::_LAST_MODIFIED, "Last-Modified");
     assert_eq!(Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS, "Last-Modified-Unix-Epoch-Nanos");
 
+    assert_eq!(Header::_STRICT_TRANSPORT_SECURITY_VALUE_DEFAULT, "max-age=31536000; includeSubDomains");
+    assert_eq!(Header::_REFERRER_POLICY_VALUE_DEFAULT, "strict-origin-when-cross-origin");
+    assert_eq!(Header::_PERMISSIONS_POLICY_VALUE_DEFAULT, "geolocation=(), microphone=(), camera=()");
+    assert_eq!(Header::_CONTENT_SECURITY_POLICY_VALUE_DEFAULT, "default-src 'self'");
+}
+
+#[test]
+fn hsts_header() {
+    let h = Header::get_hsts_header();
+    assert_eq!(h.name, Header::_STRICT_TRANSPORT_SECURITY);
+    assert_eq!(h.value, Header::_STRICT_TRANSPORT_SECURITY_VALUE_DEFAULT);
+}
+
+#[test]
+fn security_headers_in_header_list() {
+    use crate::request::{METHOD, Request};
+    use crate::http::VERSION;
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+
+    let headers = Header::get_header_list(&request);
+    let names: Vec<&str> = headers.iter().map(|h| h.name.as_str()).collect();
+
+    assert!(names.contains(&Header::_REFERRER_POLICY));
+    assert!(names.contains(&Header::_PERMISSIONS_POLICY));
+    assert!(names.contains(&Header::_CONTENT_SECURITY_POLICY));
+
+    let rp = headers.iter().find(|h| h.name == Header::_REFERRER_POLICY).unwrap();
+    assert_eq!(rp.value, Header::_REFERRER_POLICY_VALUE_DEFAULT);
+
+    let pp = headers.iter().find(|h| h.name == Header::_PERMISSIONS_POLICY).unwrap();
+    assert_eq!(pp.value, Header::_PERMISSIONS_POLICY_VALUE_DEFAULT);
+
+    let csp = headers.iter().find(|h| h.name == Header::_CONTENT_SECURITY_POLICY).unwrap();
+    assert_eq!(csp.value, Header::_CONTENT_SECURITY_POLICY_VALUE_DEFAULT);
 }

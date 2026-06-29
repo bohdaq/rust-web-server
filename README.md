@@ -73,11 +73,15 @@ cargo build --release --no-default-features --features http1
 - CORS — allowed for all origins by default, fully configurable
 - HTTP Range Requests — partial file serving and multi-range responses
 - HTTP Client Hints
-- `X-Content-Type-Options: nosniff` and `X-Frame-Options` headers
+- ETag and 304 Not Modified — conditional requests skip body transfer on cache hit
+- Security headers — `Strict-Transport-Security` (HTTPS only), `Content-Security-Policy` (configurable via `RWS_CONFIG_CSP`), `Referrer-Policy`, `Permissions-Policy`, `X-Content-Type-Options`, `X-Frame-Options`
+- WebAssembly MIME type — `.wasm` files served as `application/wasm`
+- Combined Log Format (CLF) — access log compatible with GoAccess and AWStats
+- Graceful shutdown — Ctrl+C stops the server cleanly (async/TLS paths)
+- 30-second read timeout on plain HTTP/1.1 connections
 - Symlink resolution
 - `.html` extension inference — `/page` serves `page.html`; `/dir` serves `dir/index.html`
-- No caching headers — files are always served fresh
-- Request/response logging to stdout
+- Custom 404 page — place a `404.html` in the working directory to override the default
 
 ## Further reading
 

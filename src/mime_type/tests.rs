@@ -889,3 +889,19 @@ fn detect_mime_type_for_3g2_file() {
 
     assert_eq!(expected_mime_type, actual_mime_type);
 }
+
+#[test]
+fn detect_mime_type_for_wasm_file() {
+    let expected_mime_type = MimeType::APPLICATION_WASM;
+    let request_uri = "/module.wasm";
+
+    let actual_mime_type = MimeType::detect_mime_type(request_uri);
+
+    assert_eq!(expected_mime_type, actual_mime_type);
+}
+
+#[test]
+fn wasm_mime_type_constant() {
+    assert_eq!(MimeType::APPLICATION_WASM, "application/wasm");
+    assert_eq!(MimeType::WASM_SUFFIX, ".wasm");
+}

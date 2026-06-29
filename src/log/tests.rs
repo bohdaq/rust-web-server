@@ -5,6 +5,7 @@ use crate::header::Header;
 use crate::http::VERSION;
 use crate::log::Log;
 use crate::request::{METHOD, Request};
+use crate::response::STATUS_CODE_REASON_PHRASE;
 
 #[test]
 fn log_request_response() {
@@ -82,4 +83,57 @@ fn info() {
     ).to_string();
     let actual_info = Log::info("HTTP to HTTPS with LetsEncrypt HTTP verification server");
     assert_eq!(expected_info, actual_info)
+}
+
+#[test]
+fn combined_log_format_includes_clf_fields() {
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/static/test.txt".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+
+    let (response, request) = App::handle_request(request);
+    assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n200_ok.status_code);
+
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 4567);
+    let log = Log::combined(&request, &response, &peer_addr);
+
+    // IP address
+    assert!(log.starts_with("192.168.1.1 - - ["), "log should start with IP: {}", log);
+
+    // Timestamp bracket: "IP - - [DD/Mon/YYYY:HH:MM:SS +0000]"
+    let open = log.find('[').unwrap();
+    let close = log.find(']').unwrap();
+    let timestamp = &log[open + 1..close];
+    // format: DD/Mon/YYYY:HH:MM:SS +0000  (26 chars)
+    assert_eq!(timestamp.len(), 26, "unexpected timestamp length: {}", timestamp);
+    assert!(timestamp.ends_with("+0000"), "timestamp should end with +0000: {}", timestamp);
+
+    // Request line, status, size
+    assert!(log.contains("\"GET /static/test.txt HTTP/1.1\""), "missing request line: {}", log);
+    assert!(log.contains(" 200 "), "missing status 200: {}", log);
+}
+
+#[test]
+fn combined_log_format_empty_body_uses_dash() {
+    use crate::core::New;
+    use crate::response::Response;
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/nonexistent".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+
+    let response = Response::new();
+    let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 80);
+    let log = Log::combined(&request, &response, &peer_addr);
+
+    // Empty body must appear as "-" per CLF spec
+    assert!(log.ends_with(" -"), "empty body should end with ' -': {}", log);
 }

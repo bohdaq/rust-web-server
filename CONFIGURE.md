@@ -64,6 +64,7 @@ rws --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
 | `RWS_CONFIG_CORS_EXPOSE_HEADERS` | `cors_expose_headers` | `--cors-expose-headers` / `-e` | _(none)_ | Exposed headers |
 | `RWS_CONFIG_CORS_MAX_AGE` | `cors_max_age` | `--cors-max-age` / `-g` | _(none)_ | Preflight cache duration (seconds) |
 | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE` | `request_allocation_size` | `--request-allocation-size-in-bytes` / `-r` | `16000` | Read buffer size per request |
+| `RWS_CONFIG_CSP` | — | — | `default-src 'self'` | `Content-Security-Policy` header value; set to empty string to disable |
 
 ## Memory
 
