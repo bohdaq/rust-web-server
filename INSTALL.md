@@ -1,72 +1,44 @@
 [Read Me](README.md) > Install
 
-## Install
-Make sure you removed previous executable:
+## Install via cargo
 
-> sudo rm -f /usr/local/bin/rws #on macOS
->
-> sudo rm -f /usr/bin/rws #on Linux
+```bash
+cargo install rust-web-server
+```
 
-Build the binary from source — see [DEVELOPER](DEVELOPER.md) for instructions.
+This installs the `rws` binary to `~/.cargo/bin/`. Make sure that directory is in your `$PATH` (the Rust installer adds it automatically).
 
-## x86_64 Architecture
-### Apple macOS
-> sudo cp rws /usr/local/bin
->
-> sudo chmod 777 /usr/local/bin/rws
+To update to a newer version:
+```bash
+cargo install rust-web-server --force
+```
 
-### Linux
-> sudo cp rws /usr/bin
->
-> sudo chmod ug+rwx,o+r /usr/bin/rws
-#### Debian
-> sudo dpkg -i --force-overwrite rws.deb
-#### RPM
-Replace _VERSION_ with version you downloaded.
-> sudo rpm -i --force rws-_VERSION_.rpm
-#### Portage ebuild
-Build from source and install manually.
-#### Pacman package
-Build from source and install manually.
-### Windows
-Copy executable to _C:\WINDOWS\system32_ folder.
+## Build from source
 
+```bash
+git clone https://github.com/bohdaq/rust-web-server.git
+cd rust-web-server
+cargo build --release
+sudo cp target/release/rws /usr/local/bin/   # macOS
+sudo cp target/release/rws /usr/bin/         # Linux
+```
 
+See [DEVELOPER](DEVELOPER.md) for full build instructions.
 
-## ARM Architecture
-###  Linux
-> sudo cp rws /usr/bin
->
-> sudo chmod ug+rwx,o+r /usr/bin/rws
-#### Debian
-> sudo dpkg -i --force-overwrite rws.deb
+## Verify installation
 
-###
-###
+```bash
+rws
+```
 
-### Testing installation
-To check installation execute the following code in the terminal:
-
-> $ rws
-
-You will see similar output:
+You should see output similar to:
 
 > Rust Web Server
 >
-> Version:       YOUR_VERSION
+> Version:       17.0.0
 >
-> Authors:       Bohdan Tsap <bohdan.tsap@tutanota.com>
->
-> Repository:    https://github.com/bohdaq/rust-web-server
->
-> Desciption:    rust-web-server (rws) is a static content web-server written in Rust
->
-> Rust Version:  RUST_VERSION
-> 
 > ...
-> Hello, rust-web-server is up and running: http://127.0.0.1:7878
+>
+> Server is up and running at: http://127.0.0.1:7878
 
-
-Open browser, go to http://127.0.0.1:7878, you'll see default page.
-
-Go back to terminal, press Ctrl + C (or CMD + C) to stop server.
+Open `http://127.0.0.1:7878` in a browser. Press `Ctrl+C` to stop.

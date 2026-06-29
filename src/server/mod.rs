@@ -320,7 +320,7 @@ pub struct Address {
 impl Server {
     pub async fn run_tls(
         listener: TcpListener,
-        _pool: ThreadPool,
+        pool: ThreadPool,
         app: impl Application + New + Send + 'static + Copy,
     ) {
         use crate::tls::create_tls_acceptor;
@@ -330,6 +330,12 @@ impl Server {
             .unwrap_or_default();
         let key_path = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_KEY_FILE)
             .unwrap_or_default();
+
+        if cert_path.is_empty() || key_path.is_empty() {
+            println!("No TLS certificate configured — serving plain HTTP/1.1.");
+            tokio::task::block_in_place(|| Server::run(listener, pool, app));
+            return;
+        }
 
         let tls_acceptor = match create_tls_acceptor(&cert_path, &key_path) {
             Ok(a) => a,

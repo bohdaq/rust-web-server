@@ -7,19 +7,15 @@ Minimum Rust version is **1.75**.
 
 ## Build
 
-Plain HTTP/1.1 binary:
+Default binary (HTTP/2 + TLS included):
 > cargo build --release
 >
-> cd target/release
->
-> ./rws --ip=127.0.0.1 --port=8888 --threads=100
+> ./target/release/rws --ip=127.0.0.1 --port=443 --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
 
-HTTPS + HTTP/2 binary:
-> cargo build --release --features http2
+HTTP/1.1-only binary (no TLS, lighter):
+> cargo build --release --no-default-features --features http1
 >
-> cd target/release
->
-> ./rws --ip=127.0.0.1 --port=443 --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
+> ./target/release/rws --ip=127.0.0.1 --port=8888
 
 
 # Release

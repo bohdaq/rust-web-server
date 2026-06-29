@@ -2,31 +2,23 @@
 
 Static file web server written in Rust. Serves HTTP/1.1 on a synchronous thread pool. Build with `--features http2` to enable TLS and HTTP/2.
 
-## Requirements
+## Install
 
-- [Rust](https://www.rust-lang.org/tools/install) 1.75 or later
-
-## Build
-
-HTTP/1.1 only:
 ```bash
-cargo build --release
+cargo install rust-web-server
 ```
 
-With HTTPS and HTTP/2 support:
-```bash
-cargo build --release --features http2
-```
+This installs the `rws` binary with HTTP/2 and TLS support included.
 
 ## Run
 
-### HTTP/1.1
+### Plain HTTP/1.1
 
 ```bash
-./target/release/rws
+rws
 ```
 
-Server starts on `http://127.0.0.1:7878` by default. Place your files in the working directory and open the URL in a browser.
+Starts on `http://127.0.0.1:7878` by default. Place your files in the working directory and open the URL in a browser.
 
 ### HTTPS + HTTP/2
 
@@ -36,20 +28,37 @@ openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -node
   -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 ```
 
-Start the server:
+Start the server with the certificate:
 ```bash
-./target/release/rws --tls-cert-file=cert.pem --tls-key-file=key.pem
+rws --tls-cert-file=cert.pem --tls-key-file=key.pem
 ```
 
 Open `https://127.0.0.1:7878` in a browser. The server negotiates HTTP/2 or HTTP/1.1 automatically via ALPN on the same port.
 
-### Custom port and address
+For a public domain, obtain a certificate from [Let's Encrypt](https://letsencrypt.org/).
+
+### Custom address and port
 
 ```bash
-./target/release/rws --ip=0.0.0.0 --port=443 --tls-cert-file=cert.pem --tls-key-file=key.pem
+rws --ip=0.0.0.0 --port=443 --tls-cert-file=cert.pem --tls-key-file=key.pem
 ```
 
 See [CONFIGURE](CONFIGURE.md) for all configuration options (env vars, config file, command-line flags).
+
+## Build from source
+
+```bash
+git clone https://github.com/bohdaq/rust-web-server.git
+cd rust-web-server
+cargo build --release
+```
+
+The binary is at `target/release/rws`.
+
+To build without HTTP/2 and TLS (smaller binary, no system dependencies):
+```bash
+cargo build --release --no-default-features --features http1
+```
 
 ## Features
 

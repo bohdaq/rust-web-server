@@ -5,23 +5,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Build (plain HTTP/1.1)
+# Build (http2 is the default — includes TLS and HTTP/2)
 cargo build
 
-# Build with HTTP/2 + TLS support
-cargo build --features http2
+# Build HTTP/1.1-only (no TLS, lighter binary)
+cargo build --no-default-features --features http1
 
-# Run (HTTP/1.1 on http://127.0.0.1:7878 by default)
+# Run (falls back to plain HTTP/1.1 if no cert is configured)
 cargo run
 
-# Run with HTTP/2 + TLS (requires RWS_CONFIG_TLS_CERT_FILE and RWS_CONFIG_TLS_KEY_FILE env vars)
-cargo run --features http2
+# Run with HTTPS + HTTP/2 active
+cargo run -- --tls-cert-file=cert.pem --tls-key-file=key.pem
 
 # Run all tests
 cargo test
 
 # Run a single test (replace the test path with the one you want)
-cargo test --package rws --bin rws client_hint::tests::client_hints_header -- --exact
+cargo test --package rust-web-server --bin rws client_hint::tests::client_hints_header -- --exact
 ```
 
 MSRV is 1.75. The `--ignore-rust-version` flag from older docs is no longer needed.
