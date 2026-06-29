@@ -47,6 +47,27 @@ Example — command line:
 rws --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
 ```
 
+## HTTP → HTTPS redirect
+
+When TLS is configured, you can redirect all plain-HTTP traffic to HTTPS by setting `RWS_CONFIG_HTTP_REDIRECT_PORT`. The server binds an additional plain-HTTP listener on that port and returns `301 Moved Permanently` to the HTTPS URL for every request.
+
+Example — redirect port 80 to HTTPS on port 443:
+```bash
+export RWS_CONFIG_HTTP_REDIRECT_PORT=80
+rws --ip=0.0.0.0 --port=443 --tls-cert-file=cert.pem --tls-key-file=key.pem
+```
+
+Example — `rws.config.toml`:
+```toml
+tls_cert_file          = '/path/to/cert.pem'
+tls_key_file           = '/path/to/key.pem'
+http_redirect_port     = '80'
+port                   = '443'
+ip                     = '0.0.0.0'
+```
+
+> The redirect listener is a no-op when `RWS_CONFIG_TLS_CERT_FILE` is not set, so the option is safe to include in configuration files shared between HTTP-only and HTTPS deployments.
+
 ## All configuration options
 
 | Environment variable | Config file key | Command-line arg | Default | Description |
@@ -56,6 +77,7 @@ rws --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
 | `RWS_CONFIG_THREAD_COUNT` | `thread_count` | `--thread-count` / `-t` | `200` | Thread pool size |
 | `RWS_CONFIG_TLS_CERT_FILE` | `tls_cert_file` | `--tls-cert-file` / `-s` | _(none)_ | PEM certificate file |
 | `RWS_CONFIG_TLS_KEY_FILE` | `tls_key_file` | `--tls-key-file` / `-k` | _(none)_ | PEM private key file |
+| `RWS_CONFIG_HTTP_REDIRECT_PORT` | `http_redirect_port` | — | _(none)_ | Plain-HTTP port that redirects all requests to HTTPS (requires TLS) |
 | `RWS_CONFIG_CORS_ALLOW_ALL` | `cors_allow_all` | `--cors-allow-all` / `-a` | `true` | Allow all CORS origins |
 | `RWS_CONFIG_CORS_ALLOW_ORIGINS` | `cors_allow_origins` | `--cors-allow-origins` / `-o` | _(none)_ | Allowed origins (comma-separated) |
 | `RWS_CONFIG_CORS_ALLOW_METHODS` | `cors_allow_methods` | `--cors-allow-methods` / `-m` | _(none)_ | Allowed methods |
@@ -68,4 +90,4 @@ rws --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
 
 ## Memory
 
-`rws` allocates one read buffer per request (default 16 KB). If you serve large files, use HTTP Range Requests on the client side to fetch them in parts, or increase `request_allocation_size` with caution.
+`rws` allocates one read buffer per request (default 16 KB). Files larger than 8 MB are streamed with chunked transfer encoding and are not buffered into memory. For files below that threshold, use HTTP Range Requests on the client side to fetch them in parts, or increase `request_allocation_size` with caution.

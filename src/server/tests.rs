@@ -5,6 +5,7 @@ use std::io::{BufReader, Read, Write};
 
 use std::cmp::min;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use crate::core::New;
 use crate::entry_point::config_file::override_environment_variables_from_config;
 use file_ext::FileExt;
 
@@ -1252,4 +1253,182 @@ fn check_range_response_for_not_proper_range_header_malformed() {
 
     let content_range = response.content_range_list.get(0).unwrap();
     assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_START.as_bytes());
+}
+// ──────────────────────────────────────────────────────────────────────────────
+// Keep-alive / streaming tests
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// A mock stream that returns one pre-built request per `read` call, then EOF.
+/// All writes are accumulated in `written`.
+struct SequentialMockStream {
+    requests: Vec<Vec<u8>>,
+    read_index: usize,
+    written: Vec<u8>,
+}
+
+impl SequentialMockStream {
+    fn new(requests: Vec<Vec<u8>>) -> Self {
+        SequentialMockStream { requests, read_index: 0, written: vec![] }
+    }
+}
+
+impl Read for SequentialMockStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.read_index >= self.requests.len() {
+            return Ok(0);
+        }
+        let data = &self.requests[self.read_index];
+        let n = data.len().min(buf.len());
+        buf[..n].copy_from_slice(&data[..n]);
+        self.read_index += 1;
+        Ok(n)
+    }
+}
+
+impl Write for SequentialMockStream {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.written.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+}
+
+impl Unpin for SequentialMockStream {}
+
+fn make_connection() -> crate::server::ConnectionInfo {
+    crate::server::ConnectionInfo {
+        client: crate::server::Address { ip: "127.0.0.1".to_string(), port: 12345 },
+        server: crate::server::Address { ip: "127.0.0.1".to_string(), port: 7878 },
+        request_size: 16000,
+    }
+}
+
+fn raw_get_request(uri: &str, http_version: &str, extra_headers: &[(&str, &str)]) -> Vec<u8> {
+    let mut req = format!("GET {} {}\r\nHost: localhost:7878\r\n", uri, http_version);
+    for (name, value) in extra_headers {
+        req.push_str(&format!("{}: {}\r\n", name, value));
+    }
+    req.push_str("\r\n");
+    req.into_bytes()
+}
+
+fn count_occurrences(haystack: &[u8], needle: &[u8]) -> usize {
+    haystack.windows(needle.len()).filter(|w| *w == needle).count()
+}
+
+#[test]
+fn keep_alive_http11_serves_two_requests_on_same_stream() {
+    let req1 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[]);
+    let req2 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[]);
+    let mut stream = SequentialMockStream::new(vec![req1, req2]);
+    let app = crate::app::App::new();
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    let written = String::from_utf8_lossy(&stream.written);
+    assert_eq!(
+        count_occurrences(&stream.written, b"HTTP/1.1 200"),
+        2,
+        "expected two 200 responses, got:\n{}",
+        written
+    );
+    assert!(
+        written.contains("Connection: keep-alive"),
+        "expected Connection: keep-alive in written output"
+    );
+}
+
+#[test]
+fn connection_close_header_serves_one_request_and_stops() {
+    let req1 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[("Connection", "close")]);
+    let req2 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[]);
+    let mut stream = SequentialMockStream::new(vec![req1, req2]);
+    let app = crate::app::App::new();
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    assert_eq!(
+        count_occurrences(&stream.written, b"HTTP/1.1 200"),
+        1,
+        "expected exactly one response after Connection: close"
+    );
+    let written = String::from_utf8_lossy(&stream.written);
+    assert!(written.contains("Connection: close"), "expected Connection: close in response");
+}
+
+#[test]
+fn http10_defaults_to_connection_close() {
+    let req1 = raw_get_request("/static/test.txt", VERSION.http_1_0, &[]);
+    let req2 = raw_get_request("/static/test.txt", VERSION.http_1_0, &[]);
+    let mut stream = SequentialMockStream::new(vec![req1, req2]);
+    let app = crate::app::App::new();
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    assert_eq!(
+        count_occurrences(&stream.written, b"HTTP/1.1 200"),
+        1,
+        "HTTP/1.0 should close after one response"
+    );
+    let written = String::from_utf8_lossy(&stream.written);
+    assert!(written.contains("Connection: close"));
+}
+
+#[test]
+fn http11_explicit_keep_alive_serves_multiple_requests() {
+    let req1 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[("Connection", "keep-alive")]);
+    let req2 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[("Connection", "keep-alive")]);
+    let mut stream = SequentialMockStream::new(vec![req1, req2]);
+    let app = crate::app::App::new();
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    assert_eq!(
+        count_occurrences(&stream.written, b"HTTP/1.1 200"),
+        2,
+        "explicit Connection: keep-alive should serve both requests"
+    );
+}
+
+#[test]
+fn write_chunked_file_produces_valid_chunked_encoding() {
+    let dir = env::current_dir().unwrap();
+    let filepath = dir.join("target").join("_chunked_test_file.txt");
+    let content = b"hello chunked world";
+    std::fs::write(&filepath, content).unwrap();
+
+    let response = Response {
+        http_version: VERSION.http_1_1.to_string(),
+        status_code: *STATUS_CODE_REASON_PHRASE.n200_ok.status_code,
+        reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
+        headers: vec![Header {
+            name: Header::_CONTENT_TYPE.to_string(),
+            value: MimeType::TEXT_PLAIN.to_string(),
+        }],
+        content_range_list: vec![],
+        stream_file: None,
+    };
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+
+    let mut out: Vec<u8> = vec![];
+    Server::write_chunked_file(&mut out, response, request, filepath.to_str().unwrap()).unwrap();
+
+    let raw = String::from_utf8_lossy(&out);
+    assert!(raw.contains("HTTP/1.1 200 OK"), "missing status line");
+    assert!(raw.contains("Transfer-Encoding: chunked"), "missing Transfer-Encoding header");
+    // 19 bytes = 0x13
+    let hex_prefix = format!("{:x}\r\n", content.len());
+    assert!(
+        raw.contains(&hex_prefix),
+        "missing chunk size '{}' in:\n{}",
+        hex_prefix.trim(),
+        raw
+    );
+    assert!(raw.contains("hello chunked world"), "missing chunk body");
+    assert!(out.ends_with(b"0\r\n\r\n"), "missing terminal chunk");
+
+    std::fs::remove_file(&filepath).ok();
 }

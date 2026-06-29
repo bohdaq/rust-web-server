@@ -79,6 +79,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `FormUrlEncoded` | `body::form_urlencoded` | Parse `application/x-www-form-urlencoded` bodies |
 | `URL` | `url` | Parse and build URLs; percent-encode/decode |
 | `Log` | `log` | Combined Log Format access log lines |
+| `CookieJar` | `cookie` | Parse the `Cookie` request header into individual cookies |
+| `SetCookie` | `cookie` | Build `Set-Cookie` response header values with all RFC 6265 attributes |
 
 ---
 
@@ -311,3 +313,49 @@ fn main() {
 ```
 
 `Server::setup()` reads configuration (IP, port, thread count) from the standard layered config (defaults → env vars → `rws.config.toml` → CLI args). See [CONFIGURE.md](CONFIGURE.md) for all options.
+
+---
+
+### 13. Read and set cookies
+
+`CookieJar` parses the `Cookie` request header. `SetCookie` builds the `Set-Cookie` response header value.
+
+```rust
+use rust_web_server::cookie::{CookieJar, SetCookie};
+use rust_web_server::header::Header;
+
+fn process(request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
+    // Read cookies from the request
+    if let Some(cookie_header) = request.get_header("Cookie".to_string()) {
+        let jar = CookieJar::parse(&cookie_header.value);
+        if let Some(session) = jar.get("session") {
+            println!("session cookie: {}", session.value);
+        }
+    }
+
+    // Set a cookie in the response
+    let set_cookie = SetCookie::new("session", "abc123")
+        .path("/")
+        .http_only()
+        .secure()
+        .same_site("Lax")
+        .max_age(3600)
+        .build();
+
+    response.headers.push(Header {
+        name: "Set-Cookie".to_string(),
+        value: set_cookie,
+    });
+
+    response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    response
+}
+```
+
+`SetCookie::build()` produces a string like:
+```
+session=abc123; Path=/; Max-Age=3600; Secure; HttpOnly; SameSite=Lax
+```
+
+Pass that string as the value of a `Set-Cookie` header.

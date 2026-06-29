@@ -72,6 +72,11 @@ cargo build --release --no-default-features --features http1
 - HTTP/3 over QUIC (UDP) — negotiated via `Alt-Svc`
 - HTTP/2 with ALPN negotiation alongside HTTP/1.1 on the same TCP port
 - TLS via [rustls](https://github.com/rustls/rustls) (aws-lc-rs backend, no OpenSSL)
+- HTTP/1.1 keep-alive — persistent connections; `Connection: close` or idle timeout ends the session
+- Response compression — automatic gzip for text types when client sends `Accept-Encoding: gzip`
+- Large file streaming — chunked transfer for files > 8 MB; no full-file buffering
+- HTTP → HTTPS redirect — set `RWS_CONFIG_HTTP_REDIRECT_PORT` to redirect a plain-HTTP port
+- Cookie handling — `CookieJar` parses the `Cookie` header; `SetCookie` builder creates `Set-Cookie` values
 - CORS — allowed for all origins by default, fully configurable
 - HTTP Range Requests — partial file serving and multi-range responses
 - HTTP Client Hints
@@ -80,7 +85,7 @@ cargo build --release --no-default-features --features http1
 - WebAssembly MIME type — `.wasm` files served as `application/wasm`
 - Combined Log Format (CLF) — access log compatible with GoAccess and AWStats
 - Graceful shutdown — Ctrl+C stops the server cleanly (async/TLS paths)
-- 30-second read timeout on plain HTTP/1.1 connections
+- 30-second read timeout per request on plain HTTP/1.1 connections
 - Symlink resolution
 - `.html` extension inference — `/page` serves `page.html`; `/dir` serves `dir/index.html`
 - Custom 404 page — place a `404.html` in the working directory to override the default

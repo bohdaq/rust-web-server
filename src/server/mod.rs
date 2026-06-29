@@ -184,7 +184,7 @@ impl Server {
 
     /// Streams a file to `stream` using HTTP/1.1 chunked transfer encoding.
     /// The response headers are written first, then the file is read and written in 64 KB chunks.
-    fn write_chunked_file(
+    pub(crate) fn write_chunked_file(
         stream: &mut impl Write,
         mut response: Response,
         request: Request,
