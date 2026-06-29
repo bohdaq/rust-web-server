@@ -30,6 +30,8 @@ pub mod controller;
 pub mod tls;
 #[cfg(feature = "http2")]
 pub mod h2_handler;
+#[cfg(feature = "http3")]
+pub mod h3_handler;
 
 #[cfg(not(feature = "http2"))]
 fn main() {
@@ -45,7 +47,7 @@ fn main() {
     Server::run(listener, pool, app);
 }
 
-#[cfg(feature = "http2")]
+#[cfg(all(feature = "http2", not(feature = "http3")))]
 #[tokio::main]
 async fn main() {
     let new_server = Server::setup();
@@ -58,4 +60,22 @@ async fn main() {
     let app = App::new();
 
     Server::run_tls(listener, pool, app).await;
+}
+
+#[cfg(feature = "http3")]
+#[tokio::main]
+async fn main() {
+    let new_server = Server::setup();
+    if new_server.is_err() {
+        eprintln!("{}", new_server.as_ref().err().unwrap());
+        return;
+    }
+
+    let (listener, pool) = new_server.unwrap();
+    let app = App::new();
+
+    tokio::join!(
+        Server::run_tls(listener, pool, app),
+        Server::run_quic(app),
+    );
 }

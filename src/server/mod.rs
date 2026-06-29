@@ -440,6 +440,12 @@ impl Server {
             }
         };
 
+        #[cfg(feature = "http3")]
+        response.headers.push(Header {
+            name: Header::_ALT_SVC.to_string(),
+            value: format!("h3=\":{}\"", server_port),
+        });
+        #[cfg(not(feature = "http3"))]
         response.headers.push(Header {
             name: Header::_ALT_SVC.to_string(),
             value: format!("h2=\":{}\"", server_port),
@@ -456,6 +462,67 @@ impl Server {
         stream.flush().await.map_err(|e| e.to_string())?;
 
         Ok(())
+    }
+}
+
+#[cfg(feature = "http3")]
+impl Server {
+    pub async fn run_quic(
+        app: impl Application + New + Send + 'static + Copy,
+    ) {
+        use crate::tls::create_quinn_server_config;
+        use crate::h3_handler;
+
+        let cert_path = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_CERT_FILE)
+            .unwrap_or_default();
+        let key_path = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_KEY_FILE)
+            .unwrap_or_default();
+
+        if cert_path.is_empty() || key_path.is_empty() {
+            return;
+        }
+
+        let server_config = match create_quinn_server_config(&cert_path, &key_path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("QUIC TLS setup failed: {}", e);
+                return;
+            }
+        };
+
+        let (server_ip, server_port, _) = get_ip_port_thread_count();
+        let bind_addr = format!("{}:{}", server_ip, server_port);
+        let addr: std::net::SocketAddr = match bind_addr.parse() {
+            Ok(a) => a,
+            Err(e) => {
+                eprintln!("Invalid QUIC bind address '{}': {}", bind_addr, e);
+                return;
+            }
+        };
+
+        let endpoint = match quinn::Endpoint::server(server_config, addr) {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("QUIC endpoint error: {}", e);
+                return;
+            }
+        };
+
+        println!("Listening for QUIC/HTTP3 on UDP {}:{}", server_ip, server_port);
+
+        while let Some(incoming) = endpoint.accept().await {
+            tokio::spawn(async move {
+                match incoming.await {
+                    Ok(conn) => {
+                        let peer_addr = conn.remote_address();
+                        if let Err(e) = h3_handler::handle_connection(conn, peer_addr, app).await {
+                            eprintln!("H3 connection error: {}", e);
+                        }
+                    }
+                    Err(e) => eprintln!("QUIC connection error: {}", e),
+                }
+            });
+        }
     }
 }
 

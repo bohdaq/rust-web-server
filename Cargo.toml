@@ -15,9 +15,10 @@ path = "src/main.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["http2"]
+default = ["http3"]
 http1 = []
 http2 = ["dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:rustls-pemfile", "dep:http"]
+http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn"]
 
 [dependencies]
 file-ext = "12.0.0"
@@ -30,3 +31,6 @@ rustls-pemfile = { version = "2", optional = true }
 h2 = { version = "0.4", optional = true }
 bytes = { version = "1", optional = true }
 http = { version = "1", optional = true }
+quinn = { version = "0.11", optional = true }
+h3 = { version = "0.0.8", optional = true }
+h3-quinn = { version = "0.0.10", optional = true }

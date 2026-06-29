@@ -20,6 +20,27 @@ pub fn create_tls_acceptor(cert_path: &str, key_path: &str) -> Result<TlsAccepto
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
+#[cfg(feature = "http3")]
+pub fn create_quinn_server_config(cert_path: &str, key_path: &str) -> Result<quinn::ServerConfig, String> {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
+    let certs = load_certs(cert_path)?;
+    let key = load_key(key_path)?;
+
+    let mut tls_config = ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .map_err(|e| format!("TLS config error: {}", e))?;
+
+    tls_config.max_early_data_size = u32::MAX;
+    tls_config.alpn_protocols = vec![b"h3".to_vec()];
+
+    let quic_config = quinn::crypto::rustls::QuicServerConfig::try_from(tls_config)
+        .map_err(|e| format!("QUIC TLS config error: {}", e))?;
+
+    Ok(quinn::ServerConfig::with_crypto(Arc::new(quic_config)))
+}
+
 fn load_certs(path: &str) -> Result<Vec<CertificateDer<'static>>, String> {
     let bytes = std::fs::read(path)
         .map_err(|e| format!("failed to read cert file '{}': {}", path, e))?;

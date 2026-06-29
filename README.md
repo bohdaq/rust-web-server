@@ -8,7 +8,7 @@ Static file web server written in Rust. Serves HTTP/1.1 on a synchronous thread 
 cargo install rust-web-server
 ```
 
-This installs the `rws` binary with HTTP/2 and TLS support included.
+This installs the `rws` binary with HTTP/3, HTTP/2, and TLS support included.
 
 ## Run
 
@@ -20,7 +20,7 @@ rws
 
 Starts on `http://127.0.0.1:7878` by default. Place your files in the working directory and open the URL in a browser.
 
-### HTTPS + HTTP/2
+### HTTPS + HTTP/2 + HTTP/3
 
 Generate a self-signed certificate for local development:
 ```bash
@@ -33,7 +33,7 @@ Start the server with the certificate:
 rws --tls-cert-file=cert.pem --tls-key-file=key.pem
 ```
 
-Open `https://127.0.0.1:7878` in a browser. The server negotiates HTTP/2 or HTTP/1.1 automatically via ALPN on the same port.
+Open `https://127.0.0.1:7878` in a browser. The server listens on the same port for both TCP (HTTP/1.1 and HTTP/2 via ALPN) and UDP (HTTP/3 via QUIC). HTTP/2 and HTTP/3 are negotiated automatically — no extra configuration needed.
 
 For a public domain, obtain a certificate from [Let's Encrypt](https://letsencrypt.org/).
 
@@ -55,14 +55,20 @@ cargo build --release
 
 The binary is at `target/release/rws`.
 
-To build without HTTP/2 and TLS (smaller binary, no system dependencies):
+To build with HTTP/2 only (no QUIC/HTTP/3):
+```bash
+cargo build --release --no-default-features --features http2
+```
+
+To build HTTP/1.1 only (smallest binary, no TLS):
 ```bash
 cargo build --release --no-default-features --features http1
 ```
 
 ## Features
 
-- HTTP/2 with ALPN negotiation alongside HTTP/1.1 on the same port
+- HTTP/3 over QUIC (UDP) — negotiated via `Alt-Svc`
+- HTTP/2 with ALPN negotiation alongside HTTP/1.1 on the same TCP port
 - TLS via [rustls](https://github.com/rustls/rustls) (aws-lc-rs backend, no OpenSSL)
 - CORS — allowed for all origins by default, fully configurable
 - HTTP Range Requests — partial file serving and multi-range responses

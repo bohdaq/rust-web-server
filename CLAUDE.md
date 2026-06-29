@@ -5,16 +5,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Build (http2 is the default — includes TLS and HTTP/2)
+# Build (http3 is the default — includes HTTP/3, HTTP/2, and TLS)
 cargo build
 
-# Build HTTP/1.1-only (no TLS, lighter binary)
+# Build HTTP/2 + TLS only (no QUIC/HTTP/3)
+cargo build --no-default-features --features http2
+
+# Build HTTP/1.1-only (no TLS, lightest binary)
 cargo build --no-default-features --features http1
 
 # Run (falls back to plain HTTP/1.1 if no cert is configured)
 cargo run
 
-# Run with HTTPS + HTTP/2 active
+# Run with HTTPS + HTTP/2 + HTTP/3 active
 cargo run -- --tls-cert-file=cert.pem --tls-key-file=key.pem
 
 # Run all tests
@@ -63,7 +66,7 @@ All config is read at startup into process environment variables (`RWS_CONFIG_*`
 
 ### HTTP version constants
 
-`src/http/mod.rs` defines `VERSION` (HTTP/0.9 through HTTP/2.0) and `HTTP::version_list()` which is used by `Request::parse_method_and_request_uri_and_http_version_string` to validate the version token on every incoming request.
+`src/http/mod.rs` defines `VERSION` (HTTP/0.9 through HTTP/3.0) and `HTTP::version_list()` which is used by `Request::parse_method_and_request_uri_and_http_version_string` to validate the version token on every incoming request.
 
 ### No async (default `http1` feature)
 
@@ -76,5 +79,14 @@ When built with the `http2` feature, the binary uses a `tokio` runtime and serve
 - `src/tls/mod.rs` — builds the `TlsAcceptor` from PEM cert/key files; set `RWS_CONFIG_TLS_CERT_FILE` and `RWS_CONFIG_TLS_KEY_FILE` env vars or in `rws.config.toml`.
 - `src/h2_handler/mod.rs` — translates `h2::RecvStream` requests into `crate::request::Request`, calls `app.execute()`, translates `Response` back into H2 frames. The `Application` and `Controller` traits are untouched.
 - `src/server/mod.rs::Server::run_tls()` — async accept loop; routes each TLS connection by ALPN to either `h2_handler::handle_connection` or `Server::process_h1_tls`.
-- HTTP/1.1 TLS responses include `Alt-Svc: h2=":PORT"` to advertise HTTP/2 availability.
+- HTTP/1.1 TLS responses include `Alt-Svc: h3=":PORT"` (or `h2` when http3 feature is absent) to advertise protocol availability.
 - Forbidden HTTP/2 headers (`connection`, `keep-alive`, `transfer-encoding`, `upgrade`, `proxy-connection`, `te`) are stripped from responses before sending.
+
+### HTTP/3 feature (`--features http3`, default)
+
+When built with the `http3` feature (which implies `http2`), a second listener starts over UDP using QUIC (`quinn` crate). HTTP/3 uses `h3` + `h3-quinn`. New additions:
+
+- `src/tls/mod.rs::create_quinn_server_config()` — builds a `quinn::ServerConfig` from the same PEM cert/key, with ALPN set to `h3`.
+- `src/h3_handler/mod.rs` — accepts QUIC connections, resolves H3 streams via `RequestResolver::resolve_request()`, calls `app.execute()`, sends H3 responses.
+- `src/server/mod.rs::Server::run_quic()` — binds a UDP endpoint on the same port as TCP; skipped silently if no cert is configured.
+- `main()` runs `Server::run_tls` and `Server::run_quic` concurrently via `tokio::join!`.
