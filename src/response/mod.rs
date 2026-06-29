@@ -26,6 +26,10 @@ pub struct Error {
 /// Set `status_code` and `reason_phrase` from [`STATUS_CODE_REASON_PHRASE`],
 /// push body content via [`Range::get_content_range`] into `content_range_list`,
 /// and add any extra headers to `headers`.
+///
+/// For large files, set `stream_file` to the absolute file path instead of loading
+/// the body into `content_range_list`. The server will stream it with
+/// `Transfer-Encoding: chunked` so memory usage stays constant regardless of file size.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Response {
     /// HTTP version string, e.g. `"HTTP/1.1"`.
@@ -37,7 +41,10 @@ pub struct Response {
     /// Response headers. Pre-populated with standard headers by [`Header::get_header_list`].
     pub headers: Vec<Header>,
     /// Response body as a list of content ranges (supports multipart and range responses).
-    pub content_range_list: Vec<ContentRange>
+    pub content_range_list: Vec<ContentRange>,
+    /// If set, the server streams this file with `Transfer-Encoding: chunked`
+    /// instead of using `content_range_list`. Use for files larger than ~8 MB.
+    pub stream_file: Option<String>,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -211,6 +218,7 @@ impl Response {
             reason_phrase: status.reason_phrase.to_string(),
             headers: header_list,
             content_range_list: body,
+            stream_file: None,
         }
     }
 
@@ -418,6 +426,7 @@ impl Response {
             reason_phrase: "".to_string(),
             headers: vec![],
             content_range_list: vec![],
+            stream_file: None,
         };
 
         let content_length: usize = 0;
@@ -618,7 +627,8 @@ impl Response {
             status_code: *status_code_reason_phrase.status_code,
             reason_phrase: status_code_reason_phrase.reason_phrase.to_string(),
             headers: header_list,
-            content_range_list
+            content_range_list,
+            stream_file: None,
         };
 
         response
@@ -715,6 +725,7 @@ impl Response {
             reason_phrase: "".to_string(),
             headers: vec![],
             content_range_list: vec![],
+            stream_file: None,
         };
 
         let content_length: usize = 0;
@@ -899,6 +910,7 @@ impl New for Response {
             reason_phrase: STATUS_CODE_REASON_PHRASE.n501_not_implemented.reason_phrase.to_string(),
             headers: vec![],
             content_range_list: vec![],
+            stream_file: None,
         }
     }
 }

@@ -133,6 +133,7 @@ fn it_generates_successful_response_with_additional_headers() {
         reason_phrase: response_reason_phrase.to_string(),
         headers,
         content_range_list: vec![content_range],
+        stream_file: None,
     };
 
 
@@ -200,6 +201,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
         reason_phrase: response_reason_phrase.to_string(),
         headers,
         content_range_list: vec![content_range],
+        stream_file: None,
     };
 
     let request = Request {

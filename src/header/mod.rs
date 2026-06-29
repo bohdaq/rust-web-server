@@ -55,6 +55,7 @@ impl Header {
     pub const _ALT_SVC: &'static str = "Alt-Svc";
     pub const _AUTHORIZATION: &'static str = "Authorization";
     pub const _CACHE_CONTROL: &'static str = "Cache-Control";
+    pub const _CONNECTION: &'static str = "Connection";
     pub const _CLEAR_SITE_DATA: &'static str = "Clear-Site-Data";
     pub const _CONTENT_TYPE: &'static str = "Content-Type";
     pub const _CONTENT_LENGTH: &'static str = "Content-Length";

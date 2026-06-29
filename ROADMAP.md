@@ -38,32 +38,20 @@ All three server code paths (HTTP/1.1, HTTP/2, HTTP/3) use this format. Compatib
 ### Custom error pages
 `NotFoundController` already checks for a `404.html` file in the working directory and serves it when present, falling back to an embedded default.
 
----
+### HTTP/1.1 keep-alive (persistent connections)
+`Server::process()` loops over requests on the same TCP stream. The `Connection` header controls persistence; HTTP/1.1 defaults to keep-alive, HTTP/1.0 defaults to close. A 30-second read timeout prevents stalled clients from holding a thread indefinitely.
 
-## Priority 1 — Performance
+### Response compression
+`src/compression/mod.rs` — `apply_gzip()` checks `Accept-Encoding: gzip` and compresses text responses (HTML, CSS, JS, JSON, SVG, XML) using `flate2`. Adds `Content-Encoding: gzip` and `Vary: Accept-Encoding`. Wired into HTTP/1.1, HTTP/2, and HTTP/3 code paths.
 
-### 1. HTTP/1.1 keep-alive (persistent connections)
-The server reads one request per TCP connection then closes. `Server::process()` needs to loop over requests on the same stream until `Connection: close` is received or the client disconnects. Without this, every asset on a page requires a new TCP handshake.
+### Large file streaming
+`Response.stream_file: Option<String>` — when set, `Server::write_chunked_file()` streams the file in 64 KB chunks using `Transfer-Encoding: chunked` instead of buffering into RAM. `StaticResourceController` uses this path for files larger than 8 MB that are not range requests.
 
-### 2. Response compression
-`Content-Encoding` header constant exists, never used. Check `Accept-Encoding` on each request, compress text responses (HTML, CSS, JS, JSON, SVG, XML) with gzip/brotli/zstd, add `Content-Encoding` and `Vary: Accept-Encoding`.
+### HTTP → HTTPS redirect
+`RWS_CONFIG_HTTP_REDIRECT_PORT` — when set to a port (e.g. `"80"`), `Server::run_redirect()` binds a plain-HTTP listener on that port and returns `301 Moved Permanently` to the HTTPS equivalent for every request. No-op when TLS is not configured.
 
-### 3. Large file streaming
-Every file is fully read into `Vec<u8>` before the first byte is sent. Files larger than available memory will crash the process. Needs chunked or streaming send via `Transfer-Encoding: chunked` (HTTP/1.1) or the built-in stream framing in HTTP/2 and HTTP/3.
-
----
-
-## Priority 2 — Security
-
-### 4. HTTP → HTTPS redirect
-No plain-HTTP listener when running with a certificate. Need an optional second bind address (e.g. port 80) that returns `301 Moved Permanently` to the HTTPS equivalent.
-
----
-
-## Priority 3 — Developer experience
-
-### 5. Cookie handling
-`Set-Cookie` constant defined, no implementation. A configurable signed cookie would enable basic session tracking without a third-party dependency.
+### Cookie handling
+`src/cookie/mod.rs` — `Cookie` (name/value pair), `CookieJar::parse()` (parses the `Cookie` request header), and `SetCookie` builder (produces `Set-Cookie` response header values with `Path`, `Domain`, `Max-Age`, `Secure`, `HttpOnly`, `SameSite` attributes).
 
 ---
 
@@ -79,8 +67,8 @@ No plain-HTTP listener when running with a certificate. Need an optional second 
 | — | Graceful shutdown | Low | Medium | ✅ Done |
 | — | Combined Log Format | Low | Low | ✅ Done |
 | — | Custom error pages | Low | Low | ✅ Done |
-| 1 | HTTP/1.1 keep-alive | Medium | High | Pending |
-| 2 | Response compression | Medium | High | Pending |
-| 3 | Large file streaming | High | High | Pending |
-| 4 | HTTP → HTTPS redirect | Low | Medium | Pending |
-| 5 | Cookies | High | Low | Pending |
+| 1 | HTTP/1.1 keep-alive | Medium | High | ✅ Done |
+| 2 | Response compression | Medium | High | ✅ Done |
+| 3 | Large file streaming | High | High | ✅ Done |
+| 4 | HTTP → HTTPS redirect | Low | Medium | ✅ Done |
+| 5 | Cookies | High | Low | ✅ Done |

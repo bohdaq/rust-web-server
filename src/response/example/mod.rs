@@ -85,6 +85,7 @@ fn build() {
         reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
         headers: vec![host],
         content_range_list: vec![content_range],
+        stream_file: None,
     };
 
     let response_as_array : Vec<u8> = response.generate();

@@ -57,6 +57,7 @@ fn body_in_response() {
         reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
         headers: vec![],
         content_range_list: vec![content_range],
+        stream_file: None,
     };
 
     let response_body : &ContentRange = response.content_range_list.get(0).unwrap();
@@ -188,6 +189,7 @@ fn multipart_form_data_body_in_response() {
         reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
         headers: vec![host, content_type],
         content_range_list: vec![content_range],
+        stream_file: None,
     };
 
     let response_body : &ContentRange = response.content_range_list.get(0).unwrap();
@@ -325,6 +327,7 @@ fn json_body_in_response() {
         reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
         headers: vec![host, content_type],
         content_range_list: vec![content_range],
+        stream_file: None,
     };
 
     // replace with your logic
@@ -364,7 +367,8 @@ fn multipart_body_in_response() {
         status_code: *STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code,
         reason_phrase: STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase.to_string(),
         headers: vec![host, content_type],
-        content_range_list // same as `content_range_list: content_range_list`
+        content_range_list, // same as `content_range_list: content_range_list`
+        stream_file: None,
     };
 
 

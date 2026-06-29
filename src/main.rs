@@ -28,7 +28,10 @@ async fn main() {
     let (listener, pool) = new_server.unwrap();
     let app = App::new();
 
-    Server::run_tls(listener, pool, app).await;
+    tokio::join!(
+        Server::run_tls(listener, pool, app),
+        Server::run_redirect(),
+    );
 }
 
 #[cfg(feature = "http3")]
@@ -46,5 +49,6 @@ async fn main() {
     tokio::join!(
         Server::run_tls(listener, pool, app),
         Server::run_quic(app),
+        Server::run_redirect(),
     );
 }

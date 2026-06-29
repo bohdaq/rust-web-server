@@ -21,6 +21,7 @@ fn as_response() {
         reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
         headers: vec![],
         content_range_list: vec![content_range],
+        stream_file: None,
     };
 }
 

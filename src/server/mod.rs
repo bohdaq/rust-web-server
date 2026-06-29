@@ -109,83 +109,129 @@ impl Server {
     pub fn process(mut stream: impl Read + Write + Unpin,
                    connection: ConnectionInfo,
                    app: impl Application) -> Result<(), String> {
+        use crate::http::VERSION;
 
         let request_allocation_size = connection.request_size;
-        let mut buffer = vec![0; request_allocation_size as usize];
-        let boxed_read = stream.read(&mut buffer);
-        if boxed_read.is_err() {
-            let read_message = boxed_read.err().unwrap().to_string();
-            let raw_response = Server::bad_request_response(read_message.clone());
-            let boxed_stream = stream.write(raw_response.borrow());
-            if boxed_stream.is_ok() {
-                stream.flush().unwrap();
-            } else {
-                let write_message = boxed_stream.err().unwrap().to_string();
-                let combined_error = [read_message.clone(), SYMBOL.comma.to_string(), write_message].join(SYMBOL.empty_string);
-                return Err(combined_error);
-            };
-
-            return Err(read_message);
-        }
-
-        boxed_read.unwrap();
-        let request : &[u8] = &buffer;
-
-        // let raw_request = String::from_utf8(Vec::from(request)).unwrap();
-        // println!("\n\n______{}______\n\n", raw_request);
-
-
-        let boxed_request = Request::parse(request);
-        if boxed_request.is_err() {
-            let message = boxed_request.err().unwrap();
-
-            let raw_response = Server::bad_request_response(message.clone());
-            let boxed_stream = stream.write(raw_response.borrow());
-            if boxed_stream.is_ok() {
-                stream.flush().unwrap();
-            } else {
-                let write_message = boxed_stream.err().unwrap().to_string();
-                let combined_error = [message, SYMBOL.comma.to_string(), write_message].join(SYMBOL.empty_string);
-                return Err(combined_error);
-            };
-            return Err(message);
-        }
-
-
-        let request: Request = boxed_request.unwrap();
-
-        let app_processing = app.execute(&request, &connection);
-        if app_processing.is_err() {
-            let message = app_processing.as_ref().err().unwrap().to_string();
-            let response = Server::bad_request_response(message);
-
-            let boxed_stream = stream.write(response.borrow());
-            if boxed_stream.is_ok() {
-                stream.flush().unwrap();
-            } else {
-                let write_message = boxed_stream.err().unwrap().to_string();
-                return Err(write_message);
-            };
-        }
-        let response = app_processing.unwrap();
-
-
-        let client = connection.client;
+        let client = connection.client.clone();
         let client_addr = SocketAddr::new(IpAddr::from_str(client.ip.as_str()).unwrap(), client.port as u16);
-        let log_request_response = Log::combined(&request, &response, &client_addr);
-        println!("{}", log_request_response);
 
-        let raw_response = Response::generate_response(response, request);
+        loop {
+            let mut buffer = vec![0; request_allocation_size as usize];
+            let boxed_read = stream.read(&mut buffer);
+            if boxed_read.is_err() {
+                // timeout or client closed — normal end of keep-alive session
+                break;
+            }
+            if boxed_read.unwrap() == 0 {
+                break;
+            }
 
-        let boxed_stream = stream.write(raw_response.borrow());
-        if boxed_stream.is_ok() {
-            stream.flush().unwrap();
-        } else {
-            let write_message = boxed_stream.err().unwrap().to_string();
-            return Err(write_message);
-        };
+            let request = match Request::parse(&buffer) {
+                Ok(r) => r,
+                Err(message) => {
+                    let raw_response = Server::bad_request_response(message.clone());
+                    let boxed_stream = stream.write(raw_response.borrow());
+                    if boxed_stream.is_ok() { stream.flush().unwrap(); }
+                    return Err(message);
+                }
+            };
+
+            let keep_alive = {
+                let conn_hdr = request.get_header(Header::_CONNECTION.to_string());
+                match conn_hdr {
+                    Some(h) => h.value.to_lowercase() != "close",
+                    None => request.http_version == VERSION.http_1_1,
+                }
+            };
+
+            let mut response = match app.execute(&request, &connection) {
+                Ok(r) => r,
+                Err(message) => {
+                    let raw_response = Server::bad_request_response(message.clone());
+                    let boxed_stream = stream.write(raw_response.borrow());
+                    if boxed_stream.is_ok() { stream.flush().unwrap(); }
+                    return Err(message);
+                }
+            };
+
+            crate::compression::apply_gzip(&request, &mut response);
+
+            response.headers.push(Header {
+                name: Header::_CONNECTION.to_string(),
+                value: if keep_alive { "keep-alive".to_string() } else { "close".to_string() },
+            });
+
+            let log = Log::combined(&request, &response, &client_addr);
+            println!("{}", log);
+
+            if let Some(ref filepath) = response.stream_file.clone() {
+                if let Err(e) = Server::write_chunked_file(&mut stream, response, request, filepath) {
+                    return Err(e);
+                }
+            } else {
+                let raw_response = Response::generate_response(response, request);
+                if let Err(e) = stream.write(raw_response.borrow()) {
+                    return Err(e.to_string());
+                }
+                stream.flush().unwrap();
+            }
+
+            if !keep_alive { break; }
+        }
 
         Ok(())
+    }
+
+    /// Streams a file to `stream` using HTTP/1.1 chunked transfer encoding.
+    /// The response headers are written first, then the file is read and written in 64 KB chunks.
+    fn write_chunked_file(
+        stream: &mut impl Write,
+        mut response: Response,
+        request: Request,
+        filepath: &str,
+    ) -> Result<(), String> {
+        use std::fs::File;
+        use std::io::Read as _;
+
+        response.headers.push(Header {
+            name: Header::_TRANSFER_ENCODING.to_string(),
+            value: "chunked".to_string(),
+        });
+
+        // build status line + headers (no body)
+        let status = [
+            response.http_version.clone(),
+            response.status_code.to_string(),
+            response.reason_phrase.clone(),
+        ].join(SYMBOL.whitespace);
+
+        let mut headers_str = SYMBOL.new_line_carriage_return.to_string();
+        for header in &response.headers {
+            headers_str.push_str(&header.name);
+            headers_str.push_str(Header::NAME_VALUE_SEPARATOR);
+            headers_str.push_str(&header.value);
+            headers_str.push_str(SYMBOL.new_line_carriage_return);
+        }
+        let head = format!("{}{}{}", status, headers_str, SYMBOL.new_line_carriage_return);
+
+        stream.write_all(head.as_bytes()).map_err(|e| e.to_string())?;
+
+        if request.method != METHOD.head && request.method != METHOD.options {
+            let mut file = File::open(filepath).map_err(|e| e.to_string())?;
+            let mut buf = vec![0u8; 65536];
+            loop {
+                let n = file.read(&mut buf).map_err(|e| e.to_string())?;
+                if n == 0 { break; }
+                // chunk header: hex size + CRLF
+                stream.write_all(format!("{:x}\r\n", n).as_bytes()).map_err(|e| e.to_string())?;
+                stream.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+                stream.write_all(b"\r\n").map_err(|e| e.to_string())?;
+            }
+            // terminal chunk
+            stream.write_all(b"0\r\n\r\n").map_err(|e| e.to_string())?;
+        }
+
+        stream.flush().map_err(|e| e.to_string())
     }
 
     /// Reads configuration (IP, port, thread count, TLS paths) from the layered config system
@@ -415,6 +461,111 @@ impl Server {
         }
     }
 
+    /// Binds a plain-HTTP listener on the port in `RWS_CONFIG_HTTP_REDIRECT_PORT` and sends
+    /// `301 Moved Permanently` to the HTTPS equivalent of every incoming URL.
+    /// Returns immediately if TLS is not configured or the redirect port is not set.
+    pub async fn run_redirect() {
+        use std::env;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener as TokioListener;
+
+        let cert_path = env::var(crate::entry_point::Config::RWS_CONFIG_TLS_CERT_FILE)
+            .unwrap_or_default();
+        if cert_path.is_empty() {
+            return;
+        }
+
+        let redirect_port_str = env::var(crate::entry_point::Config::RWS_CONFIG_HTTP_REDIRECT_PORT)
+            .unwrap_or_default();
+        if redirect_port_str.is_empty() {
+            return;
+        }
+
+        let redirect_port: u16 = match redirect_port_str.parse() {
+            Ok(p) => p,
+            Err(_) => {
+                eprintln!("Invalid RWS_CONFIG_HTTP_REDIRECT_PORT: {}", redirect_port_str);
+                return;
+            }
+        };
+
+        let (server_ip, server_port, _) = get_ip_port_thread_count();
+        let bind_addr = format!("{}:{}", server_ip, redirect_port);
+
+        let listener = match TokioListener::bind(&bind_addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("HTTP redirect listener error on {}: {}", bind_addr, e);
+                return;
+            }
+        };
+
+        println!("HTTP→HTTPS redirect listening on http://{}:{}", server_ip, redirect_port);
+
+        loop {
+            tokio::select! {
+                result = listener.accept() => {
+                    match result {
+                        Ok((mut stream, _peer)) => {
+                            let https_port = server_port;
+                            tokio::spawn(async move {
+                                let mut buf = vec![0u8; 4096];
+                                let n = match stream.read(&mut buf).await {
+                                    Ok(n) => n,
+                                    Err(_) => return,
+                                };
+                                let text = String::from_utf8_lossy(&buf[..n]);
+
+                                let uri = text.lines()
+                                    .next()
+                                    .and_then(|line| line.split_whitespace().nth(1))
+                                    .unwrap_or("/")
+                                    .to_string();
+
+                                let host_header = text.lines()
+                                    .find(|l| l.to_lowercase().starts_with("host:"))
+                                    .map(|l| l[5..].trim().to_string());
+
+                                let location = match host_header {
+                                    Some(h) => {
+                                        // strip existing port from Host header
+                                        let h_no_port = if h.starts_with('[') {
+                                            // IPv6: [::1] or [::1]:port
+                                            h.find(']')
+                                                .map(|i| h[..=i].to_string())
+                                                .unwrap_or(h.clone())
+                                        } else {
+                                            h.rfind(':')
+                                                .map(|i| h[..i].to_string())
+                                                .unwrap_or(h.clone())
+                                        };
+                                        if https_port == 443 {
+                                            format!("https://{}{}", h_no_port, uri)
+                                        } else {
+                                            format!("https://{}:{}{}", h_no_port, https_port, uri)
+                                        }
+                                    }
+                                    None => format!("https://localhost:{}{}", https_port, uri),
+                                };
+
+                                let response = format!(
+                                    "HTTP/1.1 301 Moved Permanently\r\nLocation: {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                                    location
+                                );
+                                let _ = stream.write_all(response.as_bytes()).await;
+                            });
+                        }
+                        Err(e) => eprintln!("HTTP redirect accept error: {}", e),
+                    }
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    println!("\nShutting down HTTP redirect listener.");
+                    break;
+                }
+            }
+        }
+    }
+
     async fn process_h1_tls(
         mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
         peer_addr: std::net::SocketAddr,
@@ -462,6 +613,7 @@ impl Server {
             }
         };
 
+        crate::compression::apply_gzip(&request, &mut response);
         response.headers.push(Header::get_hsts_header());
 
         #[cfg(feature = "http3")]

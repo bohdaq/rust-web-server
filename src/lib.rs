@@ -44,6 +44,8 @@
 //! for the full building blocks reference and use case examples.
 
 pub mod app;
+pub mod compression;
+pub mod cookie;
 pub mod application;
 pub mod body;
 pub mod client_hint;

@@ -259,7 +259,8 @@ fn cors_allow_all() {
         status_code: 0,
         reason_phrase: "".to_string(),
         headers: vec![],
-        content_range_list: vec![]
+        content_range_list: vec![],
+        stream_file: None,
     };
 
     response.headers = Cors::allow_all(&request).unwrap();
@@ -314,7 +315,8 @@ fn cors_process() {
         status_code: 0,
         reason_phrase: "".to_string(),
         headers: vec![],
-        content_range_list: vec![]
+        content_range_list: vec![],
+        stream_file: None,
     };
 
     let first_domain = "https://foo.example";
@@ -388,7 +390,8 @@ fn cors_process_default_config() {
         status_code: 0,
         reason_phrase: "".to_string(),
         headers: vec![],
-        content_range_list: vec![]
+        content_range_list: vec![],
+        stream_file: None,
     };
 
     let custom_header = "x-custom-header";
@@ -448,7 +451,8 @@ fn cors_process_empty_config() {
         status_code: 0,
         reason_phrase: "".to_string(),
         headers: vec![],
-        content_range_list: vec![]
+        content_range_list: vec![],
+        stream_file: None,
     };
 
     let cors_config = Cors {

@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.3.0"
+version = "17.4.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 description = "Static file web server and HTTP toolkit written in Rust. Supports HTTP/3, HTTP/2, and HTTP/1.1. HTTP/3 and HTTP/2 require a TLS certificate; without one the server falls back to plain HTTP/1.1 automatically."
@@ -28,6 +28,7 @@ http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn"]
 
 [dependencies]
 file-ext = "12.0.0"
+flate2 = "1"
 url-search-params = "12.0.0"
 url-build-parse = "12.1.0"
 tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "io-util", "signal"], optional = true }

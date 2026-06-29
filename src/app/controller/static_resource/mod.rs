@@ -160,6 +160,26 @@ impl Controller for StaticResourceController {
                     }
 
                     response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
+
+                    // Stream large files (> 8 MB) without loading into memory, unless it's
+                    // a range request (which needs precise byte slicing from the loaded body).
+                    const STREAM_THRESHOLD: u64 = 8 * 1024 * 1024;
+                    let is_range_request = request.get_header(Header::_RANGE.to_string()).is_some();
+                    if file_size > STREAM_THRESHOLD && !is_range_request {
+                        let mime = MimeType::detect_mime_type(&static_filepath);
+                        response.headers.push(Header {
+                            name: Header::_CONTENT_TYPE.to_string(),
+                            value: mime,
+                        });
+                        response.headers.push(Header {
+                            name: Header::_CONTENT_LENGTH.to_string(),
+                            value: file_size.to_string(),
+                        });
+                        response.status_code = *status_code_reason_phrase.status_code;
+                        response.reason_phrase = status_code_reason_phrase.reason_phrase.to_string();
+                        response.stream_file = Some(static_filepath);
+                        return response;
+                    }
                 }
 
                 response.status_code = *status_code_reason_phrase.status_code;
@@ -262,6 +282,24 @@ impl StaticResourceController {
                     }
 
                     response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
+
+                    const STREAM_THRESHOLD: u64 = 8 * 1024 * 1024;
+                    let is_range_request = request.get_header(Header::_RANGE.to_string()).is_some();
+                    if file_size > STREAM_THRESHOLD && !is_range_request {
+                        let mime = MimeType::detect_mime_type(&static_filepath);
+                        response.headers.push(Header {
+                            name: Header::_CONTENT_TYPE.to_string(),
+                            value: mime,
+                        });
+                        response.headers.push(Header {
+                            name: Header::_CONTENT_LENGTH.to_string(),
+                            value: file_size.to_string(),
+                        });
+                        response.status_code = *status_code_reason_phrase.status_code;
+                        response.reason_phrase = status_code_reason_phrase.reason_phrase.to_string();
+                        response.stream_file = Some(static_filepath);
+                        return response;
+                    }
                 }
 
                 response.status_code = *status_code_reason_phrase.status_code;
