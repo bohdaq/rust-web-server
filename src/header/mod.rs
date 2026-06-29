@@ -14,9 +14,16 @@ pub mod content_disposition;
 #[cfg(test)]
 mod example;
 
+/// An HTTP header name/value pair.
+///
+/// Use the associated string constants (e.g. [`Header::_CONTENT_TYPE`]) for header names.
+/// [`Header::get_header_list`] returns the standard set of response headers (client hints,
+/// CORS, cache control, security headers) that should be included on every response.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Header {
+    /// Header name, e.g. `"Content-Type"`.
     pub name: String,
+    /// Header value, e.g. `"application/json"`.
     pub value: String,
 }
 

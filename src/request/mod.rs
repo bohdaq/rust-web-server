@@ -13,12 +13,18 @@ use crate::symbol::SYMBOL;
 use url_build_parse::parse_url;
 use crate::url::URL;
 
+/// A parsed HTTP request.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Request {
+    /// HTTP method: `"GET"`, `"POST"`, etc. Compare with [`METHOD`] constants.
     pub method: String,
+    /// Request URI including path and query string, e.g. `"/search?q=rust"`.
     pub request_uri: String,
+    /// HTTP version string, e.g. `"HTTP/1.1"`. Compare with [`crate::http::VERSION`] constants.
     pub http_version: String,
+    /// Request headers.
     pub headers: Vec<Header>,
+    /// Raw request body bytes.
     pub body: Vec<u8>,
 }
 

@@ -4,6 +4,10 @@ mod tests;
 use std::ffi::OsStr;
 use std::path::Path;
 
+/// MIME type constants and file-extension detection.
+///
+/// Use [`MimeType::detect_mime_type`] to get the MIME type from a file path,
+/// or reference the constants directly (e.g. [`MimeType::APPLICATION_JSON`]).
 pub struct MimeType {}
 
 
@@ -189,6 +193,8 @@ impl MimeType {
     pub const CRT_SUFFIX: &'static str = ".crt";
     pub const WASM_SUFFIX: &'static str = ".wasm";
 
+    /// Returns the MIME type string for the given file path based on its extension.
+    /// Falls back to `"application/octet-stream"` for unknown extensions.
     pub fn detect_mime_type(request_uri: &str) -> String {
 
         let is_txt_suffix = request_uri.ends_with(MimeType::TXT_SUFFIX);

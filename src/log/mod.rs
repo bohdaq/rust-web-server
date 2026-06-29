@@ -8,6 +8,11 @@ use crate::response::Response;
 #[cfg(test)]
 mod tests;
 
+/// Logging helpers for access logs and server info.
+///
+/// [`Log::combined`] produces standard Combined Log Format lines compatible with
+/// GoAccess, AWStats, and similar tools. All three server code paths (HTTP/1.1,
+/// HTTP/2, HTTP/3) use it.
 pub struct Log;
 
 impl Log {
@@ -130,6 +135,8 @@ impl Log {
         log
     }
 
+    /// Returns a Combined Log Format (CLF) line for one request/response pair:
+    /// `IP - - [DD/Mon/YYYY:HH:MM:SS +0000] "METHOD URI VERSION" STATUS SIZE`
     pub fn combined(request: &Request, response: &Response, peer_addr: &SocketAddr) -> String {
         use std::time::{SystemTime, UNIX_EPOCH};
 

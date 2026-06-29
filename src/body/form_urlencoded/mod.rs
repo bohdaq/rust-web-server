@@ -2,9 +2,11 @@ use std::collections::HashMap;
 use crate::symbol::SYMBOL;
 use crate::url::URL;
 
+/// Parser and serialiser for `application/x-www-form-urlencoded` bodies.
 pub struct FormUrlEncoded;
 
 impl FormUrlEncoded {
+    /// Parses a URL-encoded body into a `HashMap` of field name → value.
     pub fn parse(data: Vec<u8>) -> Result<HashMap<String, String>, String> {
         let boxed_string = String::from_utf8(data);
         if boxed_string.is_err() {

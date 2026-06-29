@@ -188,6 +188,8 @@ impl Server {
         Ok(())
     }
 
+    /// Reads configuration (IP, port, thread count, TLS paths) from the layered config system
+    /// and returns a bound `TcpListener` and a sized `ThreadPool`. Call once at startup.
     pub fn setup() -> Result<(TcpListener, ThreadPool), String> {
         let info = Log::info("Rust Web Server");
         println!("{}", info);
@@ -241,6 +243,8 @@ impl Server {
         Ok((listener, pool))
     }
 
+    /// Accepts TCP connections in a loop and dispatches each to the thread pool.
+    /// Blocks forever (plain HTTP/1.1). For TLS/HTTP2/HTTP3 use [`Server::run_tls`].
     pub fn run(listener : TcpListener,
                pool: ThreadPool,
                app: impl Application + New + Send + 'static + Copy) {
@@ -308,13 +312,18 @@ impl Server {
 
 }
 
+/// Network context for the current connection, passed into every [`Controller`](crate::controller::Controller).
 #[derive(Clone)]
 pub struct ConnectionInfo {
+    /// Client (peer) address.
     pub client: Address,
+    /// Server (local) address.
     pub server: Address,
+    /// Bytes allocated for reading the request.
     pub request_size: i64
 }
 
+/// IP address and port pair.
 #[derive(Clone)]
 pub struct Address {
     pub ip: String,

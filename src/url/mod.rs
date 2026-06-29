@@ -9,6 +9,7 @@ use url_build_parse::{build_url, parse_url, UrlComponents};
 use url_search_params::{build_url_search_params, encode_uri_component, parse_url_search_params};
 use url_search_params::decode_uri_component;
 
+/// URL parsing, building, and percent-encoding utilities.
 pub struct URL;
 
 impl URL {

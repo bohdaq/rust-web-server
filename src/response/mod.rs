@@ -21,12 +21,22 @@ pub struct Error {
     pub message: String,
 }
 
+/// An HTTP response. Build one inside [`Controller::process`] and return it.
+///
+/// Set `status_code` and `reason_phrase` from [`STATUS_CODE_REASON_PHRASE`],
+/// push body content via [`Range::get_content_range`] into `content_range_list`,
+/// and add any extra headers to `headers`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Response {
+    /// HTTP version string, e.g. `"HTTP/1.1"`.
     pub http_version: String,
+    /// Numeric status code, e.g. `200`. Set from [`STATUS_CODE_REASON_PHRASE`].
     pub status_code: i16,
+    /// Reason phrase, e.g. `"OK"`. Set from [`STATUS_CODE_REASON_PHRASE`].
     pub reason_phrase: String,
+    /// Response headers. Pre-populated with standard headers by [`Header::get_header_list`].
     pub headers: Vec<Header>,
+    /// Response body as a list of content ranges (supports multipart and range responses).
     pub content_range_list: Vec<ContentRange>
 }
 

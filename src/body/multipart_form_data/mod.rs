@@ -7,8 +7,10 @@ use crate::ext::string_ext::StringExt;
 use crate::header::Header;
 use crate::symbol::SYMBOL;
 
+/// Parser for `multipart/form-data` request bodies (file uploads).
 pub struct FormMultipartData;
 
+/// A single part from a multipart body, with its own headers and raw byte body.
 pub struct Part {
     pub headers: Vec<Header>,
     pub body: Vec<u8>,
@@ -22,6 +24,8 @@ impl Part {
 }
 
 impl FormMultipartData {
+    /// Parses a raw multipart body into a list of [`Part`]s.
+    /// `boundary` is extracted from the `Content-Type` header value after `boundary=`.
     pub fn parse(data: &[u8], boundary: String) -> Result<Vec<Part>, String> {
 
         let cursor = io::Cursor::new(data);

@@ -16,18 +16,27 @@ use crate::mime_type::MimeType;
 use crate::symbol::SYMBOL;
 use crate::url::URL;
 
+/// A byte range within a resource (`start..end`).
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Range {
     pub start: u64,
     pub end: u64,
 }
 
+/// A single body part. `Response.content_range_list` holds one or more of these.
+///
+/// Build one with [`Range::get_content_range`] (in-memory bytes) or
+/// [`Range::get_content_range_of_a_file`] (file on disk).
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ContentRange {
+    /// Range unit — always `"bytes"`.
     pub unit: String,
     pub range: Range,
+    /// Total resource size as a string.
     pub size: String,
+    /// Raw body bytes.
     pub body: Vec<u8>,
+    /// MIME type for this part. Use [`MimeType`] constants or [`MimeType::detect_mime_type`].
     pub content_type: String,
 }
 
@@ -496,6 +505,7 @@ impl Range {
         String::from_utf8(Vec::from(buffer_as_u8_array)).unwrap()
     }
 
+    /// Creates a `ContentRange` from raw bytes and a MIME type. The most common way to build a response body.
     pub fn get_content_range(body: Vec<u8>, mime_type: String) -> ContentRange {
         let length = body.len() as u64;
         let content_range = ContentRange {
@@ -509,6 +519,7 @@ impl Range {
         content_range
     }
 
+    /// Creates a `ContentRange` by reading a file from disk. MIME type is detected from the extension.
     pub fn get_content_range_of_a_file(filepath: &str) -> Result<ContentRange, String> {
         let body: Vec<u8>;
         let boxed_file = FileExt::read_file(filepath);
