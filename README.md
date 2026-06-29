@@ -1,6 +1,8 @@
 # rws
 
-Static file web server written in Rust. Supports HTTP/3, HTTP/2, and HTTP/1.1. HTTP/3 and HTTP/2 require a TLS certificate; without one the server falls back to plain HTTP/1.1 automatically.
+Static file web server and HTTP toolkit written in Rust. Supports HTTP/3, HTTP/2, and HTTP/1.1. HTTP/3 and HTTP/2 require a TLS certificate; without one the server falls back to plain HTTP/1.1 automatically.
+
+Use it as a ready-to-run binary **or** pull it in as a library crate to get battle-tested building blocks — request/response parsing, routing, headers, MIME detection, body parsing, JSON, logging — without taking on a full async framework.
 
 ## Install
 
@@ -83,11 +85,50 @@ cargo build --release --no-default-features --features http1
 - `.html` extension inference — `/page` serves `page.html`; `/dir` serves `dir/index.html`
 - Custom 404 page — place a `404.html` in the working directory to override the default
 
+## Use as a library
+
+Add the crate to `Cargo.toml`:
+
+```toml
+[dependencies]
+rust-web-server = "17"
+```
+
+Implement a controller and plug it into the server in a few lines:
+
+```rust
+use rust_web_server::controller::Controller;
+use rust_web_server::request::{METHOD, Request};
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::range::Range;
+use rust_web_server::mime_type::MimeType;
+use rust_web_server::server::ConnectionInfo;
+
+pub struct PingController;
+
+impl Controller for PingController {
+    fn is_matching(request: &Request, _: &ConnectionInfo) -> bool {
+        request.method == METHOD.get && request.request_uri == "/ping"
+    }
+
+    fn process(_: &Request, mut response: Response, _: &ConnectionInfo) -> Response {
+        response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        response.content_range_list = vec![
+            Range::get_content_range(b"pong".to_vec(), MimeType::TEXT_PLAIN.to_string())
+        ];
+        response
+    }
+}
+```
+
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 12 use case examples covering JSON responses, query parameters, form and file upload parsing, redirects, error responses, MIME detection, and access logging.
+
 ## Further reading
 
 - [CONFIGURE](CONFIGURE.md) — all configuration options
 - [FAQ](FAQ.md) — common problems and solutions
-- [DEVELOPER](DEVELOPER.md) — building, testing, and contributing
+- [DEVELOPER](DEVELOPER.md) — building blocks, use cases, building, and testing
 - [src/README.md](src/README.md) — module-level documentation
 
 ## License
