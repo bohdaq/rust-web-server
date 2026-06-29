@@ -135,6 +135,66 @@ impl Log {
         log
     }
 
+    /// Returns a structured JSON log line for one request/response pair.
+    ///
+    /// Enable with `RWS_CONFIG_LOG_FORMAT=json`. Useful for log aggregators
+    /// (Loki, Fluentd, Datadog) that ingest JSON from pod stdout.
+    pub fn json(request: &Request, response: &Response, peer_addr: &SocketAddr) -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let body_size: usize = response.content_range_list.iter()
+            .map(|cr| cr.body.len())
+            .sum();
+
+        let secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let timestamp = Log::format_iso8601(secs);
+
+        fn escape(s: &str) -> String {
+            s.replace('\\', "\\\\")
+             .replace('"', "\\\"")
+             .replace('\n', "\\n")
+             .replace('\r', "\\r")
+        }
+
+        format!(
+            "{{\"time\":\"{}\",\"remote_addr\":\"{}\",\"method\":\"{}\",\"path\":\"{}\",\"protocol\":\"{}\",\"status\":{},\"bytes\":{}}}",
+            timestamp,
+            peer_addr.ip(),
+            escape(&request.method),
+            escape(&request.request_uri),
+            escape(&request.http_version),
+            response.status_code,
+            body_size,
+        )
+    }
+
+    /// Writes one access log line to stdout using the format configured by
+    /// `RWS_CONFIG_LOG_FORMAT` (`"combined"` or `"json"`). Call this instead of
+    /// `Log::combined` so that format selection is centralised.
+    pub fn log_access(request: &Request, response: &Response, peer_addr: &SocketAddr) {
+        let format = std::env::var(crate::entry_point::Config::RWS_CONFIG_LOG_FORMAT)
+            .unwrap_or_default();
+        let line = if format == "json" {
+            Log::json(request, response, peer_addr)
+        } else {
+            Log::combined(request, response, peer_addr)
+        };
+        println!("{}", line);
+    }
+
+    fn format_iso8601(secs: u64) -> String {
+        let sec = secs % 60;
+        let min = (secs / 60) % 60;
+        let hour = (secs / 3600) % 24;
+        let days = secs / 86400;
+        let (year, month, day) = Log::days_to_ymd(days);
+        format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", year, month, day, hour, min, sec)
+    }
+
     /// Returns a Combined Log Format (CLF) line for one request/response pair:
     /// `IP - - [DD/Mon/YYYY:HH:MM:SS +0000] "METHOD URI VERSION" STATUS SIZE`
     pub fn combined(request: &Request, response: &Response, peer_addr: &SocketAddr) -> String {

@@ -6,4 +6,7 @@ pub mod favicon;
 pub mod script;
 pub mod form;
 pub mod file;
+pub mod health;
+pub mod ready;
+pub mod metrics;
 

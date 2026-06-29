@@ -1,6 +1,8 @@
 use rust_web_server::app::App;
 use rust_web_server::core::New;
+use rust_web_server::metrics::SERVER_READY;
 use rust_web_server::server::Server;
+use std::sync::atomic::Ordering;
 
 #[cfg(not(feature = "http2"))]
 fn main() {
@@ -12,7 +14,7 @@ fn main() {
 
     let (listener, pool) = new_server.unwrap();
     let app = App::new();
-
+    SERVER_READY.store(true, Ordering::SeqCst);
     Server::run(listener, pool, app);
 }
 
@@ -27,6 +29,7 @@ async fn main() {
 
     let (listener, pool) = new_server.unwrap();
     let app = App::new();
+    SERVER_READY.store(true, Ordering::SeqCst);
 
     tokio::join!(
         Server::run_tls(listener, pool, app),
@@ -45,6 +48,7 @@ async fn main() {
 
     let (listener, pool) = new_server.unwrap();
     let app = App::new();
+    SERVER_READY.store(true, Ordering::SeqCst);
 
     tokio::join!(
         Server::run_tls(listener, pool, app),

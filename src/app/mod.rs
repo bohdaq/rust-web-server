@@ -4,6 +4,9 @@ mod tests;
 pub mod controller;
 
 use crate::app::controller::favicon::FaviconController;
+use crate::app::controller::health::HealthController;
+use crate::app::controller::ready::ReadyController;
+use crate::app::controller::metrics::MetricsController;
 use crate::app::controller::file::initiate::FileUploadInitiateController;
 use crate::app::controller::form::get_method::FormGetMethodController;
 use crate::app::controller::form::multipart_enctype_post_method::FormMultipartEnctypePostMethodController;
@@ -78,6 +81,21 @@ impl Application for App {
             return Ok(response)
         }
 
+        if HealthController::is_matching(&request, connection) {
+            response = HealthController::process(&request, response, connection);
+            return Ok(response)
+        }
+
+        if ReadyController::is_matching(&request, connection) {
+            response = ReadyController::process(&request, response, connection);
+            return Ok(response)
+        }
+
+        if MetricsController::is_matching(&request, connection) {
+            response = MetricsController::process(&request, response, connection);
+            return Ok(response)
+        }
+
         if FaviconController::is_matching(&request, connection) {
             response = FaviconController::process(&request, response, connection);
             return Ok(response)
@@ -142,6 +160,21 @@ impl App {
 
         if FormMultipartEnctypePostMethodController::is_matching_request(&request) {
             response = FormMultipartEnctypePostMethodController::process_request(&request, response);
+            return (response, request)
+        }
+
+        if HealthController::is_matching_request(&request) {
+            response = HealthController::process_request(&request, response);
+            return (response, request)
+        }
+
+        if ReadyController::is_matching_request(&request) {
+            response = ReadyController::process_request(&request, response);
+            return (response, request)
+        }
+
+        if MetricsController::is_matching_request(&request) {
+            response = MetricsController::process_request(&request, response);
             return (response, request)
         }
 

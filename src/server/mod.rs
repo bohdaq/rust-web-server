@@ -154,6 +154,7 @@ impl Server {
                 }
             };
 
+            crate::metrics::record_request();
             crate::compression::apply_gzip(&request, &mut response);
 
             response.headers.push(Header {
@@ -161,8 +162,7 @@ impl Server {
                 value: if keep_alive { "keep-alive".to_string() } else { "close".to_string() },
             });
 
-            let log = Log::combined(&request, &response, &client_addr);
-            println!("{}", log);
+            Log::log_access(&request, &response, &client_addr);
 
             if let Some(ref filepath) = response.stream_file.clone() {
                 if let Err(e) = Server::write_chunked_file(&mut stream, response, request, filepath) {
@@ -344,8 +344,11 @@ impl Server {
             }
 
             pool.execute(move || {
+                crate::metrics::connection_open();
                 let boxed_process = Server::process(stream, connection, app);
+                crate::metrics::connection_close();
                 if boxed_process.is_err() {
+                    crate::metrics::record_error();
                     let message = boxed_process.err().unwrap();
                     eprintln!("{}", message);
                 }
@@ -374,6 +377,24 @@ pub struct ConnectionInfo {
 pub struct Address {
     pub ip: String,
     pub port: i32
+}
+
+/// Resolves when SIGTERM is received on Unix, or never on other platforms.
+/// Enables a single `select!` branch to handle both SIGTERM and Ctrl+C.
+#[cfg(feature = "http2")]
+async fn sigterm() {
+    #[cfg(unix)]
+    {
+        if let Ok(mut s) = tokio::signal::unix::signal(
+            tokio::signal::unix::SignalKind::terminate()
+        ) {
+            s.recv().await;
+        } else {
+            std::future::pending::<()>().await
+        }
+    }
+    #[cfg(not(unix))]
+    std::future::pending::<()>().await
 }
 
 #[cfg(feature = "http2")]
@@ -454,7 +475,13 @@ impl Server {
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    println!("\nShutting down gracefully.");
+                    crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+                    println!("\nShutting down gracefully (SIGINT).");
+                    break;
+                }
+                _ = sigterm() => {
+                    crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+                    println!("\nShutting down gracefully (SIGTERM).");
                     break;
                 }
             }
@@ -559,7 +586,11 @@ impl Server {
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    println!("\nShutting down HTTP redirect listener.");
+                    println!("\nShutting down HTTP redirect listener (SIGINT).");
+                    break;
+                }
+                _ = sigterm() => {
+                    println!("\nShutting down HTTP redirect listener (SIGTERM).");
                     break;
                 }
             }
@@ -613,6 +644,7 @@ impl Server {
             }
         };
 
+        crate::metrics::record_request();
         crate::compression::apply_gzip(&request, &mut response);
         response.headers.push(Header::get_hsts_header());
 
@@ -627,8 +659,7 @@ impl Server {
             value: format!("h2=\":{}\"", server_port),
         });
 
-        let log = Log::combined(&request, &response, &peer_addr);
-        println!("{}", log);
+        Log::log_access(&request, &response, &peer_addr);
 
         let raw = Response::generate_response(response, request);
         stream
@@ -707,7 +738,14 @@ impl Server {
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    println!("\nShutting down QUIC.");
+                    crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+                    println!("\nShutting down QUIC (SIGINT).");
+                    endpoint.close(0u32.into(), b"shutdown");
+                    break;
+                }
+                _ = sigterm() => {
+                    crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+                    println!("\nShutting down QUIC (SIGTERM).");
                     endpoint.close(0u32.into(), b"shutdown");
                     break;
                 }

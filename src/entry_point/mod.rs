@@ -16,7 +16,13 @@ pub struct Config {}
 
 impl Config {
     pub const RWS_CONFIG_IP: &'static str = "RWS_CONFIG_IP";
-    pub const RWS_CONFIG_IP_DEFAULT_VALUE: &'static str = "127.0.0.1";
+    /// Default is `0.0.0.0` so the server is reachable inside containers and K8s pods.
+    /// For local development you can override to `127.0.0.1` via env var or config file.
+    pub const RWS_CONFIG_IP_DEFAULT_VALUE: &'static str = "0.0.0.0";
+
+    /// Log format: `"combined"` (default, Combined Log Format) or `"json"` (structured JSON).
+    pub const RWS_CONFIG_LOG_FORMAT: &'static str = "RWS_CONFIG_LOG_FORMAT";
+    pub const RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE: &'static str = "combined";
 
     pub const RWS_CONFIG_PORT: &'static str = "RWS_CONFIG_PORT";
     pub const RWS_CONFIG_PORT_DEFAULT_VALUE: &'static str = "7878";
@@ -192,6 +198,14 @@ pub fn set_default_values() {
         println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_HTTP_REDIRECT_PORT, Config::RWS_CONFIG_HTTP_REDIRECT_PORT_DEFAULT_VALUE);
     } else {
         println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_HTTP_REDIRECT_PORT);
+    }
+
+    let is_var_set = env::var(Config::RWS_CONFIG_LOG_FORMAT).is_ok();
+    if !is_var_set {
+        env::set_var(Config::RWS_CONFIG_LOG_FORMAT, Config::RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE);
+        println!("    Default value  for '{}' is '{}'", Config::RWS_CONFIG_LOG_FORMAT, Config::RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE);
+    } else {
+        println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_LOG_FORMAT);
     }
 
     println!("  End of initializing default values\n");

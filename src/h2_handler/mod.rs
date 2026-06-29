@@ -115,11 +115,11 @@ async fn handle_stream(
     };
 
     let mut rws_response = rws_response;
+    crate::metrics::record_request();
     crate::compression::apply_gzip(&rws_request, &mut rws_response);
     rws_response.headers.push(crate::header::Header::get_hsts_header());
 
-    let log = Log::combined(&rws_request, &rws_response, &peer_addr);
-    println!("{}", log);
+    Log::log_access(&rws_request, &rws_response, &peer_addr);
 
     send_h2_response(respond, rws_response);
 }

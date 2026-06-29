@@ -83,8 +83,9 @@ cargo build --release --no-default-features --features http1
 - ETag and 304 Not Modified — conditional requests skip body transfer on cache hit
 - Security headers — `Strict-Transport-Security` (HTTPS only), `Content-Security-Policy` (configurable via `RWS_CONFIG_CSP`), `Referrer-Policy`, `Permissions-Policy`, `X-Content-Type-Options`, `X-Frame-Options`
 - WebAssembly MIME type — `.wasm` files served as `application/wasm`
-- Combined Log Format (CLF) — access log compatible with GoAccess and AWStats
-- Graceful shutdown — Ctrl+C stops the server cleanly (async/TLS paths)
+- Combined Log Format (CLF) — access log compatible with GoAccess and AWStats; set `RWS_CONFIG_LOG_FORMAT=json` for structured JSON logs
+- Graceful shutdown — Ctrl+C and SIGTERM stop the server cleanly (async/TLS paths); `/readyz` returns `503` during drain
+- Kubernetes-ready — health probes (`GET /healthz` liveness, `GET /readyz` readiness), Prometheus metrics (`GET /metrics`), `0.0.0.0` default bind, Dockerfile included
 - 30-second read timeout per request on plain HTTP/1.1 connections
 - Symlink resolution
 - `.html` extension inference — `/page` serves `page.html`; `/dir` serves `dir/index.html`

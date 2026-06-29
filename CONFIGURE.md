@@ -72,7 +72,7 @@ ip                     = '0.0.0.0'
 
 | Environment variable | Config file key | Command-line arg | Default | Description |
 |---|---|---|---|---|
-| `RWS_CONFIG_IP` | `ip` | `--ip` / `-i` | `127.0.0.1` | Bind IP address |
+| `RWS_CONFIG_IP` | `ip` | `--ip` / `-i` | `0.0.0.0` | Bind IP address |
 | `RWS_CONFIG_PORT` | `port` | `--port` / `-p` | `7878` | Bind port |
 | `RWS_CONFIG_THREAD_COUNT` | `thread_count` | `--thread-count` / `-t` | `200` | Thread pool size |
 | `RWS_CONFIG_TLS_CERT_FILE` | `tls_cert_file` | `--tls-cert-file` / `-s` | _(none)_ | PEM certificate file |
@@ -87,6 +87,7 @@ ip                     = '0.0.0.0'
 | `RWS_CONFIG_CORS_MAX_AGE` | `cors_max_age` | `--cors-max-age` / `-g` | _(none)_ | Preflight cache duration (seconds) |
 | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE` | `request_allocation_size` | `--request-allocation-size-in-bytes` / `-r` | `16000` | Read buffer size per request |
 | `RWS_CONFIG_CSP` | — | — | `default-src 'self'` | `Content-Security-Policy` header value; set to empty string to disable |
+| `RWS_CONFIG_LOG_FORMAT` | `log_format` | — | `combined` | Access log format: `combined` (CLF) or `json` (structured JSON for log aggregators) |
 
 ## Memory
 

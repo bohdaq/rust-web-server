@@ -359,3 +359,75 @@ session=abc123; Path=/; Max-Age=3600; Secure; HttpOnly; SameSite=Lax
 ```
 
 Pass that string as the value of a `Set-Cookie` header.
+
+---
+
+## Kubernetes Deployment
+
+A `Dockerfile` is included in the repository root. Build and push with:
+
+```bash
+docker build -t my-registry/rws:latest .
+docker push my-registry/rws:latest
+```
+
+### Health probes
+
+`rws` exposes two endpoints for Kubernetes liveness and readiness probes:
+
+- `GET /healthz` — always returns `200 OK`; use for `livenessProbe`
+- `GET /readyz` — returns `200 OK` after startup completes, `503` during drain; use for `readinessProbe`
+
+Example pod spec:
+```yaml
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 7878
+  initialDelaySeconds: 5
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 7878
+  initialDelaySeconds: 5
+```
+
+### Prometheus metrics
+
+`GET /metrics` returns counters and gauges in Prometheus text format (`text/plain; version=0.0.4`):
+
+- `rws_requests_total` — total HTTP requests handled
+- `rws_errors_total` — requests that returned an application error
+- `rws_active_connections` — currently open connections
+
+### Structured JSON logging
+
+Set `RWS_CONFIG_LOG_FORMAT=json` (or `log_format = 'json'` in `rws.config.toml`) to emit access logs as JSON:
+
+```json
+{"time":"2026-06-30T12:00:00Z","remote_addr":"10.0.0.5:54321","method":"GET","path":"/index.html","protocol":"HTTP/1.1","status":200,"bytes":4096}
+```
+
+### Environment variables via ConfigMap
+
+All `RWS_CONFIG_*` variables map directly to Kubernetes ConfigMaps and Secrets:
+
+```yaml
+env:
+  - name: RWS_CONFIG_IP
+    value: "0.0.0.0"
+  - name: RWS_CONFIG_PORT
+    value: "7878"
+  - name: RWS_CONFIG_LOG_FORMAT
+    value: "json"
+  - name: RWS_CONFIG_TLS_CERT_FILE
+    valueFrom:
+      secretKeyRef:
+        name: tls-secret
+        key: tls.crt
+  - name: RWS_CONFIG_TLS_KEY_FILE
+    valueFrom:
+      secretKeyRef:
+        name: tls-secret
+        key: tls.key
+```
