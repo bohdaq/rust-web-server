@@ -1,6 +1,6 @@
 # rws
 
-Static file web server written in Rust. Serves HTTP/1.1 on a synchronous thread pool. Build with `--features http2` to enable TLS and HTTP/2.
+Static file web server written in Rust. Supports HTTP/3, HTTP/2, and HTTP/1.1. HTTP/3 and HTTP/2 require a TLS certificate; without one the server falls back to plain HTTP/1.1 automatically.
 
 ## Install
 

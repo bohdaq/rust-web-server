@@ -14,14 +14,14 @@ rustup update
 cargo run
 ```
 
-Starts with HTTP/2 and TLS support compiled in (the default). Without a certificate configured it falls back to plain HTTP/1.1 automatically.
+Starts with HTTP/3, HTTP/2, and TLS compiled in (the default). Without a certificate configured it falls back to plain HTTP/1.1 automatically.
 
-To run with HTTPS and HTTP/2 active, set cert and key first:
+To run with HTTPS + HTTP/2 + HTTP/3 active:
 ```bash
 cargo run -- --tls-cert-file=cert.pem --tls-key-file=key.pem
 ```
 
-To run the lightweight HTTP/1.1-only build:
+To run the HTTP/1.1-only build (no TLS):
 ```bash
 cargo run --no-default-features --features http1
 ```
@@ -39,11 +39,17 @@ cargo test --package rust-web-server --bin rws client_hint::tests::client_hints_
 
 ## Build
 
+Default (HTTP/3 + HTTP/2 + TLS):
 ```bash
 cargo build --release
 ```
 
-HTTP/1.1-only (no TLS, smaller binary):
+HTTP/2 + TLS only (no QUIC):
+```bash
+cargo build --release --no-default-features --features http2
+```
+
+HTTP/1.1 only (no TLS, smallest binary):
 ```bash
 cargo build --release --no-default-features --features http1
 ```

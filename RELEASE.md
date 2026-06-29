@@ -1,41 +1,42 @@
 [Read Me](README.md) > [Developer](DEVELOPER.md) > Release
 
 # Release Info
-Make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
 
-Minimum Rust version is **1.75**.
+Make sure you have [Rust](https://www.rust-lang.org/tools/install) 1.75 or later installed.
 
 ## Build
 
-Default binary (HTTP/2 + TLS included):
-> cargo build --release
->
-> ./target/release/rws --ip=127.0.0.1 --port=443 --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
+Default binary (HTTP/3 + HTTP/2 + TLS):
+```bash
+cargo build --release
+./target/release/rws --ip=0.0.0.0 --port=443 --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
+```
 
-HTTP/1.1-only binary (no TLS, lighter):
-> cargo build --release --no-default-features --features http1
->
-> ./target/release/rws --ip=127.0.0.1 --port=8888
+HTTP/2 + TLS only (no QUIC):
+```bash
+cargo build --release --no-default-features --features http2
+./target/release/rws --ip=0.0.0.0 --port=443 --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
+```
 
+HTTP/1.1 only (no TLS, smallest binary):
+```bash
+cargo build --release --no-default-features --features http1
+./target/release/rws --ip=0.0.0.0 --port=8080
+```
 
-# Release
-Build binary on specific platform to prepare release.
+## Publish to crates.io
 
-For each binary provide sha 256 check sum.
+```bash
+cargo publish
+```
 
-Package formats supported: Homebrew, Portage ebuild, Pacman, Debian (.deb), RPM (.rpm).
+## Supported architectures
 
+For each binary provide a SHA-256 checksum.
 
-Here is the list of supported architectures:
 1. x86 64-bit Apple: **x86_64-apple-darwin**
-1. x86 64-bit Linux: **x86_64-unknown-linux-gnu**
-   1.  Debian (.deb)
-   1.  RPM (.rpm)
-   1.  Portage ebuild
-   1.  Pacman package
-1. ARM 64-bit Linux: **aarch64_unknown_linux_gnu**
-   1.  Debian (.deb)
+1. x86 64-bit Linux: **x86_64-unknown-linux-gnu** — Debian (.deb), RPM (.rpm), Portage ebuild, Pacman
+1. ARM 64-bit Linux: **aarch64-unknown-linux-gnu** — Debian (.deb)
 1. x86 64-bit Windows: **x86_64-pc-windows-msvc**
 
-
-Also, you can clone the repository and build **rws** binary for [other platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).
+See [other supported platforms](https://doc.rust-lang.org/nightly/rustc/platform-support.html).

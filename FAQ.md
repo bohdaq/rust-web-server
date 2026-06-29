@@ -2,196 +2,171 @@
 
 # Frequently Asked Questions
 
-## Problem #1 
-I'm getting following error:
+## Problem 1
+Getting error:
 > unable to set up TCP listener: Permission denied (os error 13)
 
 ### Solution
-Try to run rws with admin privileges.
+Run `rws` with administrator privileges (`sudo` on Linux/macOS, run as Administrator on Windows).
 
-## Problem #2 
-I'm getting following error:
+## Problem 2
+Getting error:
 > unable to set up TCP listener: Address already in use (os error 48)
 
+### Solution
+Another process is already using that port. Find and stop it:
+```bash
+sudo lsof -i :7878     # macOS and Linux
+sudo fuser 7878/tcp    # Linux only
+```
+
+## Problem 3
+Started `rws` on `127.0.0.1` but cannot reach it from other devices on the local network.
 
 ### Solution
-Some application is already using port 80. 
-Find out PID and stop it.
+`127.0.0.1` is the loopback address — it only accepts connections from the same machine. Start `rws` bound to the machine's network IP or `0.0.0.0`:
+```bash
+rws --ip=0.0.0.0
+```
 
-> sudo fuser 80/tcp # works on linux
-> 
-> sudo lsof -i :80 # works on macOS as well as on linux
-
-## Problem #3
-I started rws on http://127.0.0.1:80, 
-but unable to query it from local network.
-
-### Solution
-Server is running on loopback device. Find out ip address 
-of you network device and restart rws
-using provided ip.
-
-> ifconfig # find ip address
-
-## Problem #5
-I see the following error in the console:
+## Problem 4
+Getting error in the console:
 > unable to parse request: invalid utf-8 sequence of _n_ bytes from index _m_
 
 ### Solution
-Server received not properly encoded request in UTF-8 charset. Request may be sent from various software on your network. You can ignore this message. Also request may be done through https but server is on http protocol.
+The server received a request that is not valid UTF-8. This can happen when a client sends binary data or when a browser connects via HTTP to an HTTPS-only server. Safe to ignore.
 
-
-## Problem #6
-I see the following error in the console:
+## Problem 5
+Getting error in the console:
 > unable to parse request: Unable to parse method, request uri and http version
 
 ### Solution
-Server received not valid request, for example it may contain a typo or [ASCII invisible control characters](https://en.wikipedia.org/wiki/Control_character). Request may be sent from various software on your network. You can ignore this message.
+The server received a malformed or unexpected request (e.g. a port scanner or protocol mismatch). Safe to ignore.
 
-## Problem #7
-I see the following error in the console(**Linux**):
-> unable to set up TCP listener: Cannot assign requested address (os error 99) 
-> 
-
-### Solution
-Most probably you are trying to start server on port 80. To start server on port 80 try to run it as an administrator or user with admin privileges.
-
-
-## Problem #8
-How do I start server on IPv6?
+## Problem 6
+Getting error on Linux:
+> unable to set up TCP listener: Cannot assign requested address (os error 99)
 
 ### Solution
-Simply start server with --ip=:: (or -i=::).
+The IP address you specified is not assigned to any local interface. Use `ip addr` to list available addresses.
 
-## Problem #9
-I have started server on --ip=:: but unable to access it via fe80::... address.
-
-### Solution
-Try to access the server using IPv4 _inet_ address, from the same interface. Internally your IPv4 address will be converted to IPv6 variant [::ffff:192.168.m.n].
-
-## Problem #10
-I'm trying to open directory, but getting _404 Not Found_ error.
+## Problem 7
+How do I start the server on IPv6?
 
 ### Solution
-Directory listing is not implemented. The reason behind this decision is security. To eliminate accidental sharing of unintended files.
+```bash
+rws --ip=::
+```
 
-As a workaround you can create html file with list of files you need to make available.
+## Problem 8
+Started with `--ip=::` but cannot connect via `fe80::...` link-local address.
+
+### Solution
+Use the interface's `inet` (IPv4) address instead. It will be mapped internally to `[::ffff:192.168.x.y]`.
+
+## Problem 9
+Trying to open a directory URL gets a _404 Not Found_ error.
+
+### Solution
+Directory listing is intentionally not supported (a security decision). Create an `index.html` file in the directory, or link to the files explicitly in an HTML page.
+
+## Problem 10
+Cannot connect to server:
+> Failed to connect to 192.168.x.y port N: Connection refused
+
+### Solution
+A firewall is likely blocking the port. Temporarily disable the firewall and retry.
 
 ## Problem 11
-I'm not able to connect to server, getting error:
-
-> Failed to connect to 192.168.m.n port x after y ms: Connection refused
-
-### Solution
-Most likely firewall is blocking incoming request, try to stop firewall and retry.
-
-## Problem 12
-I'm not able to start server as root
-
+Cannot start server as root:
 > Command not found
 
 ### Solution
-Root does not have /usr/local/bin as part of his $PATH variable. Try to start server by explicitly specifying path to rws: _/usr/local/bin/rws_
-
-UPDATE 26 Dec 2022: new guideline is to install to /usr/bin directory.
+`/usr/local/bin` or `~/.cargo/bin` is not in root's `$PATH`. Use the full path:
+```bash
+sudo /usr/local/bin/rws
+# or
+sudo ~/.cargo/bin/rws
+```
 
 ## Problem 12
-I'm trying to build rws from source and getting the error:
-
+Build fails with:
 > linker 'cc' not found
 
 ### Solution
-You need to install development tools:
-> sudo dnf group install "Development Tools"  #RHEL and derivatives
-> 
-> sudo yum install cmake make gcc #RHEL and derivatives
-
-
-> sudo apt-get install build-essential # Ubuntu and derivatives
-> 
-> sudo apt-get install make gcc cmake  # Ubuntu and derivatives
-
-
-> sudo pacman -S base-devel # Arch Linux
-
+Install the C development toolchain:
+```bash
+sudo apt-get install build-essential    # Debian/Ubuntu
+sudo dnf group install "Development Tools"  # Fedora/RHEL
+sudo pacman -S base-devel               # Arch Linux
+```
 
 ## Problem 13
-While building from IDE getting error:
-
+Build fails in IDE with:
 > error[E0514]: found crate `NAME` compiled by an incompatible version of rustc
 
 ### Solution
-Usually whenever such error encountered by me, I'm performing clean and build from the console, eliminating the built-in IDE compilation, and it works fine.
-
-> cargo clean
-> 
-> cargo build
-
+```bash
+cargo clean
+cargo build
+```
 
 ## Problem 14
-While building from IDE getting error:
-
-> error: failed to get `NAME` as a dependency of package `NAME VERSION
->
-> failed to load source for dependency `rust-web-server`
->
-> Unable to update registry `crates-io`
->
-> failed to fetch `https://github.com/rust-lang/crates.io-index`
->
-> failed open - 'PATH.git/FETCH_HEAD' is locked: Permission denied; class=Os (2); code=Locked (-14)
+Build fails with registry lock error:
+> failed open - 'PATH.git/FETCH_HEAD' is locked: Permission denied
 
 ### Solution
-Usually whenever such error encountered by me, I'm performing clean and build from the console as an administrator, eliminating the built-in IDE compilation, and it works fine.
-
-> sudo cargo clean
->
-> sudo cargo build
+```bash
+sudo cargo clean
+sudo cargo build
+```
 
 ## Problem 15
-While getting sources getting an error:
-
-> The following untracked working tree files would be overwritten by merge (checkout): Cargo.lock
+Getting error when pulling sources:
+> The following untracked working tree files would be overwritten by merge: Cargo.lock
 
 ### Solution
-Delete `Cargo.lock`, it will be regenerated automatically.
+```bash
+rm Cargo.lock
+```
 
-> rm Cargo.lock
-
+It will be regenerated on the next build.
 
 ## Problem 16
-Why some methods start from `_` (like `pub fn _generate_request(request: Request) -> String ` in `Request`)? 
+Why do some methods start with `_`?
 
 ### Solution
-Compiler will throw a warning, to eliminate this warning some of the methods named starting with underscore `_`.
+Rust warns about unused items. The leading underscore suppresses that warning for intentionally kept-but-unused public API methods.
 
 ## Problem 17
-I can see logs in the commandline, how can I see logs from server via http?
+How do I view server logs over HTTP?
 
 ### Solution
-Simply output console output to file `./rws &> out.txt` and open the file via `http://hostname:port/out.txt`. Logs will be appended to file, so the log file may become large and potentially even fill the filesystem.
+Redirect stdout to a file and serve it:
+```bash
+rws &> out.txt &
+```
+Then open `http://hostname:port/out.txt`. The file grows over time; watch its size.
 
 ## Problem 18
-I built rws normally but HTTPS / HTTP/2 is not working.
+Started `rws` but HTTPS / HTTP/2 / HTTP/3 is not working.
 
 ### Solution
-TLS and HTTP/2 are only available in the `http2` feature build. Rebuild with:
-> cargo build --release --features http2
-
-Then provide certificate and key paths via config. See [CONFIGURE](CONFIGURE.md) for details.
+No TLS certificate is configured. Provide certificate and key paths:
+```bash
+rws --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
+```
+Without a certificate the server falls back to plain HTTP/1.1 automatically. See [CONFIGURE](CONFIGURE.md) for all configuration options.
 
 ## Problem 19
-I'm getting a TLS error on startup:
+Getting a TLS error on startup:
 > TLS setup failed: failed to read cert file ...
 
 ### Solution
-The paths set in `RWS_CONFIG_TLS_CERT_FILE` and `RWS_CONFIG_TLS_KEY_FILE` (or `--tls-cert-file` / `--tls-key-file`) do not point to readable files. Verify the paths are correct and the process has read permission. Certificate and key files must be in PEM format.
+The certificate or key file path is wrong or the process does not have read permission. Verify the paths and permissions. Both files must be in PEM format.
 
 ## Problem 20
-My browser shows a security warning when connecting to the local HTTPS server.
+Browser shows a security warning when connecting to the local HTTPS server.
 
 ### Solution
-This is expected for self-signed certificates. The browser does not trust a certificate that is not signed by a known Certificate Authority. For local development you can add the certificate to your system trust store. For production, use a certificate from [Let's Encrypt](https://letsencrypt.org/) or another CA.
-
-
-
+Self-signed certificates are not trusted by browsers by default. For local development, add the certificate to your system trust store. For production, use a certificate from [Let's Encrypt](https://letsencrypt.org/).

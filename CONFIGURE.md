@@ -1,20 +1,19 @@
 [Read Me](README.md) > Configuration
 
-# Configuration Info
-The rws can be started without any configuration. The following is the default config - the server will bind to IP 127.0.0.1 and port 7878, will spawn 200 threads, CORS requests are allowed.
+# Configuration
 
-The rws will try to read configuration from [system environment variables](https://github.com/bohdaq/rust-web-server/blob/main/rws.variables) first, then it will override configuration
-by reading it from file named [rws.config.toml](https://github.com/bohdaq/rust-web-server/blob/main/rws.config.toml) placed in the same directory where you execute rws, at last it will
-apply config provided via [command-line arguments](https://github.com/bohdaq/rust-web-server/blob/main/rws.command_line).
+`rws` can be started with no configuration and will bind to `127.0.0.1:7878` with 200 threads, CORS enabled for all origins.
 
-I personally prefer to use system environment variables, as once it is set correctly, they are hard to break accidentally by overwriting config, or each time providing command line arguments
-during restarts.
+Configuration is applied in order from lowest to highest priority:
 
-There may be a use case when you need to run more than one instance, in such a case config file per instance or command line configuration is an option. 
+1. Built-in defaults (`src/entry_point/mod.rs`)
+2. System environment variables (`rws.variables`)
+3. `rws.config.toml` in the working directory
+4. Command-line arguments (`rws.command_line`)
 
-## HTTPS and HTTP/2
+## HTTPS, HTTP/2, and HTTP/3
 
-The `http2` build of rws has built-in TLS support using [rustls](https://github.com/rustls/rustls) (aws-lc-rs crypto backend — no OpenSSL required). Providing a certificate and key enables HTTPS on the configured port. HTTP/2 is negotiated automatically via ALPN alongside HTTP/1.1 — no separate port or extra config needed.
+TLS is built into the default `rws` binary. Providing a certificate and key enables HTTPS on the configured port. HTTP/2 is negotiated automatically via ALPN alongside HTTP/1.1 on the same TCP port. HTTP/3 listens on the same port number over UDP (QUIC) simultaneously.
 
 To obtain a free certificate for a public domain use [Let's Encrypt](https://letsencrypt.org/).
 
@@ -48,14 +47,24 @@ Example — command line:
 rws --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
 ```
 
-The server must be built with `--features http2` for TLS to take effect.
+## All configuration options
+
+| Environment variable | Config file key | Command-line arg | Default | Description |
+|---|---|---|---|---|
+| `RWS_CONFIG_IP` | `ip` | `--ip` / `-i` | `127.0.0.1` | Bind IP address |
+| `RWS_CONFIG_PORT` | `port` | `--port` / `-p` | `7878` | Bind port |
+| `RWS_CONFIG_THREAD_COUNT` | `thread_count` | `--thread-count` / `-t` | `200` | Thread pool size |
+| `RWS_CONFIG_TLS_CERT_FILE` | `tls_cert_file` | `--tls-cert-file` / `-s` | _(none)_ | PEM certificate file |
+| `RWS_CONFIG_TLS_KEY_FILE` | `tls_key_file` | `--tls-key-file` / `-k` | _(none)_ | PEM private key file |
+| `RWS_CONFIG_CORS_ALLOW_ALL` | `cors_allow_all` | `--cors-allow-all` / `-a` | `true` | Allow all CORS origins |
+| `RWS_CONFIG_CORS_ALLOW_ORIGINS` | `cors_allow_origins` | `--cors-allow-origins` / `-o` | _(none)_ | Allowed origins (comma-separated) |
+| `RWS_CONFIG_CORS_ALLOW_METHODS` | `cors_allow_methods` | `--cors-allow-methods` / `-m` | _(none)_ | Allowed methods |
+| `RWS_CONFIG_CORS_ALLOW_HEADERS` | `cors_allow_headers` | `--cors-allow-headers` / `-h` | _(none)_ | Allowed headers |
+| `RWS_CONFIG_CORS_ALLOW_CREDENTIALS` | `cors_allow_credentials` | `--cors-allow-credentials` / `-c` | `false` | Allow credentials |
+| `RWS_CONFIG_CORS_EXPOSE_HEADERS` | `cors_expose_headers` | `--cors-expose-headers` / `-e` | _(none)_ | Exposed headers |
+| `RWS_CONFIG_CORS_MAX_AGE` | `cors_max_age` | `--cors-max-age` / `-g` | _(none)_ | Preflight cache duration (seconds) |
+| `RWS_CONFIG_REQUEST_ALLOCATION_SIZE` | `request_allocation_size` | `--request-allocation-size-in-bytes` / `-r` | `16000` | Read buffer size per request |
 
 ## Memory
-As any other application, rws will allocate memory required to serve the request.
-For example if the client will make an HTTP GET for resource which has size more
-than free available memory on the running instance, rws will throw Out Of Memory error.
 
-In such case valid options are:
-1. Use range requests on the client for big resources to get a portion at a time.
-2. Balance the overall load on instance in case you have heavy load by spinning up
-   more rws instances and share traffic between them.
+`rws` allocates one read buffer per request (default 16 KB). If you serve large files, use HTTP Range Requests on the client side to fetch them in parts, or increase `request_allocation_size` with caution.
