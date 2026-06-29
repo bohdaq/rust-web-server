@@ -170,3 +170,61 @@ Browser shows a security warning when connecting to the local HTTPS server.
 
 ### Solution
 Self-signed certificates are not trusted by browsers by default. For local development, add the certificate to your system trust store. For production, use a certificate from [Let's Encrypt](https://letsencrypt.org/).
+
+## Problem 21
+Kubernetes liveness or readiness probe is failing with _Connection refused_.
+
+### Solution
+The default bind IP is `0.0.0.0` since v17.5.0, so new deployments should work out of the box. If you are running an older version or have overridden the IP to `127.0.0.1`, the kubelet cannot reach the pod IP. Set the bind address explicitly:
+```bash
+rws --ip=0.0.0.0
+```
+Or in `rws.config.toml`:
+```toml
+ip = '0.0.0.0'
+```
+
+## Problem 22
+Kubernetes readiness probe returns _503 Service Unavailable_ immediately after the pod starts.
+
+### Solution
+This is expected — `GET /readyz` returns `503` until the server finishes startup, then switches to `200 OK`. If it stays at `503`, the server failed to start (check logs). Add `initialDelaySeconds` to give the process time to initialize:
+```yaml
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 7878
+  initialDelaySeconds: 5
+  periodSeconds: 5
+```
+
+## Problem 23
+Logs are in JSON format but I want the classic Combined Log Format.
+
+### Solution
+Set `RWS_CONFIG_LOG_FORMAT=combined` (or `log_format = 'combined'` in `rws.config.toml`). JSON is the default since v17.5.0.
+
+## Problem 24
+How do I scrape Prometheus metrics from `rws`?
+
+### Solution
+`GET /metrics` returns counters and a gauge in Prometheus text format. Point your scrape config at the server:
+```yaml
+scrape_configs:
+  - job_name: rws
+    static_configs:
+      - targets: ['hostname:7878']
+```
+Available metrics: `rws_requests_total`, `rws_errors_total`, `rws_active_connections`.
+
+## Problem 25
+The server does not shut down cleanly when Kubernetes sends SIGTERM — in-flight requests are dropped.
+
+### Solution
+The `http2` and `http3` builds handle SIGTERM via `tokio::signal` and stop accepting new connections while finishing in-flight requests. The plain `http1` build exits on the next accept-loop tick after the signal. To minimize dropped requests, add a `preStop` hook to delay container termination until the load balancer has drained:
+```yaml
+lifecycle:
+  preStop:
+    exec:
+      command: ["/bin/sh", "-c", "sleep 5"]
+```
