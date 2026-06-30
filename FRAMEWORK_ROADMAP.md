@@ -459,16 +459,22 @@ Configuration changes (thread count, rate-limit thresholds, TLS cert rotation) r
 
 ---
 
-### 30. Reverse proxy / load balancing
+### 30. Reverse proxy / load balancing ✅ Done (v17.20.0)
 
-There is no way to proxy requests to upstream services. A reverse-proxy handler would let `rws` sit in front of multiple backends, enabling blue-green deploys, A/B routing, and sidecar patterns without an external Nginx or Envoy.
+`src/proxy/mod.rs` provides `ReverseProxy` — a `Middleware` that forwards
+requests to a pool of HTTP backends using round-robin load balancing. Hop-by-hop
+headers are stripped; `X-Forwarded-For` and `Via` are injected. Failed backends
+are skipped before returning `502 Bad Gateway`.
 
-**Target API:**
 ```rust
+use rust_web_server::proxy::{LoadBalancing, ReverseProxy};
+
 let app = App::new()
     .wrap(ReverseProxy::new(["http://backend-1:8080", "http://backend-2:8080"])
         .strategy(LoadBalancing::RoundRobin)
-        .health_check("/healthz"));
+        .path_prefix("/api")
+        .connect_timeout_ms(5000)
+        .read_timeout_ms(30000));
 ```
 
 ---
@@ -520,5 +526,5 @@ let app = App::new()
 | 27 | Per-route metrics | Pending |
 | 28 | Response caching | Pending |
 | 29 | Hot config reload | Pending |
-| 30 | Reverse proxy / load balancing | Pending |
+| 30 | Reverse proxy / load balancing | ✅ Done (v17.20.0) |
 | 31 | MCP server controller | Pending |

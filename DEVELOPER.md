@@ -105,6 +105,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Validated<T>` | `validate` | `FromRequest` wrapper — extracts then validates in one step; `400` on extraction failure, `422 Unprocessable Entity` with JSON error body on validation failure. |
 | `is_email` / `is_url` | `validate` | Format check helpers used by the derive macro; callable directly. |
 | `#[derive(Validate)]` | `macros` (proc-macro) | Derive `Validate` from `#[validate(...)]` field annotations. Validators: `length(min,max)`, `range(min,max)`, `email`, `required`, `url`. Requires `features = ["macros"]`. |
+| `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. |
+| `LoadBalancing` | `proxy` | Enum selecting the balancing strategy (`RoundRobin`). Passed to `ReverseProxy::strategy()`. |
 
 ---
 
@@ -1176,6 +1178,41 @@ On validation failure the response body looks like:
 ```json
 {"errors":[{"field":"email","message":"must be a valid email address"},{"field":"age","message":"must be at most 150"}]}
 ```
+
+### 30. Reverse proxy / load balancing
+
+`ReverseProxy` (in `src/proxy/`) is a `Middleware` that forwards incoming
+requests to one or more plain-HTTP backends.  Backends are selected in
+round-robin order; when a backend is unreachable the proxy tries the next one
+before returning `502 Bad Gateway`.  Hop-by-hop headers are stripped;
+`X-Forwarded-For` and `Via: 1.1 rws` are added to every forwarded request.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::proxy::{LoadBalancing, ReverseProxy};
+
+// Forward every request in round-robin across two backends.
+let app = App::new()
+    .wrap(ReverseProxy::new(["http://backend-1:8080", "http://backend-2:8080"])
+        .strategy(LoadBalancing::RoundRobin));
+
+// Proxy only /api/* to one backend; everything else is handled locally.
+let app = App::new()
+    .wrap(ReverseProxy::new(["http://api-service:3000"])
+        .path_prefix("/api")
+        .connect_timeout_ms(2000)
+        .read_timeout_ms(10000));
+```
+
+**Behaviour summary**
+
+| Condition | Result |
+|-----------|--------|
+| Backend returns a response | Forward the status code and body as-is |
+| Backend connection fails | Try next backend in round-robin order |
+| All backends fail | `502 Bad Gateway` |
+| Path prefix set and URI does not match | Pass through to the inner application |
 
 ---
 

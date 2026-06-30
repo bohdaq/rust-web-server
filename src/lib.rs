@@ -91,6 +91,7 @@ pub mod server;
 pub mod symbol;
 pub mod thread_pool;
 pub mod url;
+pub mod proxy;
 pub mod validate;
 pub mod websocket;
 
