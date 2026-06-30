@@ -280,20 +280,36 @@ let app = AppWithState::new(())
 
 ---
 
-### 20. Built-in auth middleware
+### ✅ 20. Built-in auth middleware (JWT + Basic) — _Done (v17.15.0)_
 
-JWT verification and HTTP Basic Auth are common enough to ship as first-party middleware rather than leaving each consumer to implement them correctly (timing-safe comparison, algorithm confusion attacks, etc.).
+`BasicAuthLayer<F>` and `JwtLayer` in `src/auth/mod.rs`, gated on the `auth` Cargo feature (adds `hmac` + `sha2` from RustCrypto).
 
-**Target API:**
-```rust
-// JWT
-let app = App::new()
-    .wrap(JwtLayer::new(secret).algorithm(Algorithm::HS256).claim("sub"));
-
-// Basic Auth
-let app = App::new()
-    .wrap(BasicAuthLayer::new(|user, pass| user == "admin" && pass == secret));
+```toml
+rust-web-server = { version = "17", features = ["auth"] }
 ```
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::auth::{BasicAuthLayer, JwtLayer, build_jwt, verify_jwt};
+use rust_web_server::core::New;
+
+// HTTP Basic Auth — 401 + WWW-Authenticate challenge on missing/wrong credentials
+let app = App::new()
+    .wrap(BasicAuthLayer::new(|user, pass| user == "admin" && pass == "s3cret"));
+
+// JWT HS256 — 401 on missing, tampered, wrong-algorithm, or expired tokens
+let app = App::new()
+    .wrap(JwtLayer::new(b"my-signing-secret"));
+
+// Issue tokens from a login handler:
+let token = build_jwt(r#"{"sub":"42","exp":9999999999}"#, b"my-signing-secret");
+```
+
+- `BasicAuthLayer::new(fn)` — validates `Authorization: Basic <base64>`; RFC 7617-compliant (passwords with `:` work)
+- `JwtLayer::new(secret)` — verifies `Authorization: Bearer <token>` (HS256, constant-time)
+- `build_jwt(claims_json, secret)` — produces a signed HS256 token; useful for login endpoints and tests
+- `verify_jwt(token, secret)` → `Option<Claims>` — access `claims.sub`, `claims.exp`, `claims.raw` in handlers
+- `extract_bearer_token(&req)` — extracts the raw token string from the Authorization header
 
 ---
 
@@ -466,7 +482,7 @@ let app = App::new()
 | 17 | Server-Sent Events (SSE) | ✅ Done (v17.12.0) |
 | 18 | Session management | ✅ Done (v17.13.0) |
 | 19 | Serde JSON integration | ✅ Done (v17.14.0) |
-| 20 | Built-in auth middleware (JWT + Basic) | Pending |
+| 20 | Built-in auth middleware (JWT + Basic) | ✅ Done (v17.15.0) |
 | 21 | Automatic TLS (ACME / Let's Encrypt) | Pending |
 | 22 | Declarative routing macros | Pending |
 | 23 | `derive(FromRequest)` | Pending |

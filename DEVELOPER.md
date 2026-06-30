@@ -94,6 +94,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Sse` / `SseEvent` | `sse` | Build a buffered `text/event-stream` response from a sequence of events. Correct headers set automatically. |
 | `SessionStore` / `Session` | `session` | Thread-safe in-memory session store with TTL expiry. Cookie helpers: `session_id_from_request`, `session_cookie`, `destroy_cookie`. |
 | `Json<T>` | `json` | Serde-backed JSON extractor (`from_request`) and responder (`into_response`). Requires `features = ["serde"]`. |
+| `BasicAuthLayer<F>` | `auth` | HTTP Basic Auth middleware; validates `Authorization: Basic` credentials via a closure. Requires `features = ["auth"]`. |
+| `JwtLayer` | `auth` | JWT HS256 middleware; verifies `Authorization: Bearer` tokens with constant-time HMAC-SHA256. Requires `features = ["auth"]`. |
+| `build_jwt` / `verify_jwt` / `Claims` | `auth` | Sign and verify HS256 JWTs; `Claims` exposes `sub`, `exp`, and raw JSON payload. |
 
 ---
 
@@ -785,7 +788,47 @@ let app = AppWithState::new(State {
 
 ---
 
-### 23. Serde JSON (deserialize request / serialize response)
+### 23. Auth middleware — Basic Auth and JWT
+
+`BasicAuthLayer` and `JwtLayer` are `Middleware` implementations from `src/auth/` (enabled with `features = ["auth"]`).
+
+```toml
+rust-web-server = { version = "17", features = ["auth"] }
+```
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::auth::{BasicAuthLayer, JwtLayer, build_jwt, verify_jwt, extract_bearer_token};
+use rust_web_server::core::New;
+
+// ── Basic Auth ────────────────────────────────────────────────────────────────
+
+let app = App::new()
+    .wrap(BasicAuthLayer::new(|user, pass| {
+        // constant-time comparison recommended for production
+        user == "admin" && pass == "s3cret"
+    }));
+
+// ── JWT ───────────────────────────────────────────────────────────────────────
+
+let secret = b"my-hs256-secret";
+
+// Issue a token (e.g. from a login handler):
+let token = build_jwt(r#"{"sub":"42","exp":9999999999}"#, secret);
+
+// Protect routes:
+let app = App::new().wrap(JwtLayer::new(secret));
+
+// Access claims inside a handler (re-verify — cheap):
+// let claims = extract_bearer_token(&req).and_then(|t| verify_jwt(&t, secret));
+// let user_id = claims?.sub;
+```
+
+`verify_jwt` returns `None` on: bad format, algorithm other than HS256, signature mismatch (constant-time), or expired `exp` claim. `Claims` exposes `sub`, `exp` (Unix seconds), and `raw` (the full JSON payload string for custom claims).
+
+---
+
+### 24. Serde JSON (deserialize request / serialize response)
 
 `Json<T>` (`serde` feature) wraps a serde type and bridges request bodies to typed structs and typed structs back to JSON responses. Enable the feature in your `Cargo.toml`:
 

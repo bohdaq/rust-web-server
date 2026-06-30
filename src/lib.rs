@@ -44,6 +44,8 @@
 //! for the full building blocks reference and use case examples.
 
 pub mod app;
+#[cfg(feature = "auth")]
+pub mod auth;
 #[cfg(feature = "http2")]
 pub mod async_state;
 pub mod session;
