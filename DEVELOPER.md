@@ -99,7 +99,12 @@ The crate exposes its core types so you can compose them in your own server or t
 | `build_jwt` / `verify_jwt` / `Claims` | `auth` | Sign and verify HS256 JWTs; `Claims` exposes `sub`, `exp`, and raw JSON payload. |
 | `IpFilter` | `ip_filter` | Allow/deny middleware keyed on client IPv4 address or CIDR range. `IpFilter::allow([...])` passes only listed addresses; `IpFilter::deny([...])` blocks them. |
 | `routes!` | `macros` | Declarative routing macro — builds `AppWithState`, `AsyncAppWithState`, or `Router` from a `METHOD "path" => handler` table. |
-| `#[route]`, `#[get]`, `#[post]`, … | `macros` (proc-macro) | Attribute macros that annotate handler functions with their HTTP method and path. `features = ["macros"]`. |
+| `#[route]`, `#[get]`, `#[post]`, … | `macros` (proc-macro) | Attribute macros that annotate handler functions with their HTTP method and path. Requires `features = ["macros"]`. |
+| `#[derive(FromRequest)]` | `macros` (proc-macro) | Derive `FromRequest` for a named-field struct; calls `from_request` on each field in declaration order, short-circuiting on the first error. Requires `features = ["macros"]`. |
+| `Validate` / `ValidationErrors` | `validate` | Field-level validation trait; `ValidationErrors` collects all failures before returning. Implement manually or derive. |
+| `Validated<T>` | `validate` | `FromRequest` wrapper — extracts then validates in one step; `400` on extraction failure, `422 Unprocessable Entity` with JSON error body on validation failure. |
+| `is_email` / `is_url` | `validate` | Format check helpers used by the derive macro; callable directly. |
+| `#[derive(Validate)]` | `macros` (proc-macro) | Derive `Validate` from `#[validate(...)]` field annotations. Validators: `length(min,max)`, `range(min,max)`, `email`, `required`, `url`. Requires `features = ["macros"]`. |
 
 ---
 
@@ -877,7 +882,7 @@ It also implements `FromRequest`, so it composes with the typed extractor patter
 
 ---
 
-### 24. Session management
+### 25. Session management
 
 `SessionStore` is a thread-safe in-memory session store. Place one in your application state (`AppWithState<S>`) and share it across all handlers. `create()` generates a session, `save()` persists mutations, `load()` retrieves live sessions, `destroy()` deletes one, and `purge_expired()` reclaims memory.
 
@@ -941,7 +946,7 @@ Call `store.purge_expired()` periodically (e.g. from a background thread) to rec
 
 ---
 
-### 24. Async handlers with shared state
+### 26. Async handlers with shared state
 
 `AsyncAppWithState<S>` (requires the `http2` Cargo feature) lets handlers be `async fn` closures that can `await` database queries, HTTP clients, or any async I/O. Use `App::with_async_state(state)` as the entry point.
 
@@ -982,7 +987,7 @@ Handler signature: `Fn(Request, PathParams, ConnectionInfo, Arc<S>) -> Fut` wher
 
 ---
 
-### 25. IP allowlist / denylist
+### 27. IP allowlist / denylist
 
 `IpFilter` middleware (`src/ip_filter/`) blocks or gates requests by client IPv4 address. Entries may be exact addresses (`"1.2.3.4"`) or CIDR ranges (`"10.0.0.0/8"`). Malformed entries are silently skipped.
 
@@ -1009,7 +1014,7 @@ Non-matching IPs in allow mode and IPv6 addresses both receive `403 Forbidden`. 
 
 ---
 
-### 26. Declarative routing table with `routes!`
+### 28. Declarative routing table with `routes!`
 
 `routes!` replaces repeated `.get(path, handler)` calls with a single declarative table. Any builder that exposes `.get()`, `.post()`, `.put()`, `.patch()`, `.delete()` works — `AppWithState`, `AsyncAppWithState`, or `Router`.
 
@@ -1064,6 +1069,112 @@ fn list_items(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &Db) -> Respon
 
 #[post("/items")]
 fn create_item(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &Db) -> Response { /* ... */ }
+```
+
+---
+
+### 29. Request validation
+
+`Validate` trait and `#[derive(Validate)]` (requires `features = ["macros"]`) add
+field-level validation. `Validated<T>` chains extraction and validation in one `from_request`
+call: `400` if extraction fails, `422 Unprocessable Entity` with a structured JSON error body
+if any field constraint is violated. All failures are collected before returning so the caller
+sees every invalid field at once.
+
+```toml
+# Cargo.toml
+rust-web-server = { version = "17", features = ["macros"] }
+```
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::extract::{FromRequest, BodyText};
+use rust_web_server::validate::{Validate, Validated, ValidationErrors};
+use rust_web_server::request::Request;
+use rust_web_server::router::PathParams;
+use rust_web_server::server::ConnectionInfo;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+// ── Step 1: define your input type ──────────────────────────────────────────
+
+struct CreateUser {
+    name: String,
+    email: String,
+    age: u8,
+}
+
+// ── Step 2: extract from the request (or use Json<T> with the serde feature) ─
+
+impl FromRequest for CreateUser {
+    fn from_request(req: &Request) -> Result<Self, Response> {
+        // Simplified: in practice use Json<T> or a custom body parser
+        let BodyText(body) = BodyText::from_request(req)?;
+        let mut parts = body.splitn(3, ',');
+        Ok(CreateUser {
+            name:  parts.next().unwrap_or("").to_string(),
+            email: parts.next().unwrap_or("").to_string(),
+            age:   parts.next().unwrap_or("0").trim().parse().unwrap_or(0),
+        })
+    }
+}
+
+// ── Step 3: implement Validate (or use #[derive(Validate)]) ──────────────────
+
+impl Validate for CreateUser {
+    fn validate(&self) -> Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+        if self.name.is_empty() || self.name.chars().count() > 50 {
+            errors.add("name", "must be 1–50 characters");
+        }
+        if !rust_web_server::validate::is_email(&self.email) {
+            errors.add("email", "must be a valid email address");
+        }
+        if self.age > 150 {
+            errors.add("age", "must be at most 150");
+        }
+        if errors.is_empty() { Ok(()) } else { Err(errors) }
+    }
+}
+
+// ── Or, with the derive macro (fields must be String / numeric types) ─────────
+
+// use rust_web_server::Validate;  // re-exported from rws-macros when features = ["macros"]
+//
+// #[derive(Validate)]
+// struct CreateUser {
+//     #[validate(length(min = 1, max = 50))]
+//     name: String,
+//     #[validate(email)]
+//     email: String,
+//     #[validate(range(min = 0, max = 150))]
+//     age: u8,
+// }
+
+// ── Step 4: use Validated<T> in a handler ────────────────────────────────────
+
+fn create_user(req: &Request, _: &PathParams, _: &ConnectionInfo, _: &()) -> Response {
+    // Extraction failure → 400; validation failure → 422 with JSON errors body
+    let Validated(user) = match Validated::<CreateUser>::from_request(req) {
+        Ok(v)    => v,
+        Err(res) => return res,
+    };
+
+    // user.name, user.email, user.age are guaranteed valid here
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n201_created.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n201_created.reason_phrase.to_string();
+    r
+}
+
+let app = App::with_state(())
+    .post("/users", create_user);
+```
+
+On validation failure the response body looks like:
+
+```json
+{"errors":[{"field":"email","message":"must be a valid email address"},{"field":"age","message":"must be at most 150"}]}
 ```
 
 ---

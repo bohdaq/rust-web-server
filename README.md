@@ -95,7 +95,8 @@ cargo build --release --no-default-features --features http1
 - Async handlers — `App::with_async_state(S)` gives handlers an `async fn` signature (`http2` feature, tokio-backed)
 - Middleware pipeline — `App::new().wrap(layer)` stacks composable `Middleware` layers
 - Typed errors — `IntoResponse` trait; built-in `AppError` enum covers 400–500 status codes
-- Typed request extractors — `FromRequest` trait; built-in `Body`, `BodyText`, `Query`, `RequestHeaders`
+- Typed request extractors — `FromRequest` trait; built-in `Body`, `BodyText`, `Query`, `RequestHeaders`; `#[derive(FromRequest)]` generates impls for named-field structs
+- Request validation — `Validate` trait + `Validated<T>` wrapper; `#[derive(Validate)]` with `#[validate(length, range, email, required, url)]` annotations; returns `422` with JSON error body
 - Cookie handling — `CookieJar` parses the `Cookie` header; `SetCookie` builder creates `Set-Cookie` values
 - HTTP Client Hints — `ClientHint` extractor reads UA client hint headers
 - WebSocket support — RFC 6455 handshake, frame encode/decode, SHA-1 + base64 built in, no extra dependency
@@ -112,7 +113,7 @@ cargo build --release --no-default-features --features http1
 |---------|--------------|
 | `serde` | `Json<T>` extractor and responder backed by `serde_json` |
 | `auth` | `BasicAuthLayer` (HTTP Basic) and `JwtLayer` (HS256 JWT); `build_jwt` / `verify_jwt` utilities |
-| `macros` | `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` proc-macro attributes via `rws-macros` |
+| `macros` | `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` attributes; `#[derive(FromRequest)]`; `#[derive(Validate)]` via `rws-macros` |
 
 ```toml
 [dependencies]
@@ -186,7 +187,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 26 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, and declarative routing.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 29 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, and request validation.
 
 ## AI adoption
 
