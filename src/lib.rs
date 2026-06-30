@@ -54,6 +54,7 @@ pub mod compression;
 pub mod cookie;
 pub mod error;
 pub mod extract;
+pub mod ip_filter;
 pub mod metrics;
 pub mod middleware;
 pub mod rate_limit;

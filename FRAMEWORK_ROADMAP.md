@@ -378,12 +378,14 @@ struct CreateUser {
 
 ## Security
 
-### 25. IP allowlist / denylist
+### 25. IP allowlist / denylist ✅ Done — v17.16.0
 
-No request filtering by client IP exists. Blocking known-bad ranges or restricting admin endpoints to an internal CIDR requires a custom `Middleware` implementation today.
+`IpFilter` middleware in `src/ip_filter/mod.rs`. Accepts exact IPv4 addresses and CIDR ranges.
+IPv6 client addresses are unmatched — blocked in allow mode, passed in deny mode.
 
-**Target API:**
 ```rust
+use rust_web_server::ip_filter::IpFilter;
+
 let app = App::new()
     .wrap(IpFilter::allow(["10.0.0.0/8", "192.168.0.0/16"]))
     .wrap(IpFilter::deny(["1.2.3.4"]));
@@ -487,7 +489,7 @@ let app = App::new()
 | 22 | Declarative routing macros | Pending |
 | 23 | `derive(FromRequest)` | Pending |
 | 24 | Request validation helpers | Pending |
-| 25 | IP allowlist / denylist | Pending |
+| 25 | IP allowlist / denylist | ✅ Done (v17.16.0) |
 | 26 | OpenTelemetry distributed tracing | Pending |
 | 27 | Per-route metrics | Pending |
 | 28 | Response caching | Pending |

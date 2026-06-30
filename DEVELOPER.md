@@ -97,6 +97,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `BasicAuthLayer<F>` | `auth` | HTTP Basic Auth middleware; validates `Authorization: Basic` credentials via a closure. Requires `features = ["auth"]`. |
 | `JwtLayer` | `auth` | JWT HS256 middleware; verifies `Authorization: Bearer` tokens with constant-time HMAC-SHA256. Requires `features = ["auth"]`. |
 | `build_jwt` / `verify_jwt` / `Claims` | `auth` | Sign and verify HS256 JWTs; `Claims` exposes `sub`, `exp`, and raw JSON payload. |
+| `IpFilter` | `ip_filter` | Allow/deny middleware keyed on client IPv4 address or CIDR range. `IpFilter::allow([...])` passes only listed addresses; `IpFilter::deny([...])` blocks them. |
 
 ---
 
@@ -976,6 +977,33 @@ let app = App::with_async_state(Db { items: Mutex::new(vec![]) })
 ```
 
 Handler signature: `Fn(Request, PathParams, ConnectionInfo, Arc<S>) -> Fut` where `Fut: Future<Output = Response> + Send + 'static`. Handlers receive owned values so the future is `'static`. Path matching (`:param`, `*wildcard`) and fall-through to the built-in `App` chain are included.
+
+---
+
+### 25. IP allowlist / denylist
+
+`IpFilter` middleware (`src/ip_filter/`) blocks or gates requests by client IPv4 address. Entries may be exact addresses (`"1.2.3.4"`) or CIDR ranges (`"10.0.0.0/8"`). Malformed entries are silently skipped.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::ip_filter::IpFilter;
+
+// Restrict to internal networks only.
+let internal_only = App::new()
+    .wrap(IpFilter::allow(["127.0.0.1", "10.0.0.0/8", "192.168.0.0/16"]));
+
+// Block a known-bad range.
+let with_block = App::new()
+    .wrap(IpFilter::deny(["198.51.100.0/24"]));
+
+// Chain both: allow internal, then deny a specific internal address.
+let layered = App::new()
+    .wrap(IpFilter::allow(["10.0.0.0/8"]))
+    .wrap(IpFilter::deny(["10.0.0.99"]));
+```
+
+Non-matching IPs in allow mode and IPv6 addresses both receive `403 Forbidden`. Use `IpFilter::deny` when most traffic should pass and only specific addresses need blocking.
 
 ---
 
