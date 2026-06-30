@@ -87,6 +87,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `FromRequest` / `Body` / `BodyText` / `Query` | `extract` | Typed request extractors — parse body or query params, returning a ready error on failure |
 | `RateLimiter` | `rate_limit` | Per-IP sliding-window rate limiter; `global()` reads config from env vars |
 | `WebSocket` / `Frame` | `websocket` | RFC 6455 WebSocket handshake, frame read/write; SHA-1 and base64 built in |
+| `AppWithState<S>` | `state` | State-aware application with built-in dynamic routing; state shared via `Arc<S>` |
+| `Middleware` / `WithMiddleware` | `middleware` | Composable middleware pipeline wrapping any `Application` |
 
 ---
 
@@ -606,6 +608,136 @@ Key primitives:
 - `WebSocket::read_frame(&mut stream)` → `Frame` — handles client-to-server masking automatically
 - `WebSocket::write_frame(&mut stream, frame)` — sends a server-to-client unmasked frame
 - `Frame::Text`, `Frame::Binary`, `Frame::Ping`, `Frame::Pong`, `Frame::Close`, `Frame::Continuation`
+
+---
+
+### 20. Shared application state
+
+`AppWithState<S>` wraps any `S: Send + Sync` behind an `Arc` and provides state-aware route registration with full `:param` / `*wildcard` path matching. Unmatched routes fall through to the built-in `App` controller chain.
+
+```rust
+use rust_web_server::state::AppWithState;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::range::Range;
+use rust_web_server::mime_type::MimeType;
+use rust_web_server::core::New;
+
+struct AppState {
+    greeting: String,
+    counter: std::sync::atomic::AtomicU64,
+}
+
+let app = AppWithState::new(AppState {
+    greeting: "Hello".to_string(),
+    counter: std::sync::atomic::AtomicU64::new(0),
+})
+.get("/greet", |_req, _params, _conn, state| {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r.content_range_list = vec![
+        Range::get_content_range(state.greeting.as_bytes().to_vec(), MimeType::TEXT_PLAIN.to_string())
+    ];
+    r
+})
+.get("/users/:id/posts/:post_id", |_req, params, _conn, state| {
+    let user_id = params.get("id").unwrap_or("?");
+    let post_id = params.get("post_id").unwrap_or("?");
+    let count = state.counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let body = format!("{} user={} post={} count={}", state.greeting, user_id, post_id, count + 1);
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r.content_range_list = vec![Range::get_content_range(body.into_bytes(), MimeType::TEXT_PLAIN.to_string())];
+    r
+})
+.post("/items", |req, _params, _conn, _state| {
+    // process req.body, return 201
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n201_created.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n201_created.reason_phrase.to_string();
+    r
+})
+.delete("/items/:id", |_req, params, _conn, _state| {
+    let _ = params.get("id");
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r
+});
+```
+
+The state is stored once (not cloned per request). `app.state()` returns `&S` for inspection or testing.
+
+---
+
+### 21. Middleware pipeline
+
+`WithMiddleware<A>` wraps any `Application` with a stack of [`Middleware`] layers. Implement `Middleware::handle` to intercept requests before they reach the inner application. Call `next.execute(request, connection)` to continue the chain, or return early to short-circuit.
+
+```rust
+use rust_web_server::middleware::{Middleware, WithMiddleware};
+use rust_web_server::application::Application;
+use rust_web_server::request::Request;
+use rust_web_server::response::Response;
+use rust_web_server::server::ConnectionInfo;
+use rust_web_server::app::App;
+use rust_web_server::error::{AppError, IntoResponse};
+use rust_web_server::header::Header;
+use rust_web_server::core::New;
+
+// ── Logging middleware ────────────────────────────────────────────────────────
+
+pub struct LoggingMiddleware;
+
+impl Middleware for LoggingMiddleware {
+    fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
+        println!("{} {}", request.method, request.request_uri);
+        let response = next.execute(request, connection)?;
+        println!("  → {}", response.status_code);
+        Ok(response)
+    }
+}
+
+// ── Auth middleware ───────────────────────────────────────────────────────────
+
+pub struct RequireApiKey {
+    valid_key: String,
+}
+
+impl Middleware for RequireApiKey {
+    fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
+        let key = request.headers.iter().find(|h| h.name.to_lowercase() == "x-api-key");
+        match key {
+            Some(h) if h.value == self.valid_key => next.execute(request, connection),
+            _ => Ok(AppError::Unauthorized.into_response()),
+        }
+    }
+}
+
+// ── Wire it up ────────────────────────────────────────────────────────────────
+
+let app = WithMiddleware::new(App::new())
+    .wrap(LoggingMiddleware)
+    .wrap(RequireApiKey { valid_key: "secret-key".to_string() });
+```
+
+Compose `WithMiddleware` with `AppWithState` for state-aware middleware stacks:
+
+```rust
+use rust_web_server::state::AppWithState;
+
+struct MyState { db_url: String }
+
+let app = WithMiddleware::new(
+    AppWithState::new(MyState { db_url: "postgres://...".to_string() })
+        .get("/users", |_req, _params, _conn, state| {
+            // access state.db_url
+            Response::new()
+        })
+)
+.wrap(LoggingMiddleware);
+```
 
 ---
 

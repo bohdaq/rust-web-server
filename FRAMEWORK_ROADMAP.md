@@ -8,19 +8,19 @@ What is needed to evolve `rust-web-server` from an HTTP toolkit into a framework
 
 ## Blockers — cannot build a real application without these
 
-### 1. Shared application state
+### ✅ 1. Shared application state — _Done (v17.9.0)_
 
-`App` is a zero-sized `Copy` struct. `Controller` methods are all static `fn` with no `&self`. There is no way to inject a database pool, config struct, cache, or any shared resource into a handler.
+`AppWithState<S>` in `src/state/mod.rs` wraps any `S: Send + Sync` behind an `Arc` and exposes route registration with state access:
 
-**Target API:**
 ```rust
-let app = App::new().with_state(AppState {
-    db: Pool::connect(&database_url).await?,
-    config: Config::from_env(),
-});
+let app = AppWithState::new(AppState { db: pool, config })
+    .get("/users/:id", |_req, params, _conn, state| {
+        let user = state.db.find(params.get("id").unwrap()).unwrap();
+        // ... build response
+    });
 ```
 
-Every controller would receive `&AppState` (or a typed extract from it) alongside `&Request`.
+Handlers receive `(&Request, &PathParams, &ConnectionInfo, &S)`. Unmatched routes fall through to the built-in [`App`] controller chain. The `Arc<S>` is cloned once per route registration, not per request.
 
 ---
 
@@ -37,22 +37,27 @@ app.delete("/users/:id", UserController::destroy);
 
 The router extracts named segments (`:id`) and wildcard segments (`*path`) and makes them available in the handler as typed values.
 
-> ✅ **Partially done (v17.6.0):** `Router` in `src/router/mod.rs` provides standalone dynamic routing with `:param` and `*wildcard` extraction. Handlers receive `&PathParams`. Integration with the built-in `App::execute` is pending (item 1 — shared state — is the prerequisite for wiring it cleanly).
+> ✅ **Done (v17.9.0):** `AppWithState<S>` (see Item 1) integrates `Router`-style `:param` / `*wildcard` matching with shared state. Standalone `Router` (v17.6.0) remains available for stateless dispatch inside custom `Application` implementations.
 
 ---
 
-### ✅ 3. Middleware pipeline — _Deferred: requires architectural change_
+### ✅ 3. Middleware pipeline — _Done (v17.9.0)_
 
-There is no pipeline. Cross-cutting concerns — authentication, rate limiting, request tracing, header injection — require editing `App::execute` directly. There is no way to compose behavior without touching core dispatch code.
+`Middleware` trait and `WithMiddleware<A>` in `src/middleware/mod.rs`. Wraps any `Application`:
 
-**Target API:**
 ```rust
-app.wrap(AuthMiddleware::new(secret))
-   .wrap(RateLimiter::new(100))
-   .wrap(RequestLogger::new());
+let app = WithMiddleware::new(App::new())
+    .wrap(AuthMiddleware::new(secret))
+    .wrap(RateLimitMiddleware::new(100))
+    .wrap(RequestLogger);
 ```
 
-Each middleware wraps the next, forming a chain. A request flows inward through the chain before reaching the handler, and the response flows back outward.
+`Middleware::handle` receives `next: &dyn Application` — call `next.execute` to continue the chain or return early to short-circuit. Layers run in registration order on the request path and in reverse on the response path. Composes cleanly with `AppWithState`:
+
+```rust
+let app = WithMiddleware::new(AppWithState::new(state).get(...))
+    .wrap(LoggingMiddleware);
+```
 
 ---
 
@@ -166,9 +171,9 @@ Real-time features (chat, live updates, collaborative editing) are now possible.
 
 | # | Gap | Status |
 |---|-----|--------|
-| 1 | Shared application state | Pending |
-| 2 | Dynamic routing with path parameters | ✅ Partial (standalone `Router`) |
-| 3 | Middleware pipeline | Pending |
+| 1 | Shared application state | ✅ Done (v17.9.0) |
+| 2 | Dynamic routing with path parameters | ✅ Done (v17.9.0) |
+| 3 | Middleware pipeline | ✅ Done (v17.9.0) |
 | 4 | HTTP/1.1 keep-alive | ✅ Done (v17.4.0) |
 | 5 | Async handlers | Pending |
 | 6 | Typed request extractors | ✅ Done (v17.7.0) |
