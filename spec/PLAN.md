@@ -138,7 +138,7 @@ docs/
 |------|-------------|
 | **Docker** | Annotated `Dockerfile` (multi-stage); image size per feature flag; `EXPOSE 7878`; env var injection |
 | **Kubernetes** | `/healthz` liveness probe; `/readyz` readiness probe (503 during shutdown); `/metrics` Prometheus scrape; graceful shutdown (SIGTERM → 503); HPA config snippet; example `Deployment` + `Service` YAML |
-| **Observability** | Prometheus text format from `/metrics` (`requests_total`, `errors_total`, `active_connections`); JSON vs Combined Log Format; configuring `log_format`; **(Coming Soon: OpenTelemetry tracing, per-route metrics)** |
+| **Observability** | Prometheus text format from `/metrics` (`requests_total`, `errors_total`, `active_connections`); per-route counters and latency histograms via `MetricsLayer`; JSON vs Combined Log Format; configuring `log_format`; **(Coming Soon: OpenTelemetry tracing)** |
 
 ---
 
@@ -189,10 +189,6 @@ These appear as callout blocks within relevant pages — not omitted, not separa
 
 ### Infrastructure
 - OpenTelemetry distributed tracing
-- Per-route metrics
-- Hot config reload
-- Response caching
-- Reverse proxy / load balancing
 - MCP (Model Context Protocol) server controller
 
 ---

@@ -1391,9 +1391,16 @@ readinessProbe:
 
 `GET /metrics` returns counters and gauges in Prometheus text format (`text/plain; version=0.0.4`):
 
+**Server-wide (always present)**
 - `rws_requests_total` — total HTTP requests handled
 - `rws_errors_total` — requests that returned an application error
 - `rws_active_connections` — currently open connections
+
+**Per-route (present when `MetricsLayer` is in the middleware stack)**
+- `rws_route_requests_total{method,path,status}` — request count per route and status code
+- `rws_route_duration_seconds{method,path}` — latency histogram (11 standard Prometheus buckets: 5 ms … 10 s)
+
+See [use case #33](#33-per-route-metrics) for the setup snippet.
 
 ### Structured JSON logging
 

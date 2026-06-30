@@ -42,21 +42,27 @@ No URL rewriting or body transformation. nginx `rewrite`, `proxy_set_header`, an
 
 Remaining: forward-auth delegation to an external service (Traefik's `ForwardAuth`).
 
-### Response caching
+### Response caching ✅ Done (v17.22.0)
 
-No HTTP cache layer. nginx `proxy_cache`, Varnish, and Caddy's cache module let the server store and replay upstream responses. Without this `rws` cannot act as a CDN edge or cache accelerator.
+`CacheLayer` middleware (`src/cache/`) stores successful `GET` responses in memory and serves subsequent identical requests without calling the handler. Supports TTL, vary-by-header for content negotiation, capacity-bounded eviction (oldest-first), and `Cache-Control: no-store/private` opt-out. `Age` header injected on hits.
 
-### Hot config reload
+Remaining: shared cache across processes (Redis, Memcached), `stale-while-revalidate`, CDN-tier caching (Surrogate-Key, purge API).
 
-nginx `nginx -s reload`, Traefik's dynamic provider model, and Caddy's admin API allow config changes without dropping connections. `rws` requires a full process restart.
+### Hot config reload ✅ Done (v17.21.0)
+
+Send `SIGHUP` (or `POST /admin/config/reload`) to re-apply CORS rules, rate-limit thresholds, log format, and request allocation size without restarting. `RateLimiter` limits update live via `AtomicU32`/`AtomicU64`. `config_reload::current()` exposes a typed `ConfigSnapshot` anywhere in the handler stack.
+
+Remaining: TLS cert rotation (requires rebuilding the acceptor), port/thread-count changes (require restart).
 
 ---
 
 ## Observability gaps
 
-### Per-route metrics
+### Per-route metrics ✅ Done (v17.23.0)
 
-Only global counters exist (`rws_requests_total`, `rws_errors_total`, `rws_active_connections`). nginx's `$request_time`, Traefik's per-router metrics, and Envoy's per-cluster stats give per-endpoint latency, error rates, and throughput.
+`MetricsLayer` middleware (`src/metrics/`) records `rws_route_requests_total{method,path,status}` counters and `rws_route_duration_seconds{method,path}` histograms (11 standard Prometheus buckets) per endpoint. `GET /metrics` now emits per-route data when `MetricsLayer` is in the stack. Query strings are stripped before keying to avoid cardinality explosion.
+
+Remaining: OpenTelemetry export, per-route error-rate alerting, cardinality limits.
 
 ### Distributed tracing
 
@@ -114,7 +120,8 @@ No upstream health-based circuit breaking or automatic retries on upstream 5xx r
 | 4 | Rate limiting | ✅ Done |
 | 5 | Request / response rewriting | Partial (proxy injects `X-Forwarded-For`, `Via`) |
 | 6 | Authentication middleware | ✅ Done (Basic, JWT, IP filter) |
-| 7 | Response caching | Pending |
+| 7 | Response caching | ✅ Done (v17.22.0) |
 | 8 | WebSocket support | ✅ Done (v17.8.0) |
-| 9 | Hot config reload | Pending |
-| 10 | Per-route metrics + distributed tracing | Pending |
+| 9 | Hot config reload | ✅ Done (v17.21.0) |
+| 10 | Per-route metrics | ✅ Done (v17.23.0) |
+| 11 | Distributed tracing (OpenTelemetry) | Pending |
