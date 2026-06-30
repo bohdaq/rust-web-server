@@ -37,16 +37,27 @@ docs/
     │       │   ├── request-response.md
     │       │   ├── extractors.md
     │       │   ├── error-handling.md
+    │       │   ├── middleware.md
+    │       │   ├── validation.md
     │       │   ├── forms-uploads.md
     │       │   ├── json.md
-    │       │   └── cookies.md
+    │       │   ├── cookies.md
+    │       │   └── async-handlers.md
     │       ├── features/
     │       │   ├── cors-security.md
     │       │   ├── rate-limiting.md
     │       │   ├── compression.md
     │       │   ├── https-tls.md
     │       │   ├── http2.md
-    │       │   └── http3-quic.md
+    │       │   ├── http3-quic.md
+    │       │   ├── websocket.md
+    │       │   ├── sse.md
+    │       │   ├── auth.md
+    │       │   ├── sessions.md
+    │       │   ├── reverse-proxy.md
+    │       │   ├── caching.md
+    │       │   ├── metrics.md
+    │       │   └── hot-reload.md
     │       ├── testing/
     │       │   └── test-client.md
     │       ├── deployment/
@@ -68,7 +79,7 @@ docs/
 
 - Hero: tagline, 1-line install snippet, `cargo run` output in a terminal animation
 - Protocol matrix badge row: HTTP/1.1 · HTTP/2 · HTTP/3/QUIC · TLS (rustls) · CORS · Gzip · ETag
-- Feature grid (6 cards): Zero dependencies · Thread-pool HTTP/1.1 · Kubernetes-ready · Prometheus metrics · In-process test client · No OpenSSL
+- Feature grid (8 cards): Zero dependencies · Thread-pool HTTP/1.1 · Middleware pipeline · Kubernetes-ready · Prometheus metrics · WebSocket & SSE · In-process test client · No OpenSSL
 - "Get started in 60 seconds" code block
 - Link to Quick Start
 
@@ -80,7 +91,7 @@ docs/
 |------|-------------|
 | **Installation** | `cargo add rust-web-server`, build from source, feature flags table (`http1` / `http2` / `http3`), binary sizes, MSRV 1.75 |
 | **Quick Start** | Run plain HTTP; serve static files; write and wire your first `Controller` in ~20 lines; verify with `curl` |
-| **Features** | Full feature checklist table with checkmarks; at the bottom a "Coming Soon" section for WebSockets, SSE, ACME, reverse proxy, etc. |
+| **Features** | Full feature checklist table with checkmarks; "Coming Soon" callout for ACME auto-TLS, OpenTelemetry tracing, MCP server |
 
 ---
 
@@ -101,13 +112,16 @@ docs/
 |------|-------------|
 | **Overview** | Mental model: `Controller` trait → `App::execute()` dispatch chain → `Response`. Diagram of request lifecycle from `main.rs` to TCP write. |
 | **Controllers** | `Controller` trait (`is_matching` + `process`); annotated minimal example; adding to `App::execute()`; built-in controllers list |
-| **Routing** | Static URI matching in `is_matching`; dynamic `Router` with `:param` and `*wildcard`; `PathParams::get()`; method guards |
+| **Routing** | Static URI matching in `is_matching`; dynamic `Router` with `:param` and `*wildcard`; `PathParams::get()`; method guards; `routes!` declarative macro; `#[get]`, `#[post]`, etc. attribute macros |
 | **Request & Response** | `Request` struct fields; `Response` builder; `Header` constants (50+); status code constants; content type via `MimeType`; `ContentRange` / `Range::get_content_range()` |
-| **Typed Extractors** | `FromRequest` trait; `Body`, `BodyText`, `Query`, `RequestHeaders`; implementing a custom extractor — **(Coming Soon: derive macro)** |
+| **Typed Extractors** | `FromRequest` trait; `Body`, `BodyText`, `Query`, `RequestHeaders`; `#[derive(FromRequest)]` for named-field structs; implementing a custom extractor |
 | **Error Handling** | `AppError` enum variants → HTTP status codes; `IntoResponse` trait; typed errors in controllers |
+| **Middleware** | `Middleware` trait (`handle`); `WithMiddleware` / `App::new().wrap()`; built-in layers: `RateLimitLayer`, `CacheLayer`, `MetricsLayer`, `IpFilter`, `ReverseProxy`; writing a custom layer |
+| **Validation** | `Validate` trait; `ValidationErrors`; `Validated<T>` extractor (`422` on failure); `#[derive(Validate)]` with `length`, `range`, `email`, `required`, `url` annotations |
 | **Forms & File Uploads** | `FormUrlEncoded::parse()`; `FormMultipartData::parse()`; reading file bytes from multipart parts; size limits |
-| **JSON** | Custom JSON parser (`json::object`, `json::array`, `json::property`); reading values; limitations vs serde; **(Coming Soon: serde integration)** |
+| **JSON** | Custom JSON parser (`json::object`, `json::array`, `json::property`); `Json<T>` extractor and responder via `serde_json` (`features = ["serde"]`) |
 | **Cookies** | `CookieJar::parse()` for reading; `SetCookie` builder for writing; all RFC 6265 attributes (`Secure`, `HttpOnly`, `SameSite`, `Max-Age`, `Domain`, `Path`) |
+| **Async Handlers** | `App::with_async_state(S)` for `async fn` handlers; requires `http2` feature; tokio runtime; when to use vs sync |
 
 ---
 
@@ -116,11 +130,19 @@ docs/
 | Page | Key content |
 |------|-------------|
 | **CORS & Security Headers** | `cors_allow_all` vs explicit origins; all `RWS_CONFIG_CORS_*` vars; automatic HSTS, CSP (`default-src 'self'`), `X-Frame-Options`, `X-Content-Type-Options`, Client Hints |
-| **Rate Limiting** | Per-IP sliding-window `RateLimiter`; `global()`; `check()` / `remaining()` / `reset()`; `RWS_CONFIG_RATE_LIMIT_*` vars; wiring into a controller |
+| **Rate Limiting** | Per-IP sliding-window `RateLimiter`; `global()`; `check()` / `remaining()` / `reset()`; `RWS_CONFIG_RATE_LIMIT_*` vars; `RateLimitLayer` middleware; live update via SIGHUP |
 | **Compression** | Automatic gzip on `Accept-Encoding: gzip`; which content types trigger it; chunked streaming for files > 8 MB |
 | **HTTPS / TLS** | Generating a self-signed cert; `rustls` (no OpenSSL); `--tls-cert-file` / `--tls-key-file`; HTTP → HTTPS redirect port |
 | **HTTP/2** | `--features http2` build; ALPN negotiation on same port; forbidden headers stripped automatically; `Alt-Svc` advertisement |
 | **HTTP/3 / QUIC** | Default build includes HTTP/3; QUIC UDP listener; `Alt-Svc: h3=":PORT"`; `quinn` + `h3-quinn`; when to use |
+| **WebSocket** | RFC 6455 handshake; `WebSocket::server_handshake()`; `Frame::read()` / `Frame::write()`; SHA-1 + base64 built in; no extra dep |
+| **Server-Sent Events** | `Sse` builder; `SseEvent`; fields: `data`, `event`, `id`, `retry`; `text/event-stream` headers set automatically; use case: AI token streaming |
+| **Auth** | `BasicAuthLayer<F>` — validates `Authorization: Basic` via closure (`features = ["auth"]`); `JwtLayer` — HS256 `Authorization: Bearer` token verification; `build_jwt` / `verify_jwt` / `Claims` utilities |
+| **Sessions** | `SessionStore` thread-safe in-memory sessions with TTL; `Session` read/write; cookie helpers: `session_id_from_request`, `session_cookie`, `destroy_cookie` |
+| **Reverse Proxy** | `ReverseProxy` middleware; round-robin `LoadBalancing`; `path_prefix` for selective proxying; `connect_timeout_ms` / `read_timeout_ms`; hop-by-hop header stripping; `X-Forwarded-For` + `Via` injection; `502 Bad Gateway` when all backends fail |
+| **Response Caching** | `CacheLayer::memory(capacity).ttl(secs).vary_by_header("Accept")`; what is cached (GET, 2xx); `Cache-Control: no-store/private` opt-out; `Cache-Control: no-cache` revalidation; `Age` header on hits; oldest-first eviction |
+| **Per-Route Metrics** | `MetricsLayer` middleware; `rws_route_requests_total{method,path,status}` counter; `rws_route_duration_seconds{method,path}` histogram (11 buckets); query strings stripped; `record_route()` for custom instrumentation |
+| **Hot Config Reload** | SIGHUP trigger (`kill -HUP $(pidof rws)`); `POST /admin/config/reload`; what reloads (CORS, rate limits, log format, allocation size) vs requires restart (port, TLS cert, thread count); `config_reload::current()` |
 
 ---
 
@@ -138,7 +160,7 @@ docs/
 |------|-------------|
 | **Docker** | Annotated `Dockerfile` (multi-stage); image size per feature flag; `EXPOSE 7878`; env var injection |
 | **Kubernetes** | `/healthz` liveness probe; `/readyz` readiness probe (503 during shutdown); `/metrics` Prometheus scrape; graceful shutdown (SIGTERM → 503); HPA config snippet; example `Deployment` + `Service` YAML |
-| **Observability** | Prometheus text format from `/metrics` (`requests_total`, `errors_total`, `active_connections`); per-route counters and latency histograms via `MetricsLayer`; JSON vs Combined Log Format; configuring `log_format`; **(Coming Soon: OpenTelemetry tracing)** |
+| **Observability** | Server-wide Prometheus counters (`rws_requests_total`, `rws_errors_total`, `rws_active_connections`); per-route counters and latency histograms via `MetricsLayer`; JSON vs Combined Log Format; configuring `log_format`; **(Coming Soon: OpenTelemetry tracing)** |
 
 ---
 
@@ -169,27 +191,15 @@ docs/
 
 These appear as callout blocks within relevant pages — not omitted, not separate stubs.
 
-### Framework / DX
-- Declarative routing macros (`#[route(GET, "/users/:id")]`)
-- `derive(FromRequest)` macro for custom extractors
-- Serde JSON integration
-- Middleware / filter chain
-- Session management
-- Request validation helpers
-
 ### Protocol / Transport
-- WebSocket support
-- Server-Sent Events (SSE) for streaming / AI token output
 - Automatic TLS (ACME / Let's Encrypt)
 
-### Security
-- JWT authentication middleware
-- Basic auth middleware
-- IP allowlist / denylist
+### Observability
+- OpenTelemetry distributed tracing (Jaeger, Zipkin export)
 
 ### Infrastructure
-- OpenTelemetry distributed tracing
 - MCP (Model Context Protocol) server controller
+- Virtual hosting / SNI routing
 
 ---
 
@@ -200,9 +210,9 @@ These appear as callout blocks within relevant pages — not omitted, not separa
 | Landing | 1 |
 | Getting Started | 3 |
 | Configuration | 4 |
-| Building Apps | 9 |
-| Features | 6 |
+| Building Apps | 12 |
+| Features | 14 |
 | Testing | 1 |
 | Deployment | 3 |
 | Reference | 2 |
-| **Total** | **29** |
+| **Total** | **40** |
