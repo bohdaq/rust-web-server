@@ -453,9 +453,34 @@ let app = App::new()
 
 ---
 
-### 29. Hot config reload
+### 29. Hot config reload ✅ Done (v17.21.0)
 
-Configuration changes (thread count, rate-limit thresholds, TLS cert rotation) require a full server restart today. A `SIGHUP` handler that re-reads `rws.config.toml` and applies non-binding changes in-place would eliminate downtime for routine tuning.
+`src/config_reload/mod.rs` provides live config reload without restarting the server.
+
+**Trigger:** send `SIGHUP` to the process:
+```bash
+kill -HUP $(pidof rws)
+```
+
+**What reloads without restart:**
+- CORS settings (`RWS_CONFIG_CORS_*`)
+- Rate-limit thresholds (`RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS`, `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS`)
+- Log format (`RWS_CONFIG_LOG_FORMAT`)
+- Request allocation size (`RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES`)
+
+**What requires restart:** IP/port (bound socket), thread count, TLS cert/key (acceptor built once).
+
+Implementation:
+- HTTP/1.1 (`http1` feature): `libc::signal(SIGHUP, handler)` sets an `AtomicBool`; the accept loop calls `config_reload::reload()` between connections.
+- HTTP/2 + HTTP/3 (`http2`/`http3` feature): a dedicated `sighup()` future fires in each `tokio::select!` loop and calls `reload()` inline.
+- `RateLimiter` stores `max_requests`/`window_secs` as `AtomicU32`/`AtomicU64` so thresholds update live without restarting any thread.
+- `ConfigSnapshot` — a plain struct snapshot of all hot-reloadable values; obtain via `config_reload::current()`.
+
+```rust
+// Read current hot-reloadable config anywhere in request handling:
+let cfg = rust_web_server::config_reload::current();
+if cfg.cors_allow_all { /* ... */ }
+```
 
 ---
 
@@ -525,6 +550,6 @@ let app = App::new()
 | 26 | OpenTelemetry distributed tracing | Pending |
 | 27 | Per-route metrics | Pending |
 | 28 | Response caching | Pending |
-| 29 | Hot config reload | Pending |
+| 29 | Hot config reload | ✅ Done (v17.21.0) |
 | 30 | Reverse proxy / load balancing | ✅ Done (v17.20.0) |
 | 31 | MCP server controller | Pending |

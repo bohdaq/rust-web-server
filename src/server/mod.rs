@@ -311,6 +311,7 @@ impl Server {
             }) {
                 eprintln!("unable to install signal handler: {}", e);
             }
+            crate::config_reload::install_sighup_handler();
             if let Err(e) = listener.set_nonblocking(true) {
                 eprintln!("unable to set non-blocking listener: {}", e);
             }
@@ -318,6 +319,12 @@ impl Server {
             loop {
                 if shutdown.load(Ordering::SeqCst) {
                     break;
+                }
+                if crate::config_reload::RELOAD_REQUESTED
+                    .compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed)
+                    .is_ok()
+                {
+                    crate::config_reload::reload();
                 }
                 match listener.accept() {
                     Ok((stream, peer_addr)) => {
@@ -458,6 +465,23 @@ async fn sigterm() {
     std::future::pending::<()>().await
 }
 
+/// Returns a stream that fires on each SIGHUP on Unix; never fires elsewhere.
+#[cfg(feature = "http2")]
+async fn sighup() {
+    #[cfg(unix)]
+    {
+        if let Ok(mut s) = tokio::signal::unix::signal(
+            tokio::signal::unix::SignalKind::hangup()
+        ) {
+            s.recv().await;
+        } else {
+            std::future::pending::<()>().await
+        }
+    }
+    #[cfg(not(unix))]
+    std::future::pending::<()>().await
+}
+
 #[cfg(feature = "http2")]
 impl Server {
     pub async fn run_tls(
@@ -544,6 +568,9 @@ impl Server {
                     crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
                     println!("\nShutting down gracefully (SIGTERM).");
                     break;
+                }
+                _ = sighup() => {
+                    crate::config_reload::reload();
                 }
             }
         }
@@ -653,6 +680,9 @@ impl Server {
                 _ = sigterm() => {
                     println!("\nShutting down HTTP redirect listener (SIGTERM).");
                     break;
+                }
+                _ = sighup() => {
+                    crate::config_reload::reload();
                 }
             }
         }
@@ -809,6 +839,9 @@ impl Server {
                     println!("\nShutting down QUIC (SIGTERM).");
                     endpoint.close(0u32.into(), b"shutdown");
                     break;
+                }
+                _ = sighup() => {
+                    crate::config_reload::reload();
                 }
             }
         }

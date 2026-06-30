@@ -63,6 +63,7 @@ pub mod error;
 pub mod extract;
 pub mod ip_filter;
 pub mod macros;
+pub mod config_reload;
 pub mod metrics;
 pub mod middleware;
 pub mod rate_limit;

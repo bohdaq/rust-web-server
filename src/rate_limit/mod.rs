@@ -3,6 +3,7 @@ mod tests;
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 /// A sliding-window per-key rate limiter.
@@ -29,8 +30,8 @@ use std::time::{Duration, Instant};
 /// ```
 pub struct RateLimiter {
     state: Mutex<HashMap<String, VecDeque<Instant>>>,
-    max_requests: u32,
-    window: Duration,
+    max_requests: AtomicU32,
+    window_secs: AtomicU64,
 }
 
 impl RateLimiter {
@@ -38,9 +39,26 @@ impl RateLimiter {
     pub fn new(max_requests: u32, window_secs: u64) -> Self {
         RateLimiter {
             state: Mutex::new(HashMap::new()),
-            max_requests,
-            window: Duration::from_secs(window_secs),
+            max_requests: AtomicU32::new(max_requests),
+            window_secs: AtomicU64::new(window_secs),
         }
+    }
+
+    /// Update the limits on a live limiter without restarting.
+    ///
+    /// Changes take effect on the next call to [`check`] or [`remaining`].
+    /// Called automatically by [`crate::config_reload::reload`] on SIGHUP.
+    pub fn set_limits(&self, max_requests: u32, window_secs: u64) {
+        self.max_requests.store(max_requests, Ordering::Relaxed);
+        self.window_secs.store(window_secs, Ordering::Relaxed);
+    }
+
+    fn window(&self) -> Duration {
+        Duration::from_secs(self.window_secs.load(Ordering::Relaxed))
+    }
+
+    fn max(&self) -> u32 {
+        self.max_requests.load(Ordering::Relaxed)
     }
 
     /// Returns `true` if `key` (typically a client IP) is within the rate limit,
@@ -49,8 +67,9 @@ impl RateLimiter {
     /// A permitted call is always recorded so it counts toward future limits.
     pub fn check(&self, key: &str) -> bool {
         let now = Instant::now();
+        let window = self.window();
+        let max = self.max();
         let mut guard = self.state.lock().unwrap();
-        let window = self.window;
         let timestamps = guard.entry(key.to_string()).or_default();
 
         // Drop timestamps older than the window.
@@ -58,7 +77,7 @@ impl RateLimiter {
             timestamps.pop_front();
         }
 
-        if (timestamps.len() as u32) < self.max_requests {
+        if (timestamps.len() as u32) < max {
             timestamps.push_back(now);
             true
         } else {
@@ -69,13 +88,14 @@ impl RateLimiter {
     /// Number of remaining requests `key` may make within the current window.
     pub fn remaining(&self, key: &str) -> u32 {
         let now = Instant::now();
+        let window = self.window();
+        let max = self.max();
         let mut guard = self.state.lock().unwrap();
-        let window = self.window;
         let timestamps = guard.entry(key.to_string()).or_default();
         while timestamps.front().map(|t| now.duration_since(*t) > window).unwrap_or(false) {
             timestamps.pop_front();
         }
-        self.max_requests.saturating_sub(timestamps.len() as u32)
+        max.saturating_sub(timestamps.len() as u32)
     }
 
     /// Remove all tracked state for `key`. Useful in tests.
