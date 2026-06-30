@@ -93,6 +93,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `AsyncAppWithState<S>` | `async_state` | Like `AppWithState<S>` but handlers are `async fn`; requires `http2` feature. Entry point: `App::with_async_state(S)`. |
 | `Sse` / `SseEvent` | `sse` | Build a buffered `text/event-stream` response from a sequence of events. Correct headers set automatically. |
 | `SessionStore` / `Session` | `session` | Thread-safe in-memory session store with TTL expiry. Cookie helpers: `session_id_from_request`, `session_cookie`, `destroy_cookie`. |
+| `Json<T>` | `json` | Serde-backed JSON extractor (`from_request`) and responder (`into_response`). Requires `features = ["serde"]`. |
 
 ---
 
@@ -784,7 +785,53 @@ let app = AppWithState::new(State {
 
 ---
 
-### 23. Session management
+### 23. Serde JSON (deserialize request / serialize response)
+
+`Json<T>` (`serde` feature) wraps a serde type and bridges request bodies to typed structs and typed structs back to JSON responses. Enable the feature in your `Cargo.toml`:
+
+```toml
+rust-web-server = { version = "17", features = ["serde"] }
+```
+
+```rust
+use serde::{Deserialize, Serialize};
+use rust_web_server::json::Json;
+use rust_web_server::state::AppWithState;
+
+#[derive(Deserialize)]
+struct CreateUser { name: String, age: u32 }
+
+#[derive(Serialize)]
+struct UserResponse { id: u64, name: String }
+
+let app = AppWithState::new(())
+    .post("/users", |req, _params, _conn, _state| {
+        // Deserialize — returns 400 on bad/missing JSON
+        let Json(payload) = match Json::<CreateUser>::from_request(&req) {
+            Ok(j)  => j,
+            Err(r) => return r,
+        };
+        // Serialize — returns 200 application/json
+        Json(UserResponse { id: 1, name: payload.name }).into_response()
+    })
+    .get("/users/:id", |_req, params, _conn, _state| {
+        let id: u64 = params.get("id").unwrap_or("0").parse().unwrap_or(0);
+        Json(UserResponse { id, name: "Alice".to_string() }).into_response()
+    });
+```
+
+`Json<T>` implements `Deref<Target = T>` so you can access fields directly without unwrapping:
+
+```rust
+let json = Json::<CreateUser>::from_request(&req)?;
+println!("{}", json.name); // via Deref
+```
+
+It also implements `FromRequest`, so it composes with the typed extractor pattern.
+
+---
+
+### 24. Session management
 
 `SessionStore` is a thread-safe in-memory session store. Place one in your application state (`AppWithState<S>`) and share it across all handlers. `create()` generates a session, `save()` persists mutations, `load()` retrieves live sessions, `destroy()` deletes one, and `purge_expired()` reclaims memory.
 

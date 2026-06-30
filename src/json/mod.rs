@@ -4,6 +4,11 @@ pub mod property;
 pub mod array;
 pub mod object;
 
+#[cfg(feature = "serde")]
+mod extractor;
+#[cfg(feature = "serde")]
+pub use extractor::Json;
+
 // TODO: wip
 
 pub struct JSONType {

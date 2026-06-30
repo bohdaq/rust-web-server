@@ -243,20 +243,40 @@ API summary:
 
 ---
 
-### 19. Serde JSON integration
+### ✅ 19. Serde JSON integration — _Done (v17.14.0)_
 
-The built-in `json` module requires manual property access and has no serialization support. Every JSON handler must construct strings by hand, which is error-prone and verbose.
+`Json<T>` extractor and responder in `src/json/extractor.rs`, gated on the `serde` Cargo feature (adds `serde` + `serde_json` deps). Enable with `features = ["serde"]` in `Cargo.toml`.
 
-**Target API:**
-```rust
-use rust_web_server::json::Json;
-
-// Deserialize:
-let body: MyRequest = Json::from_request(&req)?;
-
-// Serialize:
-Json(MyResponse { ok: true, count: 42 }).into_response()
+```toml
+# Cargo.toml
+rust-web-server = { version = "17", features = ["serde"] }
 ```
+
+```rust
+use serde::{Deserialize, Serialize};
+use rust_web_server::json::Json;
+use rust_web_server::state::AppWithState;
+
+#[derive(Deserialize)]
+struct CreateUser { name: String, age: u32 }
+
+#[derive(Serialize)]
+struct UserResponse { id: u64, name: String }
+
+let app = AppWithState::new(())
+    .post("/users", |req, _params, _conn, _state| {
+        let Json(payload) = match Json::<CreateUser>::from_request(&req) {
+            Ok(j)  => j,
+            Err(r) => return r,  // 400 on bad JSON
+        };
+        Json(UserResponse { id: 1, name: payload.name }).into_response()
+    });
+```
+
+- `Json::<T>::from_request(&req)` → `Result<Json<T>, Response>` (400 on parse error)
+- `Json(value).into_response()` → `200 OK` with `Content-Type: application/json`
+- Implements `FromRequest` so it works with the typed extractor pattern
+- `Deref<Target = T>` for transparent field access
 
 ---
 
@@ -445,7 +465,7 @@ let app = App::new()
 | 16 | HTTP → HTTPS redirect | ✅ Done (v17.4.0) |
 | 17 | Server-Sent Events (SSE) | ✅ Done (v17.12.0) |
 | 18 | Session management | ✅ Done (v17.13.0) |
-| 19 | Serde JSON integration | Pending |
+| 19 | Serde JSON integration | ✅ Done (v17.14.0) |
 | 20 | Built-in auth middleware (JWT + Basic) | Pending |
 | 21 | Automatic TLS (ACME / Let's Encrypt) | Pending |
 | 22 | Declarative routing macros | Pending |

@@ -97,6 +97,7 @@ cargo build --release --no-default-features --features http1
 - Async handlers — `App::with_async_state(S)` gives route handlers an `async fn` signature (`http2` feature, tokio-backed)
 - Server-Sent Events — `Sse` builder produces a buffered `text/event-stream` response with correct headers
 - Session management — `SessionStore` thread-safe in-memory sessions with TTL; cookie helpers included
+- Serde JSON — `Json<T>` extractor and responder backed by `serde_json` (`features = ["serde"]`)
 - Graceful shutdown — Ctrl+C and SIGTERM drain in-flight connections on all server paths
 - 30-second read timeout per request on plain HTTP/1.1 connections
 - Symlink resolution
