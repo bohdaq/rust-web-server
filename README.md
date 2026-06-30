@@ -92,8 +92,8 @@ cargo build --release --no-default-features --features http1
 - Per-IP rate limiting — sliding-window `RateLimiter`; configurable via env vars
 - In-process test client — `TestClient` dispatches requests without a TCP socket
 - WebSocket support — RFC 6455 handshake, frame encode/decode, SHA-1 + base64 built in, no extra dependency
-- Shared application state — `AppWithState<S>` shares `Arc<S>` across state-aware route handlers
-- Middleware pipeline — `WithMiddleware` stacks composable `Middleware` layers around any `Application`
+- Shared application state — `App::with_state(S)` shares `Arc<S>` across state-aware route handlers
+- Middleware pipeline — `App::new().wrap(layer)` stacks composable `Middleware` layers; built-in `RateLimitLayer` included
 - Graceful shutdown — Ctrl+C and SIGTERM drain in-flight connections on all server paths
 - 30-second read timeout per request on plain HTTP/1.1 connections
 - Symlink resolution

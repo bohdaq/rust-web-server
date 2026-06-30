@@ -55,6 +55,7 @@ use std::sync::Arc;
 use crate::app::App;
 use crate::application::Application;
 use crate::core::New;
+use crate::middleware::{Middleware, WithMiddleware};
 use crate::request::Request;
 use crate::response::Response;
 use crate::router::{PathParams, Router};
@@ -145,6 +146,23 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
             handler(req, params, conn, &state)
         });
         self
+    }
+
+    /// Wrap this application in a middleware layer.
+    ///
+    /// Enables fluent composition:
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::middleware::RateLimitLayer;
+    /// use rust_web_server::response::Response;
+    ///
+    /// let app = App::with_state(())
+    ///     .get("/ping", |_, _, _, _| Response::new())
+    ///     .wrap(RateLimitLayer);
+    /// ```
+    pub fn wrap<M: Middleware + 'static>(self, layer: M) -> WithMiddleware<AppWithState<S>> {
+        WithMiddleware::new(self).wrap(layer)
     }
 }
 

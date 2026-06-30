@@ -87,8 +87,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `FromRequest` / `Body` / `BodyText` / `Query` | `extract` | Typed request extractors — parse body or query params, returning a ready error on failure |
 | `RateLimiter` | `rate_limit` | Per-IP sliding-window rate limiter; `global()` reads config from env vars |
 | `WebSocket` / `Frame` | `websocket` | RFC 6455 WebSocket handshake, frame read/write; SHA-1 and base64 built in |
-| `AppWithState<S>` | `state` | State-aware application with built-in dynamic routing; state shared via `Arc<S>` |
-| `Middleware` / `WithMiddleware` | `middleware` | Composable middleware pipeline wrapping any `Application` |
+| `AppWithState<S>` | `state` | State-aware application with built-in dynamic routing; state shared via `Arc<S>`. Use `App::with_state(S)` as the entry point. |
+| `Middleware` / `WithMiddleware` | `middleware` | Composable middleware pipeline wrapping any `Application`. Use `App::new().wrap(layer)` or `AppWithState::wrap(layer)`. |
+| `RateLimitLayer` | `middleware` | Built-in middleware that enforces the global rate limiter per client IP |
 
 ---
 
@@ -715,28 +716,37 @@ impl Middleware for RequireApiKey {
     }
 }
 
-// ── Wire it up ────────────────────────────────────────────────────────────────
+// ── Wire up with App::wrap (fluent builder) ───────────────────────────────────
 
-let app = WithMiddleware::new(App::new())
+let app = App::new()
     .wrap(LoggingMiddleware)
     .wrap(RequireApiKey { valid_key: "secret-key".to_string() });
 ```
 
-Compose `WithMiddleware` with `AppWithState` for state-aware middleware stacks:
+Use the built-in `RateLimitLayer` to enforce the global rate limit (configured via `RWS_CONFIG_RATE_LIMIT_*` env vars):
 
 ```rust
-use rust_web_server::state::AppWithState;
+use rust_web_server::app::App;
+use rust_web_server::middleware::RateLimitLayer;
+use rust_web_server::core::New;
+
+let app = App::new().wrap(RateLimitLayer);
+```
+
+Compose middleware with `AppWithState` using `.wrap()` on the state app directly:
+
+```rust
+use rust_web_server::app::App;
 
 struct MyState { db_url: String }
 
-let app = WithMiddleware::new(
-    AppWithState::new(MyState { db_url: "postgres://...".to_string() })
-        .get("/users", |_req, _params, _conn, state| {
-            // access state.db_url
-            Response::new()
-        })
-)
-.wrap(LoggingMiddleware);
+let app = App::with_state(MyState { db_url: "postgres://...".to_string() })
+    .get("/users", |_req, _params, _conn, state| {
+        // access state.db_url
+        Response::new()
+    })
+    .wrap(LoggingMiddleware)
+    .wrap(RateLimitLayer);
 ```
 
 ---

@@ -194,3 +194,130 @@ fn static_file_cors_off_options_preflight_request_client_hints() {
     assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n204_no_content.status_code);
 }
 
+
+// ── Builder method tests ───────────────────────────────────────────────────────
+
+mod builder_tests {
+    use crate::app::App;
+    use crate::application::Application;
+    use crate::core::New;
+    use crate::http::VERSION;
+    use crate::middleware::{Middleware, RateLimitLayer};
+    use crate::mime_type::MimeType;
+    use crate::range::Range;
+    use crate::request::{METHOD, Request};
+    use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+    use crate::server::{Address, ConnectionInfo};
+
+    fn conn() -> ConnectionInfo {
+        ConnectionInfo {
+            client: Address { ip: "10.0.0.1".to_string(), port: 0 },
+            server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+            request_size: 16000,
+        }
+    }
+
+    fn get(uri: &str) -> Request {
+        Request {
+            method: METHOD.get.to_string(),
+            request_uri: uri.to_string(),
+            http_version: VERSION.http_1_1.to_string(),
+            headers: vec![],
+            body: vec![],
+        }
+    }
+
+    fn ok_text(s: &str) -> Response {
+        let mut r = Response::new();
+        r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        r.content_range_list = vec![Range::get_content_range(s.as_bytes().to_vec(), MimeType::TEXT_PLAIN.to_string())];
+        r
+    }
+
+    #[test]
+    fn app_wrap_applies_middleware() {
+        struct AddHeader;
+        impl Middleware for AddHeader {
+            fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
+                let mut resp = next.execute(request, connection)?;
+                resp.headers.push(crate::header::Header { name: "X-Test".to_string(), value: "yes".to_string() });
+                Ok(resp)
+            }
+        }
+
+        let app = App::new().wrap(AddHeader);
+        let resp = app.execute(&get("/healthz"), &conn()).unwrap();
+        assert_eq!(200, resp.status_code);
+        assert!(resp.headers.iter().any(|h| h.name == "X-Test" && h.value == "yes"));
+    }
+
+    #[test]
+    fn app_wrap_chains_multiple_layers() {
+        use std::sync::{Arc, Mutex};
+        let log: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(vec![]));
+
+        struct Mark { label: &'static str, log: Arc<Mutex<Vec<&'static str>>> }
+        impl Middleware for Mark {
+            fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
+                self.log.lock().unwrap().push(self.label);
+                next.execute(request, connection)
+            }
+        }
+
+        let app = App::new()
+            .wrap(Mark { label: "A", log: Arc::clone(&log) })
+            .wrap(Mark { label: "B", log: Arc::clone(&log) });
+
+        app.execute(&get("/healthz"), &conn()).unwrap();
+        assert_eq!(*log.lock().unwrap(), vec!["A", "B"]);
+    }
+
+    #[test]
+    fn app_with_state_returns_correct_response() {
+        struct State { msg: String }
+        let app = App::with_state(State { msg: "from state".to_string() })
+            .get("/hello", |_, _, _, state| ok_text(&state.msg));
+
+        let resp = app.execute(&get("/hello"), &conn()).unwrap();
+        assert_eq!(200, resp.status_code);
+        let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        assert_eq!("from state", body);
+    }
+
+    #[test]
+    fn app_with_state_falls_through_to_builtin_app() {
+        let app = App::with_state(()).get("/custom", |_, _, _, _| ok_text("custom"));
+        let resp = app.execute(&get("/healthz"), &conn()).unwrap();
+        assert_eq!(200, resp.status_code);
+    }
+
+    #[test]
+    fn app_with_state_then_wrap_composes() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        struct Flag(Arc<AtomicBool>);
+        impl Middleware for Flag {
+            fn handle(&self, req: &Request, conn: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
+                self.0.store(true, Ordering::Relaxed);
+                next.execute(req, conn)
+            }
+        }
+
+        let ran = Arc::new(AtomicBool::new(false));
+        let app = App::with_state(())
+            .get("/ping", |_, _, _, _| ok_text("pong"))
+            .wrap(Flag(Arc::clone(&ran)));
+
+        let resp = app.execute(&get("/ping"), &conn()).unwrap();
+        assert_eq!(200, resp.status_code);
+        assert!(ran.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn rate_limit_layer_allows_first_request() {
+        let app = App::new().wrap(RateLimitLayer);
+        let resp = app.execute(&get("/healthz"), &conn()).unwrap();
+        assert_ne!(429, resp.status_code);
+    }
+}

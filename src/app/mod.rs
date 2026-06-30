@@ -18,13 +18,45 @@ use crate::app::controller::static_resource::StaticResourceController;
 use crate::app::controller::style::StyleController;
 use crate::application::Application;
 use crate::controller::Controller;
-use crate::core::{New};
+use crate::core::New;
 use crate::header::Header;
-
-use crate::request::{Request};
+use crate::middleware::{Middleware, WithMiddleware};
+use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
+use crate::state::AppWithState;
 
+/// The built-in HTTP application. Serves static files, favicons, forms,
+/// file uploads, health probes, metrics, and a 404 fallback.
+///
+/// Use as-is or compose with the framework's building blocks:
+///
+/// ```rust,no_run
+/// use rust_web_server::app::App;
+/// use rust_web_server::middleware::{WithMiddleware, RateLimitLayer};
+/// use rust_web_server::core::New;
+///
+/// // Middleware stack around the built-in app
+/// let app = App::new().wrap(RateLimitLayer);
+/// ```
+///
+/// For user-defined routes with shared state, call [`App::with_state`]:
+///
+/// ```rust,no_run
+/// use rust_web_server::app::App;
+/// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+/// use rust_web_server::core::New;
+///
+/// struct State { version: &'static str }
+///
+/// let app = App::with_state(State { version: "1.0" })
+///     .get("/version", |_req, _params, _conn, state| {
+///         let mut r = Response::new();
+///         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+///         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+///         r
+///     });
+/// ```
 #[derive(Copy, Clone)]
 pub struct App {}
 
@@ -142,5 +174,48 @@ impl App {
             )
         });
         (response, request)
+    }
+
+    /// Create a state-aware application. Routes registered on the returned
+    /// [`AppWithState<S>`] are tried first; unmatched requests fall through to
+    /// the built-in controller chain (static files, health probes, etc.).
+    ///
+    /// The state is stored as `Arc<S>` and shared across all handlers.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    /// use rust_web_server::core::New;
+    ///
+    /// struct Db { url: String }
+    ///
+    /// let app = App::with_state(Db { url: "postgres://...".to_string() })
+    ///     .get("/ping", |_req, _params, _conn, db| {
+    ///         let mut r = Response::new();
+    ///         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    ///         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    ///         r
+    ///     });
+    /// ```
+    pub fn with_state<S: Send + Sync + 'static>(state: S) -> AppWithState<S> {
+        AppWithState::new(state)
+    }
+
+    /// Wrap this application in a middleware layer.
+    ///
+    /// Returns a [`WithMiddleware<App>`] that runs `layer` before every
+    /// request. Chain `.wrap()` calls to stack multiple layers:
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::middleware::RateLimitLayer;
+    /// use rust_web_server::core::New;
+    ///
+    /// let app = App::new().wrap(RateLimitLayer);
+    /// ```
+    pub fn wrap<M: Middleware + 'static>(self, layer: M) -> WithMiddleware<App> {
+        WithMiddleware::new(self).wrap(layer)
     }
 }

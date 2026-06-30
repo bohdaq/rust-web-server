@@ -49,6 +49,40 @@ use crate::request::Request;
 use crate::response::Response;
 use crate::server::ConnectionInfo;
 
+/// Built-in middleware that enforces the process-wide rate limit
+/// (configured via `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS` and
+/// `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS`).
+///
+/// Returns `429 Too Many Requests` when the sliding-window budget for the
+/// client IP is exhausted; otherwise passes the request to the next layer.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use rust_web_server::app::App;
+/// use rust_web_server::middleware::{WithMiddleware, RateLimitLayer};
+/// use rust_web_server::core::New;
+///
+/// let app = App::new().wrap(RateLimitLayer);
+/// ```
+pub struct RateLimitLayer;
+
+impl Middleware for RateLimitLayer {
+    fn handle(
+        &self,
+        request: &Request,
+        connection: &ConnectionInfo,
+        next: &dyn Application,
+    ) -> Result<Response, String> {
+        use crate::error::{AppError, IntoResponse};
+        if crate::rate_limit::global().check(&connection.client.ip) {
+            next.execute(request, connection)
+        } else {
+            Ok(AppError::TooManyRequests.into_response())
+        }
+    }
+}
+
 /// A single middleware layer.
 ///
 /// Receive the request, call `next.execute(request, connection)` to pass
