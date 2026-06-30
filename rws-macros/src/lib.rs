@@ -26,7 +26,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, Data, DeriveInput, Fields, Ident, ItemFn, LitStr, Token,
+    parse_macro_input, Data, DeriveInput, Fields, Ident, ItemFn, Lit, LitInt, LitStr, Token,
 };
 
 // ── Shared helper ─────────────────────────────────────────────────────────────
@@ -173,6 +173,221 @@ pub fn derive_from_request(input: TokenStream) -> TokenStream {
     impl_from_request(ast)
         .unwrap_or_else(|e| e.to_compile_error())
         .into()
+}
+
+// ── #[derive(Validate)] ───────────────────────────────────────────────────────
+
+/// Derive `Validate` for a named-field struct.
+///
+/// Annotate fields with `#[validate(...)]` rules. All failures are collected
+/// before returning, so the caller sees every invalid field in one response.
+///
+/// # Supported validators
+///
+/// | Syntax | Checks |
+/// |--------|--------|
+/// | `length(min = N)` | `field.chars().count() >= N` |
+/// | `length(max = N)` | `field.chars().count() <= N` |
+/// | `length(min = N, max = N)` | both bounds |
+/// | `range(min = N)` | `field as f64 >= N` |
+/// | `range(max = N)` | `field as f64 <= N` |
+/// | `range(min = N, max = N)` | both bounds |
+/// | `email` | local part, `@`, domain with `.` |
+/// | `required` | `!field.is_empty()` |
+/// | `url` | starts with `http://` or `https://` |
+///
+/// # Example
+///
+/// ```ignore
+/// #[derive(rust_web_server::Validate)]
+/// struct CreateUser {
+///     #[validate(length(min = 1, max = 50))]
+///     name: String,
+///     #[validate(email)]
+///     email: String,
+///     #[validate(range(min = 0, max = 150))]
+///     age: u8,
+/// }
+/// ```
+#[proc_macro_derive(Validate, attributes(validate))]
+pub fn derive_validate(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    impl_validate(ast)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+fn impl_validate(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let span = input.ident.span();
+    let name = &input.ident;
+
+    let fields = match &input.data {
+        Data::Struct(s) => match &s.fields {
+            Fields::Named(f) => &f.named,
+            _ => {
+                return Err(syn::Error::new(
+                    span,
+                    "#[derive(Validate)] only supports structs with named fields",
+                ))
+            }
+        },
+        _ => {
+            return Err(syn::Error::new(
+                span,
+                "#[derive(Validate)] can only be derived on structs",
+            ))
+        }
+    };
+
+    let mut all_checks: Vec<proc_macro2::TokenStream> = Vec::new();
+
+    for field in fields {
+        let field_ident = field.ident.as_ref().unwrap();
+        let field_name = field_ident.to_string();
+        for attr in &field.attrs {
+            if attr.path().is_ident("validate") {
+                let checks = generate_field_checks(attr, field_ident, &field_name)?;
+                all_checks.extend(checks);
+            }
+        }
+    }
+
+    Ok(quote! {
+        const _: () = {
+            use ::rust_web_server as _rws;
+            impl _rws::validate::Validate for #name {
+                fn validate(&self) -> ::core::result::Result<(), _rws::validate::ValidationErrors> {
+                    let mut __errors = _rws::validate::ValidationErrors::new();
+                    #(#all_checks)*
+                    if __errors.is_empty() {
+                        ::core::result::Result::Ok(())
+                    } else {
+                        ::core::result::Result::Err(__errors)
+                    }
+                }
+            }
+        };
+    })
+}
+
+fn generate_field_checks(
+    attr: &syn::Attribute,
+    field_ident: &syn::Ident,
+    field_name: &str,
+) -> syn::Result<Vec<proc_macro2::TokenStream>> {
+    let mut checks: Vec<proc_macro2::TokenStream> = Vec::new();
+
+    attr.parse_nested_meta(|meta| {
+        if meta.path.is_ident("email") {
+            let msg = format!("{field_name} must be a valid email address");
+            checks.push(quote! {
+                if !_rws::validate::is_email(&self.#field_ident) {
+                    __errors.add(#field_name, #msg);
+                }
+            });
+        } else if meta.path.is_ident("required") {
+            let msg = format!("{field_name} must not be empty");
+            checks.push(quote! {
+                if self.#field_ident.is_empty() {
+                    __errors.add(#field_name, #msg);
+                }
+            });
+        } else if meta.path.is_ident("url") {
+            let msg = format!("{field_name} must be a valid URL (http:// or https://)");
+            checks.push(quote! {
+                if !_rws::validate::is_url(&self.#field_ident) {
+                    __errors.add(#field_name, #msg);
+                }
+            });
+        } else if meta.path.is_ident("length") {
+            let mut min: Option<u64> = None;
+            let mut max: Option<u64> = None;
+            meta.parse_nested_meta(|inner| {
+                if inner.path.is_ident("min") {
+                    let lit: LitInt = inner.value()?.parse()?;
+                    min = Some(lit.base10_parse()?);
+                } else if inner.path.is_ident("max") {
+                    let lit: LitInt = inner.value()?.parse()?;
+                    max = Some(lit.base10_parse()?);
+                } else {
+                    return Err(inner.error("expected `min` or `max`"));
+                }
+                Ok(())
+            })?;
+
+            let mut len_checks: Vec<proc_macro2::TokenStream> = Vec::new();
+            if let Some(n) = min {
+                let msg = format!("{field_name} must be at least {n} character(s) long");
+                let n_lit = proc_macro2::Literal::usize_suffixed(n as usize);
+                len_checks.push(quote! {
+                    if __len < #n_lit { __errors.add(#field_name, #msg); }
+                });
+            }
+            if let Some(n) = max {
+                let msg = format!("{field_name} must be at most {n} character(s) long");
+                let n_lit = proc_macro2::Literal::usize_suffixed(n as usize);
+                len_checks.push(quote! {
+                    if __len > #n_lit { __errors.add(#field_name, #msg); }
+                });
+            }
+            checks.push(quote! {
+                {
+                    let __len = self.#field_ident.chars().count();
+                    #(#len_checks)*
+                }
+            });
+        } else if meta.path.is_ident("range") {
+            let mut min: Option<f64> = None;
+            let mut max: Option<f64> = None;
+            meta.parse_nested_meta(|inner| {
+                if inner.path.is_ident("min") {
+                    min = Some(lit_to_f64(&inner.value()?.parse::<Lit>()?)?);
+                } else if inner.path.is_ident("max") {
+                    max = Some(lit_to_f64(&inner.value()?.parse::<Lit>()?)?);
+                } else {
+                    return Err(inner.error("expected `min` or `max`"));
+                }
+                Ok(())
+            })?;
+
+            let mut rng_checks: Vec<proc_macro2::TokenStream> = Vec::new();
+            if let Some(n) = min {
+                let msg = format!("{field_name} must be at least {n}");
+                let n_lit = proc_macro2::Literal::f64_suffixed(n);
+                rng_checks.push(quote! {
+                    if __val < #n_lit { __errors.add(#field_name, #msg); }
+                });
+            }
+            if let Some(n) = max {
+                let msg = format!("{field_name} must be at most {n}");
+                let n_lit = proc_macro2::Literal::f64_suffixed(n);
+                rng_checks.push(quote! {
+                    if __val > #n_lit { __errors.add(#field_name, #msg); }
+                });
+            }
+            checks.push(quote! {
+                {
+                    let __val = self.#field_ident as f64;
+                    #(#rng_checks)*
+                }
+            });
+        } else {
+            return Err(meta.error(
+                "unknown validator; expected: email, required, url, length, range",
+            ));
+        }
+        Ok(())
+    })?;
+
+    Ok(checks)
+}
+
+fn lit_to_f64(lit: &Lit) -> syn::Result<f64> {
+    match lit {
+        Lit::Float(f) => Ok(f.base10_parse()?),
+        Lit::Int(i) => Ok(i.base10_parse::<i64>()? as f64),
+        _ => Err(syn::Error::new_spanned(lit, "expected a numeric literal")),
+    }
 }
 
 fn impl_from_request(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {

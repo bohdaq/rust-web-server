@@ -357,30 +357,30 @@ Shorthand method attributes: `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delet
 
 ---
 
-### 23. `derive(FromRequest)`
+### 23. `derive(FromRequest)` ✅ Done — v17.18.0
 
-Implementing `FromRequest` for a custom extractor today requires a manual `impl FromRequest for MyType` block. A derive macro would generate it from struct field types.
+`#[derive(FromRequest)]` in `rws-macros` (re-exported as `rust_web_server::FromRequest`).
+Generates a `FromRequest` impl that calls `from_request` on each named field in declaration
+order; the first failure short-circuits. Requires `features = ["macros"]`.
 
-**Target API:**
 ```rust
-#[derive(FromRequest)]
-struct AuthPayload {
-    #[from_header("Authorization")]
-    token: BearerToken,
-    #[from_query("locale")]
-    locale: Option<String>,
+#[derive(Debug, rust_web_server::FromRequest)]
+struct Payload {
+    body: BodyText,
+    query: Query,
 }
 ```
 
 ---
 
-### 24. Request validation helpers
+### 24. Request validation helpers ✅ Done — v17.19.0
 
-Field-level validation (required, min/max length, regex, numeric range) is manual today. A validation layer would run checks before the handler and return structured 422 error bodies automatically.
+`Validate` trait, `ValidationErrors`, `Validated<T>` extractor, and `#[derive(Validate)]`
+proc-macro in `src/validate/mod.rs` (re-exported as `rust_web_server::Validate`, requires
+`features = ["macros"]` for the derive).
 
-**Target API:**
 ```rust
-#[derive(Validate, FromRequest)]
+#[derive(rust_web_server::Validate)]
 struct CreateUser {
     #[validate(length(min = 1, max = 50))]
     name: String,
@@ -389,7 +389,16 @@ struct CreateUser {
     #[validate(range(min = 0, max = 150))]
     age: u8,
 }
+
+// In a handler — extract and validate in one step:
+let Validated(user) = match Validated::<CreateUser>::from_request(req) {
+    Ok(v)    => v,
+    Err(res) => return res,  // 400 (extraction) or 422 (validation) with JSON errors
+};
 ```
+
+Supported validators: `length(min, max)`, `range(min, max)`, `email`, `required`, `url`.
+All failures are collected before returning so the caller sees every invalid field at once.
 
 ---
 
@@ -504,8 +513,8 @@ let app = App::new()
 | 20 | Built-in auth middleware (JWT + Basic) | ✅ Done (v17.15.0) |
 | 21 | Automatic TLS (ACME / Let's Encrypt) | Pending |
 | 22 | Declarative routing macros | ✅ Done (v17.17.0) |
-| 23 | `derive(FromRequest)` | Pending |
-| 24 | Request validation helpers | Pending |
+| 23 | `derive(FromRequest)` | ✅ Done (v17.18.0) |
+| 24 | Request validation helpers | ✅ Done (v17.19.0) |
 | 25 | IP allowlist / denylist | ✅ Done (v17.16.0) |
 | 26 | OpenTelemetry distributed tracing | Pending |
 | 27 | Per-route metrics | Pending |

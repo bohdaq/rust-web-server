@@ -52,7 +52,7 @@ pub mod app;
 pub mod auth;
 
 #[cfg(feature = "macros")]
-pub use rws_macros::{delete, get, patch, post, put, route, FromRequest};
+pub use rws_macros::{delete, get, patch, post, put, route, FromRequest, Validate};
 #[cfg(feature = "http2")]
 pub mod async_state;
 pub mod session;
@@ -91,6 +91,7 @@ pub mod server;
 pub mod symbol;
 pub mod thread_pool;
 pub mod url;
+pub mod validate;
 pub mod websocket;
 
 #[cfg(feature = "http2")]
