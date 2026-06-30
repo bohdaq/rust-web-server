@@ -107,6 +107,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `#[derive(Validate)]` | `macros` (proc-macro) | Derive `Validate` from `#[validate(...)]` field annotations. Validators: `length(min,max)`, `range(min,max)`, `email`, `required`, `url`. Requires `features = ["macros"]`. |
 | `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. |
 | `LoadBalancing` | `proxy` | Enum selecting the balancing strategy (`RoundRobin`). Passed to `ReverseProxy::strategy()`. |
+| `CacheLayer` | `cache` | In-memory TTL response cache middleware for GET requests. Builder: `.ttl(secs)`, `.vary_by_header(name)`. Injects `Age` on hits; respects `Cache-Control: no-store/private`. |
+| `ConfigSnapshot` | `config_reload` | Point-in-time snapshot of all hot-reloadable config values. Read with `config_reload::current()`. |
+| `config_reload::reload` | `config_reload` | Re-reads `rws.config.toml` and applies CORS, rate-limit, log-format changes live. Triggered by SIGHUP or `POST /admin/config/reload`. |
 
 ---
 
@@ -1213,6 +1216,94 @@ let app = App::new()
 | Backend connection fails | Try next backend in round-robin order |
 | All backends fail | `502 Bad Gateway` |
 | Path prefix set and URI does not match | Pass through to the inner application |
+
+### 31. Response caching
+
+`CacheLayer` (in `src/cache/`) is a `Middleware` that stores successful `GET`
+responses in memory and serves subsequent identical requests directly from the
+cache, bypassing the handler.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::cache::CacheLayer;
+use rust_web_server::core::New;
+
+// Cache up to 1 000 entries, each valid for 60 seconds.
+let app = App::new()
+    .wrap(CacheLayer::memory(1000).ttl(60));
+
+// Separate cache entries by Accept header (content negotiation).
+let app = App::new()
+    .wrap(CacheLayer::memory(500)
+        .ttl(120)
+        .vary_by_header("Accept")
+        .vary_by_header("Accept-Language"));
+```
+
+**Behaviour summary**
+
+| Condition | Result |
+|-----------|--------|
+| GET, 2xx, no `Cache-Control: no-store/private` | Response stored; subsequent hits served from cache with `Age` header |
+| Non-GET method | Always passes through to the handler; never cached |
+| Response has `Cache-Control: no-store` or `private` | Handler is called, response is **not** stored |
+| Request has `Cache-Control: no-cache` | Cache is bypassed, handler is called; the fresh response **is** stored (revalidation) |
+| Entry exceeds TTL | Next request is a miss; handler is called and result replaces the stale entry |
+| Store reaches capacity | Expired entries are purged first; if still full, the oldest entry is evicted (insertion order) |
+
+---
+
+### 32. Hot config reload
+
+`config_reload::reload()` re-reads `rws.config.toml` and applies changes to
+CORS rules, rate-limit thresholds, log format, and request allocation size
+**without restarting the server**.
+
+**Trigger via SIGHUP (recommended)**
+
+```bash
+kill -HUP $(pidof rws)
+# or
+kill -HUP $(cat /var/run/rws.pid)
+```
+
+The server prints a confirmation line:
+
+```
+Config reloaded — cors_allow_all=false rate_limit=1000/60 log_format=clf
+```
+
+**Trigger via HTTP endpoint**
+
+```bash
+curl -X POST http://localhost:7878/admin/config/reload
+```
+
+**Read the current config snapshot in a handler**
+
+```rust
+use rust_web_server::config_reload;
+
+fn my_handler(request: &Request, response: Response, conn: &ConnectionInfo) -> Response {
+    let cfg = config_reload::current();
+    if cfg.cors_allow_all {
+        // ...
+    }
+    response
+}
+```
+
+**What is hot-reloadable vs. what requires restart**
+
+| Setting | Hot-reloadable |
+|---------|---------------|
+| CORS (`RWS_CONFIG_CORS_*`) | ✅ |
+| Rate-limit thresholds (`RWS_CONFIG_RATE_LIMIT_*`) | ✅ |
+| Log format (`RWS_CONFIG_LOG_FORMAT`) | ✅ |
+| Request allocation size | ✅ |
+| IP / port | ❌ bound socket cannot move |
+| Thread count | ❌ thread pool is fixed at startup |
+| TLS cert / key paths | ❌ acceptor is built once |
 
 ---
 

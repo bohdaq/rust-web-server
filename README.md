@@ -105,6 +105,8 @@ cargo build --release --no-default-features --features http1
 - Per-IP rate limiting — sliding-window `RateLimiter` and `RateLimitLayer` middleware; configurable via env vars
 - IP filter — `IpFilter::allow([...])` / `IpFilter::deny([...])` middleware; accepts exact IPv4 addresses and CIDR ranges
 - Reverse proxy — `ReverseProxy` middleware forwards requests to HTTP backends with round-robin load balancing, automatic failover, and `path_prefix` routing; returns `502 Bad Gateway` when all backends fail
+- Response caching — `CacheLayer` middleware; in-memory TTL cache for GET responses; vary-by-header for content negotiation; capacity-bounded with oldest-first eviction; `Age` header injected on hits; respects `Cache-Control: no-store` / `private`
+- Hot config reload — send `SIGHUP` (or `POST /admin/config/reload`) to re-apply CORS rules, rate-limit thresholds, log format, and request allocation size without restarting; `config_reload::current()` exposes a typed snapshot anywhere in the handler stack
 - WebAssembly MIME type — `.wasm` files served as `application/wasm`
 - In-process test client — `TestClient` dispatches requests without a TCP socket
 
@@ -188,7 +190,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 30 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, and reverse proxy / load balancing.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 32 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, and hot config reload.
 
 ## AI adoption
 
