@@ -46,6 +46,7 @@
 pub mod app;
 #[cfg(feature = "http2")]
 pub mod async_state;
+pub mod session;
 pub mod sse;
 pub mod compression;
 pub mod cookie;

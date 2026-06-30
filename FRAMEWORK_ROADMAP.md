@@ -200,19 +200,46 @@ let response = Sse::new()
 
 ---
 
-### 18. Session management
+### ✅ 18. Session management — _Done (v17.13.0)_
 
-No session layer exists. Stateful applications must implement their own cookie-based session ID generation, storage lookup, and expiry — typically 100+ lines of boilerplate per project.
+`SessionStore`, `Session`, and cookie helpers in `src/session/mod.rs`. Place one `SessionStore` in your application state; it is cheap to clone (all clones share the same `Arc<Mutex<…>>` backing map).
 
-**Target API:**
 ```rust
-let app = App::with_state(store)
-    .wrap(SessionLayer::new(RedisStore::new(url)).cookie("sid").ttl(3600));
+use rust_web_server::app::App;
+use rust_web_server::session::{self, SessionStore};
+use rust_web_server::header::Header;
 
-// In a handler:
-let session = Session::from_request(&req)?;
-session.set("user_id", user.id);
+struct State { sessions: SessionStore }
+
+let app = App::with_state(State { sessions: SessionStore::new(3600) })
+    .post("/login", |req, _params, _conn, state| {
+        let mut sess = state.sessions.create();
+        sess.set("user_id", "42");
+        state.sessions.save(&sess);
+        // set cookie on response …
+        let cookie = session::session_cookie(&sess.id, "sid", 3600);
+        // response.headers.push(Header { name: "Set-Cookie".to_string(), value: cookie });
+        // …
+    })
+    .get("/profile", |req, _params, _conn, state| {
+        let sid = session::session_id_from_request(&req, "sid")?;
+        let sess = state.sessions.load(&sid)?;
+        let user_id = sess.get("user_id").unwrap_or("guest");
+        // …
+    });
 ```
+
+API summary:
+- `SessionStore::new(ttl_secs)` — create a store; sessions expire after `ttl_secs`
+- `store.create()` → `Session` — generate ID, insert empty session
+- `store.create_with_id(id)` → `Session` — caller-supplied ID (CSPRNG)
+- `store.load(id)` → `Option<Session>` — returns `None` if unknown or expired
+- `store.save(&session)` — persist mutations back to the store
+- `store.destroy(id)` — delete a session
+- `store.purge_expired()` — reclaim memory (call periodically)
+- `session_id_from_request(&req, cookie_name)` → `Option<String>`
+- `session_cookie(id, name, ttl_secs)` → `Set-Cookie` value (`HttpOnly`, `SameSite=Lax`)
+- `destroy_cookie(name)` → `Set-Cookie` with `Max-Age=0`
 
 ---
 
@@ -417,7 +444,7 @@ let app = App::new()
 | 15 | WebSocket support | ✅ Done (v17.8.0) |
 | 16 | HTTP → HTTPS redirect | ✅ Done (v17.4.0) |
 | 17 | Server-Sent Events (SSE) | ✅ Done (v17.12.0) |
-| 18 | Session management | Pending |
+| 18 | Session management | ✅ Done (v17.13.0) |
 | 19 | Serde JSON integration | Pending |
 | 20 | Built-in auth middleware (JWT + Basic) | Pending |
 | 21 | Automatic TLS (ACME / Let's Encrypt) | Pending |

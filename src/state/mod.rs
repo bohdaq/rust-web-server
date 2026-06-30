@@ -154,6 +154,7 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
     ///
     /// ```rust,no_run
     /// use rust_web_server::app::App;
+    /// use rust_web_server::core::New;
     /// use rust_web_server::middleware::RateLimitLayer;
     /// use rust_web_server::response::Response;
     ///

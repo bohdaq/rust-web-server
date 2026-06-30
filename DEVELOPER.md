@@ -92,6 +92,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `RateLimitLayer` | `middleware` | Built-in middleware that enforces the global rate limiter per client IP |
 | `AsyncAppWithState<S>` | `async_state` | Like `AppWithState<S>` but handlers are `async fn`; requires `http2` feature. Entry point: `App::with_async_state(S)`. |
 | `Sse` / `SseEvent` | `sse` | Build a buffered `text/event-stream` response from a sequence of events. Correct headers set automatically. |
+| `SessionStore` / `Session` | `session` | Thread-safe in-memory session store with TTL expiry. Cookie helpers: `session_id_from_request`, `session_cookie`, `destroy_cookie`. |
 
 ---
 
@@ -783,7 +784,71 @@ let app = AppWithState::new(State {
 
 ---
 
-### 23. Async handlers with shared state
+### 23. Session management
+
+`SessionStore` is a thread-safe in-memory session store. Place one in your application state (`AppWithState<S>`) and share it across all handlers. `create()` generates a session, `save()` persists mutations, `load()` retrieves live sessions, `destroy()` deletes one, and `purge_expired()` reclaims memory.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::session::{self, SessionStore};
+use rust_web_server::header::Header;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+struct State { sessions: SessionStore }
+
+let app = App::with_state(State { sessions: SessionStore::new(3600) })
+    .post("/login", |req, _params, _conn, state| {
+        // validate credentials (not shown)…
+        let mut sess = state.sessions.create();
+        sess.set("user_id", "42");
+        state.sessions.save(&sess);
+
+        let mut r = Response::new();
+        r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        r.headers.push(Header {
+            name: "Set-Cookie".to_string(),
+            value: session::session_cookie(&sess.id, "sid", 3600),
+        });
+        r
+    })
+    .post("/logout", |req, _params, _conn, state| {
+        if let Some(sid) = session::session_id_from_request(&req, "sid") {
+            state.sessions.destroy(&sid);
+        }
+        let mut r = Response::new();
+        r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        r.headers.push(Header {
+            name: "Set-Cookie".to_string(),
+            value: session::destroy_cookie("sid"),
+        });
+        r
+    })
+    .get("/profile", |req, _params, _conn, state| {
+        let mut r = Response::new();
+        let sess = session::session_id_from_request(&req, "sid")
+            .and_then(|sid| state.sessions.load(&sid));
+        match sess {
+            Some(s) => {
+                let _user_id = s.get("user_id").unwrap_or("guest");
+                r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+                r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+            }
+            None => {
+                r.status_code = *STATUS_CODE_REASON_PHRASE.n401_unauthorized.status_code;
+                r.reason_phrase = STATUS_CODE_REASON_PHRASE.n401_unauthorized.reason_phrase.to_string();
+            }
+        }
+        r
+    });
+```
+
+Call `store.purge_expired()` periodically (e.g. from a background thread) to reclaim memory from expired sessions.
+
+---
+
+### 24. Async handlers with shared state
 
 `AsyncAppWithState<S>` (requires the `http2` Cargo feature) lets handlers be `async fn` closures that can `await` database queries, HTTP clients, or any async I/O. Use `App::with_async_state(state)` as the entry point.
 

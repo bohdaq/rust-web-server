@@ -16,6 +16,7 @@
 //! ```rust,no_run
 //! use std::sync::Arc;
 //! use rust_web_server::async_state::AsyncAppWithState;
+//! use rust_web_server::core::New;
 //! use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
 //! use rust_web_server::range::Range;
 //! use rust_web_server::mime_type::MimeType;
