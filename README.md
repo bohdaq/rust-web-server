@@ -2,7 +2,7 @@
 
 Static file web server and HTTP toolkit written in Rust. Supports HTTP/3, HTTP/2, and HTTP/1.1. HTTP/3 and HTTP/2 require a TLS certificate; without one the server falls back to plain HTTP/1.1 automatically.
 
-Use it as a ready-to-run binary **or** pull it in as a library crate to get battle-tested building blocks — request/response parsing, routing, headers, MIME detection, body parsing, JSON, logging — without taking on a full async framework.
+Use it as a ready-to-run binary **or** pull it in as a library crate to get battle-tested building blocks — request/response parsing, routing, middleware, JSON, sessions, auth, SSE — without taking on a full async framework.
 
 ## Install
 
@@ -69,6 +69,8 @@ cargo build --release --no-default-features --features http1
 
 ## Features
 
+### Server
+
 - HTTP/3 over QUIC (UDP) — negotiated via `Alt-Svc`
 - HTTP/2 with ALPN negotiation alongside HTTP/1.1 on the same TCP port
 - TLS via [rustls](https://github.com/rustls/rustls) (aws-lc-rs backend, no OpenSSL)
@@ -76,36 +78,46 @@ cargo build --release --no-default-features --features http1
 - Response compression — automatic gzip for text types when client sends `Accept-Encoding: gzip`
 - Large file streaming — chunked transfer for files > 8 MB; no full-file buffering
 - HTTP → HTTPS redirect — set `RWS_CONFIG_HTTP_REDIRECT_PORT` to redirect a plain-HTTP port
-- Cookie handling — `CookieJar` parses the `Cookie` header; `SetCookie` builder creates `Set-Cookie` values
 - CORS — allowed for all origins by default, fully configurable
 - HTTP Range Requests — partial file serving and multi-range responses
-- HTTP Client Hints
 - ETag and 304 Not Modified — conditional requests skip body transfer on cache hit
 - Security headers — `Strict-Transport-Security` (HTTPS only), `Content-Security-Policy` (configurable via `RWS_CONFIG_CSP`), `Referrer-Policy`, `Permissions-Policy`, `X-Content-Type-Options`, `X-Frame-Options`
-- WebAssembly MIME type — `.wasm` files served as `application/wasm`
 - Combined Log Format (CLF) — access log compatible with GoAccess and AWStats; set `RWS_CONFIG_LOG_FORMAT=json` for structured JSON logs
-- Graceful shutdown — Ctrl+C and SIGTERM stop the server cleanly (async/TLS paths); `/readyz` returns `503` during drain
+- Graceful shutdown — Ctrl+C and SIGTERM drain in-flight connections on all server paths; `/readyz` returns `503` during drain
 - Kubernetes-ready — health probes (`GET /healthz` liveness, `GET /readyz` readiness), Prometheus metrics (`GET /metrics`), `0.0.0.0` default bind, Dockerfile included
-- Dynamic routing — standalone `Router` with `:param` and `*wildcard` path matching
-- Typed errors — `IntoResponse` trait and built-in `AppError` mapping to HTTP status codes
+- 30-second read timeout per request on plain HTTP/1.1 connections
+- Symlink resolution; `.html` extension inference; custom `404.html` page
+
+### Library
+
+- Dynamic routing — `Router` with `:param` and `*wildcard` path matching; `routes!` macro builds routing tables declaratively
+- Shared application state — `App::with_state(S)` shares `Arc<S>` across route handlers
+- Async handlers — `App::with_async_state(S)` gives handlers an `async fn` signature (`http2` feature, tokio-backed)
+- Middleware pipeline — `App::new().wrap(layer)` stacks composable `Middleware` layers
+- Typed errors — `IntoResponse` trait; built-in `AppError` enum covers 400–500 status codes
 - Typed request extractors — `FromRequest` trait; built-in `Body`, `BodyText`, `Query`, `RequestHeaders`
-- Per-IP rate limiting — sliding-window `RateLimiter`; configurable via env vars
-- In-process test client — `TestClient` dispatches requests without a TCP socket
+- Cookie handling — `CookieJar` parses the `Cookie` header; `SetCookie` builder creates `Set-Cookie` values
+- HTTP Client Hints — `ClientHint` extractor reads UA client hint headers
 - WebSocket support — RFC 6455 handshake, frame encode/decode, SHA-1 + base64 built in, no extra dependency
-- Shared application state — `App::with_state(S)` shares `Arc<S>` across state-aware route handlers
-- Middleware pipeline — `App::new().wrap(layer)` stacks composable `Middleware` layers; built-in `RateLimitLayer` included
-- Async handlers — `App::with_async_state(S)` gives route handlers an `async fn` signature (`http2` feature, tokio-backed)
 - Server-Sent Events — `Sse` builder produces a buffered `text/event-stream` response with correct headers
 - Session management — `SessionStore` thread-safe in-memory sessions with TTL; cookie helpers included
-- Serde JSON — `Json<T>` extractor and responder backed by `serde_json` (`features = ["serde"]`)
-- Auth middleware — `BasicAuthLayer` (HTTP Basic) and `JwtLayer` (HS256 JWT) (`features = ["auth"]`)
+- Per-IP rate limiting — sliding-window `RateLimiter` and `RateLimitLayer` middleware; configurable via env vars
 - IP filter — `IpFilter::allow([...])` / `IpFilter::deny([...])` middleware; accepts exact IPv4 addresses and CIDR ranges
-- Declarative routing — `routes!` macro builds `AppWithState`/`AsyncAppWithState`/`Router` from a table; `#[route]`, `#[get]`, `#[post]`, … proc-macro attributes (`features = ["macros"]`)
-- Graceful shutdown — Ctrl+C and SIGTERM drain in-flight connections on all server paths
-- 30-second read timeout per request on plain HTTP/1.1 connections
-- Symlink resolution
-- `.html` extension inference — `/page` serves `page.html`; `/dir` serves `dir/index.html`
-- Custom 404 page — place a `404.html` in the working directory to override the default
+- WebAssembly MIME type — `.wasm` files served as `application/wasm`
+- In-process test client — `TestClient` dispatches requests without a TCP socket
+
+### Optional features
+
+| Feature | What it adds |
+|---------|--------------|
+| `serde` | `Json<T>` extractor and responder backed by `serde_json` |
+| `auth` | `BasicAuthLayer` (HTTP Basic) and `JwtLayer` (HS256 JWT); `build_jwt` / `verify_jwt` utilities |
+| `macros` | `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` proc-macro attributes via `rws-macros` |
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["serde", "auth", "macros"] }
+```
 
 ## Use as a library
 
@@ -116,7 +128,37 @@ Add the crate to `Cargo.toml`:
 rust-web-server = "17"
 ```
 
-Implement a controller and plug it into the server in a few lines:
+### Recommended: declarative routing with `routes!`
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::routes;
+use rust_web_server::request::Request;
+use rust_web_server::router::PathParams;
+use rust_web_server::server::ConnectionInfo;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+struct Db;
+
+fn list_users(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &Db) -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r
+}
+
+let app = routes! {
+    App::with_state(Db),
+    GET  "/users"     => list_users,
+    GET  "/users/:id" => list_users,
+    POST "/users"     => list_users,
+};
+```
+
+### Alternative: Controller trait
+
+For more control — custom matching logic, access to the raw response object, or registering routes in the legacy `App::execute` chain — implement `Controller` directly:
 
 ```rust
 use rust_web_server::controller::Controller;
@@ -144,7 +186,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 21 use case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, and middleware.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 26 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, and declarative routing.
 
 ## AI adoption
 
