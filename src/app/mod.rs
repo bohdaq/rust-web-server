@@ -185,4 +185,34 @@ impl App {
     pub fn wrap<M: Middleware + 'static>(self, layer: M) -> WithMiddleware<App> {
         WithMiddleware::new(self).wrap(layer)
     }
+
+    /// Create an async state-aware application (requires the `http2` feature).
+    ///
+    /// Handlers are `async fn` closures that can `await` database queries,
+    /// HTTP clients, or any other async I/O. Unmatched routes fall through to
+    /// the built-in controller chain.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use std::sync::Arc;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    /// use rust_web_server::core::New;
+    ///
+    /// struct Db { url: String }
+    ///
+    /// let app = App::with_async_state(Db { url: "postgres://...".to_string() })
+    ///     .get("/ping", |_req, _params, _conn, state| async move {
+    ///         // state: Arc<Db>
+    ///         let mut r = Response::new();
+    ///         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    ///         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    ///         r
+    ///     });
+    /// ```
+    #[cfg(feature = "http2")]
+    pub fn with_async_state<S: Send + Sync + 'static>(state: S) -> crate::async_state::AsyncAppWithState<S> {
+        crate::async_state::AsyncAppWithState::new(state)
+    }
 }

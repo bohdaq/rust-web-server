@@ -24,6 +24,11 @@ impl PathParams {
         PathParams { params: HashMap::new() }
     }
 
+    /// Build a `PathParams` from an existing map. Used by `AsyncAppWithState`.
+    pub(crate) fn from_map(params: HashMap<String, String>) -> Self {
+        PathParams { params }
+    }
+
     /// Returns the value for the named parameter, or `None` if absent.
     pub fn get(&self, name: &str) -> Option<&str> {
         self.params.get(name).map(String::as_str)

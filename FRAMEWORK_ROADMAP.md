@@ -69,11 +69,22 @@ Every request requires a new TCP handshake. A browser loading a page with 10 ass
 
 ## Major gaps — severely limits real-world use
 
-### 5. Async handlers
+### ✅ 5. Async handlers — _Done (v17.11.0)_
 
-The HTTP/1.1 path blocks one OS thread per connection. With 200 threads (the default) and any I/O waiting — a database query, an external API call — the pool saturates at 200 concurrent users. The HTTP/2 and HTTP/3 paths use tokio, but handlers have no async interface and cannot `await` anything.
+`AsyncAppWithState<S>` in `src/async_state/mod.rs` (requires `http2` feature) gives handlers an `async fn` signature so they can `await` database queries, HTTP clients, or any other async I/O:
 
-**What is needed:** Controllers that can return a `Future`, and a tokio-backed executor for the HTTP/1.1 path as well, eliminating the fixed thread-count ceiling.
+```rust
+let app = AsyncAppWithState::new(db_pool)
+    .get("/users/:id", |_req, params, _conn, state| async move {
+        let id = params.get("id").unwrap();
+        let user = state.find_user(id).await?;
+        // ... build response
+    });
+```
+
+Handler signature: `Fn(Request, PathParams, ConnectionInfo, Arc<S>) -> Fut` where `Fut: Future<Output = Response> + Send + 'static`. Handlers receive owned values so the future is `'static` and can be moved freely. Full `:param` / `*wildcard` path matching is included. Unmatched routes fall through to the built-in `App` controller chain.
+
+Entry point: `App::with_async_state(state)` (requires the `http2` Cargo feature).
 
 ---
 
@@ -175,7 +186,7 @@ Real-time features (chat, live updates, collaborative editing) are now possible.
 | 2 | Dynamic routing with path parameters | ✅ Done (v17.9.0) |
 | 3 | Middleware pipeline | ✅ Done (v17.9.0) |
 | 4 | HTTP/1.1 keep-alive | ✅ Done (v17.4.0) |
-| 5 | Async handlers | Pending |
+| 5 | Async handlers | ✅ Done (v17.11.0) |
 | 6 | Typed request extractors | ✅ Done (v17.7.0) |
 | 7 | Duplicate dispatch logic | ✅ Done (v17.6.0) |
 | 8 | Streaming responses | ✅ Done (v17.4.0) |

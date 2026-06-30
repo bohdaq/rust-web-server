@@ -90,6 +90,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `AppWithState<S>` | `state` | State-aware application with built-in dynamic routing; state shared via `Arc<S>`. Use `App::with_state(S)` as the entry point. |
 | `Middleware` / `WithMiddleware` | `middleware` | Composable middleware pipeline wrapping any `Application`. Use `App::new().wrap(layer)` or `AppWithState::wrap(layer)`. |
 | `RateLimitLayer` | `middleware` | Built-in middleware that enforces the global rate limiter per client IP |
+| `AsyncAppWithState<S>` | `async_state` | Like `AppWithState<S>` but handlers are `async fn`; requires `http2` feature. Entry point: `App::with_async_state(S)`. |
 
 ---
 
@@ -748,6 +749,47 @@ let app = App::with_state(MyState { db_url: "postgres://...".to_string() })
     .wrap(LoggingMiddleware)
     .wrap(RateLimitLayer);
 ```
+
+---
+
+### 22. Async handlers with shared state
+
+`AsyncAppWithState<S>` (requires the `http2` Cargo feature) lets handlers be `async fn` closures that can `await` database queries, HTTP clients, or any async I/O. Use `App::with_async_state(state)` as the entry point.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::range::Range;
+use rust_web_server::mime_type::MimeType;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+struct Db {
+    items: Mutex<Vec<String>>,
+}
+
+// cargo build --features http2
+let app = App::with_async_state(Db { items: Mutex::new(vec![]) })
+    .get("/items", |_req, _params, _conn, state| async move {
+        let items = state.items.lock().await;
+        let body = items.join(",");
+        let mut r = Response::new();
+        r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        r.content_range_list = vec![Range::get_content_range(body.into_bytes(), MimeType::TEXT_PLAIN.to_string())];
+        r
+    })
+    .post("/items", |req, _params, _conn, state| async move {
+        let name = String::from_utf8_lossy(&req.body).to_string();
+        state.items.lock().await.push(name);
+        let mut r = Response::new();
+        r.status_code = *STATUS_CODE_REASON_PHRASE.n201_created.status_code;
+        r.reason_phrase = STATUS_CODE_REASON_PHRASE.n201_created.reason_phrase.to_string();
+        r
+    });
+```
+
+Handler signature: `Fn(Request, PathParams, ConnectionInfo, Arc<S>) -> Fut` where `Fut: Future<Output = Response> + Send + 'static`. Handlers receive owned values so the future is `'static`. Path matching (`:param`, `*wildcard`) and fall-through to the built-in `App` chain are included.
 
 ---
 

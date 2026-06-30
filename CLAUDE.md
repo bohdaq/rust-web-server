@@ -39,13 +39,15 @@ The server is a synchronous, thread-pool-based HTTP/1.1 server built with no asy
 
 ### Routing / controller dispatch
 
-`App` (in `src/app/mod.rs`) implements the `Application` trait. It walks a hardcoded list of `if Controller::is_matching(...)` checks and calls the first matching controller's `process()`. There is no router table — controllers are checked in declaration order.
+`App` (in `src/app/mod.rs`) implements the `Application` trait (`src/application/mod.rs`). `Application::execute` returns `Result<Response, String>`. `App::execute` walks a hardcoded list of `if Controller::is_matching(...)` checks and calls the first matching controller's `process()`. Controllers are checked in declaration order.
 
 The `Controller` trait (`src/controller/mod.rs`) has two methods:
 - `is_matching(request, connection) -> bool`
 - `process(request, response, connection) -> Response`
 
-To add a route: create a new module under `src/app/controller/`, implement `Controller`, and add the `is_matching`/`process` call to `App::execute` in `src/app/mod.rs`.
+Two ways to add routes:
+1. **Controller pattern** — create a module under `src/app/controller/`, implement `Controller`, register it in `App::execute`.
+2. **Router** — build a `Router` inside `Application::execute` and call `router.handle(request, connection)`. Prefer this for new code when you need named path parameters or don't want boilerplate controllers.
 
 ### Configuration
 
@@ -67,6 +69,44 @@ All config is read at startup into process environment variables (`RWS_CONFIG_*`
 ### HTTP version constants
 
 `src/http/mod.rs` defines `VERSION` (HTTP/0.9 through HTTP/3.0) and `HTTP::version_list()` which is used by `Request::parse_method_and_request_uri_and_http_version_string` to validate the version token on every incoming request.
+
+### Dynamic router
+
+`src/router/mod.rs` provides `Router` — a fluent, path-based router with named parameters and wildcards. Register handlers with `.get()`, `.post()`, `.put()`, `.patch()`, `.delete()`, then call `router.handle(request, connection)` from inside `Application::execute`. Pattern syntax: `:name` for a named segment, `*name` for a trailing wildcard. `PathParams::get(name)` retrieves extracted values.
+
+### Typed extractors
+
+`src/extract/mod.rs` defines the `FromRequest` trait and built-in extractors:
+- `Body` — raw bytes (never fails)
+- `BodyText` — UTF-8 body (400 on invalid UTF-8)
+- `Query` — parsed query string as `HashMap<String, String>`
+- `RequestHeaders` — all request headers with case-insensitive `get(name)`
+
+### Typed errors
+
+`src/error/mod.rs` defines:
+- `IntoResponse` trait — implement on your error enum to map it to a `Response`; `Response` itself is the identity implementation
+- `AppError` enum — covers `BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`, `Internal`; all implement `IntoResponse`
+
+### Rate limiting
+
+`src/rate_limit/mod.rs` provides `RateLimiter` — a thread-safe sliding-window limiter keyed by a string (typically the client IP). Call `limiter.check(key)` → `true` if within budget, `false` to return 429. `rate_limit::global()` returns a process-wide singleton configured via `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS` (default 1000) and `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS` (default 60).
+
+### Test client
+
+`src/test_client/mod.rs` provides `TestClient<A>` — dispatches requests directly through an `Application` without opening a TCP socket. Use it in unit and integration tests:
+
+```rust
+let client = TestClient::new(App::new());
+let res = client.get("/healthz").send();
+assert_eq!(200, res.status());
+```
+
+### Graceful shutdown
+
+HTTP/1.1 (`http1` feature, `ctrlc` dep): a `SIGINT`/`SIGTERM` handler sets an `AtomicBool`; the accept loop exits and the `ThreadPool` drains in-flight requests before the process exits.
+
+HTTP/2 + HTTP/3 (async features): `tokio::signal` handles `SIGINT` and `SIGTERM`; each `run_tls`/`run_quic` loop selects on the signal and closes the endpoint cleanly.
 
 ### No async (default `http1` feature)
 
