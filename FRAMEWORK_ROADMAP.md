@@ -180,19 +180,23 @@ Real-time features (chat, live updates, collaborative editing) are now possible.
 
 ## Next — high-impact additions
 
-### 17. Server-Sent Events (SSE)
+### ✅ 17. Server-Sent Events (SSE) — _Done (v17.12.0)_
 
-HTTP/1.1 long-polling is the current only option for server-push. SSE would let a handler hold an open connection and push newline-delimited `data:` events — ideal for AI token streaming, live dashboards, and progress feeds — without the complexity of WebSocket framing.
+`Sse` builder and `SseEvent` in `src/sse/mod.rs` produce a correctly formatted `text/event-stream` response body from a sequence of events. Headers set automatically: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `X-Accel-Buffering: no`.
 
-**Target API:**
 ```rust
-app.get("/stream", |_req, _params, _conn, state| {
-    SseStream::new()
-        .event("connected", "")
-        .keep_alive(30)
-        .into_response()
-})
+use rust_web_server::sse::{Sse, SseEvent};
+
+let response = Sse::new()
+    .event("connected", "ready")
+    .push(SseEvent::data(r#"{"count":1}"#).id("1").event_type("update"))
+    .push(SseEvent::data(r#"{"count":2}"#).id("2").event_type("update"))
+    .retry(5000)
+    .comment("keep-alive")
+    .into_response();
 ```
+
+`SseEvent` supports `id`, `event_type`, `retry`, and multi-line `data` (produces one `data:` line per source line, which clients join with `\n`). The response body is fully buffered before sending — suitable for pre-known event sequences. For live streaming where events arrive over time, write the SSE headers and raw event lines directly to the TCP stream in a custom accept loop (same pattern as WebSocket).
 
 ---
 
@@ -412,7 +416,7 @@ let app = App::new()
 | 14 | No test client | ✅ Done (v17.6.0) |
 | 15 | WebSocket support | ✅ Done (v17.8.0) |
 | 16 | HTTP → HTTPS redirect | ✅ Done (v17.4.0) |
-| 17 | Server-Sent Events (SSE) | Pending |
+| 17 | Server-Sent Events (SSE) | ✅ Done (v17.12.0) |
 | 18 | Session management | Pending |
 | 19 | Serde JSON integration | Pending |
 | 20 | Built-in auth middleware (JWT + Basic) | Pending |

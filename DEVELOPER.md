@@ -91,6 +91,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Middleware` / `WithMiddleware` | `middleware` | Composable middleware pipeline wrapping any `Application`. Use `App::new().wrap(layer)` or `AppWithState::wrap(layer)`. |
 | `RateLimitLayer` | `middleware` | Built-in middleware that enforces the global rate limiter per client IP |
 | `AsyncAppWithState<S>` | `async_state` | Like `AppWithState<S>` but handlers are `async fn`; requires `http2` feature. Entry point: `App::with_async_state(S)`. |
+| `Sse` / `SseEvent` | `sse` | Build a buffered `text/event-stream` response from a sequence of events. Correct headers set automatically. |
 
 ---
 
@@ -752,7 +753,37 @@ let app = App::with_state(MyState { db_url: "postgres://...".to_string() })
 
 ---
 
-### 22. Async handlers with shared state
+### 22. Server-Sent Events
+
+`Sse` builds a complete `text/event-stream` response from a chain of events. The entire body is buffered before sending — suitable for pre-known event sequences (progress updates, batch push, AI responses already collected). For true live streaming over an open connection, write the SSE headers and event lines directly to the TCP stream in a custom loop (same pattern as WebSocket).
+
+```rust
+use rust_web_server::sse::{Sse, SseEvent};
+use rust_web_server::state::AppWithState;
+
+struct State { messages: Vec<String> }
+
+let app = AppWithState::new(State {
+    messages: vec!["first".to_string(), "second".to_string()],
+})
+.get("/events", |_req, _params, _conn, state| {
+    let mut sse = Sse::new().event("open", "");
+    for (i, msg) in state.messages.iter().enumerate() {
+        sse = sse.push(
+            SseEvent::data(msg)
+                .id(&(i + 1).to_string())
+                .event_type("message"),
+        );
+    }
+    sse.retry(3000).into_response()
+});
+```
+
+`SseEvent` fields: `data` (required, multi-line supported), `id`, `event_type`, `retry`. `Sse` methods: `event(type, data)`, `data(data)`, `push(SseEvent)`, `retry(ms)`, `comment(text)`.
+
+---
+
+### 23. Async handlers with shared state
 
 `AsyncAppWithState<S>` (requires the `http2` Cargo feature) lets handlers be `async fn` closures that can `await` database queries, HTTP clients, or any async I/O. Use `App::with_async_state(state)` as the entry point.
 
