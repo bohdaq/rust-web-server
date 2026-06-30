@@ -194,7 +194,7 @@ See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 30 use-
 
 This framework is designed to be an AI first class citizen — AI coding assistants (Claude, Cursor, Copilot) generate correct, idiomatic, compiling code on the first try.
 
-See [AI_ADOPTION.md](AI_ADOPTION.md) for the full strategy: using the server as an AI API backend, adding SSE streaming for token-by-token output, implementing an MCP tool server, and the steps to make the framework maximally discoverable by AI tools (`llms.txt`, Cargo examples, ergonomic helpers, system prompt file).
+See [spec/AI_ADOPTION.md](spec/AI_ADOPTION.md) for the full strategy: using the server as an AI API backend, adding SSE streaming for token-by-token output, implementing an MCP tool server, and the steps to make the framework maximally discoverable by AI tools (`llms.txt`, Cargo examples, ergonomic helpers, system prompt file).
 
 ## Further reading
 
@@ -202,7 +202,7 @@ See [AI_ADOPTION.md](AI_ADOPTION.md) for the full strategy: using the server as 
 - [FAQ](FAQ.md) — common problems and solutions
 - [DEVELOPER](DEVELOPER.md) — building blocks, use cases, building, and testing
 - [src/README.md](src/README.md) — module-level documentation
-- [AI_ADOPTION.md](AI_ADOPTION.md) — AI adoption strategy and roadmap
+- [spec/AI_ADOPTION.md](spec/AI_ADOPTION.md) — AI adoption strategy and roadmap
 
 ## License
 
