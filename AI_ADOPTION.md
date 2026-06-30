@@ -41,7 +41,7 @@ This is entirely additive: one controller that speaks the MCP JSON-RPC envelope 
 
 | Goal | What exists | What is missing |
 |------|-------------|-----------------|
-| AI API proxy backend | Routing, JSON, CORS, K8s probes | Outbound HTTP client (`ureq`/`reqwest`) |
+| AI API proxy backend | Routing, JSON, CORS, K8s probes, `ReverseProxy` middleware (v17.20.0) | Outbound HTTP client for custom header injection (`ureq`/`reqwest`) |
 | Streaming (SSE / token streaming) | HTTP/2 framing infrastructure | Streaming `Response` write path |
 | MCP tool server | Full HTTP stack, JSON | One new controller + MCP envelope parsing |
 | OpenAI-compat `/v1/chat` | Routing, JSON bodies | Outbound client + schema mapping |

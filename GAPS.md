@@ -6,13 +6,11 @@ This document tracks what is missing for `rws` to be competitive with production
 
 ## Critical gaps (core server functionality)
 
-### Reverse proxy
+### Reverse proxy ✅ Done (v17.20.0)
 
-The biggest gap. `rws` can only serve its own content — it cannot forward requests to upstream backends. nginx's `proxy_pass`, Traefik's services, and Caddy's `reverse_proxy` directive are their primary use cases. Without this, `rws` cannot sit in front of application servers.
+`src/proxy/ReverseProxy` forwards requests to HTTP backends with round-robin load balancing.  `path_prefix` routing lets the proxy coexist with local handlers.  Returns `502 Bad Gateway` when all backends fail.
 
-### Load balancing
-
-No round-robin, least-connections, IP-hash, or weighted distribution across multiple upstreams. Follows directly from the absence of a reverse proxy.
+Remaining: TLS upstreams, weighted distribution, health-check probes, circuit breaker.
 
 ### Virtual hosting / SNI routing
 
@@ -26,25 +24,27 @@ Caddy auto-provisions and renews Let's Encrypt certificates with zero config. `r
 
 ## Important gaps
 
-### Rate limiting
+### Rate limiting ✅ Done
 
-No per-IP or per-route request rate caps. nginx `limit_req`, Traefik's `RateLimit` middleware, and HAProxy's `stick-table` are standard production features.
+`RateLimiter` and `RateLimitLayer` provide per-IP sliding-window rate limiting configurable via env vars.
+
+Remaining: per-route rate caps, least-connections upstream selection.
 
 ### Request / response rewriting
 
-No URL rewriting, header injection/removal, or body transformation. nginx `rewrite`, `proxy_set_header`, and `sub_filter` are heavily used in production deployments.
+No URL rewriting or body transformation. nginx `rewrite`, `proxy_set_header`, and `sub_filter` are heavily used in production deployments.
 
-### Authentication middleware
+`X-Forwarded-For` and `Via` are injected automatically by `ReverseProxy`.
 
-No basic auth, no JWT validation, no IP allowlist/denylist, no forward-auth integration (Traefik's `ForwardAuth` delegates auth decisions to an external service).
+### Authentication middleware ✅ Done
+
+`BasicAuthLayer` (HTTP Basic) and `JwtLayer` (HS256 JWT) ship in the `auth` feature.  `IpFilter::allow` / `IpFilter::deny` handle IP allowlist/denylist.
+
+Remaining: forward-auth delegation to an external service (Traefik's `ForwardAuth`).
 
 ### Response caching
 
 No HTTP cache layer. nginx `proxy_cache`, Varnish, and Caddy's cache module let the server store and replay upstream responses. Without this `rws` cannot act as a CDN edge or cache accelerator.
-
-### WebSocket support
-
-No HTTP Upgrade path for WebSocket connections, either as a server or a proxy.
 
 ### Hot config reload
 
@@ -72,11 +72,14 @@ No built-in log rotation or external log shipping (syslog, journald). Relies on 
 
 | Protocol | nginx | Traefik | Caddy | rws |
 |---|---|---|---|---|
+| HTTP/1.1 reverse proxy | ✅ | ✅ | ✅ | ✅ |
+| HTTP/2 reverse proxy | ✅ | ✅ | ✅ | ❌ |
 | TCP proxy (L4) | ✅ | ✅ | ✅ | ❌ |
 | UDP proxy | ✅ | ✅ | ❌ | ❌ |
-| WebSocket | ✅ | ✅ | ✅ | ❌ |
+| WebSocket (server) | ✅ | ✅ | ✅ | ✅ |
+| WebSocket proxy | ✅ | ✅ | ✅ | ❌ |
 | gRPC proxy | ✅ | ✅ | ✅ | ❌ |
-| Server-Sent Events | ✅ | ✅ | ✅ | ❌ |
+| Server-Sent Events | ✅ | ✅ | ✅ | ✅ |
 | mTLS (client certificates) | ✅ | ✅ | ✅ | ❌ |
 
 ---
@@ -103,15 +106,15 @@ No upstream health-based circuit breaking or automatic retries on upstream 5xx r
 
 ## Implementation priority
 
-| Priority | Gap |
-|---|---|
-| 1 | Reverse proxy + load balancing |
-| 2 | Virtual hosting / SNI routing |
-| 3 | Automatic TLS (ACME / Let's Encrypt) |
-| 4 | Rate limiting |
-| 5 | Request / response rewriting |
-| 6 | Authentication middleware |
-| 7 | Response caching |
-| 8 | WebSocket support |
-| 9 | Hot config reload |
-| 10 | Per-route metrics + distributed tracing |
+| Priority | Gap | Status |
+|---|---|---|
+| 1 | Reverse proxy + load balancing | ✅ Done (v17.20.0) |
+| 2 | Virtual hosting / SNI routing | Pending |
+| 3 | Automatic TLS (ACME / Let's Encrypt) | Pending |
+| 4 | Rate limiting | ✅ Done |
+| 5 | Request / response rewriting | Partial (proxy injects `X-Forwarded-For`, `Via`) |
+| 6 | Authentication middleware | ✅ Done (Basic, JWT, IP filter) |
+| 7 | Response caching | Pending |
+| 8 | WebSocket support | ✅ Done (v17.8.0) |
+| 9 | Hot config reload | Pending |
+| 10 | Per-route metrics + distributed tracing | Pending |

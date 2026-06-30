@@ -188,7 +188,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 30 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, and request validation.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 30 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, and reverse proxy / load balancing.
 
 ## AI adoption
 
