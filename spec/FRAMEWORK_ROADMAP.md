@@ -433,11 +433,42 @@ let app = App::new()
 
 ---
 
-### 27. Per-route metrics
+### 27. Per-route metrics ✅ Done (v17.23.0)
 
-`/metrics` currently exports only server-wide counters. Production services need per-route request counts and latency histograms to identify slow endpoints and set SLO alerts.
+`MetricsLayer` (in `src/metrics/`) is a `Middleware` that records per-route
+request counts and latency histograms into a global store. `GET /metrics` now
+emits both the existing server-wide counters and the per-route data.
 
-**Target outcome:** `/metrics` includes `rws_route_requests_total{method,path,status}` and `rws_route_duration_seconds{method,path}` histograms.
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::metrics::MetricsLayer;
+
+let app = App::new().wrap(MetricsLayer);
+```
+
+**New Prometheus metrics emitted by `/metrics`:**
+
+```
+# HELP rws_route_requests_total Total requests handled per route
+# TYPE rws_route_requests_total counter
+rws_route_requests_total{method="GET",path="/api/users",status="200"} 42
+rws_route_requests_total{method="GET",path="/api/users",status="404"} 3
+
+# HELP rws_route_duration_seconds Request duration in seconds per route
+# TYPE rws_route_duration_seconds histogram
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="0.005"} 10
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="0.01"} 18
+...
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="+Inf"} 45
+rws_route_duration_seconds_sum{method="GET",path="/api/users"} 2.345678901
+rws_route_duration_seconds_count{method="GET",path="/api/users"} 45
+```
+
+- Query strings are stripped from URIs before keying (`/users?page=2` → `/users`)
+- Histogram uses standard Prometheus default bounds: 5 ms, 10 ms, 25 ms, 50 ms, 100 ms, 250 ms, 500 ms, 1 s, 2.5 s, 5 s, 10 s
+- Handler errors are attributed status `500`
+- Section is omitted from `/metrics` output until at least one route is observed
 
 ---
 
@@ -562,7 +593,7 @@ let app = App::new()
 | 24 | Request validation helpers | ✅ Done (v17.19.0) |
 | 25 | IP allowlist / denylist | ✅ Done (v17.16.0) |
 | 26 | OpenTelemetry distributed tracing | Pending |
-| 27 | Per-route metrics | Pending |
+| 27 | Per-route metrics | ✅ Done (v17.23.0) |
 | 28 | Response caching | ✅ Done (v17.22.0) |
 | 29 | Hot config reload | ✅ Done (v17.21.0) |
 | 30 | Reverse proxy / load balancing | ✅ Done (v17.20.0) |

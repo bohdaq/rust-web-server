@@ -103,6 +103,7 @@ cargo build --release --no-default-features --features http1
 - Server-Sent Events — `Sse` builder produces a buffered `text/event-stream` response with correct headers
 - Session management — `SessionStore` thread-safe in-memory sessions with TTL; cookie helpers included
 - Per-IP rate limiting — sliding-window `RateLimiter` and `RateLimitLayer` middleware; configurable via env vars
+- Per-route metrics — `MetricsLayer` middleware records `rws_route_requests_total{method,path,status}` counters and `rws_route_duration_seconds{method,path}` histograms into the global `/metrics` endpoint; query strings stripped from paths automatically
 - IP filter — `IpFilter::allow([...])` / `IpFilter::deny([...])` middleware; accepts exact IPv4 addresses and CIDR ranges
 - Reverse proxy — `ReverseProxy` middleware forwards requests to HTTP backends with round-robin load balancing, automatic failover, and `path_prefix` routing; returns `502 Bad Gateway` when all backends fail
 - Response caching — `CacheLayer` middleware; in-memory TTL cache for GET responses; vary-by-header for content negotiation; capacity-bounded with oldest-first eviction; `Age` header injected on hits; respects `Cache-Control: no-store` / `private`
@@ -190,7 +191,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 32 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, and hot config reload.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 33 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, and per-route metrics.
 
 ## AI adoption
 

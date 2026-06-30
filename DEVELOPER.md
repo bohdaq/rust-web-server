@@ -107,6 +107,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `#[derive(Validate)]` | `macros` (proc-macro) | Derive `Validate` from `#[validate(...)]` field annotations. Validators: `length(min,max)`, `range(min,max)`, `email`, `required`, `url`. Requires `features = ["macros"]`. |
 | `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. |
 | `LoadBalancing` | `proxy` | Enum selecting the balancing strategy (`RoundRobin`). Passed to `ReverseProxy::strategy()`. |
+| `MetricsLayer` | `metrics` | Middleware that records per-route request counts and latency histograms. Adds `rws_route_requests_total{method,path,status}` and `rws_route_duration_seconds{method,path}` to `/metrics`. |
 | `CacheLayer` | `cache` | In-memory TTL response cache middleware for GET requests. Builder: `.ttl(secs)`, `.vary_by_header(name)`. Injects `Age` on hits; respects `Cache-Control: no-store/private`. |
 | `ConfigSnapshot` | `config_reload` | Point-in-time snapshot of all hot-reloadable config values. Read with `config_reload::current()`. |
 | `config_reload::reload` | `config_reload` | Re-reads `rws.config.toml` and applies CORS, rate-limit, log-format changes live. Triggered by SIGHUP or `POST /admin/config/reload`. |
@@ -1216,6 +1217,55 @@ let app = App::new()
 | Backend connection fails | Try next backend in round-robin order |
 | All backends fail | `502 Bad Gateway` |
 | Path prefix set and URI does not match | Pass through to the inner application |
+
+### 33. Per-route metrics
+
+`MetricsLayer` (in `src/metrics/`) is a `Middleware` that instruments every
+request passing through it and appends per-route counters and latency histograms
+to the existing `GET /metrics` Prometheus output.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::metrics::MetricsLayer;
+
+let app = App::new().wrap(MetricsLayer);
+```
+
+After wrapping, `GET /metrics` emits the standard server-wide metrics plus:
+
+```
+# HELP rws_route_requests_total Total requests handled per route
+# TYPE rws_route_requests_total counter
+rws_route_requests_total{method="GET",path="/api/users",status="200"} 1204
+rws_route_requests_total{method="GET",path="/api/users",status="404"} 7
+
+# HELP rws_route_duration_seconds Request duration in seconds per route
+# TYPE rws_route_duration_seconds histogram
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="0.005"} 980
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="0.01"} 1100
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="0.025"} 1190
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="0.05"} 1200
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="0.1"} 1204
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="0.25"} 1204
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="0.5"} 1204
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="1"} 1204
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="2.5"} 1204
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="5"} 1204
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="10"} 1204
+rws_route_duration_seconds_bucket{method="GET",path="/api/users",le="+Inf"} 1204
+rws_route_duration_seconds_sum{method="GET",path="/api/users"} 4.876543210
+rws_route_duration_seconds_count{method="GET",path="/api/users"} 1204
+```
+
+**Behaviour notes:**
+
+- Query strings are stripped: `/users?page=2` is keyed as `/users`.
+- Handler errors (`Err` return) are attributed to status `500`.
+- The route section is absent from `/metrics` until at least one route is observed.
+- `record_route(method, path, status, elapsed_secs)` is also callable directly for custom instrumentation.
+
+---
 
 ### 31. Response caching
 
