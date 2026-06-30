@@ -35,6 +35,9 @@ pub fn connection_close() {
     ACTIVE_CONNECTIONS.fetch_sub(1, Ordering::Relaxed);
 }
 
+#[cfg(test)]
+mod tests;
+
 /// Returns a Prometheus text-format snapshot of all metrics.
 pub fn prometheus_text() -> String {
     let requests = REQUESTS_TOTAL.load(Ordering::Relaxed);

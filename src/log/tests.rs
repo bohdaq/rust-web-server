@@ -1,11 +1,14 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use file_ext::FileExt;
 use crate::app::App;
+use crate::core::New;
 use crate::header::Header;
 use crate::http::VERSION;
 use crate::log::Log;
+use crate::range::Range;
+use crate::mime_type::MimeType;
 use crate::request::{METHOD, Request};
-use crate::response::STATUS_CODE_REASON_PHRASE;
+use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 
 #[test]
 fn log_request_response() {
@@ -136,4 +139,157 @@ fn combined_log_format_empty_body_uses_dash() {
 
     // Empty body must appear as "-" per CLF spec
     assert!(log.ends_with(" -"), "empty body should end with ' -': {}", log);
+}
+
+// ── Log::json ─────────────────────────────────────────────────────────────────
+
+fn make_request(method: &str, uri: &str) -> Request {
+    Request {
+        method: method.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: vec![],
+    }
+}
+
+fn ok_response_with_body(body: &[u8]) -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r.content_range_list = vec![Range::get_content_range(body.to_vec(), MimeType::TEXT_PLAIN.to_string())];
+    r
+}
+
+#[test]
+fn json_contains_all_required_keys() {
+    let req  = make_request("GET", "/api/users");
+    let resp = ok_response_with_body(b"hello");
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 1, 2, 3)), 8080);
+
+    let line = Log::json(&req, &resp, &peer);
+
+    assert!(line.contains("\"time\""),        "missing time field");
+    assert!(line.contains("\"remote_addr\""), "missing remote_addr field");
+    assert!(line.contains("\"method\""),      "missing method field");
+    assert!(line.contains("\"path\""),        "missing path field");
+    assert!(line.contains("\"protocol\""),    "missing protocol field");
+    assert!(line.contains("\"status\""),      "missing status field");
+    assert!(line.contains("\"bytes\""),       "missing bytes field");
+}
+
+#[test]
+fn json_values_match_request_and_response() {
+    let req  = make_request("POST", "/submit");
+    let resp = ok_response_with_body(b"ok");
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)), 9000);
+
+    let line = Log::json(&req, &resp, &peer);
+
+    assert!(line.contains("\"remote_addr\":\"1.2.3.4\""), "wrong IP: {}", line);
+    assert!(line.contains("\"method\":\"POST\""),          "wrong method: {}", line);
+    assert!(line.contains("\"path\":\"/submit\""),         "wrong path: {}", line);
+    assert!(line.contains("\"status\":200"),               "wrong status: {}", line);
+    assert!(line.contains("\"bytes\":2"),                  "wrong byte count: {}", line);
+}
+
+#[test]
+fn json_empty_body_reports_zero_bytes() {
+    let req  = make_request("GET", "/empty");
+    let resp = Response::new();
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
+
+    let line = Log::json(&req, &resp, &peer);
+    assert!(line.contains("\"bytes\":0"), "expected 0 bytes: {}", line);
+}
+
+#[test]
+fn json_timestamp_is_iso8601_format() {
+    let req  = make_request("GET", "/");
+    let resp = Response::new();
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
+
+    let line = Log::json(&req, &resp, &peer);
+
+    // Extract the value of "time" from the JSON string
+    let time_start = line.find("\"time\":\"").expect("no time field") + 8;
+    let time_end   = line[time_start..].find('"').expect("time field not closed") + time_start;
+    let ts = &line[time_start..time_end];
+
+    // Must match YYYY-MM-DDThh:mm:ssZ (20 chars)
+    assert_eq!(20, ts.len(), "unexpected timestamp length: {}", ts);
+    assert!(ts.ends_with('Z'),           "timestamp must end with Z: {}", ts);
+    assert_eq!(b'T', ts.as_bytes()[10],  "expected T separator at pos 10: {}", ts);
+}
+
+#[test]
+fn json_escapes_special_chars_in_method_and_path() {
+    // A method or path containing a quote or backslash must be escaped.
+    let mut req = make_request("GET", "/path/with\"quote");
+    req.method = "G\"ET".to_string();
+    let resp = Response::new();
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
+
+    let line = Log::json(&req, &resp, &peer);
+    // The output must be valid JSON — raw unescaped `"` would break it.
+    assert!(line.contains("\\\""), "expected escaped quote in output: {}", line);
+}
+
+#[test]
+fn json_output_is_a_single_line() {
+    let req  = make_request("DELETE", "/items/1");
+    let resp = ok_response_with_body(b"deleted");
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9)), 443);
+
+    let line = Log::json(&req, &resp, &peer);
+    assert!(!line.contains('\n'), "JSON log must be a single line: {}", line);
+    assert!(line.starts_with('{'), "must start with {{");
+    assert!(line.ends_with('}'),   "must end with }}");
+}
+
+// ── Log::log_access ───────────────────────────────────────────────────────────
+
+#[test]
+fn log_access_uses_combined_by_default() {
+    // Ensure the env var is unset so we get combined format.
+    std::env::remove_var(crate::entry_point::Config::RWS_CONFIG_LOG_FORMAT);
+
+    let req  = make_request("GET", "/ping");
+    let resp = ok_response_with_body(b"pong");
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
+
+    // log_access writes to stdout — we just verify it doesn't panic.
+    Log::log_access(&req, &resp, &peer);
+}
+
+#[test]
+fn log_access_uses_json_when_env_var_set() {
+    std::env::set_var(crate::entry_point::Config::RWS_CONFIG_LOG_FORMAT, "json");
+
+    let req  = make_request("GET", "/ping");
+    let resp = ok_response_with_body(b"pong");
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
+
+    // Must not panic; JSON path is exercised by the env var.
+    Log::log_access(&req, &resp, &peer);
+
+    std::env::remove_var(crate::entry_point::Config::RWS_CONFIG_LOG_FORMAT);
+}
+
+// ── Log::server_url_thread_count ──────────────────────────────────────────────
+
+#[test]
+fn server_url_thread_count_contains_protocol_and_address() {
+    let msg = Log::server_url_thread_count("https", &"127.0.0.1:7878".to_string(), 4);
+    assert!(msg.contains("https://127.0.0.1:7878"), "missing URL: {}", msg);
+    assert!(msg.contains("4"),                       "missing thread count: {}", msg);
+}
+
+#[test]
+fn server_url_thread_count_two_lines() {
+    let msg = Log::server_url_thread_count("http", &"0.0.0.0:80".to_string(), 8);
+    let lines: Vec<&str> = msg.lines().collect();
+    assert_eq!(2, lines.len(), "expected exactly 2 lines: {:?}", lines);
+    assert!(lines[0].contains("http://0.0.0.0:80"));
+    assert!(lines[1].contains("8"));
 }
