@@ -26,6 +26,20 @@ use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
 use crate::state::AppWithState;
 
+/// A pair of function pointers representing one entry in the controller chain.
+struct ControllerEntry {
+    is_matching: fn(&Request, &ConnectionInfo) -> bool,
+    process: fn(&Request, Response, &ConnectionInfo) -> Response,
+}
+
+/// Build a [`ControllerEntry`] from any type that implements [`Controller`].
+fn entry<C: Controller>() -> ControllerEntry {
+    ControllerEntry {
+        is_matching: C::is_matching,
+        process: C::process,
+    }
+}
+
 /// The built-in HTTP application. Serves static files, favicons, forms,
 /// file uploads, health probes, metrics, and a 404 fallback.
 ///
@@ -68,81 +82,34 @@ impl New for App {
 
 impl Application for App {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
-        let header_list = Header::get_header_list(&request);
-
-        let mut response: Response = Response::get_response(
+        let header_list = Header::get_header_list(request);
+        let response = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n501_not_implemented,
             Some(header_list),
-            None
+            None,
         );
 
+        let controllers = [
+            entry::<IndexController>(),
+            entry::<StyleController>(),
+            entry::<ScriptController>(),
+            entry::<FileUploadInitiateController>(),
+            entry::<FormUrlEncodedEnctypePostMethodController>(),
+            entry::<FormGetMethodController>(),
+            entry::<FormMultipartEnctypePostMethodController>(),
+            entry::<HealthController>(),
+            entry::<ReadyController>(),
+            entry::<MetricsController>(),
+            entry::<FaviconController>(),
+            entry::<StaticResourceController>(),
+            entry::<NotFoundController>(),
+        ];
 
-
-        if IndexController::is_matching(&request, connection) {
-            response = IndexController::process(&request, response, connection);
-            return Ok(response)
+        for c in &controllers {
+            if (c.is_matching)(request, connection) {
+                return Ok((c.process)(request, response, connection));
+            }
         }
-
-        if StyleController::is_matching(&request, connection) {
-            response = StyleController::process(&request, response, connection);
-            return Ok(response)
-        }
-
-        if ScriptController::is_matching(&request, connection) {
-            response = ScriptController::process(&request, response, connection);
-            return Ok(response)
-        }
-
-        if FileUploadInitiateController::is_matching(&request, connection) {
-            response = FileUploadInitiateController::process(&request, response, connection);
-            return Ok(response)
-        }
-
-        if FormUrlEncodedEnctypePostMethodController::is_matching(&request, connection) {
-            response = FormUrlEncodedEnctypePostMethodController::process(&request, response, connection);
-            return Ok(response)
-        }
-
-        if FormGetMethodController::is_matching(&request, connection) {
-            response = FormGetMethodController::process(&request, response, connection);
-            return Ok(response)
-        }
-
-        if FormMultipartEnctypePostMethodController::is_matching(&request, connection) {
-            response = FormMultipartEnctypePostMethodController::process(&request, response, connection);
-            return Ok(response)
-        }
-
-        if HealthController::is_matching(&request, connection) {
-            response = HealthController::process(&request, response, connection);
-            return Ok(response)
-        }
-
-        if ReadyController::is_matching(&request, connection) {
-            response = ReadyController::process(&request, response, connection);
-            return Ok(response)
-        }
-
-        if MetricsController::is_matching(&request, connection) {
-            response = MetricsController::process(&request, response, connection);
-            return Ok(response)
-        }
-
-        if FaviconController::is_matching(&request, connection) {
-            response = FaviconController::process(&request, response, connection);
-            return Ok(response)
-        }
-
-        if StaticResourceController::is_matching(&request, connection) {
-            response = StaticResourceController::process(&request, response, connection);
-            return Ok(response)
-        }
-
-        if NotFoundController::is_matching(&request, connection) {
-            response = NotFoundController::process(&request, response, connection);
-            return Ok(response)
-        }
-
 
         Ok(response)
     }
