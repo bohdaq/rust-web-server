@@ -441,15 +441,29 @@ let app = App::new()
 
 ---
 
-### 28. Response caching
+### 28. Response caching ✅ Done (v17.22.0)
 
-Every request hits the handler regardless of whether the response could be served from an in-memory or shared cache. A cache middleware would short-circuit the handler for `GET` responses within their TTL.
+`src/cache/mod.rs` provides `CacheLayer` — a `Middleware` that short-circuits the
+inner application for cacheable `GET` responses within their TTL.
 
-**Target API:**
 ```rust
+use rust_web_server::cache::CacheLayer;
+
 let app = App::new()
     .wrap(CacheLayer::memory(1000).ttl(60).vary_by_header("Accept"));
 ```
+
+**What is cached:**
+- Method: GET only; all other methods bypass the cache.
+- Status: 2xx responses (200, 203, 204, 206, …).
+- Response `Cache-Control: no-store` or `private` → not cached.
+- Request `Cache-Control: no-cache` → bypasses cache, calls handler, stores fresh result.
+
+**Eviction:** bounded by capacity; expired entries are purged on each insert; if the store is still full after purging, the oldest entry (insertion order) is dropped.
+
+**Age header:** injected automatically on every cache hit so clients see how stale the response is.
+
+**Vary:** call `.vary_by_header("Accept")` (chain for multiple) to include request header values in the cache key; different values produce separate entries.
 
 ---
 
@@ -549,7 +563,7 @@ let app = App::new()
 | 25 | IP allowlist / denylist | ✅ Done (v17.16.0) |
 | 26 | OpenTelemetry distributed tracing | Pending |
 | 27 | Per-route metrics | Pending |
-| 28 | Response caching | Pending |
+| 28 | Response caching | ✅ Done (v17.22.0) |
 | 29 | Hot config reload | ✅ Done (v17.21.0) |
 | 30 | Reverse proxy / load balancing | ✅ Done (v17.20.0) |
 | 31 | MCP server controller | Pending |
