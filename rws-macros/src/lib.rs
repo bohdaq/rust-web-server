@@ -26,7 +26,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, Ident, ItemFn, LitStr, Token,
+    parse_macro_input, Data, DeriveInput, Fields, Ident, ItemFn, LitStr, Token,
 };
 
 // ── Shared helper ─────────────────────────────────────────────────────────────
@@ -147,4 +147,75 @@ pub fn delete(args: TokenStream, input: TokenStream) -> TokenStream {
     let path = parse_macro_input!(args as LitStr);
     let func = parse_macro_input!(input as ItemFn);
     annotate("DELETE", path, func)
+}
+
+// ── #[derive(FromRequest)] ────────────────────────────────────────────────────
+
+/// Derive `FromRequest` for a named-field struct.
+///
+/// Each field must implement `FromRequest`. Fields are extracted in declaration
+/// order; the first failure short-circuits and returns that error response.
+///
+/// # Example
+///
+/// ```ignore
+/// use rust_web_server::extract::{BodyText, Query};
+///
+/// #[derive(rust_web_server::FromRequest)]
+/// struct Payload {
+///     body: BodyText,
+///     params: Query,
+/// }
+/// ```
+#[proc_macro_derive(FromRequest)]
+pub fn derive_from_request(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    impl_from_request(ast)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+fn impl_from_request(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let span = input.ident.span();
+    let name = &input.ident;
+
+    let fields = match &input.data {
+        Data::Struct(s) => match &s.fields {
+            Fields::Named(f) => &f.named,
+            _ => {
+                return Err(syn::Error::new(
+                    span,
+                    "#[derive(FromRequest)] only supports structs with named fields",
+                ))
+            }
+        },
+        _ => {
+            return Err(syn::Error::new(
+                span,
+                "#[derive(FromRequest)] can only be derived on structs",
+            ))
+        }
+    };
+
+    let extractions = fields.iter().map(|f| {
+        let ident = f.ident.as_ref().unwrap();
+        let ty = &f.ty;
+        quote! {
+            let #ident = <#ty as _rws::extract::FromRequest>::from_request(__req)?;
+        }
+    });
+
+    let field_names = fields.iter().map(|f| f.ident.as_ref().unwrap());
+
+    Ok(quote! {
+        const _: () = {
+            use ::rust_web_server as _rws;
+            impl _rws::extract::FromRequest for #name {
+                fn from_request(__req: &_rws::request::Request) -> ::core::result::Result<Self, _rws::response::Response> {
+                    #(#extractions)*
+                    ::core::result::Result::Ok(#name { #(#field_names),* })
+                }
+            }
+        };
+    })
 }

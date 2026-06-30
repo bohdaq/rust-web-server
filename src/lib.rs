@@ -43,12 +43,16 @@
 //! See [DEVELOPER.md](https://github.com/bohdaq/rust-web-server/blob/main/DEVELOPER.md)
 //! for the full building blocks reference and use case examples.
 
+// Allows `::rust_web_server::…` paths to resolve from within this crate's own
+// tests, which is required by proc-macro derive output that uses that prefix.
+extern crate self as rust_web_server;
+
 pub mod app;
 #[cfg(feature = "auth")]
 pub mod auth;
 
 #[cfg(feature = "macros")]
-pub use rws_macros::{delete, get, patch, post, put, route};
+pub use rws_macros::{delete, get, patch, post, put, route, FromRequest};
 #[cfg(feature = "http2")]
 pub mod async_state;
 pub mod session;
