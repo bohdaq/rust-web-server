@@ -86,6 +86,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `TestClient` | `test_client` | In-process HTTP test client — no TCP socket required |
 | `FromRequest` / `Body` / `BodyText` / `Query` | `extract` | Typed request extractors — parse body or query params, returning a ready error on failure |
 | `RateLimiter` | `rate_limit` | Per-IP sliding-window rate limiter; `global()` reads config from env vars |
+| `WebSocket` / `Frame` | `websocket` | RFC 6455 WebSocket handshake, frame read/write; SHA-1 and base64 built in |
 
 ---
 
@@ -262,12 +263,16 @@ fn process(_request: &Request, mut response: Response, _connection: &ConnectionI
 
 ### 9. Read client IP and port
 
-`ConnectionInfo` is passed into every controller and carries the peer address.
+`ConnectionInfo` is passed into every controller and carries the peer address. Use `peer_addr()` to get a `std::net::SocketAddr`, or read the raw `client.ip` / `client.port` fields directly.
 
 ```rust
 fn process(_request: &Request, mut response: Response, connection: &ConnectionInfo) -> Response {
-    println!("request from {}:{}", connection.peer_addr.ip(), connection.peer_addr.port());
-    // ...
+    // Typed SocketAddr (preferred)
+    if let Some(addr) = connection.peer_addr() {
+        println!("request from {}", addr);  // e.g. "127.0.0.1:54321"
+    }
+    // Raw string fields (backward-compatible)
+    println!("ip={} port={}", connection.client.ip, connection.client.port);
     response
 }
 ```
@@ -545,6 +550,62 @@ Configure limits at startup:
 RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS=200   # requests per window (default 1000)
 RWS_CONFIG_RATE_LIMIT_WINDOW_SECS=60    # window length in seconds (default 60)
 ```
+
+---
+
+### 19. WebSocket connections
+
+`WebSocket` provides RFC 6455 handshake and frame I/O. Because WebSocket requires taking over the raw TCP stream after the `101` response is sent, the connection cannot be handled inside a normal `Controller::process` call (which has no access to the stream). Drive your own accept loop instead:
+
+```rust
+use std::net::TcpListener;
+use rust_web_server::request::Request;
+use rust_web_server::response::Response;
+use rust_web_server::websocket::{WebSocket, Frame};
+
+let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+for stream in listener.incoming() {
+    let mut stream = stream.unwrap();
+
+    // Read and parse the HTTP upgrade request (simplified)
+    let mut buf = [0u8; 4096];
+    let n = stream.read(&mut buf).unwrap();
+    // ... parse into a Request ...
+
+    if WebSocket::is_upgrade_request(&request) {
+        // Send the 101 handshake
+        let resp = WebSocket::handshake_response(&request).unwrap();
+        stream.write_all(&resp.generate_response()).unwrap();
+
+        // Frame loop
+        loop {
+            match WebSocket::read_frame(&mut stream) {
+                Ok(Frame::Text(msg)) => {
+                    WebSocket::send_text(&mut stream, &msg).unwrap();  // echo back
+                }
+                Ok(Frame::Ping(payload)) => {
+                    WebSocket::send_pong(&mut stream, payload).unwrap();
+                }
+                Ok(Frame::Close(code, reason)) => {
+                    WebSocket::send_close(&mut stream, code.unwrap_or(1000), &reason).unwrap();
+                    break;
+                }
+                Ok(Frame::Binary(data)) => {
+                    WebSocket::write_frame(&mut stream, Frame::Binary(data)).unwrap();
+                }
+                _ => break,
+            }
+        }
+    }
+}
+```
+
+Key primitives:
+- `WebSocket::is_upgrade_request(&request)` — checks `Upgrade: websocket`, `Connection: Upgrade`, and `Sec-WebSocket-Key`
+- `WebSocket::handshake_response(&request)` — returns a `101 Switching Protocols` `Response` with the correct `Sec-WebSocket-Accept` key
+- `WebSocket::read_frame(&mut stream)` → `Frame` — handles client-to-server masking automatically
+- `WebSocket::write_frame(&mut stream, frame)` — sends a server-to-client unmasked frame
+- `Frame::Text`, `Frame::Binary`, `Frame::Ping`, `Frame::Pong`, `Frame::Close`, `Frame::Continuation`
 
 ---
 

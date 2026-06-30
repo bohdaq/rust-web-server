@@ -118,9 +118,9 @@ Automatic gzip compression for text responses when the client sends `Accept-Enco
 
 ---
 
-### 12. `ConnectionInfo` peer address type
+### ✅ 12. `ConnectionInfo` peer address type — _Done (v17.8.0)_
 
-`ConnectionInfo.client.ip` is a `String` and `.client.port` is an `i32` instead of a `std::net::SocketAddr`. Users who need the actual address for logging or rate limiting must re-parse strings. The field should be a `SocketAddr`.
+`ConnectionInfo::peer_addr() -> Option<SocketAddr>` and `Address::to_socket_addr() -> Option<SocketAddr>` helpers added as non-breaking additions. The raw `ip: String` / `port: i32` fields are preserved for backward compatibility; the helpers parse them on demand.
 
 ---
 
@@ -142,9 +142,17 @@ assert_eq!(200, res.status());
 
 ---
 
-### 15. No WebSocket support
+### ✅ 15. WebSocket support — _Done (v17.8.0)_
 
-No `Upgrade: websocket` handling. Real-time features (chat, live updates, collaborative editing) are not possible.
+`src/websocket/mod.rs` provides RFC 6455-compliant WebSocket protocol primitives:
+- `WebSocket::is_upgrade_request(&request)` — detects Upgrade/Connection/Key headers
+- `WebSocket::handshake_response(&request)` — builds the `101 Switching Protocols` response (SHA-1 accept key, base64 encoded)
+- `WebSocket::read_frame(stream)` — reads one frame, handles client-to-server masking
+- `WebSocket::write_frame(stream, frame)` — sends a server-to-client unmasked frame
+- `Frame` enum: `Text`, `Binary`, `Ping`, `Pong`, `Close`, `Continuation`
+- Convenience methods: `send_text`, `send_close`, `send_pong`
+
+Real-time features (chat, live updates, collaborative editing) are now possible. Because WebSocket requires raw stream access after the 101 response, the handler must drive its own accept loop rather than returning from a `Controller::process` call.
 
 ---
 
@@ -169,8 +177,8 @@ No `Upgrade: websocket` handling. Real-time features (chat, live updates, collab
 | 9 | Typed error handling | ✅ Done (v17.6.0) |
 | 10 | Cookies | ✅ Done (v17.4.0) |
 | 11 | Response compression | ✅ Done (v17.4.0) |
-| 12 | `ConnectionInfo` uses `String` not `SocketAddr` | Pending |
+| 12 | `ConnectionInfo` uses `String` not `SocketAddr` | ✅ Done (v17.8.0) |
 | 13 | Graceful shutdown | ✅ Done (v17.7.0) |
 | 14 | No test client | ✅ Done (v17.6.0) |
-| 15 | No WebSocket | Pending |
+| 15 | WebSocket support | ✅ Done (v17.8.0) |
 | 16 | HTTP → HTTPS redirect | ✅ Done (v17.4.0) |

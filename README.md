@@ -91,6 +91,7 @@ cargo build --release --no-default-features --features http1
 - Typed request extractors — `FromRequest` trait; built-in `Body`, `BodyText`, `Query`, `RequestHeaders`
 - Per-IP rate limiting — sliding-window `RateLimiter`; configurable via env vars
 - In-process test client — `TestClient` dispatches requests without a TCP socket
+- WebSocket support — RFC 6455 handshake, frame encode/decode, SHA-1 + base64 built in, no extra dependency
 - Graceful shutdown — Ctrl+C and SIGTERM drain in-flight connections on all server paths
 - 30-second read timeout per request on plain HTTP/1.1 connections
 - Symlink resolution
@@ -134,7 +135,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 18 use case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, and testing.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 19 use case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, and WebSocket connections.
 
 ## AI adoption
 

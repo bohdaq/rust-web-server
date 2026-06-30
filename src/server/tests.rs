@@ -1432,3 +1432,41 @@ fn write_chunked_file_produces_valid_chunked_encoding() {
 
     std::fs::remove_file(&filepath).ok();
 }
+
+#[test]
+fn connection_info_peer_addr_parses_ipv4() {
+    use crate::server::{Address, ConnectionInfo};
+    let info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 8080 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+        request_size: 0,
+    };
+    let addr = info.peer_addr().unwrap();
+    assert_eq!("127.0.0.1:8080", addr.to_string());
+}
+
+#[test]
+fn connection_info_peer_addr_returns_none_for_bad_ip() {
+    use crate::server::{Address, ConnectionInfo};
+    let info = ConnectionInfo {
+        client: Address { ip: "not-an-ip".to_string(), port: 80 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+        request_size: 0,
+    };
+    assert!(info.peer_addr().is_none());
+}
+
+#[test]
+fn address_to_socket_addr_parses_ipv6() {
+    use crate::server::Address;
+    let addr = Address { ip: "::1".to_string(), port: 443 };
+    let sa = addr.to_socket_addr().unwrap();
+    assert_eq!(443, sa.port());
+}
+
+#[test]
+fn address_to_socket_addr_returns_none_for_negative_port() {
+    use crate::server::Address;
+    let addr = Address { ip: "127.0.0.1".to_string(), port: -1 };
+    assert!(addr.to_socket_addr().is_none());
+}

@@ -422,6 +422,24 @@ pub struct Address {
     pub port: i32
 }
 
+impl ConnectionInfo {
+    /// Parse the client address into a [`std::net::SocketAddr`], if the stored
+    /// IP and port are valid. Returns `None` if parsing fails.
+    pub fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        self.client.to_socket_addr()
+    }
+}
+
+impl Address {
+    /// Parse this address into a [`std::net::SocketAddr`]. Returns `None` if
+    /// the IP string or port value cannot be converted.
+    pub fn to_socket_addr(&self) -> Option<std::net::SocketAddr> {
+        let ip: std::net::IpAddr = self.ip.parse().ok()?;
+        let port = u16::try_from(self.port).ok()?;
+        Some(std::net::SocketAddr::new(ip, port))
+    }
+}
+
 /// Resolves when SIGTERM is received on Unix, or never on other platforms.
 /// Enables a single `select!` branch to handle both SIGTERM and Ctrl+C.
 #[cfg(feature = "http2")]

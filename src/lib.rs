@@ -74,6 +74,7 @@ pub mod server;
 pub mod symbol;
 pub mod thread_pool;
 pub mod url;
+pub mod websocket;
 
 #[cfg(feature = "http2")]
 #[doc(hidden)]
