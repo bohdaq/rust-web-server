@@ -178,10 +178,224 @@ Real-time features (chat, live updates, collaborative editing) are now possible.
 
 ---
 
+## Next — high-impact additions
+
+### 17. Server-Sent Events (SSE)
+
+HTTP/1.1 long-polling is the current only option for server-push. SSE would let a handler hold an open connection and push newline-delimited `data:` events — ideal for AI token streaming, live dashboards, and progress feeds — without the complexity of WebSocket framing.
+
+**Target API:**
+```rust
+app.get("/stream", |_req, _params, _conn, state| {
+    SseStream::new()
+        .event("connected", "")
+        .keep_alive(30)
+        .into_response()
+})
+```
+
+---
+
+### 18. Session management
+
+No session layer exists. Stateful applications must implement their own cookie-based session ID generation, storage lookup, and expiry — typically 100+ lines of boilerplate per project.
+
+**Target API:**
+```rust
+let app = App::with_state(store)
+    .wrap(SessionLayer::new(RedisStore::new(url)).cookie("sid").ttl(3600));
+
+// In a handler:
+let session = Session::from_request(&req)?;
+session.set("user_id", user.id);
+```
+
+---
+
+### 19. Serde JSON integration
+
+The built-in `json` module requires manual property access and has no serialization support. Every JSON handler must construct strings by hand, which is error-prone and verbose.
+
+**Target API:**
+```rust
+use rust_web_server::json::Json;
+
+// Deserialize:
+let body: MyRequest = Json::from_request(&req)?;
+
+// Serialize:
+Json(MyResponse { ok: true, count: 42 }).into_response()
+```
+
+---
+
+### 20. Built-in auth middleware
+
+JWT verification and HTTP Basic Auth are common enough to ship as first-party middleware rather than leaving each consumer to implement them correctly (timing-safe comparison, algorithm confusion attacks, etc.).
+
+**Target API:**
+```rust
+// JWT
+let app = App::new()
+    .wrap(JwtLayer::new(secret).algorithm(Algorithm::HS256).claim("sub"));
+
+// Basic Auth
+let app = App::new()
+    .wrap(BasicAuthLayer::new(|user, pass| user == "admin" && pass == secret));
+```
+
+---
+
+### 21. Automatic TLS (ACME / Let's Encrypt)
+
+Obtaining and renewing TLS certificates is manual today — the operator must run `certbot`, write the paths into config, and handle renewal restarts. ACME would automate issuance and zero-downtime renewal directly inside the server process.
+
+**Target API:**
+```rust
+cargo run -- --acme-domain=example.com --acme-email=admin@example.com
+```
+
+---
+
+## Developer experience
+
+### 22. Declarative routing macros
+
+The current `App::execute` registration table works but requires a separate struct per route and explicit wiring. A proc-macro attribute would eliminate the boilerplate for the common case.
+
+**Target API:**
+```rust
+#[route(GET, "/users/:id")]
+async fn get_user(req: Request, params: PathParams, conn: ConnectionInfo, state: Arc<Db>) -> Response {
+    // ...
+}
+```
+
+---
+
+### 23. `derive(FromRequest)`
+
+Implementing `FromRequest` for a custom extractor today requires a manual `impl FromRequest for MyType` block. A derive macro would generate it from struct field types.
+
+**Target API:**
+```rust
+#[derive(FromRequest)]
+struct AuthPayload {
+    #[from_header("Authorization")]
+    token: BearerToken,
+    #[from_query("locale")]
+    locale: Option<String>,
+}
+```
+
+---
+
+### 24. Request validation helpers
+
+Field-level validation (required, min/max length, regex, numeric range) is manual today. A validation layer would run checks before the handler and return structured 422 error bodies automatically.
+
+**Target API:**
+```rust
+#[derive(Validate, FromRequest)]
+struct CreateUser {
+    #[validate(length(min = 1, max = 50))]
+    name: String,
+    #[validate(email)]
+    email: String,
+    #[validate(range(min = 0, max = 150))]
+    age: u8,
+}
+```
+
+---
+
+## Security
+
+### 25. IP allowlist / denylist
+
+No request filtering by client IP exists. Blocking known-bad ranges or restricting admin endpoints to an internal CIDR requires a custom `Middleware` implementation today.
+
+**Target API:**
+```rust
+let app = App::new()
+    .wrap(IpFilter::allow(["10.0.0.0/8", "192.168.0.0/16"]))
+    .wrap(IpFilter::deny(["1.2.3.4"]));
+```
+
+---
+
+## Infrastructure
+
+### 26. OpenTelemetry distributed tracing
+
+There is no trace context propagation. Requests cannot be correlated across services, and there is no way to measure handler latency with span-level granularity compatible with Jaeger, Tempo, or Honeycomb.
+
+**Target API:**
+```rust
+let app = App::new()
+    .wrap(OtelLayer::new(tracer).propagate_b3().propagate_w3c());
+```
+
+---
+
+### 27. Per-route metrics
+
+`/metrics` currently exports only server-wide counters. Production services need per-route request counts and latency histograms to identify slow endpoints and set SLO alerts.
+
+**Target outcome:** `/metrics` includes `rws_route_requests_total{method,path,status}` and `rws_route_duration_seconds{method,path}` histograms.
+
+---
+
+### 28. Response caching
+
+Every request hits the handler regardless of whether the response could be served from an in-memory or shared cache. A cache middleware would short-circuit the handler for `GET` responses within their TTL.
+
+**Target API:**
+```rust
+let app = App::new()
+    .wrap(CacheLayer::memory(1000).ttl(60).vary_by_header("Accept"));
+```
+
+---
+
+### 29. Hot config reload
+
+Configuration changes (thread count, rate-limit thresholds, TLS cert rotation) require a full server restart today. A `SIGHUP` handler that re-reads `rws.config.toml` and applies non-binding changes in-place would eliminate downtime for routine tuning.
+
+---
+
+### 30. Reverse proxy / load balancing
+
+There is no way to proxy requests to upstream services. A reverse-proxy handler would let `rws` sit in front of multiple backends, enabling blue-green deploys, A/B routing, and sidecar patterns without an external Nginx or Envoy.
+
+**Target API:**
+```rust
+let app = App::new()
+    .wrap(ReverseProxy::new(["http://backend-1:8080", "http://backend-2:8080"])
+        .strategy(LoadBalancing::RoundRobin)
+        .health_check("/healthz"));
+```
+
+---
+
+### 31. MCP (Model Context Protocol) server
+
+AI coding agents and LLM tool-callers need a standardized interface to interact with application APIs. An `McpController` would expose tools, resources, and prompts over the MCP protocol, making any `rws` application instantly reachable from Claude, Cursor, and other MCP-aware clients.
+
+**Target API:**
+```rust
+let app = App::new()
+    .mcp_tool("list_users", list_users_handler)
+    .mcp_resource("user://{id}", get_user_resource)
+    .mcp_prompt("summarize", summarize_prompt);
+```
+
+---
+
 ## Summary
 
-| # | Gap | Status |
-|---|-----|--------|
+| # | Item | Status |
+|---|------|--------|
 | 1 | Shared application state | ✅ Done (v17.9.0) |
 | 2 | Dynamic routing with path parameters | ✅ Done (v17.9.0) |
 | 3 | Middleware pipeline | ✅ Done (v17.9.0) |
@@ -198,3 +412,18 @@ Real-time features (chat, live updates, collaborative editing) are now possible.
 | 14 | No test client | ✅ Done (v17.6.0) |
 | 15 | WebSocket support | ✅ Done (v17.8.0) |
 | 16 | HTTP → HTTPS redirect | ✅ Done (v17.4.0) |
+| 17 | Server-Sent Events (SSE) | Pending |
+| 18 | Session management | Pending |
+| 19 | Serde JSON integration | Pending |
+| 20 | Built-in auth middleware (JWT + Basic) | Pending |
+| 21 | Automatic TLS (ACME / Let's Encrypt) | Pending |
+| 22 | Declarative routing macros | Pending |
+| 23 | `derive(FromRequest)` | Pending |
+| 24 | Request validation helpers | Pending |
+| 25 | IP allowlist / denylist | Pending |
+| 26 | OpenTelemetry distributed tracing | Pending |
+| 27 | Per-route metrics | Pending |
+| 28 | Response caching | Pending |
+| 29 | Hot config reload | Pending |
+| 30 | Reverse proxy / load balancing | Pending |
+| 31 | MCP server controller | Pending |
