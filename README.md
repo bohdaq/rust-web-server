@@ -100,6 +100,7 @@ cargo build --release --no-default-features --features http1
 - Serde JSON — `Json<T>` extractor and responder backed by `serde_json` (`features = ["serde"]`)
 - Auth middleware — `BasicAuthLayer` (HTTP Basic) and `JwtLayer` (HS256 JWT) (`features = ["auth"]`)
 - IP filter — `IpFilter::allow([...])` / `IpFilter::deny([...])` middleware; accepts exact IPv4 addresses and CIDR ranges
+- Declarative routing — `routes!` macro builds `AppWithState`/`AsyncAppWithState`/`Router` from a table; `#[route]`, `#[get]`, `#[post]`, … proc-macro attributes (`features = ["macros"]`)
 - Graceful shutdown — Ctrl+C and SIGTERM drain in-flight connections on all server paths
 - 30-second read timeout per request on plain HTTP/1.1 connections
 - Symlink resolution

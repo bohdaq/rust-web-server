@@ -326,17 +326,34 @@ cargo run -- --acme-domain=example.com --acme-email=admin@example.com
 
 ## Developer experience
 
-### 22. Declarative routing macros
+### 22. Declarative routing macros ✅ Done — v17.17.0
 
-The current `App::execute` registration table works but requires a separate struct per route and explicit wiring. A proc-macro attribute would eliminate the boilerplate for the common case.
+**`routes!` macro** (main crate, zero extra deps) builds any `AppWithState`, `AsyncAppWithState`, or `Router` from a declarative table:
 
-**Target API:**
 ```rust
+use rust_web_server::routes;
+
+let app = routes! {
+    App::with_state(db),
+    GET  "/users"     => list_users,
+    GET  "/users/:id" => get_user,
+    POST "/users"     => create_user,
+};
+```
+
+**Proc-macro attributes** (`rws-macros` subcrate, `features = ["macros"]`) annotate handlers with their route for documentation and tooling:
+
+```rust
+use rust_web_server::route;  // re-exported from rws-macros
+
 #[route(GET, "/users/:id")]
-async fn get_user(req: Request, params: PathParams, conn: ConnectionInfo, state: Arc<Db>) -> Response {
+fn get_user(req: &Request, params: &PathParams, conn: &ConnectionInfo, state: &Db) -> Response {
+    let id = params.get("id").unwrap_or("0");
     // ...
 }
 ```
+
+Shorthand method attributes: `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]`.
 
 ---
 
@@ -486,7 +503,7 @@ let app = App::new()
 | 19 | Serde JSON integration | ✅ Done (v17.14.0) |
 | 20 | Built-in auth middleware (JWT + Basic) | ✅ Done (v17.15.0) |
 | 21 | Automatic TLS (ACME / Let's Encrypt) | Pending |
-| 22 | Declarative routing macros | Pending |
+| 22 | Declarative routing macros | ✅ Done (v17.17.0) |
 | 23 | `derive(FromRequest)` | Pending |
 | 24 | Request validation helpers | Pending |
 | 25 | IP allowlist / denylist | ✅ Done (v17.16.0) |

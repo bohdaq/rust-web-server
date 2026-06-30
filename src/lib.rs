@@ -46,6 +46,9 @@
 pub mod app;
 #[cfg(feature = "auth")]
 pub mod auth;
+
+#[cfg(feature = "macros")]
+pub use rws_macros::{delete, get, patch, post, put, route};
 #[cfg(feature = "http2")]
 pub mod async_state;
 pub mod session;
@@ -55,6 +58,7 @@ pub mod cookie;
 pub mod error;
 pub mod extract;
 pub mod ip_filter;
+pub mod macros;
 pub mod metrics;
 pub mod middleware;
 pub mod rate_limit;

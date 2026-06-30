@@ -98,6 +98,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `JwtLayer` | `auth` | JWT HS256 middleware; verifies `Authorization: Bearer` tokens with constant-time HMAC-SHA256. Requires `features = ["auth"]`. |
 | `build_jwt` / `verify_jwt` / `Claims` | `auth` | Sign and verify HS256 JWTs; `Claims` exposes `sub`, `exp`, and raw JSON payload. |
 | `IpFilter` | `ip_filter` | Allow/deny middleware keyed on client IPv4 address or CIDR range. `IpFilter::allow([...])` passes only listed addresses; `IpFilter::deny([...])` blocks them. |
+| `routes!` | `macros` | Declarative routing macro — builds `AppWithState`, `AsyncAppWithState`, or `Router` from a `METHOD "path" => handler` table. |
+| `#[route]`, `#[get]`, `#[post]`, … | `macros` (proc-macro) | Attribute macros that annotate handler functions with their HTTP method and path. `features = ["macros"]`. |
 
 ---
 
@@ -1004,6 +1006,65 @@ let layered = App::new()
 ```
 
 Non-matching IPs in allow mode and IPv6 addresses both receive `403 Forbidden`. Use `IpFilter::deny` when most traffic should pass and only specific addresses need blocking.
+
+---
+
+### 26. Declarative routing table with `routes!`
+
+`routes!` replaces repeated `.get(path, handler)` calls with a single declarative table. Any builder that exposes `.get()`, `.post()`, `.put()`, `.patch()`, `.delete()` works — `AppWithState`, `AsyncAppWithState`, or `Router`.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::routes;
+use rust_web_server::request::Request;
+use rust_web_server::router::PathParams;
+use rust_web_server::server::ConnectionInfo;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+struct Db;
+
+// AppWithState<S> passes &S (not &Arc<S>) to the handler.
+fn list_items(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &Db) -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r
+}
+
+fn create_item(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &Db) -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n201_created.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n201_created.reason_phrase.to_string();
+    r
+}
+
+let app = routes! {
+    App::with_state(Db),
+    GET    "/items"     => list_items,
+    POST   "/items"     => create_item,
+    GET    "/items/:id" => list_items,   // reuse handler
+    DELETE "/items/:id" => list_items,   // reuse handler
+};
+```
+
+Combine with `#[route]` / `#[get]` attributes (requires `features = ["macros"]`) to co-locate the route declaration with the handler function:
+
+```toml
+# Cargo.toml
+rust-web-server = { version = "17", features = ["macros"] }
+```
+
+```rust
+use rust_web_server::{get, post};
+
+// Route: `GET /items` is added as a doc-comment; function is unchanged.
+#[get("/items")]
+fn list_items(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &Db) -> Response { /* ... */ }
+
+#[post("/items")]
+fn create_item(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &Db) -> Response { /* ... */ }
+```
 
 ---
 
