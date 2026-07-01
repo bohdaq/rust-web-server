@@ -42,29 +42,46 @@ fn echo_post(req: &Request, _p: &PathParams, _c: &ConnectionInfo, _s: &AppState)
 }
 
 // ── app builder ───────────────────────────────────────────────────────────────
+//
+// Dispatch chain (outermost → innermost):
+//
+//  McpServer                 — POST /mcp  →  JSON-RPC (tools/list, tools/call …)
+//    └─ AppWithState<S>      — custom routes registered below via routes!
+//         └─ App (built-in)  — IndexController, HealthController (/healthz),
+//                              ReadyController (/readyz), MetricsController,
+//                              StaticResourceController, NotFoundController (404)
+//
+// Nothing below needs to change to keep the built-in controllers active;
+// they run automatically for any request that neither McpServer nor
+// AppWithState match.
 
 fn build_app() -> impl rust_web_server::application::Application + Send + Clone + 'static {
-    routes! {
+    // 1. Declare HTTP routes with shared state.
+    //    Unmatched requests fall through to the built-in App controller chain.
+    let http = routes! {
         App::with_state(AppState { version: "1.0.0" }),
         GET  "/api/version" => get_version,
         POST "/api/echo"    => echo_post,
-    }
-    .mcp("rws", "1.0.0")
-    .tool(
-        "version",
-        "Get the server version",
-        r#"{"type":"object"}"#,
-        |_| Ok(McpContent::json(r#"{"version":"1.0.0"}"#)),
-    )
-    .tool(
-        "echo",
-        "Echo a message back",
-        r#"{"type":"object","properties":{"message":{"type":"string"}},"required":["message"]}"#,
-        |args| {
-            let msg = extract_arg(args, "message").unwrap_or_default();
-            Ok(McpContent::text(msg))
-        },
-    )
+    };
+
+    // 2. Attach the MCP server.
+    //    POST /mcp is handled here; everything else is forwarded to `http` above.
+    http.mcp("rws", "1.0.0")
+        .tool(
+            "version",
+            "Get the server version",
+            r#"{"type":"object"}"#,
+            |_| Ok(McpContent::json(r#"{"version":"1.0.0"}"#)),
+        )
+        .tool(
+            "echo",
+            "Echo a message back",
+            r#"{"type":"object","properties":{"message":{"type":"string"}},"required":["message"]}"#,
+            |args| {
+                let msg = extract_arg(args, "message").unwrap_or_default();
+                Ok(McpContent::text(msg))
+            },
+        )
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
