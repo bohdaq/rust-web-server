@@ -112,6 +112,10 @@ cargo build --release --no-default-features --features http1
 - UDP proxy — `UdpProxy` standalone datagram proxy; forwards each UDP packet to a backend and returns the reply; suitable for DNS, syslog, and similar request-reply protocols
 - WebSocket proxy — `WsProxy` standalone listener; performs the HTTP upgrade with clients, connects to backends, and relays WebSocket frames bidirectionally in a two-thread relay
 - mTLS — set `RWS_CONFIG_TLS_CLIENT_CA_FILE` to a PEM CA file to require client certificates; verifier built via `rustls` `WebPkiClientVerifier`; applies to both HTTPS and QUIC listeners
+- Canary / traffic splitting — `CanaryLayer` middleware distributes requests across backends proportionally to configured weights; deterministic, lock-free, zero-dep
+- Circuit breaker — `CircuitBreaker` per-backend state machine (Closed→Open→HalfOpen); `global()` singleton; `RetryLayer` middleware retries on 502/503/504
+- Service discovery — `BackendPool` with four sources: `Static`, `EnvPrefix` (env vars), `File` (polled text file), `Dns` (A-record lookup); background refresh thread; all clones share one pool
+- Kubernetes Ingress routing — `KubernetesIngressWatcher` polls the K8s API, parses Ingress rules, and `IngressRouter` forwards matching requests to cluster services
 - Request / response rewriting — `RewriteLayer` middleware rewrites request headers, URI (set, strip prefix, add prefix), response headers, status code, and response body bytes; composable with any middleware stack
 - Response caching — `CacheLayer` middleware; in-memory TTL cache for GET responses; vary-by-header for content negotiation; capacity-bounded with oldest-first eviction; `Age` header injected on hits; respects `Cache-Control: no-store` / `private`
 - Hot config reload — send `SIGHUP` (or `POST /admin/config/reload`) to re-apply CORS rules, rate-limit thresholds, log format, and request allocation size without restarting; `config_reload::current()` exposes a typed snapshot anywhere in the handler stack
@@ -202,7 +206,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 44 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, MCP server, virtual hosting / SNI routing, request / response rewriting, L4 TCP proxy, UDP proxy, WebSocket proxy, HTTP/2 reverse proxy, gRPC proxy, and mTLS.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 48 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, MCP server, virtual hosting / SNI routing, request / response rewriting, L4 TCP proxy, UDP proxy, WebSocket proxy, HTTP/2 reverse proxy, gRPC proxy, mTLS, canary routing, circuit breaker, service discovery, and Kubernetes Ingress routing.
 
 ## AI adoption
 

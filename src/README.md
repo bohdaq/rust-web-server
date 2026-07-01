@@ -22,6 +22,10 @@ Module-level documentation for each component.
 1. [TCP Proxy](https://github.com/bohdaq/rust-web-server/tree/main/src/tcp_proxy) — `TcpProxy` standalone L4 TCP proxy; bidirectional byte relay with round-robin backends
 1. [UDP Proxy](https://github.com/bohdaq/rust-web-server/tree/main/src/udp_proxy) — `UdpProxy` standalone UDP proxy; request-reply datagram forwarding with configurable reply timeout
 1. [WS Proxy](https://github.com/bohdaq/rust-web-server/tree/main/src/ws_proxy) — `WsProxy` standalone WebSocket proxy; HTTP upgrade + bidirectional frame relay
+1. [Canary](https://github.com/bohdaq/rust-web-server/tree/main/src/canary) — `CanaryLayer` weighted traffic-splitting middleware; `WeightedBackend` carries url + weight
+1. [Circuit Breaker](https://github.com/bohdaq/rust-web-server/tree/main/src/circuit_breaker) — `CircuitBreaker` per-backend state machine; `RetryLayer` retries on configurable status codes
+1. [Service Discovery](https://github.com/bohdaq/rust-web-server/tree/main/src/service_discovery) — `BackendPool` with Static / EnvPrefix / File / Dns discovery sources; background polling
+1. [Ingress](https://github.com/bohdaq/rust-web-server/tree/main/src/ingress) — `KubernetesIngressWatcher` polls K8s API; `IngressRouter` routes requests to cluster services
 1. [Cache](https://github.com/bohdaq/rust-web-server/tree/main/src/cache) — `CacheLayer` middleware; in-memory TTL cache for GET responses with vary-by-header and capacity eviction
 1. [Config Reload](https://github.com/bohdaq/rust-web-server/tree/main/src/config_reload) — hot config reload via SIGHUP; `ConfigSnapshot` exposes reloadable values; `RateLimiter` limits update live
 1. [Otel](https://github.com/bohdaq/rust-web-server/tree/main/src/otel) — `OtelLayer` middleware; W3C Trace Context propagation; OTLP HTTP export to Jaeger / Grafana Tempo; `StdoutExporter` for development

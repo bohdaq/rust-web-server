@@ -199,7 +199,7 @@ impl Middleware for ReverseProxy {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-fn build_request(request: &Request, backend_host: &str, client_ip: &str) -> Vec<u8> {
+pub(crate) fn build_request(request: &Request, backend_host: &str, client_ip: &str) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let _ = write!(
         out,
@@ -224,7 +224,7 @@ fn build_request(request: &Request, backend_host: &str, client_ip: &str) -> Vec<
     out
 }
 
-fn read_response(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
+pub(crate) fn read_response(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
     let mut buf: Vec<u8> = Vec::with_capacity(8192);
     let mut tmp = [0u8; 4096];
 
@@ -275,6 +275,37 @@ fn read_response(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
     }
 
     Ok(buf)
+}
+
+/// Forward a single HTTP/1.1 request to `host:port` and return the response.
+///
+/// This is the shared low-level building block used by [`crate::canary`] and
+/// [`crate::ingress`] so they don't have to duplicate the TCP + request/response
+/// marshalling code.
+pub(crate) fn proxy_http1(
+    request: &Request,
+    client_ip: &str,
+    host: &str,
+    port: u16,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
+    use std::net::ToSocketAddrs;
+    let addr_str = format!("{}:{}", host, port);
+    let sock_addr = addr_str
+        .to_socket_addrs()
+        .map_err(|e| format!("DNS lookup for {} failed: {}", addr_str, e))?
+        .next()
+        .ok_or_else(|| format!("no address resolved for {}", addr_str))?;
+    let stream = TcpStream::connect_timeout(&sock_addr, connect_timeout)
+        .map_err(|e| format!("connect to {} failed: {}", addr_str, e))?;
+    stream.set_read_timeout(Some(read_timeout)).map_err(|e| e.to_string())?;
+    stream.set_write_timeout(Some(Duration::from_secs(10))).map_err(|e| e.to_string())?;
+    let req_bytes = build_request(request, host, client_ip);
+    let mut stream = stream;
+    stream.write_all(&req_bytes).map_err(|e| format!("write to backend failed: {}", e))?;
+    let resp_bytes = read_response(&mut stream)?;
+    Response::parse(&resp_bytes)
 }
 
 fn bad_gateway() -> Response {

@@ -126,6 +126,11 @@ The crate exposes its core types so you can compose them in your own server or t
 | `TcpProxy` | `tcp_proxy` | Standalone L4 TCP proxy. Accepts connections on a local address and relays bytes bidirectionally to round-robin backends. |
 | `UdpProxy` | `udp_proxy` | Standalone UDP proxy (request-reply model). Forwards each datagram to a backend and returns the reply to the original client. |
 | `WsProxy` | `ws_proxy` | Standalone WebSocket proxy. Listens on a local address, upgrades client connections, and relays WebSocket frames bidirectionally to backends. |
+| `WeightedBackend` / `CanaryLayer` | `canary` | Weighted traffic-splitting proxy middleware; each backend has a `weight` — distribution is proportional. Useful for canary releases and A/B testing. |
+| `CircuitBreaker` | `circuit_breaker` | Per-backend circuit breaker (Closed→Open→HalfOpen state machine). `global()` returns a process-wide singleton. Configurable failure threshold and recovery window. |
+| `RetryLayer` | `circuit_breaker` | Middleware that retries requests on configurable status codes (default: 502, 503, 504) up to `max_retries` times. |
+| `BackendPool` / `DiscoverySource` | `service_discovery` | Dynamic backend pool updated by a background thread. Sources: `Static`, `EnvPrefix` (env vars), `File` (one host:port per line), `Dns` (A-record lookup). |
+| `IngressRule` / `KubernetesIngressWatcher` / `IngressRouter` | `ingress` | Kubernetes Ingress watcher: polls the K8s API, parses Ingress rules, and routes requests to the correct upstream service. `IngressRouter` implements `Application`. |
 
 ---
 
@@ -1897,6 +1902,127 @@ tls_client_ca_file = "/etc/pki/ca.crt"
 ```
 
 The setting applies to both HTTPS (HTTP/2 + HTTP/1.1) and QUIC (HTTP/3) listeners. When `RWS_CONFIG_TLS_CLIENT_CA_FILE` is empty or unset the server performs no client certificate verification (default behaviour).
+
+---
+
+### 45. Canary routing / traffic splitting
+
+`CanaryLayer` distributes requests across backends proportionally to their weights. Use it for canary releases (send 10% of traffic to a new version), A/B testing, or gradual rollouts. The distribution is deterministic: it expands the backend list by weight and uses a lock-free `AtomicUsize` counter to cycle through it.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::canary::{CanaryLayer, WeightedBackend};
+
+// 90% of traffic to stable, 10% to the new canary build.
+let app = App::new()
+    .wrap(CanaryLayer::new(vec![
+        WeightedBackend::new("stable-backend:8080", 9),
+        WeightedBackend::new("canary-backend:8080", 1),
+    ])
+    .connect_timeout_ms(500)
+    .read_timeout_ms(5000));
+```
+
+Setting `weight = 0` removes a backend from the rotation without removing it from the config — useful for quickly disabling a canary.
+
+---
+
+### 46. Circuit breaker
+
+`CircuitBreaker` tracks per-backend failure counts and prevents sending traffic to unhealthy backends. States: **Closed** (healthy, counting failures) → **Open** (blocked until recovery window elapses) → **HalfOpen** (testing with the next request) → back to **Closed** on success.
+
+```rust
+use rust_web_server::circuit_breaker::{CircuitBreaker, global as global_breaker};
+
+// Process-wide singleton (threshold=5, recovery=30s).
+{
+    let mut cb = global_breaker().lock().unwrap();
+    cb.record_failure("backend-1:8080");
+    if cb.is_available("backend-1:8080") {
+        // send request
+    }
+    cb.record_success("backend-1:8080");
+}
+
+// Or create a custom breaker.
+let mut cb = CircuitBreaker::new(3, 10); // open after 3 failures, recover after 10s
+```
+
+`RetryLayer` pairs naturally with the circuit breaker — it retries requests that return 502/503/504:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::circuit_breaker::RetryLayer;
+use rust_web_server::proxy::ReverseProxy;
+
+let app = App::new()
+    .wrap(ReverseProxy::new(["backend-1:8080", "backend-2:8080"]))
+    .wrap(RetryLayer::new().max_retries(2));
+```
+
+---
+
+### 47. Service discovery
+
+`BackendPool` maintains a live list of backend addresses that a background thread refreshes automatically. Four discovery sources:
+
+```rust
+use rust_web_server::service_discovery::{BackendPool, DiscoverySource};
+
+// Static list — no polling.
+let pool = BackendPool::r#static(vec!["10.0.0.1:8080".into(), "10.0.0.2:8080".into()]);
+
+// Read from environment variables: RWS_BACKENDS_0, RWS_BACKENDS_1, …
+let pool = BackendPool::env_prefix("RWS_BACKENDS").poll_interval_secs(60);
+
+// One host:port per line in a file (blank lines and # comments ignored).
+let pool = BackendPool::file("/etc/rws/backends.txt").poll_interval_secs(30);
+
+// A-record DNS resolution — resolves all IPs for the hostname.
+let pool = BackendPool::dns("my-service.internal", 8080).poll_interval_secs(15);
+
+// Start background polling thread (no-op for Static).
+pool.start();
+
+// Read current backend list.
+let backends: Vec<String> = pool.backends();
+```
+
+`BackendPool` is `Clone` — all clones share the same `Arc<RwLock<Vec<String>>>` underneath, so a refresh on one clone is visible to all.
+
+---
+
+### 48. Kubernetes Ingress routing
+
+`KubernetesIngressWatcher` polls the Kubernetes API for Ingress resources and maintains a live route table. `IngressRouter` implements `Application` and forwards matching requests to the appropriate upstream service.
+
+```rust
+use rust_web_server::ingress::{IngressRouter, KubernetesIngressWatcher};
+use rust_web_server::server::Server;
+
+// Configure from environment variables:
+//   RWS_K8S_API_SERVER=http://localhost:8001   (kubectl proxy)
+//   RWS_K8S_TOKEN=<bearer-token>
+//   RWS_K8S_NAMESPACE=default
+let watcher = KubernetesIngressWatcher::from_env()
+    .expect("K8s config not found");
+
+// Start background polling (default: every 30 s).
+watcher.start();
+
+// Use as the top-level Application — routes to services via
+// {service}.{namespace}.svc.cluster.local:{port}.
+let router = IngressRouter::new(watcher)
+    .connect_timeout_ms(500)
+    .read_timeout_ms(5000);
+
+let (listener, pool) = Server::setup().unwrap();
+Server::run(listener, pool, router);
+```
+
+For **in-cluster** deployments, mount the service account and point kubectl proxy to the API server. TLS to `kubernetes.default.svc` is not yet handled natively — use `kubectl proxy` or set `RWS_K8S_API_SERVER=http://kubernetes.default.svc:80` with an appropriately configured proxy sidecar.
 
 ---
 

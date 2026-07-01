@@ -101,21 +101,29 @@ No built-in log rotation or external log shipping (syslog, journald). Relies on 
 
 ## Kubernetes / cloud-native gaps
 
-### Ingress controller
+### Ingress controller ✅ Done (v17.32.0)
 
-Traefik and nginx both run as Kubernetes Ingress controllers, reading `Ingress` / `IngressRoute` objects from the API server and dynamically routing traffic. `rws` has no service discovery or dynamic configuration model.
+`KubernetesIngressWatcher` (`src/ingress/mod.rs`) polls `/apis/networking.k8s.io/v1/ingresses` on the K8s API server, parses Ingress rules, and maintains a live route table in an `Arc<RwLock<Vec<IngressRule>>>`. `IngressRouter` implements `Application` and routes incoming requests to `{service}.{namespace}.svc.cluster.local:{port}` via HTTP/1.1. Configure via `RWS_K8S_API_SERVER`, `RWS_K8S_TOKEN`, `RWS_K8S_NAMESPACE` or call `KubernetesIngressWatcher::from_service_account()`. Background thread polls at a configurable interval.
 
-### Service discovery
+Remaining: TLS to `kubernetes.default.svc` (requires rustls client config); watch API (`?watch=true`) instead of polling; support for `pathType: Exact`; Ingress class filtering.
 
-No integration with Consul, etcd, Docker labels, or the Kubernetes API.
+### Service discovery ✅ Done (v17.32.0)
 
-### Traffic splitting / canary routing
+`BackendPool` (`src/service_discovery/mod.rs`) maintains a live list of backends updated by a background thread. Four discovery sources: `Static` (fixed list), `EnvPrefix` (scan `{PREFIX}_0`, `{PREFIX}_1`, … env vars), `File` (one `host:port` per line, polled), `Dns` (A-record lookup via `ToSocketAddrs`). All clones share the same `Arc<RwLock<Vec<String>>>`. Call `.start()` once at startup to launch the background poller.
 
-No weighted routing between versions (e.g. 10% to v2, 90% to v1).
+Remaining: Consul HTTP API, etcd watch, Docker label discovery, SRV record support, weighted DNS.
 
-### Circuit breaker / retry
+### Traffic splitting / canary routing ✅ Done (v17.32.0)
 
-No upstream health-based circuit breaking or automatic retries on upstream 5xx responses.
+`CanaryLayer` (`src/canary/mod.rs`) is a `Middleware` that distributes requests across backends proportionally to their weights. Backends are expanded into a rotation vec (`weight` copies each) and selected via an `AtomicUsize` counter — deterministic, lock-free, zero-dep. `WeightedBackend::new(url, weight)` with `weight = 0` removes a backend from rotation without removing its config entry.
+
+Remaining: live weight updates without restart; smooth weighted round-robin for finer-grained distribution; integration with `BackendPool` for dynamic backend lists.
+
+### Circuit breaker / retry ✅ Done (v17.32.0)
+
+`CircuitBreaker` (`src/circuit_breaker/mod.rs`) is a per-backend state machine: **Closed** counts failures → **Open** blocks requests until recovery window elapses → **HalfOpen** tests with one request → back to **Closed** on success, or **Open** on failure. `global()` returns a process-wide `OnceLock<Mutex<CircuitBreaker>>` singleton (threshold=5, recovery=30s). `RetryLayer` middleware retries on configurable status codes (default: 502, 503, 504) up to `max_retries` times.
+
+Remaining: integration with `ReverseProxy` for automatic per-backend open/close; half-open concurrent request limit; metrics exposure (`rws_circuit_breaker_state{backend}`).
 
 ---
 
