@@ -141,6 +141,7 @@ impl PromptMessage {
 }
 
 /// Argument definition for a prompt template.
+#[derive(Clone)]
 pub struct PromptArgDef {
     pub name: String,
     pub description: String,
@@ -163,6 +164,7 @@ type ToolFn     = Arc<dyn Fn(&str) -> Result<McpContent, String>    + Send + Syn
 type ResourceFn = Arc<dyn Fn(&str) -> Result<McpContent, String>    + Send + Sync>;
 type PromptFn   = Arc<dyn Fn(&str) -> Result<Vec<PromptMessage>, String> + Send + Sync>;
 
+#[derive(Clone)]
 struct ToolDef {
     name: String,
     description: String,
@@ -170,6 +172,7 @@ struct ToolDef {
     handler: ToolFn,
 }
 
+#[derive(Clone)]
 struct ResourceDef {
     uri_template: String,
     name: String,
@@ -177,6 +180,7 @@ struct ResourceDef {
     handler: ResourceFn,
 }
 
+#[derive(Clone)]
 struct PromptDef {
     name: String,
     description: String,
@@ -192,6 +196,7 @@ struct PromptDef {
 /// the server to [`Server::run`] (or [`Server::run_tls`]) as an [`Application`].
 /// Requests that do not match the MCP endpoint fall through to the built-in
 /// [`App`] controller chain.
+#[derive(Clone)]
 pub struct McpServer {
     server_name: String,
     server_version: String,
@@ -199,7 +204,7 @@ pub struct McpServer {
     tools: Vec<ToolDef>,
     resources: Vec<ResourceDef>,
     prompts: Vec<PromptDef>,
-    fallback: Option<Box<dyn Application + Send + Sync>>,
+    fallback: Option<Arc<dyn Application + Send + Sync>>,
 }
 
 impl McpServer {
@@ -244,7 +249,7 @@ impl McpServer {
     /// let client = TestClient::new(server);
     /// ```
     pub fn wrap(mut self, app: impl Application + Send + Sync + 'static) -> Self {
-        self.fallback = Some(Box::new(app));
+        self.fallback = Some(Arc::new(app));
         self
     }
 

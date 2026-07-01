@@ -2,6 +2,7 @@
 mod tests;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::request::Request;
 use crate::response::Response;
@@ -39,6 +40,7 @@ impl PathParams {
     }
 }
 
+#[derive(Clone)]
 enum Segment {
     Literal(String),
     Param(String),
@@ -46,8 +48,9 @@ enum Segment {
 }
 
 type HandlerFn =
-    Box<dyn Fn(&Request, &PathParams, &ConnectionInfo) -> Response + Send + Sync + 'static>;
+    Arc<dyn Fn(&Request, &PathParams, &ConnectionInfo) -> Response + Send + Sync + 'static>;
 
+#[derive(Clone)]
 struct Route {
     method: String,
     segments: Vec<Segment>,
@@ -92,6 +95,7 @@ struct Route {
 ///         r
 ///     });
 /// ```
+#[derive(Clone)]
 pub struct Router {
     routes: Vec<Route>,
 }
@@ -136,7 +140,7 @@ impl Router {
         self.routes.push(Route {
             method: method.to_string(),
             segments: Self::parse_pattern(pattern),
-            handler: Box::new(handler),
+            handler: Arc::new(handler),
         });
         self
     }

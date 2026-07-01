@@ -13,7 +13,6 @@ use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::app::App;
 use crate::application::Application;
-use crate::core::{New};
 use crate::entry_point::{bootstrap, get_ip_port_thread_count, get_request_allocation_size, set_default_values};
 use crate::header::Header;
 use crate::log::Log;
@@ -298,7 +297,7 @@ impl Server {
     /// For TLS/HTTP2/HTTP3 use [`Server::run_tls`].
     pub fn run(listener: TcpListener,
                pool: ThreadPool,
-               app: impl Application + New + Send + 'static + Copy) {
+               app: impl Application + Send + 'static + Clone) {
         #[cfg(feature = "http1")]
         {
             use std::sync::Arc;
@@ -328,7 +327,7 @@ impl Server {
                 }
                 match listener.accept() {
                     Ok((stream, peer_addr)) => {
-                        Server::dispatch_connection(stream, peer_addr, &pool, app);
+                        Server::dispatch_connection(stream, peer_addr, &pool, app.clone());
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(10));
@@ -362,7 +361,7 @@ impl Server {
                                 return;
                             }
                         };
-                        Server::dispatch_connection(stream, peer_addr, &pool, app);
+                        Server::dispatch_connection(stream, peer_addr, &pool, app.clone());
                     }
                 }
             }
@@ -373,7 +372,7 @@ impl Server {
         stream: std::net::TcpStream,
         peer_addr: std::net::SocketAddr,
         pool: &ThreadPool,
-        app: impl Application + New + Send + 'static + Copy,
+        app: impl Application + Send + 'static + Clone,
     ) {
         print!("Connection established, ");
         if let Ok(local) = stream.local_addr() {
@@ -487,7 +486,7 @@ impl Server {
     pub async fn run_tls(
         listener: TcpListener,
         pool: ThreadPool,
-        app: impl Application + New + Send + 'static + Copy,
+        app: impl Application + Send + 'static + Clone,
     ) {
         use crate::tls::create_tls_acceptor;
         use crate::h2_handler;
@@ -525,6 +524,7 @@ impl Server {
                     match result {
                         Ok((tcp_stream, peer_addr)) => {
                             let acceptor = tls_acceptor.clone();
+                            let app = app.clone();
                             tokio::spawn(async move {
                                 match acceptor.accept(tcp_stream).await {
                                     Ok(tls_stream) => {
@@ -771,7 +771,7 @@ impl Server {
 #[cfg(feature = "http3")]
 impl Server {
     pub async fn run_quic(
-        app: impl Application + New + Send + 'static + Copy,
+        app: impl Application + Send + 'static + Clone,
     ) {
         use crate::tls::create_quinn_server_config;
         use crate::h3_handler;
@@ -818,6 +818,7 @@ impl Server {
                 maybe = endpoint.accept() => {
                     match maybe {
                         Some(incoming) => {
+                            let app = app.clone();
                             tokio::spawn(async move {
                                 match incoming.await {
                                     Ok(conn) => {

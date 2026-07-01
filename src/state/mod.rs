@@ -66,6 +66,7 @@ use crate::server::ConnectionInfo;
 ///
 /// Routes are matched in registration order. The first match wins; unmatched
 /// requests are forwarded to [`App`] (static files, health probes, etc.).
+#[derive(Clone)]
 pub struct AppWithState<S> {
     state: Arc<S>,
     router: Router,

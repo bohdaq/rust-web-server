@@ -23,7 +23,7 @@ const FORBIDDEN_H2_RESPONSE_HEADERS: &[&str] = &[
 pub async fn handle_connection(
     stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     peer_addr: std::net::SocketAddr,
-    app: impl Application + Send + Copy + 'static,
+    app: impl Application + Send + Clone + 'static,
 ) -> Result<(), String> {
     let mut conn = h2::server::handshake(stream)
         .await
@@ -45,7 +45,7 @@ pub async fn handle_connection(
                     },
                     request_size: 0,
                 };
-                tokio::spawn(handle_stream(request, respond, connection, peer_addr, app));
+                tokio::spawn(handle_stream(request, respond, connection, peer_addr, app.clone()));
             }
             Err(e) => {
                 eprintln!("H2 stream accept error: {}", e);

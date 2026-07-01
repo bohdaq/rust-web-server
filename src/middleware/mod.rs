@@ -122,6 +122,12 @@ impl<A: Application> WithMiddleware<A> {
     }
 }
 
+impl<A: Clone> Clone for WithMiddleware<A> {
+    fn clone(&self) -> Self {
+        WithMiddleware { inner: self.inner.clone(), layers: self.layers.clone() }
+    }
+}
+
 impl<A: Application> Application for WithMiddleware<A> {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         Chain { app: &self.inner, layers: &self.layers, index: 0 }.execute(request, connection)

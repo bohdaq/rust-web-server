@@ -62,12 +62,13 @@ use crate::server::ConnectionInfo;
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
-type AsyncHandlerFn<S> = Box<
+type AsyncHandlerFn<S> = Arc<
     dyn Fn(Request, PathParams, ConnectionInfo, Arc<S>) -> BoxFuture<Response> + Send + Sync,
 >;
 
 // ── Internal pattern matching (mirrors Router) ────────────────────────────────
 
+#[derive(Clone)]
 enum Segment {
     Literal(String),
     Param(String),
@@ -127,6 +128,7 @@ fn try_match(pattern: &[Segment], path: &[&str]) -> Option<HashMap<String, Strin
 
 // ── AsyncRoute ────────────────────────────────────────────────────────────────
 
+#[derive(Clone)]
 struct AsyncRoute<S> {
     method: String,
     segments: Vec<Segment>,
@@ -140,6 +142,7 @@ struct AsyncRoute<S> {
 /// State is stored as `Arc<S>` and passed by value (cheap clone) to each
 /// handler invocation. Handlers receive owned `Request`, `PathParams`, and
 /// `ConnectionInfo` values so the returned future is `'static`.
+#[derive(Clone)]
 pub struct AsyncAppWithState<S> {
     state: Arc<S>,
     routes: Vec<AsyncRoute<S>>,
@@ -164,7 +167,7 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
         self.routes.push(AsyncRoute {
             method: method.to_string(),
             segments: parse_pattern(pattern),
-            handler: Box::new(move |req, params, conn, state| Box::pin(handler(req, params, conn, state))),
+            handler: Arc::new(move |req, params, conn, state| Box::pin(handler(req, params, conn, state))),
         });
         self
     }

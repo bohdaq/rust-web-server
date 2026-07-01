@@ -23,7 +23,7 @@ const FORBIDDEN_H3_RESPONSE_HEADERS: &[&str] = &[
 pub async fn handle_connection(
     conn: quinn::Connection,
     peer_addr: std::net::SocketAddr,
-    app: impl Application + Send + Copy + 'static,
+    app: impl Application + Send + Clone + 'static,
 ) -> Result<(), String> {
     let (server_ip, server_port, _) = get_ip_port_thread_count();
 
@@ -45,6 +45,7 @@ pub async fn handle_connection(
                     },
                     request_size: 0,
                 };
+                let app = app.clone();
                 tokio::spawn(async move {
                     match resolver.resolve_request().await {
                         Ok((request, stream)) => {
