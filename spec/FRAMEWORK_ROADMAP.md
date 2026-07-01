@@ -421,15 +421,55 @@ let app = App::new()
 
 ## Infrastructure
 
-### 26. OpenTelemetry distributed tracing
+### 26. OpenTelemetry distributed tracing ✅ Done (v17.24.0)
 
-There is no trace context propagation. Requests cannot be correlated across services, and there is no way to measure handler latency with span-level granularity compatible with Jaeger, Tempo, or Honeycomb.
+`OtelLayer` (in `src/otel/`) is a `Middleware` that reads W3C `traceparent`
+headers, creates HTTP server spans, and exports to stdout or an OTLP HTTP
+collector (Jaeger ≥ 1.35, Grafana Tempo, OpenTelemetry Collector). Zero new
+Cargo dependencies — OTLP JSON is sent over a raw `TcpStream`.
 
-**Target API:**
 ```rust
-let app = App::new()
-    .wrap(OtelLayer::new(tracer).propagate_b3().propagate_w3c());
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::otel::{OtelLayer, TracingConfig, ExporterConfig, setup};
+
+setup(TracingConfig {
+    service_name: "my-service".to_string(),
+    service_version: env!("CARGO_PKG_VERSION").to_string(),
+    exporter: ExporterConfig::Otlp {
+        endpoint: "http://localhost:4318".to_string(),
+    },
+    sample_rate: 1.0,
+    batch_size: 128,
+});
+
+let app = App::new().wrap(OtelLayer);
 ```
+
+Or from environment variables:
+```rust
+rust_web_server::otel::setup_from_env();
+let app = App::new().wrap(OtelLayer);
+```
+
+**Environment variables:**
+- `OTEL_SERVICE_NAME` — service name attribute (default `"rws"`)
+- `OTEL_EXPORTER_OTLP_ENDPOINT` — OTLP endpoint (default: stdout)
+- `OTEL_TRACES_SAMPLER_ARG` — sample rate `0.0`–`1.0` (default `1.0`)
+
+**Features:**
+- W3C Trace Context (`traceparent`) propagation — continues existing traces from
+  upstream services, starts new root spans when no header is present
+- `current_traceparent()` — callable from anywhere on the request thread;
+  used by `ReverseProxy` to propagate context to upstream services
+- `StdoutExporter` — JSON lines to stdout; suitable for `jq` / log aggregators
+- `OtlpHttpExporter` — HTTP POST to `/v1/traces` (OTLP JSON); no gRPC needed
+- `ExporterConfig::Discard` — silent no-op; useful in tests
+- Configurable sample rate (head-based sampling)
+- Configurable batch size — spans are flushed when the batch fills or on
+  `otel::shutdown()` (call before process exit)
+- `http.method`, `http.target`, `http.status_code` span attributes
+- Status code 2 (Error) set automatically for 5xx responses
 
 ---
 
@@ -592,7 +632,7 @@ let app = App::new()
 | 23 | `derive(FromRequest)` | ✅ Done (v17.18.0) |
 | 24 | Request validation helpers | ✅ Done (v17.19.0) |
 | 25 | IP allowlist / denylist | ✅ Done (v17.16.0) |
-| 26 | OpenTelemetry distributed tracing | Pending |
+| 26 | OpenTelemetry distributed tracing | ✅ Done (v17.24.0) |
 | 27 | Per-route metrics | ✅ Done (v17.23.0) |
 | 28 | Response caching | ✅ Done (v17.22.0) |
 | 29 | Hot config reload | ✅ Done (v17.21.0) |

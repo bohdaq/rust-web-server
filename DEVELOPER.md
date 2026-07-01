@@ -111,6 +111,14 @@ The crate exposes its core types so you can compose them in your own server or t
 | `CacheLayer` | `cache` | In-memory TTL response cache middleware for GET requests. Builder: `.ttl(secs)`, `.vary_by_header(name)`. Injects `Age` on hits; respects `Cache-Control: no-store/private`. |
 | `ConfigSnapshot` | `config_reload` | Point-in-time snapshot of all hot-reloadable config values. Read with `config_reload::current()`. |
 | `config_reload::reload` | `config_reload` | Re-reads `rws.config.toml` and applies CORS, rate-limit, log-format changes live. Triggered by SIGHUP or `POST /admin/config/reload`. |
+| `OtelLayer` | `otel` | Middleware that creates HTTP server spans, propagates W3C `traceparent`, and exports to stdout or OTLP HTTP. Call `otel::setup()` or `otel::setup_from_env()` at startup. |
+| `TracingConfig` / `ExporterConfig` | `otel` | Configure the tracing subsystem: service name, exporter backend, sample rate, batch size. |
+| `otel::setup` / `otel::setup_from_env` | `otel` | Initialize the global tracer. Call once before the server starts. `setup_from_env` reads `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_TRACES_SAMPLER_ARG`. |
+| `otel::shutdown` / `otel::flush` | `otel` | Flush buffered spans to the exporter. Call `shutdown()` before process exit to avoid span loss. |
+| `otel::current_traceparent` | `otel` | Returns the W3C `traceparent` for the span active on the current thread. Used by `ReverseProxy` for automatic context propagation. |
+| `TraceContext` | `otel` | Parsed W3C `traceparent` value. `TraceContext::parse(header)` / `ctx.as_header(span_id)`. |
+| `SpanData` | `otel` | A completed span ready for export. Contains trace/span/parent IDs, timing, HTTP attributes, and OTel status code. |
+| `StdoutExporter` / `OtlpHttpExporter` | `otel` | Built-in exporters. `OtlpHttpExporter::new(endpoint, service_name, service_version)` posts OTLP JSON. |
 
 ---
 
@@ -1354,6 +1362,98 @@ fn my_handler(request: &Request, response: Response, conn: &ConnectionInfo) -> R
 | IP / port | ❌ bound socket cannot move |
 | Thread count | ❌ thread pool is fixed at startup |
 | TLS cert / key paths | ❌ acceptor is built once |
+
+---
+
+### 34. Distributed tracing (OtelLayer)
+
+`OtelLayer` is a `Middleware` that creates an HTTP server span for each request,
+reads W3C `traceparent` headers from upstream services, and exports spans to
+stdout or an OTLP HTTP collector — all with zero new Cargo dependencies.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::otel::{OtelLayer, TracingConfig, ExporterConfig, setup};
+
+// Call once at startup, before the server starts accepting requests.
+setup(TracingConfig {
+    service_name: "checkout-service".to_string(),
+    service_version: env!("CARGO_PKG_VERSION").to_string(),
+    exporter: ExporterConfig::Otlp {
+        endpoint: "http://localhost:4318".to_string(), // OTLP HTTP port
+    },
+    sample_rate: 1.0,   // 0.0–1.0; head-based sampling
+    batch_size: 128,    // flush to exporter when batch fills
+});
+
+let app = App::new().wrap(OtelLayer);
+```
+
+Or via environment variables (compatible with the OpenTelemetry spec):
+
+```bash
+export OTEL_SERVICE_NAME=checkout-service
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_TRACES_SAMPLER_ARG=0.1   # sample 10% of requests
+```
+
+```rust
+rust_web_server::otel::setup_from_env();
+let app = App::new().wrap(OtelLayer);
+```
+
+Flush all buffered spans before the process exits:
+
+```rust
+rust_web_server::otel::shutdown();
+```
+
+**What OtelLayer does per request:**
+
+| Step | Detail |
+|------|--------|
+| Read `traceparent` | Parses W3C Trace Context from request header; starts new root span if absent |
+| Create span | New `span_id`; shares `trace_id` with upstream if continuing a trace |
+| Thread-local context | `current_traceparent()` returns the active `traceparent` on the current thread; used by `ReverseProxy` to propagate context to backends |
+| Record span | On response: records `http.method`, `http.target`, `http.status_code`; status code 2 (Error) for 5xx |
+| Export | Batch flushed to exporter when `batch_size` reached or on `shutdown()` |
+
+**Exporters:**
+
+| Config | Behaviour |
+|--------|-----------|
+| `ExporterConfig::Stdout` | JSON lines to stdout; pipe to `jq` or a log aggregator |
+| `ExporterConfig::Otlp { endpoint }` | HTTP POST `/v1/traces` (OTLP JSON); works with Jaeger ≥ 1.35, Grafana Tempo, OpenTelemetry Collector |
+| `ExporterConfig::Discard` | No-op; useful in tests to silence output |
+
+**Testing with OtelLayer:**
+
+```rust
+use rust_web_server::otel::{ExporterConfig, TracingConfig, OtelLayer, setup};
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::test_client::TestClient;
+use std::sync::Once;
+
+static INIT: Once = Once::new();
+fn init() {
+    INIT.call_once(|| {
+        setup(TracingConfig {
+            exporter: ExporterConfig::Discard,
+            ..Default::default()
+        });
+    });
+}
+
+#[test]
+fn my_test() {
+    init();
+    let client = TestClient::new(App::new().wrap(OtelLayer));
+    let res = client.get("/api/users").send();
+    assert_eq!(200, res.status());
+}
+```
 
 ---
 

@@ -66,6 +66,7 @@ pub mod macros;
 pub mod cache;
 pub mod config_reload;
 pub mod metrics;
+pub mod otel;
 pub mod middleware;
 pub mod rate_limit;
 pub mod router;

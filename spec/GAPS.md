@@ -64,9 +64,14 @@ Remaining: TLS cert rotation (requires rebuilding the acceptor), port/thread-cou
 
 Remaining: OpenTelemetry export, per-route error-rate alerting, cardinality limits.
 
-### Distributed tracing
+### Distributed tracing ✅ Done (v17.24.0)
 
-No OpenTelemetry, Jaeger, or Zipkin integration. Envoy's built-in tracing is a major differentiator for service mesh deployments.
+`OtelLayer` middleware adds W3C Trace Context propagation and OTLP HTTP export
+(Jaeger ≥ 1.35, Grafana Tempo, OpenTelemetry Collector). Zero new Cargo
+dependencies.
+
+Remaining: B3 propagation, multi-span (child spans within handlers), baggage
+propagation, automatic instrumentation of DB/HTTP calls.
 
 ### Access log rotation
 
@@ -124,4 +129,4 @@ No upstream health-based circuit breaking or automatic retries on upstream 5xx r
 | 8 | WebSocket support | ✅ Done (v17.8.0) |
 | 9 | Hot config reload | ✅ Done (v17.21.0) |
 | 10 | Per-route metrics | ✅ Done (v17.23.0) |
-| 11 | Distributed tracing (OpenTelemetry) | Pending |
+| 11 | Distributed tracing (OpenTelemetry) | ✅ Done (v17.24.0) |

@@ -1,6 +1,6 @@
 # rws
 
-Static file web server and HTTP toolkit written in Rust. Supports HTTP/3, HTTP/2, and HTTP/1.1. HTTP/3 and HTTP/2 require a TLS certificate; without one the server falls back to plain HTTP/1.1 automatically.
+An HTTP web framework and server for Rust supporting HTTP/1.1, HTTP/2, and HTTP/3. No third-party HTTP dependencies — parsing, routing, middleware, auth, WebSocket, SSE, caching, and tracing are all built in.
 
 Use it as a ready-to-run binary **or** pull it in as a library crate to get battle-tested building blocks — request/response parsing, routing, middleware, JSON, sessions, auth, SSE — without taking on a full async framework.
 
@@ -108,6 +108,7 @@ cargo build --release --no-default-features --features http1
 - Reverse proxy — `ReverseProxy` middleware forwards requests to HTTP backends with round-robin load balancing, automatic failover, and `path_prefix` routing; returns `502 Bad Gateway` when all backends fail
 - Response caching — `CacheLayer` middleware; in-memory TTL cache for GET responses; vary-by-header for content negotiation; capacity-bounded with oldest-first eviction; `Age` header injected on hits; respects `Cache-Control: no-store` / `private`
 - Hot config reload — send `SIGHUP` (or `POST /admin/config/reload`) to re-apply CORS rules, rate-limit thresholds, log format, and request allocation size without restarting; `config_reload::current()` exposes a typed snapshot anywhere in the handler stack
+- Distributed tracing — `OtelLayer` middleware creates HTTP server spans; reads W3C `traceparent` headers, propagates context to upstream services, exports to stdout or an OTLP HTTP collector (Jaeger, Grafana Tempo); zero new Cargo dependencies
 - WebAssembly MIME type — `.wasm` files served as `application/wasm`
 - In-process test client — `TestClient` dispatches requests without a TCP socket
 
@@ -191,7 +192,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 33 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, and per-route metrics.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 34 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, and distributed tracing.
 
 ## AI adoption
 

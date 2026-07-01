@@ -91,7 +91,7 @@ docs/
 |------|-------------|
 | **Installation** | `cargo add rust-web-server`, build from source, feature flags table (`http1` / `http2` / `http3`), binary sizes, MSRV 1.75 |
 | **Quick Start** | Run plain HTTP; serve static files; write and wire your first `Controller` in ~20 lines; verify with `curl` |
-| **Features** | Full feature checklist table with checkmarks; "Coming Soon" callout for ACME auto-TLS, OpenTelemetry tracing, MCP server |
+| **Features** | Full feature checklist table with checkmarks; "Coming Soon" callout for ACME auto-TLS, MCP server |
 
 ---
 
@@ -143,6 +143,7 @@ docs/
 | **Response Caching** | `CacheLayer::memory(capacity).ttl(secs).vary_by_header("Accept")`; what is cached (GET, 2xx); `Cache-Control: no-store/private` opt-out; `Cache-Control: no-cache` revalidation; `Age` header on hits; oldest-first eviction |
 | **Per-Route Metrics** | `MetricsLayer` middleware; `rws_route_requests_total{method,path,status}` counter; `rws_route_duration_seconds{method,path}` histogram (11 buckets); query strings stripped; `record_route()` for custom instrumentation |
 | **Hot Config Reload** | SIGHUP trigger (`kill -HUP $(pidof rws)`); `POST /admin/config/reload`; what reloads (CORS, rate limits, log format, allocation size) vs requires restart (port, TLS cert, thread count); `config_reload::current()` |
+| **Distributed Tracing** | `OtelLayer` middleware; W3C `traceparent` propagation; `setup()` / `setup_from_env()`; `ExporterConfig::Stdout` (dev) vs `Otlp { endpoint }` (prod); `current_traceparent()` for downstream propagation; `shutdown()` at exit |
 
 ---
 
@@ -160,7 +161,7 @@ docs/
 |------|-------------|
 | **Docker** | Annotated `Dockerfile` (multi-stage); image size per feature flag; `EXPOSE 7878`; env var injection |
 | **Kubernetes** | `/healthz` liveness probe; `/readyz` readiness probe (503 during shutdown); `/metrics` Prometheus scrape; graceful shutdown (SIGTERM → 503); HPA config snippet; example `Deployment` + `Service` YAML |
-| **Observability** | Server-wide Prometheus counters (`rws_requests_total`, `rws_errors_total`, `rws_active_connections`); per-route counters and latency histograms via `MetricsLayer`; JSON vs Combined Log Format; configuring `log_format`; **(Coming Soon: OpenTelemetry tracing)** |
+| **Observability** | Server-wide Prometheus counters (`rws_requests_total`, `rws_errors_total`, `rws_active_connections`); per-route counters and latency histograms via `MetricsLayer`; JSON vs Combined Log Format; configuring `log_format`; OpenTelemetry tracing with `OtelLayer` |
 
 ---
 
@@ -194,9 +195,6 @@ These appear as callout blocks within relevant pages — not omitted, not separa
 ### Protocol / Transport
 - Automatic TLS (ACME / Let's Encrypt)
 
-### Observability
-- OpenTelemetry distributed tracing (Jaeger, Zipkin export)
-
 ### Infrastructure
 - MCP (Model Context Protocol) server controller
 - Virtual hosting / SNI routing
@@ -211,8 +209,8 @@ These appear as callout blocks within relevant pages — not omitted, not separa
 | Getting Started | 3 |
 | Configuration | 4 |
 | Building Apps | 12 |
-| Features | 14 |
+| Features | 15 |
 | Testing | 1 |
 | Deployment | 3 |
 | Reference | 2 |
-| **Total** | **40** |
+| **Total** | **41** |
