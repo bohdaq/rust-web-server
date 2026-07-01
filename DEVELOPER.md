@@ -133,6 +133,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `IngressRule` / `KubernetesIngressWatcher` / `IngressRouter` | `ingress` | Kubernetes Ingress watcher: polls the K8s API, parses Ingress rules, and routes requests to the correct upstream service. `IngressRouter` implements `Application`. |
 | `Scheduler` / `CronSchedule` | `scheduler` | `@Scheduled`-equivalent background task runner. Three modes: `.every(Duration, fn)` (fixed rate), `.after(Duration, fn)` (fixed delay), `.cron("sec min hour day month weekday", fn)`. Full cron syntax: `*`, exact, `*/step`, `N-M`, comma list. |
 | `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. |
+| `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
 
 ---
 
@@ -2204,3 +2205,95 @@ Template:
 | Env var | Default | Purpose |
 |---|---|---|
 | `RWS_CONFIG_TEMPLATE_DIR` | `templates` | Directory scanned by `template::init_from_env()` |
+
+### 51. Typed configuration binding (`#[derive(Config)]`)
+
+`#[derive(Config)]` (`macros` feature) generates `fn load() -> Result<Self, String>` that reads environment variables and parses them into strongly-typed struct fields — equivalent to Spring's `@ConfigurationProperties`.
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["macros"] }
+```
+
+**Basic usage**
+
+```rust
+use rust_web_server::Config;
+
+#[derive(Config)]
+#[config(prefix = "APP_")]
+struct AppConfig {
+    // reads APP_PORT; falls back to "8080" if absent
+    #[config(env = "PORT", default = "8080")]
+    port: u16,
+
+    // reads APP_DATABASE_URL; Err if absent
+    #[config(env = "DATABASE_URL")]
+    database_url: String,
+
+    // reads APP_DEBUG; None if absent or empty
+    #[config(env = "DEBUG")]
+    debug: Option<bool>,
+
+    // reads APP_MAX_CONNS; required
+    #[config(env = "MAX_CONNS", default = "100")]
+    max_connections: u32,
+}
+
+fn main() {
+    let cfg = AppConfig::load().expect("invalid config");
+    println!("port={} db={} debug={:?}", cfg.port, cfg.database_url, cfg.debug);
+}
+```
+
+**Field derivation rules**
+
+| Field annotation | Absent | Present |
+|---|---|---|
+| `#[config(env = "KEY", default = "v")]` | use `"v"` | parse to type |
+| `#[config(env = "KEY")]` (non-`Option`) | `Err` | parse to type |
+| `#[config(env = "KEY")]` (`Option<T>`) | `None` | `Some(parsed)` |
+| no `#[config]` | auto-key = `PREFIX + FIELD_UPPERCASED` | same |
+
+**Supported field types**
+
+All Rust scalar types implement `FromEnvStr` out of the box: `String`, `bool`, `u8`–`u128`, `i8`–`i128`, `f32`, `f64`, `usize`, `isize`. For `bool`, the values `"true"`, `"1"`, `"yes"` parse to `true`; `"false"`, `"0"`, `"no"` to `false`.
+
+**Custom types**
+
+Implement `FromEnvStr` to support custom field types:
+
+```rust
+use rust_web_server::config_binding::FromEnvStr;
+
+#[derive(Debug)]
+enum LogLevel { Debug, Info, Warn, Error }
+
+impl FromEnvStr for LogLevel {
+    fn from_env_str(s: &str) -> Result<Self, String> {
+        match s.to_ascii_lowercase().as_str() {
+            "debug" => Ok(LogLevel::Debug),
+            "info"  => Ok(LogLevel::Info),
+            "warn"  => Ok(LogLevel::Warn),
+            "error" => Ok(LogLevel::Error),
+            other   => Err(format!("unknown log level {:?}", other)),
+        }
+    }
+}
+
+#[derive(Config)]
+struct ServerConfig {
+    #[config(env = "LOG_LEVEL", default = "info")]
+    log_level: LogLevel,
+}
+```
+
+**Low-level helpers** (no derive needed)
+
+```rust
+use rust_web_server::config_binding::{load_required, load_with_default, load_optional};
+
+let port: u16 = load_with_default("APP_PORT", "8080")?;
+let db: String = load_required("DATABASE_URL")?;
+let debug: Option<bool> = load_optional("APP_DEBUG")?;
+```

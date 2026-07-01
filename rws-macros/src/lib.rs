@@ -21,6 +21,11 @@
 //! All attributes add a `Route: METHOD /path` doc-comment and leave the
 //! function body completely unchanged. They work with named functions used
 //! as handlers in `routes!` or registered directly with `.get()`, `.post()`, etc.
+//!
+//! ## `#[derive(Config)]`
+//!
+//! Generates `fn load() -> Result<Self, String>` that reads environment variables
+//! and parses them into the annotated field types. See `rust_web_server::config_binding`.
 
 use proc_macro::TokenStream;
 use quote::quote;
@@ -433,4 +438,193 @@ fn impl_from_request(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream
             }
         };
     })
+}
+
+// ── #[derive(Config)] ─────────────────────────────────────────────────────────
+
+/// Derive `load() -> Result<Self, String>` for a configuration struct.
+///
+/// Each field is bound to an environment variable. The env var name is derived
+/// from the field name (uppercased) plus an optional struct-level prefix.
+///
+/// # Struct-level attribute
+///
+/// ```text
+/// #[config(prefix = "APP_")]
+/// ```
+///
+/// When set, every field's env var key is `prefix + key`.
+///
+/// # Field-level attribute
+///
+/// ```text
+/// #[config(env = "PORT", default = "8080")]
+/// ```
+///
+/// | Option | Meaning |
+/// |--------|---------|
+/// | `env = "KEY"` | explicit env var name (prefix is still prepended) |
+/// | `default = "v"` | fallback when the env var is absent |
+///
+/// If `env` is omitted the field name is uppercased and used as the key.
+/// Wrapping the field type in `Option<T>` makes it optional (returns `None` when absent).
+///
+/// # Example
+///
+/// ```ignore
+/// #[derive(rust_web_server::Config)]
+/// #[config(prefix = "APP_")]
+/// struct AppConfig {
+///     #[config(env = "PORT", default = "8080")]
+///     port: u16,
+///     #[config(env = "DATABASE_URL")]
+///     database_url: String,
+///     #[config(env = "DEBUG")]
+///     debug: Option<bool>,
+/// }
+///
+/// let cfg = AppConfig::load().unwrap();
+/// ```
+#[proc_macro_derive(Config, attributes(config))]
+pub fn derive_config(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    impl_config(ast)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+fn impl_config(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let span = input.ident.span();
+    let name = &input.ident;
+
+    // Parse optional struct-level prefix: #[config(prefix = "...")]
+    let prefix = parse_config_prefix(&input.attrs)?;
+
+    let fields = match &input.data {
+        Data::Struct(s) => match &s.fields {
+            Fields::Named(f) => &f.named,
+            _ => {
+                return Err(syn::Error::new(
+                    span,
+                    "#[derive(Config)] only supports structs with named fields",
+                ))
+            }
+        },
+        _ => {
+            return Err(syn::Error::new(
+                span,
+                "#[derive(Config)] can only be derived on structs",
+            ))
+        }
+    };
+
+    let mut field_loads: Vec<proc_macro2::TokenStream> = Vec::new();
+    let mut field_names: Vec<&syn::Ident> = Vec::new();
+
+    for field in fields {
+        let ident = field.ident.as_ref().unwrap();
+        field_names.push(ident);
+
+        // Parse field-level #[config(env = "...", default = "...")]
+        let (env_key, default) = parse_field_config(&field.attrs, ident, &prefix)?;
+
+        let is_option = is_option_type(&field.ty);
+
+        let load_expr = if is_option {
+            quote! {
+                _rws::config_binding::load_optional(&#env_key)?
+            }
+        } else if let Some(default_str) = default {
+            quote! {
+                _rws::config_binding::load_with_default(&#env_key, #default_str)?
+            }
+        } else {
+            quote! {
+                _rws::config_binding::load_required(&#env_key)?
+            }
+        };
+
+        field_loads.push(quote! {
+            let #ident = #load_expr;
+        });
+    }
+
+    Ok(quote! {
+        impl #name {
+            /// Load configuration from environment variables.
+            pub fn load() -> ::core::result::Result<Self, ::std::string::String> {
+                use ::rust_web_server as _rws;
+                #(#field_loads)*
+                ::core::result::Result::Ok(#name {
+                    #(#field_names),*
+                })
+            }
+        }
+    })
+}
+
+/// Return `(env_key_expr, Option<default_str>)` for a field.
+/// `env_key_expr` is a `proc_macro2::TokenStream` that evaluates to a `String`.
+fn parse_field_config(
+    attrs: &[syn::Attribute],
+    ident: &syn::Ident,
+    prefix: &str,
+) -> syn::Result<(proc_macro2::TokenStream, Option<LitStr>)> {
+    let mut env_name: Option<String> = None;
+    let mut default: Option<LitStr> = None;
+
+    for attr in attrs {
+        if !attr.path().is_ident("config") {
+            continue;
+        }
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("env") {
+                let lit: LitStr = meta.value()?.parse()?;
+                env_name = Some(lit.value());
+            } else if meta.path.is_ident("default") {
+                default = Some(meta.value()?.parse()?);
+            } else {
+                return Err(meta.error("unknown config key; expected `env` or `default`"));
+            }
+            Ok(())
+        })?;
+    }
+
+    let key = format!(
+        "{}{}",
+        prefix,
+        env_name.unwrap_or_else(|| ident.to_string().to_uppercase())
+    );
+
+    Ok((quote! { #key }, default))
+}
+
+/// Parse `#[config(prefix = "...")]` from struct attributes, returning the prefix string.
+fn parse_config_prefix(attrs: &[syn::Attribute]) -> syn::Result<String> {
+    let mut prefix = String::new();
+    for attr in attrs {
+        if !attr.path().is_ident("config") {
+            continue;
+        }
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("prefix") {
+                let lit: LitStr = meta.value()?.parse()?;
+                prefix = lit.value();
+            } else {
+                return Err(meta.error("unknown struct config key; expected `prefix`"));
+            }
+            Ok(())
+        })?;
+    }
+    Ok(prefix)
+}
+
+/// Return true if `ty` is `Option<_>`.
+fn is_option_type(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(tp) = ty {
+        if let Some(seg) = tp.path.segments.last() {
+            return seg.ident == "Option";
+        }
+    }
+    false
 }

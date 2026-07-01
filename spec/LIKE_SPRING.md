@@ -38,11 +38,39 @@ This document tracks what is missing to make `rws` usable as a full application 
 
 `Validate` trait + `ValidationErrors` collector. `Validated<T>` wrapper: extract then validate in one step — `400` on extraction failure, `422 Unprocessable Entity` with JSON error body on validation failure. `#[derive(Validate)]` with `#[validate(length(min, max))]`, `range`, `email`, `required`, `url` annotations (`macros` feature).
 
-### 8. Typed configuration binding
+### 8. Typed configuration binding ✅ Done (v17.35.0)
 
-Config is read via `std::env::var` throughout the codebase. A `#[derive(Config)]` macro that binds `RWS_CONFIG_*` env vars and `rws.config.toml` keys to a typed struct (like Spring's `@ConfigurationProperties`) would make configuration safe, self-documenting, and IDE-friendly.
+`#[derive(Config)]` (`macros` feature) generates `fn load() -> Result<Self, String>` that reads environment variables and parses them into strongly-typed struct fields. Equivalent to Spring's `@ConfigurationProperties`.
 
-`config_reload::current()` gives a `ConfigSnapshot` for the hot-reloadable subset of config — but user-defined config structs are not yet supported.
+```rust
+use rust_web_server::Config;
+
+#[derive(Config)]
+#[config(prefix = "APP_")]
+struct AppConfig {
+    #[config(env = "PORT", default = "8080")]
+    port: u16,
+
+    #[config(env = "DATABASE_URL")]
+    database_url: String,      // required — Err if absent
+
+    #[config(env = "DEBUG")]
+    debug: Option<bool>,       // None if absent or empty
+}
+
+let cfg = AppConfig::load().expect("invalid config");
+```
+
+Runtime support in `src/config_binding/` — `FromEnvStr` trait with impls for all Rust scalar types (`String`, `bool`, `u8`–`u128`, `i8`–`i128`, `f32`, `f64`, `usize`, `isize`). Implement `FromEnvStr` for custom types. Three helper functions (`load_required`, `load_with_default`, `load_optional`) are also available directly.
+
+Field derivation rules:
+
+| Annotation | Env var absent | Env var present |
+|---|---|---|
+| `#[config(env = "KEY", default = "v")]` | use `"v"` | parse to field type |
+| `#[config(env = "KEY")]` non-`Option` | `Err` | parse to field type |
+| `#[config(env = "KEY")]` `Option<T>` | `Ok(None)` | parse, wrap in `Some` |
+| no `#[config]` — auto-key from field name | same as non-`Option` rules | — |
 
 ---
 
@@ -110,6 +138,6 @@ Full cron field syntax: `*`, exact value, `*/step`, `N-M` range, `N,M,P` list, a
 | 8 | WebSocket support | ✅ Done |
 | 9 | Test utilities (`TestClient`) | ✅ Done |
 | 10 | Scheduler (`@Scheduled` equivalent) | ✅ Done (v17.33.0) |
-| 11 | Typed configuration binding (`#[derive(Config)]`) | ❌ Not yet |
+| 11 | Typed configuration binding (`#[derive(Config)]`) | ✅ Done (v17.35.0) |
 | 12 | HTML template engine | ✅ Done (v17.34.0) |
 | 13 | Database layer (`sqlx`) | ❌ Not yet |

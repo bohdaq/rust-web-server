@@ -31,3 +31,4 @@ Module-level documentation for each component.
 1. [Config Reload](https://github.com/bohdaq/rust-web-server/tree/main/src/config_reload) — hot config reload via SIGHUP; `ConfigSnapshot` exposes reloadable values; `RateLimiter` limits update live
 1. [Otel](https://github.com/bohdaq/rust-web-server/tree/main/src/otel) — `OtelLayer` middleware; W3C Trace Context propagation; OTLP HTTP export to Jaeger / Grafana Tempo; `StdoutExporter` for development
 1. [Template](https://github.com/bohdaq/rust-web-server/tree/main/src/template) — `TeraEngine` Jinja2/Django HTML template engine; `from_dir` / `from_glob` / `from_raw`; global singleton; `Context` re-exported from Tera; requires `tera` feature
+1. [Config Binding](https://github.com/bohdaq/rust-web-server/tree/main/src/config_binding) — `FromEnvStr` trait + impls for all scalar types; `load_required` / `load_with_default` / `load_optional` helpers; used by `#[derive(Config)]` (requires `macros` feature)

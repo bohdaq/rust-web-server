@@ -52,7 +52,7 @@ pub mod app;
 pub mod auth;
 
 #[cfg(feature = "macros")]
-pub use rws_macros::{delete, get, patch, post, put, route, FromRequest, Validate};
+pub use rws_macros::{delete, get, patch, post, put, route, Config, FromRequest, Validate};
 #[cfg(feature = "http2")]
 pub mod async_state;
 pub mod session;
@@ -110,6 +110,7 @@ pub mod ws_proxy;
 pub mod canary;
 pub mod circuit_breaker;
 pub mod service_discovery;
+pub mod config_binding;
 pub mod ingress;
 #[cfg(feature = "tera")]
 pub mod template;

@@ -126,6 +126,7 @@ cargo build --release --no-default-features --features http1
 - WebAssembly MIME type — `.wasm` files served as `application/wasm`
 - In-process test client — `TestClient` dispatches requests without a TCP socket
 - HTML template engine — `TeraEngine` (`tera` feature) wraps the [Tera](https://keats.github.io/tera/) crate; Jinja2/Django syntax — variables, loops, conditionals, inheritance, filters, macros; global singleton via `template::init(dir)`; `template::render(name, &ctx)` returns a `200 OK` HTML response
+- Typed config binding — `#[derive(Config)]` (`macros` feature) generates `load() -> Result<Self, String>` that reads env vars into strongly-typed structs; `#[config(env = "KEY", default = "v")]` per field; `Option<T>` fields are optional; `FromEnvStr` trait supports custom types
 
 ### Optional features
 
@@ -133,7 +134,7 @@ cargo build --release --no-default-features --features http1
 |---------|--------------|
 | `serde` | `Json<T>` extractor and responder backed by `serde_json` |
 | `auth` | `BasicAuthLayer` (HTTP Basic) and `JwtLayer` (HS256 JWT); `build_jwt` / `verify_jwt` utilities |
-| `macros` | `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` attributes; `#[derive(FromRequest)]`; `#[derive(Validate)]` via `rws-macros` |
+| `macros` | `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` attributes; `#[derive(FromRequest)]`; `#[derive(Validate)]`; `#[derive(Config)]` (typed env-var binding) via `rws-macros` |
 | `acme` | `AcmeManager` — automatic certificate provisioning and renewal via ACME (Let's Encrypt); implies `http2` |
 | `tera` | `TeraEngine` HTML template engine (Jinja2/Django syntax); `template::init()` global singleton; `template::render()` one-liner |
 
@@ -209,7 +210,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 50 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, MCP server, virtual hosting / SNI routing, request / response rewriting, L4 TCP proxy, UDP proxy, WebSocket proxy, HTTP/2 reverse proxy, gRPC proxy, mTLS, canary routing, circuit breaker, service discovery, Kubernetes Ingress routing, background scheduling, and HTML template rendering.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 51 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, MCP server, virtual hosting / SNI routing, request / response rewriting, L4 TCP proxy, UDP proxy, WebSocket proxy, HTTP/2 reverse proxy, gRPC proxy, mTLS, canary routing, circuit breaker, service discovery, Kubernetes Ingress routing, background scheduling, HTML template rendering, and typed configuration binding.
 
 ## AI adoption
 
