@@ -26,6 +26,7 @@ Module-level documentation for each component.
 1. [Circuit Breaker](https://github.com/bohdaq/rust-web-server/tree/main/src/circuit_breaker) — `CircuitBreaker` per-backend state machine; `RetryLayer` retries on configurable status codes
 1. [Service Discovery](https://github.com/bohdaq/rust-web-server/tree/main/src/service_discovery) — `BackendPool` with Static / EnvPrefix / File / Dns discovery sources; background polling
 1. [Ingress](https://github.com/bohdaq/rust-web-server/tree/main/src/ingress) — `KubernetesIngressWatcher` polls K8s API; `IngressRouter` routes requests to cluster services
+1. [Scheduler](https://github.com/bohdaq/rust-web-server/tree/main/src/scheduler) — `Scheduler` background task runner; fixed-rate, fixed-delay, and 6-field cron; `CronSchedule` with full field syntax
 1. [Cache](https://github.com/bohdaq/rust-web-server/tree/main/src/cache) — `CacheLayer` middleware; in-memory TTL cache for GET responses with vary-by-header and capacity eviction
 1. [Config Reload](https://github.com/bohdaq/rust-web-server/tree/main/src/config_reload) — hot config reload via SIGHUP; `ConfigSnapshot` exposes reloadable values; `RateLimiter` limits update live
 1. [Otel](https://github.com/bohdaq/rust-web-server/tree/main/src/otel) — `OtelLayer` middleware; W3C Trace Context propagation; OTLP HTTP export to Jaeger / Grafana Tempo; `StdoutExporter` for development

@@ -103,6 +103,7 @@ pub mod thread_pool;
 pub mod url;
 pub mod proxy;
 pub mod rewrite;
+pub mod scheduler;
 pub mod tcp_proxy;
 pub mod udp_proxy;
 pub mod ws_proxy;

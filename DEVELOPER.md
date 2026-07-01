@@ -131,6 +131,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `RetryLayer` | `circuit_breaker` | Middleware that retries requests on configurable status codes (default: 502, 503, 504) up to `max_retries` times. |
 | `BackendPool` / `DiscoverySource` | `service_discovery` | Dynamic backend pool updated by a background thread. Sources: `Static`, `EnvPrefix` (env vars), `File` (one host:port per line), `Dns` (A-record lookup). |
 | `IngressRule` / `KubernetesIngressWatcher` / `IngressRouter` | `ingress` | Kubernetes Ingress watcher: polls the K8s API, parses Ingress rules, and routes requests to the correct upstream service. `IngressRouter` implements `Application`. |
+| `Scheduler` / `CronSchedule` | `scheduler` | `@Scheduled`-equivalent background task runner. Three modes: `.every(Duration, fn)` (fixed rate), `.after(Duration, fn)` (fixed delay), `.cron("sec min hour day month weekday", fn)`. Full cron syntax: `*`, exact, `*/step`, `N-M`, comma list. |
 
 ---
 
@@ -2023,6 +2024,54 @@ Server::run(listener, pool, router);
 ```
 
 For **in-cluster** deployments, mount the service account and point kubectl proxy to the API server. TLS to `kubernetes.default.svc` is not yet handled natively — use `kubectl proxy` or set `RWS_K8S_API_SERVER=http://kubernetes.default.svc:80` with an appropriately configured proxy sidecar.
+
+---
+
+### 49. Background task scheduler
+
+`Scheduler` is a `@Scheduled`-equivalent background task runner. Each task runs in its own dedicated thread started by `.start()`.
+
+```rust
+use std::time::Duration;
+use rust_web_server::scheduler::Scheduler;
+
+Scheduler::new()
+    // Fixed rate: every 60 s, measured from task start.
+    .every(Duration::from_secs(60), || {
+        println!("flush metrics");
+    })
+    // Fixed delay: 30 s after each run completes.
+    .after(Duration::from_secs(30), || {
+        println!("heartbeat");
+    })
+    // Cron: fire at second 0 of every minute (UTC).
+    // Format: "sec min hour day-of-month month day-of-week"
+    .cron("0 * * * * *", || {
+        println!("every minute");
+    }).unwrap()
+    // 10 s pause before the first run of the previous task.
+    .initial_delay(Duration::from_secs(10))
+    // Cron: every day at 02:30:00 UTC.
+    .cron("0 30 2 * * *", || {
+        println!("nightly job");
+    }).unwrap()
+    // Cron: weekdays only (Mon=1..Fri=5) at 09:00:00 UTC.
+    .cron("0 0 9 * * 1-5", || {
+        println!("business hours open");
+    }).unwrap()
+    .start(); // spawns one thread per task, returns immediately
+```
+
+**Cron field syntax** (6 space-separated fields, UTC):
+
+| Field | Range | Example |
+|---|---|---|
+| second | 0–59 | `0`, `*/10`, `0,30` |
+| minute | 0–59 | `*`, `0,15,30,45` |
+| hour | 0–23 | `9-17` |
+| day-of-month | 1–31 | `1`, `*/7` |
+| month | 1–12 | `*`, `3-11` |
+| day-of-week | 0–6 (0=Sun) | `1-5` |
 
 ---
 
