@@ -66,8 +66,12 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
 
     // 2. Attach the MCP server.
     //    POST /mcp is handled here; everything else is forwarded to `http` above.
-    http.mcp("rws", "1.0.0")
-        .tool(
+    //    Set MCP_TOKEN env var to require bearer auth (recommended in production).
+    let mut mcp = http.mcp("rws", "1.0.0");
+    if let Ok(token) = std::env::var("MCP_TOKEN") {
+        mcp = mcp.require_bearer(token);
+    }
+    mcp.tool(
             "version",
             "Get the server version",
             r#"{"type":"object"}"#,

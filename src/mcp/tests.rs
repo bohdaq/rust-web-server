@@ -467,3 +467,83 @@ fn wrap_mcp_takes_priority_over_wrapped_app() {
         .send();
     assert_eq!(resp.status(), 200);
 }
+
+// ── require_bearer auth ───────────────────────────────────────────────────────
+
+fn make_protected_server() -> McpServer {
+    McpServer::new("srv", "1.0")
+        .require_bearer("secret-token")
+        .tool("ping", "Ping", "{}", |_| Ok(McpContent::text("pong")))
+}
+
+#[test]
+fn auth_correct_token_succeeds() {
+    let client = TestClient::new(make_protected_server());
+    let resp = client
+        .post("/mcp")
+        .header("Authorization", "Bearer secret-token")
+        .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+        .send();
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn auth_missing_token_returns_401() {
+    let client = TestClient::new(make_protected_server());
+    let resp = client
+        .post("/mcp")
+        .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+        .send();
+    assert_eq!(resp.status(), 401);
+}
+
+#[test]
+fn auth_wrong_token_returns_401() {
+    let client = TestClient::new(make_protected_server());
+    let resp = client
+        .post("/mcp")
+        .header("Authorization", "Bearer wrong-token")
+        .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+        .send();
+    assert_eq!(resp.status(), 401);
+}
+
+#[test]
+fn auth_options_preflight_also_requires_token() {
+    let client = TestClient::new(make_protected_server());
+    let resp = client.options("/mcp").send();
+    assert_eq!(resp.status(), 401);
+}
+
+#[test]
+fn auth_non_mcp_path_not_affected() {
+    // Auth only guards /mcp — other paths go to the fallback App unchanged.
+    let client = TestClient::new(make_protected_server());
+    let resp = client.get("/healthz").send();
+    assert_eq!(resp.status(), 200);
+}
+
+#[test]
+fn auth_www_authenticate_header_present_on_401() {
+    let client = TestClient::new(make_protected_server());
+    let resp = client
+        .post("/mcp")
+        .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+        .send();
+    assert_eq!(resp.status(), 401);
+    let has_www_auth = resp.headers().iter()
+        .any(|h| h.name.eq_ignore_ascii_case("www-authenticate"));
+    assert!(has_www_auth, "WWW-Authenticate header missing on 401");
+}
+
+#[test]
+fn no_auth_configured_allows_all() {
+    // Without require_bearer, any request is accepted.
+    let srv = McpServer::new("open", "1.0").tool("ping", "Ping", "{}", |_| Ok(McpContent::text("pong")));
+    let client = TestClient::new(srv);
+    let resp = client
+        .post("/mcp")
+        .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+        .send();
+    assert_eq!(resp.status(), 200);
+}

@@ -205,6 +205,7 @@ pub struct McpServer {
     resources: Vec<ResourceDef>,
     prompts: Vec<PromptDef>,
     fallback: Option<Arc<dyn Application + Send + Sync>>,
+    auth_token: Option<String>,
 }
 
 impl McpServer {
@@ -218,7 +219,37 @@ impl McpServer {
             resources: vec![],
             prompts: vec![],
             fallback: None,
+            auth_token: None,
         }
+    }
+
+    /// Require a bearer token on every request to the MCP endpoint.
+    ///
+    /// The client must send `Authorization: Bearer <token>`. Requests with a
+    /// missing or wrong token receive `401 Unauthorized` before any JSON-RPC
+    /// processing occurs.
+    ///
+    /// Store the token in an environment variable — never hard-code it:
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::core::New;
+    ///
+    /// let app = App::new()
+    ///     .mcp("my-server", "1.0")
+    ///     .require_bearer(std::env::var("MCP_TOKEN").expect("MCP_TOKEN not set"));
+    /// ```
+    ///
+    /// Claude Desktop config:
+    /// ```json
+    /// { "mcpServers": { "my-server": {
+    ///     "url": "http://localhost:7878/mcp",
+    ///     "headers": { "Authorization": "Bearer <token>" }
+    /// }}}
+    /// ```
+    pub fn require_bearer(mut self, token: impl Into<String>) -> Self {
+        self.auth_token = Some(token.into());
+        self
     }
 
     /// Wrap an existing [`Application`] so that non-MCP requests are forwarded
@@ -512,6 +543,18 @@ impl McpServer {
 impl Application for McpServer {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         if request.request_uri == self.path {
+            // Check bearer token before processing any MCP request.
+            if let Some(expected) = &self.auth_token {
+                let provided = request.headers.iter()
+                    .find(|h| h.name.eq_ignore_ascii_case("authorization"))
+                    .map(|h| h.value.as_str())
+                    .unwrap_or("");
+                let bearer = provided.strip_prefix("Bearer ").unwrap_or("");
+                if bearer != expected.as_str() {
+                    return Ok(unauthorized());
+                }
+            }
+
             return Ok(match request.method.as_str() {
                 "POST" => {
                     let body = std::str::from_utf8(&request.body).unwrap_or("");
@@ -583,6 +626,21 @@ fn no_content() -> Response {
     let mut r = Response::new();
     r.status_code = *STATUS_CODE_REASON_PHRASE.n202_accepted.status_code;
     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n202_accepted.reason_phrase.to_string();
+    r
+}
+
+fn unauthorized() -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n401_unauthorized.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n401_unauthorized.reason_phrase.to_string();
+    r.headers.push(Header {
+        name: "WWW-Authenticate".to_string(),
+        value: "Bearer".to_string(),
+    });
+    r.content_range_list = vec![Range::get_content_range(
+        b"Unauthorized".to_vec(),
+        MimeType::TEXT_PLAIN.to_string(),
+    )];
     r
 }
 

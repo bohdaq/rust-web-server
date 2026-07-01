@@ -78,6 +78,11 @@ impl<A: Application> TestClient<A> {
     pub fn delete(&self, path: &str) -> TestRequest<'_, A> {
         TestRequest::new(METHOD.delete.to_string(), path, self)
     }
+
+    /// Build an `OPTIONS` request to `path`.
+    pub fn options(&self, path: &str) -> TestRequest<'_, A> {
+        TestRequest::new(METHOD.options.to_string(), path, self)
+    }
 }
 
 /// A pending test request. Chain builder methods then call [`TestRequest::send`].
