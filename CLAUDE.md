@@ -31,11 +31,13 @@ MSRV is 1.75. The `--ignore-rust-version` flag from older docs is no longer need
 
 ## Architecture
 
-The server is a synchronous, thread-pool-based HTTP/1.1 server built with no async runtime and zero third-party HTTP dependencies. Everything — HTTP parsing, JSON, CORS, MIME types, range requests — is implemented from scratch in this repo.
+The default build (`http3` feature) uses a tokio async runtime and serves HTTP/3 over QUIC, HTTP/2, and HTTP/1.1 over TLS. The `http1`-only build is a fully synchronous, thread-pool-based server with no async runtime. All HTTP parsing, JSON, CORS, MIME types, range requests, WebSocket, SSE, and routing are implemented from scratch with no third-party HTTP dependencies.
 
 ### Request lifecycle
 
-`main.rs` → `Server::setup()` binds the TCP listener → `Server::run()` accepts connections → dispatches each to the `ThreadPool` → `Server::process()` reads bytes, calls `Request::parse()`, then `app.execute()` → `Response::generate_response()` writes bytes back.
+`main.rs` → `Server::setup()` binds the TCP listener and creates the `ThreadPool` → `Server::run()` (plain HTTP/1.1) or `Server::run_tls()` (TLS) accepts connections → dispatches each to the thread pool → `Server::process()` implements an HTTP/1.1 keep-alive loop: reads bytes, calls `Request::parse()`, calls `app.execute()`, applies gzip compression (`compression::apply_gzip()`), records metrics, sets `Connection` header, then writes the response. For large files `response.stream_file` triggers `Server::write_chunked_file()` instead.
+
+Each connection gets a 30-second read timeout. `Server::run_redirect()` optionally listens on a second port and issues `301` redirects to HTTPS.
 
 ### Routing / controller dispatch
 
@@ -45,9 +47,30 @@ The `Controller` trait (`src/controller/mod.rs`) has two methods:
 - `is_matching(request, connection) -> bool`
 - `process(request, response, connection) -> Response`
 
-Two ways to add routes:
+Three ways to add routes:
 1. **Controller pattern** — create a module under `src/app/controller/`, implement `Controller`, register it in `App::execute`.
 2. **Router** — build a `Router` inside `Application::execute` and call `router.handle(request, connection)`. Prefer this for new code when you need named path parameters or don't want boilerplate controllers.
+3. **State-aware app** — `App::with_state(S)` returns `AppWithState<S>` which has `.get()`, `.post()`, `.put()`, `.patch()`, `.delete()` builder methods accepting `fn(state, request, path_params, connection) -> Response`. `App::with_async_state(S)` gives the same API with `async fn` handlers (requires `http2` feature). Wrap with `.wrap(layer)` to add middleware.
+
+### Application variants
+
+- `App` — zero-config, wraps all built-in controllers. Entry point: `App::new()`.
+- `AppWithState<S>` (`src/state/mod.rs`) — state-aware dynamic router; `state: Arc<S>` shared across handlers. Entry point: `App::with_state(S)`.
+- `AsyncAppWithState<S>` (`src/async_state/mod.rs`) — same as `AppWithState` but handlers are `async fn`; requires `http2` feature. Entry point: `App::with_async_state(S)`.
+- `WithMiddleware<A>` (`src/middleware/mod.rs`) — wraps any `Application` with a middleware stack. Entry point: `app.wrap(layer)`.
+- `McpServer` (`src/mcp/mod.rs`) — implements `Application`; serves the MCP Streamable HTTP protocol at `POST /mcp`. Entry point: `app.mcp(name, version)` or `McpServer::new(name, version)`.
+
+### Middleware
+
+`src/middleware/mod.rs` defines the `Middleware` trait:
+```rust
+trait Middleware: Send + Sync {
+    fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String>;
+}
+```
+`WithMiddleware<A>::wrap(layer)` pushes layers onto a `Vec<Box<dyn Middleware>>`; layers are applied in push order (first-pushed is outermost). Any `Application` can be wrapped via `.wrap(layer)`.
+
+Built-in middleware: `RateLimitLayer`, `MetricsLayer`, `CacheLayer`, `OtelLayer`, `RewriteLayer`, `ReverseProxy`, `H2ReverseProxy`, `GrpcProxy`, `BasicAuthLayer`, `JwtLayer`, `IpFilter`.
 
 ### Configuration
 
@@ -59,10 +82,20 @@ Configuration is layered (lowest → highest priority):
 
 All config is read at startup into process environment variables (`RWS_CONFIG_*`) and then accessed globally via `env::var(...)`. There is no config struct passed around at runtime.
 
+Key config constants (all in `src/entry_point/mod.rs`):
+- `RWS_CONFIG_IP`, `RWS_CONFIG_PORT`, `RWS_CONFIG_THREAD_COUNT`
+- `RWS_CONFIG_TLS_CERT_FILE`, `RWS_CONFIG_TLS_KEY_FILE`
+- `RWS_CONFIG_TLS_CLIENT_CA_FILE` — mTLS CA cert; empty disables client cert verification
+- `RWS_CONFIG_HTTP_REDIRECT_PORT` — if set, `Server::run_redirect()` sends `301` to HTTPS on this port
+- `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS`, `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS`
+- `RWS_CONFIG_LOG_FORMAT` — `"combined"` (default) or `"json"`
+
+Hot reload: `SIGHUP` (or `POST /admin/config/reload`) calls `config_reload::reload()` which re-reads CORS rules, rate limits, log format, and request allocation size. On TLS builds, SIGHUP also rebuilds the `TlsAcceptor` from updated certs for all virtual hosts.
+
 ### Key types
 
 - `Request` (`src/request/mod.rs`) — method, request_uri, http_version, headers, body (raw bytes)
-- `Response` (`src/response/mod.rs`) — status code, headers, body as `Vec<ContentRange>`
+- `Response` (`src/response/mod.rs`) — status code, headers, body as `Vec<ContentRange>`, and `stream_file: Option<String>` for chunked file streaming
 - `Header` (`src/header/mod.rs`) — name/value pair; constants for all standard header names
 - `ConnectionInfo` (`src/server/mod.rs`) — client/server IP+port, request allocation size, and `sni_hostname: Option<String>` (SNI hostname from TLS handshake, `None` for plain HTTP), passed into every controller
 
@@ -94,6 +127,20 @@ Call `.with_host("example.com")` before registering routes to restrict a `Router
 
 `src/rate_limit/mod.rs` provides `RateLimiter` — a thread-safe sliding-window limiter keyed by a string (typically the client IP). Call `limiter.check(key)` → `true` if within budget, `false` to return 429. `rate_limit::global()` returns a process-wide singleton configured via `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS` (default 1000) and `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS` (default 60).
 
+### Metrics
+
+`src/metrics/mod.rs` — global counters incremented directly in `Server::process()` and `dispatch_connection()`:
+- `record_request()` — total requests
+- `record_error()` — total errors
+- `connection_open()` / `connection_close()` — current connection gauge
+- `SERVER_READY: AtomicBool` — cleared on shutdown; checked by `/readyz`
+
+`MetricsLayer` middleware records per-route `rws_route_requests_total{method,path,status}` counters and `rws_route_duration_seconds{method,path}` histograms. The built-in `GET /metrics` endpoint exposes all metrics in Prometheus text format.
+
+### MCP server
+
+`src/mcp/mod.rs` — `McpServer` implements `Application` and serves the MCP Streamable HTTP protocol (`POST /mcp`, JSON-RPC 2.0). Register tools, resources, and prompts via builder methods: `.tool(name, description, schema, handler)`, `.resource(uri_template, name, description, handler)`, `.prompt(name, description, handler)`. `.require_bearer(token)` gates all requests behind a static Bearer token. `.wrap(app)` falls through non-MCP requests to another `Application`. The binary ships 8 built-in rws-specific tools (`server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`).
+
 ### Test client
 
 `src/test_client/mod.rs` provides `TestClient<A>` — dispatches requests directly through an `Application` without opening a TCP socket. Use it in unit and integration tests:
@@ -108,11 +155,11 @@ assert_eq!(200, res.status());
 
 HTTP/1.1 (`http1` feature, `ctrlc` dep): a `SIGINT`/`SIGTERM` handler sets an `AtomicBool`; the accept loop exits and the `ThreadPool` drains in-flight requests before the process exits.
 
-HTTP/2 + HTTP/3 (async features): `tokio::signal` handles `SIGINT` and `SIGTERM`; each `run_tls`/`run_quic` loop selects on the signal and closes the endpoint cleanly.
+HTTP/2 + HTTP/3 (async features): `tokio::signal` handles `SIGINT` and `SIGTERM`; each `run_tls`/`run_quic` loop `select!`s on the signal and breaks cleanly. `SERVER_READY` is cleared before breaking.
 
-### No async (default `http1` feature)
+### No async (`http1` feature only)
 
-The server uses `std::net::TcpListener` and a hand-rolled `ThreadPool` (`src/thread_pool/mod.rs`). Each connection is handled synchronously on a worker thread.
+When compiled with `--no-default-features --features http1`, the server uses `std::net::TcpListener` and a hand-rolled `ThreadPool` (`src/thread_pool/mod.rs`). Each connection is handled synchronously on a worker thread. No tokio, no async.
 
 ### HTTP/2 feature (`--features http2`)
 
@@ -122,9 +169,10 @@ When built with the `http2` feature, the binary uses a `tokio` runtime and serve
 - `src/virtual_host/mod.rs` — `VirtualHostConfig { domain, cert_file, key_file }` carries per-domain cert configuration.
 - `src/h2_handler/mod.rs` — translates `h2::RecvStream` requests into `crate::request::Request`, calls `app.execute()`, translates `Response` back into H2 frames. The `Application` and `Controller` traits are untouched.
 - `src/server/mod.rs::Server::run_tls()` — async accept loop; extracts SNI hostname after the TLS handshake (`tls_stream.get_ref().1.server_name()`), routes by ALPN to `h2_handler::handle_connection` or `Server::process_h1_tls`, populates `ConnectionInfo::sni_hostname`.
+- `src/server/mod.rs::Server::run_redirect()` — optional second listener; sends `301 Moved Permanently` to HTTPS for every request; activated by `RWS_CONFIG_HTTP_REDIRECT_PORT`.
 - HTTP/1.1 TLS responses include `Alt-Svc: h3=":PORT"` (or `h2` when http3 feature is absent) to advertise protocol availability.
 - Forbidden HTTP/2 headers (`connection`, `keep-alive`, `transfer-encoding`, `upgrade`, `proxy-connection`, `te`) are stripped from responses before sending.
-- SIGHUP reloads all virtual host certs alongside the default cert without restarting.
+- SIGHUP: reloads hot config via `config_reload::reload()` AND rebuilds `TlsAcceptor` with fresh certs for all virtual hosts.
 
 ### HTTP/3 feature (`--features http3`, default)
 
@@ -133,7 +181,7 @@ When built with the `http3` feature (which implies `http2`), a second listener s
 - `src/tls/mod.rs::create_quinn_server_config_from_vhosts()` — builds a multi-domain `quinn::ServerConfig` via the same `SniCertResolver`; `create_quinn_server_config()` is the single-cert wrapper.
 - `src/h3_handler/mod.rs` — accepts QUIC connections, extracts SNI from `conn.handshake_data()?.downcast::<HandshakeData>()`, resolves H3 streams via `RequestResolver::resolve_request()`, calls `app.execute()`, sends H3 responses.
 - `src/server/mod.rs::Server::run_quic()` — binds a UDP endpoint on the same port as TCP; skipped silently if no cert is configured.
-- `main()` runs `Server::run_tls` and `Server::run_quic` concurrently via `tokio::join!`.
+- `main()` runs `Server::run_tls`, `Server::run_quic`, and `Server::run_redirect` concurrently via `tokio::join!`.
 
 ### Proxy modules
 
