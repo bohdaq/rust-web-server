@@ -12,9 +12,11 @@ This document tracks what is missing for `rws` to be competitive with production
 
 Remaining: TLS upstreams, weighted distribution, health-check probes, circuit breaker.
 
-### Virtual hosting / SNI routing
+### Virtual hosting / SNI routing ✅ Done (v17.29.0)
 
-One server instance = one site. nginx `server_name` blocks, Traefik's `Host` rules, and Caddy's site blocks let a single process serve multiple domains on one port. `rws` has no concept of virtual hosts.
+`SniCertResolver` (`src/tls/mod.rs`) selects the correct TLS certificate at handshake time based on the SNI hostname sent in the client `ClientHello`. `create_tls_acceptor_from_vhosts()` and `create_quinn_server_config_from_vhosts()` replace the previous single-cert path for HTTP/2 and HTTP/3 respectively. Add one `[[virtual_host]]` block per domain in `rws.config.toml` (or set `RWS_CONFIG_VIRTUAL_HOST_{N}_DOMAIN/CERT_FILE/KEY_FILE` env vars). The negotiated hostname is exposed as `ConnectionInfo::sni_hostname: Option<String>` in every handler. `Router::with_host(name)` restricts a router's routes to one virtual host; the `Host` request header is used as fallback for plain-HTTP connections. SIGHUP hot-reloads all virtual host certs alongside the default cert.
+
+Remaining: wildcard domain matching (e.g. `*.example.com`), automatic per-vhost ACME provisioning, weighted traffic splitting across virtual hosts.
 
 ### Automatic TLS (ACME) ✅ Done — v17.25.0
 
@@ -50,9 +52,9 @@ Remaining: shared cache across processes (Redis, Memcached), `stale-while-revali
 
 ### Hot config reload ✅ Done (v17.21.0)
 
-Send `SIGHUP` (or `POST /admin/config/reload`) to re-apply CORS rules, rate-limit thresholds, log format, and request allocation size without restarting. `RateLimiter` limits update live via `AtomicU32`/`AtomicU64`. `config_reload::current()` exposes a typed `ConfigSnapshot` anywhere in the handler stack.
+Send `SIGHUP` (or `POST /admin/config/reload`) to re-apply CORS rules, rate-limit thresholds, log format, and request allocation size without restarting. `RateLimiter` limits update live via `AtomicU32`/`AtomicU64`. `config_reload::current()` exposes a typed `ConfigSnapshot` anywhere in the handler stack. TLS cert rotation is also handled by SIGHUP — the acceptor is rebuilt in-place with all virtual host certs (v17.29.0).
 
-Remaining: TLS cert rotation (requires rebuilding the acceptor), port/thread-count changes (require restart).
+Remaining: port/thread-count changes (require restart).
 
 ---
 
@@ -120,7 +122,7 @@ No upstream health-based circuit breaking or automatic retries on upstream 5xx r
 | Priority | Gap | Status |
 |---|---|---|
 | 1 | Reverse proxy + load balancing | ✅ Done (v17.20.0) |
-| 2 | Virtual hosting / SNI routing | Pending |
+| 2 | Virtual hosting / SNI routing | ✅ Done (v17.29.0) |
 | 3 | Automatic TLS (ACME / Let's Encrypt) | ✅ Done (v17.25.0) |
 | 4 | Rate limiting | ✅ Done |
 | 5 | Request / response rewriting | Partial (proxy injects `X-Forwarded-For`, `Via`) |
