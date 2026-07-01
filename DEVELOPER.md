@@ -1556,6 +1556,57 @@ The library integration is automatic when the `acme` feature is enabled — `mai
 
 **Zero-downtime renewal:** after writing new files, `run_renewal_loop` sends `SIGHUP` to the process. The `run_tls` accept loop catches the signal and replaces the `TlsAcceptor` in-place — no TCP connections are dropped.
 
+### 36. MCP server (Model Context Protocol)
+
+`McpServer` turns any `rws` application into an MCP server reachable from Claude, Cursor, and other LLM tool-callers. It uses the Streamable HTTP transport: a single `POST /mcp` endpoint that speaks JSON-RPC 2.0. No extra Cargo features or dependencies are needed.
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer, PromptArgDef, PromptMessage, extract_arg};
+use rust_web_server::server::Server;
+
+fn main() {
+    let srv = McpServer::new("my-app", "1.0")
+        // Register a tool
+        .tool(
+            "add",
+            "Add two numbers",
+            r#"{"type":"object","properties":{"a":{"type":"number"},"b":{"type":"number"}}}"#,
+            |args| {
+                let a: f64 = extract_arg(args, "a").and_then(|v| v.parse().ok()).unwrap_or(0.0);
+                let b: f64 = extract_arg(args, "b").and_then(|v| v.parse().ok()).unwrap_or(0.0);
+                Ok(McpContent::text(format!("{}", a + b)))
+            },
+        )
+        // Register a resource
+        .resource(
+            "docs://{topic}",
+            "Documentation",
+            "Fetch docs for a topic",
+            |uri| Ok(McpContent::text(format!("Docs for {uri}"))),
+        )
+        // Register a prompt with argument declarations
+        .prompt_with_args(
+            "translate",
+            "Translate text",
+            vec![
+                PromptArgDef::required("text", "Text to translate"),
+                PromptArgDef::optional("lang", "Target language (default English)"),
+            ],
+            |args| {
+                let text = extract_arg(args, "text").unwrap_or_default();
+                let lang = extract_arg(args, "lang").unwrap_or_else(|| "English".to_string());
+                Ok(vec![PromptMessage::user(format!("Translate to {lang}: {text}"))])
+            },
+        );
+
+    Server::new(None).run(srv);
+}
+```
+
+`McpServer` implements `Application`, so it handles `POST /mcp` for JSON-RPC and falls through to the built-in `App` for all other paths (static files, health checks, etc.). Use `.at("/custom/path")` to override the default `/mcp` endpoint.
+
+**Supported MCP methods:** `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, `prompts/get`, `notifications/initialized`.
+
 ### Structured JSON logging
 
 Set `RWS_CONFIG_LOG_FORMAT=json` (or `log_format = 'json'` in `rws.config.toml`) to emit access logs as JSON:

@@ -66,6 +66,7 @@ pub mod macros;
 pub mod cache;
 pub mod config_reload;
 pub mod metrics;
+pub mod mcp;
 pub mod otel;
 #[cfg(feature = "acme")]
 pub mod acme;

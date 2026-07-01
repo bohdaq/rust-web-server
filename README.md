@@ -110,6 +110,7 @@ cargo build --release --no-default-features --features http1
 - Hot config reload — send `SIGHUP` (or `POST /admin/config/reload`) to re-apply CORS rules, rate-limit thresholds, log format, and request allocation size without restarting; `config_reload::current()` exposes a typed snapshot anywhere in the handler stack
 - Distributed tracing — `OtelLayer` middleware creates HTTP server spans; reads W3C `traceparent` headers, propagates context to upstream services, exports to stdout or an OTLP HTTP collector (Jaeger, Grafana Tempo); zero new Cargo dependencies
 - Automatic TLS — `AcmeManager` (`acme` feature) provisions and renews Let's Encrypt certificates via ACME (RFC 8555); HTTP-01 challenge server built in; background renewal loop sends SIGHUP so the TLS acceptor hot-reloads the certificate without restarting
+- MCP server — `McpServer` implements `Application`; exposes tools, resources, and prompts over MCP Streamable HTTP (JSON-RPC 2.0 `POST /mcp`); no extra Cargo features needed; reachable from Claude, Cursor, and other MCP clients
 - WebAssembly MIME type — `.wasm` files served as `application/wasm`
 - In-process test client — `TestClient` dispatches requests without a TCP socket
 
@@ -194,13 +195,13 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 35 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, and automatic TLS via ACME.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 36 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, and MCP server.
 
 ## AI adoption
 
 This framework is designed to be an AI first class citizen — AI coding assistants (Claude, Cursor, Copilot) generate correct, idiomatic, compiling code on the first try.
 
-See [spec/AI_ADOPTION.md](spec/AI_ADOPTION.md) for the full strategy: using the server as an AI API backend, adding SSE streaming for token-by-token output, implementing an MCP tool server, and the steps to make the framework maximally discoverable by AI tools (`llms.txt`, Cargo examples, ergonomic helpers, system prompt file).
+See [spec/AI_ADOPTION.md](spec/AI_ADOPTION.md) for the full strategy: using the server as an AI API backend, adding SSE streaming for token-by-token output, using the built-in `McpServer` to expose tools over MCP, and the steps to make the framework maximally discoverable by AI tools (`llms.txt`, Cargo examples, ergonomic helpers, system prompt file).
 
 ## Further reading
 

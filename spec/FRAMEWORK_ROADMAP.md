@@ -598,16 +598,28 @@ let app = App::new()
 
 ---
 
-### 31. MCP (Model Context Protocol) server
+### 31. MCP (Model Context Protocol) server ✅ Done (v17.26.0)
 
-AI coding agents and LLM tool-callers need a standardized interface to interact with application APIs. An `McpController` would expose tools, resources, and prompts over the MCP protocol, making any `rws` application instantly reachable from Claude, Cursor, and other MCP-aware clients.
+`McpServer` exposes tools, resources, and prompts over the MCP protocol (Streamable HTTP transport, JSON-RPC 2.0). Any `rws` application is instantly reachable from Claude, Cursor, and other MCP-aware clients.
 
-**Target API:**
+**API:**
 ```rust
-let app = App::new()
-    .mcp_tool("list_users", list_users_handler)
-    .mcp_resource("user://{id}", get_user_resource)
-    .mcp_prompt("summarize", summarize_prompt);
+use rust_web_server::mcp::{McpServer, McpContent, PromptMessage, PromptArgDef, extract_arg};
+
+let srv = McpServer::new("my-app", "1.0")
+    .at("/mcp")  // optional; default is /mcp
+    .tool("list_users", "List all users", r#"{"type":"object"}"#, |_args| {
+        Ok(McpContent::json(r#"[{"id":1,"name":"Alice"}]"#))
+    })
+    .resource("user://{id}", "User", "Fetch a user by ID", |uri| {
+        Ok(McpContent::text(format!("User at {uri}")))
+    })
+    .prompt("summarize", "Summarize text", |args| {
+        let text = extract_arg(args, "text").unwrap_or_default();
+        Ok(vec![PromptMessage::user(format!("Please summarize: {text}"))])
+    });
+
+Server::new(None).run(srv);
 ```
 
 ---
@@ -646,4 +658,4 @@ let app = App::new()
 | 28 | Response caching | ✅ Done (v17.22.0) |
 | 29 | Hot config reload | ✅ Done (v17.21.0) |
 | 30 | Reverse proxy / load balancing | ✅ Done (v17.20.0) |
-| 31 | MCP server controller | Pending |
+| 31 | MCP server controller | ✅ Done (v17.26.0) |
