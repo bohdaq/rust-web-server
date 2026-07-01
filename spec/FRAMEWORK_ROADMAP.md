@@ -659,3 +659,4 @@ Server::new(None).run(srv);
 | 29 | Hot config reload | ✅ Done (v17.21.0) |
 | 30 | Reverse proxy / load balancing | ✅ Done (v17.20.0) |
 | 31 | MCP server controller | ✅ Done (v17.26.0) |
+| 32 | MCP bearer auth + rws built-in tools | ✅ Done (v17.27.0) |

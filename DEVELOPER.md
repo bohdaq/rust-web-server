@@ -1560,13 +1560,15 @@ The library integration is automatic when the `acme` feature is enabled — `mai
 
 `McpServer` turns any `rws` application into an MCP server reachable from Claude, Cursor, and other LLM tool-callers. It uses the Streamable HTTP transport: a single `POST /mcp` endpoint that speaks JSON-RPC 2.0. No extra Cargo features or dependencies are needed.
 
+**Standalone MCP server** — tools, resources, and prompts only:
+
 ```rust
 use rust_web_server::mcp::{McpContent, McpServer, PromptArgDef, PromptMessage, extract_arg};
 use rust_web_server::server::Server;
 
 fn main() {
     let srv = McpServer::new("my-app", "1.0")
-        // Register a tool
+        .require_bearer(std::env::var("MCP_TOKEN").unwrap())
         .tool(
             "add",
             "Add two numbers",
@@ -1577,14 +1579,12 @@ fn main() {
                 Ok(McpContent::text(format!("{}", a + b)))
             },
         )
-        // Register a resource
         .resource(
             "docs://{topic}",
             "Documentation",
             "Fetch docs for a topic",
             |uri| Ok(McpContent::text(format!("Docs for {uri}"))),
         )
-        // Register a prompt with argument declarations
         .prompt_with_args(
             "translate",
             "Translate text",
@@ -1603,7 +1603,53 @@ fn main() {
 }
 ```
 
-`McpServer` implements `Application`, so it handles `POST /mcp` for JSON-RPC and falls through to the built-in `App` for all other paths (static files, health checks, etc.). Use `.at("/custom/path")` to override the default `/mcp` endpoint.
+**Combined HTTP routes + MCP** — use `.mcp()` on `AppWithState` to layer MCP on top of existing routes. Requests that don't match `POST /mcp` fall through to the HTTP layer:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::mcp::{McpContent, extract_arg};
+use rust_web_server::request::Request;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::router::PathParams;
+use rust_web_server::routes;
+use rust_web_server::server::{ConnectionInfo, Server};
+
+#[derive(Clone)]
+struct State { version: &'static str }
+
+fn get_version(_req: &Request, _p: &PathParams, _c: &ConnectionInfo, s: &State) -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r
+}
+
+fn main() {
+    // Dispatch chain: McpServer → AppWithState → App (built-in controllers)
+    let http = routes! {
+        App::with_state(State { version: "1.0.0" }),
+        GET "/api/version" => get_version,
+    };
+
+    let mut mcp = http.mcp("my-app", "1.0.0");
+    if let Ok(token) = std::env::var("MCP_TOKEN") {
+        mcp = mcp.require_bearer(token);
+    }
+    let app = mcp.tool(
+        "server_version",
+        "Return the running server version",
+        r#"{"type":"object"}"#,
+        |_| Ok(McpContent::json(r#"{"version":"1.0.0"}"#)),
+    );
+
+    let (listener, pool) = Server::setup().unwrap();
+    Server::run(listener, pool, app);
+}
+```
+
+`require_bearer(token)` enforces `Authorization: Bearer <token>` on every MCP request; set `MCP_TOKEN` in the environment. Requests from unknown clients receive a `401 Unauthorized` with `WWW-Authenticate: Bearer`.
+
+Use `.at("/custom/path")` to override the default `/mcp` endpoint. The bundled `rws` binary ships 8 built-in tools: `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`.
 
 **Supported MCP methods:** `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, `prompts/get`, `notifications/initialized`.
 

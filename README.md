@@ -110,7 +110,7 @@ cargo build --release --no-default-features --features http1
 - Hot config reload — send `SIGHUP` (or `POST /admin/config/reload`) to re-apply CORS rules, rate-limit thresholds, log format, and request allocation size without restarting; `config_reload::current()` exposes a typed snapshot anywhere in the handler stack
 - Distributed tracing — `OtelLayer` middleware creates HTTP server spans; reads W3C `traceparent` headers, propagates context to upstream services, exports to stdout or an OTLP HTTP collector (Jaeger, Grafana Tempo); zero new Cargo dependencies
 - Automatic TLS — `AcmeManager` (`acme` feature) provisions and renews Let's Encrypt certificates via ACME (RFC 8555); HTTP-01 challenge server built in; background renewal loop sends SIGHUP so the TLS acceptor hot-reloads the certificate without restarting
-- MCP server — `McpServer` implements `Application`; exposes tools, resources, and prompts over MCP Streamable HTTP (JSON-RPC 2.0 `POST /mcp`); no extra Cargo features needed; reachable from Claude, Cursor, and other MCP clients
+- MCP server — `McpServer` implements `Application`; exposes tools, resources, and prompts over MCP Streamable HTTP (JSON-RPC 2.0 `POST /mcp`); no extra Cargo features needed; reachable from Claude, Cursor, and other MCP clients; built-in bearer token auth (`require_bearer()`); the bundled binary ships 8 rws-specific tools (`server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`)
 - WebAssembly MIME type — `.wasm` files served as `application/wasm`
 - In-process test client — `TestClient` dispatches requests without a TCP socket
 
