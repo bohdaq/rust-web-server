@@ -1,8 +1,13 @@
 use rust_web_server::app::App;
+use rust_web_server::blocklist::{self, BlocklistLayer};
+use rust_web_server::cache::CacheLayer;
 use rust_web_server::core::New;
+use rust_web_server::feature;
+use rust_web_server::maintenance::{MaintenanceLayer, MAINTENANCE_MODE};
 use rust_web_server::mcp::{McpContent, extract_arg};
 use rust_web_server::metrics::SERVER_READY;
 use rust_web_server::request::Request;
+use rust_web_server::request_log::{self, LogLayer};
 use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
 use rust_web_server::router::PathParams;
 use rust_web_server::routes;
@@ -56,23 +61,41 @@ fn echo_post(req: &Request, _p: &PathParams, _c: &ConnectionInfo, _s: &AppState)
 // AppWithState match.
 
 fn build_app() -> impl rust_web_server::application::Application + Send + Clone + 'static {
-    // 1. Declare HTTP routes with shared state.
-    //    Unmatched requests fall through to the built-in App controller chain.
+    // 1. HTTP routes with shared state.
     let http = routes! {
         App::with_state(AppState { version: env!("CARGO_PKG_VERSION") }),
         GET  "/api/version" => get_version,
         POST "/api/echo"    => echo_post,
     };
 
-    // 2. Attach the MCP server.
-    //    POST /mcp is handled here; everything else is forwarded to `http` above.
-    //    Set MCP_TOKEN env var to require bearer auth (recommended in production).
-    let mut mcp = http.mcp("rws", env!("CARGO_PKG_VERSION"));
+    // Snapshot registered routes before mcp() consumes `http`.
+    let registered_routes: Vec<(String, String)> = http.route_entries()
+        .into_iter()
+        .map(|r| (r.method, r.pattern))
+        .collect();
+
+    // 2. Shared cache — two clones kept so MCP tools can read stats and clear.
+    //    All three instances share the same Arc<Mutex<CacheStore>> underneath.
+    let cache = CacheLayer::memory(500).ttl(60);
+    let cache2 = cache.clone(); // captured by cache_stats tool
+    let cache3 = cache.clone(); // captured by cache_clear tool
+
+    // 3. Middleware stack (innermost → outermost):
+    //    routes → log → blocklist → maintenance → cache → MCP
+    let app = http
+        .wrap(LogLayer)
+        .wrap(BlocklistLayer)
+        .wrap(MaintenanceLayer)
+        .wrap(cache);
+
+    // 4. MCP server — POST /mcp; everything else falls through to `app`.
+    let mut mcp = app.mcp("rws", env!("CARGO_PKG_VERSION"));
     if let Ok(token) = std::env::var("MCP_TOKEN") {
         mcp = mcp.require_bearer(token);
     }
 
     mcp
+        // ── server introspection ─────────────────────────────────────────────
         .tool(
             "server_config",
             "Active RWS_CONFIG_* environment variables and their current values",
@@ -122,20 +145,55 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
         )
         .tool(
             "server_metrics",
-            "Live server counters: requests processed, errors, active connections, ready state",
+            "Live server counters: requests, errors, active connections, thread pool queue depth",
             r#"{"type":"object"}"#,
             |_| {
                 use rust_web_server::metrics;
-                use std::sync::atomic::Ordering;
                 Ok(McpContent::json(format!(
-                    r#"{{"requests_total":{},"errors_total":{},"active_connections":{},"ready":{}}}"#,
+                    r#"{{"requests_total":{},"errors_total":{},"active_connections":{},"thread_pool_queued":{},"ready":{}}}"#,
                     metrics::REQUESTS_TOTAL.load(Ordering::Relaxed),
                     metrics::ERRORS_TOTAL.load(Ordering::Relaxed),
                     metrics::ACTIVE_CONNECTIONS.load(Ordering::Relaxed),
+                    metrics::THREAD_POOL_QUEUED.load(Ordering::Relaxed),
                     metrics::SERVER_READY.load(Ordering::Relaxed),
                 )))
             },
         )
+        .tool(
+            "list_routes",
+            "All registered HTTP routes (method + pattern)",
+            r#"{"type":"object"}"#,
+            move |_| {
+                let entries: Vec<String> = registered_routes.iter()
+                    .map(|(m, p)| format!(r#"{{"method":"{}","pattern":"{}"}}"#, m, p))
+                    .collect();
+                Ok(McpContent::json(format!("[{}]", entries.join(","))))
+            },
+        )
+        // ── cache ────────────────────────────────────────────────────────────
+        .tool(
+            "cache_stats",
+            "Response cache hit/miss counts and current entry count",
+            r#"{"type":"object"}"#,
+            move |_| {
+                Ok(McpContent::json(format!(
+                    r#"{{"hits":{},"misses":{},"size":{}}}"#,
+                    cache2.hits(),
+                    cache2.misses(),
+                    cache2.size(),
+                )))
+            },
+        )
+        .tool(
+            "cache_clear",
+            "Evict all entries from the response cache",
+            r#"{"type":"object"}"#,
+            move |_| {
+                cache3.clear();
+                Ok(McpContent::text("cache cleared"))
+            },
+        )
+        // ── rate limiting ────────────────────────────────────────────────────
         .tool(
             "rate_limit_config",
             "Current rate limit settings (max requests per window and window duration)",
@@ -164,6 +222,7 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
                 )))
             },
         )
+        // ── CORS / config ────────────────────────────────────────────────────
         .tool(
             "cors_config",
             "Current CORS configuration snapshot",
@@ -202,9 +261,126 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
             "Trigger a hot config reload from environment variables and rws.config.toml",
             r#"{"type":"object"}"#,
             |_| {
-                use std::sync::atomic::Ordering;
                 rust_web_server::config_reload::RELOAD_REQUESTED.store(true, Ordering::SeqCst);
                 Ok(McpContent::text("config reload requested"))
+            },
+        )
+        // ── runtime controls ─────────────────────────────────────────────────
+        .tool(
+            "maintenance_status",
+            "Check whether maintenance mode is currently active",
+            r#"{"type":"object"}"#,
+            |_| {
+                let active = MAINTENANCE_MODE.load(Ordering::Relaxed);
+                Ok(McpContent::json(format!(r#"{{"active":{}}}"#, active)))
+            },
+        )
+        .tool(
+            "set_maintenance",
+            "Enable or disable maintenance mode (returns 503 for all non-health paths when active)",
+            r#"{"type":"object","properties":{"enabled":{"type":"boolean"}},"required":["enabled"]}"#,
+            |args| {
+                let enabled = extract_arg(args, "enabled")
+                    .map(|v| v == "true")
+                    .unwrap_or(false);
+                MAINTENANCE_MODE.store(enabled, Ordering::SeqCst);
+                Ok(McpContent::json(format!(r#"{{"active":{}}}"#, enabled)))
+            },
+        )
+        .tool(
+            "block_ip",
+            "Add an IP address to the runtime blocklist (returns 403 for future requests)",
+            r#"{"type":"object","properties":{"ip":{"type":"string"}},"required":["ip"]}"#,
+            |args| {
+                let ip = extract_arg(args, "ip").unwrap_or_default();
+                blocklist::global().block(&ip);
+                Ok(McpContent::json(format!(r#"{{"blocked":"{}"}}"#, ip)))
+            },
+        )
+        .tool(
+            "unblock_ip",
+            "Remove an IP address from the runtime blocklist",
+            r#"{"type":"object","properties":{"ip":{"type":"string"}},"required":["ip"]}"#,
+            |args| {
+                let ip = extract_arg(args, "ip").unwrap_or_default();
+                blocklist::global().unblock(&ip);
+                Ok(McpContent::json(format!(r#"{{"unblocked":"{}"}}"#, ip)))
+            },
+        )
+        .tool(
+            "list_blocked_ips",
+            "List all currently blocked IP addresses",
+            r#"{"type":"object"}"#,
+            |_| {
+                let list: Vec<String> = blocklist::global().list()
+                    .into_iter()
+                    .map(|ip| format!(r#""{}""#, ip))
+                    .collect();
+                Ok(McpContent::json(format!("[{}]", list.join(","))))
+            },
+        )
+        .tool(
+            "feature_list",
+            "List all runtime feature flags and their current enabled state",
+            r#"{"type":"object"}"#,
+            |_| {
+                let pairs: Vec<String> = feature::global().list()
+                    .into_iter()
+                    .map(|(k, v)| format!(r#"{{\"name\":\"{}\",\"enabled\":{}}}"#, k, v))
+                    .collect();
+                Ok(McpContent::json(format!("[{}]", pairs.join(","))))
+            },
+        )
+        .tool(
+            "feature_set",
+            "Enable or disable a named runtime feature flag",
+            r#"{"type":"object","properties":{"name":{"type":"string"},"enabled":{"type":"boolean"}},"required":["name","enabled"]}"#,
+            |args| {
+                let name = extract_arg(args, "name").unwrap_or_default();
+                let enabled = extract_arg(args, "enabled")
+                    .map(|v| v == "true")
+                    .unwrap_or(false);
+                feature::global().set(&name, enabled);
+                Ok(McpContent::json(format!(r#"{{"name":"{}","enabled":{}}}"#, name, enabled)))
+            },
+        )
+        // ── request log ──────────────────────────────────────────────────────
+        .tool(
+            "recent_requests",
+            "Last N requests recorded by the server (default 20, max 100)",
+            r#"{"type":"object","properties":{"n":{"type":"integer","description":"Number of entries to return (default 20)"}}}"#,
+            |args| {
+                let n = extract_arg(args, "n")
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(20)
+                    .min(100);
+                let entries: Vec<String> = request_log::global().recent(n)
+                    .into_iter()
+                    .map(|e| format!(
+                        r#"{{"ts":{},"method":"{}","path":"{}","status":{},"ip":"{}","latency_ms":{}}}"#,
+                        e.timestamp, e.method, e.path, e.status, e.client_ip, e.latency_ms,
+                    ))
+                    .collect();
+                Ok(McpContent::json(format!("[{}]", entries.join(","))))
+            },
+        )
+        .tool(
+            "recent_errors",
+            "Last N requests with a 4xx or 5xx status code (default 20, max 100)",
+            r#"{"type":"object","properties":{"n":{"type":"integer","description":"Number of error entries to return (default 20)"}}}"#,
+            |args| {
+                let n = extract_arg(args, "n")
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(20)
+                    .min(100);
+                let entries: Vec<String> = request_log::global().recent_errors(n)
+                    .into_iter()
+                    .map(|e| format!(
+                        r#"{{"ts":{},"method":"{}","path":"{}","status":{},"ip":"{}","latency_ms":{}}}"#,
+                        e.timestamp, e.method, e.path, e.status, e.client_ip, e.latency_ms,
+                    ))
+                    .collect();
+                Ok(McpContent::json(format!("[{}]", entries.join(","))))
             },
         )
 }

@@ -149,6 +149,11 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
         self
     }
 
+    /// Return a snapshot of all registered routes as `(method, pattern)` pairs.
+    pub fn route_entries(&self) -> Vec<crate::router::RouteInfo> {
+        self.router.route_entries()
+    }
+
     /// Attach an MCP server to this application. Requests that do not match
     /// the MCP endpoint (`POST /mcp`) are forwarded to `self`, so all
     /// previously registered routes remain active.

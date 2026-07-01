@@ -63,10 +63,14 @@ pub mod error;
 pub mod extract;
 pub mod ip_filter;
 pub mod macros;
+pub mod blocklist;
 pub mod cache;
 pub mod config_reload;
+pub mod feature;
+pub mod maintenance;
 pub mod metrics;
 pub mod mcp;
+pub mod request_log;
 pub mod otel;
 #[cfg(feature = "acme")]
 pub mod acme;

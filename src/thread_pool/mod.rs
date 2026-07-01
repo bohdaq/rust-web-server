@@ -1,8 +1,11 @@
 #[cfg(test)]
 mod tests;
 
-use std::{thread};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, mpsc, Mutex};
+use std::thread;
+
+use crate::metrics;
 
 pub struct ThreadPool {
     _workers: Vec<Worker>,
@@ -34,7 +37,11 @@ impl ThreadPool {
         where
             F: FnOnce() + Send  + 'static,
     {
-        let job = Box::new(f);
+        metrics::THREAD_POOL_QUEUED.fetch_add(1, Ordering::Relaxed);
+        let job = Box::new(move || {
+            metrics::THREAD_POOL_QUEUED.fetch_sub(1, Ordering::Relaxed);
+            f();
+        });
         let boxed_send = self.sender.send(job);
         if boxed_send.is_err() {
             eprintln!("unable to send job: {}", boxed_send.err().unwrap());

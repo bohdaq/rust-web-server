@@ -122,6 +122,14 @@ impl<A: Application> WithMiddleware<A> {
     }
 }
 
+impl<A: Application + Send + Sync + Clone + 'static> WithMiddleware<A> {
+    /// Attach an MCP server that handles `POST /mcp`; all other requests fall
+    /// through to this middleware stack.
+    pub fn mcp(self, name: impl Into<String>, version: impl Into<String>) -> crate::mcp::McpServer {
+        crate::mcp::McpServer::new(name, version).wrap(self)
+    }
+}
+
 impl<A: Clone> Clone for WithMiddleware<A> {
     fn clone(&self) -> Self {
         WithMiddleware { inner: self.inner.clone(), layers: self.layers.clone() }

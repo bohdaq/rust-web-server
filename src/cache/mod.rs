@@ -28,7 +28,8 @@
 mod tests;
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::application::Application;
@@ -95,8 +96,15 @@ impl CacheStore {
 ///
 /// Construct with [`CacheLayer::memory`] and configure with the builder methods
 /// [`ttl`](CacheLayer::ttl) and [`vary_by_header`](CacheLayer::vary_by_header).
+///
+/// `CacheLayer` is cheaply `Clone`-able — clones share the same underlying
+/// store, which lets you keep a handle for cache stats and invalidation while
+/// the other clone is used as middleware.
+#[derive(Clone)]
 pub struct CacheLayer {
-    store: OnceLock<Mutex<CacheStore>>,
+    store: Arc<Mutex<CacheStore>>,
+    hits: Arc<AtomicU64>,
+    misses: Arc<AtomicU64>,
     capacity: usize,
     ttl: Duration,
     vary_headers: Vec<String>,
@@ -108,11 +116,36 @@ impl CacheLayer {
     /// Default TTL is **60 seconds**. Adjust with [`.ttl()`](CacheLayer::ttl).
     pub fn memory(capacity: usize) -> Self {
         CacheLayer {
-            store: OnceLock::new(),
+            store: Arc::new(Mutex::new(CacheStore::new())),
+            hits: Arc::new(AtomicU64::new(0)),
+            misses: Arc::new(AtomicU64::new(0)),
             capacity,
             ttl: Duration::from_secs(60),
             vary_headers: vec![],
         }
+    }
+
+    /// Number of cache hits since the cache was created.
+    pub fn hits(&self) -> u64 {
+        self.hits.load(Ordering::Relaxed)
+    }
+
+    /// Number of cache misses since the cache was created.
+    pub fn misses(&self) -> u64 {
+        self.misses.load(Ordering::Relaxed)
+    }
+
+    /// Current number of entries in the store (including potentially expired ones
+    /// that haven't been purged yet).
+    pub fn size(&self) -> usize {
+        self.store.lock().unwrap().entries.len()
+    }
+
+    /// Remove all entries from the cache.
+    pub fn clear(&self) {
+        let mut guard = self.store.lock().unwrap();
+        guard.entries.clear();
+        guard.order.clear();
     }
 
     /// Set the time-to-live for cached entries.
@@ -140,7 +173,7 @@ impl CacheLayer {
     }
 
     fn store(&self) -> &Mutex<CacheStore> {
-        self.store.get_or_init(|| Mutex::new(CacheStore::new()))
+        &self.store
     }
 
     /// Build a cache key from the request URI and any configured vary headers.
@@ -218,9 +251,11 @@ impl Middleware for CacheLayer {
             // Check for a valid cache hit.
             let guard = self.store().lock().unwrap();
             if let Some(entry) = guard.get(&key, self.ttl) {
+                self.hits.fetch_add(1, Ordering::Relaxed);
                 return Ok(Self::cached_response(entry));
             }
         }
+        self.misses.fetch_add(1, Ordering::Relaxed);
 
         // Cache miss (or bypass): call the handler.
         let response = next.execute(request, connection)?;

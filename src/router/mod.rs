@@ -95,6 +95,13 @@ struct Route {
 ///         r
 ///     });
 /// ```
+/// A registered route entry returned by [`Router::route_entries`].
+#[derive(Clone)]
+pub struct RouteInfo {
+    pub method: String,
+    pub pattern: String,
+}
+
 #[derive(Clone)]
 pub struct Router {
     routes: Vec<Route>,
@@ -162,6 +169,29 @@ impl Router {
                 }
             })
             .collect()
+    }
+
+    /// Return a snapshot of all registered routes as `(method, pattern)` pairs.
+    ///
+    /// Patterns are reconstructed from parsed segments, so the output exactly
+    /// matches what was passed to `.get()`, `.post()`, etc. at registration time.
+    pub fn route_entries(&self) -> Vec<RouteInfo> {
+        self.routes.iter().map(|r| RouteInfo {
+            method: r.method.clone(),
+            pattern: Self::segments_to_pattern(&r.segments),
+        }).collect()
+    }
+
+    fn segments_to_pattern(segs: &[Segment]) -> String {
+        if segs.is_empty() {
+            return "/".to_string();
+        }
+        let parts: Vec<String> = segs.iter().map(|s| match s {
+            Segment::Literal(l) => l.clone(),
+            Segment::Param(n) => format!(":{}", n),
+            Segment::Wildcard(n) => format!("*{}", n),
+        }).collect();
+        format!("/{}", parts.join("/"))
     }
 
     /// Try to match `request` against registered routes in registration order.
