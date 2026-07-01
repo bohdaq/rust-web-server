@@ -118,7 +118,7 @@ The server uses `std::net::TcpListener` and a hand-rolled `ThreadPool` (`src/thr
 
 When built with the `http2` feature, the binary uses a `tokio` runtime and serves TLS via `rustls` (aws-lc-rs crypto backend). ALPN negotiation selects HTTP/2 (`h2` crate) or HTTP/1.1 per connection automatically. New modules:
 
-- `src/tls/mod.rs` — `SniCertResolver` implements `rustls::server::ResolvesServerCert`; `create_tls_acceptor_from_vhosts(vhosts, default_cert, default_key)` builds a multi-domain `TlsAcceptor` that picks the right cert per SNI hostname at handshake time. `create_tls_acceptor(cert, key)` is a backward-compat wrapper for single-cert deployments.
+- `src/tls/mod.rs` — `SniCertResolver` implements `rustls::server::ResolvesServerCert`; `create_tls_acceptor_from_vhosts(vhosts, default_cert, default_key)` builds a multi-domain `TlsAcceptor` that picks the right cert per SNI hostname at handshake time. `create_tls_acceptor(cert, key)` is a backward-compat wrapper for single-cert deployments. When `RWS_CONFIG_TLS_CLIENT_CA_FILE` is set, `load_client_verifier()` builds a `WebPkiClientVerifier` that enforces mTLS on both HTTPS and QUIC listeners.
 - `src/virtual_host/mod.rs` — `VirtualHostConfig { domain, cert_file, key_file }` carries per-domain cert configuration.
 - `src/h2_handler/mod.rs` — translates `h2::RecvStream` requests into `crate::request::Request`, calls `app.execute()`, translates `Response` back into H2 frames. The `Application` and `Controller` traits are untouched.
 - `src/server/mod.rs::Server::run_tls()` — async accept loop; extracts SNI hostname after the TLS handshake (`tls_stream.get_ref().1.server_name()`), routes by ALPN to `h2_handler::handle_connection` or `Server::process_h1_tls`, populates `ConnectionInfo::sni_hostname`.
@@ -134,3 +134,14 @@ When built with the `http3` feature (which implies `http2`), a second listener s
 - `src/h3_handler/mod.rs` — accepts QUIC connections, extracts SNI from `conn.handshake_data()?.downcast::<HandshakeData>()`, resolves H3 streams via `RequestResolver::resolve_request()`, calls `app.execute()`, sends H3 responses.
 - `src/server/mod.rs::Server::run_quic()` — binds a UDP endpoint on the same port as TCP; skipped silently if no cert is configured.
 - `main()` runs `Server::run_tls` and `Server::run_quic` concurrently via `tokio::join!`.
+
+### Proxy modules
+
+- `src/proxy/mod.rs` — `ReverseProxy` (HTTP/1.1 reverse proxy middleware); `H2ReverseProxy` (HTTP/2 upstream proxy, `http2` feature, uses `tokio::task::block_in_place` to bridge sync middleware into the tokio runtime); `GrpcProxy` (wraps `H2ReverseProxy`, filters on `Content-Type: application/grpc*`). `Backend::parse()` strips `h2://` and `http://` prefixes.
+- `src/tcp_proxy/mod.rs` — `TcpProxy` standalone L4 TCP proxy; `bind(addr)` blocks and accepts connections; `relay(client)` spawns two threads doing `std::io::copy` for bidirectional byte relay; round-robin backend selection via `AtomicUsize`.
+- `src/udp_proxy/mod.rs` — `UdpProxy` standalone UDP datagram proxy; per-datagram thread model; ephemeral socket per datagram connects to the backend; `set_read_timeout()` controls reply wait; round-robin backend selection.
+- `src/ws_proxy/mod.rs` — `WsProxy` standalone WebSocket proxy; reads the HTTP upgrade request from the client, connects to the backend, exchanges upgrade handshake, then relays raw bytes bidirectionally in a two-thread loop.
+
+### Rewrite middleware
+
+- `src/rewrite/mod.rs` — `RewriteLayer` implements `Middleware`; clones `Request` and applies `RequestRule` variants (header set/remove, URI set/strip-prefix/add-prefix) before dispatch, then applies `ResponseRule` variants (header set/remove, status override, body byte find-and-replace) on the way back. Private `replace_bytes()` does linear non-overlapping scan.

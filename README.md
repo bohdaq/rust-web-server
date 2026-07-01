@@ -107,6 +107,11 @@ cargo build --release --no-default-features --features http1
 - Per-route metrics — `MetricsLayer` middleware records `rws_route_requests_total{method,path,status}` counters and `rws_route_duration_seconds{method,path}` histograms into the global `/metrics` endpoint; query strings stripped from paths automatically
 - IP filter — `IpFilter::allow([...])` / `IpFilter::deny([...])` middleware; accepts exact IPv4 addresses and CIDR ranges
 - Reverse proxy — `ReverseProxy` middleware forwards requests to HTTP backends with round-robin load balancing, automatic failover, and `path_prefix` routing; returns `502 Bad Gateway` when all backends fail
+- HTTP/2 reverse proxy — `H2ReverseProxy` middleware forwards requests over HTTP/2 to backends; `GrpcProxy` wraps it to filter on `Content-Type: application/grpc*`; requires `http2` feature
+- L4 TCP proxy — `TcpProxy` standalone listener relays TCP bytes bidirectionally to round-robin backends; useful for any TCP protocol (databases, legacy services, plain HTTP)
+- UDP proxy — `UdpProxy` standalone datagram proxy; forwards each UDP packet to a backend and returns the reply; suitable for DNS, syslog, and similar request-reply protocols
+- WebSocket proxy — `WsProxy` standalone listener; performs the HTTP upgrade with clients, connects to backends, and relays WebSocket frames bidirectionally in a two-thread relay
+- mTLS — set `RWS_CONFIG_TLS_CLIENT_CA_FILE` to a PEM CA file to require client certificates; verifier built via `rustls` `WebPkiClientVerifier`; applies to both HTTPS and QUIC listeners
 - Request / response rewriting — `RewriteLayer` middleware rewrites request headers, URI (set, strip prefix, add prefix), response headers, status code, and response body bytes; composable with any middleware stack
 - Response caching — `CacheLayer` middleware; in-memory TTL cache for GET responses; vary-by-header for content negotiation; capacity-bounded with oldest-first eviction; `Age` header injected on hits; respects `Cache-Control: no-store` / `private`
 - Hot config reload — send `SIGHUP` (or `POST /admin/config/reload`) to re-apply CORS rules, rate-limit thresholds, log format, and request allocation size without restarting; `config_reload::current()` exposes a typed snapshot anywhere in the handler stack
@@ -197,7 +202,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 38 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, MCP server, virtual hosting / SNI routing, and request / response rewriting.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 44 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, MCP server, virtual hosting / SNI routing, request / response rewriting, L4 TCP proxy, UDP proxy, WebSocket proxy, HTTP/2 reverse proxy, gRPC proxy, and mTLS.
 
 ## AI adoption
 

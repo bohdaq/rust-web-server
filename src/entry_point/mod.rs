@@ -61,6 +61,12 @@ impl Config {
     pub const RWS_CONFIG_TLS_KEY_FILE: &'static str = "RWS_CONFIG_TLS_KEY_FILE";
     pub const RWS_CONFIG_TLS_KEY_FILE_DEFAULT_VALUE: &'static str = "";
 
+    /// Path to a PEM-encoded CA certificate used to verify client certificates (mTLS).
+    /// When set, the TLS handshake requires a valid client certificate signed by this CA.
+    /// Connections without a valid cert are rejected at the TLS layer (before any HTTP processing).
+    pub const RWS_CONFIG_TLS_CLIENT_CA_FILE: &'static str = "RWS_CONFIG_TLS_CLIENT_CA_FILE";
+    pub const RWS_CONFIG_TLS_CLIENT_CA_FILE_DEFAULT_VALUE: &'static str = "";
+
     /// When non-empty, a plain-HTTP listener on this port redirects all requests to HTTPS.
     /// Set to e.g. `"80"` when running on standard ports. Requires TLS to be configured.
     pub const RWS_CONFIG_HTTP_REDIRECT_PORT: &'static str = "RWS_CONFIG_HTTP_REDIRECT_PORT";

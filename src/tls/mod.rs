@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Arc;
-use rustls::ServerConfig;
+use rustls::{RootCertStore, ServerConfig};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::server::{ClientHello, ResolvesServerCert};
+use rustls::server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier};
 use rustls::sign::CertifiedKey;
 use tokio_rustls::TlsAcceptor;
 
@@ -69,9 +69,20 @@ pub fn create_tls_acceptor_from_vhosts(
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
     let resolver = SniCertResolver::build(vhosts, default_cert, default_key)?;
-    let mut config = ServerConfig::builder()
-        .with_no_client_auth()
-        .with_cert_resolver(Arc::new(resolver));
+
+    // mTLS: if RWS_CONFIG_TLS_CLIENT_CA_FILE is set, require a valid client cert.
+    let ca_path = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_CLIENT_CA_FILE)
+        .unwrap_or_default();
+    let mut config = if ca_path.is_empty() {
+        ServerConfig::builder()
+            .with_no_client_auth()
+            .with_cert_resolver(Arc::new(resolver))
+    } else {
+        let verifier = load_client_verifier(&ca_path)?;
+        ServerConfig::builder()
+            .with_client_cert_verifier(verifier)
+            .with_cert_resolver(Arc::new(resolver))
+    };
 
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
 
@@ -92,9 +103,19 @@ pub fn create_quinn_server_config_from_vhosts(
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
     let resolver = SniCertResolver::build(vhosts, default_cert, default_key)?;
-    let mut tls_config = ServerConfig::builder()
-        .with_no_client_auth()
-        .with_cert_resolver(Arc::new(resolver));
+
+    let ca_path = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_CLIENT_CA_FILE)
+        .unwrap_or_default();
+    let mut tls_config = if ca_path.is_empty() {
+        ServerConfig::builder()
+            .with_no_client_auth()
+            .with_cert_resolver(Arc::new(resolver))
+    } else {
+        let verifier = load_client_verifier(&ca_path)?;
+        ServerConfig::builder()
+            .with_client_cert_verifier(verifier)
+            .with_cert_resolver(Arc::new(resolver))
+    };
 
     tls_config.max_early_data_size = u32::MAX;
     tls_config.alpn_protocols = vec![b"h3".to_vec()];
@@ -138,4 +159,17 @@ fn load_key(path: &str) -> Result<PrivateKeyDer<'static>, String> {
         .map_err(|e| format!("failed to parse key from '{}': {}", path, e))?
         .ok_or_else(|| format!("no private key found in '{}'", path))
         .map(|k| k.clone_key())
+}
+
+fn load_client_verifier(ca_path: &str) -> Result<Arc<dyn rustls::server::danger::ClientCertVerifier>, String> {
+    let certs = load_certs(ca_path)?;
+    let mut root_store = RootCertStore::empty();
+    for cert in certs {
+        root_store
+            .add(cert)
+            .map_err(|e| format!("invalid CA cert in '{}': {}", ca_path, e))?;
+    }
+    WebPkiClientVerifier::builder(Arc::new(root_store))
+        .build()
+        .map_err(|e| format!("client cert verifier build error: {}", e))
 }

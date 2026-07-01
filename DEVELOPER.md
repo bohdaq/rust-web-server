@@ -121,6 +121,11 @@ The crate exposes its core types so you can compose them in your own server or t
 | `TraceContext` | `otel` | Parsed W3C `traceparent` value. `TraceContext::parse(header)` / `ctx.as_header(span_id)`. |
 | `SpanData` | `otel` | A completed span ready for export. Contains trace/span/parent IDs, timing, HTTP attributes, and OTel status code. |
 | `StdoutExporter` / `OtlpHttpExporter` | `otel` | Built-in exporters. `OtlpHttpExporter::new(endpoint, service_name, service_version)` posts OTLP JSON. |
+| `H2ReverseProxy` | `proxy` | HTTP/2 upstream reverse proxy middleware. Round-robin backend selection; `h2://` scheme prefix supported. Requires `http2` feature. |
+| `GrpcProxy` | `proxy` | gRPC reverse proxy middleware — filters on `Content-Type: application/grpc*` and forwards over HTTP/2. Requires `http2` feature. |
+| `TcpProxy` | `tcp_proxy` | Standalone L4 TCP proxy. Accepts connections on a local address and relays bytes bidirectionally to round-robin backends. |
+| `UdpProxy` | `udp_proxy` | Standalone UDP proxy (request-reply model). Forwards each datagram to a backend and returns the reply to the original client. |
+| `WsProxy` | `ws_proxy` | Standalone WebSocket proxy. Listens on a local address, upgrades client connections, and relays WebSocket frames bidirectionally to backends. |
 
 ---
 
@@ -1776,6 +1781,122 @@ let app = App::new()
 ```
 
 Rules are applied in the order they are registered. The incoming `Request` is cloned before modification — the original is never mutated, so other middleware layers in the stack see the unmodified request.
+
+---
+
+### 39. L4 TCP proxy
+
+`TcpProxy` is a standalone listener that accepts TCP connections and relays bytes bidirectionally to a pool of backends. It is useful for proxying any TCP protocol — databases, legacy services, or plain HTTP/1.1 — without parsing the stream.
+
+```rust
+use rust_web_server::tcp_proxy::TcpProxy;
+
+// Listens on 0.0.0.0:5432, round-robins across two Postgres backends.
+TcpProxy::new(["10.0.0.10:5432", "10.0.0.11:5432"])
+    .connect_timeout_ms(500)
+    .bind("0.0.0.0:5432")
+    .expect("TCP proxy failed");
+```
+
+`bind()` blocks until an error occurs. Run it in a separate thread alongside your HTTP server.
+
+---
+
+### 40. UDP proxy
+
+`UdpProxy` is a request-reply UDP proxy. Each incoming datagram is forwarded to a backend; the reply is returned to the original sender. Suitable for DNS, syslog, and other datagram protocols.
+
+```rust
+use rust_web_server::udp_proxy::UdpProxy;
+
+UdpProxy::new(["10.0.0.10:53", "10.0.0.11:53"])
+    .reply_timeout_ms(2000)
+    .buffer_size(8192)
+    .bind("0.0.0.0:53")
+    .expect("UDP proxy failed");
+```
+
+`bind()` blocks indefinitely. Run it in a separate thread.
+
+---
+
+### 41. WebSocket proxy
+
+`WsProxy` listens for HTTP upgrade requests, performs the WebSocket handshake with the client, connects to a backend, and relays frames bidirectionally in a two-thread relay loop.
+
+```rust
+use rust_web_server::ws_proxy::WsProxy;
+
+WsProxy::new(["ws-backend:8080"])
+    .connect_timeout_ms(500)
+    .read_timeout_ms(30_000)
+    .bind("0.0.0.0:9000")
+    .expect("WS proxy failed");
+```
+
+`bind()` blocks indefinitely. The proxy does raw byte relay after the handshake, so any WebSocket subprotocol passes through transparently.
+
+---
+
+### 42. HTTP/2 reverse proxy
+
+`H2ReverseProxy` forwards requests to HTTP/2 backends. It works as a `Middleware` in the normal stack; `block_in_place` bridges the sync handler into the tokio runtime. Requires the `http2` feature.
+
+```rust
+#[cfg(feature = "http2")]
+{
+    use rust_web_server::app::App;
+    use rust_web_server::core::New;
+    use rust_web_server::proxy::H2ReverseProxy;
+
+    let app = App::new()
+        .wrap(H2ReverseProxy::new(["h2://backend1:8443", "h2://backend2:8443"])
+            .path_prefix("/api")
+            .connect_timeout_ms(1000)
+            .read_timeout_ms(5000));
+}
+```
+
+Requests whose URI does not start with `path_prefix` pass through to the next middleware. `X-Forwarded-For` and `Via` are injected automatically.
+
+---
+
+### 43. gRPC proxy
+
+`GrpcProxy` wraps `H2ReverseProxy` and filters on `Content-Type: application/grpc*`. All gRPC traffic is forwarded over HTTP/2; non-gRPC requests fall through to the next handler. Requires the `http2` feature.
+
+```rust
+#[cfg(feature = "http2")]
+{
+    use rust_web_server::app::App;
+    use rust_web_server::core::New;
+    use rust_web_server::proxy::GrpcProxy;
+
+    let app = App::new()
+        .wrap(GrpcProxy::new(["grpc-service:50051"])
+            .connect_timeout_ms(1000)
+            .read_timeout_ms(10_000));
+}
+```
+
+---
+
+### 44. mTLS (mutual TLS / client certificate authentication)
+
+Set `RWS_CONFIG_TLS_CLIENT_CA_FILE` to the path of a PEM-encoded CA certificate file. The server will require every client to present a certificate signed by that CA; connections without a valid certificate are rejected at the TLS handshake level.
+
+```bash
+export RWS_CONFIG_TLS_CLIENT_CA_FILE=/etc/pki/ca.crt
+cargo run -- --tls-cert-file=server.crt --tls-key-file=server.key
+```
+
+Or in `rws.config.toml`:
+
+```toml
+tls_client_ca_file = "/etc/pki/ca.crt"
+```
+
+The setting applies to both HTTPS (HTTP/2 + HTTP/1.1) and QUIC (HTTP/3) listeners. When `RWS_CONFIG_TLS_CLIENT_CA_FILE` is empty or unset the server performs no client certificate verification (default behaviour).
 
 ---
 

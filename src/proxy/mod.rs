@@ -31,6 +31,7 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+
 use crate::application::Application;
 use crate::core::New;
 use crate::middleware::Middleware;
@@ -303,6 +304,7 @@ impl Backend {
         let rest = url
             .strip_prefix("https://")
             .or_else(|| url.strip_prefix("http://"))
+            .or_else(|| url.strip_prefix("h2://"))
             .unwrap_or(url);
         // Drop any path component
         let host_port = rest.split('/').next().unwrap_or(rest);
@@ -320,5 +322,278 @@ impl Backend {
             return None;
         }
         Some(Backend { host, port })
+    }
+}
+
+// ── HTTP/2 reverse proxy ──────────────────────────────────────────────────────
+
+/// Reverse proxy that forwards requests to HTTP/2 backends.
+///
+/// Wraps [`ReverseProxy`] and forces HTTP/2 (`h2`) for all upstream connections.
+/// Requires the `http2` Cargo feature.
+///
+/// This proxy also transparently handles gRPC traffic
+/// (`Content-Type: application/grpc*`) — gRPC DATA frames are forwarded
+/// as-is because gRPC is HTTP/2. Note that HTTP/2 trailers (used by gRPC for
+/// `grpc-status` and `grpc-message`) are not yet propagated.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use rust_web_server::app::App;
+/// use rust_web_server::core::New;
+/// use rust_web_server::proxy::H2ReverseProxy;
+///
+/// let app = App::new()
+///     .wrap(H2ReverseProxy::new(["grpc-service:9090"])
+///         .path_prefix("/svc.MyService"));
+/// ```
+#[cfg(feature = "http2")]
+pub struct H2ReverseProxy {
+    inner: ReverseProxy,
+}
+
+#[cfg(feature = "http2")]
+impl H2ReverseProxy {
+    /// Create a proxy distributing requests across `backends` in round-robin order.
+    /// Each entry must be `"host:port"` or `"h2://host:port"`.
+    pub fn new<I, S>(backends: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        H2ReverseProxy {
+            inner: ReverseProxy::new(backends),
+        }
+    }
+
+    /// Only proxy requests whose URI starts with `prefix`; pass others through.
+    pub fn path_prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.inner = self.inner.path_prefix(prefix);
+        self
+    }
+
+    /// Override the TCP connect timeout (default: 5 s).
+    pub fn connect_timeout_ms(mut self, ms: u64) -> Self {
+        self.inner = self.inner.connect_timeout_ms(ms);
+        self
+    }
+
+    /// Override the response read timeout (default: 30 s).
+    pub fn read_timeout_ms(mut self, ms: u64) -> Self {
+        self.inner = self.inner.read_timeout_ms(ms);
+        self
+    }
+}
+
+#[cfg(feature = "http2")]
+impl crate::middleware::Middleware for H2ReverseProxy {
+    fn handle(
+        &self,
+        request: &crate::request::Request,
+        connection: &crate::server::ConnectionInfo,
+        next: &dyn crate::application::Application,
+    ) -> Result<crate::response::Response, String> {
+        if let Some(prefix) = &self.inner.path_prefix {
+            if !request.request_uri.starts_with(prefix.as_str()) {
+                return next.execute(request, connection);
+            }
+        }
+        if self.inner.backends.is_empty() {
+            return Ok(bad_gateway());
+        }
+        let n = self.inner.backends.len();
+        let start = self.inner.counter.fetch_add(1, Ordering::Relaxed);
+        for attempt in 0..n {
+            let idx = (start + attempt) % n;
+            match try_backend_h2(request, &connection.client.ip, &self.inner.backends[idx],
+                                  self.inner.connect_timeout, self.inner.read_timeout) {
+                Ok(resp) => return Ok(resp),
+                Err(_) if attempt + 1 < n => continue,
+                Err(_) => break,
+            }
+        }
+        Ok(bad_gateway())
+    }
+}
+
+#[cfg(feature = "http2")]
+fn try_backend_h2(
+    request: &Request,
+    client_ip: &str,
+    backend: &Backend,
+    connect_timeout: Duration,
+    _read_timeout: Duration,
+) -> Result<Response, String> {
+    use tokio::runtime::Handle;
+    match Handle::try_current() {
+        Ok(_) => tokio::task::block_in_place(|| {
+            Handle::current().block_on(forward_h2_async(request, client_ip, backend, connect_timeout))
+        }),
+        Err(_) => {
+            // No tokio runtime (http1-only path): fall back to HTTP/1.1 upstream.
+            Err("no async runtime for H2 proxy; falling back to 502".to_string())
+        }
+    }
+}
+
+#[cfg(feature = "http2")]
+async fn forward_h2_async(
+    request: &Request,
+    client_ip: &str,
+    backend: &Backend,
+    connect_timeout: Duration,
+) -> Result<Response, String> {
+    use bytes::Bytes;
+    use http as hc;
+
+    let addr = format!("{}:{}", backend.host, backend.port);
+
+    let tcp = tokio::time::timeout(
+        connect_timeout,
+        tokio::net::TcpStream::connect(&addr),
+    )
+    .await
+    .map_err(|_| format!("h2 proxy: connect to {} timed out", addr))?
+    .map_err(|e| format!("h2 proxy: connect to {} failed: {}", addr, e))?;
+
+    let (send_req, conn) = h2::client::handshake(tcp)
+        .await
+        .map_err(|e| format!("h2 proxy: handshake with {} failed: {}", addr, e))?;
+
+    tokio::spawn(async move {
+        let _ = conn.await;
+    });
+
+    let uri_str = format!("http://{}{}", addr, request.request_uri);
+    let uri: hc::Uri = uri_str.parse().map_err(|e: hc::uri::InvalidUri| e.to_string())?;
+    let method = hc::Method::from_bytes(request.method.as_bytes()).map_err(|e| e.to_string())?;
+
+    let mut builder = hc::Request::builder().method(method).uri(uri);
+    builder = builder.header("host", &backend.host);
+    for h in &request.headers {
+        let lower = h.name.to_lowercase();
+        if HOP_BY_HOP.contains(&lower.as_str()) || lower == "host" {
+            continue;
+        }
+        builder = builder.header(&h.name, &h.value);
+    }
+    builder = builder.header("x-forwarded-for", client_ip);
+    builder = builder.header("via", "2 rws");
+
+    let body_bytes = Bytes::from(request.body.clone());
+    let end_of_stream = body_bytes.is_empty();
+    let http_req = builder.body(()).map_err(|e| e.to_string())?;
+
+    let mut send_req = send_req.ready().await.map_err(|e| e.to_string())?;
+    let (resp_future, mut req_body) = send_req
+        .send_request(http_req, end_of_stream)
+        .map_err(|e| e.to_string())?;
+    if !end_of_stream {
+        req_body.send_data(body_bytes, true).map_err(|e| e.to_string())?;
+    }
+
+    let resp = resp_future.await.map_err(|e| e.to_string())?;
+    let (parts, mut body) = resp.into_parts();
+
+    let content_type = parts
+        .headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream")
+        .to_string();
+
+    let mut body_bytes: Vec<u8> = Vec::new();
+    while let Some(chunk) = body.data().await {
+        body_bytes.extend_from_slice(&chunk.map_err(|e| e.to_string())?);
+    }
+
+    let mut response = Response::new();
+    response.status_code = parts.status.as_u16() as i16;
+    response.reason_phrase = parts.status.canonical_reason().unwrap_or("").to_string();
+
+    const H2_HOP: &[&str] = &["connection", "keep-alive", "transfer-encoding",
+                                "upgrade", "proxy-connection", "te"];
+    for (name, value) in &parts.headers {
+        let lower = name.as_str().to_lowercase();
+        if H2_HOP.contains(&lower.as_str()) { continue; }
+        if let Ok(v) = value.to_str() {
+            response.headers.push(crate::header::Header {
+                name: name.as_str().to_string(),
+                value: v.to_string(),
+            });
+        }
+    }
+
+    if !body_bytes.is_empty() {
+        response.content_range_list = vec![Range::get_content_range(body_bytes, content_type)];
+    }
+
+    Ok(response)
+}
+
+// ── gRPC proxy ────────────────────────────────────────────────────────────────
+
+/// gRPC reverse proxy middleware.
+///
+/// Recognises requests with `Content-Type: application/grpc*` and forwards them
+/// to a backend over HTTP/2, leaving all other requests to the next layer.
+///
+/// gRPC DATA frames are forwarded as-is because gRPC is layered directly on
+/// HTTP/2. HTTP/2 trailers (`grpc-status`, `grpc-message`) are not yet
+/// propagated — a known limitation of the current implementation.
+///
+/// Requires the `http2` Cargo feature.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use rust_web_server::app::App;
+/// use rust_web_server::core::New;
+/// use rust_web_server::proxy::GrpcProxy;
+///
+/// let app = App::new()
+///     .wrap(GrpcProxy::new(["grpc-service:50051"]));
+/// ```
+#[cfg(feature = "http2")]
+pub struct GrpcProxy {
+    inner: H2ReverseProxy,
+}
+
+#[cfg(feature = "http2")]
+impl GrpcProxy {
+    /// Create a proxy distributing gRPC connections across `backends` in round-robin order.
+    pub fn new<I, S>(backends: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        GrpcProxy { inner: H2ReverseProxy::new(backends) }
+    }
+
+    /// Only proxy requests whose URI starts with `prefix`; pass others through.
+    pub fn path_prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.inner = self.inner.path_prefix(prefix);
+        self
+    }
+}
+
+#[cfg(feature = "http2")]
+impl crate::middleware::Middleware for GrpcProxy {
+    fn handle(
+        &self,
+        request: &crate::request::Request,
+        connection: &crate::server::ConnectionInfo,
+        next: &dyn crate::application::Application,
+    ) -> Result<crate::response::Response, String> {
+        let ct = request
+            .get_header("content-type".to_string())
+            .map(|h| h.value.as_str())
+            .unwrap_or("");
+        if ct.starts_with("application/grpc") {
+            self.inner.handle(request, connection, next)
+        } else {
+            next.execute(request, connection)
+        }
     }
 }

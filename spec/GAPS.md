@@ -88,14 +88,14 @@ No built-in log rotation or external log shipping (syslog, journald). Relies on 
 | Protocol | nginx | Traefik | Caddy | rws |
 |---|---|---|---|---|
 | HTTP/1.1 reverse proxy | ✅ | ✅ | ✅ | ✅ |
-| HTTP/2 reverse proxy | ✅ | ✅ | ✅ | ❌ |
-| TCP proxy (L4) | ✅ | ✅ | ✅ | ❌ |
-| UDP proxy | ✅ | ✅ | ❌ | ❌ |
+| HTTP/2 reverse proxy | ✅ | ✅ | ✅ | ✅ (`H2ReverseProxy`, `http2` feature) |
+| TCP proxy (L4) | ✅ | ✅ | ✅ | ✅ (`TcpProxy`) |
+| UDP proxy | ✅ | ✅ | ❌ | ✅ (`UdpProxy`, request-reply) |
 | WebSocket (server) | ✅ | ✅ | ✅ | ✅ |
-| WebSocket proxy | ✅ | ✅ | ✅ | ❌ |
-| gRPC proxy | ✅ | ✅ | ✅ | ❌ |
+| WebSocket proxy | ✅ | ✅ | ✅ | ✅ (`WsProxy`, standalone listener) |
+| gRPC proxy | ✅ | ✅ | ✅ | ✅ (`GrpcProxy`, `http2` feature; trailers pending) |
 | Server-Sent Events | ✅ | ✅ | ✅ | ✅ |
-| mTLS (client certificates) | ✅ | ✅ | ✅ | ❌ |
+| mTLS (client certificates) | ✅ | ✅ | ✅ | ✅ (`RWS_CONFIG_TLS_CLIENT_CA_FILE`) |
 
 ---
 

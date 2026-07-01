@@ -8,6 +8,10 @@ request-allocation-size-in-bytes = 12000 # In bytes, how much memory to allocate
 # tls_cert_file = '/path/to/cert.pem'
 # tls_key_file  = '/path/to/key.pem'
 
+# mTLS — require clients to present a certificate signed by this CA.
+# Leave unset to disable client certificate verification (default).
+# tls_client_ca_file = '/path/to/ca.pem'
+
 # Virtual hosting / SNI routing — one [[virtual_host]] block per domain.
 # The cert above is the fallback when no virtual host matches or SNI is absent.
 # [[virtual_host]]
