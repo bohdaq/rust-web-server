@@ -20,6 +20,7 @@ use crate::application::Application;
 use crate::controller::Controller;
 use crate::core::New;
 use crate::header::Header;
+use crate::mcp::McpServer;
 use crate::middleware::{Middleware, WithMiddleware};
 use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
@@ -184,6 +185,31 @@ impl App {
     /// ```
     pub fn wrap<M: Middleware + 'static>(self, layer: M) -> WithMiddleware<App> {
         WithMiddleware::new(self).wrap(layer)
+    }
+
+    /// Create an MCP server. Tools, resources, and prompts are registered on
+    /// the returned [`McpServer`]; unmatched requests fall through to the
+    /// built-in controller chain automatically.
+    ///
+    /// Consistent with [`App::with_state`] and [`App::with_async_state`]:
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::mcp::{McpContent, extract_arg};
+    ///
+    /// let app = App::mcp("my-server", "1.0")
+    ///     .tool(
+    ///         "echo",
+    ///         "Echo text back",
+    ///         r#"{"type":"object","properties":{"text":{"type":"string"}}}"#,
+    ///         |args| {
+    ///             let t = extract_arg(args, "text").unwrap_or_default();
+    ///             Ok(McpContent::text(t))
+    ///         },
+    ///     );
+    /// ```
+    pub fn mcp(name: impl Into<String>, version: impl Into<String>) -> McpServer {
+        McpServer::new(name, version)
     }
 
     /// Create an async state-aware application (requires the `http2` feature).
