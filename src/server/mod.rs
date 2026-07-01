@@ -391,6 +391,7 @@ impl Server {
                 port: server_port,
             },
             request_size: get_request_allocation_size(),
+            sni_hostname: None,
         };
 
         if let Err(e) = stream.set_read_timeout(Some(Duration::from_secs(30))) {
@@ -418,7 +419,10 @@ pub struct ConnectionInfo {
     /// Server (local) address.
     pub server: Address,
     /// Bytes allocated for reading the request.
-    pub request_size: i64
+    pub request_size: i64,
+    /// SNI hostname sent by the client during the TLS handshake, if any.
+    /// `None` for plain-HTTP connections or when the client omits SNI.
+    pub sni_hostname: Option<String>,
 }
 
 /// IP address and port pair.
@@ -488,7 +492,7 @@ impl Server {
         pool: ThreadPool,
         app: impl Application + Send + 'static + Clone,
     ) {
-        use crate::tls::create_tls_acceptor;
+        use crate::tls::create_tls_acceptor_from_vhosts;
         use crate::h2_handler;
 
         let cert_path = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_CERT_FILE)
@@ -502,7 +506,8 @@ impl Server {
             return;
         }
 
-        let mut tls_acceptor = match create_tls_acceptor(&cert_path, &key_path) {
+        let vhosts = crate::entry_point::get_virtual_hosts();
+        let mut tls_acceptor = match create_tls_acceptor_from_vhosts(&vhosts, &cert_path, &key_path) {
             Ok(a) => a,
             Err(e) => {
                 eprintln!("TLS setup failed: {}", e);
@@ -528,16 +533,16 @@ impl Server {
                             tokio::spawn(async move {
                                 match acceptor.accept(tcp_stream).await {
                                     Ok(tls_stream) => {
-                                        let protocol = tls_stream
-                                            .get_ref()
-                                            .1
+                                        let server_conn = tls_stream.get_ref().1;
+                                        let sni = server_conn.server_name().map(|s| s.to_string());
+                                        let protocol = server_conn
                                             .alpn_protocol()
                                             .map(|p| p.to_vec());
 
                                         match protocol.as_deref() {
                                             Some(b"h2") => {
                                                 if let Err(e) =
-                                                    h2_handler::handle_connection(tls_stream, peer_addr, app)
+                                                    h2_handler::handle_connection(tls_stream, peer_addr, sni, app)
                                                         .await
                                                 {
                                                     eprintln!("H2 connection error: {}", e);
@@ -545,7 +550,7 @@ impl Server {
                                             }
                                             _ => {
                                                 if let Err(e) =
-                                                    Server::process_h1_tls(tls_stream, peer_addr, app).await
+                                                    Server::process_h1_tls(tls_stream, peer_addr, sni, app).await
                                                 {
                                                     eprintln!("H1 TLS error: {}", e);
                                                 }
@@ -571,10 +576,10 @@ impl Server {
                 }
                 _ = sighup() => {
                     crate::config_reload::reload();
-                    // Reload TLS cert in place — picks up renewed certificates (e.g. from ACME).
-                    if let Ok(new_acceptor) = create_tls_acceptor(&cert_path, &key_path) {
+                    let vhosts = crate::entry_point::get_virtual_hosts();
+                    if let Ok(new_acceptor) = create_tls_acceptor_from_vhosts(&vhosts, &cert_path, &key_path) {
                         tls_acceptor = new_acceptor;
-                        println!("[TLS] Certificate reloaded from '{}'.", cert_path);
+                        println!("[TLS] Certificates reloaded ({} virtual hosts).", vhosts.len());
                     }
                 }
             }
@@ -696,6 +701,7 @@ impl Server {
     async fn process_h1_tls(
         mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
         peer_addr: std::net::SocketAddr,
+        sni_hostname: Option<String>,
         app: impl Application,
     ) -> Result<(), String> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -729,6 +735,7 @@ impl Server {
                 port: server_port,
             },
             request_size: request_allocation_size,
+            sni_hostname,
         };
 
         let mut response = match app.execute(&request, &connection) {
@@ -773,7 +780,7 @@ impl Server {
     pub async fn run_quic(
         app: impl Application + Send + 'static + Clone,
     ) {
-        use crate::tls::create_quinn_server_config;
+        use crate::tls::create_quinn_server_config_from_vhosts;
         use crate::h3_handler;
 
         let cert_path = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_CERT_FILE)
@@ -785,7 +792,8 @@ impl Server {
             return;
         }
 
-        let server_config = match create_quinn_server_config(&cert_path, &key_path) {
+        let vhosts = crate::entry_point::get_virtual_hosts();
+        let server_config = match create_quinn_server_config_from_vhosts(&vhosts, &cert_path, &key_path) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("QUIC TLS setup failed: {}", e);

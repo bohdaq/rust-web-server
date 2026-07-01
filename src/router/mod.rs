@@ -105,11 +105,21 @@ pub struct RouteInfo {
 #[derive(Clone)]
 pub struct Router {
     routes: Vec<Route>,
+    /// When set, `handle()` only matches if the request's SNI hostname (or
+    /// `Host` header for plain HTTP) equals this value.
+    host: Option<String>,
 }
 
 impl Router {
     pub fn new() -> Self {
-        Router { routes: Vec::new() }
+        Router { routes: Vec::new(), host: None }
+    }
+
+    /// Restrict this router to requests whose SNI hostname (TLS) or `Host`
+    /// header (plain HTTP) matches `host`.  Call before registering routes.
+    pub fn with_host(mut self, host: &str) -> Self {
+        self.host = Some(host.to_string());
+        self
     }
 
     /// Register a `GET` handler for `pattern`.
@@ -198,7 +208,21 @@ impl Router {
     ///
     /// Returns `Some(response)` on the first match, `None` if no route matches.
     /// The query string is stripped before matching; only the path is used.
+    ///
+    /// When `.with_host()` is set, this returns `None` immediately unless the
+    /// request's SNI hostname (TLS) or `Host` header (plain HTTP) matches.
     pub fn handle(&self, request: &Request, connection: &ConnectionInfo) -> Option<Response> {
+        if let Some(required_host) = &self.host {
+            let actual = connection.sni_hostname.as_deref().or_else(|| {
+                request.headers.iter()
+                    .find(|h| h.name.eq_ignore_ascii_case("host"))
+                    .map(|h| h.value.as_str())
+            });
+            if actual != Some(required_host.as_str()) {
+                return None;
+            }
+        }
+
         let path = request.request_uri.split('?').next().unwrap_or(&request.request_uri);
         let path_segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
 

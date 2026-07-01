@@ -13,6 +13,7 @@ fn make_connection() -> ConnectionInfo {
         client: Address { ip: "127.0.0.1".to_string(), port: 12345 },
         server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 4096,
+    sni_hostname: None,
     }
 }
 

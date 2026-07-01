@@ -64,7 +64,7 @@ All config is read at startup into process environment variables (`RWS_CONFIG_*`
 - `Request` (`src/request/mod.rs`) — method, request_uri, http_version, headers, body (raw bytes)
 - `Response` (`src/response/mod.rs`) — status code, headers, body as `Vec<ContentRange>`
 - `Header` (`src/header/mod.rs`) — name/value pair; constants for all standard header names
-- `ConnectionInfo` (`src/server/mod.rs`) — client/server IP+port + request allocation size, passed into every controller
+- `ConnectionInfo` (`src/server/mod.rs`) — client/server IP+port, request allocation size, and `sni_hostname: Option<String>` (SNI hostname from TLS handshake, `None` for plain HTTP), passed into every controller
 
 ### HTTP version constants
 
@@ -73,6 +73,8 @@ All config is read at startup into process environment variables (`RWS_CONFIG_*`
 ### Dynamic router
 
 `src/router/mod.rs` provides `Router` — a fluent, path-based router with named parameters and wildcards. Register handlers with `.get()`, `.post()`, `.put()`, `.patch()`, `.delete()`, then call `router.handle(request, connection)` from inside `Application::execute`. Pattern syntax: `:name` for a named segment, `*name` for a trailing wildcard. `PathParams::get(name)` retrieves extracted values.
+
+Call `.with_host("example.com")` before registering routes to restrict a `Router` to requests whose SNI hostname (TLS) or `Host` header (plain HTTP) matches that value — the foundation for virtual-host routing.
 
 ### Typed extractors
 
@@ -116,17 +118,19 @@ The server uses `std::net::TcpListener` and a hand-rolled `ThreadPool` (`src/thr
 
 When built with the `http2` feature, the binary uses a `tokio` runtime and serves TLS via `rustls` (aws-lc-rs crypto backend). ALPN negotiation selects HTTP/2 (`h2` crate) or HTTP/1.1 per connection automatically. New modules:
 
-- `src/tls/mod.rs` — builds the `TlsAcceptor` from PEM cert/key files; set `RWS_CONFIG_TLS_CERT_FILE` and `RWS_CONFIG_TLS_KEY_FILE` env vars or in `rws.config.toml`.
+- `src/tls/mod.rs` — `SniCertResolver` implements `rustls::server::ResolvesServerCert`; `create_tls_acceptor_from_vhosts(vhosts, default_cert, default_key)` builds a multi-domain `TlsAcceptor` that picks the right cert per SNI hostname at handshake time. `create_tls_acceptor(cert, key)` is a backward-compat wrapper for single-cert deployments.
+- `src/virtual_host/mod.rs` — `VirtualHostConfig { domain, cert_file, key_file }` carries per-domain cert configuration.
 - `src/h2_handler/mod.rs` — translates `h2::RecvStream` requests into `crate::request::Request`, calls `app.execute()`, translates `Response` back into H2 frames. The `Application` and `Controller` traits are untouched.
-- `src/server/mod.rs::Server::run_tls()` — async accept loop; routes each TLS connection by ALPN to either `h2_handler::handle_connection` or `Server::process_h1_tls`.
+- `src/server/mod.rs::Server::run_tls()` — async accept loop; extracts SNI hostname after the TLS handshake (`tls_stream.get_ref().1.server_name()`), routes by ALPN to `h2_handler::handle_connection` or `Server::process_h1_tls`, populates `ConnectionInfo::sni_hostname`.
 - HTTP/1.1 TLS responses include `Alt-Svc: h3=":PORT"` (or `h2` when http3 feature is absent) to advertise protocol availability.
 - Forbidden HTTP/2 headers (`connection`, `keep-alive`, `transfer-encoding`, `upgrade`, `proxy-connection`, `te`) are stripped from responses before sending.
+- SIGHUP reloads all virtual host certs alongside the default cert without restarting.
 
 ### HTTP/3 feature (`--features http3`, default)
 
 When built with the `http3` feature (which implies `http2`), a second listener starts over UDP using QUIC (`quinn` crate). HTTP/3 uses `h3` + `h3-quinn`. New additions:
 
-- `src/tls/mod.rs::create_quinn_server_config()` — builds a `quinn::ServerConfig` from the same PEM cert/key, with ALPN set to `h3`.
-- `src/h3_handler/mod.rs` — accepts QUIC connections, resolves H3 streams via `RequestResolver::resolve_request()`, calls `app.execute()`, sends H3 responses.
+- `src/tls/mod.rs::create_quinn_server_config_from_vhosts()` — builds a multi-domain `quinn::ServerConfig` via the same `SniCertResolver`; `create_quinn_server_config()` is the single-cert wrapper.
+- `src/h3_handler/mod.rs` — accepts QUIC connections, extracts SNI from `conn.handshake_data()?.downcast::<HandshakeData>()`, resolves H3 streams via `RequestResolver::resolve_request()`, calls `app.execute()`, sends H3 responses.
 - `src/server/mod.rs::Server::run_quic()` — binds a UDP endpoint on the same port as TCP; skipped silently if no cert is configured.
 - `main()` runs `Server::run_tls` and `Server::run_quic` concurrently via `tokio::join!`.

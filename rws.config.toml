@@ -8,6 +8,18 @@ request-allocation-size-in-bytes = 12000 # In bytes, how much memory to allocate
 # tls_cert_file = '/path/to/cert.pem'
 # tls_key_file  = '/path/to/key.pem'
 
+# Virtual hosting / SNI routing — one [[virtual_host]] block per domain.
+# The cert above is the fallback when no virtual host matches or SNI is absent.
+# [[virtual_host]]
+# domain    = 'example.com'
+# cert_file = '/etc/ssl/example.pem'
+# key_file  = '/etc/ssl/example.key'
+#
+# [[virtual_host]]
+# domain    = 'other.com'
+# cert_file = '/etc/ssl/other.pem'
+# key_file  = '/etc/ssl/other.key'
+
 [cors]
 allow_all = false # true will allow all CORS requests and you can omit configuring cors properties below
 allow_origins = ["https://foo.example", "https://bar.example"] # list of allowed origins, this setting won't apply if cors allow_all set to true

@@ -103,6 +103,7 @@ pub mod thread_pool;
 pub mod url;
 pub mod proxy;
 pub mod validate;
+pub mod virtual_host;
 pub mod websocket;
 
 #[cfg(feature = "http2")]

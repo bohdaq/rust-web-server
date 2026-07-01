@@ -81,7 +81,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Log` | `log` | Combined Log Format access log lines |
 | `CookieJar` | `cookie` | Parse the `Cookie` request header into individual cookies |
 | `SetCookie` | `cookie` | Build `Set-Cookie` response header values with all RFC 6265 attributes |
-| `Router` / `PathParams` | `router` | Standalone dynamic router with `:param` and `*wildcard` path matching |
+| `Router` / `PathParams` | `router` | Standalone dynamic router with `:param` and `*wildcard` path matching; `.with_host(name)` restricts a router to one virtual host |
+| `VirtualHostConfig` | `virtual_host` | Per-domain cert configuration `{ domain, cert_file, key_file }` for multi-domain SNI routing |
 | `IntoResponse` / `AppError` | `error` | Typed errors that map to HTTP status codes |
 | `TestClient` | `test_client` | In-process HTTP test client — no TCP socket required |
 | `FromRequest` / `Body` / `BodyText` / `Query` | `extract` | Typed request extractors — parse body or query params, returning a ready error on failure |
@@ -1652,6 +1653,93 @@ fn main() {
 Use `.at("/custom/path")` to override the default `/mcp` endpoint. The bundled `rws` binary ships 8 built-in tools: `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`.
 
 **Supported MCP methods:** `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, `prompts/get`, `notifications/initialized`.
+
+---
+
+### 37. Virtual hosting / SNI routing
+
+A single `rws` instance can serve multiple domains from one IP+port, each with its own TLS certificate. The TLS layer selects the right cert at handshake time via SNI; `ConnectionInfo::sni_hostname` exposes it to every handler; `Router::with_host()` narrows a router to one domain.
+
+**Step 1 — configure virtual hosts in `rws.config.toml`:**
+
+```toml
+# Default cert (used when no virtual host matches or client omits SNI)
+tls_cert_file = '/etc/ssl/default.pem'
+tls_key_file  = '/etc/ssl/default.key'
+
+[[virtual_host]]
+domain    = 'example.com'
+cert_file = '/etc/ssl/example.pem'
+key_file  = '/etc/ssl/example.key'
+
+[[virtual_host]]
+domain    = 'other.com'
+cert_file = '/etc/ssl/other.pem'
+key_file  = '/etc/ssl/other.key'
+```
+
+Or via environment variables (useful in Kubernetes):
+
+```bash
+RWS_CONFIG_VIRTUAL_HOST_0_DOMAIN=example.com
+RWS_CONFIG_VIRTUAL_HOST_0_CERT_FILE=/etc/ssl/example.pem
+RWS_CONFIG_VIRTUAL_HOST_0_KEY_FILE=/etc/ssl/example.key
+```
+
+**Step 2 — route per domain in the app:**
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::application::Application;
+use rust_web_server::request::Request;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::router::{PathParams, Router};
+use rust_web_server::server::ConnectionInfo;
+use rust_web_server::range::Range;
+use rust_web_server::mime_type::MimeType;
+
+fn example_home(_req: &Request, _p: &PathParams, _c: &ConnectionInfo) -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r.content_range_list = vec![Range::get_content_range(b"example.com home".to_vec(), MimeType::TEXT_PLAIN.to_string())];
+    r
+}
+
+fn other_home(_req: &Request, _p: &PathParams, _c: &ConnectionInfo) -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r.content_range_list = vec![Range::get_content_range(b"other.com home".to_vec(), MimeType::TEXT_PLAIN.to_string())];
+    r
+}
+
+pub struct VhostApp;
+
+impl Application for VhostApp {
+    fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
+        let example = Router::new()
+            .with_host("example.com")
+            .get("/", example_home);
+
+        let other = Router::new()
+            .with_host("other.com")
+            .get("/", other_home);
+
+        if let Some(r) = example.handle(request, connection) { return Ok(r); }
+        if let Some(r) = other.handle(request, connection)   { return Ok(r); }
+
+        // Fall through to built-in App controllers (static files, /healthz, etc.)
+        App::new().execute(request, connection)
+    }
+}
+```
+
+For plain-HTTP virtual hosting (no TLS), `with_host()` falls back to the `Host` request header when `sni_hostname` is `None`.
+
+**Hot-reload certs** — send `SIGHUP` or `POST /admin/config/reload` to pick up renewed certificates (e.g. after ACME renewal) without restarting the server.
+
+---
 
 ### Structured JSON logging
 

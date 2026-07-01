@@ -77,6 +77,7 @@ cargo build --release --no-default-features --features http1
 - HTTP/1.1 keep-alive — persistent connections; `Connection: close` or idle timeout ends the session
 - Response compression — automatic gzip for text types when client sends `Accept-Encoding: gzip`
 - Large file streaming — chunked transfer for files > 8 MB; no full-file buffering
+- Virtual hosting / SNI routing — serve multiple domains from one instance, each with its own TLS certificate; per-domain routing via `Router::with_host()`
 - HTTP → HTTPS redirect — set `RWS_CONFIG_HTTP_REDIRECT_PORT` to redirect a plain-HTTP port
 - CORS — allowed for all origins by default, fully configurable
 - HTTP Range Requests — partial file serving and multi-range responses
@@ -195,7 +196,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 36 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, and MCP server.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 37 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, MCP server, and virtual hosting / SNI routing.
 
 ## AI adoption
 

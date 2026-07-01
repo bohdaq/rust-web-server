@@ -6,6 +6,7 @@ pub mod environment_variables;
 
 
 use std::{env};
+use crate::virtual_host::VirtualHostConfig;
 
 use crate::entry_point::command_line_args::{override_environment_variables_from_command_line_args};
 use crate::entry_point::config_file::override_environment_variables_from_config;
@@ -292,6 +293,30 @@ pub fn get_ip_port_thread_count() -> (String, i32, i32) {
     }
 
     (ip, port, thread_count)
+}
+
+/// Read all `[[virtual_host]]` entries from config / env vars.
+///
+/// Each entry must have `RWS_CONFIG_VIRTUAL_HOST_{N}_DOMAIN` set; reading
+/// stops at the first missing index.  `cert_file` and `key_file` default to
+/// empty string if omitted.
+pub fn get_virtual_hosts() -> Vec<VirtualHostConfig> {
+    let mut hosts = Vec::new();
+    let mut i = 0usize;
+    loop {
+        match env::var(format!("RWS_CONFIG_VIRTUAL_HOST_{}_DOMAIN", i)) {
+            Err(_) => break,
+            Ok(domain) => {
+                let cert_file = env::var(format!("RWS_CONFIG_VIRTUAL_HOST_{}_CERT_FILE", i))
+                    .unwrap_or_default();
+                let key_file = env::var(format!("RWS_CONFIG_VIRTUAL_HOST_{}_KEY_FILE", i))
+                    .unwrap_or_default();
+                hosts.push(VirtualHostConfig { domain, cert_file, key_file });
+                i += 1;
+            }
+        }
+    }
+    hosts
 }
 
 pub fn get_request_allocation_size() -> i64 {

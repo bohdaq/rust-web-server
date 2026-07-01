@@ -1,4 +1,5 @@
 use std::{io};
+use std::collections::HashMap;
 use std::io::{BufRead, Cursor};
 use crate::entry_point::command_line_args::{CommandLineArgument};
 use file_ext::FileExt;
@@ -9,11 +10,30 @@ pub fn read_config_file(
     mut prefix: String) -> Result<bool, String> {
 
     let mut argument_list : Vec<String> = vec![];
+    // Tracks how many times each array-table section name has appeared.
+    let mut array_table_counters: HashMap<String, usize> = HashMap::new();
+
     let lines = cursor.lines().into_iter();
     for boxed_line in lines {
         let line = boxed_line.unwrap();
         let without_comment = strip_comment(line);
         let without_whitespaces = strip_whitespaces(without_comment.to_string());
+
+        // [[section]] — array table: each occurrence gets a unique numbered prefix.
+        let is_array_table = without_whitespaces.starts_with("[[")
+            && without_whitespaces.ends_with("]]");
+        if is_array_table {
+            let name = without_whitespaces
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .to_string();
+            let count = array_table_counters.entry(name.clone()).or_insert(0);
+            prefix = format!("{}_{}", name, count);
+            *count += 1;
+            continue;
+        }
+
+        // [section] — regular table: plain prefix, unchanged behaviour.
         let is_table = without_whitespaces.starts_with(SYMBOL.opening_square_bracket);
         if is_table {
             prefix = without_whitespaces

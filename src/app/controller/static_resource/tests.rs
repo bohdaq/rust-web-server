@@ -24,6 +24,7 @@ fn directory_index_html() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let is_matching = StaticResourceController::is_matching(&request, &connection_info);
@@ -57,6 +58,7 @@ fn directory_index_html_with_query() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let is_matching = StaticResourceController::is_matching(&request, &connection_info);
@@ -90,6 +92,7 @@ fn directory_index_html_no_slash() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let is_matching = StaticResourceController::is_matching(&request, &connection_info);
@@ -123,6 +126,7 @@ fn directory_index_html_no_slash_and_query() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let is_matching = StaticResourceController::is_matching(&request, &connection_info);
@@ -156,6 +160,7 @@ fn file_retrieval() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let is_matching = StaticResourceController::is_matching(&request, &connection_info);
@@ -189,6 +194,7 @@ fn not_found() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let is_matching = StaticResourceController::is_matching(&request, &connection_info);
@@ -218,6 +224,7 @@ fn malformed() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let is_matching = StaticResourceController::is_matching(&request, &connection_info);
@@ -247,6 +254,7 @@ fn file_retrieval_with_query_params() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let is_matching = StaticResourceController::is_matching(&request, &connection_info);
@@ -280,6 +288,7 @@ fn file_retrieval_no_html_suffix() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let is_matching = StaticResourceController::is_matching(&request, &connection_info);
@@ -313,6 +322,7 @@ fn file_retrieval_no_html_suffix_with_query_params() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let is_matching = StaticResourceController::is_matching(&request, &connection_info);
@@ -344,6 +354,7 @@ fn file_response_includes_etag_header() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let response = StaticResourceController::process(&request, Response::new(), &connection_info);
@@ -365,6 +376,7 @@ fn if_none_match_returns_304_not_modified() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     // First request — get the ETag
@@ -409,6 +421,7 @@ fn if_none_match_star_returns_304() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let request = Request {
@@ -431,6 +444,7 @@ fn stale_etag_returns_200_with_body() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let request = Request {

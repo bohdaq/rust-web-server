@@ -8,7 +8,8 @@ Module-level documentation for each component.
 1. [Server](https://github.com/bohdaq/rust-web-server/tree/main/src/server)
 1. [Application](https://github.com/bohdaq/rust-web-server/tree/main/src/application)
 1. [Controller](https://github.com/bohdaq/rust-web-server/tree/main/src/controller)
-1. [TLS](https://github.com/bohdaq/rust-web-server/tree/main/src/tls) — TLS acceptor and QUIC server config; requires `http2` or `http3` feature
+1. [TLS](https://github.com/bohdaq/rust-web-server/tree/main/src/tls) — `SniCertResolver` for SNI-based cert selection; `create_tls_acceptor_from_vhosts()` and `create_quinn_server_config_from_vhosts()` for multi-domain TLS; requires `http2` or `http3` feature
+1. [Virtual Host](https://github.com/bohdaq/rust-web-server/tree/main/src/virtual_host) — `VirtualHostConfig { domain, cert_file, key_file }` — per-domain certificate configuration for virtual hosting
 1. [H2 Handler](https://github.com/bohdaq/rust-web-server/tree/main/src/h2_handler) — HTTP/2 connection and stream handling; requires `http2` feature
 1. [H3 Handler](https://github.com/bohdaq/rust-web-server/tree/main/src/h3_handler) — HTTP/3 over QUIC connection and stream handling; requires `http3` feature
 1. [Body](https://github.com/bohdaq/rust-web-server/tree/main/src/body)

@@ -27,6 +27,12 @@ pub async fn handle_connection(
 ) -> Result<(), String> {
     let (server_ip, server_port, _) = get_ip_port_thread_count();
 
+    // Extract the SNI hostname from the QUIC/TLS handshake data.
+    let sni_hostname: Option<String> = conn
+        .handshake_data()
+        .and_then(|d| d.downcast::<quinn::crypto::rustls::HandshakeData>().ok())
+        .and_then(|d| d.server_name.clone());
+
     let mut h3_conn = h3::server::Connection::new(h3_quinn::Connection::new(conn))
         .await
         .map_err(|e| format!("H3 connection error: {}", e))?;
@@ -44,6 +50,7 @@ pub async fn handle_connection(
                         port: server_port,
                     },
                     request_size: 0,
+                    sni_hostname: sni_hostname.clone(),
                 };
                 let app = app.clone();
                 tokio::spawn(async move {

@@ -26,6 +26,7 @@ fn file_retrieval() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let is_matching = IndexController::is_matching(&request, &connection_info);
@@ -63,6 +64,7 @@ fn file_retrieval() {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
         server: Address { ip: "127.0.0.1".to_string(), port: 0 },
         request_size: 0,
+    sni_hostname: None,
     };
 
     let is_matching = IndexController::is_matching(&request, &connection_info);

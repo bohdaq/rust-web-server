@@ -47,6 +47,63 @@ Example — command line:
 rws --tls-cert-file=/path/to/cert.pem --tls-key-file=/path/to/key.pem
 ```
 
+## Virtual hosting / SNI routing
+
+A single `rws` instance can serve multiple domains, each with its own TLS certificate. The server reads the SNI hostname from the TLS `ClientHello`, selects the matching certificate, and exposes the hostname as `ConnectionInfo::sni_hostname` so application code can route per-domain.
+
+Add one `[[virtual_host]]` block per domain in `rws.config.toml`. The default cert/key (`tls_cert_file` / `tls_key_file`) is used when no SNI hostname matches or when the client sends no SNI.
+
+```toml
+# Default cert — used when no virtual host matches, or for plain HTTP/1.1
+tls_cert_file = '/etc/ssl/default.pem'
+tls_key_file  = '/etc/ssl/default.key'
+
+[[virtual_host]]
+domain   = 'example.com'
+cert_file = '/etc/ssl/example.pem'
+key_file  = '/etc/ssl/example.key'
+
+[[virtual_host]]
+domain   = 'other.com'
+cert_file = '/etc/ssl/other.pem'
+key_file  = '/etc/ssl/other.key'
+```
+
+Virtual hosts can also be configured via numbered environment variables:
+
+```bash
+RWS_CONFIG_VIRTUAL_HOST_0_DOMAIN=example.com
+RWS_CONFIG_VIRTUAL_HOST_0_CERT_FILE=/etc/ssl/example.pem
+RWS_CONFIG_VIRTUAL_HOST_0_KEY_FILE=/etc/ssl/example.key
+
+RWS_CONFIG_VIRTUAL_HOST_1_DOMAIN=other.com
+RWS_CONFIG_VIRTUAL_HOST_1_CERT_FILE=/etc/ssl/other.pem
+RWS_CONFIG_VIRTUAL_HOST_1_KEY_FILE=/etc/ssl/other.key
+```
+
+Send `SIGHUP` (or `POST /admin/config/reload`) to hot-reload all virtual host certificates without restarting.
+
+### App-level virtual-host routing
+
+The `Router` exposes `.with_host(hostname)` to restrict a router's routes to a specific virtual host. For plain-HTTP connections the `Host` header is used as fallback when SNI is not available.
+
+```rust
+use rust_web_server::router::Router;
+
+let example_router = Router::new()
+    .with_host("example.com")
+    .get("/", example_home)
+    .get("/about", example_about);
+
+let other_router = Router::new()
+    .with_host("other.com")
+    .get("/", other_home);
+
+// In Application::execute, call both; first non-None result wins.
+if let Some(resp) = example_router.handle(&request, &connection) { return Ok(resp); }
+if let Some(resp) = other_router.handle(&request, &connection)  { return Ok(resp); }
+```
+
 ## HTTP → HTTPS redirect
 
 When TLS is configured, you can redirect all plain-HTTP traffic to HTTPS by setting `RWS_CONFIG_HTTP_REDIRECT_PORT`. The server binds an additional plain-HTTP listener on that port and returns `301 Moved Permanently` to the HTTPS URL for every request.
