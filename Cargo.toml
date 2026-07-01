@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.33.0"
+version = "17.34.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 description = "An HTTP web framework and server for Rust supporting HTTP/1.1, HTTP/2, and HTTP/3. No third-party HTTP dependencies — parsing, routing, middleware, auth, WebSocket, SSE, caching, tracing, and MCP server are all built in."
@@ -29,6 +29,7 @@ acme   = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs"]
 serde  = ["dep:serde", "dep:serde_json"]
 auth   = ["dep:hmac", "dep:sha2"]
 macros = ["dep:rws-macros"]
+tera   = ["dep:tera", "dep:serde", "dep:serde_json"]
 
 [dependencies]
 ctrlc = { version = "3", optional = true }
@@ -55,3 +56,4 @@ hmac  = { version = "0.12", optional = true }
 sha2  = { version = "0.10", optional = true }
 aws-lc-rs = { version = "1", optional = true }
 rws-macros = { path = "rws-macros", version = "17", optional = true }
+tera = { version = "1", optional = true }

@@ -111,6 +111,8 @@ pub mod canary;
 pub mod circuit_breaker;
 pub mod service_discovery;
 pub mod ingress;
+#[cfg(feature = "tera")]
+pub mod template;
 pub mod validate;
 pub mod virtual_host;
 pub mod websocket;

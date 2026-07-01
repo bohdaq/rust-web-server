@@ -48,9 +48,24 @@ Config is read via `std::env::var` throughout the codebase. A `#[derive(Config)]
 
 ## Nice to have
 
-### 9. HTML template engine
+### 9. HTML template engine ✅ Done (v17.34.0)
 
-Tera or Minijinja integration for server-side rendering. The `MimeType::TEXT_HTML` constant exists; wiring a template engine to a handler is straightforward, but no first-class integration ships yet.
+`TeraEngine` and module-level helpers in `src/template/` (`features = ["tera"]`). Jinja2/Django syntax via the [Tera](https://keats.github.io/tera/) crate — variables, loops, conditionals, template inheritance, filters, macros.
+
+```rust
+use rust_web_server::template::{self, Context};
+
+// At startup:
+template::init("templates").unwrap();
+
+// In a handler:
+let mut ctx = Context::new();
+ctx.insert("title", "Home");
+ctx.insert("items", &["Rust", "rws", "Tera"]);
+let response = template::render("index.html", &ctx)?;
+```
+
+Three construction modes: `TeraEngine::from_dir(dir)` for disk templates, `TeraEngine::from_glob(pattern)` for custom glob, `TeraEngine::from_raw(&[(name, src)])` for inline/test templates. Global singleton via `template::init(dir)` / `template::init_from_env()` / `template::global()`. Template directory configured via `RWS_CONFIG_TEMPLATE_DIR` (default: `"templates"`).
 
 ### 10. WebSocket support ✅ Done (v17.8.0)
 
@@ -96,5 +111,5 @@ Full cron field syntax: `*`, exact value, `*/step`, `N-M` range, `N,M,P` list, a
 | 9 | Test utilities (`TestClient`) | ✅ Done |
 | 10 | Scheduler (`@Scheduled` equivalent) | ✅ Done (v17.33.0) |
 | 11 | Typed configuration binding (`#[derive(Config)]`) | ❌ Not yet |
-| 12 | HTML template engine | ❌ Not yet |
+| 12 | HTML template engine | ✅ Done (v17.34.0) |
 | 13 | Database layer (`sqlx`) | ❌ Not yet |

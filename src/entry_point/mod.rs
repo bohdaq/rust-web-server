@@ -67,6 +67,10 @@ impl Config {
     pub const RWS_CONFIG_TLS_CLIENT_CA_FILE: &'static str = "RWS_CONFIG_TLS_CLIENT_CA_FILE";
     pub const RWS_CONFIG_TLS_CLIENT_CA_FILE_DEFAULT_VALUE: &'static str = "";
 
+    /// Directory containing Tera HTML templates (default: `"templates"`). Requires `tera` feature.
+    pub const RWS_CONFIG_TEMPLATE_DIR: &'static str = "RWS_CONFIG_TEMPLATE_DIR";
+    pub const RWS_CONFIG_TEMPLATE_DIR_DEFAULT_VALUE: &'static str = "templates";
+
     /// When non-empty, a plain-HTTP listener on this port redirects all requests to HTTPS.
     /// Set to e.g. `"80"` when running on standard ports. Requires TLS to be configured.
     pub const RWS_CONFIG_HTTP_REDIRECT_PORT: &'static str = "RWS_CONFIG_HTTP_REDIRECT_PORT";

@@ -132,6 +132,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `BackendPool` / `DiscoverySource` | `service_discovery` | Dynamic backend pool updated by a background thread. Sources: `Static`, `EnvPrefix` (env vars), `File` (one host:port per line), `Dns` (A-record lookup). |
 | `IngressRule` / `KubernetesIngressWatcher` / `IngressRouter` | `ingress` | Kubernetes Ingress watcher: polls the K8s API, parses Ingress rules, and routes requests to the correct upstream service. `IngressRouter` implements `Application`. |
 | `Scheduler` / `CronSchedule` | `scheduler` | `@Scheduled`-equivalent background task runner. Three modes: `.every(Duration, fn)` (fixed rate), `.after(Duration, fn)` (fixed delay), `.cron("sec min hour day month weekday", fn)`. Full cron syntax: `*`, exact, `*/step`, `N-M`, comma list. |
+| `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. |
 
 ---
 
@@ -2106,3 +2107,100 @@ env:
         name: tls-secret
         key: tls.key
 ```
+
+### 50. HTML template rendering (TeraEngine)
+
+`TeraEngine` wraps the [Tera](https://keats.github.io/tera/) crate to add Jinja2/Django-style server-side rendering. Enable it with `features = ["tera"]` in `Cargo.toml`.
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["tera"] }
+```
+
+**Directory-based setup (production)**
+
+Put templates under `templates/` (or another directory configured via `RWS_CONFIG_TEMPLATE_DIR`):
+
+```
+templates/
+  base.html
+  index.html
+  users/list.html
+```
+
+Initialize once at startup, then call `template::render` from any handler:
+
+```rust
+use rust_web_server::template::{self, Context};
+use rust_web_server::response::Response;
+
+// In main() or App setup:
+template::init("templates").unwrap();
+// or read from RWS_CONFIG_TEMPLATE_DIR env var:
+// template::init_from_env().unwrap();
+
+fn home_handler(_: &Request, _: &PathParams, _: &ConnectionInfo) -> Response {
+    let mut ctx = Context::new();
+    ctx.insert("title", "Home");
+    ctx.insert("user", &"Alice");
+    template::render("index.html", &ctx).unwrap()
+}
+```
+
+`templates/index.html`:
+
+```html
+{% extends "base.html" %}
+{% block content %}
+  <h1>{{ title }}</h1>
+  <p>Hello, {{ user }}!</p>
+{% endblock %}
+```
+
+**Inline templates (testing / embedded apps)**
+
+```rust
+use rust_web_server::template::{TeraEngine, Context};
+
+let engine = TeraEngine::from_raw(&[
+    ("base.html", "HEADER {% block body %}{% endblock %} FOOTER"),
+    ("page.html", "{% extends \"base.html\" %}{% block body %}{{ msg }}{% endblock %}"),
+]).unwrap();
+
+let mut ctx = Context::new();
+ctx.insert("msg", "Hello from rws!");
+let html = engine.render("page.html", &ctx).unwrap();
+// → "HEADER Hello from rws! FOOTER"
+
+let response = engine.response("page.html", &ctx).unwrap();
+// → 200 OK, Content-Type: text/html
+```
+
+**Inserting complex values**
+
+`Context::insert` accepts anything that implements `serde::Serialize`:
+
+```rust
+#[derive(serde::Serialize)]
+struct Product { name: String, price: f64 }
+
+let products = vec![
+    Product { name: "Widget".into(), price: 9.99 },
+    Product { name: "Gadget".into(), price: 24.99 },
+];
+ctx.insert("products", &products);
+```
+
+Template:
+
+```html
+{% for p in products %}
+  <li>{{ p.name }} — ${{ p.price }}</li>
+{% endfor %}
+```
+
+**Configuration**
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `RWS_CONFIG_TEMPLATE_DIR` | `templates` | Directory scanned by `template::init_from_env()` |
