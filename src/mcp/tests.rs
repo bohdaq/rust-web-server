@@ -1,5 +1,8 @@
 use super::json_rpc;
 use super::{extract_arg, json_escape, McpContent, McpServer, PromptArgDef, PromptMessage};
+use crate::app::App;
+use crate::core::New;
+use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::test_client::TestClient;
 
 // ── json_rpc::extract_str ─────────────────────────────────────────────────────
@@ -409,4 +412,58 @@ fn mcp_path_override_with_at() {
         .body_text(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#)
         .send();
     assert_eq!(resp2.status(), 200);
+}
+
+// ── wrap() — compose with existing Application ────────────────────────────────
+
+#[test]
+fn wrap_forwards_non_mcp_to_existing_app() {
+    // An AppWithState-style app with a custom route.
+    let existing = App::with_state(())
+        .get("/api/hello", |_req, _params, _conn, _state| {
+            let mut r = Response::new();
+            r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+            r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+            r
+        });
+
+    let srv = McpServer::new("srv", "1.0")
+        .tool("ping", "Ping", "{}", |_| Ok(McpContent::text("pong")))
+        .wrap(existing);
+
+    let client = TestClient::new(srv);
+
+    // MCP endpoint still works.
+    let mcp_resp = client
+        .post("/mcp")
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#)
+        .send();
+    assert_eq!(mcp_resp.status(), 200);
+    assert!(mcp_resp.body_text().contains("ping"), "MCP tool missing");
+
+    // Custom route from existing app also works.
+    let api_resp = client.get("/api/hello").send();
+    assert_eq!(api_resp.status(), 200, "custom route unreachable");
+}
+
+#[test]
+fn wrap_mcp_takes_priority_over_wrapped_app() {
+    // Even if the wrapped app has a /mcp route, McpServer handles it.
+    let competing = App::with_state(())
+        .get("/mcp", |_req, _params, _conn, _state| {
+            let mut r = Response::new();
+            r.status_code = *STATUS_CODE_REASON_PHRASE.n418_im_a_teapot.status_code;
+            r.reason_phrase = STATUS_CODE_REASON_PHRASE.n418_im_a_teapot.reason_phrase.to_string();
+            r
+        });
+
+    let srv = McpServer::new("srv", "1.0").wrap(competing);
+    let client = TestClient::new(srv);
+
+    // POST /mcp → MCP server (200), not the wrapped app's 418.
+    let resp = client
+        .post("/mcp")
+        .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+        .send();
+    assert_eq!(resp.status(), 200);
 }

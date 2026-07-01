@@ -199,6 +199,7 @@ pub struct McpServer {
     tools: Vec<ToolDef>,
     resources: Vec<ResourceDef>,
     prompts: Vec<PromptDef>,
+    fallback: Option<Box<dyn Application + Send + Sync>>,
 }
 
 impl McpServer {
@@ -211,7 +212,40 @@ impl McpServer {
             tools: vec![],
             resources: vec![],
             prompts: vec![],
+            fallback: None,
         }
+    }
+
+    /// Wrap an existing [`Application`] so that non-MCP requests are forwarded
+    /// to it instead of the built-in [`App`].
+    ///
+    /// Use this when your existing server has custom routes, state, or
+    /// middleware that you want to keep alongside the MCP endpoint:
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::mcp::{McpServer, McpContent};
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    /// use rust_web_server::test_client::TestClient;
+    ///
+    /// let existing_app = App::with_state(42u32)
+    ///     .get("/api/hello", |_req, _params, _conn, _state| {
+    ///         let mut r = Response::new();
+    ///         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    ///         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    ///         r
+    ///     });
+    ///
+    /// let server = McpServer::new("my-app", "1.0")
+    ///     .tool("ping", "Ping", "{}", |_| Ok(McpContent::text("pong")))
+    ///     .wrap(existing_app);
+    ///
+    /// // Both /mcp and /api/hello are now handled by the same server.
+    /// let client = TestClient::new(server);
+    /// ```
+    pub fn wrap(mut self, app: impl Application + Send + Sync + 'static) -> Self {
+        self.fallback = Some(Box::new(app));
+        self
     }
 
     /// Override the HTTP path for the MCP endpoint (default `"/mcp"`).
@@ -506,8 +540,11 @@ impl Application for McpServer {
             });
         }
 
-        // Not an MCP path — fall through to the built-in App.
-        App::new().execute(request, connection)
+        // Not an MCP path — fall through to the wrapped app (or built-in App).
+        match &self.fallback {
+            Some(app) => app.execute(request, connection),
+            None      => App::new().execute(request, connection),
+        }
     }
 }
 
