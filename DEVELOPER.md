@@ -107,6 +107,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `is_email` / `is_url` | `validate` | Format check helpers used by the derive macro; callable directly. |
 | `#[derive(Validate)]` | `macros` (proc-macro) | Derive `Validate` from `#[validate(...)]` field annotations. Validators: `length(min,max)`, `range(min,max)`, `email`, `required`, `url`. Requires `features = ["macros"]`. |
 | `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. |
+| `RewriteLayer` | `rewrite` | Composable request/response rewriting middleware: request header add/replace/remove, URI set/strip-prefix/add-prefix, response header add/replace/remove, status override, body byte find-and-replace. |
 | `LoadBalancing` | `proxy` | Enum selecting the balancing strategy (`RoundRobin`). Passed to `ReverseProxy::strategy()`. |
 | `MetricsLayer` | `metrics` | Middleware that records per-route request counts and latency histograms. Adds `rws_route_requests_total{method,path,status}` and `rws_route_duration_seconds{method,path}` to `/metrics`. |
 | `CacheLayer` | `cache` | In-memory TTL response cache middleware for GET requests. Builder: `.ttl(secs)`, `.vary_by_header(name)`. Injects `Age` on hits; respects `Cache-Control: no-store/private`. |
@@ -1738,6 +1739,43 @@ impl Application for VhostApp {
 For plain-HTTP virtual hosting (no TLS), `with_host()` falls back to the `Host` request header when `sni_hostname` is `None`.
 
 **Hot-reload certs** — send `SIGHUP` or `POST /admin/config/reload` to pick up renewed certificates (e.g. after ACME renewal) without restarting the server.
+
+---
+
+### 38. Request / response rewriting
+
+`RewriteLayer` is a `Middleware` that transforms requests before they reach handlers and responses before they leave the server. Compose it with any `App` or middleware stack using `.wrap()`.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::rewrite::RewriteLayer;
+
+let app = App::new()
+    .wrap(RewriteLayer::new()
+        // ── Request rewrites ──────────────────────────────────────────────
+        // Add or replace a request header (case-insensitive match).
+        .request_header_set("X-Env", "production")
+        // Remove a request header.
+        .request_header_remove("X-Debug")
+        // Strip a path prefix before routing (no-op if absent; normalises to "/").
+        .request_uri_strip_prefix("/api/v1")
+        // Alternatively, replace the URI entirely or add a prefix:
+        // .request_uri_set("/internal/resource")
+        // .request_uri_add_prefix("/v2")
+
+        // ── Response rewrites ─────────────────────────────────────────────
+        // Add or replace a response header.
+        .response_header_set("Cache-Control", "no-store")
+        // Remove a response header.
+        .response_header_remove("Server")
+        // Override the status code (useful when proxying to change 404 → 410).
+        // .response_status(410, "Gone")
+        // Byte-level find-and-replace in the response body (all content ranges).
+        .response_body_replace("http://staging.internal", "https://example.com"));
+```
+
+Rules are applied in the order they are registered. The incoming `Request` is cloned before modification — the original is never mutated, so other middleware layers in the stack see the unmodified request.
 
 ---
 

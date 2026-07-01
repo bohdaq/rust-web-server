@@ -107,6 +107,7 @@ cargo build --release --no-default-features --features http1
 - Per-route metrics — `MetricsLayer` middleware records `rws_route_requests_total{method,path,status}` counters and `rws_route_duration_seconds{method,path}` histograms into the global `/metrics` endpoint; query strings stripped from paths automatically
 - IP filter — `IpFilter::allow([...])` / `IpFilter::deny([...])` middleware; accepts exact IPv4 addresses and CIDR ranges
 - Reverse proxy — `ReverseProxy` middleware forwards requests to HTTP backends with round-robin load balancing, automatic failover, and `path_prefix` routing; returns `502 Bad Gateway` when all backends fail
+- Request / response rewriting — `RewriteLayer` middleware rewrites request headers, URI (set, strip prefix, add prefix), response headers, status code, and response body bytes; composable with any middleware stack
 - Response caching — `CacheLayer` middleware; in-memory TTL cache for GET responses; vary-by-header for content negotiation; capacity-bounded with oldest-first eviction; `Age` header injected on hits; respects `Cache-Control: no-store` / `private`
 - Hot config reload — send `SIGHUP` (or `POST /admin/config/reload`) to re-apply CORS rules, rate-limit thresholds, log format, and request allocation size without restarting; `config_reload::current()` exposes a typed snapshot anywhere in the handler stack
 - Distributed tracing — `OtelLayer` middleware creates HTTP server spans; reads W3C `traceparent` headers, propagates context to upstream services, exports to stdout or an OTLP HTTP collector (Jaeger, Grafana Tempo); zero new Cargo dependencies
@@ -196,7 +197,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 37 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, MCP server, and virtual hosting / SNI routing.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 38 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, MCP server, virtual hosting / SNI routing, and request / response rewriting.
 
 ## AI adoption
 

@@ -102,6 +102,7 @@ pub mod symbol;
 pub mod thread_pool;
 pub mod url;
 pub mod proxy;
+pub mod rewrite;
 pub mod validate;
 pub mod virtual_host;
 pub mod websocket;

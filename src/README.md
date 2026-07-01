@@ -18,6 +18,7 @@ Module-level documentation for each component.
 1. [Null](https://github.com/bohdaq/rust-web-server/tree/main/src/null)
 1. [Core](https://github.com/bohdaq/rust-web-server/tree/main/src/core)
 1. [Proxy](https://github.com/bohdaq/rust-web-server/tree/main/src/proxy) — `ReverseProxy` middleware with round-robin load balancing and automatic failover
+1. [Rewrite](https://github.com/bohdaq/rust-web-server/tree/main/src/rewrite) — `RewriteLayer` middleware; request header/URI rewriting and response header/status/body rewriting
 1. [Cache](https://github.com/bohdaq/rust-web-server/tree/main/src/cache) — `CacheLayer` middleware; in-memory TTL cache for GET responses with vary-by-header and capacity eviction
 1. [Config Reload](https://github.com/bohdaq/rust-web-server/tree/main/src/config_reload) — hot config reload via SIGHUP; `ConfigSnapshot` exposes reloadable values; `RateLimiter` limits update live
 1. [Otel](https://github.com/bohdaq/rust-web-server/tree/main/src/otel) — `OtelLayer` middleware; W3C Trace Context propagation; OTLP HTTP export to Jaeger / Grafana Tempo; `StdoutExporter` for development

@@ -32,11 +32,13 @@ Remaining: wildcard domain matching (e.g. `*.example.com`), automatic per-vhost 
 
 Remaining: per-route rate caps, least-connections upstream selection.
 
-### Request / response rewriting
+### Request / response rewriting ✅ Done (v17.30.0)
 
-No URL rewriting or body transformation. nginx `rewrite`, `proxy_set_header`, and `sub_filter` are heavily used in production deployments.
+`RewriteLayer` (`src/rewrite/mod.rs`) is a composable `Middleware` that transforms requests before they reach handlers and responses before they leave the server. Builder API: `.request_header_set(name, value)`, `.request_header_remove(name)`, `.request_uri_set(uri)`, `.request_uri_strip_prefix(prefix)`, `.request_uri_add_prefix(prefix)`, `.response_header_set(name, value)`, `.response_header_remove(name)`, `.response_status(code, reason)`, `.response_body_replace(from, to)`. The incoming request is cloned; the original is never mutated.
 
 `X-Forwarded-For` and `Via` are injected automatically by `ReverseProxy`.
+
+Remaining: regex URI rewriting, conditional rewrites (match on header/status), per-route rewrite rule tables.
 
 ### Authentication middleware ✅ Done
 
@@ -125,7 +127,7 @@ No upstream health-based circuit breaking or automatic retries on upstream 5xx r
 | 2 | Virtual hosting / SNI routing | ✅ Done (v17.29.0) |
 | 3 | Automatic TLS (ACME / Let's Encrypt) | ✅ Done (v17.25.0) |
 | 4 | Rate limiting | ✅ Done |
-| 5 | Request / response rewriting | Partial (proxy injects `X-Forwarded-For`, `Via`) |
+| 5 | Request / response rewriting | ✅ Done (v17.30.0) |
 | 6 | Authentication middleware | ✅ Done (Basic, JWT, IP filter) |
 | 7 | Response caching | ✅ Done (v17.22.0) |
 | 8 | WebSocket support | ✅ Done (v17.8.0) |
