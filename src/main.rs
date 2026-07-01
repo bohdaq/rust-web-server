@@ -390,6 +390,12 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
 #[cfg(not(feature = "http2"))]
 fn main() {
     let (listener, pool) = Server::setup().expect("server setup failed");
+    if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
+        let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
+        SERVER_READY.store(true, Ordering::SeqCst);
+        Server::run(listener, pool, proxy_app);
+        return;
+    }
     SERVER_READY.store(true, Ordering::SeqCst);
     Server::run(listener, pool, build_app());
 }
@@ -411,6 +417,15 @@ async fn main() {
         }
     }
 
+    if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
+        let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
+        SERVER_READY.store(true, Ordering::SeqCst);
+        tokio::join!(
+            Server::run_tls(listener, pool, proxy_app.clone()),
+            Server::run_redirect(),
+        );
+        return;
+    }
     SERVER_READY.store(true, Ordering::SeqCst);
     tokio::join!(
         Server::run_tls(listener, pool, build_app()),
@@ -435,6 +450,16 @@ async fn main() {
         }
     }
 
+    if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
+        let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
+        SERVER_READY.store(true, Ordering::SeqCst);
+        tokio::join!(
+            Server::run_tls(listener, pool, proxy_app.clone()),
+            Server::run_quic(proxy_app),
+            Server::run_redirect(),
+        );
+        return;
+    }
     SERVER_READY.store(true, Ordering::SeqCst);
     tokio::join!(
         Server::run_tls(listener, pool, build_app()),
