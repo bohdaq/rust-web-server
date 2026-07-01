@@ -29,6 +29,19 @@ async fn main() {
 
     let (listener, pool) = new_server.unwrap();
     let app = App::new();
+
+    #[cfg(feature = "acme")]
+    {
+        use rust_web_server::acme::{AcmeConfig, AcmeManager};
+        if let Some(cfg) = AcmeConfig::from_env() {
+            let mgr = AcmeManager::new(cfg);
+            if let Err(e) = mgr.provision_if_needed().await {
+                eprintln!("[ACME] Startup provisioning failed: {e}");
+            }
+            tokio::spawn(mgr.run_renewal_loop());
+        }
+    }
+
     SERVER_READY.store(true, Ordering::SeqCst);
 
     tokio::join!(
@@ -48,6 +61,19 @@ async fn main() {
 
     let (listener, pool) = new_server.unwrap();
     let app = App::new();
+
+    #[cfg(feature = "acme")]
+    {
+        use rust_web_server::acme::{AcmeConfig, AcmeManager};
+        if let Some(cfg) = AcmeConfig::from_env() {
+            let mgr = AcmeManager::new(cfg);
+            if let Err(e) = mgr.provision_if_needed().await {
+                eprintln!("[ACME] Startup provisioning failed: {e}");
+            }
+            tokio::spawn(mgr.run_renewal_loop());
+        }
+    }
+
     SERVER_READY.store(true, Ordering::SeqCst);
 
     tokio::join!(

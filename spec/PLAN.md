@@ -91,7 +91,7 @@ docs/
 |------|-------------|
 | **Installation** | `cargo add rust-web-server`, build from source, feature flags table (`http1` / `http2` / `http3`), binary sizes, MSRV 1.75 |
 | **Quick Start** | Run plain HTTP; serve static files; write and wire your first `Controller` in ~20 lines; verify with `curl` |
-| **Features** | Full feature checklist table with checkmarks; "Coming Soon" callout for ACME auto-TLS, MCP server |
+| **Features** | Full feature checklist table with checkmarks; "Coming Soon" callout for MCP server |
 
 ---
 
@@ -191,9 +191,6 @@ docs/
 ## Coming Soon Items
 
 These appear as callout blocks within relevant pages — not omitted, not separate stubs.
-
-### Protocol / Transport
-- Automatic TLS (ACME / Let's Encrypt)
 
 ### Infrastructure
 - MCP (Model Context Protocol) server controller

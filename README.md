@@ -109,6 +109,7 @@ cargo build --release --no-default-features --features http1
 - Response caching — `CacheLayer` middleware; in-memory TTL cache for GET responses; vary-by-header for content negotiation; capacity-bounded with oldest-first eviction; `Age` header injected on hits; respects `Cache-Control: no-store` / `private`
 - Hot config reload — send `SIGHUP` (or `POST /admin/config/reload`) to re-apply CORS rules, rate-limit thresholds, log format, and request allocation size without restarting; `config_reload::current()` exposes a typed snapshot anywhere in the handler stack
 - Distributed tracing — `OtelLayer` middleware creates HTTP server spans; reads W3C `traceparent` headers, propagates context to upstream services, exports to stdout or an OTLP HTTP collector (Jaeger, Grafana Tempo); zero new Cargo dependencies
+- Automatic TLS — `AcmeManager` (`acme` feature) provisions and renews Let's Encrypt certificates via ACME (RFC 8555); HTTP-01 challenge server built in; background renewal loop sends SIGHUP so the TLS acceptor hot-reloads the certificate without restarting
 - WebAssembly MIME type — `.wasm` files served as `application/wasm`
 - In-process test client — `TestClient` dispatches requests without a TCP socket
 
@@ -119,6 +120,7 @@ cargo build --release --no-default-features --features http1
 | `serde` | `Json<T>` extractor and responder backed by `serde_json` |
 | `auth` | `BasicAuthLayer` (HTTP Basic) and `JwtLayer` (HS256 JWT); `build_jwt` / `verify_jwt` utilities |
 | `macros` | `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` attributes; `#[derive(FromRequest)]`; `#[derive(Validate)]` via `rws-macros` |
+| `acme` | `AcmeManager` — automatic certificate provisioning and renewal via ACME (Let's Encrypt); implies `http2` |
 
 ```toml
 [dependencies]
@@ -192,7 +194,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 34 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, and distributed tracing.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 35 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, and automatic TLS via ACME.
 
 ## AI adoption
 

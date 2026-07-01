@@ -313,14 +313,23 @@ let token = build_jwt(r#"{"sub":"42","exp":9999999999}"#, b"my-signing-secret");
 
 ---
 
-### 21. Automatic TLS (ACME / Let's Encrypt)
+### 21. Automatic TLS (ACME / Let's Encrypt) ✅ Done — v17.25.0
 
-Obtaining and renewing TLS certificates is manual today — the operator must run `certbot`, write the paths into config, and handle renewal restarts. ACME would automate issuance and zero-downtime renewal directly inside the server process.
+Automatically obtains and renews TLS certificates from Let's Encrypt (or any RFC 8555-compliant CA) without running `certbot` or manually handling renewals.
 
-**Target API:**
-```rust
-cargo run -- --acme-domain=example.com --acme-email=admin@example.com
+**Activation** — set env vars and enable the `acme` feature:
+```bash
+RWS_CONFIG_ACME_DOMAINS=example.com,www.example.com
+RWS_CONFIG_ACME_EMAIL=admin@example.com
+cargo run --features acme
 ```
+
+**How it works:**
+- At startup, `AcmeManager::provision_if_needed` fetches the ACME directory, creates or loads an account key (ECDSA P-256, stored at `acme_account.key`), places a new-order, serves the HTTP-01 challenge on port 80, and writes the provisioned certificate chain and key to `RWS_CONFIG_TLS_CERT_FILE` / `RWS_CONFIG_TLS_KEY_FILE`.
+- A background task (`run_renewal_loop`) checks every 12 hours and renews when fewer than `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` (default 30) days remain. After renewal it sends `SIGHUP` so the TLS acceptor reloads the certificate without restarting.
+- Use `RWS_CONFIG_ACME_STAGING=true` to test against Let's Encrypt staging.
+
+**Feature flag:** `acme` (implies `http2`).
 
 ---
 
@@ -627,7 +636,7 @@ let app = App::new()
 | 18 | Session management | ✅ Done (v17.13.0) |
 | 19 | Serde JSON integration | ✅ Done (v17.14.0) |
 | 20 | Built-in auth middleware (JWT + Basic) | ✅ Done (v17.15.0) |
-| 21 | Automatic TLS (ACME / Let's Encrypt) | Pending |
+| 21 | Automatic TLS (ACME / Let's Encrypt) | ✅ Done (v17.25.0) |
 | 22 | Declarative routing macros | ✅ Done (v17.17.0) |
 | 23 | `derive(FromRequest)` | ✅ Done (v17.18.0) |
 | 24 | Request validation helpers | ✅ Done (v17.19.0) |

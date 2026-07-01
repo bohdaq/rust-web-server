@@ -16,9 +16,9 @@ Remaining: TLS upstreams, weighted distribution, health-check probes, circuit br
 
 One server instance = one site. nginx `server_name` blocks, Traefik's `Host` rules, and Caddy's site blocks let a single process serve multiple domains on one port. `rws` has no concept of virtual hosts.
 
-### Automatic TLS (ACME)
+### Automatic TLS (ACME) ✅ Done — v17.25.0
 
-Caddy auto-provisions and renews Let's Encrypt certificates with zero config. `rws` requires manually providing cert files and has no ACME client, renewal scheduling, or OCSP stapling.
+`AcmeManager` (feature flag `acme`) auto-provisions and renews Let's Encrypt certificates. Set `RWS_CONFIG_ACME_DOMAINS` and `RWS_CONFIG_ACME_EMAIL` at startup; a background task renews before expiry and triggers a TLS hot-reload via SIGHUP. OCSP stapling is not yet implemented.
 
 ---
 
@@ -121,7 +121,7 @@ No upstream health-based circuit breaking or automatic retries on upstream 5xx r
 |---|---|---|
 | 1 | Reverse proxy + load balancing | ✅ Done (v17.20.0) |
 | 2 | Virtual hosting / SNI routing | Pending |
-| 3 | Automatic TLS (ACME / Let's Encrypt) | Pending |
+| 3 | Automatic TLS (ACME / Let's Encrypt) | ✅ Done (v17.25.0) |
 | 4 | Rate limiting | ✅ Done |
 | 5 | Request / response rewriting | Partial (proxy injects `X-Forwarded-For`, `Via`) |
 | 6 | Authentication middleware | ✅ Done (Basic, JWT, IP filter) |

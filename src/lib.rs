@@ -67,6 +67,8 @@ pub mod cache;
 pub mod config_reload;
 pub mod metrics;
 pub mod otel;
+#[cfg(feature = "acme")]
+pub mod acme;
 pub mod middleware;
 pub mod rate_limit;
 pub mod router;

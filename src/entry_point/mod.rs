@@ -65,6 +65,46 @@ impl Config {
     pub const RWS_CONFIG_HTTP_REDIRECT_PORT: &'static str = "RWS_CONFIG_HTTP_REDIRECT_PORT";
     pub const RWS_CONFIG_HTTP_REDIRECT_PORT_DEFAULT_VALUE: &'static str = "";
 
+    // ── ACME (Automatic Certificate Management Environment) ───────────────────
+
+    /// Comma-separated list of domain names to obtain a certificate for.
+    /// Setting this activates ACME at startup. Example: `"example.com,www.example.com"`
+    pub const RWS_CONFIG_ACME_DOMAINS: &'static str = "RWS_CONFIG_ACME_DOMAINS";
+    pub const RWS_CONFIG_ACME_DOMAINS_DEFAULT_VALUE: &'static str = "";
+
+    /// Contact email sent to the CA. Recommended but not required.
+    pub const RWS_CONFIG_ACME_EMAIL: &'static str = "RWS_CONFIG_ACME_EMAIL";
+    pub const RWS_CONFIG_ACME_EMAIL_DEFAULT_VALUE: &'static str = "";
+
+    /// Set to `"true"` to use the Let's Encrypt staging environment (for testing).
+    pub const RWS_CONFIG_ACME_STAGING: &'static str = "RWS_CONFIG_ACME_STAGING";
+    pub const RWS_CONFIG_ACME_STAGING_DEFAULT_VALUE: &'static str = "false";
+
+    /// Custom ACME directory URL. Defaults to Let's Encrypt production.
+    pub const RWS_CONFIG_ACME_DIRECTORY: &'static str = "RWS_CONFIG_ACME_DIRECTORY";
+    pub const RWS_CONFIG_ACME_DIRECTORY_DEFAULT_VALUE: &'static str = "";
+
+    /// Where to write the provisioned certificate chain (PEM). Defaults to `RWS_CONFIG_TLS_CERT_FILE`.
+    pub const RWS_CONFIG_ACME_CERT_PATH: &'static str = "RWS_CONFIG_ACME_CERT_PATH";
+    pub const RWS_CONFIG_ACME_CERT_PATH_DEFAULT_VALUE: &'static str = "";
+
+    /// Where to write the certificate's private key (PEM). Defaults to `RWS_CONFIG_TLS_KEY_FILE`.
+    pub const RWS_CONFIG_ACME_KEY_PATH: &'static str = "RWS_CONFIG_ACME_KEY_PATH";
+    pub const RWS_CONFIG_ACME_KEY_PATH_DEFAULT_VALUE: &'static str = "";
+
+    /// Port for the temporary HTTP-01 challenge server (default 80).
+    /// Must be reachable from the internet on port 80. Not used with DNS-01.
+    pub const RWS_CONFIG_ACME_CHALLENGE_PORT: &'static str = "RWS_CONFIG_ACME_CHALLENGE_PORT";
+    pub const RWS_CONFIG_ACME_CHALLENGE_PORT_DEFAULT_VALUE: &'static str = "80";
+
+    /// Renew when fewer than this many days remain on the certificate (default 30).
+    pub const RWS_CONFIG_ACME_RENEW_BEFORE_DAYS: &'static str = "RWS_CONFIG_ACME_RENEW_BEFORE_DAYS";
+    pub const RWS_CONFIG_ACME_RENEW_BEFORE_DAYS_DEFAULT_VALUE: &'static str = "30";
+
+    /// Path to persist the ACME account key between restarts (default `acme_account.key`).
+    pub const RWS_CONFIG_ACME_ACCOUNT_KEY_PATH: &'static str = "RWS_CONFIG_ACME_ACCOUNT_KEY_PATH";
+    pub const RWS_CONFIG_ACME_ACCOUNT_KEY_PATH_DEFAULT_VALUE: &'static str = "acme_account.key";
+
 
     pub const RWS_DEFAULT_IP: &'static str = "127.0.0.1";
     pub const RWS_DEFAULT_PORT: &'static i32 = &7878;

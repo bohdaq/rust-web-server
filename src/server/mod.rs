@@ -503,7 +503,7 @@ impl Server {
             return;
         }
 
-        let tls_acceptor = match create_tls_acceptor(&cert_path, &key_path) {
+        let mut tls_acceptor = match create_tls_acceptor(&cert_path, &key_path) {
             Ok(a) => a,
             Err(e) => {
                 eprintln!("TLS setup failed: {}", e);
@@ -571,6 +571,11 @@ impl Server {
                 }
                 _ = sighup() => {
                     crate::config_reload::reload();
+                    // Reload TLS cert in place — picks up renewed certificates (e.g. from ACME).
+                    if let Ok(new_acceptor) = create_tls_acceptor(&cert_path, &key_path) {
+                        tls_acceptor = new_acceptor;
+                        println!("[TLS] Certificate reloaded from '{}'.", cert_path);
+                    }
                 }
             }
         }

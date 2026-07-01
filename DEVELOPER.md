@@ -1502,6 +1502,60 @@ readinessProbe:
 
 See [use case #33](#33-per-route-metrics) for the setup snippet.
 
+---
+
+### 35. Automatic TLS (ACME / Let's Encrypt)
+
+`AcmeManager` (`acme` feature flag) provisions a TLS certificate from Let's Encrypt at startup and renews it automatically before expiry — no `certbot`, no cron jobs, no manual restarts.
+
+```toml
+# Cargo.toml
+[dependencies]
+rust-web-server = { version = "17", features = ["acme"] }
+```
+
+```bash
+# Required env vars
+RWS_CONFIG_ACME_DOMAINS=example.com,www.example.com
+RWS_CONFIG_ACME_EMAIL=admin@example.com
+
+# Optional
+RWS_CONFIG_ACME_STAGING=true            # use Let's Encrypt staging (testing only)
+RWS_CONFIG_ACME_CHALLENGE_PORT=80       # port for HTTP-01 challenge server (default 80)
+RWS_CONFIG_ACME_RENEW_BEFORE_DAYS=30   # renew when fewer than N days remain
+RWS_CONFIG_ACME_ACCOUNT_KEY_PATH=acme_account.key  # persisted ACME account key
+```
+
+The library integration is automatic when the `acme` feature is enabled — `main.rs` checks `AcmeConfig::from_env()` at startup:
+
+```rust
+#[cfg(feature = "acme")]
+{
+    use rust_web_server::acme::{AcmeConfig, AcmeManager};
+    if let Some(cfg) = AcmeConfig::from_env() {
+        let mgr = AcmeManager::new(cfg);
+        // Provision cert now (or skip if one is still valid).
+        if let Err(e) = mgr.provision_if_needed().await {
+            eprintln!("[ACME] Startup provisioning failed: {e}");
+        }
+        // Background loop checks every 12 hours; after renewal sends SIGHUP
+        // so the TLS acceptor reloads without restarting.
+        tokio::spawn(mgr.run_renewal_loop());
+    }
+}
+```
+
+**Protocol flow:**
+1. Fetches the ACME directory from Let's Encrypt.
+2. Creates or loads an ECDSA P-256 account key (stored at `acme_account.key`).
+3. Places a `newOrder` for all configured domains.
+4. For each domain, starts a temporary TCP server on port 80 that answers the HTTP-01 challenge (`/.well-known/acme-challenge/<token>`), signals the ACME server, and polls until `valid`.
+5. Generates a fresh P-256 certificate key and CSR with `rcgen`.
+6. Finalises the order and downloads the signed certificate chain.
+7. Writes the chain to `RWS_CONFIG_TLS_CERT_FILE` and the key to `RWS_CONFIG_TLS_KEY_FILE`.
+
+**Zero-downtime renewal:** after writing new files, `run_renewal_loop` sends `SIGHUP` to the process. The `run_tls` accept loop catches the signal and replaces the `TlsAcceptor` in-place — no TCP connections are dropped.
+
 ### Structured JSON logging
 
 Set `RWS_CONFIG_LOG_FORMAT=json` (or `log_format = 'json'` in `rws.config.toml`) to emit access logs as JSON:
