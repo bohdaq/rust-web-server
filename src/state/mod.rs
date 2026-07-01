@@ -149,6 +149,34 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
         self
     }
 
+    /// Attach an MCP server to this application. Requests that do not match
+    /// the MCP endpoint (`POST /mcp`) are forwarded to `self`, so all
+    /// previously registered routes remain active.
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::mcp::{McpContent, extract_arg};
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    /// use rust_web_server::core::New;
+    ///
+    /// struct Db { url: String }
+    ///
+    /// let app = App::with_state(Db { url: "postgres://localhost/mydb".to_string() })
+    ///     .get("/api/users", |_req, _params, _conn, _db| {
+    ///         let mut r = Response::new();
+    ///         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    ///         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    ///         r
+    ///     })
+    ///     .mcp("my-server", "1.0")
+    ///     .tool("list_users", "List all users", "{}", |_| {
+    ///         Ok(McpContent::json(r#"[{"id":1,"name":"Alice"}]"#))
+    ///     });
+    /// ```
+    pub fn mcp(self, name: impl Into<String>, version: impl Into<String>) -> crate::mcp::McpServer {
+        crate::mcp::McpServer::new(name, version).wrap(self)
+    }
+
     /// Wrap this application in a middleware layer.
     ///
     /// Enables fluent composition:

@@ -187,29 +187,47 @@ impl App {
         WithMiddleware::new(self).wrap(layer)
     }
 
-    /// Create an MCP server. Tools, resources, and prompts are registered on
-    /// the returned [`McpServer`]; unmatched requests fall through to the
-    /// built-in controller chain automatically.
-    ///
-    /// Consistent with [`App::with_state`] and [`App::with_async_state`]:
+    /// Attach an MCP server to this application. Tools, resources, and
+    /// prompts are registered on the returned [`McpServer`]; requests that
+    /// do not match the MCP endpoint are forwarded to `self` (static files,
+    /// health probes, any custom routes registered before this call).
     ///
     /// ```rust,no_run
     /// use rust_web_server::app::App;
     /// use rust_web_server::mcp::{McpContent, extract_arg};
+    /// use rust_web_server::core::New;
     ///
-    /// let app = App::mcp("my-server", "1.0")
+    /// // Pure MCP — unmatched paths handled by built-in App
+    /// let app = App::new()
+    ///     .mcp("my-server", "1.0")
     ///     .tool(
     ///         "echo",
     ///         "Echo text back",
     ///         r#"{"type":"object","properties":{"text":{"type":"string"}}}"#,
-    ///         |args| {
-    ///             let t = extract_arg(args, "text").unwrap_or_default();
-    ///             Ok(McpContent::text(t))
-    ///         },
+    ///         |args| Ok(McpContent::text(extract_arg(args, "text").unwrap_or_default())),
     ///     );
     /// ```
-    pub fn mcp(name: impl Into<String>, version: impl Into<String>) -> McpServer {
-        McpServer::new(name, version)
+    ///
+    /// To combine with custom HTTP routes, start from [`App::with_state`]:
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::mcp::McpContent;
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    /// use rust_web_server::core::New;
+    ///
+    /// let app = App::with_state(())
+    ///     .get("/api/ping", |_, _, _, _| {
+    ///         let mut r = Response::new();
+    ///         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    ///         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    ///         r
+    ///     })
+    ///     .mcp("my-server", "1.0")
+    ///     .tool("ping", "Ping the server", "{}", |_| Ok(McpContent::text("pong")));
+    /// ```
+    pub fn mcp(self, name: impl Into<String>, version: impl Into<String>) -> McpServer {
+        McpServer::new(name, version).wrap(self)
     }
 
     /// Create an async state-aware application (requires the `http2` feature).
