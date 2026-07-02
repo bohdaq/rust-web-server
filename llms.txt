@@ -956,6 +956,7 @@ rust-web-server = { version = "17", default-features = false, features = ["http1
 
 - [DEVELOPER.md — 58 use-case examples](DEVELOPER.md)
 - [spec/SSO.md — OAuth2/OIDC design spec](spec/SSO.md)
-- [spec/GAPS_V2.md — framework self-sufficiency gap tracking](spec/GAPS_V2.md)
+- [spec/GAPS_V3.md — current gaps: server, proxy, framework (v17.43.0)](spec/GAPS_V3.md)
+- [spec/GAPS_V2.md — previous gap tracking (all critical items now closed)](spec/GAPS_V2.md)
 - [spec/PROXY_SERVER_CONFIG.md — config-driven proxy reference](spec/PROXY_SERVER_CONFIG.md)
 - [spec/IDEAS.md — forward-looking feature ideas](spec/IDEAS.md)
