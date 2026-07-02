@@ -177,6 +177,7 @@ cargo build --release --no-default-features --features http1
 - Dependency injection — `Container` stores services keyed by `TypeId`; `register::<T>(val)` for concrete types, `provide::<dyn Trait>(Arc::new(...))` for trait objects, named instances via `register_named`; share with `container.into_arc()` as `App::with_state` state
 - Outbound HTTP client — `Client` (sync) and `AsyncClient` (`http2` feature) for making outbound HTTP/1.1 requests; fluent builder API (`.get()`, `.post()`, `.header()`, `.body_json()`, `.timeout_ms()`); automatic redirect following; HTTPS via `rustls` (`http-client` or `http2` feature); no third-party HTTP dependency
 - Password hashing — `hash_password` / `verify_password` (Argon2id, random salt, PHC string format) and `generate_token` (CSPRNG hex bytes for reset tokens and API keys); `crypto` feature
+- CSRF protection — `CsrfLayer` middleware (double-submit cookie, `SameSite=Strict`, constant-time comparison) and `CsrfToken::from_request` extractor for embedding tokens in HTML forms; supports `X-CSRF-Token` header for AJAX; `csrf` feature
 
 ### Optional features
 
@@ -192,6 +193,7 @@ cargo build --release --no-default-features --features http1
 | `model-postgres` | Model layer backed by PostgreSQL (via the `postgres` crate) — same API as `model-sqlite` |
 | `model-mysql` | Model layer backed by MySQL (via the `mysql` crate) — same API as `model-sqlite` |
 | `crypto` | `hash_password` / `verify_password` (Argon2id) and `generate_token` (CSPRNG) for user auth flows |
+| `csrf` | `CsrfLayer` middleware + `CsrfToken` extractor — double-submit cookie CSRF protection for HTML forms and AJAX |
 
 ```toml
 [dependencies]
@@ -265,7 +267,7 @@ impl Controller for PingController {
 }
 ```
 
-See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 51 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, MCP server, virtual hosting / SNI routing, request / response rewriting, L4 TCP proxy, UDP proxy, WebSocket proxy, HTTP/2 reverse proxy, gRPC proxy, mTLS, canary routing, circuit breaker, service discovery, Kubernetes Ingress routing, background scheduling, HTML template rendering, and typed configuration binding.
+See [DEVELOPER](DEVELOPER.md) for the full building blocks reference and 57 use-case examples covering JSON responses, query parameters, form and file upload parsing, redirects, typed errors, typed extractors, rate limiting, testing, WebSocket connections, shared state, middleware, SSE, auth, Serde JSON, sessions, async handlers, IP filtering, declarative routing, request validation, reverse proxy / load balancing, response caching, hot config reload, per-route metrics, distributed tracing, automatic TLS via ACME, MCP server, virtual hosting / SNI routing, request / response rewriting, L4 TCP proxy, UDP proxy, WebSocket proxy, HTTP/2 reverse proxy, gRPC proxy, mTLS, canary routing, circuit breaker, service discovery, Kubernetes Ingress routing, background scheduling, HTML template rendering, typed configuration binding, config-driven proxy, dependency injection, model layer CRUD, outbound HTTP client, password hashing, and CSRF protection.
 
 ## AI adoption
 

@@ -69,7 +69,7 @@ Also expose `generate_token(n_bytes) -> String` (hex-encoded CSPRNG bytes) for p
 
 ---
 
-### 3. CSRF protection
+### 3. CSRF protection ✅ Done
 
 Any web app that serves HTML forms is vulnerable to cross-site request forgery without a mitigation. There is no built-in CSRF token helper today.
 
@@ -265,8 +265,8 @@ Increasingly expected as an alternative to REST. Would require a separate `src/g
 | Gap | Priority | Effort | New deps? |
 |---|---|---|---|
 | ~~Outbound HTTP client~~ ✅ | ~~Critical~~ | ~~Medium~~ | ~~No (reuse rustls)~~ |
-| Password hashing | Critical | Small | `argon2` |
-| CSRF protection | Critical | Small | No (reuse hmac/sha2) |
+| ~~Password hashing~~ ✅ | ~~Critical~~ | ~~Small~~ | ~~`argon2`~~ |
+| ~~CSRF protection~~ ✅ | ~~Critical~~ | ~~Small~~ | ~~No (reuse rand_core)~~ |
 | OAuth2 / SSO | Critical | Large | Minimal |
 | Email (SMTP) | Important | Small | `lettre` or scratch |
 | File storage | Important | Medium | No (S3 via HTTP client) |

@@ -145,6 +145,10 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Client` / `RequestBuilder` / `Response` | `http_client` | Synchronous outbound HTTP/1.1 client. `Client::new().get(url).header(k,v).timeout_ms(ms).send()` returns `Response`. Follows redirects automatically. Plain HTTP works in all builds; HTTPS requires `http-client` or `http2` feature. |
 | `AsyncClient` / `AsyncRequestBuilder` | `http_client` (requires `http2` feature) | Async variant of the outbound client. Same builder API with `.send().await`. |
 | `HttpClientError` | `http_client` | Error type returned by the HTTP client; implements `std::error::Error`. |
+| `hash_password` / `verify_password` | `crypto` | Argon2id password hashing and verification. `hash_password(pwd)` returns a PHC string (salt embedded). `verify_password(pwd, hash)` is constant-time. |
+| `generate_token` | `crypto` | CSPRNG-backed `generate_token(n_bytes) -> String` — lowercase hex, suitable for reset tokens and API keys. |
+| `CsrfLayer` | `csrf` | Double-submit cookie CSRF middleware. Validates `X-CSRF-Token` header or `_csrf` form field against the `_csrf` cookie on mutating requests; returns 403 on mismatch. Builder: `.cookie_name()`, `.http_only()`, `.secure()`. |
+| `CsrfToken` | `csrf` | Extractor for the current CSRF token. `CsrfToken::from_request(&req)` returns the token inside a GET handler (after `CsrfLayer` has run). Implements `Display` for easy HTML embedding. |
 
 ---
 
@@ -2668,4 +2672,109 @@ use rust_web_server::http_client::AsyncClient;
 async fn fetch_async(url: &str) -> Result<String, rust_web_server::http_client::HttpClientError> {
     AsyncClient::new().get(url).send().await?.text()
 }
+```
+
+---
+
+### 56. Password hashing
+
+`crypto` feature — Argon2id with random salt. Store the PHC string; the salt is embedded so no separate column is needed.
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["crypto"] }
+```
+
+```rust
+use rust_web_server::crypto::{hash_password, verify_password, generate_token};
+
+// At registration:
+let hash = hash_password(&req.body_text()?)?;
+// Store `hash` in the database.
+
+// At login:
+let ok = verify_password(&submitted_password, &stored_hash)?;
+if !ok {
+    return Ok(AppError::Unauthorized.into_response());
+}
+
+// Password reset / API key generation:
+let reset_token = generate_token(32); // 64-char lowercase hex
+```
+
+---
+
+### 57. CSRF protection
+
+`csrf` feature — double-submit cookie pattern. Validates every mutating request (`POST`, `PUT`, `PATCH`, `DELETE`) against a `_csrf` cookie; passes safe methods through unconditionally.
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["csrf"] }
+```
+
+Add `CsrfLayer` to the middleware stack:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::csrf::CsrfLayer;
+
+let app = App::new().wrap(CsrfLayer::new());
+```
+
+Inside a `GET` handler, embed the token in the HTML form:
+
+```rust
+use rust_web_server::csrf::CsrfToken;
+use rust_web_server::request::Request;
+use rust_web_server::server::ConnectionInfo;
+use rust_web_server::response::Response;
+
+fn show_form(req: &Request, _conn: &ConnectionInfo) -> Response {
+    let token = CsrfToken::from_request(req)
+        .map(|t| t.value().to_string())
+        .unwrap_or_default();
+
+    let html = format!(
+        r#"<form method="POST" action="/submit">
+  <input type="hidden" name="_csrf" value="{token}">
+  <input type="text" name="email">
+  <button type="submit">Subscribe</button>
+</form>"#
+    );
+    // build your HTML response with `html` body
+    Response::new()
+}
+```
+
+For AJAX, read the cookie with JavaScript (cookie is not `HttpOnly` by default) and include it as a header:
+
+```js
+const token = document.cookie
+    .split('; ')
+    .find(c => c.startsWith('_csrf='))
+    ?.split('=')[1];
+
+fetch('/api/action', {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': token },
+    body: JSON.stringify(payload),
+});
+```
+
+Options:
+
+```rust
+// Restrict to HTML forms only (disables JS cookie access):
+CsrfLayer::new().http_only(true)
+
+// Add Secure flag for production HTTPS deployments:
+CsrfLayer::new().secure(true)
+
+// Custom cookie / field / header names:
+CsrfLayer::new()
+    .cookie_name("xsrf")
+    .field_name("xsrf")
+    .header_name("X-XSRF-Token")
 ```
