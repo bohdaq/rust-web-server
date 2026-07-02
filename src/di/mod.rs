@@ -74,11 +74,8 @@
 //!     _c: &ConnectionInfo,
 //!     state: &Arc<Container>,
 //! ) -> Response {
-//!     let cfg = state.get::<Config>().unwrap();
-//!     let mut r = Response::new();
-//!     r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
-//!     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-//!     r
+//!     let _cfg = state.get::<Config>().unwrap();
+//!     Response::get_response(&STATUS_CODE_REASON_PHRASE.n200_ok, None, None)
 //! }
 //!
 //! let mut container = Container::new();

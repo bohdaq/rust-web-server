@@ -22,6 +22,7 @@ fn hint_list() {
 
 #[test]
 fn accept_client_hints_header() {
+    let _g = crate::test_env::lock();
     override_environment_variables_from_config(Some("/src/test/client_hint/rws.config.toml"));
 
     let header = ClientHint::get_accept_client_hints_header();
@@ -31,6 +32,7 @@ fn accept_client_hints_header() {
 
 #[test]
 fn critical_client_hints_header() {
+    let _g = crate::test_env::lock();
     override_environment_variables_from_config(Some("/src/test/client_hint/rws.config.toml"));
 
     let header = ClientHint::get_critical_client_hints_header();

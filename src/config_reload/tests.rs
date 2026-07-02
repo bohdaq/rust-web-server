@@ -1,13 +1,9 @@
 use super::{current, reload, ConfigSnapshot, RELOAD_REQUESTED};
 use std::sync::atomic::Ordering;
-use std::sync::Mutex;
-
-// Serialize all tests that mutate process-level env vars.
-static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
 #[test]
 fn snapshot_from_env_reads_cors_allow_all() {
-    let _g = ENV_MUTEX.lock().unwrap();
+    let _g = crate::test_env::lock();
     std::env::set_var("RWS_CONFIG_CORS_ALLOW_ALL", "true");
     let snap = ConfigSnapshot::from_env();
     assert!(snap.cors_allow_all);
@@ -15,7 +11,7 @@ fn snapshot_from_env_reads_cors_allow_all() {
 
 #[test]
 fn snapshot_from_env_reads_cors_allow_all_false() {
-    let _g = ENV_MUTEX.lock().unwrap();
+    let _g = crate::test_env::lock();
     std::env::set_var("RWS_CONFIG_CORS_ALLOW_ALL", "false");
     let snap = ConfigSnapshot::from_env();
     assert!(!snap.cors_allow_all);
@@ -23,7 +19,7 @@ fn snapshot_from_env_reads_cors_allow_all_false() {
 
 #[test]
 fn snapshot_from_env_reads_cors_allow_all_case_insensitive() {
-    let _g = ENV_MUTEX.lock().unwrap();
+    let _g = crate::test_env::lock();
     std::env::set_var("RWS_CONFIG_CORS_ALLOW_ALL", "TRUE");
     let snap = ConfigSnapshot::from_env();
     assert!(snap.cors_allow_all);
@@ -31,7 +27,7 @@ fn snapshot_from_env_reads_cors_allow_all_case_insensitive() {
 
 #[test]
 fn snapshot_from_env_reads_rate_limit_defaults_when_unset() {
-    let _g = ENV_MUTEX.lock().unwrap();
+    let _g = crate::test_env::lock();
     std::env::remove_var("RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS");
     std::env::remove_var("RWS_CONFIG_RATE_LIMIT_WINDOW_SECS");
     let snap = ConfigSnapshot::from_env();
@@ -41,7 +37,7 @@ fn snapshot_from_env_reads_rate_limit_defaults_when_unset() {
 
 #[test]
 fn snapshot_from_env_reads_rate_limit_when_set() {
-    let _g = ENV_MUTEX.lock().unwrap();
+    let _g = crate::test_env::lock();
     std::env::set_var("RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS", "500");
     std::env::set_var("RWS_CONFIG_RATE_LIMIT_WINDOW_SECS", "30");
     let snap = ConfigSnapshot::from_env();
@@ -51,7 +47,7 @@ fn snapshot_from_env_reads_rate_limit_when_set() {
 
 #[test]
 fn snapshot_from_env_reads_log_format() {
-    let _g = ENV_MUTEX.lock().unwrap();
+    let _g = crate::test_env::lock();
     std::env::set_var("RWS_CONFIG_LOG_FORMAT", "json");
     let snap = ConfigSnapshot::from_env();
     assert_eq!("json", snap.log_format);
@@ -59,7 +55,7 @@ fn snapshot_from_env_reads_log_format() {
 
 #[test]
 fn snapshot_from_env_reads_cors_origins() {
-    let _g = ENV_MUTEX.lock().unwrap();
+    let _g = crate::test_env::lock();
     std::env::set_var("RWS_CONFIG_CORS_ALLOW_ORIGINS", "https://example.com");
     let snap = ConfigSnapshot::from_env();
     assert_eq!("https://example.com", snap.cors_allow_origins);
@@ -67,7 +63,7 @@ fn snapshot_from_env_reads_cors_origins() {
 
 #[test]
 fn snapshot_from_env_reads_request_allocation_size() {
-    let _g = ENV_MUTEX.lock().unwrap();
+    let _g = crate::test_env::lock();
     std::env::set_var("RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES", "65536");
     let snap = ConfigSnapshot::from_env();
     assert_eq!(65536, snap.request_allocation_size);
@@ -106,7 +102,7 @@ fn reload_requested_can_be_set_and_cleared() {
 #[test]
 fn reload_does_not_panic_without_config_file() {
     // override_environment_variables_from_config handles missing files gracefully.
-    let _g = ENV_MUTEX.lock().unwrap();
+    let _g = crate::test_env::lock();
     reload();
 }
 
@@ -116,7 +112,7 @@ fn reload_updates_snapshot() {
     // We don't assert specific values because reload() first re-reads rws.config.toml,
     // which may override any env vars we set. Instead, confirm that after reload(),
     // current() agrees with ConfigSnapshot::from_env() (no stale snapshot).
-    let _g = ENV_MUTEX.lock().unwrap();
+    let _g = crate::test_env::lock();
     reload();
     let snap = current();
     let expected = ConfigSnapshot::from_env();

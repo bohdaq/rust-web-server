@@ -9,6 +9,7 @@ use crate::response::STATUS_CODE_REASON_PHRASE;
 
 #[test]
 fn not_found() {
+    let _g = crate::test_env::lock();
     override_environment_variables_from_config(Some("/src/test/app/rws.config.toml"));
 
     let request = Request {
@@ -28,6 +29,7 @@ fn not_found() {
 
 #[test]
 fn static_file() {
+    let _g = crate::test_env::lock();
     override_environment_variables_from_config(Some("/src/test/app/rws.config.toml"));
 
     let request = Request {
@@ -47,6 +49,7 @@ fn static_file() {
 
 #[test]
 fn index() {
+    let _g = crate::test_env::lock();
     override_environment_variables_from_config(Some("/src/test/app/rws.config.toml"));
 
     let request = Request {
@@ -66,6 +69,7 @@ fn index() {
 
 #[test]
 fn static_file_cors_options_preflight_request_client_hints() {
+    let _g = crate::test_env::lock();
     override_environment_variables_from_config(Some("/src/test/app/rws.config.toml"));
 
     let origin_value = "origin-value.com";
@@ -141,6 +145,7 @@ fn static_file_cors_options_preflight_request_client_hints() {
 
 #[test]
 fn static_file_cors_off_options_preflight_request_client_hints() {
+    let _g = crate::test_env::lock();
     override_environment_variables_from_config(Some("/src/test/app/rws.config_cors_off.toml"));
 
     let origin_value = "origin-value.com";

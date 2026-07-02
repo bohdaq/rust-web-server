@@ -9,7 +9,6 @@
 //! ```rust,no_run
 //! use rust_web_server::server::Server;
 //! use rust_web_server::mcp::{McpServer, McpContent, PromptMessage};
-//! # #[cfg(not(feature = "http2"))]
 //! # fn main() {
 //! let mcp = McpServer::new("my-server", "1.0")
 //!     // A tool: callable by the AI, like a function
@@ -266,10 +265,7 @@ impl McpServer {
     ///
     /// let existing_app = App::with_state(42u32)
     ///     .get("/api/hello", |_req, _params, _conn, _state| {
-    ///         let mut r = Response::new();
-    ///         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
-    ///         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-    ///         r
+    ///         Response::get_response(&STATUS_CODE_REASON_PHRASE.n200_ok, None, None)
     ///     });
     ///
     /// let server = McpServer::new("my-app", "1.0")

@@ -4,6 +4,7 @@ use crate::entry_point::Config;
 
 #[test]
 fn command_line_arg_port() {
+    let _g = crate::test_env::lock();
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(0).unwrap();
@@ -21,6 +22,7 @@ fn command_line_arg_port() {
 
 #[test]
 fn command_line_arg_ip() {
+    let _g = crate::test_env::lock();
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(1).unwrap();
@@ -38,6 +40,7 @@ fn command_line_arg_ip() {
 
 #[test]
 fn command_line_arg_thread_count() {
+    let _g = crate::test_env::lock();
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(2).unwrap();
@@ -55,6 +58,7 @@ fn command_line_arg_thread_count() {
 
 #[test]
 fn command_line_arg_request_allocation_size() {
+    let _g = crate::test_env::lock();
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(10).unwrap();
@@ -72,6 +76,7 @@ fn command_line_arg_request_allocation_size() {
 
 #[test]
 fn command_line_arg_thread_cors_allow_all() {
+    let _g = crate::test_env::lock();
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(3).unwrap();
@@ -89,6 +94,7 @@ fn command_line_arg_thread_cors_allow_all() {
 
 #[test]
 fn command_line_arg_thread_cors_allow_origins() {
+    let _g = crate::test_env::lock();
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(4).unwrap();
@@ -106,6 +112,7 @@ fn command_line_arg_thread_cors_allow_origins() {
 
 #[test]
 fn command_line_arg_thread_cors_allow_methods() {
+    let _g = crate::test_env::lock();
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(5).unwrap();
@@ -123,6 +130,7 @@ fn command_line_arg_thread_cors_allow_methods() {
 
 #[test]
 fn command_line_arg_thread_cors_allow_headers() {
+    let _g = crate::test_env::lock();
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(6).unwrap();
@@ -140,6 +148,7 @@ fn command_line_arg_thread_cors_allow_headers() {
 
 #[test]
 fn command_line_arg_thread_cors_allow_credentials() {
+    let _g = crate::test_env::lock();
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(7).unwrap();
@@ -157,6 +166,7 @@ fn command_line_arg_thread_cors_allow_credentials() {
 
 #[test]
 fn command_line_arg_thread_cors_expose_headers() {
+    let _g = crate::test_env::lock();
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(8).unwrap();
@@ -174,6 +184,7 @@ fn command_line_arg_thread_cors_expose_headers() {
 
 #[test]
 fn command_line_arg_thread_cors_max_age() {
+    let _g = crate::test_env::lock();
     let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
 
     let argument = command_line_arg_list.get(9).unwrap();
@@ -191,6 +202,7 @@ fn command_line_arg_thread_cors_max_age() {
 
 #[test]
 fn parse() {
+    let _g = crate::test_env::lock();
     let args_vec_as_str : Vec<&str> = "-i=127.0.0.1 -p=7777 -t=100 -a=false -o=https://foo.example,https://bar.example -m=GET,POST,PUT,DELETE -h=content-type,x-custom-header -c=true -e=content-type,x-custom-header -g=86400"
         .split_whitespace()
         .collect::<Vec<&str>>();
@@ -233,6 +245,7 @@ fn parse() {
 
 #[test]
 fn parse_long_form() {
+    let _g = crate::test_env::lock();
     let args_vec_as_str : Vec<&str> = "--ip=127.0.0.1 --port=7777 --thread-count=100 --cors-allow-all=false --cors-allow-origins=https://foo.example,https://bar.example --cors-allow-methods=GET,POST,PUT,DELETE --cors-allow-headers=content-type,x-custom-header --cors-allow-credentials=true --cors-expose-headers=content-type,x-custom-header --cors-max-age=86400"
         .split_whitespace()
         .collect::<Vec<&str>>();
@@ -275,5 +288,6 @@ fn parse_long_form() {
 
 #[test]
 fn _override() {
+    let _g = crate::test_env::lock();
     override_environment_variables_from_command_line_args()
 }

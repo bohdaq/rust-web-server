@@ -610,10 +610,10 @@ impl Exporter for DiscardExporter {
 /// Captures spans in memory instead of exporting them. Use in unit tests.
 ///
 /// ```rust
-/// use rust_web_server::otel::{CapturingExporter, ExporterConfig, TracingConfig, setup};
+/// use rust_web_server::otel::{CapturingExporter, SpanData};
 /// use std::sync::{Arc, Mutex};
 ///
-/// let captured: Arc<Mutex<Vec<_>>> = Default::default();
+/// let captured: Arc<Mutex<Vec<SpanData>>> = Arc::new(Mutex::new(Vec::new()));
 /// // (CapturingExporter is constructed internally by the test helpers)
 /// ```
 pub struct CapturingExporter {

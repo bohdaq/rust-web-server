@@ -178,6 +178,7 @@ fn it_generates_successful_response_with_index_html_as_symlink() {
 
 #[test]
 fn it_generates_successful_response_with_static_file() {
+    let _g = crate::test_env::lock();
     override_environment_variables_from_config(Some("/src/test/rws.config.toml"));
 
     // request test data

@@ -143,3 +143,20 @@ pub mod h2_handler;
 #[cfg(feature = "http3")]
 #[doc(hidden)]
 pub mod h3_handler;
+
+/// Shared infrastructure for tests that write process-wide environment variables.
+///
+/// Tests that call `override_environment_variables_from_config` or
+/// `CommandLineArgument::set_environment_variable` must hold this lock for
+/// their entire duration so they don't race with other tests reading the
+/// same variables.
+#[cfg(test)]
+pub mod test_env {
+    use std::sync::{Mutex, OnceLock};
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    pub fn lock() -> std::sync::MutexGuard<'static, ()> {
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+}

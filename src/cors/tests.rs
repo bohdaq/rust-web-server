@@ -14,8 +14,7 @@ use crate::symbol::SYMBOL;
 
 #[test]
 fn cors_options_preflight_request() {
-    // request test data
-
+    let _g = crate::test_env::lock();
     override_environment_variables_from_config(Some("/src/test/rws.config.toml"));
 
     let request_method = METHOD.options;
@@ -133,6 +132,7 @@ fn cors_options_preflight_request() {
 
 #[test]
 fn actual_request_after_preflight() {
+    let _g = crate::test_env::lock();
     override_environment_variables_from_config(Some("/src/test/rws.config.toml"));
 
     let request_method = METHOD.get;
@@ -366,6 +366,7 @@ fn cors_process() {
 
 #[test]
 fn cors_process_default_config() {
+    let _g = crate::test_env::lock();
     println!("cors_process_default_config");
 
     override_environment_variables_from_config(Some("/src/test/rws.config.toml"));

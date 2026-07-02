@@ -47,6 +47,7 @@ fn readyz_does_not_match_other_uri() {
 
 #[test]
 fn readyz_returns_503_when_not_ready() {
+    let _guard = crate::test_env::lock();
     SERVER_READY.store(false, Ordering::SeqCst);
     let req = make_readyz_request();
     let response = Response::new();
@@ -58,6 +59,7 @@ fn readyz_returns_503_when_not_ready() {
 
 #[test]
 fn readyz_returns_200_when_ready() {
+    let _guard = crate::test_env::lock();
     SERVER_READY.store(true, Ordering::SeqCst);
     let req = make_readyz_request();
     let response = Response::new();

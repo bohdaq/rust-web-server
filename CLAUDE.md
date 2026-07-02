@@ -40,6 +40,37 @@ Every code change — new feature, bug fix, refactor — must include all three:
 - Cover the happy path and at least one failure/edge case per public function or method.
 - Run `cargo test` before committing. All tests must pass.
 
+#### Shared-state lock — mandatory for any test that touches `RWS_CONFIG_*` env vars
+
+`cargo test` runs all tests in parallel within one process. `RWS_CONFIG_*` environment variables are process-wide mutable state. Any test that **writes** them — directly or transitively — races with every other test that reads them, causing intermittent failures that are hard to reproduce.
+
+**Rule:** hold `let _g = crate::test_env::lock();` as the very first line of every test that does any of the following (directly or via a called function):
+
+| Trigger | Why it writes env vars |
+|---|---|
+| `std::env::set_var("RWS_CONFIG_*", …)` | direct write |
+| `std::env::remove_var("RWS_CONFIG_*")` | direct remove |
+| `override_environment_variables_from_config(…)` | reads a `.toml` file and writes all keys it finds, including `thread_count` |
+| `bootstrap()` | calls `override_environment_variables_from_config(None)` which reads the project-root `rws.config.toml` |
+| `config_reload::reload()` | calls `override_environment_variables_from_config(None)` |
+| `CommandLineArgument::_parse(…)` / `set_environment_variable(…)` | calls `env::set_var` for each parsed arg |
+| `metrics::SERVER_READY.store(…)` | mutates a global `AtomicBool` read by `/readyz` tests |
+
+The lock is a `static OnceLock<Mutex<()>>` defined in `src/lib.rs` under `#[cfg(test)]`. It must be held for the **entire** test body — assign it to a named binding (`_g`, not `_`) so it isn't dropped immediately:
+
+```rust
+#[test]
+fn my_test() {
+    let _g = crate::test_env::lock();   // held until end of function
+    override_environment_variables_from_config(Some("/src/test/rws.config.toml"));
+    // ... rest of test
+}
+```
+
+**The transitive trap.** The lock is required even when a test doesn't call `set_var` directly. `bootstrap()` looks innocent but it calls `override_environment_variables_from_config(None)`, which finds the project-root `rws.config.toml` (which sets `thread_count = 200`) and writes it into the process environment. A test that calls `bootstrap()` without the lock will silently corrupt `RWS_CONFIG_THREAD_COUNT` for any concurrently running test that just set it to something else.
+
+When adding a new test, ask: *does any function I call eventually call `env::set_var`?* If yes, take the lock.
+
 ### 2. DEVELOPER.md
 
 - **Building blocks table** — add a row for every new public type, function, or middleware: `| Name | Module | What it does |`
