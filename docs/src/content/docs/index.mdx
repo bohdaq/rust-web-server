@@ -1,0 +1,186 @@
+---
+title: rust-web-server
+description: HTTP/1.1 · HTTP/2 · HTTP/3/QUIC · Reverse Proxy · MCP Server · ORM — no third-party HTTP dependencies.
+template: splash
+hero:
+  title: Build fast. Ship zero deps.
+  tagline: >
+    HTTP/1.1 · HTTP/2 · HTTP/3/QUIC · TLS · Reverse Proxy · MCP Server · ORM.
+    One Rust crate. No third-party HTTP dependencies.
+  image:
+    dark: ../../assets/logo.svg
+    light: ../../assets/logo.svg
+  actions:
+    - text: Get Started
+      link: /getting-started/quick-start/
+      icon: right-arrow
+      variant: primary
+    - text: GitHub
+      link: https://github.com/bohdaq/rust-web-server
+      icon: github
+      variant: minimal
+    - text: crates.io v17
+      link: https://crates.io/crates/rust-web-server
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<div class="protocol-matrix">
+  <span>HTTP/1.1</span>
+  <span>HTTP/2</span>
+  <span>HTTP/3 / QUIC</span>
+  <span>TLS (rustls)</span>
+  <span>CORS</span>
+  <span>Gzip</span>
+  <span>ETag</span>
+  <span>WebSocket</span>
+  <span>SSE</span>
+</div>
+
+## What's inside
+
+<CardGrid>
+  <Card title="Zero HTTP dependencies" icon="puzzle">
+    HTTP parsing, CORS, MIME types, range requests, WebSocket, SSE, and routing are all implemented from scratch — no `hyper`, no `actix-net`, no `tokio-util`.
+  </Card>
+  <Card title="Config-driven proxy" icon="setting">
+    Drop an `rws.config.toml` next to the binary and it becomes a reverse proxy, load balancer, and API gateway. No code required.
+  </Card>
+  <Card title="MCP Server" icon="rocket">
+    Expose tools, resources, and prompts to Claude and other AI agents over the MCP Streamable HTTP protocol with a simple builder API.
+  </Card>
+  <Card title="Middleware pipeline" icon="bars">
+    Compose `RateLimitLayer`, `CacheLayer`, `OtelLayer`, `JwtLayer`, `RewriteLayer`, `BasicAuthLayer`, and more via `.wrap(layer)`.
+  </Card>
+  <Card title="Model layer ORM" icon="document">
+    JPA-style ORM with `#[derive(Model)]`, a type-safe `QueryBuilder`, repository pattern, migrations, and `HasMany` / `HasOne` / `BelongsTo` relations — SQLite, PostgreSQL, or MySQL.
+  </Card>
+  <Card title="Kubernetes-ready" icon="approve-check-circle">
+    `/healthz`, `/readyz`, `/metrics`. Graceful SIGTERM shutdown. Prometheus-compatible scrape endpoint. First-class Kubernetes Ingress Watcher.
+  </Card>
+  <Card title="Prometheus metrics" icon="magnifier">
+    Server-wide counters plus per-route `rws_route_requests_total` and `rws_route_duration_seconds` histograms via `MetricsLayer`.
+  </Card>
+  <Card title="WebSocket & SSE" icon="bolt">
+    RFC 6455 WebSocket handshake and frame codec built in. `Sse` builder for Server-Sent Events — ideal for streaming AI tokens.
+  </Card>
+  <Card title="In-process test client" icon="approve-check">
+    `TestClient::new(App::new())` dispatches requests through your `Application` without opening a TCP socket — fast, hermetic unit tests with zero infra.
+  </Card>
+  <Card title="Dependency injection" icon="box">
+    `Container` is a `TypeId`-keyed service store for concrete types and trait objects. Pair with `App::with_state(Arc::new(container))` for ergonomic DI.
+  </Card>
+  <Card title="Background scheduler" icon="bulb">
+    Run tasks on a fixed interval, after a delay, or a cron schedule via `Scheduler::new().every(…, fn).cron("0 * * * * *", fn).start()`.
+  </Card>
+  <Card title="No OpenSSL" icon="heart">
+    TLS is powered by `rustls` with the `aws-lc-rs` crypto backend — no system OpenSSL dependency, fully static binaries, FIPS-compatible.
+  </Card>
+</CardGrid>
+
+## Get started in 60 seconds
+
+<div class="two-col">
+<div>
+
+### As a library
+
+```toml title="Cargo.toml"
+[dependencies]
+rust-web-server = { version = "17", default-features = false, features = ["http1"] }
+```
+
+```rust title="src/main.rs"
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::mime_type::MimeType;
+use rust_web_server::range::Range;
+use rust_web_server::request::Request;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::router::PathParams;
+use rust_web_server::server::{ConnectionInfo, Server};
+
+fn hello(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &()) -> Response {
+    let ok = &STATUS_CODE_REASON_PHRASE.n200_ok;
+    let mut r = Response::new();
+    r.status_code = *ok.status_code;
+    r.reason_phrase = ok.reason_phrase.to_string();
+    r.content_range_list = vec![Range::get_content_range(
+        b"Hello, world!".to_vec(),
+        MimeType::TEXT_PLAIN.to_string(),
+    )];
+    r
+}
+
+fn main() {
+    let app = App::with_state(()).get("/hello", hello);
+    let (listener, pool) = Server::setup().expect("setup failed");
+    Server::run(listener, pool, app);
+}
+```
+
+```shell
+$ curl http://localhost:7878/hello
+Hello, world!
+```
+
+</div>
+<div>
+
+### As a proxy — no code required
+
+```toml title="rws.config.toml"
+[server]
+port = 8080
+
+[[upstream]]
+name     = "api"
+backends = ["localhost:3000", "localhost:3001"]
+
+[upstream.health_check]
+path              = "/healthz"
+interval_secs     = 10
+healthy_threshold = 2
+
+[[route]]
+[route.match]
+path = "/api/"
+
+[route.action]
+type     = "proxy"
+upstream = "api"
+
+[[route]]
+[route.match]
+path = "/"
+
+[route.action]
+type   = "respond"
+status = 200
+body   = "Gateway ready"
+```
+
+```shell
+$ rws
+Listening on 0.0.0.0:8080
+```
+
+</div>
+</div>
+
+## Build matrix
+
+| | `http1` | `http2` | `http3` (default) |
+|---|:---:|:---:|:---:|
+| Runtime | sync thread pool | tokio | tokio |
+| TLS | — | rustls | rustls |
+| HTTP/2 | — | ALPN | ALPN |
+| QUIC | — | — | quinn |
+| Approx. binary | ~3 MB | ~8 MB | ~12 MB |
+| MSRV | 1.75 | 1.75 | 1.75 |
+
+<div class="cta-footer">
+  <a href="/getting-started/quick-start/">Read the Quick Start →</a>
+</div>
