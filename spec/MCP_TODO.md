@@ -1,0 +1,509 @@
+[Read Me](../README.md) > [Spec](.) > MCP TODO
+
+# MCP TODO — Enhancement Backlog
+
+Current implementation: `src/mcp/mod.rs`, targeting **MCP 2024-11-05** (Streamable HTTP transport).
+
+Baseline covered: `initialize`, `tools/*`, `resources/*`, `prompts/*`, static Bearer auth,
+`notifications/initialized` (202 no-content), `ping`, CORS preflight, `.wrap(app)` fallthrough.
+
+---
+
+## Priority 1 — Correctness and ergonomics (do first)
+
+### TODO-1: Protocol version negotiation
+
+`initialize` always returns `"protocolVersion":"2024-11-05"` regardless of what the client sends.
+The spec requires the server to inspect `params.protocolVersion` and respond with the version it
+actually supports, allowing the client to abort if incompatible.
+
+Current code ignores `params` entirely:
+```rust
+fn do_initialize(&self) -> Result<String, (i32, String)> {
+    // ignores clientInfo and protocolVersion from body
+```
+
+**Fix:** extract `params.protocolVersion` and `params.clientInfo` via `json_rpc::extract_str`.
+Store `clientInfo` for logging. Return the lower of client's and server's version.
+
+**Effort:** tiny — two `json_rpc::extract_str` calls in `do_initialize`.
+
+---
+
+### TODO-2: Per-request context in tool handlers
+
+Tool handlers receive only `arguments: &str`. They have no access to caller identity, session,
+or HTTP headers. This makes it impossible to write a tool that behaves differently per user or
+logs which MCP client called it.
+
+**Add `McpContext`:**
+```rust
+pub struct McpContext {
+    pub client_name:    Option<String>,   // from initialize params.clientInfo.name
+    pub client_version: Option<String>,   // from initialize params.clientInfo.version
+    pub session_id:     Option<String>,   // Mcp-Session-Id header
+    pub auth_claims:    Option<String>,   // JSON string of verified JWT claims (TODO-11)
+}
+```
+
+**New builder method:**
+```rust
+.tool_with_context("list_files", desc, schema,
+    |ctx: McpContext, args: &str| -> Result<McpContent, String> {
+        println!("Called by {}", ctx.client_name.as_deref().unwrap_or("unknown"));
+        Ok(McpContent::text("..."))
+    }
+)
+```
+
+Store `clientInfo` from `initialize` in the handler context. The `McpContext` is constructed
+in `execute()` from the current `Request` headers and the stored `clientInfo`.
+
+**Effort:** small — new struct, new builder variant, plumb through `do_tools_call`.
+
+---
+
+### TODO-3: Tool annotations (MCP 2025-03-26)
+
+The 2025-03-26 spec adds `annotations` to tool definitions. Claude Desktop and other clients use
+these hints to warn before destructive actions, or to skip confirmation for read-only tools.
+
+**Add to `ToolDef`:**
+```rust
+pub struct ToolAnnotations {
+    pub read_only_hint:   Option<bool>,  // tool does not modify state
+    pub destructive_hint: Option<bool>,  // tool may delete/overwrite data
+    pub idempotent_hint:  Option<bool>,  // calling N times = calling once
+    pub open_world_hint:  Option<bool>,  // tool may contact external services
+}
+```
+
+**Builder:**
+```rust
+.tool(name, desc, schema, handler)                       // existing — no annotations
+.tool_annotated(name, desc, schema, annotations, handler) // new
+```
+
+**Serialized in `do_tools_list`:**
+```json
+{"name":"delete_file","annotations":{"destructiveHint":true,"readOnlyHint":false}}
+```
+
+**Effort:** tiny — two struct fields, one optional JSON block in `do_tools_list`.
+
+---
+
+### TODO-4: `image` and `embedded_resource` content types
+
+`McpContent` only serializes `{"type":"text",...}`. The spec defines two more:
+
+```rust
+// Image from a tool (screenshot, chart, generated art):
+McpContent::image(base64_data: impl Into<String>, mime_type: &str) -> Self
+// → {"type":"image","data":"<b64>","mimeType":"image/png"}
+
+// Embedded resource inside a tool response:
+McpContent::embedded(uri: &str, text: impl Into<String>, mime_type: &str) -> Self
+// → {"type":"resource","resource":{"uri":"...","mimeType":"...","text":"..."}}
+```
+
+Update `to_content_json()` to branch on `kind`.
+
+**Effort:** small — extend the enum-like `kind` field and update `to_content_json`.
+
+---
+
+### TODO-5: JSON-RPC batch requests
+
+JSON-RPC 2.0 (and MCP) allows an array of request objects in a single POST:
+```json
+[{"jsonrpc":"2.0","method":"tools/list","id":1},
+ {"jsonrpc":"2.0","method":"prompts/list","id":2}]
+```
+
+Current `handle_request` always parses the body as a single object. An array body silently
+falls through to `METHOD_NOT_FOUND` because `"method"` extraction returns `None`.
+
+**Fix in `handle_request`:**
+```rust
+let trimmed = body.trim_start();
+if trimmed.starts_with('[') {
+    return self.handle_batch(body);
+}
+```
+
+`handle_batch` splits the array, dispatches each element, collects results, and wraps them in
+a `[...]` response array. Notifications in the batch (no `id`) still return no entry in the
+array.
+
+**Effort:** small — one branch + `handle_batch` function.
+
+---
+
+### TODO-6: Pagination for list methods
+
+`tools/list`, `resources/list`, `prompts/list` return all items unconditionally. The spec
+supports cursor-based pagination via `params.cursor` → response `nextCursor`.
+
+For servers with many tools or resources, clients must page. Claude Desktop already sends
+`cursor` on subsequent list calls.
+
+**Add to `McpServer`:**
+```rust
+pub fn page_size(mut self, n: usize) -> Self { ... }
+```
+
+**In `do_tools_list`:**
+- Read `params.cursor` (an opaque base64 offset)
+- Slice `self.tools[offset..offset+page_size]`
+- If more items remain, set `"nextCursor": "<offset+page_size as base64>"`
+
+**Effort:** small — cursor = base64(usize offset), three list handlers updated.
+
+---
+
+## Priority 2 — Spec completeness (medium effort)
+
+### TODO-7: SSE streaming transport (`GET /mcp`)
+
+The MCP Streamable HTTP spec defines a second transport on the same path:
+- `POST /mcp` — client → server requests (implemented)
+- `GET /mcp` — server → client SSE stream for push notifications (**missing**)
+
+Without the GET SSE channel, **all three** `listChanged` / `subscribe` capabilities must
+remain `false`. This blocks:
+- `notifications/tools/list_changed` (TODO-9)
+- `notifications/resources/updated` + `notifications/resources/list_changed`
+- `notifications/progress` for long-running tools (TODO-10)
+- `notifications/message` log stream (TODO-8)
+
+**Design:**
+```rust
+// Internal broadcast bus
+type SseSender = std::sync::mpsc::SyncSender<String>;
+
+struct McpServer {
+    // ... existing fields ...
+    sse_clients: Arc<Mutex<Vec<SseSender>>>,
+}
+```
+
+In `execute()`, when `request.method == "GET"` and path matches:
+1. Create a `(tx, rx)` pair.
+2. Push `tx` into `sse_clients`.
+3. Return a streaming SSE response that reads from `rx` until the channel closes.
+
+Push a notification from anywhere:
+```rust
+fn notify_all(&self, event: &str) {
+    let json = format!(r#"{{"jsonrpc":"2.0","method":"{}"}}"#, event);
+    let mut clients = self.sse_clients.lock().unwrap();
+    clients.retain(|tx| tx.send(format!("data: {json}\n\n")).is_ok());
+}
+```
+
+**Leverage point:** `src/sse/mod.rs` already produces correct `text/event-stream` headers
+and framing. The internal plumbing here uses a raw MPSC channel rather than the `Sse` builder
+(which assembles a finished response body) — a lightweight equivalent that writes frames
+incrementally is needed. This is the largest single item in this list.
+
+**Effort:** medium — new GET handler, MPSC broadcast bus, keep-alive heartbeat thread.
+
+---
+
+### TODO-8: `logging/setLevel` and `notifications/message`
+
+The spec lets clients request a minimum log level and receive server log messages as SSE
+notifications. Useful during development: the MCP client shows server diagnostics inline.
+
+**Depends on:** TODO-7 (SSE channel for push).
+
+**New method in `handle_request`:**
+```
+"logging/setLevel" => self.do_set_log_level(body)
+```
+
+Store `min_level: Arc<Mutex<LogLevel>>`. When the server calls `mcp_log!(server, "info", "msg")`,
+check the level, format as `notifications/message`, and push over the SSE channel.
+
+**Builder:**
+```rust
+let server = McpServer::new(...)
+    .logging_enabled()  // advertises logging capability in initialize
+```
+
+**Effort:** small once TODO-7 is done.
+
+---
+
+### TODO-9: Dynamic tool/resource/prompt registration + `listChanged`
+
+Currently tools are in `Arc<Vec<ToolDef>>` — immutable after build. There is no way to add or
+remove a tool at runtime (e.g. after discovering a plugin, connecting to a DB, or hot-reloading
+config).
+
+**Change storage to `Arc<RwLock<Vec<ToolDef>>>`.**
+
+**Add a `McpHandle` returned from `.build()` (or exposed via `.handle()`):**
+```rust
+let (server, handle) = McpServer::new(...).tool(...).build_with_handle();
+
+// Later, from any thread:
+handle.register_tool("new_tool", desc, schema, handler);
+handle.remove_tool("old_tool");
+// Automatically pushes notifications/tools/list_changed over SSE (needs TODO-7)
+```
+
+Update `do_initialize` capabilities:
+```json
+{"tools":{"listChanged":true},"resources":{"listChanged":true,"subscribe":true},...}
+```
+
+**Effort:** medium — `RwLock` swap, `McpHandle` type, `listChanged` notification dispatch.
+
+---
+
+### TODO-10: `notifications/progress` for long-running tools
+
+When a client includes `_meta.progressToken` in a `tools/call` request, the server should
+send periodic `notifications/progress` events over the SSE channel as the tool runs.
+
+**Depends on:** TODO-7 (SSE channel).
+
+**In `do_tools_call`:**
+```rust
+let progress_token = json_rpc::extract_str(&params, "_meta.progressToken");
+// pass to handler via McpContext (TODO-2)
+```
+
+**In tool handlers:**
+```rust
+|ctx: McpContext, args: &str| {
+    if let Some(token) = &ctx.progress_token {
+        ctx.report_progress(token, 0.0, 100.0, Some("starting".into()));
+    }
+    // ... do work ...
+    Ok(McpContent::text("done"))
+}
+```
+
+**Effort:** small once TODO-7 and TODO-2 are done.
+
+---
+
+### TODO-11: `completions/complete` — argument autocompletion
+
+Clients like Cursor and VS Code use `completions/complete` to offer autocomplete when the user
+fills in tool or prompt arguments. Without it, argument fields are plain text boxes.
+
+**New builder method:**
+```rust
+.completion("tool", "tool_name", |arg_name, partial| {
+    match arg_name {
+        "region" => Ok(vec!["us-east-1", "eu-west-1", "ap-southeast-1"]),
+        _        => Ok(vec![]),
+    }
+})
+```
+
+**Dispatch:**
+```
+"completion/complete" => self.do_completion(body)
+```
+
+The response format:
+```json
+{"completion":{"values":["us-east-1","eu-west-1"],"hasMore":false,"total":2}}
+```
+
+**Effort:** small — one new handler, one new builder method, one new internal vec.
+
+---
+
+### TODO-12: Request cancellation (`notifications/cancelled`)
+
+The spec allows a client to send `notifications/cancelled` to abort a long-running `tools/call`.
+Currently the server never reads this — the tool runs to completion regardless.
+
+**For `http1` builds (synchronous):** not fixable without thread interruption; log and ignore.
+
+**For `http2` async builds:**
+```rust
+// In McpContext (TODO-2):
+pub cancellation: CancellationToken,  // tokio_util::sync::CancellationToken
+```
+
+The `notifications/cancelled` handler finds the in-flight request by `id` and calls
+`token.cancel()`. Async tool handlers check `token.is_cancelled()` between steps.
+
+**Effort:** medium (async only, requires CancellationToken tracking map).
+
+---
+
+## Priority 3 — Enterprise / advanced (lower urgency)
+
+### TODO-13: OAuth 2.0 Authorization (MCP 2025-03-26)
+
+The 2025-03-26 spec defines an OAuth 2.0 authorization flow: the server exposes
+`/.well-known/oauth-authorization-server`, requires Bearer tokens from an authorization server,
+and supports PKCE. This enables multi-tenant or enterprise deployments where each user
+authenticates independently.
+
+**Leverage point:** `sso::JwksCache` already does RS256/ES256 JWT verification. A new builder:
+```rust
+.require_oauth(
+    jwks_url:  "https://accounts.google.com/.well-known/openid-configuration",
+    audience:  "my-mcp-client-id",
+)
+```
+
+In `execute()`: extract Bearer token → verify with `JwksCache` → inject claims into `McpContext`
+(TODO-2) as `auth_claims`. Return `401` with `WWW-Authenticate: Bearer` on failure.
+
+Also serve `GET /.well-known/oauth-authorization-server` with the metadata document.
+
+**Effort:** small — `JwksCache` already does the hard work.
+
+---
+
+### TODO-14: `resources/subscribe` and `resources/unsubscribe`
+
+Clients can subscribe to a specific resource URI and receive `notifications/resources/updated`
+when it changes. Used for live-updating resource panels in Claude Desktop.
+
+**Depends on:** TODO-7 (SSE channel) and TODO-9 (dynamic registration).
+
+**Add subscription store:**
+```rust
+subscriptions: Arc<RwLock<HashMap<String, Vec<SseSender>>>>
+// key: resource URI, value: list of SSE channels subscribed to it
+```
+
+**New methods in `handle_request`:**
+```
+"resources/subscribe"   => self.do_resource_subscribe(body, session_id)
+"resources/unsubscribe" => self.do_resource_unsubscribe(body, session_id)
+```
+
+**API for resource owners to signal changes:**
+```rust
+handle.notify_resource_updated("config://main");
+```
+
+**Effort:** medium (depends on TODO-7 and TODO-9).
+
+---
+
+### TODO-15: `sampling/createMessage` — server-side sampling
+
+The spec allows the MCP server to ask the client to run inference ("sampling"). This reverses
+the normal flow: the server sends a `sampling/createMessage` request over the SSE channel and
+the client responds via POST.
+
+```rust
+let response = server_handle.sample(SamplingRequest {
+    messages: vec![SamplingMessage::user("What is 2+2?")],
+    max_tokens: 100,
+    model_preferences: None,
+}).await?;
+```
+
+This is the most unusual MCP feature — only needed for agent-to-agent or meta-agent patterns.
+**Depends on:** TODO-7 and async execution.
+
+**Effort:** large (bidirectional request/response over SSE).
+
+---
+
+### TODO-16: `roots/list` and `notifications/roots/list_changed`
+
+Clients can advertise filesystem roots to the server so the server knows which directories the
+client has access to. Useful for file-system-aware tools that should only operate within the
+client's workspace.
+
+**Store received roots in `McpContext` (TODO-2):**
+```rust
+pub roots: Vec<McpRoot>,  // { uri: String, name: Option<String> }
+```
+
+**On `notifications/roots/list_changed`:** re-request `roots/list` from the client (requires
+sampling-style bidirectional call — needs TODO-15).
+
+**Effort:** medium (depends on TODO-15 for full implementation; partial read from context is small).
+
+---
+
+### TODO-17: Async tool handlers (`http2` feature)
+
+Tool handlers are `Box<dyn Fn(&str) -> Result<McpContent, String> + Send + Sync>` — synchronous.
+A tool that calls `AsyncClient`, queries a database, or waits for an AI response blocks a tokio
+worker thread.
+
+**New builder variant (gated on `#[cfg(feature = "http2")]`):**
+```rust
+.async_tool("call_api", desc, schema,
+    |args: &str| async move {
+        let resp = AsyncClient::new().get("https://api.example.com").send().await?;
+        Ok(McpContent::json(resp.text()?))
+    }
+)
+```
+
+In `execute()` the async variant uses `tokio::task::block_in_place` to bridge the sync
+`Application::execute` boundary (same pattern as `H2ReverseProxy::handle`).
+
+**Effort:** medium — new `AsyncToolDef` storage, `block_in_place` bridge.
+
+---
+
+## Implementation order
+
+```
+Phase 1 — Quick wins (no new dependencies, mostly additive)
+  TODO-1  protocol version negotiation     (tiny)
+  TODO-2  McpContext in tool handlers      (small)
+  TODO-3  tool annotations 2025-03-26      (tiny)
+  TODO-4  image + embedded content types   (small)
+  TODO-5  JSON-RPC batch requests          (small)
+  TODO-6  list pagination                  (small)
+  TODO-11 completions/complete             (small)
+
+Phase 2 — Streaming foundation (enables all notification features)
+  TODO-7  GET /mcp SSE channel            (medium — unblocks 8, 9, 10, 14, 15, 16)
+  TODO-8  logging/setLevel + notifications (small, needs TODO-7)
+  TODO-9  dynamic registration             (medium, needs TODO-7)
+  TODO-10 notifications/progress           (small, needs TODO-7 + TODO-2)
+
+Phase 3 — Enterprise + advanced
+  TODO-11 completions/complete            (small, can go in Phase 1)
+  TODO-12 request cancellation            (medium, http2 only)
+  TODO-13 OAuth 2.0 (2025-03-26)         (small — JwksCache already exists)
+  TODO-14 resources/subscribe             (medium, needs TODO-7 + TODO-9)
+  TODO-17 async tool handlers             (medium, http2 only)
+  TODO-15 sampling/createMessage          (large)
+  TODO-16 roots/list                      (medium, needs TODO-15)
+```
+
+---
+
+## Summary table
+
+| # | Enhancement | Spec | Priority | Effort | Dependency |
+|---|-------------|------|----------|--------|------------|
+| 1 | Protocol version negotiation | 2024-11-05 | **P1** | Tiny | — |
+| 2 | `McpContext` in tool handlers | Ergonomics | **P1** | Small | — |
+| 3 | Tool annotations | 2025-03-26 | **P1** | Tiny | — |
+| 4 | `image` + `embedded` content | 2024-11-05 | **P1** | Small | — |
+| 5 | JSON-RPC batch | JSON-RPC 2.0 | **P1** | Small | — |
+| 6 | List pagination | 2024-11-05 | **P1** | Small | — |
+| 11 | `completions/complete` | 2024-11-05 | **P1** | Small | — |
+| 7 | SSE transport (`GET /mcp`) | Streamable HTTP | **P2** | Medium | — |
+| 8 | `logging/setLevel` | 2024-11-05 | **P2** | Small | #7 |
+| 9 | Dynamic registration + `listChanged` | 2024-11-05 | **P2** | Medium | #7 |
+| 10 | `notifications/progress` | 2024-11-05 | **P2** | Small | #7 + #2 |
+| 12 | Request cancellation | 2024-11-05 | **P3** | Medium | `http2` async |
+| 13 | OAuth 2.0 auth | 2025-03-26 | **P3** | Small | `sso` feature |
+| 14 | `resources/subscribe` | 2024-11-05 | **P3** | Medium | #7 + #9 |
+| 17 | Async tool handlers | Ergonomics | **P3** | Medium | `http2` feature |
+| 15 | `sampling/createMessage` | 2024-11-05 | **P3** | Large | #7 |
+| 16 | `roots/list` | 2024-11-05 | **P3** | Medium | #15 |
