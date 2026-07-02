@@ -181,6 +181,8 @@ docs/
 | **WebSocket** | RFC 6455 handshake; `WebSocket::is_upgrade_request()`; `WebSocket::handshake_response()`; frame read/write; `Frame` enum; SHA-1 + base64 built in; no extra dep |
 | **Server-Sent Events** | `Sse` builder; `SseEvent` fields (`data`, `event`, `id`, `retry`); headers set automatically; use case: AI token streaming; multi-line data |
 | **Auth** | `BasicAuthLayer<F>` via closure (`auth` feature); `JwtLayer` HS256 Bearer verification; `build_jwt` / `verify_jwt` / `Claims`; `extract_bearer_token`; `IpFilter::allow` / `deny` |
+| **OAuth2 / OIDC SSO** | `sso` feature; `OidcConfig::from_env()`; provider presets (`OidcConfig::google()`, `microsoft()`, `github()`, `okta()`, `auth0()`, `keycloak()`); authorization-code + PKCE flow; RS256/ES256 JWT verification via JWKS endpoint; `OidcAuth` middleware; `Claims` extraction in handlers |
+| **CSRF Protection** | `csrf` feature; `CsrfLayer` double-submit cookie; `CsrfToken::from_request` extractor for embedding token in HTML forms; `X-CSRF-Token` header for AJAX; `SameSite=Strict`; constant-time comparison |
 | **Sessions** | `SessionStore` TTL in-memory sessions; `Session` get/set; `store.create()`, `save()`, `load()`, `destroy()`, `purge_expired()`; cookie helpers |
 | **Response Caching** | `CacheLayer::memory(capacity).ttl(secs).vary_by_header("Accept")`; what is cached; `Cache-Control: no-store/private` opt-out; `no-cache` revalidation; `Age` header on hits; oldest-first eviction |
 | **Per-Route Metrics** | `MetricsLayer` middleware; `rws_route_requests_total{method,path,status}` counter; `rws_route_duration_seconds{method,path}` histogram (11 buckets); query strings stripped; `GET /metrics` Prometheus format |
@@ -307,11 +309,11 @@ From `spec/IDEAS.md` — appear as callout blocks in the relevant sections, and 
 | Getting Started | 3 |
 | Configuration | 4 |
 | Building Apps | 15 |
-| Features | 21 |
+| Features | 23 |
 | Proxy / Gateway | 12 |
 | Database | 8 |
 | MCP Server | 5 |
 | Testing | 1 |
 | Deployment | 4 |
 | Reference | 2 |
-| **Total** | **76** |
+| **Total** | **78** |

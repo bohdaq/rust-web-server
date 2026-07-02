@@ -1,0 +1,87 @@
+---
+title: Load Balancing
+description: How rws distributes traffic across backends today and what strategies are planned.
+---
+
+Every proxy component in `rust-web-server` — `ReverseProxy`, `H2ReverseProxy`, `GrpcProxy`, `TcpProxy`, `UdpProxy`, `WsProxy`, and `DynamicProxy` (config-driven mode) — uses the same underlying selection mechanism: a **lock-free atomic round-robin counter**.
+
+## How round-robin works
+
+Each proxy struct holds an `AtomicUsize` counter initialised to `0`. On every request the counter is incremented with `Ordering::Relaxed` and the backend index is computed as:
+
+```rust
+let idx = counter.fetch_add(1, Ordering::Relaxed) % backends.len();
+```
+
+No mutex is acquired; the operation is a single CPU instruction on every major architecture. Under concurrent load requests are distributed evenly across all live backends in cyclic order.
+
+## Library API
+
+```rust
+use rust_web_server::proxy::{LoadBalancing, ReverseProxy};
+
+// Explicit — same as the default.
+let proxy = ReverseProxy::new(["http://a:8080", "http://b:8080", "http://c:8080"])
+    .strategy(LoadBalancing::RoundRobin);
+```
+
+The `.strategy()` method exists to allow future strategies to be added without a breaking API change.
+
+## Config-driven mode
+
+In config-driven mode the `strategy` field in `[[upstream]]` is parsed and stored but only `"round_robin"` is active:
+
+```toml
+[[upstream]]
+name     = "api"
+backends = ["api-1:3000", "api-2:3000", "api-3:3000"]
+strategy = "round_robin"    # default; only supported value today
+```
+
+### DynamicProxy and live backend lists
+
+When `[upstream.health_check]` is configured, the health-checker thread maintains a shared `Arc<RwLock<Vec<String>>>` containing only the currently healthy backends. `DynamicProxy` (the config-driven proxy adapter) reads from this live list on every request:
+
+```
+All backends:  [api-1, api-2, api-3]
+                          ↓  health checker removes api-2
+Live backends: [api-1, api-3]
+                          ↓  round-robin counter % 2
+Request N+0 → api-1
+Request N+1 → api-3
+Request N+2 → api-1
+```
+
+The live list is protected by `RwLock` — reads are concurrent; the health-checker thread takes a write lock only when the list changes.
+
+## Failover behaviour
+
+`ReverseProxy` tries backends in order starting from the round-robin cursor position. If a backend fails to connect, the next backend in the list is tried. This continues until either a backend succeeds or all backends have been tried (returning `502`).
+
+```
+backends = [A, B, C]
+counter = 7 → idx 7 % 3 = 1 → start at B
+B fails → try C → C succeeds → return response
+```
+
+## Canary / weighted round-robin
+
+`CanaryLayer` implements weighted round-robin by pre-expanding the rotation: a backend with `weight = 3` appears three times in the rotation array. The same lock-free atomic counter selects slots.
+
+```rust
+// 3 out of 4 slots → stable; 1 out of 4 → canary.
+CanaryLayer::new(vec![
+    WeightedBackend::new("http://stable:8080", 3),
+    WeightedBackend::new("http://canary:8080", 1),
+])
+```
+
+See [Canary / Traffic Splitting](/proxy/canary/) for full details.
+
+:::caution[Coming Soon: additional strategies]
+The following strategies are planned for future releases:
+
+- **`least_connections`** — route to the backend with the fewest in-flight requests.
+- **`ip_hash`** — consistent hashing on client IP for session affinity.
+- **`random`** — uniform random selection (useful when backends have heterogeneous weights not expressible as integers).
+:::

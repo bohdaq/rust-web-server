@@ -1,0 +1,125 @@
+---
+title: Reverse Proxy
+description: HTTP/1.1 reverse proxy middleware with round-robin load balancing, path filtering, and automatic failover.
+---
+
+`ReverseProxy` is a [`Middleware`](/building-apps/middleware/) that forwards incoming HTTP/1.1 requests to one or more backends. It lives in `src/proxy/mod.rs` and requires no feature flags.
+
+## Basic usage
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::proxy::ReverseProxy;
+
+// All requests forwarded round-robin across two backends.
+let app = App::new()
+    .wrap(ReverseProxy::new(["http://backend-1:8080", "http://backend-2:8080"]));
+```
+
+## Selective proxying with `path_prefix`
+
+By default every request is proxied. Use `.path_prefix()` to restrict proxying to a specific path prefix; all other requests fall through to the inner application.
+
+```rust
+// Only proxy /api/* — other paths are handled locally.
+let app = App::new()
+    .wrap(ReverseProxy::new(["http://api-service:3000"])
+        .path_prefix("/api"));
+```
+
+## Load balancing strategy
+
+`ReverseProxy` accepts a `.strategy()` builder for future extensibility. The only active strategy is round-robin.
+
+```rust
+use rust_web_server::proxy::{LoadBalancing, ReverseProxy};
+
+let proxy = ReverseProxy::new(["http://a:8080", "http://b:8080"])
+    .strategy(LoadBalancing::RoundRobin); // default; explicit for clarity
+```
+
+The counter is a lock-free `AtomicUsize` incremented on every request. The backend index is `counter % backend_count`, giving a uniform cyclic distribution with no mutex overhead.
+
+## Timeouts
+
+```rust
+let proxy = ReverseProxy::new(["http://backend:8080"])
+    .connect_timeout_ms(3_000)   // TCP connect timeout (default: 5 000 ms)
+    .read_timeout_ms(60_000);    // Response read timeout (default: 30 000 ms)
+```
+
+The write timeout for the forwarded request is always 10 seconds (not configurable via the builder today).
+
+## Automatic failover
+
+When a backend connection fails, `ReverseProxy` tries the next backend in round-robin order. Only after all backends have failed does it return `502 Bad Gateway`.
+
+```
+request → backend-1 fails → backend-2 fails → 502 Bad Gateway
+request → backend-1 fails → backend-2 OK    → response forwarded
+```
+
+## Headers
+
+### Hop-by-hop headers stripped
+
+The following headers are never forwarded to the upstream or back to the client, per RFC 7230:
+
+- `Connection`
+- `Keep-Alive`
+- `Proxy-Authenticate`
+- `Proxy-Authorization`
+- `TE`
+- `Trailers`
+- `Transfer-Encoding`
+- `Upgrade`
+
+### Headers added to forwarded requests
+
+| Header | Value |
+|--------|-------|
+| `X-Forwarded-For` | Client IP from `ConnectionInfo` |
+| `Via` | `1.1 rws` |
+| `Host` | Backend host (replaces the original `Host` header) |
+| `Connection` | `close` (forces HTTP/1.0-style per-request connections) |
+
+## Backend URL format
+
+Backend strings accept any of these forms:
+
+```
+http://host:port      # scheme stripped, path ignored
+h2://host:port        # treated as plain TCP (TLS not supported)
+host:port             # bare host:port
+host                  # port defaults to 80
+```
+
+:::caution[Coming Soon: TLS to upstream]
+All upstream connections are plain TCP. HTTPS backends are not yet supported. For encrypted upstreams, use `H2ReverseProxy` with an H2 cleartext backend or terminate TLS at the backend itself.
+:::
+
+## 502 Bad Gateway
+
+`ReverseProxy` returns `502 Bad Gateway` with `Content-Type: text/plain` when:
+
+- No backends are configured.
+- All backends fail to connect or return a network error.
+
+## Combining with other middleware
+
+Because `ReverseProxy` implements `Middleware`, you can stack it with rate limiting, auth, rewriting, and any other middleware via `.wrap()`.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::proxy::ReverseProxy;
+use rust_web_server::rate_limit::RateLimitLayer;
+
+let app = App::new()
+    .wrap(RateLimitLayer::new(100, 60))   // 100 req/min per IP
+    .wrap(ReverseProxy::new(["http://backend:3000"])
+        .path_prefix("/api"));
+```
+
+Middleware is applied outermost-first, so `RateLimitLayer` runs before `ReverseProxy`.

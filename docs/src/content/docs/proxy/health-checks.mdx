@@ -1,0 +1,92 @@
+---
+title: Health Checks
+description: Automatic background health monitoring that removes and restores backends without restarting.
+---
+
+Health checks are available in **config-driven mode** only. Each `[[upstream]]` that includes a `[upstream.health_check]` section gets a dedicated daemon thread (`health-{upstream_name}`) that probes every backend on a regular interval and updates the live backend list without any restart.
+
+## Configuration
+
+```toml
+[[upstream]]
+name     = "api"
+backends = ["api-1:3000", "api-2:3000", "api-3:3000"]
+
+[upstream.health_check]
+path                 = "/healthz"   # GET path (default: "/health")
+interval_secs        = 15           # probe interval in seconds (default: 30)
+timeout_ms           = 3000         # connect + read timeout per probe (default: 5000)
+healthy_threshold    = 2            # consecutive successes to restore (default: 2)
+unhealthy_threshold  = 3            # consecutive failures to remove (default: 3)
+```
+
+## How it works
+
+### Startup state
+
+All backends start as **live**. The health checker assumes backends are healthy until proven otherwise.
+
+### Probe request
+
+Every `interval_secs` seconds the checker sends a minimal HTTP/1.1 request to each backend:
+
+```
+GET /healthz HTTP/1.1
+Host: api-1
+Connection: close
+
+```
+
+Both the TCP connect and the response read are bounded by `timeout_ms`. A backend is considered healthy if it replies with a `2xx` status code (the checker reads only the first 16 bytes of the response — just enough for `HTTP/1.1 2`).
+
+### Failure tracking
+
+Per-backend counters track consecutive successes and failures independently:
+
+```
+backend api-2:
+  consecutive failures = 1  →  still live
+  consecutive failures = 2  →  still live
+  consecutive failures = 3  →  REMOVED from live list  (unhealthy_threshold reached)
+
+backend api-2 later:
+  consecutive successes = 1  →  still dead
+  consecutive successes = 2  →  RESTORED to live list  (healthy_threshold reached)
+```
+
+The counters reset on state transition: a success resets the failure counter to `0`, and vice versa.
+
+### Live list update
+
+After probing all backends, the checker atomically replaces the shared live list:
+
+```rust
+Arc<RwLock<Vec<String>>>  // written by health checker; read by DynamicProxy
+```
+
+`DynamicProxy` acquires a read lock on every request, which is concurrent-safe. The health checker acquires a write lock only when publishing the new list.
+
+### Log output
+
+State changes are logged to stderr:
+
+```
+[health] upstream=api backend=api-2:3000 removed (3x fail)
+[health] upstream=api backend=api-2:3000 restored (2x ok)
+```
+
+## All backends unhealthy
+
+If all backends fail their health checks, the live list becomes empty. `DynamicProxy` returns `502 Bad Gateway` for every request until at least one backend recovers.
+
+:::note[No health checks in library mode]
+`ReverseProxy` does not have built-in health checks. Use `BackendPool` with a `File` or `Dns` source (see [Service Discovery](/proxy/service-discovery/)) and `CircuitBreaker` (see [Circuit Breaker](/proxy/circuit-breaker/)) to replicate the behaviour programmatically.
+:::
+
+## Implementation reference
+
+The health checker lives in `src/proxy_config/health.rs`:
+
+- `start_health_checker(upstream_name, backends, live, config)` — spawns the daemon thread.
+- `check_backend(backend, path, timeout)` — sends a single probe, returns `true` on `2xx`.
+- `parse_host_port(backend)` — strips URL prefixes and returns `(host, port)`.

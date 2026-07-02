@@ -73,6 +73,8 @@ export default defineConfig({
             { label: 'WebSocket',              link: '/features/websocket/' },
             { label: 'Server-Sent Events',     link: '/features/sse/' },
             { label: 'Auth',                   link: '/features/auth/' },
+            { label: 'OAuth2 / OIDC SSO',      link: '/features/sso/' },
+            { label: 'CSRF Protection',        link: '/features/csrf/' },
             { label: 'Sessions',               link: '/features/sessions/' },
             { label: 'Response Caching',       link: '/features/caching/' },
             { label: 'Metrics',                link: '/features/metrics/' },

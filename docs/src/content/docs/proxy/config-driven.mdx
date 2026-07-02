@@ -1,0 +1,353 @@
+---
+title: Config-Driven Proxy
+description: Full annotated rws.config.toml reference for zero-code proxy configuration.
+---
+
+When `rws.config.toml` (or the file pointed to by `RWS_CONFIG_FILE`) contains at least one `[[route]]` or `[[upstream]]` section, `rws` boots in proxy mode automatically. No code changes required.
+
+## Minimal example
+
+```toml
+[[upstream]]
+name = "api"
+backends = ["localhost:3000"]
+
+[[route]]
+name = "api-proxy"
+
+[route.match]
+path = "/api/*"
+
+[route.action]
+type = "proxy"
+
+[route.action.proxy]
+upstream = "api"
+```
+
+## `[[upstream]]` — backend pools
+
+Each `[[upstream]]` block defines a named pool of HTTP backends.
+
+```toml
+[[upstream]]
+name        = "api"                              # required; referenced by route actions
+backends    = ["10.0.0.1:3000", "10.0.0.2:3000"] # one or more "host:port" strings
+strategy    = "round_robin"                       # currently only "round_robin" is active
+```
+
+:::note[Backend URL format]
+Backends must be `"host:port"` strings. Do not include `http://` — scheme prefixes are stripped automatically. TLS to upstreams is not yet supported.
+:::
+
+:::caution[Coming Soon: upstream TLS]
+HTTPS backends (`https://`) are parsed but connections are made over plain TCP. Mutual TLS to upstreams is not yet implemented.
+:::
+
+### `[upstream.health_check]` — automatic health monitoring
+
+Add a nested `[upstream.health_check]` table to enable background health checking. Unhealthy backends are removed from the live rotation until they recover.
+
+```toml
+[[upstream]]
+name     = "api"
+backends = ["10.0.0.1:3000", "10.0.0.2:3000", "10.0.0.3:3000"]
+
+[upstream.health_check]
+path                 = "/healthz"   # GET path sent to each backend
+interval_secs        = 30           # how often to probe (default: 30)
+timeout_ms           = 5000         # connect + read timeout per probe (default: 5000)
+healthy_threshold    = 2            # consecutive successes before marking live (default: 2)
+unhealthy_threshold  = 3            # consecutive failures before marking dead (default: 3)
+```
+
+See [Health Checks](/proxy/health-checks/) for the full implementation details.
+
+## `[[route]]` — routing rules
+
+Routes are evaluated in declaration order; the first match wins.
+
+```toml
+[[route]]
+name = "my-route"    # informational label; no functional effect
+```
+
+### `[route.match]` — matching criteria
+
+All fields are optional. Omitting a field means "match anything".
+
+```toml
+[route.match]
+host         = "api.example.com"     # SNI hostname (TLS) or Host header (plain HTTP)
+path         = "/api/*"              # prefix match when ending with *, exact match otherwise
+method       = "POST"                # HTTP method (case-insensitive)
+content_type = "application/json*"   # Content-Type prefix match when ending with *
+```
+
+**Path matching rules:**
+
+| Pattern | Matches |
+|---------|---------|
+| `/api/*` | Any path starting with `/api/` (prefix match) |
+| `/api/ping` | Only `/api/ping` (exact match) |
+| _(omitted)_ | All paths |
+
+### `[route.action]` — what to do on match
+
+The `type` field selects the action.
+
+#### `type = "proxy"` — forward to an upstream
+
+```toml
+[route.action]
+type = "proxy"
+
+[route.action.proxy]
+upstream           = "api"      # upstream name defined in [[upstream]]
+connect_timeout_ms = 5000       # TCP connect timeout in ms (default: 5000)
+read_timeout_ms    = 30000      # response read timeout in ms (default: 30000)
+strip_path_prefix  = "/api"     # strip this prefix before forwarding (optional)
+add_path_prefix    = "/v2"      # prepend this prefix before forwarding (optional)
+```
+
+#### `type = "grpc"` — forward gRPC to an HTTP/2 upstream
+
+```toml
+[route.action]
+type = "grpc"
+
+[route.action.grpc]
+upstream           = "grpc-svc"
+connect_timeout_ms = 5000
+read_timeout_ms    = 30000
+```
+
+#### `type = "redirect"` — HTTP redirect
+
+```toml
+[route.action]
+type = "redirect"
+
+[route.action.redirect]
+location = "https://example.com$path"   # $path is replaced with the request URI
+status   = 301                          # 301, 302, 307, or 308 (default: 301)
+```
+
+#### `type = "respond"` — fixed response
+
+```toml
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status       = 200
+body         = "{\"status\":\"ok\"}"
+content_type = "application/json"
+```
+
+:::caution[Coming Soon: static site action]
+`type = "static"` is parsed and recognized (`root`, `index` fields) but the handler is not yet implemented. Static file serving currently falls through to the built-in `App` fallback.
+:::
+
+### `[route.middleware]` — per-route middleware
+
+Middleware is applied only to requests that match this route.
+
+#### Rate limiting
+
+```toml
+[route.middleware.rate_limit]
+max_requests = 100    # requests allowed per window (default: 1000)
+window_secs  = 60     # sliding window size in seconds (default: 60)
+```
+
+#### Bearer token authentication
+
+```toml
+[route.middleware.auth]
+type      = "bearer"
+token_env = "API_TOKEN"    # environment variable holding the expected token
+```
+
+Incoming requests must include `Authorization: Bearer <value of API_TOKEN>`. Returns `401 Unauthorized` on mismatch.
+
+:::caution[Coming Soon: JWT and Basic auth from config]
+`type = "jwt"` (reads `secret_env`) and `type = "basic"` (reads `users_file`) are parsed but not yet wired to middleware implementations.
+:::
+
+#### IP filter
+
+```toml
+[route.middleware.ip_filter]
+allow = ["10.0.0.0/8", "192.168.1.100"]   # allowlist (CIDR or exact)
+deny  = ["1.2.3.4"]                         # denylist
+```
+
+#### Request rewriting
+
+```toml
+[[route.middleware.rewrite.request]]
+type  = "set_header"
+name  = "X-Real-IP"
+value = "client"
+
+[[route.middleware.rewrite.request]]
+type   = "strip_prefix"
+prefix = "/internal"
+```
+
+#### Response rewriting
+
+```toml
+[[route.middleware.rewrite.response]]
+type  = "set_header"
+name  = "Cache-Control"
+value = "no-store"
+
+[[route.middleware.rewrite.response]]
+type   = "replace_body"
+from   = "staging.internal"
+to     = "example.com"
+```
+
+## L4 proxy sections
+
+### `[[tcp_proxy]]` — raw TCP tunnel
+
+```toml
+[[tcp_proxy]]
+name               = "pg"
+listen             = "0.0.0.0:5432"
+backends           = ["db-1:5432", "db-2:5432"]
+connect_timeout_ms = 5000
+```
+
+### `[[udp_proxy]]` — UDP datagram proxy
+
+```toml
+[[udp_proxy]]
+name             = "dns"
+listen           = "0.0.0.0:53"
+backends         = ["8.8.8.8:53", "8.8.4.4:53"]
+reply_timeout_ms = 2000
+buffer_size      = 65536
+```
+
+### `[[ws_proxy]]` — WebSocket proxy
+
+```toml
+[[ws_proxy]]
+name               = "chat"
+listen             = "0.0.0.0:8080"
+backends           = ["chat-backend:9000"]
+connect_timeout_ms = 5000
+read_timeout_ms    = 30000
+```
+
+## Global middleware
+
+Middleware that applies to all routes goes in a top-level `[middleware]` section (same field structure as `[route.middleware]`).
+
+```toml
+[middleware.rate_limit]
+max_requests = 500
+window_secs  = 60
+```
+
+## Full annotated example
+
+```toml
+# rws.config.toml — full proxy setup
+
+# ── upstreams ──────────────────────────────────────────────────────────────────
+
+[[upstream]]
+name     = "api"
+backends = ["api-1:3000", "api-2:3000"]
+strategy = "round_robin"
+
+[upstream.health_check]
+path                = "/healthz"
+interval_secs       = 15
+timeout_ms          = 3000
+healthy_threshold   = 2
+unhealthy_threshold = 3
+
+[[upstream]]
+name     = "grpc-svc"
+backends = ["grpc-1:50051"]
+
+# ── routes ─────────────────────────────────────────────────────────────────────
+
+[[route]]
+name = "maintenance-page"
+
+[route.match]
+host = "down.example.com"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status       = 503
+body         = "Under maintenance"
+content_type = "text/plain"
+
+[[route]]
+name = "grpc"
+
+[route.match]
+content_type = "application/grpc*"
+
+[route.action]
+type = "grpc"
+
+[route.action.grpc]
+upstream = "grpc-svc"
+
+[[route]]
+name = "api"
+
+[route.match]
+path = "/api/*"
+
+[route.action]
+type = "proxy"
+
+[route.action.proxy]
+upstream          = "api"
+strip_path_prefix = "/api"
+
+[route.middleware.rate_limit]
+max_requests = 200
+window_secs  = 60
+
+[route.middleware.auth]
+type      = "bearer"
+token_env = "API_SECRET"
+
+[[route]]
+name = "redirect-www"
+
+[route.match]
+host = "example.com"
+
+[route.action]
+type = "redirect"
+
+[route.action.redirect]
+location = "https://www.example.com$path"
+status   = 301
+
+# ── L4 proxies ─────────────────────────────────────────────────────────────────
+
+[[tcp_proxy]]
+name     = "postgres"
+listen   = "0.0.0.0:5432"
+backends = ["pg-primary:5432"]
+
+[[udp_proxy]]
+name     = "dns"
+listen   = "0.0.0.0:53"
+backends = ["8.8.8.8:53", "8.8.4.4:53"]
+```

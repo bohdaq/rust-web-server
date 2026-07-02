@@ -1,0 +1,87 @@
+---
+title: Proxy Overview
+description: Two ways to use rws as a reverse proxy — zero-code config-driven mode and programmatic library mode.
+---
+
+`rust-web-server` ships a full-featured proxy stack. You can use it in two distinct ways depending on how much control you need.
+
+## Mode 1 — Config-driven proxy (no code)
+
+Drop a `rws.config.toml` file next to the binary and run `rws`. As soon as the file contains at least one `[[route]]` or `[[upstream]]` section, the server automatically switches into proxy mode. No Rust code is required.
+
+```toml
+# rws.config.toml
+[[upstream]]
+name = "api"
+backends = ["localhost:3000", "localhost:3001"]
+
+[[route]]
+name = "api-proxy"
+
+[route.match]
+path = "/api/*"
+
+[route.action]
+type = "proxy"
+
+[route.action.proxy]
+upstream = "api"
+```
+
+```bash
+rws          # proxy mode activated automatically
+```
+
+**Best for:** ops teams, sidecar containers, API gateways, and situations where you just need to route traffic without touching Rust.
+
+## Mode 2 — Library / programmatic
+
+Add `rust-web-server` as a dependency and compose the proxy middleware stack in code.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::proxy::ReverseProxy;
+
+let app = App::new()
+    .wrap(ReverseProxy::new(["http://backend:3000"])
+        .path_prefix("/api"));
+
+Server::new().run(app);
+```
+
+**Best for:** services that need custom routing logic, per-request auth, conditional proxying, or tight integration with application code.
+
+## Side-by-side comparison
+
+| | Config-driven | Library |
+|---|---|---|
+| Requires Rust code | No | Yes |
+| Hot-reload via SIGHUP | Yes (routes + upstreams) | No |
+| Health checks | Yes (built-in) | Manual (`BackendPool` + `CircuitBreaker`) |
+| L4 TCP / UDP / WS proxies | Yes (config sections) | Yes (standalone structs) |
+| Path rewriting | Yes (`strip_path_prefix`, `add_path_prefix`) | Yes (`RewriteLayer`) |
+| Per-route rate limiting | Yes | Yes (`RateLimitLayer`) |
+| Bearer auth | Yes (token from env var) | Yes (`JwtLayer`, `BasicAuthLayer`) |
+| gRPC | Yes (`type = "grpc"`) | Yes (`GrpcProxy`, requires `http2` feature) |
+| Canary / traffic splitting | No (planned) | Yes (`CanaryLayer`) |
+| Service discovery | No (planned) | Yes (`BackendPool`) |
+| Circuit breaker / retry | No (planned) | Yes (`CircuitBreaker`, `RetryLayer`) |
+
+## Detection logic
+
+At startup `main()` calls `ProxyConfig::is_proxy_mode()`, which reads `rws.config.toml` (or the path in `RWS_CONFIG_FILE`) and returns `true` if the text contains `[[route]]` or `[[upstream]]`. When `true`, `build_from_file()` compiles the config into a `ConfigDrivenApp` that replaces the default `App`.
+
+## What to read next
+
+- [Config-Driven Proxy](/proxy/config-driven/) — full `rws.config.toml` reference
+- [Reverse Proxy](/proxy/reverse-proxy/) — `ReverseProxy` middleware API
+- [Load Balancing](/proxy/load-balancing/) — round-robin and planned strategies
+- [Health Checks](/proxy/health-checks/) — automatic backend health monitoring
+- [Circuit Breaker](/proxy/circuit-breaker/) — failure isolation and retry
+- [Canary](/proxy/canary/) — weighted traffic splitting
+- [Service Discovery](/proxy/service-discovery/) — dynamic backend pools
+- [TCP Proxy](/proxy/tcp-proxy/) — L4 TCP tunnel
+- [UDP Proxy](/proxy/udp-proxy/) — datagram proxy
+- [WebSocket Proxy](/proxy/websocket-proxy/) — WS upgrade tunneling
+- [gRPC Proxy](/proxy/grpc-proxy/) — HTTP/2 gRPC forwarding

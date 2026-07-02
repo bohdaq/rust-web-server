@@ -1,0 +1,70 @@
+---
+title: Roadmap
+description: Planned features for rust-web-server — each appears as a callout on the relevant docs page.
+---
+
+These features are planned. Each appears as a callout on the relevant docs page.
+
+:::caution[Coming Soon]
+**Upstream TLS for config-driven proxy**
+
+`https://` backend URLs in `[[upstream]]` sections of `rws.config.toml`. Currently only `http://` backends are supported in proxy mode.
+:::
+
+:::caution[Coming Soon]
+**Additional load-balancing strategies**
+
+`least_connections`, `ip_hash`, and `random` as alternatives to the current round-robin backend selection in `ConfigDrivenApp` and `BackendPool`.
+:::
+
+:::caution[Coming Soon]
+**No-code auth in proxy mode**
+
+JWT and HTTP Basic auth configured directly in `rws.config.toml` without writing Rust code — equivalent to `JwtLayer` and `BasicAuthLayer` but activated through `[[route]]` middleware entries.
+:::
+
+:::caution[Coming Soon]
+**Static site action in config proxy**
+
+`type = "static"` action in `[[route]]` sections to serve a directory of static files from the config-driven proxy without writing a custom controller.
+:::
+
+:::caution[Coming Soon]
+**Regex URI rewriting in RewriteLayer**
+
+Pattern-based URI rewriting (e.g. capture groups, back-references) in addition to the current prefix-strip and prefix-add operations in `RewriteLayer`.
+:::
+
+:::caution[Coming Soon]
+**ForwardAuthLayer middleware**
+
+Delegate authentication decisions to an external HTTP service. The middleware calls the auth service with a copy of the request headers; a non-2xx response rejects the original request.
+:::
+
+:::caution[Coming Soon]
+**Multi-span distributed tracing**
+
+Child spans, baggage propagation, and per-database-query spans within a single inbound request. Currently `OtelLayer` creates one span per request with no nested structure.
+:::
+
+:::caution[Coming Soon]
+**Admin UI**
+
+`GET /admin` — a browser-based dashboard showing live metrics, current configuration, and a tail of the access log. Requires authentication.
+:::
+
+:::caution[Coming Soon]
+**Access log rotation**
+
+Built-in log-file rotation (by size or time) so the server can write logs to disk without an external `logrotate` configuration.
+:::
+
+:::caution[Coming Soon]
+**WebAssembly compile target**
+
+Support for `wasm32-wasi` so the server can run inside a WebAssembly runtime such as Wasmtime or WasmEdge.
+:::
+
+---
+
+Track progress and open issues at [github.com/bohdaq/rust-web-server](https://github.com/bohdaq/rust-web-server/issues).
