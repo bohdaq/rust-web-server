@@ -11,28 +11,6 @@ use std::time::Duration;
 
 use crate::proxy_config::HealthCheckConfig;
 
-/// A shared, atomically-updated list of live backend addresses.
-#[derive(Clone)]
-pub(crate) struct LiveBackends(pub(crate) Arc<RwLock<Vec<String>>>);
-
-impl LiveBackends {
-    /// Create a new `LiveBackends` starting with `all` backends considered alive.
-    pub(crate) fn new(all: Vec<String>) -> Self {
-        LiveBackends(Arc::new(RwLock::new(all)))
-    }
-
-    /// Return a snapshot of the current live backend list.
-    pub(crate) fn get_all(&self) -> Vec<String> {
-        self.0.read().unwrap().clone()
-    }
-
-    /// Return the underlying `Arc<RwLock<Vec<String>>>` for sharing with the
-    /// health-checker thread.
-    pub(crate) fn snapshot(&self) -> Arc<RwLock<Vec<String>>> {
-        Arc::clone(&self.0)
-    }
-}
-
 /// Start a background health-checker thread.
 ///
 /// The thread runs until the process exits. It periodically checks every
