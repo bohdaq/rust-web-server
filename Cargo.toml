@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.37.0"
+version = "17.38.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 description = "An HTTP web framework, reverse proxy, and server for Rust supporting HTTP/1.1, HTTP/2, and HTTP/3. Config-driven proxy mode (rws.config.toml with [[route]] / [[upstream]]) or library crate. No third-party HTTP dependencies."
@@ -30,6 +30,9 @@ serde  = ["dep:serde", "dep:serde_json"]
 auth   = ["dep:hmac", "dep:sha2"]
 macros = ["dep:rws-macros"]
 tera   = ["dep:tera", "dep:serde", "dep:serde_json"]
+model-sqlite   = ["dep:rusqlite"]
+model-postgres = ["dep:postgres"]
+model-mysql    = ["dep:mysql"]
 
 [dependencies]
 ctrlc = { version = "3", optional = true }
@@ -57,3 +60,6 @@ sha2  = { version = "0.10", optional = true }
 aws-lc-rs = { version = "1", optional = true }
 rws-macros = { path = "rws-macros", version = "17", optional = true }
 tera = { version = "1", optional = true }
+rusqlite  = { version = "0.32", features = ["bundled"], optional = true }
+postgres  = { version = "0.19", optional = true }
+mysql     = { version = "25", optional = true }

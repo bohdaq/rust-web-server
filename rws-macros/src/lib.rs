@@ -628,3 +628,298 @@ fn is_option_type(ty: &syn::Type) -> bool {
     }
     false
 }
+
+// ── #[derive(Model)] ──────────────────────────────────────────────────────────
+
+/// Derive `rust_web_server::model::Model` for a struct.
+///
+/// # Struct attributes
+///
+/// | Attribute | Meaning |
+/// |---|---|
+/// | `#[table(name = "tbl")]` | Override table name (default: struct name lowercased) |
+///
+/// # Field attributes
+///
+/// | Attribute | Meaning |
+/// |---|---|
+/// | `#[primary_key]` | Mark as primary key |
+/// | `#[primary_key(auto_increment)]` | Auto-increment primary key |
+/// | `#[column(name = "col")]` | Override column name |
+/// | `#[column(unique)]` | Mark column unique (informational) |
+/// | `#[ignore]` | Exclude from DB mapping |
+///
+/// # Example
+///
+/// ```ignore
+/// #[derive(rust_web_server::Model, Debug, Clone)]
+/// #[table(name = "users")]
+/// pub struct User {
+///     #[primary_key(auto_increment)]
+///     pub id: i64,
+///     #[column(name = "first_name")]
+///     pub name: String,
+///     pub email: String,
+///     #[ignore]
+///     pub display_label: String,
+/// }
+/// ```
+#[proc_macro_derive(Model, attributes(table, column, primary_key))]
+pub fn derive_model(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    impl_model(ast)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+fn impl_model(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let span = input.ident.span();
+    let struct_name = &input.ident;
+
+    // ── Determine table name ──────────────────────────────────────────────────
+    let table_name = parse_table_name(&input.attrs, struct_name)?;
+
+    let fields = match &input.data {
+        Data::Struct(s) => match &s.fields {
+            Fields::Named(f) => &f.named,
+            _ => {
+                return Err(syn::Error::new(
+                    span,
+                    "#[derive(Model)] only supports structs with named fields",
+                ))
+            }
+        },
+        _ => {
+            return Err(syn::Error::new(
+                span,
+                "#[derive(Model)] can only be derived on structs",
+            ))
+        }
+    };
+
+    // ── Parse field metadata ──────────────────────────────────────────────────
+    struct FieldMeta {
+        field_ident: syn::Ident,
+        col_name: String,
+        #[allow(dead_code)]
+        is_pk: bool,
+        is_auto_increment: bool,
+        is_ignored: bool,
+    }
+
+    let mut pk_field: Option<FieldMeta> = None;
+    let mut regular_fields: Vec<FieldMeta> = Vec::new();
+
+    for field in fields {
+        let ident = field.ident.as_ref().unwrap().clone();
+        let mut col_name = ident.to_string();
+        let mut is_pk = false;
+        let mut is_auto_increment = false;
+        let mut is_ignored = false;
+
+        for attr in &field.attrs {
+            if attr.path().is_ident("ignore") {
+                is_ignored = true;
+            } else if attr.path().is_ident("primary_key") {
+                is_pk = true;
+                // Check for (auto_increment)
+                let _ = attr.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("auto_increment") {
+                        is_auto_increment = true;
+                    }
+                    Ok(())
+                });
+            } else if attr.path().is_ident("column") {
+                let _ = attr.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("name") {
+                        let lit: LitStr = meta.value()?.parse()?;
+                        col_name = lit.value();
+                    }
+                    // unique / nullable are informational — ignore
+                    Ok(())
+                });
+            }
+        }
+
+        let meta = FieldMeta {
+            field_ident: ident,
+            col_name,
+            is_pk,
+            is_auto_increment,
+            is_ignored,
+        };
+
+        if is_pk {
+            pk_field = Some(meta);
+        } else {
+            regular_fields.push(meta);
+        }
+    }
+
+    let pk = pk_field.ok_or_else(|| {
+        syn::Error::new(span, "#[derive(Model)] requires exactly one #[primary_key] field")
+    })?;
+
+    // ── column_names (all mapped fields, including PK) ────────────────────────
+    let mut all_col_names: Vec<String> = Vec::new();
+    all_col_names.push(pk.col_name.clone());
+    for f in regular_fields.iter().filter(|f| !f.is_ignored) {
+        all_col_names.push(f.col_name.clone());
+    }
+
+    let pk_col_name = pk.col_name.clone();
+    let pk_field_ident = &pk.field_ident;
+    let auto_inc = pk.is_auto_increment;
+
+    // ── from_row body ─────────────────────────────────────────────────────────
+    let pk_from_row = {
+        let col = &pk.col_name;
+        let fident = &pk.field_ident;
+        quote! { #fident: row.get(#col)? }
+    };
+
+    let regular_from_row: Vec<proc_macro2::TokenStream> = fields
+        .iter()
+        .filter(|f| {
+            let ident_str = f.ident.as_ref().unwrap().to_string();
+            // Skip the PK field (handled separately) and ignored fields.
+            let is_pk_field = ident_str == pk_field_ident.to_string();
+            !is_pk_field
+        })
+        .map(|f| {
+            let fident = f.ident.as_ref().unwrap();
+            // Check if ignored
+            let is_ignored = f.attrs.iter().any(|a| a.path().is_ident("ignore"));
+            if is_ignored {
+                quote! { #fident: ::core::default::Default::default() }
+            } else {
+                // Determine column name override
+                let mut col = fident.to_string();
+                for attr in &f.attrs {
+                    if attr.path().is_ident("column") {
+                        let _ = attr.parse_nested_meta(|meta| {
+                            if meta.path.is_ident("name") {
+                                if let Ok(lit) = meta.value()?.parse::<LitStr>() {
+                                    col = lit.value();
+                                }
+                            }
+                            Ok(())
+                        });
+                    }
+                }
+                quote! { #fident: row.get(#col)? }
+            }
+        })
+        .collect();
+
+    // ── to_values body ────────────────────────────────────────────────────────
+    let pk_to_values = {
+        let col = &pk.col_name;
+        quote! {
+            (#col, ::rust_web_server::model::ToColumn::to_column(&self.#pk_field_ident))
+        }
+    };
+
+    let regular_to_values: Vec<proc_macro2::TokenStream> = fields
+        .iter()
+        .filter(|f| {
+            let ident_str = f.ident.as_ref().unwrap().to_string();
+            let is_pk_field = ident_str == pk_field_ident.to_string();
+            let is_ignored = f.attrs.iter().any(|a| a.path().is_ident("ignore"));
+            !is_pk_field && !is_ignored
+        })
+        .map(|f| {
+            let fident = f.ident.as_ref().unwrap();
+            let mut col = fident.to_string();
+            for attr in &f.attrs {
+                if attr.path().is_ident("column") {
+                    let _ = attr.parse_nested_meta(|meta| {
+                        if meta.path.is_ident("name") {
+                            if let Ok(lit) = meta.value()?.parse::<LitStr>() {
+                                col = lit.value();
+                            }
+                        }
+                        Ok(())
+                    });
+                }
+            }
+            quote! {
+                (#col, ::rust_web_server::model::ToColumn::to_column(&self.#fident))
+            }
+        })
+        .collect();
+
+    // ── Generate impl ─────────────────────────────────────────────────────────
+    Ok(quote! {
+        impl ::rust_web_server::model::Model for #struct_name {
+            fn table_name() -> &'static str {
+                #table_name
+            }
+
+            fn column_names() -> &'static [&'static str] {
+                &[#(#all_col_names),*]
+            }
+
+            fn primary_key_name() -> &'static str {
+                #pk_col_name
+            }
+
+            fn primary_key_value(&self) -> ::rust_web_server::model::Value {
+                ::rust_web_server::model::ToColumn::to_column(&self.#pk_field_ident)
+            }
+
+            fn primary_key_auto_increment() -> bool {
+                #auto_inc
+            }
+
+            fn from_row(row: &::rust_web_server::model::ModelRow) -> ::core::result::Result<Self, ::rust_web_server::model::DbError> {
+                ::core::result::Result::Ok(#struct_name {
+                    #pk_from_row,
+                    #(#regular_from_row),*
+                })
+            }
+
+            fn to_values(&self) -> ::std::vec::Vec<(&'static str, ::rust_web_server::model::Value)> {
+                vec![
+                    #pk_to_values,
+                    #(#regular_to_values),*
+                ]
+            }
+        }
+
+        impl #struct_name {
+            /// Create a `ModelRepository` tied to the given connection.
+            pub fn repository(conn: &mut ::rust_web_server::model::DbConnection) -> ::rust_web_server::model::ModelRepository<#struct_name, i64> {
+                ::rust_web_server::model::ModelRepository::new(conn)
+            }
+
+            /// Create a `QueryBuilder` tied to the given connection.
+            pub fn query(conn: &mut ::rust_web_server::model::DbConnection) -> ::rust_web_server::model::QueryBuilder<#struct_name> {
+                ::rust_web_server::model::QueryBuilder::new(conn)
+            }
+        }
+    })
+}
+
+fn parse_table_name(
+    attrs: &[syn::Attribute],
+    struct_name: &syn::Ident,
+) -> syn::Result<String> {
+    for attr in attrs {
+        if attr.path().is_ident("table") {
+            let mut name: Option<String> = None;
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("name") {
+                    let lit: LitStr = meta.value()?.parse()?;
+                    name = Some(lit.value());
+                }
+                Ok(())
+            })?;
+            if let Some(n) = name {
+                return Ok(n);
+            }
+        }
+    }
+    // Default: lowercased struct name.
+    Ok(struct_name.to_string().to_lowercase())
+}

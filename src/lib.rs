@@ -53,6 +53,8 @@ pub mod auth;
 
 #[cfg(feature = "macros")]
 pub use rws_macros::{delete, get, patch, post, put, route, Config, FromRequest, Validate};
+#[cfg(all(feature = "macros", any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql")))]
+pub use rws_macros::Model;
 #[cfg(feature = "http2")]
 pub mod async_state;
 pub mod session;
@@ -118,6 +120,8 @@ pub mod ingress;
 pub mod template;
 pub mod validate;
 pub mod virtual_host;
+#[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+pub mod model;
 pub mod websocket;
 
 #[cfg(feature = "http2")]

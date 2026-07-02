@@ -172,6 +172,7 @@ cargo build --release --no-default-features --features http1
 - In-process test client — `TestClient` dispatches requests without a TCP socket
 - HTML template engine — `TeraEngine` (`tera` feature) wraps the [Tera](https://keats.github.io/tera/) crate; Jinja2/Django syntax — variables, loops, conditionals, inheritance, filters, macros; global singleton via `template::init(dir)`; `template::render(name, &ctx)` returns a `200 OK` HTML response
 - Typed config binding — `#[derive(Config)]` (`macros` feature) generates `load() -> Result<Self, String>` that reads env vars into strongly-typed structs; `#[config(env = "KEY", default = "v")]` per field; `Option<T>` fields are optional; `FromEnvStr` trait supports custom types
+- Model layer — `#[derive(Model)]` proc-macro maps structs to tables; `Repository<T, ID>` for zero-boilerplate CRUD; `QueryBuilder<T>` for fluent filtering; migration runner (`db.migrate("migrations/")`); `HasMany`/`BelongsTo` relationship helpers; enable with `model-sqlite`, `model-postgres`, or `model-mysql` feature
 - Config-driven proxy server — drop `rws.config.toml` with `[[route]]` / `[[upstream]]` sections to run as a full reverse proxy with per-route middleware, health-checked backend pools, and L4/WS proxies; no code required
 - Dependency injection — `Container` stores services keyed by `TypeId`; `register::<T>(val)` for concrete types, `provide::<dyn Trait>(Arc::new(...))` for trait objects, named instances via `register_named`; share with `container.into_arc()` as `App::with_state` state
 
@@ -184,6 +185,9 @@ cargo build --release --no-default-features --features http1
 | `macros` | `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` attributes; `#[derive(FromRequest)]`; `#[derive(Validate)]`; `#[derive(Config)]` (typed env-var binding) via `rws-macros` |
 | `acme` | `AcmeManager` — automatic certificate provisioning and renewal via ACME (Let's Encrypt); implies `http2` |
 | `tera` | `TeraEngine` HTML template engine (Jinja2/Django syntax); `template::init()` global singleton; `template::render()` one-liner |
+| `model-sqlite` | Model layer backed by SQLite (via `rusqlite` with bundled SQLite) — `DbPool`, `DbConnection`, `#[derive(Model)]`, `Repository`, `QueryBuilder`, migration runner |
+| `model-postgres` | Model layer backed by PostgreSQL (via the `postgres` crate) — same API as `model-sqlite` |
+| `model-mysql` | Model layer backed by MySQL (via the `mysql` crate) — same API as `model-sqlite` |
 
 ```toml
 [dependencies]

@@ -419,11 +419,11 @@ Feature flags (one DB driver per compilation):
 
 | Phase | Feature | Status |
 |-------|---------|--------|
-| 1 | `DbPool`, `DbConnection`, `DbConfig`, feature flags | Pending |
-| 2 | `#[derive(Model)]` proc-macro, column mapping | Pending |
-| 3 | `Repository<T, ID>` trait, CRUD, batch ops | Pending |
-| 4 | `QueryBuilder<T>` — filter, order, limit, offset, update, delete | Pending |
-| 5 | Raw SQL (`query`, `query_raw`, `execute`) | Pending |
-| 6 | Transactions (closure + manual begin/commit/rollback) | Pending |
-| 7 | Relationships (`#[has_many]`, `#[belongs_to]`, eager load) | Pending |
-| 8 | Migration runner, `_schema_migrations` tracking | Pending |
+| 1 | `DbPool`, `DbConnection`, `DbConfig`, feature flags | ✅ Done |
+| 2 | `#[derive(Model)]` proc-macro, column mapping | ✅ Done |
+| 3 | `Repository<T, ID>` trait, CRUD, batch ops | ✅ Done |
+| 4 | `QueryBuilder<T>` — filter, order, limit, offset, update, delete | ✅ Done |
+| 5 | Raw SQL (`query`, `query_raw`, `execute`) | ✅ Done |
+| 6 | Transactions (closure + manual begin/commit/rollback) | ✅ Done |
+| 7 | Relationships (`#[has_many]`, `#[belongs_to]`, eager load) | ✅ Done |
+| 8 | Migration runner, `_schema_migrations` tracking | ✅ Done |

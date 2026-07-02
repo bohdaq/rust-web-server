@@ -136,6 +136,12 @@ The crate exposes its core types so you can compose them in your own server or t
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
 | `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware round-robin proxying. |
 | `Container` | `di` | Type-keyed dependency injection container. `register::<T>(service)` stores concrete types; `provide::<dyn Trait>(Arc::new(...))` stores trait objects; both keyed by `TypeId`. Named services via `register_named` / `provide_named` / `get_named`. Share across handlers with `container.into_arc()` as `AppWithState` state. |
+| `DbPool` / `PooledConnection` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`) | Connection pool. `DbPool::new(DbConfig)` or `DbPool::from_env()` pre-creates `pool_size` connections. `pool.get()` checks out a `PooledConnection` (returned on drop). |
+| `DbConnection` | `model` | Single database connection. `execute(sql, params)` for DDL/DML; `query_rows(sql, params)` for SELECT; `query::<T>(sql, params)` for typed results; `begin()` / `commit()` / `rollback()` / `transaction(closure)`; `migrate(dir)` / `migration_status(dir)`. |
+| `ModelRepository<T, i64>` | `model` | JPA-style CRUD: `find_by_id`, `find_all`, `save` (INSERT when pk==0, UPDATE otherwise), `save_all`, `delete_by_id`, `delete_all_by_id`, `count`, `exists_by_id`. Obtain via `T::repository(&mut conn)` when using `#[derive(Model)]`. |
+| `QueryBuilder<T>` | `model` | Fluent SQL builder: `where_eq`, `filter`, `order_by`, `limit`, `offset`, `fetch_all`, `fetch_one`, `count`, `update`, `delete`. Obtain via `T::query(&mut conn)` when using `#[derive(Model)]`. |
+| `#[derive(Model)]` | `model` (requires `macros` + a model feature) | Proc-macro that maps a struct to a DB table. Attributes: `#[table(name = "…")]` struct-level override; `#[primary_key(auto_increment)]`; `#[column(name = "…")]`; `#[ignore]`. Generates `Model` impl plus `T::repository(&mut conn)` and `T::query(&mut conn)` helpers. |
+| `HasMany<T>` / `HasOne<T>` / `BelongsTo<O>` | `model` | Explicit-load relationship helpers. `HasMany::new(owner_pk, fk_col).load(&mut conn)` returns `Vec<T>`; no hidden N+1 queries. |
 
 ---
 
@@ -2511,3 +2517,98 @@ let app = routes! {
 | `get_named::<T>("name")` | Resolve named service |
 | `contains::<T>()` | Check if registered |
 | `into_arc()` | Seal into `Arc<Container>` for sharing |
+
+---
+
+### 54. Basic CRUD with the Model layer
+
+Enable the `model-sqlite` (or `model-postgres` / `model-mysql`) feature in `Cargo.toml`:
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["macros", "model-sqlite"] }
+```
+
+Define a model struct:
+
+```rust
+use rust_web_server::Model;
+
+#[derive(Model, Debug, Clone)]
+#[table(name = "users")]
+pub struct User {
+    #[primary_key(auto_increment)]
+    pub id: i64,
+    #[column(name = "first_name")]
+    pub name: String,
+    pub email: String,
+    pub age: Option<i32>,
+    #[ignore]
+    pub display_label: String,   // not stored in DB
+}
+```
+
+Open a connection pool and run migrations:
+
+```rust
+use rust_web_server::model::{DbConfig, DbPool};
+
+let pool = DbPool::new(DbConfig {
+    host:      "localhost".into(),
+    port:      5432,
+    user:      "app".into(),
+    password:  "secret".into(),
+    database:  "myapp.db".into(),   // file path for SQLite
+    pool_size: 5,
+})?;
+
+let mut db = pool.get()?;
+db.migrate("migrations/")?;
+```
+
+CRUD via the repository:
+
+```rust
+let mut db = pool.get()?;
+let mut repo = User::repository(&mut db);
+
+// INSERT
+let alice = repo.save(&User { id: 0, name: "Alice".into(), email: "alice@example.com".into(), age: Some(30), display_label: "".into() })?;
+println!("saved with id={}", alice.id);
+
+// SELECT by PK
+let found: Option<User> = repo.find_by_id(alice.id)?;
+
+// UPDATE
+let mut updated = found.unwrap();
+updated.age = Some(31);
+repo.save(&updated)?;
+
+// DELETE
+repo.delete_by_id(alice.id)?;
+
+// COUNT
+let n: i64 = repo.count()?;
+```
+
+Fluent query builder:
+
+```rust
+let page: Vec<User> = User::query(&mut db)
+    .filter("age >= ?", vec![rust_web_server::model::Value::Int(18)])
+    .order_by("name", rust_web_server::model::Order::Asc)
+    .limit(20)
+    .offset(40)
+    .fetch_all()?;
+```
+
+Transactions:
+
+```rust
+let mut db = pool.get()?;
+db.transaction(|conn| {
+    let user = User::repository(conn).save(&new_user)?;
+    // more work...
+    Ok(user)
+})?;
+```
