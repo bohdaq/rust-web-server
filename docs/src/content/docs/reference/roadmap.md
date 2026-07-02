@@ -6,12 +6,6 @@ description: Planned features for rust-web-server — each appears as a callout 
 These features are planned. Each appears as a callout on the relevant docs page.
 
 :::caution[Coming Soon]
-**Upstream TLS for config-driven proxy**
-
-`https://` backend URLs in `[[upstream]]` sections of `rws.config.toml`. Currently only `http://` backends are supported in proxy mode.
-:::
-
-:::caution[Coming Soon]
 **Additional load-balancing strategies**
 
 `least_connections`, `ip_hash`, and `random` as alternatives to the current round-robin backend selection in `ConfigDrivenApp` and `BackendPool`.

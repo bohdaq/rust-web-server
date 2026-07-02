@@ -60,12 +60,17 @@ pub fn build(config: ProxyConfig) -> (ConfigDrivenApp, Vec<std::thread::JoinHand
                             // Fallback: upstream not declared, use name as single backend
                             Arc::new(RwLock::new(vec![upstream.clone()]))
                         });
+                    let upstream_tls = config.upstreams.iter()
+                        .find(|u| u.name == *upstream)
+                        .map(|u| u.tls)
+                        .unwrap_or(false);
                     arc_app(DynamicProxy::new(
                         live,
                         *connect_timeout_ms,
                         *read_timeout_ms,
                         strip_path_prefix.clone(),
                         add_path_prefix.clone(),
+                        upstream_tls,
                     ))
                 }
 
@@ -90,7 +95,11 @@ pub fn build(config: ProxyConfig) -> (ConfigDrivenApp, Vec<std::thread::JoinHand
                         .get(upstream.as_str())
                         .cloned()
                         .unwrap_or_else(|| Arc::new(RwLock::new(vec![upstream.clone()])));
-                    arc_app(DynamicProxy::new(live, *connect_timeout_ms, *read_timeout_ms, None, None))
+                    let upstream_tls = config.upstreams.iter()
+                        .find(|u| u.name == *upstream)
+                        .map(|u| u.tls)
+                        .unwrap_or(false);
+                    arc_app(DynamicProxy::new(live, *connect_timeout_ms, *read_timeout_ms, None, None, upstream_tls))
                 }
 
                 ActionConfig::Mcp | ActionConfig::Unknown(_) => {

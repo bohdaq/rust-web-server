@@ -59,6 +59,10 @@ pub struct UpstreamConfig {
     pub backends: Vec<String>,
     pub strategy: String, // "round_robin" | "random" | "ip_hash"
     pub health_check: Option<HealthCheckConfig>,
+    /// `true` when all backends use `https://` scheme — connections to the
+    /// upstream are made over TLS. Requires the `http-client` or `http2`
+    /// feature (which bring in `rustls` + `webpki-roots`).
+    pub tls: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -243,7 +247,8 @@ impl ProxyConfig {
             } else {
                 None
             };
-            upstreams.push(UpstreamConfig { name, backends, strategy, health_check });
+            let tls = backends.iter().any(|b| b.starts_with("https://"));
+            upstreams.push(UpstreamConfig { name, backends, strategy, health_check, tls });
             i += 1;
         }
 
@@ -711,6 +716,7 @@ pub(crate) struct DynamicProxy {
     read_timeout: Duration,
     strip_prefix: Option<Arc<String>>,
     add_prefix: Option<Arc<String>>,
+    tls: bool,
 }
 
 impl DynamicProxy {
@@ -720,6 +726,7 @@ impl DynamicProxy {
         read_timeout_ms: u64,
         strip_prefix: Option<String>,
         add_prefix: Option<String>,
+        tls: bool,
     ) -> Self {
         DynamicProxy {
             live,
@@ -728,6 +735,7 @@ impl DynamicProxy {
             read_timeout: Duration::from_millis(read_timeout_ms),
             strip_prefix: strip_prefix.map(Arc::new),
             add_prefix: add_prefix.map(Arc::new),
+            tls,
         }
     }
 
@@ -750,8 +758,8 @@ impl Application for DynamicProxy {
             }
         };
 
-        let (host, port) = match crate::proxy_config::health::parse_host_port(&backend) {
-            Some(hp) => hp,
+        let (host, port, _) = match crate::proxy_config::health::parse_backend_url(&backend) {
+            Some(t) => t,
             None => return Ok(bad_gateway()),
         };
 
@@ -776,14 +784,35 @@ impl Application for DynamicProxy {
             request
         };
 
-        match crate::proxy::proxy_http1(
-            effective_request,
-            &conn.client.ip,
-            &host,
-            port,
-            self.connect_timeout,
-            self.read_timeout,
-        ) {
+        let result = if self.tls {
+            #[cfg(any(feature = "http-client", feature = "http2"))]
+            {
+                crate::proxy::proxy_https1(
+                    effective_request,
+                    &conn.client.ip,
+                    &host,
+                    port,
+                    self.connect_timeout,
+                    self.read_timeout,
+                )
+            }
+            #[cfg(not(any(feature = "http-client", feature = "http2")))]
+            {
+                eprintln!("[proxy] HTTPS upstream requires http-client or http2 feature");
+                Err("TLS upstream not supported in this build".to_string())
+            }
+        } else {
+            crate::proxy::proxy_http1(
+                effective_request,
+                &conn.client.ip,
+                &host,
+                port,
+                self.connect_timeout,
+                self.read_timeout,
+            )
+        };
+
+        match result {
             Ok(r) => Ok(r),
             Err(_) => Ok(bad_gateway()),
         }

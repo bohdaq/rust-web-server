@@ -37,11 +37,9 @@ strategy    = "round_robin"                       # currently only "round_robin"
 ```
 
 :::note[Backend URL format]
-Backends must be `"host:port"` strings. Do not include `http://` — scheme prefixes are stripped automatically. TLS to upstreams is not yet supported.
-:::
-
-:::caution[Coming Soon: upstream TLS]
-HTTPS backends (`https://`) are parsed but connections are made over plain TCP. Mutual TLS to upstreams is not yet implemented.
+Use `"host:port"` for plain HTTP or `"https://host:port"` for TLS upstreams.
+Requires the `http-client` or `http2` feature (included in all builds except `--no-default-features --features http1`).
+Scheme prefixes are detected automatically — `https://` enables TLS, anything else uses plain TCP.
 :::
 
 ### `[upstream.health_check]` — automatic health monitoring

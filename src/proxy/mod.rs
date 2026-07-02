@@ -32,6 +32,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 
+
 use crate::application::Application;
 use crate::core::New;
 use crate::middleware::Middleware;
@@ -225,6 +226,10 @@ pub(crate) fn build_request(request: &Request, backend_host: &str, client_ip: &s
 }
 
 pub(crate) fn read_response(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
+    read_response_from(stream)
+}
+
+pub(crate) fn read_response_from<R: Read>(stream: &mut R) -> Result<Vec<u8>, String> {
     let mut buf: Vec<u8> = Vec::with_capacity(8192);
     let mut tmp = [0u8; 4096];
 
@@ -305,6 +310,55 @@ pub(crate) fn proxy_http1(
     let mut stream = stream;
     stream.write_all(&req_bytes).map_err(|e| format!("write to backend failed: {}", e))?;
     let resp_bytes = read_response(&mut stream)?;
+    Response::parse(&resp_bytes)
+}
+
+/// Forward a single HTTPS/1.1 request to `host:port` over TLS and return the
+/// response. Requires the `http-client` or `http2` feature (both bring in
+/// `rustls` + `webpki-roots`).
+#[cfg(any(feature = "http-client", feature = "http2"))]
+pub(crate) fn proxy_https1(
+    request: &Request,
+    client_ip: &str,
+    host: &str,
+    port: u16,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
+    use rustls::pki_types::ServerName;
+    use rustls::ClientConfig;
+    use std::net::ToSocketAddrs;
+    use std::sync::Arc;
+
+    let addr_str = format!("{}:{}", host, port);
+    let sock_addr = addr_str
+        .to_socket_addrs()
+        .map_err(|e| format!("DNS lookup for {} failed: {}", addr_str, e))?
+        .next()
+        .ok_or_else(|| format!("no address resolved for {}", addr_str))?;
+
+    let stream = TcpStream::connect_timeout(&sock_addr, connect_timeout)
+        .map_err(|e| format!("connect to {} failed: {}", addr_str, e))?;
+    stream.set_read_timeout(Some(read_timeout)).map_err(|e| e.to_string())?;
+    stream.set_write_timeout(Some(Duration::from_secs(10))).map_err(|e| e.to_string())?;
+
+    let root_store =
+        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let config = Arc::new(
+        ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth(),
+    );
+    let server_name = ServerName::try_from(host.to_string())
+        .map_err(|e| format!("invalid upstream hostname '{}': {}", host, e))?;
+    let conn = rustls::ClientConnection::new(config, server_name).map_err(|e| e.to_string())?;
+    let mut tls = rustls::StreamOwned::new(conn, stream);
+
+    let req_bytes = build_request(request, host, client_ip);
+    tls.write_all(&req_bytes)
+        .map_err(|e| format!("write to upstream failed: {}", e))?;
+
+    let resp_bytes = read_response_from(&mut tls)?;
     Response::parse(&resp_bytes)
 }
 

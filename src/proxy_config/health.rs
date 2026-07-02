@@ -78,12 +78,11 @@ pub(crate) fn start_health_checker(
         .ok();
 }
 
-/// Send a minimal HTTP/1.1 GET request to `backend` (host:port) at `path`
-/// with the given `timeout`. Returns `true` on a 2xx response.
+/// Send a minimal HTTP(S)/1.1 GET request to `backend` at `path` with the
+/// given `timeout`. Returns `true` on a 2xx response.
 fn check_backend(backend: &str, path: &str, timeout: Duration) -> bool {
-    // Parse host:port
-    let (host, port) = match parse_host_port(backend) {
-        Some(hp) => hp,
+    let (host, port, tls) = match parse_backend_url(backend) {
+        Some(t) => t,
         None => return false,
     };
 
@@ -105,40 +104,106 @@ fn check_backend(backend: &str, path: &str, timeout: Duration) -> bool {
         path, host
     );
 
-    let mut stream = stream;
-    if stream.write_all(req.as_bytes()).is_err() {
+    if tls {
+        check_via_tls(stream, &host, req.as_bytes())
+    } else {
+        let mut stream = stream;
+        if stream.write_all(req.as_bytes()).is_err() {
+            return false;
+        }
+        let mut buf = [0u8; 16];
+        if stream.read(&mut buf).is_err() {
+            return false;
+        }
+        buf.starts_with(b"HTTP/1.1 2") || buf.starts_with(b"HTTP/1.0 2")
+    }
+}
+
+#[cfg(any(feature = "http-client", feature = "http2"))]
+fn check_via_tls(stream: TcpStream, host: &str, req: &[u8]) -> bool {
+    use rustls::pki_types::ServerName;
+    use rustls::ClientConfig;
+    use std::sync::Arc;
+
+    let root_store =
+        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let config = Arc::new(
+        ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth(),
+    );
+    let server_name = match ServerName::try_from(host.to_string()) {
+        Ok(n) => n,
+        Err(_) => return false,
+    };
+    let conn = match rustls::ClientConnection::new(config, server_name) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let mut tls = rustls::StreamOwned::new(conn, stream);
+    if tls.write_all(req).is_err() {
         return false;
     }
-
-    // Read just the status line
     let mut buf = [0u8; 16];
-    if stream.read(&mut buf).is_err() {
+    if tls.read(&mut buf).is_err() {
         return false;
     }
-
-    // Expect "HTTP/1.1 2" at the start
     buf.starts_with(b"HTTP/1.1 2") || buf.starts_with(b"HTTP/1.0 2")
 }
 
-pub(crate) fn parse_host_port(backend: &str) -> Option<(String, u16)> {
-    // Strip scheme prefixes
-    let rest = backend
-        .strip_prefix("https://")
-        .or_else(|| backend.strip_prefix("http://"))
-        .or_else(|| backend.strip_prefix("h2://"))
-        .unwrap_or(backend);
+// When rustls is not compiled in, silently skip TLS health checks.
+#[cfg(not(any(feature = "http-client", feature = "http2")))]
+fn check_via_tls(_stream: TcpStream, _host: &str, _req: &[u8]) -> bool {
+    false
+}
+
+/// Parse a backend address that may include a scheme prefix.
+///
+/// Returns `(host, port, tls)`:
+/// - `https://` → TLS=true, default port 443
+/// - `http://`, `h2://`, or no scheme → TLS=false, default port 80
+pub(crate) fn parse_backend_url(backend: &str) -> Option<(String, u16, bool)> {
+    let (rest, tls, default_port) = if let Some(r) = backend.strip_prefix("https://") {
+        (r, true, 443u16)
+    } else if let Some(r) = backend.strip_prefix("http://") {
+        (r, false, 80u16)
+    } else if let Some(r) = backend.strip_prefix("h2://") {
+        (r, false, 80u16)
+    } else {
+        (backend, false, 80u16)
+    };
+
     // Drop any path component
     let host_port = rest.split('/').next().unwrap_or(rest);
-    if let Some(colon) = host_port.rfind(':') {
+    if host_port.is_empty() {
+        return None;
+    }
+
+    // Handle IPv6 addresses like [::1]:8080
+    let (host, port) = if host_port.starts_with('[') {
+        // IPv6 literal: [host]:port or [host]
+        let close = host_port.find(']')?;
+        let host = host_port[1..close].to_string();
+        let port = if host_port.len() > close + 1 && host_port.as_bytes()[close + 1] == b':' {
+            host_port[close + 2..].parse::<u16>().unwrap_or(default_port)
+        } else {
+            default_port
+        };
+        (host, port)
+    } else if let Some(colon) = host_port.rfind(':') {
         let port_str = &host_port[colon + 1..];
         if let Ok(p) = port_str.parse::<u16>() {
-            return Some((host_port[..colon].to_string(), p));
+            (host_port[..colon].to_string(), p)
+        } else {
+            (host_port.to_string(), default_port)
         }
-    }
-    // Default port 80
-    if !host_port.is_empty() {
-        Some((host_port.to_string(), 80))
     } else {
-        None
+        (host_port.to_string(), default_port)
+    };
+
+    if host.is_empty() {
+        return None;
     }
+    Some((host, port, tls))
 }
+
