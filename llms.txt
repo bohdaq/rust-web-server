@@ -1,0 +1,961 @@
+# rws — Rust Web Server
+
+> Source: https://github.com/bohdaq/rust-web-server
+> Website: https://rws8.tech/
+> Crates.io: https://crates.io/crates/rust-web-server
+> Docs: https://docs.rs/rust-web-server
+> License: MIT  |  MSRV: 1.75  |  Current version: 17.43.0
+
+`rws` is an HTTP web framework, reverse proxy, and standalone server for Rust.
+It supports HTTP/1.1, HTTP/2, and HTTP/3/QUIC over TLS with no third-party HTTP
+dependencies — all HTTP parsing, routing, middleware, WebSocket, SSE, CORS,
+rate limiting, and MIME detection are built from scratch.
+
+Use it in three modes:
+- **Static file server** — `cargo install rust-web-server && rws`
+- **Config-driven proxy** — drop `rws.config.toml` with `[[route]]`/`[[upstream]]`; no code required
+- **Library crate** — `cargo add rust-web-server`; use as a full application framework
+
+---
+
+## Key files
+
+- [README.md](README.md) — overview, feature list, quick starts
+- [DEVELOPER.md](DEVELOPER.md) — full building-blocks reference + 58 use-case examples
+- [CLAUDE.md](CLAUDE.md) — architecture, request lifecycle, module index, coding conventions
+- [Cargo.toml](Cargo.toml) — feature flags and optional dependencies
+- [src/lib.rs](src/lib.rs) — crate root; all public modules declared here
+- [src/main.rs](src/main.rs) — binary entry point; builds the server using the library API
+- [spec/](spec/) — design specs for major features (proxy, SSO, model layer, etc.)
+
+---
+
+## Architecture
+
+### Request lifecycle (default `http3` build)
+
+```
+main.rs
+  └─ build_app()              → returns Box<dyn Application>
+  └─ Server::setup()          → binds TCP listener, creates runtime
+  └─ tokio::join!(
+       Server::run_tls(),     → accepts TLS; ALPN → HTTP/2 or HTTP/1.1
+       Server::run_quic(),    → accepts QUIC → HTTP/3
+       Server::run_redirect() → optional HTTP→HTTPS redirect port
+     )
+
+Per connection (HTTP/1.1 TLS):
+  Server::process() → read bytes → Request::parse()
+                    → app.execute(request, connection) → Response
+                    → apply gzip → write bytes
+
+Per connection (HTTP/2):
+  h2_handler::handle_connection() → translates h2 frames → app.execute() → h2 frames
+
+Per connection (HTTP/3):
+  h3_handler → RequestResolver::resolve_request() → app.execute() → h3 response
+```
+
+### Application trait
+
+Every application variant implements `Application`:
+```rust
+pub trait Application: Send + Sync {
+    fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String>;
+}
+```
+
+`App::execute` walks a hardcoded list of `Controller::is_matching` checks.
+`AppWithState<S>::execute` uses a dynamic `Router` with registered handlers.
+`WithMiddleware<A>::execute` calls each `Middleware::handle` layer in order.
+
+### Middleware trait
+
+```rust
+pub trait Middleware: Send + Sync {
+    fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application)
+        -> Result<Response, String>;
+}
+```
+
+Call `next.execute(request, connection)` to pass through, or return a `Response`
+directly to short-circuit. Layers are applied in registration order (first `.wrap()`
+is outermost). Any `Application` can be wrapped: `app.wrap(layer)`.
+
+### Key types
+
+```
+Request         src/request/mod.rs       — method: String, request_uri: String,
+                                           http_version: String, headers: Vec<Header>,
+                                           body: Vec<u8>
+
+Response        src/response/mod.rs      — status_code: i16, reason_phrase: String,
+                                           headers: Vec<Header>,
+                                           content_range_list: Vec<ContentRange>,
+                                           stream_file: Option<String>
+
+Header          src/header/mod.rs        — name: String, value: String
+                                           (constants: Header::_CONTENT_TYPE, etc.)
+
+ConnectionInfo  src/server/mod.rs        — client: Address { ip, port },
+                                           server: Address { ip, port },
+                                           request_size: usize,
+                                           sni_hostname: Option<String>
+
+STATUS_CODE_REASON_PHRASE src/response/mod.rs
+                         — typed constants: .n200_ok, .n302_found,
+                           .n400_bad_request, .n401_unauthorized,
+                           .n403_forbidden, .n404_not_found, .n500_internal_server_error, …
+                           each has .status_code: &i16 and .reason_phrase: &str
+
+Range::get_content_range(body: Vec<u8>, mime: String) → ContentRange
+    src/range/mod.rs  — standard way to set a response body
+
+MimeType::TEXT_PLAIN, MimeType::APPLICATION_JSON, MimeType::TEXT_HTML, …
+    src/mime_type/mod.rs — MIME type constants; MimeType::detect("file.rs") → &str
+```
+
+### Building a response (canonical pattern)
+
+```rust
+use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+use crate::range::Range;
+use crate::mime_type::MimeType;
+use crate::header::Header;
+
+let mut r = Response::new();
+r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+r.content_range_list = vec![Range::get_content_range(
+    b"Hello".to_vec(),
+    MimeType::TEXT_PLAIN.to_string(),
+)];
+r.headers.push(Header { name: "X-Custom".to_string(), value: "value".to_string() });
+```
+
+### 302 Redirect pattern
+
+```rust
+let mut r = Response::new();
+r.status_code = *STATUS_CODE_REASON_PHRASE.n302_found.status_code;
+r.reason_phrase = STATUS_CODE_REASON_PHRASE.n302_found.reason_phrase.to_string();
+r.headers.push(Header { name: "Location".to_string(), value: "/destination".to_string() });
+```
+
+### Typed error pattern
+
+```rust
+use crate::error::{AppError, IntoResponse};
+
+// Returns 403 Forbidden:
+Ok(AppError::Forbidden.into_response())
+
+// Returns 404 Not Found with message:
+Ok(AppError::NotFound("user not found".into()).into_response())
+
+// Full enum: BadRequest(String), Unauthorized, Forbidden,
+//            NotFound(String), Conflict(String),
+//            UnprocessableEntity(String), TooManyRequests, Internal(String)
+```
+
+---
+
+## Application variants
+
+### App (zero-config)
+
+`App::new()` — wraps all built-in controllers (static files, healthz, readyz,
+metrics, CORS, SSE, WebSocket, MCP). Minimal boilerplate. Suitable for static
+serving or adding a few custom controllers.
+
+### AppWithState<S> (state + routing)
+
+```rust
+let app = App::with_state(MyState { … })
+    .get("/users/:id", get_user)
+    .post("/users", create_user)
+    .put("/users/:id", update_user)
+    .delete("/users/:id", delete_user)
+    .wrap(RateLimitLayer);
+
+// Handler signature:
+fn get_user(req: &Request, params: &PathParams, conn: &ConnectionInfo, state: &Arc<MyState>)
+    -> Response { … }
+```
+
+`PathParams::get("id")` extracts named path segments. `*wildcard` matches trailing paths.
+
+### AsyncAppWithState<S> (async handlers, requires `http2`)
+
+```rust
+let app = App::with_async_state(MyState { … })
+    .get("/users", list_users);
+
+async fn list_users(req: &Request, params: &PathParams, conn: &ConnectionInfo, state: &Arc<MyState>)
+    -> Response { … }
+```
+
+### routes! macro (declarative table, requires `macros`)
+
+```rust
+let app = routes! {
+    App::with_state(my_state),
+    GET  "/users"     => list_users,
+    POST "/users"     => create_user,
+    GET  "/users/:id" => get_user,
+};
+```
+
+### WithMiddleware<A>
+
+```rust
+// Any Application wrapped with middleware layers:
+let app = App::new()
+    .wrap(OtelLayer)
+    .wrap(RateLimitLayer)
+    .wrap(CacheLayer::new().ttl(60));
+// Layers run in registration order (OtelLayer is outermost here).
+```
+
+### McpServer (Model Context Protocol)
+
+```rust
+let mcp = App::new().mcp("my-server", "1.0.0")
+    .tool("greet", "Say hello", schema, |params| {
+        Ok(format!("Hello, {}!", params["name"]))
+    });
+// Serves POST /mcp (JSON-RPC 2.0, MCP Streamable HTTP protocol).
+```
+
+---
+
+## Feature flags
+
+| Feature | What it enables | Key new deps |
+|---|---|---|
+| `http1` (no-default) | Sync thread-pool server, no tokio, no TLS | `ctrlc`, `libc` |
+| `http2` | tokio, rustls TLS, HTTP/2 via `h2` crate | `tokio`, `rustls`, `h2` |
+| `http3` **(default)** | HTTP/3 over QUIC via `quinn` + `h3` (implies `http2`) | `quinn`, `h3`, `h3-quinn` |
+| `http-client` | HTTPS for outbound `Client` | `rustls`, `webpki-roots` |
+| `serde` | `Json<T>` extractor/responder via `serde_json` | `serde`, `serde_json` |
+| `auth` | `BasicAuthLayer`, `JwtLayer`, `build_jwt`/`verify_jwt` (HS256) | `hmac`, `sha2` |
+| `macros` | `#[get]`, `#[derive(FromRequest)]`, `#[derive(Validate)]`, `#[derive(Config)]`, `routes!` | `rws-macros` |
+| `acme` | Automatic TLS via Let's Encrypt (implies `http2`) | `rcgen`, `aws-lc-rs` |
+| `tera` | Tera HTML template engine (Jinja2/Django syntax) | `tera`, `serde`, `serde_json` |
+| `model-sqlite` | ORM backed by bundled SQLite | `rusqlite` |
+| `model-postgres` | ORM backed by PostgreSQL | `postgres` |
+| `model-mysql` | ORM backed by MySQL | `mysql` |
+| `crypto` | `hash_password`/`verify_password` (Argon2id), `generate_token` (CSPRNG) | `argon2`, `rand_core` |
+| `csrf` | `CsrfLayer` + `CsrfToken` — double-submit cookie CSRF protection | `rand_core` |
+| `sso` | `OidcAuth` middleware, PKCE, RS256/ES256 JWT via JWKS, provider presets | `rsa`, `p256`, `sha2`, `serde`, `serde_json` |
+
+Build commands:
+```bash
+cargo build                            # http3 (default) — HTTP/3 + HTTP/2 + TLS
+cargo build --no-default-features --features http2   # HTTP/2 + TLS
+cargo build --no-default-features --features http1   # HTTP/1.1 only, sync, no TLS
+```
+
+---
+
+## Routing
+
+### Dynamic Router (standalone)
+
+```rust
+use rust_web_server::router::Router;
+
+let mut router = Router::new();
+router.get("/api/users/:id", |req, params, conn| { … });
+router.post("/api/users", |req, params, conn| { … });
+// In Application::execute:
+router.handle(request, connection)  // Returns Option<Response>
+```
+
+### Virtual-host routing
+
+```rust
+Router::new().with_host("api.example.com")
+    .get("/v1/status", status_handler)
+```
+
+Matches requests whose SNI hostname (TLS) or `Host` header (plain HTTP) equals the given value.
+
+### Path parameter syntax
+
+- `:name` — matches one path segment; `params.get("name")` → `Option<&str>`
+- `*name` — matches the rest of the path (trailing wildcard)
+
+---
+
+## Extractors (src/extract/mod.rs)
+
+```rust
+use rust_web_server::extract::{Body, BodyText, Query, RequestHeaders};
+
+// Body — raw bytes, never fails
+let raw: Body = Body::from_request(req)?;
+
+// BodyText — UTF-8 body, 400 on invalid UTF-8
+let text: BodyText = BodyText::from_request(req)?;
+
+// Query — parsed query string
+let q: Query = Query::from_request(req)?;
+let id = q.get("id");  // Option<&String>
+
+// RequestHeaders — case-insensitive header access
+let h: RequestHeaders = RequestHeaders::from_request(req)?;
+let ct = h.get("Content-Type");  // Option<&str>
+```
+
+Derive `FromRequest` on a struct to compose extractors:
+```rust
+#[derive(FromRequest)]  // requires macros feature
+struct CreateUser { body: BodyText, auth: RequestHeaders }
+```
+
+---
+
+## Validation (src/validate/mod.rs)
+
+```rust
+#[derive(FromRequest, Validate)]  // both require macros feature
+struct SignupForm {
+    #[validate(length(min = 3, max = 50))]
+    username: BodyText,
+    #[validate(email)]
+    email: BodyText,
+    #[validate(length(min = 8))]
+    password: BodyText,
+}
+
+// In handler:
+let form = Validated::<SignupForm>::from_request(req)?;
+// Returns 400 on extraction failure, 422 with JSON error body on validation failure.
+```
+
+---
+
+## Session management (src/session/mod.rs)
+
+```rust
+use rust_web_server::session::{SessionStore, session_id_from_request, session_cookie, destroy_cookie};
+
+// Store in AppState:
+struct State { sessions: SessionStore }
+let state = State { sessions: SessionStore::new(3600) }; // TTL in seconds
+
+// Create a session:
+let mut session = state.sessions.create();
+session.set("user_id", "42");
+state.sessions.save(&session);
+// Set cookie on response:
+response.headers.push(Header {
+    name: "Set-Cookie".to_string(),
+    value: session_cookie(&session.id, "sid", 3600),
+});
+
+// Load a session:
+let sid = session_id_from_request(request, "sid")?;
+let session = state.sessions.load(&sid)?;
+let user_id = session.get("user_id")?;
+
+// Destroy:
+state.sessions.destroy(&sid);
+response.headers.push(Header {
+    name: "Set-Cookie".to_string(),
+    value: destroy_cookie("sid"),
+});
+```
+
+`Session.id` is a public `String` field.
+
+---
+
+## Auth middleware (src/auth/mod.rs, requires `auth` feature)
+
+```rust
+use rust_web_server::auth::{BasicAuthLayer, JwtLayer, build_jwt, verify_jwt};
+
+// Basic Auth — closure receives (username, password):
+let app = App::new().wrap(BasicAuthLayer::new(|user, pass| user == "admin" && pass == "secret"));
+
+// JWT HS256:
+let app = App::new().wrap(JwtLayer::new("my-secret-key"));
+
+// Build a JWT:
+let token = build_jwt("user-123", 3600, "my-secret-key")?;  // subject, ttl_secs, secret
+
+// Verify manually:
+let claims = verify_jwt(&token, "my-secret-key")?;
+// claims.sub: String, claims.exp: u64, claims.raw: serde_json::Value
+```
+
+---
+
+## CSRF protection (src/csrf/mod.rs, requires `csrf` feature)
+
+```rust
+use rust_web_server::csrf::{CsrfLayer, CsrfToken};
+
+// Middleware: validates POST/PUT/PATCH/DELETE, passes GET/HEAD/OPTIONS through.
+let app = App::new().wrap(CsrfLayer::new());
+
+// In a GET handler — embed token in HTML form:
+let token = CsrfToken::from_request(req).map(|t| t.value().to_string()).unwrap_or_default();
+// <input type="hidden" name="_csrf" value="{token}">
+// For AJAX: read cookie `_csrf` in JS and send as `X-CSRF-Token` header.
+
+// Options:
+CsrfLayer::new()
+    .http_only(true)          // restrict to HTML forms (disables JS access)
+    .secure(true)             // add Secure flag (use behind HTTPS)
+    .cookie_name("xsrf")     // custom cookie name
+    .header_name("X-XSRF-Token")
+```
+
+Double-submit cookie pattern: random 32-byte token, `SameSite=Strict`, constant-time comparison.
+
+---
+
+## Password hashing (src/crypto/mod.rs, requires `crypto` feature)
+
+```rust
+use rust_web_server::crypto::{hash_password, verify_password, generate_token};
+
+let hash = hash_password("hunter2")?;     // Argon2id, random salt, returns PHC string
+let ok   = verify_password("hunter2", &hash)?;  // constant-time, Ok(true/false)
+let tok  = generate_token(32);            // 64-char lowercase hex from OS CSPRNG
+```
+
+Store the PHC string as-is — salt is embedded. Use `generate_token` for password-reset tokens, API keys, email verification codes.
+
+---
+
+## OAuth2 / OIDC SSO (src/sso/, requires `sso` feature)
+
+```rust
+use std::sync::Arc;
+use rust_web_server::session::SessionStore;
+use rust_web_server::sso::{OidcAuth, OidcConfig, OidcClaims};
+
+let sessions = Arc::new(SessionStore::new(86_400));
+
+let app = App::new()
+    .wrap(
+        OidcAuth::new(
+            OidcConfig::google(client_id, client_secret, "https://myapp.com/auth/callback"),
+            Arc::clone(&sessions),
+        )
+        .exclude("/healthz")
+        .exclude("/public/"),
+    );
+
+// OidcAuth intercepts:
+//   GET /auth/login    → redirect to IdP with PKCE + state + nonce
+//   GET /auth/callback → exchange code, verify id_token, store claims in session
+//   GET /auth/logout   → destroy session
+// All other paths require a valid session or are redirected to /auth/login.
+
+// Inside any protected handler:
+fn dashboard(req: &Request, conn: &ConnectionInfo) -> Response {
+    let claims: OidcClaims = OidcAuth::claims(req).unwrap();
+    // claims.sub, claims.email, claims.name, claims.picture, …
+}
+
+// Load config from env (RWS_OIDC_PROVIDER, RWS_OIDC_CLIENT_ID, …):
+let config = OidcConfig::from_env()?;
+
+// Provider presets:
+OidcConfig::google(id, secret, uri)
+OidcConfig::microsoft("tenant-id", id, secret, uri)
+OidcConfig::github(id, secret, uri)          // OAuth 2.0 only (no OIDC JWT)
+OidcConfig::okta("company.okta.com", id, secret, uri)
+OidcConfig::auth0("company.auth0.com", id, secret, uri)
+OidcConfig::keycloak("https://kc.example.com", "my-realm", id, secret, uri)
+OidcConfig::discover("https://idp.example.com", id, secret, uri)?  // fetches /.well-known/openid-configuration
+```
+
+### JWT verification standalone
+
+```rust
+use rust_web_server::sso::{JwksCache, VerifyOptions};
+
+let cache = JwksCache::new("https://www.googleapis.com/oauth2/v3/certs");
+let claims = cache.verify_jwt(&id_token, &VerifyOptions {
+    audience:    "my-client-id.apps.googleusercontent.com",
+    issuer:      "https://accounts.google.com",
+    leeway_secs: 30,
+})?;
+// Supports RS256 (RSA) and ES256 (EC P-256). Auto-rotates keys on kid miss.
+```
+
+---
+
+## Outbound HTTP client (src/http_client/, always available)
+
+```rust
+use rust_web_server::http_client::{Client, HttpClientError};
+
+// Plain HTTP (no feature flag needed):
+let resp = Client::new()
+    .get("http://api.example.com/data")
+    .header("Authorization", "Bearer tok")
+    .timeout_ms(5_000)
+    .send()?;
+assert!(resp.is_success());
+let body: String = resp.text()?;
+
+// HTTPS (requires `http-client` or `http2` feature):
+let resp = Client::new().post("https://api.example.com/charge")
+    .body_json(r#"{"amount":1000}"#)
+    .send()?;
+
+// Async (requires `http2` feature):
+use rust_web_server::http_client::AsyncClient;
+let resp = AsyncClient::new().get("https://api.example.com").send().await?;
+```
+
+Follows redirects automatically. GET-downgrade on 301/302/303; method-preserve on 307/308.
+
+---
+
+## Model layer / ORM (src/model/, requires `model-sqlite` / `model-postgres` / `model-mysql`)
+
+```rust
+use rust_web_server::model::{DbPool, DbConfig};
+
+#[derive(Model)]  // requires macros feature
+#[table(name = "users")]
+struct User {
+    #[primary_key(auto_increment)]
+    pub id:    i64,
+    pub name:  String,
+    pub email: String,
+}
+
+let pool = DbPool::new(DbConfig::from_env()?);
+let mut conn = pool.get()?;
+
+// Migration:
+conn.migrate("migrations/")?;
+
+// CRUD:
+let mut repo = User::repository(&mut conn);
+let user = repo.find_by_id(1)?;
+repo.save(&mut User { id: 0, name: "Alice".into(), email: "a@b.com".into() })?;
+repo.delete_by_id(1)?;
+let all = repo.find_all()?;
+
+// Query builder:
+let adults = User::query(&mut conn)
+    .filter("age >= ?", &[&18i64])
+    .order_by("name ASC")
+    .limit(10)
+    .fetch_all()?;
+```
+
+`DbConfig::from_env()` reads `RWS_DB_HOST`, `RWS_DB_PORT`, `RWS_DB_USER`, `RWS_DB_PASSWORD`, `RWS_DB_DATABASE`, `RWS_DB_POOL_SIZE`.
+
+Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&mut conn)`, no lazy loading, no hidden N+1.
+
+---
+
+## Middleware reference
+
+| Type | Module | Effect |
+|---|---|---|
+| `RateLimitLayer` | `middleware` | Per-IP sliding-window; reads `RWS_CONFIG_RATE_LIMIT_*`; 429 on exceeded |
+| `BasicAuthLayer<F>` | `auth` | HTTP Basic; closure `(user, pass) -> bool`; 401 on failure |
+| `JwtLayer` | `auth` | HS256 Bearer token; 401 on invalid |
+| `IpFilter` | `ip_filter` | Allow or deny by IPv4/CIDR; 403 on block |
+| `CsrfLayer` | `csrf` | Double-submit cookie; 403 on mismatch for POST/PUT/PATCH/DELETE |
+| `OidcAuth` | `sso` | OAuth2/OIDC auth; redirects unauthenticated users to `/auth/login` |
+| `MetricsLayer` | `metrics` | Per-route Prometheus counters + histograms |
+| `OtelLayer` | `otel` | W3C traceparent spans; exports to stdout or OTLP |
+| `CacheLayer` | `cache` | In-memory GET response cache; builder `.ttl(secs)` |
+| `ReverseProxy` | `proxy` | HTTP/1.1 upstream proxy; round-robin; 502 on all-fail |
+| `H2ReverseProxy` | `proxy` | HTTP/2 upstream proxy; `h2://` scheme prefix |
+| `GrpcProxy` | `proxy` | gRPC proxy; filters on `Content-Type: application/grpc*` |
+| `RewriteLayer` | `rewrite` | Request/response header, URI, status, body rewriting |
+| `CanaryLayer` | `canary` | Weighted traffic splitting; `.add(backend, weight)` |
+| `RetryLayer` | `circuit_breaker` | Retry on 502/503/504 up to `max_retries` |
+| `OidcAuth` | `sso` | OIDC auth flow + claims injection; `.exclude(prefix)` |
+
+---
+
+## Observability
+
+### Prometheus metrics
+
+Built-in `GET /metrics` exposes counters. `MetricsLayer` adds per-route metrics.
+
+```rust
+use rust_web_server::metrics::{record_request, record_error, SERVER_READY};
+```
+
+### OpenTelemetry tracing
+
+```rust
+use rust_web_server::otel;
+
+otel::setup_from_env(); // OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT
+let app = App::new().wrap(OtelLayer);
+// At shutdown:
+otel::shutdown();
+```
+
+### Access log
+
+Combined Log Format by default. `RWS_CONFIG_LOG_FORMAT=json` switches to structured JSON.
+
+### Hot config reload
+
+`SIGHUP` or `POST /admin/config/reload` re-reads `rws.config.toml` and applies
+CORS, rate-limit, log-format changes live. On TLS builds, also rebuilds the
+`TlsAcceptor` with fresh certificates.
+
+---
+
+## Configuration
+
+Layered priority (lowest → highest):
+1. Hardcoded defaults in `src/entry_point/mod.rs`
+2. System environment variables
+3. `rws.config.toml` in the working directory
+4. Command-line args
+
+Key environment variables:
+```
+RWS_CONFIG_IP                    default: 127.0.0.1
+RWS_CONFIG_PORT                  default: 7878
+RWS_CONFIG_THREAD_COUNT          default: number of CPU cores
+RWS_CONFIG_TLS_CERT_FILE         path to PEM cert (enables TLS)
+RWS_CONFIG_TLS_KEY_FILE          path to PEM key
+RWS_CONFIG_TLS_CLIENT_CA_FILE    path to CA cert (enables mTLS)
+RWS_CONFIG_HTTP_REDIRECT_PORT    if set, listens on this port and sends 301 → HTTPS
+RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS   default: 1000
+RWS_CONFIG_RATE_LIMIT_WINDOW_SECS   default: 60
+RWS_CONFIG_LOG_FORMAT            "combined" (default) | "json"
+```
+
+### Typed config binding (requires `macros` feature)
+
+```rust
+#[derive(Config)]
+#[config(prefix = "APP_")]
+struct AppConfig {
+    #[config(env = "PORT", default = "8080")]
+    port: u16,
+    #[config(env = "DATABASE_URL")]
+    database_url: Option<String>,
+}
+let cfg = AppConfig::load()?;
+```
+
+---
+
+## Config-driven proxy server
+
+When `rws.config.toml` contains `[[route]]` or `[[upstream]]` sections, the binary
+automatically starts in proxy mode — no Rust code required.
+
+```toml
+[[upstream]]
+name     = "api"
+backends = ["10.0.0.10:8080", "10.0.0.11:8080"]
+
+  [upstream.health_check]
+  path                = "/healthz"
+  interval_secs       = 10
+  healthy_threshold   = 2
+  unhealthy_threshold = 3
+
+[[route]]
+  [route.match]
+  host   = "api.example.com"
+  path   = "/v1/*"
+  method = "GET"
+
+  [route.action]
+  type     = "proxy"
+  upstream = "api"
+
+  [route.middleware]
+  rate_limit = { max_requests = 500, window_secs = 60 }
+  auth       = { type = "bearer", token_env = "API_TOKEN" }
+  cache      = { ttl_secs = 3600 }
+
+[[route]]
+  [route.match]
+  path = "/*"
+  [route.action]
+  type   = "respond"
+  status = 404
+  body   = "Not Found"
+```
+
+Route action types: `proxy`, `grpc`, `static`, `redirect`, `respond`, `mcp`.
+Per-route middleware: `rate_limit`, `cache`, `auth`, `ip_allow`/`ip_deny`, `rewrite`.
+
+---
+
+## MCP server (Model Context Protocol)
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let app = App::new().mcp("my-server", "1.0.0")
+    .tool("add", "Add two numbers",
+          serde_json::json!({"type":"object","properties":{"a":{"type":"number"},"b":{"type":"number"}}}),
+          |params| Ok(format!("{}", params["a"].as_f64().unwrap() + params["b"].as_f64().unwrap())))
+    .require_bearer("my-secret-token")  // optional static Bearer auth
+    .wrap(App::new());                  // fall through non-MCP requests to inner app
+
+// Serves POST /mcp (JSON-RPC 2.0, MCP Streamable HTTP transport).
+// Built-in tools (when started as binary): server_config, feature_flags,
+// server_metrics, rate_limit_config, check_rate_limit, cors_config,
+// list_static_files, reload_config.
+```
+
+---
+
+## Standalone proxies
+
+```rust
+// L4 TCP proxy:
+use rust_web_server::tcp_proxy::TcpProxy;
+TcpProxy::new().backend("10.0.0.1:5432").backend("10.0.0.2:5432").bind("0.0.0.0:5432");
+
+// UDP proxy:
+use rust_web_server::udp_proxy::UdpProxy;
+UdpProxy::new().backend("10.0.0.1:53").bind("0.0.0.0:53");
+
+// WebSocket proxy:
+use rust_web_server::ws_proxy::WsProxy;
+WsProxy::new().backend("10.0.0.1:8080").bind("0.0.0.0:8080");
+```
+
+---
+
+## Dependency injection (src/di/mod.rs)
+
+```rust
+use rust_web_server::di::Container;
+
+let mut c = Container::new();
+c.register::<RedisClient>(RedisClient::new("redis://localhost"));
+c.provide::<dyn Cache>(Arc::new(MemoryCache::new()));
+c.register_named("primary_db", PgPool::new(…));
+
+let container = c.into_arc();
+
+// In handlers (container as AppState):
+let redis: Arc<RedisClient> = state.get::<RedisClient>().unwrap();
+let cache: Arc<dyn Cache>   = state.get::<dyn Cache>().unwrap();
+```
+
+---
+
+## Testing (src/test_client/mod.rs)
+
+```rust
+use rust_web_server::test_client::TestClient;
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+
+let client = TestClient::new(App::new());
+
+let res = client.get("/healthz").send();
+assert_eq!(200, res.status());
+
+let res = client.post("/api/users")
+    .header("Content-Type", "application/json")
+    .body(r#"{"name":"Alice"}"#)
+    .send();
+assert_eq!(201, res.status());
+```
+
+`TestClient` dispatches requests directly through `Application::execute` — no TCP socket, no async runtime required.
+
+---
+
+## Background scheduler (src/scheduler/mod.rs)
+
+```rust
+use rust_web_server::scheduler::Scheduler;
+use std::time::Duration;
+
+Scheduler::new()
+    .every(Duration::from_secs(60), || println!("tick"))               // fixed rate
+    .after(Duration::from_secs(5), || println!("delayed once"))        // fixed delay
+    .cron("0 0 * * * *", || println!("top of every hour"))             // 6-field cron
+    .start();  // spawns daemon threads; returns immediately
+```
+
+---
+
+## HTML templates (requires `tera` feature)
+
+```rust
+use rust_web_server::template;
+
+template::init("templates/");  // call once at startup
+
+// In handler:
+let mut ctx = tera::Context::new();
+ctx.insert("name", "Alice");
+let response = template::render("index.html", &ctx);
+```
+
+---
+
+## Virtual hosting / SNI routing
+
+```rust
+use rust_web_server::virtual_host::VirtualHostConfig;
+use rust_web_server::router::Router;
+
+// In Server::run_tls, pass multiple VirtualHostConfig entries:
+let vhosts = vec![
+    VirtualHostConfig { domain: "api.example.com".into(),  cert_file: "api.pem".into(),  key_file: "api.key".into() },
+    VirtualHostConfig { domain: "www.example.com".into(),  cert_file: "www.pem".into(),  key_file: "www.key".into() },
+];
+
+// Per-host routing via Router:
+let api_router = Router::new().with_host("api.example.com").get("/status", status_handler);
+let www_router = Router::new().with_host("www.example.com").get("/", home_handler);
+```
+
+---
+
+## Graceful shutdown
+
+- **http1**: `SIGINT`/`SIGTERM` → `AtomicBool` stops accept loop; `ThreadPool` drains in-flight requests.
+- **http2/http3**: `tokio::signal` handlers call `select!` on the accept loop; `SERVER_READY` is cleared before exit.
+- **`/readyz`** returns 503 while draining. **`/healthz`** always returns 200.
+
+---
+
+## Security checklist
+
+- PKCE (RFC 7636) — `sso` module; `PkceVerifier::new()` + `verifier.challenge()`
+- CSRF double-submit cookie — `csrf` module; constant-time comparison
+- Rate limiting — `RateLimitLayer` or `rate_limit::global().check(ip)`
+- mTLS — set `RWS_CONFIG_TLS_CLIENT_CA_FILE`
+- IP filtering — `IpFilter::allow([…])` / `.deny([…])`
+- JWT HS256 — `auth` module; constant-time HMAC
+- JWT RS256/ES256 — `sso::JwksCache`; signature + expiry + aud + iss validated
+- Argon2id password hashing — `crypto` module; random salt; PHC string output
+- `SameSite=Strict` session cookies — set via `session_cookie()` helper
+- `HttpOnly` flag — controllable on all `Set-Cookie` builders
+- XSS: no built-in output escaping — use Tera templates which auto-escape HTML
+
+---
+
+## Module index
+
+```
+src/app/                — App (zero-config) and controller dispatch
+src/application/        — Application trait
+src/async_state/        — AsyncAppWithState
+src/auth/               — BasicAuthLayer, JwtLayer, build_jwt, verify_jwt (auth feature)
+src/blocklist/          — IP blocklist middleware
+src/body/               — multipart_form_data, form_urlencoded parsers
+src/cache/              — CacheLayer middleware
+src/canary/             — CanaryLayer weighted traffic splitting
+src/circuit_breaker/    — CircuitBreaker, RetryLayer
+src/client_hint/        — Client Hints header parsing
+src/compression/        — gzip compression applied in Server::process
+src/config_reload/      — hot-reload logic; ConfigSnapshot
+src/controller/         — Controller trait; built-in controllers
+src/cookie/             — CookieJar, SetCookie builder
+src/core/               — New trait (used for App::new())
+src/cors/               — CORS handler controller
+src/csrf/               — CsrfLayer, CsrfToken (csrf feature)
+src/crypto/             — hash_password, verify_password, generate_token (crypto feature)
+src/di/                 — Container (dependency injection)
+src/entry_point/        — Config constants, CLI arg parsing, startup
+src/error/              — IntoResponse trait, AppError enum
+src/ext/                — Extension traits
+src/extract/            — FromRequest trait, Body, BodyText, Query, RequestHeaders
+src/feature/            — Feature flag introspection
+src/h2_handler/         — HTTP/2 connection handler (http2 feature)
+src/h3_handler/         — HTTP/3 connection handler (http3 feature)
+src/header/             — Header struct; header name constants
+src/http/               — HTTP version constants
+src/http_client/        — Client, AsyncClient, outbound HTTP
+src/ingress/            — KubernetesIngressWatcher, IngressRouter
+src/ip_filter/          — IpFilter middleware
+src/json/               — Json<T> extractor/responder (serde feature)
+src/language/           — Accept-Language parsing
+src/log/                — Combined Log Format + JSON log helpers
+src/macros/             — routes! macro and utility macros
+src/maintenance/        — MaintenanceLayer
+src/mcp/                — McpServer (MCP Streamable HTTP)
+src/metrics/            — Prometheus metrics, MetricsLayer
+src/middleware/         — Middleware trait, WithMiddleware, RateLimitLayer
+src/mime_type/          — MIME type constants and detection
+src/model/              — ORM: DbPool, DbConnection, Model, Repository, QueryBuilder
+src/null/               — NullApplication (returns 404 for everything)
+src/otel/               — OtelLayer, setup, span export
+src/prelude/            — Re-exports of the most commonly used types
+src/proxy/              — ReverseProxy, H2ReverseProxy, GrpcProxy
+src/proxy_config/       — Config-driven proxy: ProxyConfig, ConfigDrivenApp
+src/range/              — Range, ContentRange, body construction
+src/rate_limit/         — RateLimiter, global()
+src/request/            — Request struct and HTTP/1.1 parsing
+src/request_log/        — Per-request log middleware
+src/response/           — Response struct, STATUS_CODE_REASON_PHRASE
+src/rewrite/            — RewriteLayer (request/response rewriting)
+src/router/             — Router, PathParams, named/wildcard routing
+src/scheduler/          — Scheduler (fixed-rate, fixed-delay, cron)
+src/server/             — Server (bind, accept, process), ConnectionInfo, Address
+src/service_discovery/  — BackendPool, DiscoverySource variants
+src/session/            — SessionStore, Session, cookie helpers
+src/sso/                — OidcAuth, OidcConfig, OidcProvider, JwksCache (sso feature)
+src/state/              — AppWithState<S>
+src/symbol/             — ASCII/byte constants
+src/tcp_proxy/          — TcpProxy (L4)
+src/template/           — TeraEngine, global init/render (tera feature)
+src/test_client/        — TestClient
+src/thread_pool/        — ThreadPool (http1 feature)
+src/tls/                — SniCertResolver, TlsAcceptor builders (http2 feature)
+src/udp_proxy/          — UdpProxy
+src/url/                — URL parsing, percent-encode/decode
+src/validate/           — Validate trait, Validated<T>, ValidationErrors
+src/virtual_host/       — VirtualHostConfig
+src/websocket/          — WebSocket handshake, Frame codec
+src/ws_proxy/           — WsProxy (WebSocket proxy)
+```
+
+---
+
+## Cargo.toml snippet for common setups
+
+```toml
+# Full stack — HTTP/3 + JSON + auth + sessions + crypto + CSRF + SSO + ORM + templates
+[dependencies]
+rust-web-server = { version = "17", features = [
+    "serde", "auth", "macros", "tera",
+    "model-sqlite", "crypto", "csrf", "sso"
+] }
+
+# API server — HTTP/3 + JSON + auth
+[dependencies]
+rust-web-server = { version = "17", features = ["serde", "auth", "macros"] }
+
+# HTTP/1.1 only (smallest binary, sync, no TLS)
+[dependencies]
+rust-web-server = { version = "17", default-features = false, features = ["http1"] }
+```
+
+---
+
+## Links
+
+- [DEVELOPER.md — 58 use-case examples](DEVELOPER.md)
+- [spec/SSO.md — OAuth2/OIDC design spec](spec/SSO.md)
+- [spec/GAPS_V2.md — framework self-sufficiency gap tracking](spec/GAPS_V2.md)
+- [spec/PROXY_SERVER_CONFIG.md — config-driven proxy reference](spec/PROXY_SERVER_CONFIG.md)
+- [spec/IDEAS.md — forward-looking feature ideas](spec/IDEAS.md)
