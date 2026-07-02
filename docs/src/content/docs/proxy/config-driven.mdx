@@ -27,20 +27,40 @@ upstream = "api"
 
 ## `[[upstream]]` — backend pools
 
-Each `[[upstream]]` block defines a named pool of HTTP backends.
+Each `[[upstream]]` block defines a named pool of HTTP or HTTPS backends.
 
 ```toml
 [[upstream]]
 name        = "api"                              # required; referenced by route actions
-backends    = ["10.0.0.1:3000", "10.0.0.2:3000"] # one or more "host:port" strings
+backends    = ["10.0.0.1:3000", "10.0.0.2:3000"] # plain HTTP (host:port)
 strategy    = "round_robin"                       # currently only "round_robin" is active
 ```
 
-:::note[Backend URL format]
-Use `"host:port"` for plain HTTP or `"https://host:port"` for TLS upstreams.
-Requires the `http-client` or `http2` feature (included in all builds except `--no-default-features --features http1`).
-Scheme prefixes are detected automatically — `https://` enables TLS, anything else uses plain TCP.
+### TLS (HTTPS) upstreams
+
+Prefix backend addresses with `https://` to connect over TLS. Certificate verification uses the system WebPKI root store (same CA bundle as browsers).
+
+```toml
+[[upstream]]
+name     = "secure-api"
+backends = ["https://api.example.com:443", "https://api2.example.com:443"]
+
+[upstream.health_check]
+path          = "/healthz"
+interval_secs = 10
+```
+
+:::note[Feature requirement]
+HTTPS upstreams require the `http-client` or `http2` feature — both are included in the default (`http3`) build and the `http2`-only build. The `http1`-only build (`--no-default-features --features http1`) returns `502` for HTTPS backends and logs an error.
 :::
+
+### Backend URL format summary
+
+| Format | Protocol | Default port |
+|--------|----------|-------------|
+| `host:port` | Plain TCP / HTTP | — (required) |
+| `http://host:port` | Plain TCP / HTTP | 80 |
+| `https://host:port` | TLS / HTTPS | 443 |
 
 ### `[upstream.health_check]` — automatic health monitoring
 

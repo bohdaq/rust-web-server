@@ -105,3 +105,18 @@ Send `SIGHUP` or `POST /admin/config/reload` to reload the TLS certificate
 from disk without restarting the server. This also rebuilds the TLS acceptor
 for all configured virtual hosts.
 :::
+
+
+## Upstream TLS (proxy mode)
+
+When using the config-driven proxy (`rws.config.toml`), prefix backend addresses with `https://` to connect to upstream services over TLS:
+
+```toml
+[[upstream]]
+name     = "secure-api"
+backends = ["https://api.internal:443", "https://api2.internal:443"]
+```
+
+Certificate verification uses the WebPKI root store (same trust anchors as browsers). Requires the `http-client` or `http2` feature — included in all builds except `--no-default-features --features http1`.
+
+See [Config-Driven Proxy → TLS upstreams](/proxy/config-driven/#tls-https-upstreams) for the full reference.

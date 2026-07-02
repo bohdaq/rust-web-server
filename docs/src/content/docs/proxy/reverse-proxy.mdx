@@ -89,14 +89,14 @@ The following headers are never forwarded to the upstream or back to the client,
 Backend strings accept any of these forms:
 
 ```
-http://host:port      # scheme stripped, path ignored
-h2://host:port        # treated as plain TCP (TLS not supported)
+http://host:port      # scheme stripped, plain TCP
+h2://host:port        # treated as plain TCP
 host:port             # bare host:port
 host                  # port defaults to 80
 ```
 
-:::caution[Coming Soon: TLS to upstream]
-All upstream connections are plain TCP. HTTPS backends are not yet supported. For encrypted upstreams, use `H2ReverseProxy` with an H2 cleartext backend or terminate TLS at the backend itself.
+:::note[TLS to upstream]
+The programmatic `ReverseProxy` middleware connects over plain TCP. For HTTPS backends, use the **config-driven proxy** with `https://` backend URLs — see [Config-Driven Proxy](/proxy/config-driven/#tls-https-upstreams). Alternatively, terminate TLS at the backend itself (e.g., a sidecar that unwraps TLS and proxies to the app on a localhost port).
 :::
 
 ## 502 Bad Gateway
