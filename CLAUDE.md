@@ -29,6 +29,29 @@ cargo test --package rust-web-server --bin rws client_hint::tests::client_hints_
 
 MSRV is 1.75. The `--ignore-rust-version` flag from older docs is no longer needed.
 
+## Required for every change
+
+Every code change — new feature, bug fix, refactor — must include all three:
+
+### 1. Tests
+
+- Add tests in a `tests.rs` sibling file (e.g. `src/csrf/tests.rs`) or inline `#[cfg(test)]` block.
+- Use `TestClient::new(app)` for integration-style tests; pure unit tests for helpers and pure functions.
+- Cover the happy path and at least one failure/edge case per public function or method.
+- Run `cargo test` before committing. All tests must pass.
+
+### 2. DEVELOPER.md
+
+- **Building blocks table** — add a row for every new public type, function, or middleware: `| Name | Module | What it does |`
+- **Use cases** — add a numbered use-case section with a minimal, runnable code example showing the feature in context. Follow the existing `## Use Case #N: Title` heading pattern.
+
+### 3. README.md + llms.txt
+
+- Add a bullet or table row to the relevant "What's in the box" / "Optional features" section of `README.md`.
+- Update `llms.txt` — add the new type/function to the relevant section (API surface, middleware table, module index, security checklist, etc.). `llms.txt` is the primary LLM discovery document; keep it current.
+
+Skipping any of these three is not acceptable. Docs and tests ship with the code, not after.
+
 ## Architecture
 
 The default build (`http3` feature) uses a tokio async runtime and serves HTTP/3 over QUIC, HTTP/2, and HTTP/1.1 over TLS. The `http1`-only build is a fully synchronous, thread-pool-based server with no async runtime. All HTTP parsing, JSON, CORS, MIME types, range requests, WebSocket, SSE, and routing are implemented from scratch with no third-party HTTP dependencies.
