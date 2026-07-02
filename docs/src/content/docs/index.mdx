@@ -89,35 +89,36 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ```toml title="Cargo.toml"
 [dependencies]
-rust-web-server = { version = "17", default-features = false, features = ["http1"] }
+rust-web-server = "17"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
 ```rust title="src/main.rs"
-use rust_web_server::app::App;
-use rust_web_server::core::New;
-use rust_web_server::mime_type::MimeType;
-use rust_web_server::range::Range;
-use rust_web_server::request::Request;
-use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
-use rust_web_server::router::PathParams;
-use rust_web_server::server::{ConnectionInfo, Server};
+use rust_web_server::prelude::*;
 
 fn hello(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &()) -> Response {
-    let ok = &STATUS_CODE_REASON_PHRASE.n200_ok;
-    let mut r = Response::new();
-    r.status_code = *ok.status_code;
-    r.reason_phrase = ok.reason_phrase.to_string();
-    r.content_range_list = vec![Range::get_content_range(
-        b"Hello, world!".to_vec(),
-        MimeType::TEXT_PLAIN.to_string(),
-    )];
-    r
+    Response::get_response(
+        STATUS_CODE_REASON_PHRASE.n200_ok,
+        None,
+        Some(vec![Range::get_content_range(
+            b"Hello, world!".to_vec(),
+            MimeType::TEXT_PLAIN.to_string(),
+        )]),
+    )
 }
 
-fn main() {
-    let app = App::with_state(()).get("/hello", hello);
-    let (listener, pool) = Server::setup().expect("setup failed");
-    Server::run(listener, pool, app);
+#[tokio::main]
+async fn main() {
+    let app = routes! {
+        App::with_state(()),
+        GET "/hello" => hello,
+    };
+    let (listener, pool) = Server::setup().unwrap();
+    tokio::join!(
+        Server::run_tls(listener, pool, app.clone()),
+        Server::run_quic(app),
+        Server::run_redirect(),
+    );
 }
 ```
 
