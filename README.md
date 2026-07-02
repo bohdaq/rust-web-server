@@ -173,6 +173,7 @@ cargo build --release --no-default-features --features http1
 - HTML template engine — `TeraEngine` (`tera` feature) wraps the [Tera](https://keats.github.io/tera/) crate; Jinja2/Django syntax — variables, loops, conditionals, inheritance, filters, macros; global singleton via `template::init(dir)`; `template::render(name, &ctx)` returns a `200 OK` HTML response
 - Typed config binding — `#[derive(Config)]` (`macros` feature) generates `load() -> Result<Self, String>` that reads env vars into strongly-typed structs; `#[config(env = "KEY", default = "v")]` per field; `Option<T>` fields are optional; `FromEnvStr` trait supports custom types
 - Config-driven proxy server — drop `rws.config.toml` with `[[route]]` / `[[upstream]]` sections to run as a full reverse proxy with per-route middleware, health-checked backend pools, and L4/WS proxies; no code required
+- Dependency injection — `Container` stores services keyed by `TypeId`; `register::<T>(val)` for concrete types, `provide::<dyn Trait>(Arc::new(...))` for trait objects, named instances via `register_named`; share with `container.into_arc()` as `App::with_state` state
 
 ### Optional features
 

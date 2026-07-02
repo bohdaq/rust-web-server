@@ -190,6 +190,10 @@ When built with the `http3` feature (which implies `http2`), a second listener s
 - `src/udp_proxy/mod.rs` — `UdpProxy` standalone UDP datagram proxy; per-datagram thread model; ephemeral socket per datagram connects to the backend; `set_read_timeout()` controls reply wait; round-robin backend selection.
 - `src/ws_proxy/mod.rs` — `WsProxy` standalone WebSocket proxy; reads the HTTP upgrade request from the client, connects to the backend, exchanges upgrade handshake, then relays raw bytes bidirectionally in a two-thread loop.
 
+### Dependency injection
+
+`src/di/mod.rs` — `Container` is a type-keyed service store backed by `HashMap<TypeId, Box<dyn Any + Send + Sync>>`. Services are stored as `Arc<T>` or `Arc<dyn Trait>` (both are `Sized`, `'static`, `Any + Send + Sync` and can be stored in the map). Registration: `register::<T>(value)` wraps in `Arc<T>`; `provide::<T: ?Sized>(Arc<T>)` stores trait objects directly. Both keyed by `TypeId::of::<T>()`. Named services use a second map keyed by `(TypeId, String)`. Resolution: `get::<T>()` (works for both concrete and `dyn Trait`) and `get_named::<T>(name)`. `into_arc()` seals the container for sharing. No external dependencies.
+
 ### Config-driven proxy server
 
 `src/proxy_config/` — turns `rws.config.toml` into a live proxy stack at startup; activated when the config file contains `[[route]]` or `[[upstream]]` sections.

@@ -120,7 +120,24 @@ Full cron field syntax: `*`, exact value, `*/step`, `N-M` range, `N,M,P` list, a
 
 ## What Rust makes hard
 
-**Dependency injection** — Spring's IoC container relies on reflection, which Rust does not have. The closest Rust approaches are trait objects + `Arc<dyn Trait>` passed explicitly, or compile-time DI via macros (`shaku`, `inject`). It is doable but looks nothing like Spring's `@Autowired`. `AppWithState<S>` and `AsyncAppWithState<S>` cover the most common case: a single shared state object injected into every handler via `Arc<S>`.
+**Dependency injection** — Spring's IoC container relies on reflection, which Rust does not have. The rws approach is a `Container` (`src/di/`) that stores services keyed by `TypeId`. It covers the most common cases: concrete types, trait objects, and named instances. Use `container.into_arc()` with `App::with_state` to share services across handlers. See [Use Case #53 in DEVELOPER.md](../DEVELOPER.md) for full examples.
+
+```rust
+use std::sync::Arc;
+use rust_web_server::di::Container;
+
+// Concrete service
+let mut c = Container::new();
+c.register(Config { port: 8080 });
+let cfg = c.get::<Config>().unwrap();
+
+// Trait object — swap implementation without changing handlers
+c.provide::<dyn UserRepository>(Arc::new(PgUserRepository::new()));
+let repo = c.get::<dyn UserRepository>().unwrap();
+
+// Use as AppWithState
+let app = routes! { App::with_state(c.into_arc()), GET "/v" => handler, };
+```
 
 ---
 

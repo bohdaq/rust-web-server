@@ -135,6 +135,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. |
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
 | `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware round-robin proxying. |
+| `Container` | `di` | Type-keyed dependency injection container. `register::<T>(service)` stores concrete types; `provide::<dyn Trait>(Arc::new(...))` stores trait objects; both keyed by `TypeId`. Named services via `register_named` / `provide_named` / `get_named`. Share across handlers with `container.into_arc()` as `AppWithState` state. |
 
 ---
 
@@ -2405,3 +2406,108 @@ read_timeout_ms    = 30000
 ```
 
 See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full annotated config reference.
+
+### 53. Dependency injection
+
+`Container` is a type-keyed service store. Register services at startup; resolve them in handlers via `Arc<Container>` passed as `AppWithState` state.
+
+**Concrete services**
+
+```rust
+use rust_web_server::di::Container;
+
+struct DatabasePool { url: String }
+struct EmailService { host: String }
+
+let mut c = Container::new();
+c.register(DatabasePool { url: "postgres://localhost/app".into() })
+ .register(EmailService { host: "smtp.example.com".into() });
+
+// In a handler:
+let db = state.get::<DatabasePool>().unwrap();
+let email = state.get::<EmailService>().unwrap();
+```
+
+**Trait objects**
+
+Register under the trait type so handlers depend on the abstraction, not the implementation:
+
+```rust
+use std::sync::Arc;
+use rust_web_server::di::Container;
+
+pub trait UserRepository: Send + Sync {
+    fn find(&self, id: u64) -> Option<String>;
+}
+
+pub struct PgUserRepository;
+impl UserRepository for PgUserRepository {
+    fn find(&self, id: u64) -> Option<String> {
+        Some(format!("user-{}", id))
+    }
+}
+
+let mut c = Container::new();
+c.provide::<dyn UserRepository>(Arc::new(PgUserRepository));
+
+// In tests, swap to a fake:
+// c.provide::<dyn UserRepository>(Arc::new(FakeUserRepository));
+
+let repo = c.get::<dyn UserRepository>().unwrap();
+assert_eq!(repo.find(1).as_deref(), Some("user-1"));
+```
+
+**Named services** — multiple instances of the same type:
+
+```rust
+use rust_web_server::di::Container;
+
+let mut c = Container::new();
+c.register_named("primary", 5432u16)   // primary DB port
+ .register_named("replica", 5433u16);  // replica DB port
+
+assert_eq!(*c.get_named::<u16>("primary").unwrap(), 5432);
+assert_eq!(*c.get_named::<u16>("replica").unwrap(), 5433);
+```
+
+**Wire into `App::with_state`**
+
+```rust
+use std::sync::Arc;
+use rust_web_server::app::App;
+use rust_web_server::di::Container;
+use rust_web_server::routes;
+
+fn get_user(
+    req: &Request,
+    params: &PathParams,
+    _conn: &ConnectionInfo,
+    state: &Arc<Container>,
+) -> Response {
+    let repo = state.get::<dyn UserRepository>().unwrap();
+    // use repo.find(...)
+    Response::new()
+}
+
+let mut container = Container::new();
+container.provide::<dyn UserRepository>(Arc::new(PgUserRepository));
+// register more services...
+
+let app = routes! {
+    App::with_state(container.into_arc()),
+    GET "/users/:id" => get_user,
+};
+```
+
+**API summary**
+
+| Method | Effect |
+|---|---|
+| `register::<T>(value)` | Store concrete service; wraps in `Arc<T>` |
+| `provide::<dyn Trait>(Arc::new(...))` | Store trait object |
+| `register_named("name", value)` | Named concrete service |
+| `provide_named("name", Arc::new(...))` | Named trait object |
+| `get::<T>()` | Resolve concrete or trait object → `Option<Arc<T>>` |
+| `get_named::<T>("name")` | Resolve named service |
+| `contains::<T>()` | Check if registered |
+| `into_arc()` | Seal into `Arc<Container>` for sharing |

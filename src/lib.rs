@@ -111,6 +111,7 @@ pub mod canary;
 pub mod circuit_breaker;
 pub mod service_discovery;
 pub mod config_binding;
+pub mod di;
 pub mod proxy_config;
 pub mod ingress;
 #[cfg(feature = "tera")]
