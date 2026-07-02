@@ -50,7 +50,14 @@ Every code change — new feature, bug fix, refactor — must include all three:
 - Add a bullet or table row to the relevant "What's in the box" / "Optional features" section of `README.md`.
 - Update `llms.txt` — add the new type/function to the relevant section (API surface, middleware table, module index, security checklist, etc.). `llms.txt` is the primary LLM discovery document; keep it current.
 
-Skipping any of these three is not acceptable. Docs and tests ship with the code, not after.
+### 4. docs/ (Astro site)
+
+- Update or create the relevant page under `docs/src/content/docs/`. Pages are organized by section: `building-apps/`, `features/`, `proxy/`, `database/`, `deployment/`, `reference/`, etc.
+- For a new feature, add a new `.md` or `.mdx` file in the appropriate section and register it in the Astro sidebar if needed (`docs/astro.config.mjs`).
+- For an existing feature, update the page that covers it — add a new `##` section, update examples, revise the description.
+- Keep examples in docs consistent with examples in `DEVELOPER.md`.
+
+Skipping any of these four is not acceptable. Docs and tests ship with the code, not after.
 
 ## Architecture
 

@@ -1,6 +1,6 @@
 ---
 title: Reverse Proxy
-description: HTTP/1.1 reverse proxy middleware with round-robin load balancing, path filtering, and automatic failover.
+description: HTTP/1.1 reverse proxy middleware with round-robin load balancing, path filtering, automatic failover, and built-in keep-alive connection pooling.
 ---
 
 `ReverseProxy` is a [`Middleware`](/building-apps/middleware/) that forwards incoming HTTP/1.1 requests to one or more backends. It lives in `src/proxy/mod.rs` and requires no feature flags.
@@ -82,7 +82,55 @@ The following headers are never forwarded to the upstream or back to the client,
 | `X-Forwarded-For` | Client IP from `ConnectionInfo` |
 | `Via` | `1.1 rws` |
 | `Host` | Backend host (replaces the original `Host` header) |
-| `Connection` | `close` (forces HTTP/1.0-style per-request connections) |
+| `Connection` | `keep-alive` (pooled path) or `close` (non-pooled callers) |
+
+## Connection pooling
+
+`ReverseProxy` ships with a built-in `ConnPool` that reuses idle TCP connections to backends. When a backend responds with `Connection: keep-alive` (or uses chunked `Transfer-Encoding`, which is decoded in-place so the body length is known), the stream is returned to the pool and reused for the next request to the same backend.
+
+**Defaults:** 8 idle connections per backend, 60-second idle timeout. No configuration needed.
+
+### Tuning the built-in pool
+
+```rust
+use rust_web_server::proxy::ReverseProxy;
+
+let proxy = ReverseProxy::new(["http://backend:8080"])
+    .max_idle_conns(32);   // up to 32 idle connections per backend
+```
+
+### Sharing a pool across proxy instances
+
+Useful when two `ReverseProxy` instances route to overlapping backends (e.g., an API proxy and an auth proxy both reach the same service).
+
+```rust
+use std::sync::Arc;
+use std::time::Duration;
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::proxy::{ConnPool, ReverseProxy};
+
+let pool = Arc::new(ConnPool::new(32, Duration::from_secs(120)));
+
+let api  = App::new().wrap(
+    ReverseProxy::new(["http://api:3000"]).with_pool(Arc::clone(&pool)));
+let auth = App::new().wrap(
+    ReverseProxy::new(["http://auth:4000"]).with_pool(Arc::clone(&pool)));
+```
+
+### How pooling works
+
+| Backend response | Pool action |
+|-----------------|-------------|
+| `Connection: keep-alive` + `Content-Length` | Stream returned to pool after body is read |
+| `Transfer-Encoding: chunked` + keep-alive | Chunks decoded; `Content-Length` rewritten; stream returned to pool |
+| `Connection: close` or EOF | Stream dropped; TCP connection closed |
+| Idle stream older than `idle_timeout` | Evicted on next `acquire()` |
+| Pool at `max_idle` for this backend | Extra stream dropped (TCP closed) |
+
+:::tip
+Connection pooling is most impactful when backends and the proxy share a network (low-latency link). On high-throughput routes, pooling eliminates per-request TCP handshake latency entirely.
+:::
 
 ## Backend URL format
 
