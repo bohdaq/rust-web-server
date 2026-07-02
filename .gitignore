@@ -7,3 +7,4 @@ rws-macros/target
 .DS_Store
 /uploads/
 *.pem
+.claude/worktrees/
