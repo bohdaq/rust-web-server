@@ -5,6 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![MSRV: 1.75](https://img.shields.io/badge/rust-1.75%2B-blue.svg)](https://www.rust-lang.org)
 
+**Website:** [rws8.tech](https://rws8.tech/)
+
 An HTTP web framework, reverse proxy, and server for Rust — HTTP/1.1 · HTTP/2 · HTTP/3/QUIC · TLS · No third-party HTTP dependencies.
 
 | Mode | Setup | Code required |
