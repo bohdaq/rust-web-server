@@ -176,6 +176,7 @@ cargo build --release --no-default-features --features http1
 - Config-driven proxy server — drop `rws.config.toml` with `[[route]]` / `[[upstream]]` sections to run as a full reverse proxy with per-route middleware, health-checked backend pools, and L4/WS proxies; no code required
 - Dependency injection — `Container` stores services keyed by `TypeId`; `register::<T>(val)` for concrete types, `provide::<dyn Trait>(Arc::new(...))` for trait objects, named instances via `register_named`; share with `container.into_arc()` as `App::with_state` state
 - Outbound HTTP client — `Client` (sync) and `AsyncClient` (`http2` feature) for making outbound HTTP/1.1 requests; fluent builder API (`.get()`, `.post()`, `.header()`, `.body_json()`, `.timeout_ms()`); automatic redirect following; HTTPS via `rustls` (`http-client` or `http2` feature); no third-party HTTP dependency
+- Password hashing — `hash_password` / `verify_password` (Argon2id, random salt, PHC string format) and `generate_token` (CSPRNG hex bytes for reset tokens and API keys); `crypto` feature
 
 ### Optional features
 
@@ -190,6 +191,7 @@ cargo build --release --no-default-features --features http1
 | `model-sqlite` | Model layer backed by SQLite (via `rusqlite` with bundled SQLite) — `DbPool`, `DbConnection`, `#[derive(Model)]`, `Repository`, `QueryBuilder`, migration runner |
 | `model-postgres` | Model layer backed by PostgreSQL (via the `postgres` crate) — same API as `model-sqlite` |
 | `model-mysql` | Model layer backed by MySQL (via the `mysql` crate) — same API as `model-sqlite` |
+| `crypto` | `hash_password` / `verify_password` (Argon2id) and `generate_token` (CSPRNG) for user auth flows |
 
 ```toml
 [dependencies]

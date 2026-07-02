@@ -45,7 +45,7 @@ For async handlers (`http2` feature), an `AsyncClient` that awaits with `tokio::
 
 ---
 
-### 2. Password hashing
+### 2. Password hashing ✅ Done
 
 Every app with user accounts needs to hash passwords at registration and verify them at login. There is no helper for this today. Handlers that need it must add `bcrypt` or `argon2` directly to `Cargo.toml` and wire them into state manually.
 

@@ -124,6 +124,8 @@ pub mod virtual_host;
 pub mod model;
 pub mod websocket;
 pub mod http_client;
+#[cfg(feature = "crypto")]
+pub mod crypto;
 
 #[cfg(feature = "http2")]
 #[doc(hidden)]
