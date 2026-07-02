@@ -149,6 +149,13 @@ The crate exposes its core types so you can compose them in your own server or t
 | `generate_token` | `crypto` | CSPRNG-backed `generate_token(n_bytes) -> String` — lowercase hex, suitable for reset tokens and API keys. |
 | `CsrfLayer` | `csrf` | Double-submit cookie CSRF middleware. Validates `X-CSRF-Token` header or `_csrf` form field against the `_csrf` cookie on mutating requests; returns 403 on mismatch. Builder: `.cookie_name()`, `.http_only()`, `.secure()`. |
 | `CsrfToken` | `csrf` | Extractor for the current CSRF token. `CsrfToken::from_request(&req)` returns the token inside a GET handler (after `CsrfLayer` has run). Implements `Display` for easy HTML embedding. |
+| `OidcAuth` | `sso` | OAuth2/OIDC middleware. Intercepts `/auth/login`, `/auth/callback`, `/auth/logout`; validates sessions; injects `OidcClaims` via `OidcAuth::claims(req)`. Builder: `.exclude(prefix)`, `.login_path()`, `.callback_path()`. |
+| `OidcConfig` | `sso` | OAuth2/OIDC configuration. Provider presets: `OidcConfig::google(id, secret, uri)`, `::microsoft(tenant, …)`, `::github(…)`, `::okta(domain, …)`, `::auth0(domain, …)`, `::keycloak(base, realm, …)`, `::from_env()`. |
+| `OidcProvider` | `sso` | OIDC provider endpoints (authorization, token, JWKS, userinfo). Presets match `OidcConfig`; `OidcProvider::discover(issuer)` fetches `/.well-known/openid-configuration`. |
+| `OidcClaims` | `sso` | Standard OIDC claims: `sub`, `iss`, `aud`, `exp`, `iat`, `nonce`, `email`, `name`, `picture`, etc. Extracted from a verified `id_token` (RS256/ES256) or a UserInfo response. |
+| `JwksCache` | `sso` | Thread-safe JWKS key cache. Lazy-fetches and auto-rotates on `kid` miss. `verify_jwt(token, opts)` validates RS256 and ES256 JWTs end-to-end (signature + expiry + aud + iss). |
+| `OidcClient` | `sso` | OAuth2 client: `authorization_url(pkce, state, nonce)` builds the IdP redirect URL; `exchange_code(code, verifier)` posts to the token endpoint; `fetch_user_info(token)` calls the UserInfo endpoint. |
+| `PkceVerifier` / `PkceChallenge` | `sso` | RFC 7636 PKCE. `PkceVerifier::new()` generates a 32-byte random code verifier; `.challenge()` returns the S256 `PkceChallenge` to include in the authorization URL. |
 
 ---
 
@@ -2777,4 +2784,123 @@ CsrfLayer::new()
     .cookie_name("xsrf")
     .field_name("xsrf")
     .header_name("X-XSRF-Token")
+```
+
+---
+
+### 58. OAuth2 / OIDC SSO ("Sign in with Google / GitHub / …")
+
+`sso` feature — authorization-code + PKCE flow, RS256/ES256 JWT verification via
+JWKS, session-backed identity, and built-in login/callback/logout routes.
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["sso"] }
+```
+
+**Minimal setup — Google:**
+
+```rust
+use std::sync::Arc;
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::session::SessionStore;
+use rust_web_server::sso::{OidcAuth, OidcConfig};
+
+let sessions = Arc::new(SessionStore::new(86_400));
+
+let app = App::new()
+    .wrap(
+        OidcAuth::new(
+            OidcConfig::google(
+                &std::env::var("GOOGLE_CLIENT_ID").unwrap(),
+                &std::env::var("GOOGLE_CLIENT_SECRET").unwrap(),
+                "https://myapp.com/auth/callback",
+            ),
+            Arc::clone(&sessions),
+        )
+        .exclude("/healthz")
+        .exclude("/public/"),
+    );
+// OidcAuth automatically handles:
+//   GET /auth/login    → redirect to Google
+//   GET /auth/callback → exchange code, verify id_token, create session
+//   GET /auth/logout   → destroy session
+// All other routes require a session or are redirected to /auth/login.
+```
+
+**Access claims in any handler:**
+
+```rust
+use rust_web_server::sso::OidcAuth;
+use rust_web_server::request::Request;
+use rust_web_server::server::ConnectionInfo;
+use rust_web_server::response::Response;
+
+fn dashboard(req: &Request, _conn: &ConnectionInfo) -> Response {
+    let claims = OidcAuth::claims(req).expect("OidcAuth middleware is in the stack");
+    // claims.sub      — unique user ID at the IdP
+    // claims.email    — email address (Option<String>)
+    // claims.name     — display name  (Option<String>)
+    // claims.picture  — avatar URL    (Option<String>)
+    todo!("build response")
+}
+```
+
+**Load config from environment variables:**
+
+```rust
+// RWS_OIDC_PROVIDER=google RWS_OIDC_CLIENT_ID=... RWS_OIDC_CLIENT_SECRET=...
+// RWS_OIDC_REDIRECT_URI=https://myapp.com/auth/callback
+let config = OidcConfig::from_env().unwrap();
+```
+
+**Other built-in providers:**
+
+```rust
+// Microsoft Entra ID (Azure AD)
+OidcConfig::microsoft("my-tenant-id", client_id, client_secret, redirect_uri)
+
+// GitHub (OAuth 2.0 only — no OIDC; fetches user via /user API)
+OidcConfig::github(client_id, client_secret, redirect_uri)
+
+// Okta
+OidcConfig::okta("mycompany.okta.com", client_id, client_secret, redirect_uri)
+
+// Auth0
+OidcConfig::auth0("mycompany.auth0.com", client_id, client_secret, redirect_uri)
+
+// Keycloak
+OidcConfig::keycloak("https://keycloak.example.com", "my-realm",
+                     client_id, client_secret, redirect_uri)
+
+// Any OIDC-compliant provider (fetches discovery doc once at startup)
+OidcConfig::discover("https://idp.example.com", client_id, client_secret, redirect_uri)
+    .unwrap()
+```
+
+**JWKS and JWT verification (standalone):**
+
+```rust
+use rust_web_server::sso::{JwksCache, VerifyOptions};
+
+let cache = JwksCache::new("https://www.googleapis.com/oauth2/v3/certs");
+// fetch() is called automatically on first use; re-fetches on key rotation
+let claims = cache.verify_jwt(
+    &id_token,
+    &VerifyOptions {
+        audience:    "my-client-id.apps.googleusercontent.com",
+        issuer:      "https://accounts.google.com",
+        leeway_secs: 30,
+    },
+)?;
+```
+
+**Custom login/callback paths:**
+
+```rust
+OidcAuth::new(config, sessions)
+    .login_path("/sso/start")
+    .callback_path("/sso/return")
+    .logout_path("/sso/end")
 ```

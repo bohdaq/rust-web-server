@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.41.0"
+version = "17.42.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 description = "An HTTP web framework, reverse proxy, and server for Rust supporting HTTP/1.1, HTTP/2, and HTTP/3. Config-driven proxy mode (rws.config.toml with [[route]] / [[upstream]]) or library crate. No third-party HTTP dependencies."
@@ -36,6 +36,7 @@ model-postgres = ["dep:postgres"]
 model-mysql    = ["dep:mysql"]
 crypto = ["dep:argon2", "dep:rand_core"]
 csrf   = ["dep:rand_core"]
+sso    = ["dep:rsa", "dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:serde_json", "http-client"]
 
 [dependencies]
 ctrlc = { version = "3", optional = true }
@@ -59,7 +60,9 @@ h3-quinn = { version = "0.0.10", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 hmac  = { version = "0.12", optional = true }
-sha2  = { version = "0.10", optional = true }
+sha2  = { version = "0.10", features = ["oid"], optional = true }
+rsa       = { version = "0.9", optional = true }
+p256      = { version = "0.13", features = ["ecdsa"], optional = true }
 aws-lc-rs = { version = "1", optional = true }
 rws-macros = { path = "rws-macros", version = "17", optional = true }
 tera = { version = "1", optional = true }

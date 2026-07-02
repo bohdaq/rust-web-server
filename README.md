@@ -58,7 +58,7 @@ $ curl http://localhost:7878/hello
 Hello, world!
 ```
 
-See [DEVELOPER](DEVELOPER.md) for 57 use-case examples covering JSON, auth, WebSocket, SSE, middleware, ORM, MCP, and more.
+See [DEVELOPER](DEVELOPER.md) for 58 use-case examples covering JSON, auth, WebSocket, SSE, middleware, ORM, MCP, and more.
 
 ---
 
@@ -179,6 +179,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 - IP filter — `IpFilter::allow([...])` / `deny([...])`; exact IPv4 and CIDR ranges
 - CSRF — double-submit cookie, `SameSite=Strict`, constant-time compare (`csrf` feature)
 - Password hashing — Argon2id + CSPRNG token generation (`crypto` feature)
+- OAuth2 / OIDC SSO — authorization-code + PKCE flow; RS256/ES256 JWT via JWKS; `OidcAuth` middleware; presets for Google, Microsoft, GitHub, Okta, Auth0, Keycloak; `from_env()`; `sso` feature
 - Request / response rewriting — `RewriteLayer` rewrites headers, URI, status, body bytes
 
 ### Observability & ops
@@ -224,6 +225,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 | `model-mysql` | ORM backed by MySQL |
 | `crypto` | Argon2id password hashing + CSPRNG token generation |
 | `csrf` | Double-submit cookie CSRF protection |
+| `sso` | OAuth2/OIDC SSO — `OidcAuth` middleware, RS256/ES256 JWT via JWKS, PKCE, provider presets (Google · Microsoft · GitHub · Okta · Auth0 · Keycloak) |
 
 ```toml
 [dependencies]
@@ -253,7 +255,7 @@ Binary is at `target/release/rws`. MSRV is 1.75.
 ## Further reading
 
 - [CONFIGURE](CONFIGURE.md) — all configuration options (env vars, config file, CLI flags)
-- [DEVELOPER](DEVELOPER.md) — building blocks reference and 57 use-case examples
+- [DEVELOPER](DEVELOPER.md) — building blocks reference and 58 use-case examples
 - [FAQ](FAQ.md) — common problems and solutions
 - [spec/PROXY_SERVER_CONFIG.md](spec/PROXY_SERVER_CONFIG.md) — annotated proxy config reference
 - [spec/AI_ADOPTION.md](spec/AI_ADOPTION.md) — AI adoption strategy

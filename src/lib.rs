@@ -128,6 +128,8 @@ pub mod http_client;
 pub mod crypto;
 #[cfg(feature = "csrf")]
 pub mod csrf;
+#[cfg(feature = "sso")]
+pub mod sso;
 pub mod prelude;
 
 #[cfg(feature = "http2")]

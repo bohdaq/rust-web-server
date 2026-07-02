@@ -93,7 +93,7 @@ Implementation: HMAC-SHA256 over a random session-scoped nonce, stored in a `Sam
 
 ---
 
-### 4. OAuth2 / SSO
+### 4. OAuth2 / SSO ✅ Done
 
 `spec/SSO.md` is written but nothing is implemented. Social login (Google, GitHub) and enterprise SSO (SAML, OpenID Connect) are expected in production apps in 2026. Currently every app that wants "Sign in with Google" must implement the OAuth2 authorization-code flow from scratch.
 
@@ -267,7 +267,7 @@ Increasingly expected as an alternative to REST. Would require a separate `src/g
 | ~~Outbound HTTP client~~ ✅ | ~~Critical~~ | ~~Medium~~ | ~~No (reuse rustls)~~ |
 | ~~Password hashing~~ ✅ | ~~Critical~~ | ~~Small~~ | ~~`argon2`~~ |
 | ~~CSRF protection~~ ✅ | ~~Critical~~ | ~~Small~~ | ~~No (reuse rand_core)~~ |
-| OAuth2 / SSO | Critical | Large | Minimal |
+| ~~OAuth2 / SSO~~ ✅ | ~~Critical~~ | ~~Large~~ | ~~`rsa`, `p256`~~ |
 | Email (SMTP) | Important | Small | `lettre` or scratch |
 | File storage | Important | Medium | No (S3 via HTTP client) |
 | Background job queue | Important | Medium | No |
