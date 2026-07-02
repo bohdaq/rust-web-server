@@ -142,6 +142,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `QueryBuilder<T>` | `model` | Fluent SQL builder: `where_eq`, `filter`, `order_by`, `limit`, `offset`, `fetch_all`, `fetch_one`, `count`, `update`, `delete`. Obtain via `T::query(&mut conn)` when using `#[derive(Model)]`. |
 | `#[derive(Model)]` | `model` (requires `macros` + a model feature) | Proc-macro that maps a struct to a DB table. Attributes: `#[table(name = "…")]` struct-level override; `#[primary_key(auto_increment)]`; `#[column(name = "…")]`; `#[ignore]`. Generates `Model` impl plus `T::repository(&mut conn)` and `T::query(&mut conn)` helpers. |
 | `HasMany<T>` / `HasOne<T>` / `BelongsTo<O>` | `model` | Explicit-load relationship helpers. `HasMany::new(owner_pk, fk_col).load(&mut conn)` returns `Vec<T>`; no hidden N+1 queries. |
+| `Client` / `RequestBuilder` / `Response` | `http_client` | Synchronous outbound HTTP/1.1 client. `Client::new().get(url).header(k,v).timeout_ms(ms).send()` returns `Response`. Follows redirects automatically. Plain HTTP works in all builds; HTTPS requires `http-client` or `http2` feature. |
+| `AsyncClient` / `AsyncRequestBuilder` | `http_client` (requires `http2` feature) | Async variant of the outbound client. Same builder API with `.send().await`. |
+| `HttpClientError` | `http_client` | Error type returned by the HTTP client; implements `std::error::Error`. |
 
 ---
 
@@ -2611,4 +2614,58 @@ db.transaction(|conn| {
     // more work...
     Ok(user)
 })?;
+```
+
+---
+
+### 55. Call an external API from a handler
+
+Use `http_client::Client` to make outbound HTTP requests.  Plain HTTP works in
+all builds.  HTTPS requires the `http-client` feature (or `http2` / `http3`
+which already include it).
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["http-client"] }
+```
+
+```rust
+use rust_web_server::http_client::{Client, HttpClientError};
+
+fn fetch_user(id: u64) -> Result<String, HttpClientError> {
+    let client = Client::new();
+    let resp = client
+        .get(&format!("https://api.example.com/users/{id}"))
+        .header("Authorization", "Bearer tok_…")
+        .timeout_ms(5_000)
+        .send()?;
+
+    if resp.is_success() {
+        resp.text()
+    } else {
+        Err(HttpClientError(format!("upstream returned {}", resp.status())))
+    }
+}
+```
+
+POST with a JSON body:
+
+```rust
+let resp = Client::new()
+    .post("https://api.example.com/charges")
+    .body_json(r#"{"amount":1000,"currency":"usd"}"#)
+    .header("Authorization", "Bearer sk_…")
+    .send()?;
+
+assert!(resp.is_success());
+```
+
+Async variant (requires `http2` feature):
+
+```rust
+use rust_web_server::http_client::AsyncClient;
+
+async fn fetch_async(url: &str) -> Result<String, rust_web_server::http_client::HttpClientError> {
+    AsyncClient::new().get(url).send().await?.text()
+}
 ```

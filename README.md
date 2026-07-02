@@ -175,11 +175,13 @@ cargo build --release --no-default-features --features http1
 - Model layer — `#[derive(Model)]` proc-macro maps structs to tables; `Repository<T, ID>` for zero-boilerplate CRUD; `QueryBuilder<T>` for fluent filtering; migration runner (`db.migrate("migrations/")`); `HasMany`/`BelongsTo` relationship helpers; enable with `model-sqlite`, `model-postgres`, or `model-mysql` feature
 - Config-driven proxy server — drop `rws.config.toml` with `[[route]]` / `[[upstream]]` sections to run as a full reverse proxy with per-route middleware, health-checked backend pools, and L4/WS proxies; no code required
 - Dependency injection — `Container` stores services keyed by `TypeId`; `register::<T>(val)` for concrete types, `provide::<dyn Trait>(Arc::new(...))` for trait objects, named instances via `register_named`; share with `container.into_arc()` as `App::with_state` state
+- Outbound HTTP client — `Client` (sync) and `AsyncClient` (`http2` feature) for making outbound HTTP/1.1 requests; fluent builder API (`.get()`, `.post()`, `.header()`, `.body_json()`, `.timeout_ms()`); automatic redirect following; HTTPS via `rustls` (`http-client` or `http2` feature); no third-party HTTP dependency
 
 ### Optional features
 
 | Feature | What it adds |
 |---------|--------------|
+| `http-client` | HTTPS support for the outbound `Client` — adds `rustls` + `webpki-roots`; plain HTTP works without any feature |
 | `serde` | `Json<T>` extractor and responder backed by `serde_json` |
 | `auth` | `BasicAuthLayer` (HTTP Basic) and `JwtLayer` (HS256 JWT); `build_jwt` / `verify_jwt` utilities |
 | `macros` | `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` attributes; `#[derive(FromRequest)]`; `#[derive(Validate)]`; `#[derive(Config)]` (typed env-var binding) via `rws-macros` |

@@ -123,6 +123,7 @@ pub mod virtual_host;
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
 pub mod model;
 pub mod websocket;
+pub mod http_client;
 
 #[cfg(feature = "http2")]
 #[doc(hidden)]

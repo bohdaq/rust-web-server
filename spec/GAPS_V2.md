@@ -8,7 +8,7 @@
 
 ## Critical — nearly every real app needs these
 
-### 1. Outbound HTTP client
+### 1. Outbound HTTP client ✅ Done
 
 **The most painful missing piece.** There is no ergonomic way to call an external API from a handler. The proxy modules use raw TCP internally, but application code needs:
 
@@ -264,7 +264,7 @@ Increasingly expected as an alternative to REST. Would require a separate `src/g
 
 | Gap | Priority | Effort | New deps? |
 |---|---|---|---|
-| Outbound HTTP client | Critical | Medium | No (reuse rustls) |
+| ~~Outbound HTTP client~~ ✅ | ~~Critical~~ | ~~Medium~~ | ~~No (reuse rustls)~~ |
 | Password hashing | Critical | Small | `argon2` |
 | CSRF protection | Critical | Small | No (reuse hmac/sha2) |
 | OAuth2 / SSO | Critical | Large | Minimal |
