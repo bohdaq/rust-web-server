@@ -1,5 +1,7 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::sync::atomic::{AtomicU32, Ordering as AtOrd};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -8,7 +10,7 @@ use crate::application::Application;
 use crate::core::New;
 use crate::http::VERSION;
 use crate::middleware::Middleware;
-use crate::proxy::{LoadBalancing, ReverseProxy};
+use crate::proxy::{ConnPool, LoadBalancing, ReverseProxy, read_response_poolable};
 use crate::request::{METHOD, Request};
 use crate::server::{Address, ConnectionInfo};
 
@@ -19,7 +21,7 @@ fn conn() -> ConnectionInfo {
         client: Address { ip: "10.0.0.1".to_string(), port: 1234 },
         server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 16000,
-    sni_hostname: None,
+        sni_hostname: None,
     }
 }
 
@@ -33,8 +35,8 @@ fn get(uri: &str) -> Request {
     }
 }
 
-/// Spawns a mock HTTP/1.1 backend that reads one request and sends `response`.
-/// Returns the port the backend is listening on.
+/// Spawns a one-shot mock backend: accepts one connection, reads the request,
+/// writes `response`, then closes.
 fn mock_backend(response: &'static str) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock backend");
     let port = listener.local_addr().unwrap().port();
@@ -48,7 +50,37 @@ fn mock_backend(response: &'static str) -> u16 {
     port
 }
 
-/// Backend that accepts a connection and immediately closes without sending anything.
+/// Keep-alive backend: accepts up to `max_conns` TCP connections, serves each
+/// with `response`, keeps the socket open (simulates HTTP/1.1 keep-alive).
+/// Returns (port, connections_accepted_counter).
+fn keepalive_backend(response: &'static str, max_conns: usize) -> (u16, Arc<AtomicU32>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind keepalive backend");
+    let port = listener.local_addr().unwrap().port();
+    let counter = Arc::new(AtomicU32::new(0));
+    let counter2 = Arc::clone(&counter);
+    thread::spawn(move || {
+        for _ in 0..max_conns {
+            if let Ok((mut stream, _)) = listener.accept() {
+                counter2.fetch_add(1, AtOrd::Relaxed);
+                // Serve multiple requests on the same connection
+                loop {
+                    let mut buf = [0u8; 4096];
+                    match stream.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {
+                            if stream.write_all(response.as_bytes()).is_err() {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+    (port, counter)
+}
+
+/// Backend that immediately closes without sending anything.
 fn silent_backend() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind silent backend");
     let port = listener.local_addr().unwrap().port();
@@ -60,22 +92,26 @@ fn silent_backend() -> u16 {
     port
 }
 
-/// Backend that stays listening but never accepts; combined with a very short
-/// connect timeout this simulates an unreachable backend.
 fn refusing_port() -> u16 {
-    // A port that immediately refuses connections (no listener).
-    // Bind, extract the port, then drop the listener so the OS rejects incoming
-    // SYNs immediately (on most platforms) rather than queuing them.
     let l = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = l.local_addr().unwrap().port();
     drop(l);
     port
 }
 
+// Responses with Connection: close (pool will NOT reuse these connections).
 const OK_RESPONSE: &str =
     "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello";
 const NOT_FOUND_RESPONSE: &str =
     "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\nnot found";
+
+// Response with Connection: keep-alive (pool WILL reuse the connection).
+const KEEPALIVE_RESPONSE: &str =
+    "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: keep-alive\r\n\r\nhello";
+
+// Chunked response with Connection: keep-alive.
+const CHUNKED_KEEPALIVE_RESPONSE: &str =
+    "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
 
 // ── Backend parsing ───────────────────────────────────────────────────────────
 
@@ -123,7 +159,6 @@ fn proxy_preserves_upstream_body() {
 #[test]
 fn proxy_returns_502_when_backend_silently_closes() {
     let port = silent_backend();
-    // Give the thread a moment to accept
     thread::sleep(Duration::from_millis(20));
     let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)]);
     let resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
@@ -158,21 +193,23 @@ fn proxy_fails_over_to_second_backend_when_first_is_down() {
 
 #[test]
 fn round_robin_distributes_across_backends() {
-    fn count_backend(resp_body: &'static str) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU32>) {
-        use std::sync::Arc;
-        use std::sync::atomic::AtomicU32;
+    fn count_backend(resp_body: &'static str) -> (u16, Arc<AtomicU32>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let count = Arc::new(AtomicU32::new(0));
         let count_clone = Arc::clone(&count);
-        let body = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", resp_body.len(), resp_body);
+        let body = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            resp_body.len(),
+            resp_body
+        );
         thread::spawn(move || {
             for _ in 0..4 {
                 if let Ok((mut stream, _)) = listener.accept() {
                     let mut buf = [0u8; 4096];
                     let _ = stream.read(&mut buf);
                     let _ = stream.write_all(body.as_bytes());
-                    count_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    count_clone.fetch_add(1, AtOrd::Relaxed);
                 }
             }
         });
@@ -194,8 +231,8 @@ fn round_robin_distributes_across_backends() {
 
     thread::sleep(Duration::from_millis(50));
 
-    let a = count_a.load(std::sync::atomic::Ordering::Relaxed);
-    let b = count_b.load(std::sync::atomic::Ordering::Relaxed);
+    let a = count_a.load(AtOrd::Relaxed);
+    let b = count_b.load(AtOrd::Relaxed);
     assert_eq!(4, a + b, "total requests should be 4");
     assert!(a >= 1, "backend A should have received at least one request");
     assert!(b >= 1, "backend B should have received at least one request");
@@ -219,7 +256,6 @@ fn path_prefix_passes_non_matching_to_inner_app() {
     let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)])
         .path_prefix("/api");
     let app = App::new().wrap(proxy);
-    // /healthz is handled by App, not the proxy
     let resp = app.execute(&get("/healthz"), &conn()).unwrap();
     assert_eq!(200, resp.status_code);
 }
@@ -309,4 +345,193 @@ fn proxy_with_builder_options_compiles_and_works() {
         .path_prefix("/");
     let resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
     assert_eq!(200, resp.status_code);
+}
+
+// ── Connection pool ───────────────────────────────────────────────────────────
+
+#[test]
+fn pool_reuses_connection_for_keepalive_response() {
+    let (port, tcp_conn_count) = keepalive_backend(KEEPALIVE_RESPONSE, 1);
+    let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)]);
+
+    // First request — opens a TCP connection.
+    let resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(200, resp.status_code);
+
+    // Give the pool a moment to store the returned stream.
+    thread::sleep(Duration::from_millis(20));
+
+    // Pool should hold the idle connection.
+    assert_eq!(1, proxy.pool.idle_count(), "pool should hold 1 idle connection after keep-alive response");
+
+    // Second request — should reuse the pooled stream (no new TCP connection).
+    let resp2 = proxy.handle(&get("/health"), &conn(), &App::new()).unwrap();
+    assert_eq!(200, resp2.status_code);
+
+    // Only one TCP connection should have been established.
+    thread::sleep(Duration::from_millis(20));
+    assert_eq!(1, tcp_conn_count.load(AtOrd::Relaxed), "only 1 TCP connection should be opened");
+}
+
+#[test]
+fn pool_does_not_reuse_connection_close_response() {
+    // Backend with Connection: close — pool must not keep the stream.
+    let port = mock_backend(OK_RESPONSE);
+    let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)]);
+    let resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(200, resp.status_code);
+    thread::sleep(Duration::from_millis(20));
+    assert_eq!(0, proxy.pool.idle_count(), "pool must be empty after Connection: close");
+}
+
+#[test]
+fn shared_pool_is_used_across_proxy_instances() {
+    let (port, tcp_conn_count) = keepalive_backend(KEEPALIVE_RESPONSE, 1);
+    let pool = Arc::new(ConnPool::new_default());
+    let proxy1 = ReverseProxy::new([format!("http://127.0.0.1:{}", port)])
+        .with_pool(Arc::clone(&pool));
+    let proxy2 = ReverseProxy::new([format!("http://127.0.0.1:{}", port)])
+        .with_pool(Arc::clone(&pool));
+
+    let resp1 = proxy1.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(200, resp1.status_code);
+    thread::sleep(Duration::from_millis(20));
+
+    let resp2 = proxy2.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(200, resp2.status_code);
+    thread::sleep(Duration::from_millis(20));
+
+    assert_eq!(1, tcp_conn_count.load(AtOrd::Relaxed), "shared pool: only 1 TCP connection");
+}
+
+#[test]
+fn pool_evicts_stale_connections() {
+    use std::time::Duration;
+    let pool = ConnPool::new(8, Duration::from_millis(1));
+
+    // Bind a dummy socket so we can get a TcpStream.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    thread::spawn(move || { let _ = listener.accept(); });
+    let stream = std::net::TcpStream::connect(format!("127.0.0.1:{}", port)).unwrap();
+
+    pool.release("127.0.0.1:9999", stream);
+    assert_eq!(1, pool.idle_count());
+
+    // Wait for the 1ms timeout to expire.
+    thread::sleep(Duration::from_millis(5));
+    assert!(pool.acquire("127.0.0.1:9999").is_none(), "stale connection should be evicted");
+    assert_eq!(0, pool.idle_count());
+}
+
+#[test]
+fn pool_respects_max_idle_limit() {
+    let pool = ConnPool::new(2, Duration::from_secs(60));
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    // Allow up to 3 connections
+    thread::spawn(move || {
+        for _ in 0..3 {
+            let _ = listener.accept();
+        }
+    });
+    for _ in 0..3 {
+        let s = std::net::TcpStream::connect(format!("127.0.0.1:{}", port)).unwrap();
+        pool.release("h:1", s);
+    }
+    // max_idle is 2, so the 3rd should be dropped
+    assert_eq!(2, pool.idle_count());
+}
+
+// ── Chunked decoding (read_response_poolable) ─────────────────────────────────
+
+#[test]
+fn chunked_response_is_decoded_and_poolable() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    thread::spawn(move || {
+        if let Ok((mut s, _)) = listener.accept() {
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            let _ = s.write_all(CHUNKED_KEEPALIVE_RESPONSE.as_bytes());
+            // Keep the connection open
+            thread::sleep(Duration::from_millis(200));
+        }
+    });
+
+    let mut stream = std::net::TcpStream::connect(format!("127.0.0.1:{}", port)).unwrap();
+    // Send a dummy request
+    let _ = stream.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+    let (resp_bytes, can_reuse) = read_response_poolable(&mut stream).unwrap();
+    let resp = crate::response::Response::parse(&resp_bytes).unwrap();
+
+    assert_eq!(200, resp.status_code);
+    let body: Vec<u8> = resp.content_range_list.iter().flat_map(|c| c.body.iter().copied()).collect();
+    assert_eq!(b"hello", body.as_slice(), "decoded body should be 'hello'");
+    assert!(can_reuse, "chunked keep-alive response should be reusable");
+}
+
+#[test]
+fn chunked_multi_chunk_response_is_decoded_correctly() {
+    // Multi-chunk: "hel" + "lo" = "hello"
+    let chunked = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n3\r\nhel\r\n2\r\nlo\r\n0\r\n\r\n";
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    thread::spawn(move || {
+        if let Ok((mut s, _)) = listener.accept() {
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            let _ = s.write_all(chunked.as_bytes());
+            thread::sleep(Duration::from_millis(200));
+        }
+    });
+
+    let mut stream = std::net::TcpStream::connect(format!("127.0.0.1:{}", port)).unwrap();
+    let _ = stream.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    let (resp_bytes, can_reuse) = read_response_poolable(&mut stream).unwrap();
+    let resp = crate::response::Response::parse(&resp_bytes).unwrap();
+    let body: Vec<u8> = resp.content_range_list.iter().flat_map(|c| c.body.iter().copied()).collect();
+    assert_eq!(b"hello", body.as_slice());
+    assert!(can_reuse);
+}
+
+#[test]
+fn connection_close_response_is_not_reusable() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    thread::spawn(move || {
+        if let Ok((mut s, _)) = listener.accept() {
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            let _ = s.write_all(OK_RESPONSE.as_bytes()); // has Connection: close
+        }
+    });
+
+    let mut stream = std::net::TcpStream::connect(format!("127.0.0.1:{}", port)).unwrap();
+    let _ = stream.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    let (_resp_bytes, can_reuse) = read_response_poolable(&mut stream).unwrap();
+    assert!(!can_reuse, "Connection: close responses must not be pooled");
+}
+
+#[test]
+fn proxy_serves_chunked_response_body_correctly() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    thread::spawn(move || {
+        for _ in 0..2 {
+            if let Ok((mut s, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                let _ = s.read(&mut buf);
+                let _ = s.write_all(CHUNKED_KEEPALIVE_RESPONSE.as_bytes());
+                thread::sleep(Duration::from_millis(200));
+            }
+        }
+    });
+
+    let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)]);
+    let resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(200, resp.status_code);
+    let body: Vec<u8> = resp.content_range_list.iter().flat_map(|c| c.body.iter().copied()).collect();
+    assert_eq!(b"hello", body.as_slice(), "proxy must decode chunked body");
 }

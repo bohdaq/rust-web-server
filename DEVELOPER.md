@@ -106,7 +106,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Validated<T>` | `validate` | `FromRequest` wrapper — extracts then validates in one step; `400` on extraction failure, `422 Unprocessable Entity` with JSON error body on validation failure. |
 | `is_email` / `is_url` | `validate` | Format check helpers used by the derive macro; callable directly. |
 | `#[derive(Validate)]` | `macros` (proc-macro) | Derive `Validate` from `#[validate(...)]` field annotations. Validators: `length(min,max)`, `range(min,max)`, `email`, `required`, `url`. Requires `features = ["macros"]`. |
-| `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. |
+| `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. Reuses idle TCP connections via the built-in `ConnPool`. |
+| `ConnPool` | `proxy` | Per-backend HTTP/1.1 connection pool. `ConnPool::new(max_idle, idle_timeout)` or `ConnPool::new_default()`. Share across proxy instances with `Arc<ConnPool>` via `ReverseProxy::with_pool()`. |
 | `RewriteLayer` | `rewrite` | Composable request/response rewriting middleware: request header add/replace/remove, URI set/strip-prefix/add-prefix, response header add/replace/remove, status override, body byte find-and-replace. |
 | `LoadBalancing` | `proxy` | Enum selecting the balancing strategy (`RoundRobin`). Passed to `ReverseProxy::strategy()`. |
 | `MetricsLayer` | `metrics` | Middleware that records per-route request counts and latency histograms. Adds `rws_route_requests_total{method,path,status}` and `rws_route_duration_seconds{method,path}` to `/metrics`. |
@@ -1262,6 +1263,35 @@ let app = App::new()
 | Backend connection fails | Try next backend in round-robin order |
 | All backends fail | `502 Bad Gateway` |
 | Path prefix set and URI does not match | Pass through to the inner application |
+
+**Connection pooling**
+
+`ReverseProxy` ships with an embedded `ConnPool` (8 idle connections per backend, 60 s idle timeout).  When a backend sends `Connection: keep-alive`, the TCP stream is returned to the pool and reused for the next request, eliminating per-request TCP handshakes.
+
+To share one pool across multiple `ReverseProxy` instances or to tune pool parameters:
+
+```rust
+use std::sync::Arc;
+use std::time::Duration;
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::proxy::{ConnPool, ReverseProxy};
+
+let pool = Arc::new(ConnPool::new(32, Duration::from_secs(120)));
+
+let api  = App::new().wrap(
+    ReverseProxy::new(["http://api:3000"]).with_pool(Arc::clone(&pool)));
+let auth = App::new().wrap(
+    ReverseProxy::new(["http://auth:4000"]).with_pool(Arc::clone(&pool)));
+```
+
+To tune the built-in pool without sharing it:
+
+```rust
+use rust_web_server::proxy::ReverseProxy;
+
+let proxy = ReverseProxy::new(["http://backend:8080"]).max_idle_conns(16);
+```
 
 ### 33. Per-route metrics
 

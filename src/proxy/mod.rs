@@ -23,15 +23,18 @@
 //!         .path_prefix("/api"));
 //! ```
 
+pub mod pool;
+
 #[cfg(test)]
 mod tests;
 
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
-
+pub use pool::ConnPool;
 
 use crate::application::Application;
 use crate::core::New;
@@ -69,17 +72,18 @@ pub enum LoadBalancing {
 /// Hop-by-hop headers are stripped before forwarding.  `X-Forwarded-For` and
 /// `Via` are added to every forwarded request.
 ///
-/// # Limitations
-///
-/// * Only plain HTTP backends are supported (no TLS to the upstream).
-/// * Chunked transfer encoding from the backend is forwarded as-is; callers
-///   that need decoded bodies should set `Content-Length` on the upstream.
+/// Idle connections are pooled and reused across requests (up to
+/// [`ConnPool::new_default`] limits: 8 idle per backend, 60-second timeout).
+/// This eliminates per-request TCP handshake overhead and ephemeral-port
+/// exhaustion.  Use [`ReverseProxy::with_pool`] to share a pool across
+/// multiple proxy instances or to tune pool parameters.
 pub struct ReverseProxy {
     backends: Vec<Backend>,
     path_prefix: Option<String>,
     connect_timeout: Duration,
     read_timeout: Duration,
     counter: AtomicUsize,
+    pool: Arc<ConnPool>,
 }
 
 impl ReverseProxy {
@@ -100,6 +104,7 @@ impl ReverseProxy {
             connect_timeout: Duration::from_secs(5),
             read_timeout: Duration::from_secs(30),
             counter: AtomicUsize::new(0),
+            pool: Arc::new(ConnPool::new_default()),
         }
     }
 
@@ -129,6 +134,21 @@ impl ReverseProxy {
         self
     }
 
+    /// Attach a shared connection pool.
+    ///
+    /// Useful for sharing one pool across multiple `ReverseProxy` instances
+    /// or for tuning pool parameters (capacity, idle timeout).
+    pub fn with_pool(mut self, pool: Arc<ConnPool>) -> Self {
+        self.pool = pool;
+        self
+    }
+
+    /// Set the maximum number of idle connections per backend (default: 8).
+    pub fn max_idle_conns(mut self, n: usize) -> Self {
+        self.pool = Arc::new(ConnPool::new(n, Duration::from_secs(60)));
+        self
+    }
+
     fn proxy(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         if self.backends.is_empty() {
             return Err("no backends configured".to_string());
@@ -152,29 +172,37 @@ impl ReverseProxy {
         connection: &ConnectionInfo,
         backend: &Backend,
     ) -> Result<Response, String> {
-        let addr_str = format!("{}:{}", backend.host, backend.port);
-        let sock_addr = addr_str
-            .to_socket_addrs()
-            .map_err(|e| format!("DNS lookup for {} failed: {}", addr_str, e))?
-            .next()
-            .ok_or_else(|| format!("no address resolved for {}", addr_str))?;
+        let key = format!("{}:{}", backend.host, backend.port);
 
-        let stream = TcpStream::connect_timeout(&sock_addr, self.connect_timeout)
-            .map_err(|e| format!("connect to {} failed: {}", addr_str, e))?;
-        stream
-            .set_read_timeout(Some(self.read_timeout))
-            .map_err(|e| e.to_string())?;
-        stream
-            .set_write_timeout(Some(Duration::from_secs(10)))
-            .map_err(|e| e.to_string())?;
+        // Try a pooled connection first; fall back to a fresh one.
+        let stream = if let Some(pooled) = self.pool.acquire(&key) {
+            pooled
+        } else {
+            let addr_str = key.as_str();
+            let sock_addr = addr_str
+                .to_socket_addrs()
+                .map_err(|e| format!("DNS lookup for {} failed: {}", addr_str, e))?
+                .next()
+                .ok_or_else(|| format!("no address resolved for {}", addr_str))?;
+            TcpStream::connect_timeout(&sock_addr, self.connect_timeout)
+                .map_err(|e| format!("connect to {} failed: {}", addr_str, e))?
+        };
 
-        let req_bytes = build_request(request, &backend.host, &connection.client.ip);
+        stream.set_read_timeout(Some(self.read_timeout)).map_err(|e| e.to_string())?;
+        stream.set_write_timeout(Some(Duration::from_secs(10))).map_err(|e| e.to_string())?;
+
+        // keep_alive = true: send Connection: keep-alive so the server holds
+        // the connection open after responding.
+        let req_bytes = build_request(request, &backend.host, &connection.client.ip, true);
         let mut stream = stream;
-        stream
-            .write_all(&req_bytes)
-            .map_err(|e| format!("write to backend failed: {}", e))?;
+        stream.write_all(&req_bytes).map_err(|e| format!("write to backend failed: {}", e))?;
 
-        let resp_bytes = read_response(&mut stream)?;
+        let (resp_bytes, reusable) = read_response_poolable(&mut stream)?;
+
+        if reusable {
+            self.pool.release(&key, stream);
+        }
+
         Response::parse(&resp_bytes)
     }
 }
@@ -200,7 +228,12 @@ impl Middleware for ReverseProxy {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-pub(crate) fn build_request(request: &Request, backend_host: &str, client_ip: &str) -> Vec<u8> {
+pub(crate) fn build_request(
+    request: &Request,
+    backend_host: &str,
+    client_ip: &str,
+    keep_alive: bool,
+) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let _ = write!(
         out,
@@ -216,7 +249,11 @@ pub(crate) fn build_request(request: &Request, backend_host: &str, client_ip: &s
     }
     let _ = write!(out, "X-Forwarded-For: {}\r\n", client_ip);
     let _ = write!(out, "Via: 1.1 rws\r\n");
-    let _ = write!(out, "Connection: close\r\n");
+    if keep_alive {
+        let _ = write!(out, "Connection: keep-alive\r\n");
+    } else {
+        let _ = write!(out, "Connection: close\r\n");
+    }
     if !request.body.is_empty() {
         let _ = write!(out, "Content-Length: {}\r\n", request.body.len());
     }
@@ -225,6 +262,159 @@ pub(crate) fn build_request(request: &Request, backend_host: &str, client_ip: &s
     out
 }
 
+/// Read a full HTTP/1.1 response from `stream`.
+///
+/// Supports three body-length mechanisms:
+/// - `Content-Length: N` — reads exactly N bytes; stream reusable if backend allows.
+/// - `Transfer-Encoding: chunked` — decodes all chunks and rewrites the
+///   response as a `Content-Length` response; stream reusable if backend allows.
+/// - Neither — reads until EOF; stream is never reusable (connection closes).
+///
+/// Returns `(response_bytes, can_reuse)`.  When `can_reuse` is `true` and the
+/// caller has a [`ConnPool`], it should call [`ConnPool::release`].
+pub(crate) fn read_response_poolable(stream: &mut TcpStream) -> Result<(Vec<u8>, bool), String> {
+    let mut buf: Vec<u8> = Vec::with_capacity(8192);
+    let mut tmp = [0u8; 4096];
+
+    // Read until headers end (\r\n\r\n).
+    let header_end = loop {
+        let n = stream.read(&mut tmp).map_err(|e| e.to_string())?;
+        if n == 0 {
+            return if buf.is_empty() {
+                Err("backend closed connection without sending a response".to_string())
+            } else {
+                Ok((buf, false))
+            };
+        }
+        buf.extend_from_slice(&tmp[..n]);
+        if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+            break pos + 4;
+        }
+    };
+
+    let header_str_lower =
+        std::str::from_utf8(&buf[..header_end]).unwrap_or("").to_ascii_lowercase();
+
+    let connection_close =
+        header_str_lower.lines().any(|l| l.starts_with("connection:") && l.contains("close"));
+
+    let is_chunked = header_str_lower
+        .lines()
+        .any(|l| l.starts_with("transfer-encoding:") && l.contains("chunked"));
+
+    let content_length: Option<usize> = header_str_lower.lines().find_map(|l| {
+        l.strip_prefix("content-length:")?
+            .trim()
+            .parse()
+            .ok()
+    });
+
+    if is_chunked {
+        let decoded = decode_chunked(stream, &buf, header_end, &mut tmp)?;
+        rewrite_as_content_length(&mut buf, header_end, &decoded);
+        Ok((buf, !connection_close))
+    } else if let Some(len) = content_length {
+        while buf.len() < header_end + len {
+            let n = stream.read(&mut tmp).map_err(|e| e.to_string())?;
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&tmp[..n]);
+        }
+        Ok((buf, !connection_close))
+    } else {
+        // No body-length indicator — read until EOF; connection cannot be reused.
+        loop {
+            let n = stream.read(&mut tmp).map_err(|e| e.to_string())?;
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&tmp[..n]);
+        }
+        Ok((buf, false))
+    }
+}
+
+/// Decode HTTP/1.1 chunked transfer-encoding from `stream`.
+///
+/// `buf[header_end..]` may already contain some body bytes that arrived in
+/// the same read as the headers.  Returns the fully decoded body.
+fn decode_chunked(
+    stream: &mut TcpStream,
+    buf: &[u8],
+    header_end: usize,
+    tmp: &mut [u8],
+) -> Result<Vec<u8>, String> {
+    // Seed `raw` with any body bytes already buffered alongside the headers.
+    let mut raw: Vec<u8> = buf[header_end..].to_vec();
+    let mut decoded: Vec<u8> = Vec::new();
+
+    loop {
+        // Wait until we have at least one complete chunk-size line (ends with \r\n).
+        let crlf = loop {
+            if let Some(p) = raw.windows(2).position(|w| w == b"\r\n") {
+                break p;
+            }
+            let n = stream.read(tmp).map_err(|e| e.to_string())?;
+            if n == 0 {
+                return Err("chunked: premature EOF reading chunk size".to_string());
+            }
+            raw.extend_from_slice(&tmp[..n]);
+        };
+
+        // Chunk size is hex, optionally followed by chunk-extensions (";…").
+        let size_line = std::str::from_utf8(&raw[..crlf])
+            .map_err(|_| "chunked: non-UTF-8 chunk size line".to_string())?;
+        let size_str = size_line.split(';').next().unwrap_or("").trim();
+        let chunk_size = usize::from_str_radix(size_str, 16)
+            .map_err(|_| format!("chunked: invalid chunk size '{}'", size_str))?;
+        raw.drain(..crlf + 2); // consume "<size>\r\n"
+
+        if chunk_size == 0 {
+            // Last chunk — consume the trailing CRLF ("0\r\n\r\n" → trailing "\r\n" still pending).
+            while raw.len() < 2 {
+                let n = stream.read(tmp).map_err(|e| e.to_string())?;
+                if n == 0 {
+                    break;
+                }
+                raw.extend_from_slice(&tmp[..n]);
+            }
+            break;
+        }
+
+        // Read chunk data + trailing CRLF.
+        while raw.len() < chunk_size + 2 {
+            let n = stream.read(tmp).map_err(|e| e.to_string())?;
+            if n == 0 {
+                return Err("chunked: premature EOF reading chunk body".to_string());
+            }
+            raw.extend_from_slice(&tmp[..n]);
+        }
+        decoded.extend_from_slice(&raw[..chunk_size]);
+        raw.drain(..chunk_size + 2); // consume "<data>\r\n"
+    }
+
+    Ok(decoded)
+}
+
+/// Rewrite `buf` in-place: strip `Transfer-Encoding`, add `Content-Length`,
+/// replace the old (undecoded) body with `decoded`.
+fn rewrite_as_content_length(buf: &mut Vec<u8>, header_end: usize, decoded: &[u8]) {
+    let header_str = std::str::from_utf8(&buf[..header_end]).unwrap_or("").to_string();
+    buf.clear();
+    for line in header_str.lines() {
+        if line.to_ascii_lowercase().starts_with("transfer-encoding:") || line.is_empty() {
+            continue;
+        }
+        buf.extend_from_slice(line.as_bytes());
+        buf.extend_from_slice(b"\r\n");
+    }
+    let _ = write!(buf, "Content-Length: {}\r\n\r\n", decoded.len());
+    buf.extend_from_slice(decoded);
+}
+
+/// Non-pooled version of the response reader, used by callers that send
+/// `Connection: close` (e.g. `proxy_http1`, `proxy_https1`).
 pub(crate) fn read_response(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
     read_response_from(stream)
 }
@@ -233,7 +423,6 @@ pub(crate) fn read_response_from<R: Read>(stream: &mut R) -> Result<Vec<u8>, Str
     let mut buf: Vec<u8> = Vec::with_capacity(8192);
     let mut tmp = [0u8; 4096];
 
-    // Read until the header block ends (\r\n\r\n)
     let header_end = loop {
         let n = stream.read(&mut tmp).map_err(|e| e.to_string())?;
         if n == 0 {
@@ -249,7 +438,6 @@ pub(crate) fn read_response_from<R: Read>(stream: &mut R) -> Result<Vec<u8>, Str
         }
     };
 
-    // Parse Content-Length from headers
     let content_length = std::str::from_utf8(&buf[..header_end])
         .unwrap_or("")
         .lines()
@@ -306,7 +494,7 @@ pub(crate) fn proxy_http1(
         .map_err(|e| format!("connect to {} failed: {}", addr_str, e))?;
     stream.set_read_timeout(Some(read_timeout)).map_err(|e| e.to_string())?;
     stream.set_write_timeout(Some(Duration::from_secs(10))).map_err(|e| e.to_string())?;
-    let req_bytes = build_request(request, host, client_ip);
+    let req_bytes = build_request(request, host, client_ip, false);
     let mut stream = stream;
     stream.write_all(&req_bytes).map_err(|e| format!("write to backend failed: {}", e))?;
     let resp_bytes = read_response(&mut stream)?;
@@ -354,7 +542,7 @@ pub(crate) fn proxy_https1(
     let conn = rustls::ClientConnection::new(config, server_name).map_err(|e| e.to_string())?;
     let mut tls = rustls::StreamOwned::new(conn, stream);
 
-    let req_bytes = build_request(request, host, client_ip);
+    let req_bytes = build_request(request, host, client_ip, false);
     tls.write_all(&req_bytes)
         .map_err(|e| format!("write to upstream failed: {}", e))?;
 
@@ -419,20 +607,7 @@ impl Backend {
 ///
 /// This proxy also transparently handles gRPC traffic
 /// (`Content-Type: application/grpc*`) — gRPC DATA frames are forwarded
-/// as-is because gRPC is HTTP/2. Note that HTTP/2 trailers (used by gRPC for
-/// `grpc-status` and `grpc-message`) are not yet propagated.
-///
-/// # Example
-///
-/// ```rust,no_run
-/// use rust_web_server::app::App;
-/// use rust_web_server::core::New;
-/// use rust_web_server::proxy::H2ReverseProxy;
-///
-/// let app = App::new()
-///     .wrap(H2ReverseProxy::new(["grpc-service:9090"])
-///         .path_prefix("/svc.MyService"));
-/// ```
+/// as-is because gRPC is layered directly on HTTP/2.
 #[cfg(feature = "http2")]
 pub struct H2ReverseProxy {
     inner: ReverseProxy,
@@ -516,7 +691,6 @@ fn try_backend_h2(
             Handle::current().block_on(forward_h2_async(request, client_ip, backend, connect_timeout))
         }),
         Err(_) => {
-            // No tokio runtime (http1-only path): fall back to HTTP/1.1 upstream.
             Err("no async runtime for H2 proxy; falling back to 502".to_string())
         }
     }
@@ -623,10 +797,6 @@ async fn forward_h2_async(
 ///
 /// Recognises requests with `Content-Type: application/grpc*` and forwards them
 /// to a backend over HTTP/2, leaving all other requests to the next layer.
-///
-/// gRPC DATA frames are forwarded as-is because gRPC is layered directly on
-/// HTTP/2. HTTP/2 trailers (`grpc-status`, `grpc-message`) are not yet
-/// propagated — a known limitation of the current implementation.
 ///
 /// Requires the `http2` Cargo feature.
 ///

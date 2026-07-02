@@ -281,7 +281,7 @@ Router::new().with_host("api.example.com")
 
 Matches requests whose SNI hostname (TLS) or `Host` header (plain HTTP) equals the given value.
 
-### Path parameter syntax
+### Path parameter syntax 
 
 - `:name` — matches one path segment; `params.get("name")` → `Option<&str>`
 - `*name` — matches the rest of the path (trailing wildcard)
@@ -574,7 +574,8 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&mu
 | `MetricsLayer` | `metrics` | Per-route Prometheus counters + histograms |
 | `OtelLayer` | `otel` | W3C traceparent spans; exports to stdout or OTLP |
 | `CacheLayer` | `cache` | In-memory GET response cache; builder `.ttl(secs)` |
-| `ReverseProxy` | `proxy` | HTTP/1.1 upstream proxy; round-robin; 502 on all-fail |
+| `ReverseProxy` | `proxy` | HTTP/1.1 upstream proxy; round-robin; 502 on all-fail; built-in `ConnPool` |
+| `ConnPool` | `proxy` | Per-backend HTTP/1.1 keep-alive connection pool; `new(max_idle, timeout)` |
 | `H2ReverseProxy` | `proxy` | HTTP/2 upstream proxy; `h2://` scheme prefix |
 | `GrpcProxy` | `proxy` | gRPC proxy; filters on `Content-Type: application/grpc*` |
 | `RewriteLayer` | `rewrite` | Request/response header, URI, status, body rewriting |
@@ -900,7 +901,7 @@ src/model/              — ORM: DbPool, DbConnection, Model, Repository, QueryB
 src/null/               — NullApplication (returns 404 for everything)
 src/otel/               — OtelLayer, setup, span export
 src/prelude/            — Re-exports of the most commonly used types
-src/proxy/              — ReverseProxy, H2ReverseProxy, GrpcProxy
+src/proxy/              — ReverseProxy, H2ReverseProxy, GrpcProxy, ConnPool (pool.rs)
 src/proxy_config/       — Config-driven proxy: ProxyConfig, ConfigDrivenApp
 src/range/              — Range, ContentRange, body construction
 src/rate_limit/         — RateLimiter, global()

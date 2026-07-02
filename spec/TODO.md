@@ -10,7 +10,7 @@ Consolidated, prioritized task list synthesized from GAPS_V3.md, IDEAS.md, ADMIN
 
 These gaps make rws unsuitable for real production workloads regardless of how complete the feature set is.
 
-- [ ] **Upstream connection pooling** (`src/proxy/pool.rs`) — every proxied request opens a new TCP connection; under load this dominates latency and exhausts ephemeral ports. A per-backend `Keep-Alive` pool (`HashMap<String, Pool<TcpStream>>`) shared across `ReverseProxy`, `H2ReverseProxy`, `DynamicProxy`, and `CanaryLayer`. Closes GAPS_V3 §1.1 and §2.6.
+- [x] **Upstream connection pooling** (`src/proxy/pool.rs`) — `ConnPool` (Mutex-backed, per-backend VecDeque of TcpStream) is embedded in `ReverseProxy`. Idle connections are reused when the backend sends `Connection: keep-alive`; chunked `Transfer-Encoding` is decoded so body length is known. Share pools across instances with `Arc<ConnPool>` via `ReverseProxy::with_pool()`. Closes GAPS_V3 §1.1 and §2.6.
 
 - [ ] **TLS to HTTP/2 upstreams** (`H2ReverseProxy`) — `H2ReverseProxy` connects over plain TCP. `h2://` prefixed backends that require TLS (every managed cloud service) are unreachable. Reuse the `rustls` dep already in the tree. Closes GAPS_V3 §2.2.
 
