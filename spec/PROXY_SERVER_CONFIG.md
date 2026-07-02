@@ -347,9 +347,41 @@ Health check state is visible via `GET /metrics` (Prometheus) and the `server_me
 
 ---
 
-## Implementation plan
+## Implementation status (v17.36.0)
 
-The following pieces need to be built or extended for full config-driven operation:
+### ✅ Phase 1 — Config schema + route table
+- `src/proxy_config/mod.rs` — all config types: `ProxyConfig`, `UpstreamConfig`, `RouteConfig`, `ActionConfig`, `MiddlewareConfig`, `HealthCheckConfig`, `RewriteRuleConfig`, etc.
+- `src/proxy_config/parser.rs` — hand-rolled TOML parser (`SectionMap`); handles `[[arrays]]`, `[sub-tables]`, inline tables, and arrays of values
+- `src/proxy_config/builder.rs` — `build_from_file()` / `build()` wires parsed config into a live `ConfigDrivenApp`
+- `ConfigDrivenApp` — first-match router over `Arc<Vec<CompiledRoute>>`; implements `Application + Clone`
+- `ProxyConfig::is_proxy_mode()` — detects `[[route]]` / `[[upstream]]` in `rws.config.toml`; `main()` checks this at startup for all three feature targets (http1 / http2 / http3)
+
+### ✅ Phase 2 — Backend health checks
+- `src/proxy_config/health.rs` — `start_health_checker()` spawns a daemon thread per upstream; tracks per-backend consecutive successes/failures; updates `Arc<RwLock<Vec<String>>>` live-backend list
+- `DynamicProxy` reads from the same `Arc<RwLock<…>>` for zero-copy health-aware round-robin
+
+### ⏳ Phase 3 — Load balancing strategies
+- `round_robin` implemented (default); `least_conn`, `ip_hash`, `random` are parsed but fall back to round-robin
+
+### ⏳ Phase 4 — Upstream TLS
+- `https://` scheme stripped in health-check parser but TLS client handshake not yet implemented for proxy forwarding; connections use plain HTTP/1.1
+
+### ✅ Phase 5 — Config-driven TCP/UDP/WS proxies
+- `[[tcp_proxy]]`, `[[udp_proxy]]`, `[[ws_proxy]]` sections spawn dedicated threads via `TcpProxy::bind()`, `UdpProxy::bind()`, `WsProxy::bind()`
+
+### ⏳ Phase 6 — Per-route auth from config
+- `bearer` auth via `BearerAuthMiddleware` ✅
+- `jwt` auth is a no-op placeholder (requires `auth` feature future wiring) ⏳
+- `basic` auth with htpasswd file not yet implemented ⏳
+
+### ⏳ Phase 7 — Static site action
+- `type = "static"` falls through to built-in `App` (which serves from the working directory); `root` / `directory_listing` config fields not yet honored
+
+---
+
+## Original implementation plan
+
+The following captures the original design intent for reference:
 
 ### Phase 1 — Config schema + route table (highest value)
 1. Extend `src/entry_point/mod.rs` to parse `[[upstream]]`, `[[route]]`, `[[tcp_proxy]]`, `[[udp_proxy]]`, `[[ws_proxy]]` from `rws.config.toml`.

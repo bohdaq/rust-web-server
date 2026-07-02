@@ -1,8 +1,8 @@
 # rws
 
-An HTTP web framework and server for Rust supporting HTTP/1.1, HTTP/2, and HTTP/3. No third-party HTTP dependencies — parsing, routing, middleware, auth, WebSocket, SSE, caching, and tracing are all built in.
+An HTTP web framework, reverse proxy, and server for Rust supporting HTTP/1.1, HTTP/2, and HTTP/3. No third-party HTTP dependencies — parsing, routing, middleware, auth, WebSocket, SSE, caching, tracing, and MCP server are all built in.
 
-Use it as a ready-to-run binary **or** pull it in as a library crate to get battle-tested building blocks — request/response parsing, routing, middleware, JSON, sessions, auth, SSE — without taking on a full async framework.
+Use it as a **config-driven proxy server** (drop an `rws.config.toml` with `[[route]]` and `[[upstream]]` sections — no code required), as a **ready-to-run static file server**, or pull it in as a **library crate** to get battle-tested building blocks — request/response parsing, routing, middleware, JSON, sessions, auth, SSE — without taking on a full async framework.
 
 ## Install
 
@@ -46,6 +46,51 @@ rws --ip=0.0.0.0 --port=443 --tls-cert-file=cert.pem --tls-key-file=key.pem
 ```
 
 See [CONFIGURE](CONFIGURE.md) for all configuration options (env vars, config file, command-line flags).
+
+### Config-driven proxy server
+
+Drop an `rws.config.toml` in the working directory with `[[route]]` and `[[upstream]]` blocks and `rws` starts as a full reverse proxy — no code required:
+
+```toml
+[[upstream]]
+name     = "api"
+backends = ["10.0.0.10:8080", "10.0.0.11:8080"]
+
+  [upstream.health_check]
+  path             = "/healthz"
+  interval_secs    = 10
+  timeout_ms       = 2000
+  healthy_threshold   = 2
+  unhealthy_threshold = 3
+
+[[route]]
+name = "api-proxy"
+
+  [route.match]
+  host = "api.example.com"
+  path = "/v1/*"
+
+  [route.action]
+  type     = "proxy"
+  upstream = "api"
+
+  [route.middleware]
+  rate_limit = { max_requests = 500, window_secs = 60 }
+  auth       = { type = "bearer", token_env = "API_TOKEN" }
+
+[[route]]
+name = "catch-all"
+
+  [route.match]
+  path = "/*"
+
+  [route.action]
+  type   = "respond"
+  status = 404
+  body   = "Not Found"
+```
+
+See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full annotated config reference.
 
 ## Build from source
 
@@ -127,6 +172,7 @@ cargo build --release --no-default-features --features http1
 - In-process test client — `TestClient` dispatches requests without a TCP socket
 - HTML template engine — `TeraEngine` (`tera` feature) wraps the [Tera](https://keats.github.io/tera/) crate; Jinja2/Django syntax — variables, loops, conditionals, inheritance, filters, macros; global singleton via `template::init(dir)`; `template::render(name, &ctx)` returns a `200 OK` HTML response
 - Typed config binding — `#[derive(Config)]` (`macros` feature) generates `load() -> Result<Self, String>` that reads env vars into strongly-typed structs; `#[config(env = "KEY", default = "v")]` per field; `Option<T>` fields are optional; `FromEnvStr` trait supports custom types
+- Config-driven proxy server — drop `rws.config.toml` with `[[route]]` / `[[upstream]]` sections to run as a full reverse proxy with per-route middleware, health-checked backend pools, and L4/WS proxies; no code required
 
 ### Optional features
 

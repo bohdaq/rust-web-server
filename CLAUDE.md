@@ -190,6 +190,16 @@ When built with the `http3` feature (which implies `http2`), a second listener s
 - `src/udp_proxy/mod.rs` — `UdpProxy` standalone UDP datagram proxy; per-datagram thread model; ephemeral socket per datagram connects to the backend; `set_read_timeout()` controls reply wait; round-robin backend selection.
 - `src/ws_proxy/mod.rs` — `WsProxy` standalone WebSocket proxy; reads the HTTP upgrade request from the client, connects to the backend, exchanges upgrade handshake, then relays raw bytes bidirectionally in a two-thread loop.
 
+### Config-driven proxy server
+
+`src/proxy_config/` — turns `rws.config.toml` into a live proxy stack at startup; activated when the config file contains `[[route]]` or `[[upstream]]` sections.
+
+- `mod.rs` — all config types (`ProxyConfig`, `UpstreamConfig`, `RouteConfig`, `ActionConfig`, `MiddlewareConfig`, etc.); `ProxyConfig::is_proxy_mode()` scans the file; `ProxyConfig::load()` and `ProxyConfig::from_str()` parse it. `ConfigDrivenApp { routes: Arc<Vec<CompiledRoute>>, fallback: App }` implements `Application + Clone` (first-match router). `RouteMatcher` evaluates host, path prefix/exact, method, content-type prefix. `DynamicProxy` picks a live backend from `Arc<RwLock<Vec<String>>>` with an atomic round-robin counter. `RedirectAdapter` and `RespondAdapter` handle redirect/fixed-response actions. `PerRouteRateLimit` and `BearerAuthMiddleware` implement `Middleware`.
+- `parser.rs` — hand-rolled TOML parser producing `SectionMap` (`HashMap<String, Vec<(String, String)>>`). Tracks `[[array]]` tables with counters (`upstream[0]`, `route[0].match`), expands inline tables and arrays of strings.
+- `health.rs` — `start_health_checker()` spawns a daemon thread per upstream; sends `GET {path} HTTP/1.1` with connect+read timeouts, tracks consecutive pass/fail, writes updated live-backend list via `RwLock`.
+- `builder.rs` — `build_from_file()` / `build(config)`: creates upstream live-backend pools, starts health-checker threads, compiles routes (applies middleware stack via `apply_middleware()`), spawns L4/WS proxy threads. `ArcApp` adapter wraps `Arc<dyn Application>` so `WithMiddleware::new()` can take ownership.
+- `main()` (all three feature variants) checks `ProxyConfig::is_proxy_mode()` before calling `build_app()`; if true, calls `build_from_file()` and passes the resulting `ConfigDrivenApp` to `Server::run` / `run_tls` / `run_quic`.
+
 ### Rewrite middleware
 
 - `src/rewrite/mod.rs` — `RewriteLayer` implements `Middleware`; clones `Request` and applies `RequestRule` variants (header set/remove, URI set/strip-prefix/add-prefix) before dispatch, then applies `ResponseRule` variants (header set/remove, status override, body byte find-and-replace) on the way back. Private `replace_bytes()` does linear non-overlapping scan.

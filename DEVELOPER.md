@@ -134,6 +134,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Scheduler` / `CronSchedule` | `scheduler` | `@Scheduled`-equivalent background task runner. Three modes: `.every(Duration, fn)` (fixed rate), `.after(Duration, fn)` (fixed delay), `.cron("sec min hour day month weekday", fn)`. Full cron syntax: `*`, exact, `*/step`, `N-M`, comma list. |
 | `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. |
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
+| `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware round-robin proxying. |
 
 ---
 
@@ -2297,3 +2298,110 @@ let port: u16 = load_with_default("APP_PORT", "8080")?;
 let db: String = load_required("DATABASE_URL")?;
 let debug: Option<bool> = load_optional("APP_DEBUG")?;
 ```
+
+### 52. Config-driven proxy server
+
+When `rws.config.toml` contains `[[route]]` or `[[upstream]]` sections, `rws` starts as a full reverse proxy — no Rust code required.
+
+**Detect proxy mode and build the app**
+
+```rust
+// main.rs — already wired automatically in the binary.
+// To use programmatically:
+if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
+    let (app, _handles) = rust_web_server::proxy_config::build_from_file();
+    // `app` implements Application + Clone; pass to Server::run / run_tls / run_quic
+}
+```
+
+**Minimal `rws.config.toml`**
+
+```toml
+[[upstream]]
+name     = "backend"
+backends = ["10.0.0.10:8080", "10.0.0.11:8080"]
+
+  [upstream.health_check]
+  path                = "/healthz"
+  interval_secs       = 10
+  timeout_ms          = 2000
+  healthy_threshold   = 2
+  unhealthy_threshold = 3
+
+[[route]]
+name = "api"
+
+  [route.match]
+  path = "/api/*"
+
+  [route.action]
+  type     = "proxy"
+  upstream = "backend"
+
+  [route.middleware]
+  rate_limit = { max_requests = 200, window_secs = 60 }
+
+    [[route.middleware.rewrite.request]]
+    type  = "header_set"
+    name  = "X-Forwarded-Host"
+    value = "api.example.com"
+
+[[route]]
+name = "catch-all"
+
+  [route.match]
+  path = "/*"
+
+  [route.action]
+  type   = "respond"
+  status = 404
+  body   = "Not Found"
+```
+
+**Action types**
+
+| `type` | Behaviour |
+|---|---|
+| `proxy` | Forward to a named `[[upstream]]` pool over HTTP/1.1 |
+| `grpc` | Forward over HTTP/2 (`Content-Type: application/grpc*`) |
+| `static` | Built-in static file controller |
+| `redirect` | 301/302 with a `Location` header; `$path` interpolated |
+| `respond` | Fixed status + body (catch-all 404, maintenance page) |
+| `mcp` | Built-in MCP Streamable HTTP server |
+
+**Per-route middleware keys**
+
+| Key | Example |
+|---|---|
+| `rate_limit` | `{ max_requests = 500, window_secs = 60 }` |
+| `cache` | `{ ttl_secs = 3600, vary_by = ["Accept-Encoding"] }` |
+| `auth` | `{ type = "bearer", token_env = "API_TOKEN" }` |
+| `ip_allow` / `ip_deny` | `["192.168.1.0/24", "10.0.0.1"]` |
+| `rewrite.request[]` | `[{ type = "header_set", name = "X-Real-IP", value = "$client_ip" }]` |
+| `rewrite.response[]` | `[{ type = "header_remove", name = "Server" }]` |
+
+**L4 proxies (separate listeners, spawned from config)**
+
+```toml
+[[tcp_proxy]]
+name               = "postgres"
+listen             = "0.0.0.0:5432"
+backends           = ["db1:5432", "db2:5432"]
+connect_timeout_ms = 500
+
+[[udp_proxy]]
+name             = "dns"
+listen           = "0.0.0.0:53"
+backends         = ["8.8.8.8:53", "1.1.1.1:53"]
+reply_timeout_ms = 2000
+buffer_size      = 8192
+
+[[ws_proxy]]
+name               = "chat"
+listen             = "0.0.0.0:9000"
+backends           = ["ws-backend:8080"]
+connect_timeout_ms = 500
+read_timeout_ms    = 30000
+```
+
+See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full annotated config reference.
