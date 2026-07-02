@@ -346,6 +346,612 @@ content_type = "text/plain"
     assert_eq!(body, b"first");
 }
 
+// ── RouteMatcher: content-type prefix ─────────────────────────────────────────
+
+#[test]
+fn route_matcher_content_type_prefix_matches() {
+    let matcher = RouteMatcher::from_match_config(&MatchConfig {
+        content_type: Some("application/grpc*".to_string()),
+        ..Default::default()
+    });
+    let conn = make_conn("127.0.0.1");
+
+    // Matching prefix
+    let mut req = make_request("POST", "/");
+    req.headers.push(crate::header::Header {
+        name: "Content-Type".to_string(),
+        value: "application/grpc+proto".to_string(),
+    });
+    assert!(matcher.matches(&req, &conn));
+
+    // Non-matching content-type
+    let mut req2 = make_request("POST", "/");
+    req2.headers.push(crate::header::Header {
+        name: "Content-Type".to_string(),
+        value: "application/json".to_string(),
+    });
+    assert!(!matcher.matches(&req2, &conn));
+
+    // No content-type header at all
+    assert!(!matcher.matches(&make_request("POST", "/"), &conn));
+}
+
+#[test]
+fn route_matcher_sni_hostname() {
+    let matcher = RouteMatcher::from_match_config(&MatchConfig {
+        host: Some("api.example.com".to_string()),
+        ..Default::default()
+    });
+
+    // SNI hostname matches (conn-level, no Host header required)
+    let mut conn = make_conn("127.0.0.1");
+    conn.sni_hostname = Some("api.example.com".to_string());
+    assert!(matcher.matches(&make_request("GET", "/"), &conn));
+
+    // SNI mismatch
+    conn.sni_hostname = Some("www.example.com".to_string());
+    assert!(!matcher.matches(&make_request("GET", "/"), &conn));
+
+    // No SNI, no Host header → no match
+    conn.sni_hostname = None;
+    assert!(!matcher.matches(&make_request("GET", "/"), &conn));
+}
+
+#[test]
+fn route_matcher_host_and_path_both_required() {
+    let matcher = RouteMatcher::from_match_config(&MatchConfig {
+        host: Some("example.com".to_string()),
+        path: Some("/api/*".to_string()),
+        ..Default::default()
+    });
+    let conn = make_conn("127.0.0.1");
+
+    let mut req_right_host = make_request("GET", "/api/users");
+    req_right_host.headers.push(crate::header::Header {
+        name: "Host".to_string(),
+        value: "example.com".to_string(),
+    });
+    // Both host and path match → matches
+    assert!(matcher.matches(&req_right_host, &conn));
+
+    // Wrong host, correct path → no match
+    let mut req_wrong_host = make_request("GET", "/api/users");
+    req_wrong_host.headers.push(crate::header::Header {
+        name: "Host".to_string(),
+        value: "other.com".to_string(),
+    });
+    assert!(!matcher.matches(&req_wrong_host, &conn));
+
+    // Correct host, wrong path → no match
+    let mut req_wrong_path = make_request("GET", "/other");
+    req_wrong_path.headers.push(crate::header::Header {
+        name: "Host".to_string(),
+        value: "example.com".to_string(),
+    });
+    assert!(!matcher.matches(&req_wrong_path, &conn));
+}
+
+#[test]
+fn route_matcher_method_case_insensitive() {
+    let matcher = RouteMatcher::from_match_config(&MatchConfig {
+        method: Some("POST".to_string()),
+        ..Default::default()
+    });
+    let conn = make_conn("127.0.0.1");
+    // Lower-case method from the request should still match
+    assert!(matcher.matches(&make_request("post", "/any"), &conn));
+    assert!(!matcher.matches(&make_request("get", "/any"), &conn));
+}
+
+// ── Parser: L4 proxy sections ──────────────────────────────────────────────────
+
+#[test]
+fn from_str_parses_tcp_proxy() {
+    let cfg = ProxyConfig::from_str(r#"
+[[tcp_proxy]]
+name = "pg"
+listen = "0.0.0.0:5432"
+backends = ["db1:5432", "db2:5432"]
+connect_timeout_ms = 1000
+"#);
+    assert_eq!(cfg.tcp_proxies.len(), 1);
+    let tcp = &cfg.tcp_proxies[0];
+    assert_eq!(tcp.name, "pg");
+    assert_eq!(tcp.listen, "0.0.0.0:5432");
+    assert_eq!(tcp.backends, vec!["db1:5432", "db2:5432"]);
+    assert_eq!(tcp.connect_timeout_ms, 1000);
+}
+
+#[test]
+fn from_str_parses_udp_proxy() {
+    let cfg = ProxyConfig::from_str(r#"
+[[udp_proxy]]
+name = "dns"
+listen = "0.0.0.0:53"
+backends = ["8.8.8.8:53"]
+reply_timeout_ms = 2000
+buffer_size = 4096
+"#);
+    assert_eq!(cfg.udp_proxies.len(), 1);
+    let udp = &cfg.udp_proxies[0];
+    assert_eq!(udp.name, "dns");
+    assert_eq!(udp.listen, "0.0.0.0:53");
+    assert_eq!(udp.backends, vec!["8.8.8.8:53"]);
+    assert_eq!(udp.reply_timeout_ms, 2000);
+    assert_eq!(udp.buffer_size, 4096);
+}
+
+#[test]
+fn from_str_parses_ws_proxy() {
+    let cfg = ProxyConfig::from_str(r#"
+[[ws_proxy]]
+name = "chat"
+listen = "0.0.0.0:9000"
+backends = ["ws1:8080", "ws2:8080"]
+connect_timeout_ms = 500
+read_timeout_ms = 30000
+"#);
+    assert_eq!(cfg.ws_proxies.len(), 1);
+    let ws = &cfg.ws_proxies[0];
+    assert_eq!(ws.name, "chat");
+    assert_eq!(ws.backends, vec!["ws1:8080", "ws2:8080"]);
+    assert_eq!(ws.connect_timeout_ms, 500);
+    assert_eq!(ws.read_timeout_ms, 30000);
+}
+
+// ── Parser: middleware fields ──────────────────────────────────────────────────
+
+#[test]
+fn from_str_parses_cache_middleware() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "cached"
+
+[route.match]
+path = "/static/*"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "ok"
+content_type = "text/plain"
+
+[route.middleware.cache]
+ttl_secs = 3600
+vary_by = ["Accept-Encoding", "Accept-Language"]
+"#);
+    let cache = cfg.routes[0].middleware.cache.as_ref().unwrap();
+    assert_eq!(cache.ttl_secs, 3600);
+    assert_eq!(cache.vary_by, vec!["Accept-Encoding", "Accept-Language"]);
+}
+
+#[test]
+fn from_str_parses_bearer_auth() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "protected"
+
+[route.match]
+path = "/secret"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "secret data"
+content_type = "text/plain"
+
+[route.middleware.auth]
+type = "bearer"
+token_env = "MY_API_TOKEN"
+"#);
+    match cfg.routes[0].middleware.auth.as_ref().unwrap() {
+        crate::proxy_config::AuthConfig::Bearer { token_env } => {
+            assert_eq!(token_env, "MY_API_TOKEN");
+        }
+        other => panic!("expected Bearer, got {:?}", other),
+    }
+}
+
+#[test]
+fn from_str_parses_rewrite_request_rules() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "rewrite"
+
+[route.match]
+path = "/api/*"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "ok"
+content_type = "text/plain"
+
+[[route.middleware.rewrite.request]]
+type = "header_set"
+name = "X-Forwarded-Host"
+value = "api.example.com"
+
+[[route.middleware.rewrite.request]]
+type = "uri_strip_prefix"
+prefix = "/api"
+"#);
+    let rules = &cfg.routes[0].middleware.rewrite_request;
+    assert_eq!(rules.len(), 2);
+    assert_eq!(rules[0].type_, "header_set");
+    assert_eq!(rules[0].name.as_deref(), Some("X-Forwarded-Host"));
+    assert_eq!(rules[0].value.as_deref(), Some("api.example.com"));
+    assert_eq!(rules[1].type_, "uri_strip_prefix");
+    assert_eq!(rules[1].prefix.as_deref(), Some("/api"));
+}
+
+#[test]
+fn from_str_parses_rewrite_response_rules() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "secure"
+
+[route.match]
+path = "/*"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "ok"
+content_type = "text/plain"
+
+[[route.middleware.rewrite.response]]
+type = "header_set"
+name = "X-Frame-Options"
+value = "DENY"
+
+[[route.middleware.rewrite.response]]
+type = "header_remove"
+name = "Server"
+"#);
+    let rules = &cfg.routes[0].middleware.rewrite_response;
+    assert_eq!(rules.len(), 2);
+    assert_eq!(rules[0].type_, "header_set");
+    assert_eq!(rules[0].name.as_deref(), Some("X-Frame-Options"));
+    assert_eq!(rules[0].value.as_deref(), Some("DENY"));
+    assert_eq!(rules[1].type_, "header_remove");
+    assert_eq!(rules[1].name.as_deref(), Some("Server"));
+}
+
+#[test]
+fn from_str_parses_ip_filter() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "internal"
+
+[route.match]
+path = "/admin/*"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "admin"
+content_type = "text/plain"
+
+[route.middleware.ip_filter]
+allow = ["10.0.0.0/8", "192.168.1.1"]
+"#);
+    let mw = &cfg.routes[0].middleware;
+    assert_eq!(mw.ip_allow, vec!["10.0.0.0/8", "192.168.1.1"]);
+    assert!(mw.ip_deny.is_empty());
+}
+
+#[test]
+fn from_str_parses_redirect_302() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "temp-redirect"
+
+[route.match]
+path = "/moved"
+
+[route.action]
+type = "redirect"
+
+[route.action.redirect]
+location = "https://example.com/new"
+status = 302
+"#);
+    match &cfg.routes[0].action {
+        ActionConfig::Redirect { location, status } => {
+            assert_eq!(location, "https://example.com/new");
+            assert_eq!(*status, 302);
+        }
+        other => panic!("expected Redirect, got {:?}", other),
+    }
+}
+
+// ── ConfigDrivenApp / builder middleware tests ─────────────────────────────────
+
+#[test]
+fn respond_action_sets_content_type_header() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "json-resp"
+
+[route.match]
+path = "/data"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "{\"ok\":true}"
+content_type = "application/json"
+"#);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    let resp = app.execute(&make_request("GET", "/data"), &conn).unwrap();
+    assert_eq!(resp.status_code, 200);
+    // Body is inside content_range_list[0]
+    let ct = &resp.content_range_list[0].content_type;
+    assert!(ct.contains("application/json"), "expected application/json, got {ct}");
+}
+
+#[test]
+fn redirect_action_substitutes_dollar_path() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "path-redirect"
+
+[route.match]
+path = "/*"
+
+[route.action]
+type = "redirect"
+
+[route.action.redirect]
+location = "https://new.example.com$path"
+status = 301
+"#);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    let resp = app.execute(&make_request("GET", "/about"), &conn).unwrap();
+    assert_eq!(resp.status_code, 301);
+    let location = resp.headers.iter().find(|h| h.name == "Location").map(|h| h.value.as_str()).unwrap_or("");
+    assert_eq!(location, "https://new.example.com/about");
+}
+
+#[test]
+fn rate_limit_middleware_returns_429_after_limit() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "limited"
+
+[route.match]
+path = "/limited"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "ok"
+content_type = "text/plain"
+
+[route.middleware.rate_limit]
+max_requests = 1
+window_secs = 60
+"#);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("10.77.77.77");
+    let req = make_request("GET", "/limited");
+
+    // First request: within budget → 200
+    let r1 = app.execute(&req, &conn).unwrap();
+    assert_eq!(r1.status_code, 200, "first request should pass");
+
+    // Second request: over limit → 429
+    let r2 = app.execute(&req, &conn).unwrap();
+    assert_eq!(r2.status_code, 429, "second request should be rate-limited");
+}
+
+#[test]
+fn bearer_auth_returns_401_without_authorization_header() {
+    std::env::set_var("RWSTEST_PROXY_BEARER_A", "supersecret");
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "protected"
+
+[route.match]
+path = "/secret"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "secret"
+content_type = "text/plain"
+
+[route.middleware.auth]
+type = "bearer"
+token_env = "RWSTEST_PROXY_BEARER_A"
+"#);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    let resp = app.execute(&make_request("GET", "/secret"), &conn).unwrap();
+    assert_eq!(resp.status_code, 401);
+}
+
+#[test]
+fn bearer_auth_returns_401_with_wrong_token() {
+    std::env::set_var("RWSTEST_PROXY_BEARER_B", "correct-token");
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "protected"
+
+[route.match]
+path = "/secret"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "secret"
+content_type = "text/plain"
+
+[route.middleware.auth]
+type = "bearer"
+token_env = "RWSTEST_PROXY_BEARER_B"
+"#);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    let mut req = make_request("GET", "/secret");
+    req.headers.push(crate::header::Header {
+        name: "Authorization".to_string(),
+        value: "Bearer wrong-token".to_string(),
+    });
+    let resp = app.execute(&req, &conn).unwrap();
+    assert_eq!(resp.status_code, 401);
+}
+
+#[test]
+fn bearer_auth_passes_with_correct_token() {
+    std::env::set_var("RWSTEST_PROXY_BEARER_C", "my-valid-token");
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "protected"
+
+[route.match]
+path = "/secret"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "secret"
+content_type = "text/plain"
+
+[route.middleware.auth]
+type = "bearer"
+token_env = "RWSTEST_PROXY_BEARER_C"
+"#);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    let mut req = make_request("GET", "/secret");
+    req.headers.push(crate::header::Header {
+        name: "Authorization".to_string(),
+        value: "Bearer my-valid-token".to_string(),
+    });
+    let resp = app.execute(&req, &conn).unwrap();
+    assert_eq!(resp.status_code, 200);
+}
+
+#[test]
+fn ip_allow_filter_blocks_ip_not_in_allowlist() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "internal"
+
+[route.match]
+path = "/admin"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "admin"
+content_type = "text/plain"
+
+[route.middleware.ip_filter]
+allow = ["192.168.1.0/24"]
+"#);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+
+    // IP outside the allowed range → 403
+    let outside = make_conn("10.0.0.1");
+    let resp = app.execute(&make_request("GET", "/admin"), &outside).unwrap();
+    assert_eq!(resp.status_code, 403);
+
+    // IP inside the allowed range → 200
+    let inside = make_conn("192.168.1.55");
+    let resp2 = app.execute(&make_request("GET", "/admin"), &inside).unwrap();
+    assert_eq!(resp2.status_code, 200);
+}
+
+#[test]
+fn ip_deny_filter_blocks_listed_ip() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "open-but-blocked"
+
+[route.match]
+path = "/page"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "hello"
+content_type = "text/plain"
+
+[route.middleware.ip_filter]
+deny = ["10.0.0.5"]
+"#);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+
+    // Denied IP → 403
+    let blocked = make_conn("10.0.0.5");
+    let resp = app.execute(&make_request("GET", "/page"), &blocked).unwrap();
+    assert_eq!(resp.status_code, 403);
+
+    // Non-denied IP → 200
+    let allowed = make_conn("10.0.0.6");
+    let resp2 = app.execute(&make_request("GET", "/page"), &allowed).unwrap();
+    assert_eq!(resp2.status_code, 200);
+}
+
+#[test]
+fn rewrite_response_header_injected() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "secure-headers"
+
+[route.match]
+path = "/page"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "hello"
+content_type = "text/plain"
+
+[[route.middleware.rewrite.response]]
+type = "header_set"
+name = "X-Frame-Options"
+value = "DENY"
+"#);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    let resp = app.execute(&make_request("GET", "/page"), &conn).unwrap();
+    assert_eq!(resp.status_code, 200);
+    let xfo = resp.headers.iter().find(|h| h.name.eq_ignore_ascii_case("X-Frame-Options")).map(|h| h.value.as_str()).unwrap_or("");
+    assert_eq!(xfo, "DENY");
+}
+
 // ── is_proxy_mode tests ────────────────────────────────────────────────────────
 
 #[test]
