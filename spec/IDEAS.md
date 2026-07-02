@@ -2,230 +2,256 @@
 
 # Ideas
 
-Implementation hints and recommendations for evolving `rust-web-server` toward framework-level usability. Items follow the priority order from [FRAMEWORK_ROADMAP.md](FRAMEWORK_ROADMAP.md).
+Forward-looking ideas for evolving `rust-web-server`. All items from the original roadmap ([FRAMEWORK_ROADMAP.md](FRAMEWORK_ROADMAP.md)) are now complete. This file captures what comes next.
 
 ---
 
-## Start here: the quick wins
+## Status: foundation is done
 
-### Merge duplicate dispatch
+Every item from the original 2023–2024 ideas list is shipped:
 
-`App::execute` and `App::handle_request` are identical if/else chains over the same controllers. Before touching anything else, remove `handle_request` and route tests through `execute` directly. This reduces every subsequent change from two edits to one.
+| Original idea | Shipped |
+|---|---|
+| Merge duplicate dispatch | v17.6.0 |
+| `ConnectionInfo` → `SocketAddr` helpers | v17.8.0 |
+| Shared state (`Arc<S>` in `App`) | v17.9.0 |
+| Dynamic routing (`:param`, `*wildcard`) | v17.9.0 |
+| Middleware pipeline | v17.9.0 |
+| HTTP/1.1 keep-alive | v17.4.0 |
+| Async handlers | v17.11.0 |
+| Typed request extractors (`FromRequest`) | v17.7.0 |
+| Typed error handling (`IntoResponse`) | v17.6.0 |
+| Streaming responses / chunked transfer | v17.4.0 |
 
-### `ConnectionInfo` → `SocketAddr`
-
-Replace `client: Address` / `server: Address` (String + i32 fields) with `std::net::SocketAddr`. It is already available everywhere — `TcpListener::accept()` returns it. One afternoon of refactoring with a clear before/after and no design decisions.
-
----
-
-## 1. Shared state
-
-Remove `Copy` from `App` and add a generic state parameter:
-
-```rust
-pub struct App<S = ()> {
-    state: Arc<S>,
-}
-```
-
-State must be `Send + Sync + 'static`. Pass `Arc<S>` into `Application::execute` alongside the request. Everything else — routing, middleware, extractors — builds on top of this. Do not add those before state works.
-
-**Thread-safety note:** `Arc<T>` is read-only sharing. For mutable shared state use `Arc<Mutex<T>>` or `Arc<RwLock<T>>`. Prefer `RwLock` for read-heavy data (connection pools, config).
+What follows are the ideas worth building next, ordered by impact.
 
 ---
 
-## 2. Dynamic routing
+## 1. Database layer
 
-Do not write a router from scratch. The [`matchit`](https://crates.io/crates/matchit) crate is a radix-trie router used by axum. It is tiny, has no dependencies, and handles `:param` and `*wildcard` segments.
+The only item still marked ❌ in [LIKE_SPRING.md](LIKE_SPRING.md). Without it, any real application stores state in `Arc<Mutex<HashMap>>` and works around the missing piece manually.
+
+`sqlx` is the right choice: async, compile-time query checking, no ORM overhead, supports PostgreSQL, MySQL, and SQLite. The integration point is `App::with_async_state(pool)` — pass a `sqlx::PgPool` as state and `await` queries inside `async fn` handlers.
 
 ```toml
-# Cargo.toml
-matchit = "0.8"
+# Cargo.toml — gated behind a new feature flag so non-DB users pay nothing
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "tls-rustls"], optional = true }
 ```
 
-```rust
-let mut router: matchit::Router<Box<dyn Handler>> = matchit::Router::new();
-router.insert("/users/:id", Box::new(UserController::show))?;
+What to add:
+- `src/db/mod.rs` — re-export `sqlx` pool types and a `DbError → AppError` adapter
+- `features = ["db-postgres"]`, `["db-sqlite"]`, `["db-mysql"]` feature flags
+- Use case example in DEVELOPER.md: `AsyncAppWithState<PgPool>` with a live query
+- A `TestDb` helper for integration tests that spins up a SQLite in-memory pool
 
-// in dispatch:
-let matched = router.at(request.request_uri.as_str())?;
-let id = matched.params.get("id").unwrap();
-matched.value.handle(&request, id, &state)
-```
-
-Build one router per HTTP method (`GET`, `POST`, etc.) stored in a `HashMap<Method, matchit::Router<…>>`. The existing if/else chain in `App::execute` can remain as a fallback for built-in controllers while routes are migrated over incrementally.
+This is the highest-value addition. Nearly every serious application needs it, and right now there is no path at all.
 
 ---
 
-## 3. Middleware
+## 2. Upstream TLS for the config-driven proxy
 
-Tower's `Service`/`Layer` is the gold standard but has a steep learning curve. For a first pass, a simple ordered `Vec` is sufficient and composable:
+Phase 4 of [PROXY_SERVER_CONFIG.md](PROXY_SERVER_CONFIG.md). The `ConfigDrivenApp` / `DynamicProxy` currently speaks plain HTTP to backends. TLS upstreams (`https://` in `backends = [...]`) are silently treated as HTTP/1.1 plain text.
 
-```rust
-pub trait Middleware: Send + Sync {
-    fn handle(&self, req: &Request, next: &dyn Fn(&Request) -> Response) -> Response;
-}
-
-pub struct App<S> {
-    state: Arc<S>,
-    middleware: Vec<Arc<dyn Middleware>>,
-    router: Router<S>,
-}
-```
-
-Dispatch walks the `Vec`. Each middleware calls `next` to continue, or short-circuits by returning a response directly — an `AuthMiddleware` returns 401 without calling `next`. Upgrade to Tower later when ecosystem interop is needed.
-
----
-
-## 4. HTTP/1.1 keep-alive
-
-After writing a response in `Server::process`, check the `Connection` header. HTTP/1.1 is persistent by default — loop back and read the next request on the same stream unless `Connection: close` was sent. Add a per-idle-request timeout so stalled clients do not hold threads indefinitely:
-
-```rust
-loop {
-    stream.set_read_timeout(Some(Duration::from_secs(30)))?;
-    let request = match read_request(&mut stream) {
-        Ok(r)  => r,
-        Err(_) => break,  // timeout or client closed
-    };
-    let keep_alive = should_keep_alive(&request);
-    let response = app.execute(&request, &connection)?;
-    write_response(&mut stream, response)?;
-    if !keep_alive { break; }
-}
-```
-
----
-
-## 5. Async handlers
-
-The thread pool (`Server::run`) and the TLS async path (`Server::run_tls`) are two code paths with different concurrency models. Carrying everything on tokio removes the 200-thread ceiling and lets handlers `await` database calls. The plain HTTP/1.1 and TLS paths then share the same handler code — only the stream type differs.
-
-```rust
-// replace the thread pool accept loop
-let listener = tokio::net::TcpListener::bind(addr).await?;
-loop {
-    let (stream, peer) = listener.accept().await?;
-    let app = app.clone();
-    tokio::spawn(async move {
-        handle_connection(stream, peer, app).await;
-    });
-}
-```
-
-Handler trait with async:
-
-```rust
-pub trait Handler<S>: Send + Sync {
-    fn call(&self, req: Request, state: Arc<S>) -> BoxFuture<'_, Response>;
-}
-```
-
----
-
-## 6. Typed request extractors
-
-Add `serde` and define a `FromRequest` trait. Handlers then receive typed values instead of a raw `&Request`.
+What to add in `src/proxy_config/`:
+- `upstream.tls` table in `rws.config.toml`:
 
 ```toml
-# Cargo.toml
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+[[upstream]]
+name = "secure-api"
+backends = ["internal-api:443"]
+
+  [upstream.tls]
+  verify = true            # verify backend cert against system roots
+  ca_file = "internal-ca.pem"  # optional custom CA
+  client_cert = "client.pem"   # optional mTLS client cert
+  client_key  = "client.key"
 ```
 
-```rust
-pub trait FromRequest: Sized {
-    type Error: IntoResponse;
-    fn from_request(req: &Request) -> Result<Self, Self::Error>;
-}
+- In `health.rs` / `builder.rs`, detect `https://` prefix or `upstream.tls` presence and wrap the TCP stream with `tokio-rustls` before sending the HTTP request
+- Reuse the existing `rustls` dep (already present in `http2` feature)
 
-pub struct Json<T>(pub T);
-
-impl<T: serde::de::DeserializeOwned> FromRequest for Json<T> {
-    type Error = Response;
-    fn from_request(req: &Request) -> Result<Self, Self::Error> {
-        serde_json::from_slice(&req.body)
-            .map(Json)
-            .map_err(|_| /* 400 response */ todo!())
-    }
-}
-```
-
-Implement the same pattern for `Query<T>` (URL query string via `serde_urlencoded`), `Path<T>` (router params), and `Form<T>` (URL-encoded body).
+Until this lands, the proxy cannot talk to any backend that enforces TLS — which includes all managed cloud services.
 
 ---
 
-## 7. Typed error handling
+## 3. Config-driven load balancing strategies
 
-Add an `IntoResponse` trait and change `Application::execute` to return `Result<Response, Box<dyn IntoResponse>>`. Application errors implement the trait and carry their own HTTP status code — the framework calls `.into_response()` on `Err` automatically.
+Phase 3 of [PROXY_SERVER_CONFIG.md](PROXY_SERVER_CONFIG.md). `DynamicProxy` today does round-robin only. Three more strategies cover most real-world needs:
 
-```rust
-pub trait IntoResponse {
-    fn into_response(self) -> Response;
-}
-
-impl IntoResponse for Response {
-    fn into_response(self) -> Response { self }
-}
-
-// application error example
-enum AppError {
-    NotFound(String),
-    Unauthorized,
-    Internal(Box<dyn std::error::Error>),
-}
-
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        match self {
-            AppError::NotFound(msg)  => /* 404 */ todo!(),
-            AppError::Unauthorized   => /* 401 */ todo!(),
-            AppError::Internal(_)    => /* 500 */ todo!(),
-        }
-    }
-}
+```toml
+[[upstream]]
+name = "api"
+backends = ["10.0.0.10:8080", "10.0.0.11:8080", "10.0.0.12:8080"]
+load_balancing = "least_connections"  # or "ip_hash" | "random" | "round_robin"
 ```
+
+| Strategy | Use case |
+|---|---|
+| `least_connections` | Long-lived connections (WebSocket, SSE) — routes new requests to the backend with the fewest active |
+| `ip_hash` | Session stickiness without a cookie — same client IP always hits the same backend |
+| `random` | Simplest possible distribution when backends are homogeneous and connections are short |
+
+Implementation in `src/proxy_config/mod.rs`:
+- Add `active_connections: Arc<Vec<AtomicUsize>>` alongside `backends` in `DynamicProxy`
+- `least_connections`: select minimum index, `fetch_add`/`fetch_sub` on dispatch / response
+- `ip_hash`: `hash(client_ip) % backend_count`, skip unhealthy entries
+- `random`: `rand` crate already in-tree? If not, use `SystemTime` as a cheap entropy source
 
 ---
 
-## 8. Streaming responses
+## 4. JWT and Basic auth from `rws.config.toml`
 
-Replace `ContentRange.body: Vec<u8>` with a `Body` enum so large files are not fully buffered before sending:
+Phase 6 of [PROXY_SERVER_CONFIG.md](PROXY_SERVER_CONFIG.md). Bearer token auth from config already works. JWT and htpasswd-file Basic auth are placeholders.
+
+```toml
+[route.middleware]
+auth = { type = "jwt", secret_env = "JWT_SECRET" }
+# or
+auth = { type = "basic", htpasswd_file = ".htpasswd" }
+```
+
+What to add:
+- In `apply_middleware()` in `builder.rs`, wire `"jwt"` arm to `JwtLayer` (already in `src/auth/`, gated on `auth` feature)
+- For `"basic"`, add a minimal htpasswd parser (MD5/SHA1/bcrypt hashed entries, one `user:hash` per line) — or delegate to `BasicAuthLayer` with a closure that reads the file at startup
+- Gate on `features = ["auth"]`; the config parser already reads the `type` field
+
+---
+
+## 5. Static site action in config proxy
+
+Phase 7 of [PROXY_SERVER_CONFIG.md](PROXY_SERVER_CONFIG.md). A `type = "static"` action would let the config-driven proxy serve a directory of files without falling through to the built-in `App`.
+
+```toml
+[[route]]
+name = "docs"
+
+  [route.match]
+  path = "/docs/*"
+
+  [route.action]
+  type = "static"
+  root = "/var/www/docs"
+  index = "index.html"
+  strip_prefix = "/docs"
+```
+
+Implementation: a `StaticAdapter` that wraps the existing file-serving logic in `App` (range requests, ETag, MIME types, gzip, 304 Not Modified are already correct). The only new piece is the `strip_prefix` option.
+
+This rounds out the three config-driven actions: `proxy`, `respond`, `redirect`, and now `static`.
+
+---
+
+## 6. Access log rotation
+
+`GAPS.md` lists this as an open gap. The server writes access logs to stdout, which works fine with container runtimes (Docker, Kubernetes) that handle log collection. But bare-metal and VM deployments need on-disk rotation.
+
+Two options:
+- **Sidecar model (recommended for containers):** document using `logrotate` + `SIGHUP` to reopen the file. The server already handles `SIGHUP` and could reopen a log file descriptor in `config_reload::reload()`.
+- **Built-in rotation:** add `RWS_CONFIG_ACCESS_LOG_FILE` and `RWS_CONFIG_ACCESS_LOG_MAX_MB` / `RWS_CONFIG_ACCESS_LOG_MAX_FILES`. A background thread rotates when the file exceeds the threshold.
+
+The sidecar model is simpler and keeps the binary smaller. The built-in model is self-contained and useful for embedded deployments. Either way, the config flag and the `reload()` hook for file descriptor reopening are the same.
+
+---
+
+## 7. Regex URI rewriting
+
+The `RewriteLayer` does literal prefix operations today. Production nginx configs are dominated by regex rewrites:
+
+```nginx
+rewrite ^/api/v1/(.*)$ /api/v2/$1 redirect;
+```
+
+Equivalent in `rws`:
 
 ```rust
-pub enum Body {
-    Bytes(Vec<u8>),
-    Stream(Box<dyn Read + Send>),
-    // after migrating to tokio:
-    // AsyncStream(Pin<Box<dyn AsyncRead + Send>>),
+.request_uri_rewrite(r"^/api/v1/(.*)", "/api/v2/$1")
+```
+
+Implementation in `src/rewrite/mod.rs`:
+- Add a `RequestRule::RewriteUri { pattern: Regex, replacement: String }` variant
+- Gate on a `regex` Cargo feature (adds the `regex` crate)
+- Capture group substitution: replace `$1`–`$9` in `replacement` with matched groups
+- Applied after `StripUriPrefix` in the request rule chain
+
+The `regex` crate is already used by several Rust HTTP frameworks; pinning to `"1"` keeps compile times acceptable.
+
+---
+
+## 8. Forward-auth middleware
+
+`GAPS.md` lists this under authentication: delegate auth decisions to an external HTTP service (Traefik's `ForwardAuth`, nginx `auth_request`).
+
+```rust
+let app = App::new()
+    .wrap(ForwardAuthLayer::new("http://auth.internal/verify")
+        .copy_header("X-User-Id")
+        .copy_header("X-Roles")
+        .timeout_ms(2000));
+```
+
+How it works:
+1. Clone the request headers, send a `GET` to the auth service with them
+2. `2xx` → continue; set any `copy_header` values from the auth response on the forwarded request
+3. `4xx` → return the auth service's response verbatim (preserves `WWW-Authenticate`, `Location` for OAuth redirects)
+
+Implementation: a new `ForwardAuthLayer` in `src/auth/mod.rs`; makes a plain HTTP/1.1 call to the auth endpoint (reuse the existing TCP connect logic from `ReverseProxy`). No new Cargo deps needed.
+
+---
+
+## 9. Multi-span distributed tracing
+
+`OtelLayer` creates one span per HTTP request. Handlers cannot create child spans today — useful for database queries, external HTTP calls, and expensive computation.
+
+```rust
+use rust_web_server::otel::{current_span, SpanBuilder};
+
+fn get_user(req: &Request, params: &PathParams, conn: &ConnectionInfo, state: &Db) -> Response {
+    let span = SpanBuilder::new("db.query")
+        .attribute("db.statement", "SELECT * FROM users WHERE id = ?")
+        .start();
+    let user = state.find_user(params.get("id").unwrap());
+    span.finish();
+    // ...
 }
 ```
 
-For HTTP/1.1, write the stream as `Transfer-Encoding: chunked`:
+What to add in `src/otel/`:
+- `thread_local!` active span stack; `SpanBuilder::start()` pushes onto it and sets `parentSpanId`
+- `Span::finish()` sets `endTimeUnixNano` and enqueues for export
+- `current_traceparent()` already exists — extend it to read from the span stack first
 
-```
-<hex-length>\r\n
-<chunk bytes>\r\n
-...
-0\r\n
-\r\n
-```
+This is a significant quality-of-life improvement for anyone debugging latency in production.
 
-For HTTP/2 and HTTP/3, the protocol frames data natively — feed chunks to the send stream incrementally.
+---
+
+## 10. Admin UI
+
+The server already exposes `/metrics`, `/healthz`, `/readyz`, and `POST /admin/config/reload`. Grouping these into a lightweight browser UI would complete the observability story for local development and small deployments.
+
+What to add:
+- `GET /admin` → an HTML page (embedded as a `&'static str` or using the `tera` feature) showing:
+  - Current config (`RWS_CONFIG_*` values)
+  - Live metrics (requests/sec, error rate, active connections)
+  - Rate limiter state per IP
+  - Reload button → `POST /admin/config/reload`
+- Gate behind `BasicAuthLayer` by default; configurable via `RWS_CONFIG_ADMIN_PASSWORD`
+- No JavaScript frameworks — plain HTML + CSS + a `<meta http-equiv="refresh">` for auto-update, or minimal vanilla JS polling `/metrics`
+
+The UI itself requires no new Cargo dependencies. The Prometheus text format from `/metrics` can be parsed client-side in under 30 lines of JavaScript.
 
 ---
 
 ## Recommended order
 
-| Step | What | Why first |
-|------|------|-----------|
-| 1 | Merge duplicate dispatch | Reduces work for every subsequent step |
-| 2 | `ConnectionInfo` → `SocketAddr` | Trivial; unblocks logging and rate-limiting |
-| 3 | Shared state (`Arc<S>` in `App`) | Everything else depends on this |
-| 4 | `matchit` router + path params | Unlocks real API routes |
-| 5 | `IntoResponse` + typed errors | Clean error handling before more routes are added |
-| 6 | HTTP/1.1 keep-alive | High impact, self-contained change |
-| 7 | Middleware `Vec` | Cross-cutting concerns, auth |
-| 8 | Unify on tokio | Async handlers, removes thread-pool ceiling |
-| 9 | `FromRequest` extractors | After routing and state are stable |
-| 10 | `Body::Stream` + chunked | After async path is in place |
+| Priority | Idea | Blocker for |
+|---|---|---|
+| 1 | Database layer (sqlx) | Every real application |
+| 2 | Upstream TLS for proxy | Cloud-native deployments |
+| 3 | Config-driven load balancing | Production traffic distribution |
+| 4 | JWT/Basic auth from config | Config-only auth stories |
+| 5 | Static site action in config proxy | Single-binary site serving |
+| 6 | Access log rotation | Bare-metal deployments |
+| 7 | Regex URI rewriting | Complex routing migrations |
+| 8 | Forward-auth middleware | OAuth/SSO integration |
+| 9 | Multi-span tracing | Production latency debugging |
+| 10 | Admin UI | Ops convenience |
