@@ -163,10 +163,10 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 
 - Config-driven proxy — `rws.config.toml` with `[[route]]` / `[[upstream]]`; per-route middleware
 - Reverse proxy middleware — `ReverseProxy`; round-robin; `502` when all backends fail; built-in `ConnPool` reuses keep-alive TCP streams
-- HTTP/2 reverse proxy — `H2ReverseProxy`; `GrpcProxy` wraps it for `Content-Type: application/grpc*`
+- HTTP/2 reverse proxy — `H2ReverseProxy` (`h2://`, `h2s://`, `https://`); `GrpcProxy` wraps it for `Content-Type: application/grpc*` (`grpc://`, `grpcs://`); TLS upstreams via rustls + ALPN `h2`
 - L4 TCP proxy — `TcpProxy` bidirectional relay, any TCP protocol (databases, legacy HTTP)
 - UDP proxy — `UdpProxy` datagram proxy; DNS / syslog style
-- WebSocket proxy — `WsProxy` performs the HTTP upgrade and relays frames bidirectionally
+- WebSocket proxy — `WsProxy` performs the HTTP upgrade and relays frames bidirectionally; `wss://` backends connect over TLS via rustls
 - Health checks — per-upstream background checker; live backend list via `Arc<RwLock<Vec<String>>>`
 - Canary / traffic splitting — `CanaryLayer` distributes requests by weight, lock-free
 - Circuit breaker — Closed → Open → HalfOpen; `RetryLayer` retries on 502/503/504

@@ -122,11 +122,11 @@ The crate exposes its core types so you can compose them in your own server or t
 | `TraceContext` | `otel` | Parsed W3C `traceparent` value. `TraceContext::parse(header)` / `ctx.as_header(span_id)`. |
 | `SpanData` | `otel` | A completed span ready for export. Contains trace/span/parent IDs, timing, HTTP attributes, and OTel status code. |
 | `StdoutExporter` / `OtlpHttpExporter` | `otel` | Built-in exporters. `OtlpHttpExporter::new(endpoint, service_name, service_version)` posts OTLP JSON. |
-| `H2ReverseProxy` | `proxy` | HTTP/2 upstream reverse proxy middleware. Round-robin backend selection; `h2://` scheme prefix supported. Requires `http2` feature. |
-| `GrpcProxy` | `proxy` | gRPC reverse proxy middleware — filters on `Content-Type: application/grpc*` and forwards over HTTP/2. Requires `http2` feature. |
+| `H2ReverseProxy` | `proxy` | HTTP/2 upstream reverse proxy middleware. `h2://` plain TCP, `h2s://`/`https://` TLS with ALPN `h2` (port defaults to 443). Requires `http2` feature. |
+| `GrpcProxy` | `proxy` | gRPC reverse proxy middleware — filters on `Content-Type: application/grpc*` and forwards over HTTP/2. `grpc://` plain, `grpcs://`/`https://` TLS. Requires `http2` feature. |
 | `TcpProxy` | `tcp_proxy` | Standalone L4 TCP proxy. Accepts connections on a local address and relays bytes bidirectionally to round-robin backends. |
 | `UdpProxy` | `udp_proxy` | Standalone UDP proxy (request-reply model). Forwards each datagram to a backend and returns the reply to the original client. |
-| `WsProxy` | `ws_proxy` | Standalone WebSocket proxy. Listens on a local address, upgrades client connections, and relays WebSocket frames bidirectionally to backends. |
+| `WsProxy` | `ws_proxy` | Standalone WebSocket proxy. `ws://` plain TCP (two-thread relay), `wss://` TLS (single-thread polling relay; `http-client` or `http2` feature). Port defaults to 80/443. |
 | `WeightedBackend` / `CanaryLayer` | `canary` | Weighted traffic-splitting proxy middleware; each backend has a `weight` — distribution is proportional. Useful for canary releases and A/B testing. |
 | `CircuitBreaker` | `circuit_breaker` | Per-backend circuit breaker (Closed→Open→HalfOpen state machine). `global()` returns a process-wide singleton. Configurable failure threshold and recovery window. |
 | `RetryLayer` | `circuit_breaker` | Middleware that retries requests on configurable status codes (default: 502, 503, 504) up to `max_retries` times. |
@@ -1882,15 +1882,25 @@ UdpProxy::new(["10.0.0.10:53", "10.0.0.11:53"])
 
 ### 41. WebSocket proxy
 
-`WsProxy` listens for HTTP upgrade requests, performs the WebSocket handshake with the client, connects to a backend, and relays frames bidirectionally in a two-thread relay loop.
+`WsProxy` listens for HTTP upgrade requests, performs the WebSocket handshake with the client, connects to a backend, and relays frames bidirectionally. Plain `ws://` backends use two threads; `wss://` backends use a single-thread polling relay (5 ms timeout) to avoid TLS stream-sharing deadlocks.
 
 ```rust
 use rust_web_server::ws_proxy::WsProxy;
 
-WsProxy::new(["ws-backend:8080"])
+// Plain TCP backends
+WsProxy::new(["ws://chat-backend:9000", "ws://chat-backend:9001"])
     .connect_timeout_ms(500)
     .read_timeout_ms(30_000)
-    .bind("0.0.0.0:9000")
+    .bind("0.0.0.0:8080")
+    .expect("WS proxy failed");
+
+// TLS backend — wss:// (requires http-client or http2 feature)
+WsProxy::new(["wss://chat.example.com"])   // port defaults to 443
+    .bind("0.0.0.0:8080")
+    .expect("WS proxy failed");
+
+WsProxy::new(["wss://chat.internal:8443"]) // explicit port
+    .bind("0.0.0.0:8080")
     .expect("WS proxy failed");
 ```
 
@@ -1900,7 +1910,12 @@ WsProxy::new(["ws-backend:8080"])
 
 ### 42. HTTP/2 reverse proxy
 
-`H2ReverseProxy` forwards requests to HTTP/2 backends. It works as a `Middleware` in the normal stack; `block_in_place` bridges the sync handler into the tokio runtime. Requires the `http2` feature.
+`H2ReverseProxy` forwards requests to HTTP/2 backends over plain TCP or TLS. It works as a `Middleware` in the normal stack; `block_in_place` bridges the sync handler into the tokio runtime. Requires the `http2` feature.
+
+Backend URL schemes:
+- `h2://host:port` — plain TCP (cleartext HTTP/2)
+- `h2s://host:port` — TLS with ALPN `h2`; port defaults to 443
+- `https://host:port` — same as `h2s://`
 
 ```rust
 #[cfg(feature = "http2")]
@@ -1909,9 +1924,16 @@ WsProxy::new(["ws-backend:8080"])
     use rust_web_server::core::New;
     use rust_web_server::proxy::H2ReverseProxy;
 
+    // Plain TCP backends
     let app = App::new()
-        .wrap(H2ReverseProxy::new(["h2://backend1:8443", "h2://backend2:8443"])
+        .wrap(H2ReverseProxy::new(["h2://backend1:8080", "h2://backend2:8080"])
             .path_prefix("/api")
+            .connect_timeout_ms(1000)
+            .read_timeout_ms(5000));
+
+    // TLS backends (h2s:// or https://)
+    let app = App::new()
+        .wrap(H2ReverseProxy::new(["h2s://api.example.com"])  // port defaults to 443
             .connect_timeout_ms(1000)
             .read_timeout_ms(5000));
 }
@@ -1925,6 +1947,11 @@ Requests whose URI does not start with `path_prefix` pass through to the next mi
 
 `GrpcProxy` wraps `H2ReverseProxy` and filters on `Content-Type: application/grpc*`. All gRPC traffic is forwarded over HTTP/2; non-gRPC requests fall through to the next handler. Requires the `http2` feature.
 
+Backend URL schemes:
+- `grpc://host:port` — plain TCP (cleartext gRPC)
+- `grpcs://host:port` — TLS; port defaults to 443
+- `https://host:port` — same as `grpcs://`
+
 ```rust
 #[cfg(feature = "http2")]
 {
@@ -1932,8 +1959,15 @@ Requests whose URI does not start with `path_prefix` pass through to the next mi
     use rust_web_server::core::New;
     use rust_web_server::proxy::GrpcProxy;
 
+    // Plain TCP
     let app = App::new()
-        .wrap(GrpcProxy::new(["grpc-service:50051"])
+        .wrap(GrpcProxy::new(["grpc://grpc-service:50051"])
+            .connect_timeout_ms(1000)
+            .read_timeout_ms(10_000));
+
+    // TLS — grpcs:// (every managed cloud gRPC service requires this)
+    let app = App::new()
+        .wrap(GrpcProxy::new(["grpcs://grpc.example.com"])  // port defaults to 443
             .connect_timeout_ms(1000)
             .read_timeout_ms(10_000));
 }

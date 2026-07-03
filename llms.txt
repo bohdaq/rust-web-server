@@ -576,8 +576,8 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&mu
 | `CacheLayer` | `cache` | In-memory GET response cache; builder `.ttl(secs)` |
 | `ReverseProxy` | `proxy` | HTTP/1.1 upstream proxy; round-robin; 502 on all-fail; built-in `ConnPool` |
 | `ConnPool` | `proxy` | Per-backend HTTP/1.1 keep-alive connection pool; `new(max_idle, timeout)` |
-| `H2ReverseProxy` | `proxy` | HTTP/2 upstream proxy; `h2://` scheme prefix |
-| `GrpcProxy` | `proxy` | gRPC proxy; filters on `Content-Type: application/grpc*` |
+| `H2ReverseProxy` | `proxy` | HTTP/2 upstream proxy; `h2://` plain TCP, `h2s://`/`https://` TLS (ALPN `h2`); port defaults to 443 for TLS schemes; `http2` feature |
+| `GrpcProxy` | `proxy` | gRPC proxy; filters on `Content-Type: application/grpc*`; `grpc://` plain, `grpcs://`/`https://` TLS; `http2` feature |
 | `RewriteLayer` | `rewrite` | Request/response header, URI, status, body rewriting |
 | `CanaryLayer` | `canary` | Weighted traffic splitting; `.add(backend, weight)` |
 | `RetryLayer` | `circuit_breaker` | Retry on 502/503/504 up to `max_retries` |
@@ -732,9 +732,10 @@ TcpProxy::new().backend("10.0.0.1:5432").backend("10.0.0.2:5432").bind("0.0.0.0:
 use rust_web_server::udp_proxy::UdpProxy;
 UdpProxy::new().backend("10.0.0.1:53").bind("0.0.0.0:53");
 
-// WebSocket proxy:
+// WebSocket proxy (ws:// plain TCP, wss:// TLS — http-client or http2 feature):
 use rust_web_server::ws_proxy::WsProxy;
-WsProxy::new().backend("10.0.0.1:8080").bind("0.0.0.0:8080");
+WsProxy::new(["ws://chat-backend:9000"]).bind("0.0.0.0:8080");
+WsProxy::new(["wss://chat.example.com"]).bind("0.0.0.0:8443"); // TLS, port defaults to 443
 ```
 
 ---
