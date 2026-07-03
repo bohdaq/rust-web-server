@@ -4,7 +4,7 @@
 > Website: https://rws8.tech/
 > Crates.io: https://crates.io/crates/rust-web-server
 > Docs: https://docs.rs/rust-web-server
-> License: MIT  |  MSRV: 1.75  |  Current version: 17.43.0
+> License: MIT  |  MSRV: 1.75  |  Current version: 17.60.0
 
 `rws` is an HTTP web framework, reverse proxy, and standalone server for Rust.
 It supports HTTP/1.1, HTTP/2, and HTTP/3/QUIC over TLS with no third-party HTTP
@@ -21,7 +21,7 @@ Use it in three modes:
 ## Key files
 
 - [README.md](README.md) — overview, feature list, quick starts
-- [DEVELOPER.md](DEVELOPER.md) — full building-blocks reference + 58 use-case examples
+- [DEVELOPER.md](DEVELOPER.md) — full building-blocks reference + 72 use-case examples
 - [CLAUDE.md](CLAUDE.md) — architecture, request lifecycle, module index, coding conventions
 - [Cargo.toml](Cargo.toml) — feature flags and optional dependencies
 - [src/lib.rs](src/lib.rs) — crate root; all public modules declared here
