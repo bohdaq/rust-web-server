@@ -931,6 +931,109 @@ impl Application for RespondAdapter {
     }
 }
 
+// ── StaticAdapter ──────────────────────────────────────────────────────────────
+
+/// Action adapter that serves static files from a configured `root` directory.
+///
+/// Unlike `StaticResourceController` (which always resolves paths relative to
+/// the process's current working directory), this adapter is parameterized
+/// per-route by `ActionConfig::Static { root, index }` from `rws.config.toml`,
+/// so a config-driven proxy can serve an arbitrary directory without Rust code.
+#[derive(Clone)]
+pub(crate) struct StaticAdapter {
+    root: Arc<std::path::PathBuf>,
+    index: Arc<Vec<String>>,
+}
+
+impl StaticAdapter {
+    pub(crate) fn new(root: String, index: Vec<String>) -> Self {
+        let index = if index.is_empty() { vec!["index.html".to_string()] } else { index };
+        StaticAdapter {
+            root: Arc::new(std::path::PathBuf::from(root)),
+            index: Arc::new(index),
+        }
+    }
+
+    /// Resolves `request_uri` against `root`. Returns `None` if the decoded
+    /// path contains a `..` segment, which would otherwise let a request
+    /// escape the configured root directory.
+    fn resolve(&self, request_uri: &str) -> Option<std::path::PathBuf> {
+        let raw_path = request_uri.split('?').next().unwrap_or(request_uri);
+        let decoded = crate::url::URL::percent_decode(raw_path);
+
+        if decoded.split('/').any(|segment| segment == "..") {
+            return None;
+        }
+
+        let relative = decoded.trim_start_matches('/');
+        Some(self.root.join(relative))
+    }
+}
+
+impl Application for StaticAdapter {
+    fn execute(&self, request: &Request, _conn: &ConnectionInfo) -> Result<Response, String> {
+        let mut response = Response::new();
+
+        let not_found = |mut response: Response| {
+            response.status_code = *STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
+            response.reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase.to_string();
+            response
+        };
+
+        let candidate = match self.resolve(&request.request_uri) {
+            Some(p) => p,
+            None => {
+                response.status_code = *STATUS_CODE_REASON_PHRASE.n403_forbidden.status_code;
+                response.reason_phrase = STATUS_CODE_REASON_PHRASE.n403_forbidden.reason_phrase.to_string();
+                return Ok(response);
+            }
+        };
+
+        let mut file_path = candidate;
+        if file_path.is_dir() {
+            let indexed = self
+                .index
+                .iter()
+                .map(|name| file_path.join(name))
+                .find(|p| p.is_file());
+
+            file_path = match indexed {
+                Some(p) => p,
+                None => return Ok(not_found(response)),
+            };
+        }
+
+        if !file_path.is_file() {
+            return Ok(not_found(response));
+        }
+
+        // Defense-in-depth against symlinks inside `root` that point outside it —
+        // the `..`-segment check above only catches traversal in the request URI.
+        if let (Ok(root_canon), Ok(file_canon)) =
+            (self.root.canonicalize(), file_path.canonicalize())
+        {
+            if !file_canon.starts_with(&root_canon) {
+                return Ok(not_found(response));
+            }
+        }
+
+        let path_str = match file_path.to_str() {
+            Some(s) => s,
+            None => return Ok(not_found(response)),
+        };
+
+        match crate::range::Range::get_content_range_of_a_file(path_str) {
+            Ok(content_range) => {
+                response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+                response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+                response.content_range_list = vec![content_range];
+                Ok(response)
+            }
+            Err(_) => Ok(not_found(response)),
+        }
+    }
+}
+
 // ── PerRouteRateLimit middleware ───────────────────────────────────────────────
 
 /// A per-route rate limiter middleware backed by a shared `RateLimiter`.

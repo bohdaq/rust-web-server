@@ -954,6 +954,138 @@ value = "DENY"
 
 // ── is_proxy_mode tests ────────────────────────────────────────────────────────
 
+// ── StaticAdapter (config-driven `type = "static"` action) tests ───────────────
+
+#[test]
+fn static_action_serves_file_from_configured_root() {
+    let dir = std::env::temp_dir().join(format!("rws_static_test_file_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("hello.txt"), b"hello from static root").unwrap();
+
+    let cfg = ProxyConfig::from_str(&format!(
+        r#"
+[[route]]
+name = "static-site"
+
+[route.match]
+path = "/*"
+
+[route.action]
+type = "static"
+
+[route.action.static]
+root = "{}"
+"#,
+        dir.to_str().unwrap()
+    ));
+
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    let resp = app.execute(&make_request("GET", "/hello.txt"), &conn).unwrap();
+    assert_eq!(resp.status_code, 200);
+    assert_eq!(resp.content_range_list[0].body, b"hello from static root");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn static_action_serves_index_for_directory_request() {
+    let dir = std::env::temp_dir().join(format!("rws_static_test_idx_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("index.html"), b"<h1>home</h1>").unwrap();
+
+    let cfg = ProxyConfig::from_str(&format!(
+        r#"
+[[route]]
+name = "static-site"
+
+[route.match]
+path = "/*"
+
+[route.action]
+type = "static"
+
+[route.action.static]
+root = "{}"
+"#,
+        dir.to_str().unwrap()
+    ));
+
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    let resp = app.execute(&make_request("GET", "/"), &conn).unwrap();
+    assert_eq!(resp.status_code, 200);
+    assert_eq!(resp.content_range_list[0].body, b"<h1>home</h1>");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn static_action_rejects_path_traversal() {
+    let dir = std::env::temp_dir().join(format!("rws_static_test_trav_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("secret.txt"), b"root-only").unwrap();
+    // File outside the configured root that must never be reachable through it.
+    let outside = std::env::temp_dir().join(format!("rws_static_outside_{}.txt", std::process::id()));
+    std::fs::write(&outside, b"outside secret").unwrap();
+
+    let cfg = ProxyConfig::from_str(&format!(
+        r#"
+[[route]]
+name = "static-site"
+
+[route.match]
+path = "/*"
+
+[route.action]
+type = "static"
+
+[route.action.static]
+root = "{}"
+"#,
+        dir.to_str().unwrap()
+    ));
+
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    let traversal_uri = format!("/../{}", outside.file_name().unwrap().to_str().unwrap());
+    let resp = app.execute(&make_request("GET", &traversal_uri), &conn).unwrap();
+    assert_eq!(resp.status_code, 403);
+
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::remove_file(&outside).ok();
+}
+
+#[test]
+fn static_action_missing_file_is_404() {
+    let dir = std::env::temp_dir().join(format!("rws_static_test_404_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let cfg = ProxyConfig::from_str(&format!(
+        r#"
+[[route]]
+name = "static-site"
+
+[route.match]
+path = "/*"
+
+[route.action]
+type = "static"
+
+[route.action.static]
+root = "{}"
+"#,
+        dir.to_str().unwrap()
+    ));
+
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    let resp = app.execute(&make_request("GET", "/nope.txt"), &conn).unwrap();
+    assert_eq!(resp.status_code, 404);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn is_proxy_mode_false_when_no_config_file() {
     // In test environment, rws.config.toml either doesn't exist or doesn't have

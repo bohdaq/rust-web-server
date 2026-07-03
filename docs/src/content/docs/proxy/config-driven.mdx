@@ -163,9 +163,23 @@ body         = "{\"status\":\"ok\"}"
 content_type = "application/json"
 ```
 
-:::caution[Coming Soon: static site action]
-`type = "static"` is parsed and recognized (`root`, `index` fields) but the handler is not yet implemented. Static file serving currently falls through to the built-in `App` fallback.
-:::
+#### `type = "static"` — serve a directory
+
+```toml
+[route.action]
+type = "static"
+
+[route.action.static]
+root  = "/var/www/site"        # absolute or relative to the process working directory
+index = ["index.html"]         # tried in order for directory requests; defaults to ["index.html"]
+```
+
+Requests are resolved against `root`, independent of the server process's working
+directory. Any request path containing a `..` segment (before or after
+percent-decoding) is rejected with `403`; a request that resolves to a missing
+file returns `404`. Directory requests (or any path resolving to a directory)
+try each `index` entry in order and 404 if none exist. MIME type is detected
+from the file extension, matching the built-in static-file controller.
 
 ### `[route.middleware]` — per-route middleware
 

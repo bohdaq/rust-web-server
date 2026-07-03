@@ -1021,7 +1021,7 @@ src/null/               — NullApplication (returns 404 for everything)
 src/otel/               — OtelLayer, setup, span export
 src/prelude/            — Re-exports of the most commonly used types
 src/proxy/              — ReverseProxy, H2ReverseProxy, GrpcProxy, ConnPool (pool.rs)
-src/proxy_config/       — Config-driven proxy: ProxyConfig, ConfigDrivenApp
+src/proxy_config/       — Config-driven proxy: ProxyConfig, ConfigDrivenApp, StaticAdapter
 src/range/              — Range, ContentRange, body construction
 src/rate_limit/         — RateLimiter, global()
 src/request/            — Request struct and HTTP/1.1 parsing

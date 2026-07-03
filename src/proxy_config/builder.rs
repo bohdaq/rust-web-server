@@ -7,8 +7,8 @@ use std::sync::{Arc, RwLock};
 use crate::middleware::WithMiddleware;
 use crate::proxy_config::{
     ActionConfig, AuthConfig, CompiledRoute, ConfigDrivenApp, DynamicProxy, MiddlewareConfig,
-    ProxyConfig, RedirectAdapter, RespondAdapter, RouteMatcher, arc_app, BearerAuthMiddleware,
-    PerRouteRateLimit,
+    ProxyConfig, RedirectAdapter, RespondAdapter, RouteMatcher, StaticAdapter, arc_app,
+    BearerAuthMiddleware, PerRouteRateLimit,
 };
 
 /// Build a `ConfigDrivenApp` from `rws.config.toml` and spawn L4/WS proxy
@@ -82,10 +82,8 @@ pub fn build(config: ProxyConfig) -> (ConfigDrivenApp, Vec<std::thread::JoinHand
                     arc_app(RespondAdapter::new(*status, body.clone(), content_type.clone()))
                 }
 
-                // For static action, fall through to App (built-in static controller)
-                ActionConfig::Static { .. } => {
-                    use crate::core::New;
-                    arc_app(crate::app::App::new())
+                ActionConfig::Static { root, index } => {
+                    arc_app(StaticAdapter::new(root.clone(), index.clone()))
                 }
 
                 // Grpc action — use DynamicProxy (it forwards over HTTP/1.1;

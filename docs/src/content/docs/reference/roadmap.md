@@ -17,11 +17,6 @@ These features are planned. Each appears as a callout on the relevant docs page.
 JWT and HTTP Basic auth configured directly in `rws.config.toml` without writing Rust code — equivalent to `JwtLayer` and `BasicAuthLayer` but activated through `[[route]]` middleware entries.
 :::
 
-:::caution[Coming Soon]
-**Static site action in config proxy**
-
-`type = "static"` action in `[[route]]` sections to serve a directory of static files from the config-driven proxy without writing a custom controller.
-:::
 
 :::caution[Coming Soon]
 **Regex URI rewriting in RewriteLayer**

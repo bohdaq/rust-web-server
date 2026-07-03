@@ -140,6 +140,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. |
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
 | `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware round-robin proxying. |
+| `StaticAdapter` | `proxy_config` | Action handler for `type = "static"` routes in `rws.config.toml`. Serves files from a configured `root` directory (independent of the process working directory), trying each `index` entry in order for directory requests; rejects any request path with a `..` segment (before or after percent-decoding) with `403`, missing files with `404`. |
 | `Container` | `di` | Type-keyed dependency injection container. `register::<T>(service)` stores concrete types; `provide::<dyn Trait>(Arc::new(...))` stores trait objects; both keyed by `TypeId`. Named services via `register_named` / `provide_named` / `get_named`. Share across handlers with `container.into_arc()` as `AppWithState` state. |
 | `DbPool` / `DbTransaction` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`; implies `http2`) | Async connection pool backed by `sqlx`. `DbPool::new(DbConfig).await` or `DbPool::from_env().await`. All SQL operations are `async fn`: `execute`, `query_rows`, `query::<T>`, `begin`, `transaction(closure)`, `migrate`, `migration_status`. **SQLite in-memory shortcut:** `DbPool::memory().await` creates a single-connection pool backed by `":memory:"` — each call is an isolated empty database, ideal for tests. Cheap to clone (Arc-wrapped). |
 | `DbConfig` | `model` | Database configuration. `DbConfig::from_env()` reads `RWS_DB_*` env vars; construct manually with `DbConfig { host, port, user, password, database, pool_size }`. |
@@ -2531,10 +2532,24 @@ name = "catch-all"
 |---|---|
 | `proxy` | Forward to a named `[[upstream]]` pool over HTTP/1.1 |
 | `grpc` | Forward over HTTP/2 (`Content-Type: application/grpc*`) |
-| `static` | Built-in static file controller |
+| `static` | Serve a directory (`root`, `index`) via `StaticAdapter` — see `[route.action.static]` below |
 | `redirect` | 301/302 with a `Location` header; `$path` interpolated |
 | `respond` | Fixed status + body (catch-all 404, maintenance page) |
 | `mcp` | Built-in MCP Streamable HTTP server |
+
+**`static` action example**
+
+```toml
+[route.action]
+type = "static"
+
+[route.action.static]
+root  = "/var/www/site"        # absolute or relative to the process working directory
+index = ["index.html"]         # tried in order for directory requests; defaults to ["index.html"]
+```
+
+Requests with a `..` path segment (before or after percent-decoding) return `403`; a
+resolved path that doesn't exist returns `404`.
 
 **Per-route middleware keys**
 

@@ -4,7 +4,7 @@
 
 Consolidated, prioritized task list synthesized from GAPS_V3.md, IDEAS.md, ADMIN_ROADMAP.md, and all open roadmap items. Items are ordered within each tier by the ratio of impact to implementation effort.
 
-**Status as of 2026-07-03:** Priority 1 is fully complete. Priority 2 is the current focus.
+**Status as of 2026-07-03:** Priority 1 is fully complete. Priority 2 is the current focus. Code inspection this date found two Priority 2 items were silent-failure bugs (config accepted but ignored, no error) rather than plain feature gaps — the static-site action and the load-balancer `strategy` field. Both were promoted to the top of the tier with exact file:line root causes; the static-site action has since been fixed (see below). The `strategy` field is still open.
 
 ---
 
@@ -32,13 +32,17 @@ All six blocking gaps have been resolved. rws is now suitable for real productio
 
 Commonly needed; workarounds exist but are painful. **This is the current focus.**
 
+**Two silent-failure bugs confirmed by code inspection on 2026-07-03 — promoted to the top of this tier.** Both accept config that parses successfully and produce different behavior than the config states, with no error or log line. That's worse than a missing feature (which fails loudly) and each is a small, isolated fix.
+
+- [x] **Static site action in config-driven proxy is a no-op** (`type = "static"`) — Fixed. Added `StaticAdapter` (`src/proxy_config/mod.rs`, "StaticAdapter" section) implementing `Application`: resolves the request path against the configured `root`, tries each `index` entry in order for directory requests (default `["index.html"]`), rejects any `..` path segment (pre- or post-percent-decode) with `403`, and returns `404` for anything else missing. Also canonicalizes and checks `starts_with(root)` as defense-in-depth against symlinks inside `root` pointing outside it. Reuses `Range::get_content_range_of_a_file()` for MIME detection and body construction — same code path the built-in static controller uses. `builder.rs:86-88` now constructs `StaticAdapter::new(root, index)` instead of falling back to `App::new()`. 4 new tests in `src/proxy_config/tests.rs` (serve file, serve directory index, reject traversal, 404 on missing file); full `cargo test` passes (1132 unit + 72 doc tests). Docs updated: `docs/proxy/config-driven.mdx`, `DEVELOPER.md` (building blocks table + Use Case #52), `llms.txt`; removed the stale "Coming Soon" callout from `docs/reference/roadmap.md`. Closed GAPS_V3 §2.8 and IDEAS.md §5.
+
+- [ ] **`strategy` field on `[[upstream]]` is parsed but never read** — `UpstreamConfig.strategy` (`src/proxy_config/mod.rs:60`, parsed at `mod.rs:231-233`) is stored on the struct but is never passed into `DynamicProxy`. `DynamicProxy::new()` (`mod.rs:722-740`) takes no strategy parameter at all, and both call sites (`builder.rs:67`, `builder.rs:102`) drop `upstream.strategy` on the floor. `next_backend()` (`mod.rs:742-749`) is hardcoded round-robin via `AtomicUsize`. Setting `strategy = "ip_hash"` in config today has zero effect and there's no indication it was ignored. Fix: thread `strategy` through `DynamicProxy::new()` and branch `next_backend()` on it; implement `least_connections` (most impactful — needed for WebSocket/SSE stickiness), `ip_hash`, and `random`. See IDEAS.md §3. Closes GAPS_V3 §2.1.
+
 - [ ] **Background job queue** (`src/jobs/`, `jobs` feature) — no facility for ad-hoc one-shot jobs from handlers ("send this email after signup"). Add a `Job` trait, `JobQueue::new(workers)`, retry-with-backoff, and a `PersistentJobQueue` backed by the model layer for crash safety. Closes GAPS_V3 §3.3 and GAPS_V2 §7.
 
 - [ ] **File / object storage abstraction** (`src/storage/`, `storage-local` / `storage-s3` features) — `FormMultipartData::parse()` returns raw bytes with no place to put them. Add a `Storage` trait with `LocalStorage` (no deps) and `S3Storage` using the existing outbound HTTP client to sign AWS Signature V4 requests. Closes GAPS_V3 §3.2 and GAPS_V2 §6.
 
 - [ ] **OpenAPI / Swagger schema generation** (`src/openapi/`, `openapi` feature) — no API schema from routes. `AppWithState` route registrations and `#[derive(Validate)]` already capture all needed data. Serve `GET /openapi.json`; optionally serve Swagger UI as embedded HTML. Closes GAPS_V3 §3.4 and GAPS_V2 §8.
-
-- [ ] **Config-driven load balancing strategies** — `DynamicProxy` round-robin only (the `strategy` field is parsed but never applied). Add `least_connections`, `ip_hash`, and `random` via `load_balancing = "…"` in `rws.config.toml`. `least_connections` is the most important (WebSocket and SSE stickiness). See IDEAS.md §3. Closes GAPS_V3 §2.1.
 
 - [x] **Async ORM** — `src/model/` rewritten to use `sqlx 0.8` as the async database driver. `DbPool` wraps `sqlx::Pool<Db>` (cheap to clone); `DbTransaction` wraps `sqlx::Transaction<'static, Db>`. Old `DbConnection` and `PooledConnection` types removed. All ORM methods (`save`, `find_all`, `find_by_id`, `delete_by_id`, `count`, `exists_by_id`, `QueryBuilder` terminals, relation `.load()`, `migrate()`, `migration_status()`) are now `async fn` and return `Result<_, DbError>`. `DbSessionStore` updated to `async fn`. All model and session tests use `#[tokio::test]`. 16 model integration tests + 31 session tests pass. Closes GAPS_V3 §3.7.
 
@@ -47,8 +51,6 @@ Commonly needed; workarounds exist but are painful. **This is the current focus.
 - [ ] **Request ID middleware** (`src/request_id/mod.rs`) — no automatic `X-Request-Id` / `X-Correlation-Id` generation or propagation. Essential for correlating log lines across services. `OtelLayer` creates spans but does not inject a stable request ID header accessible to application code. Closes GAPS_V3 §1.6.
 
 - [ ] **JWT / Basic auth from `rws.config.toml`** — `JwtLayer` and `BasicAuthLayer` require Rust code. Add `auth = { type = "jwt", secret_env = "JWT_SECRET" }` and `auth = { type = "basic", htpasswd_file = ".htpasswd" }` in `[route.middleware]`. Wire to existing middleware in `builder.rs`. Closes GAPS_V3 §2.7 and IDEAS.md §4.
-
-- [ ] **Static site action in config-driven proxy** (`type = "static"`) — serving a local directory from `rws.config.toml` without Rust code is broken; `builder.rs` falls through to `App::new()` without applying a root directory. Fix `builder.rs` to create a `StaticAdapter` that wraps the existing file-serving logic. Closes GAPS_V3 §2.8 and IDEAS.md §5.
 
 - [ ] **ForwardAuth middleware** (`src/auth/forward.rs`) — delegate auth decisions to an external service (OPA, Casbin, a centralized auth API). On 2xx, copy nominated headers onto the downstream request. On 4xx, return the auth service response verbatim. No new deps. Closes GAPS_V3 §2.9 and IDEAS.md §8.
 
