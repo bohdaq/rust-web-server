@@ -27,6 +27,38 @@ pub struct DbConfig {
 }
 
 impl DbConfig {
+    /// Create a configuration for a SQLite in-memory database.
+    ///
+    /// The pool size is fixed at 1. Every connection to `":memory:"` opens a
+    /// separate, empty database, so using more than one connection would silently
+    /// discard each other's writes. A single pooled connection serialises all
+    /// access through the `DbPool` mutex, which is correct for tests and
+    /// single-threaded development use.
+    ///
+    /// For multi-threaded use, see [`DbPool::memory`].
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # #[cfg(feature = "model-sqlite")]
+    /// # {
+    /// use rust_web_server::model::{DbConfig, DbConnection};
+    /// let mut conn = DbConnection::open(&DbConfig::memory()).unwrap();
+    /// conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY)", &[]).unwrap();
+    /// # }
+    /// ```
+    #[cfg(feature = "model-sqlite")]
+    pub fn memory() -> Self {
+        DbConfig {
+            host: String::new(),
+            port: 0,
+            user: String::new(),
+            password: String::new(),
+            database: ":memory:".into(),
+            pool_size: 1,
+        }
+    }
+
     /// Read configuration from environment variables.
     ///
     /// | Variable | Default |
@@ -243,6 +275,30 @@ impl DbConnection {
     /// Return migration status (applied / pending) for files in `dir`.
     pub fn migration_status(&mut self, dir: &str) -> Result<Vec<MigrationStatus>, DbError> {
         crate::model::migration::migration_status(self, dir)
+    }
+
+    /// Open a fresh SQLite in-memory database with no pre-existing schema.
+    ///
+    /// Every call returns an independent, isolated connection — ideal for unit
+    /// tests where each test needs a clean slate.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # #[cfg(feature = "model-sqlite")]
+    /// # {
+    /// use rust_web_server::model::{DbConnection, Value};
+    ///
+    /// let mut conn = DbConnection::memory().unwrap();
+    /// conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)", &[]).unwrap();
+    /// conn.execute("INSERT INTO users (name) VALUES (?1)", &[Value::Text("Alice".into())]).unwrap();
+    /// # }
+    /// ```
+    #[cfg(feature = "model-sqlite")]
+    pub fn memory() -> Result<Self, DbError> {
+        rusqlite::Connection::open(":memory:")
+            .map(|inner| DbConnection { inner })
+            .map_err(|e| DbError::new(e.to_string()))
     }
 
     // ── SQLite backend ────────────────────────────────────────────────────────

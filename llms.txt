@@ -557,6 +557,18 @@ let adults = User::query(&mut conn)
 
 `DbConfig::from_env()` reads `RWS_DB_HOST`, `RWS_DB_PORT`, `RWS_DB_USER`, `RWS_DB_PASSWORD`, `RWS_DB_DATABASE`, `RWS_DB_POOL_SIZE`.
 
+**SQLite in-memory shortcuts (model-sqlite only):**
+
+```rust
+// Shared in-memory database — all pool.get() calls see the same data:
+let pool = DbPool::memory()?;
+
+// Isolated per-call database — each call is a fresh empty database (ideal for tests):
+let mut conn = DbConnection::memory()?;
+```
+
+`DbPool::memory()` creates a single-connection pool on `":memory:"`; `get()` returns `Err` on exhaustion rather than silently opening a new empty database. `DbPool::memory()` = `DbPool::new(DbConfig::memory())` = `DbPool::new(DbConfig { database: ":memory:", pool_size: 1, .. })`.
+
 Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&mut conn)`, no lazy loading, no hidden N+1.
 
 ---

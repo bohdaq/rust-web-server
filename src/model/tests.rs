@@ -478,4 +478,71 @@ mod model_tests {
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         format!("/tmp/rws_model_test_migrations_{}", n)
     }
+
+    // ── In-memory constructors ─────────────────────────────────────────────────
+
+    #[test]
+    fn db_config_memory_has_memory_path_and_pool_size_one() {
+        let cfg = DbConfig::memory();
+        assert_eq!(":memory:", cfg.database);
+        assert_eq!(1, cfg.pool_size);
+    }
+
+    #[test]
+    fn db_connection_memory_opens_and_accepts_ddl() {
+        let mut conn = DbConnection::memory().expect("open :memory:");
+        conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT NOT NULL)", &[])
+            .expect("create table");
+        let rows = conn.execute("INSERT INTO t (v) VALUES (?1)", &[Value::Text("hi".into())])
+            .expect("insert");
+        assert_eq!(1, rows);
+    }
+
+    #[test]
+    fn db_connection_memory_is_isolated_per_call() {
+        // Each DbConnection::memory() call must return an independent database.
+        let mut a = DbConnection::memory().unwrap();
+        let mut b = DbConnection::memory().unwrap();
+        a.execute("CREATE TABLE t (x INTEGER)", &[]).unwrap();
+        a.execute("INSERT INTO t VALUES (42)", &[]).unwrap();
+        // b sees a completely separate schema — CREATE on b must not fail.
+        b.execute("CREATE TABLE t (x INTEGER)", &[]).unwrap();
+        let rows_b = b.query_rows("SELECT x FROM t", &[]).unwrap();
+        assert!(rows_b.is_empty(), "b should see an empty table, not a's data");
+    }
+
+    #[test]
+    fn db_pool_memory_single_connection_sees_correct_data() {
+        use crate::model::DbPool;
+        let pool = DbPool::memory().expect("create memory pool");
+
+        {
+            let mut conn = pool.get().expect("checkout");
+            conn.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)", &[]).unwrap();
+            conn.execute("INSERT INTO items (name) VALUES (?1)", &[Value::Text("apple".into())]).unwrap();
+        } // connection returned to pool here
+
+        {
+            let mut conn = pool.get().expect("re-checkout same connection");
+            let rows = conn.query_rows("SELECT name FROM items", &[]).unwrap();
+            assert_eq!(1, rows.len());
+            let name: String = rows[0].get("name").unwrap();
+            assert_eq!("apple", name);
+        }
+    }
+
+    #[test]
+    fn db_pool_memory_exhaustion_returns_clear_error() {
+        use crate::model::DbPool;
+        let pool = DbPool::memory().expect("create memory pool");
+
+        // Hold the only connection.
+        let _conn = pool.get().expect("first checkout");
+
+        // Second get() must return an error, not silently open an empty database.
+        let result = pool.get();
+        assert!(result.is_err(), "second get() on exhausted memory pool must fail");
+        let msg = result.err().unwrap().0;
+        assert!(msg.contains("exhausted"), "error message should mention exhaustion: {}", msg);
+    }
 }

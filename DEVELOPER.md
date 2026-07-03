@@ -137,8 +137,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
 | `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware round-robin proxying. |
 | `Container` | `di` | Type-keyed dependency injection container. `register::<T>(service)` stores concrete types; `provide::<dyn Trait>(Arc::new(...))` stores trait objects; both keyed by `TypeId`. Named services via `register_named` / `provide_named` / `get_named`. Share across handlers with `container.into_arc()` as `AppWithState` state. |
-| `DbPool` / `PooledConnection` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`) | Connection pool. `DbPool::new(DbConfig)` or `DbPool::from_env()` pre-creates `pool_size` connections. `pool.get()` checks out a `PooledConnection` (returned on drop). |
-| `DbConnection` | `model` | Single database connection. `execute(sql, params)` for DDL/DML; `query_rows(sql, params)` for SELECT; `query::<T>(sql, params)` for typed results; `begin()` / `commit()` / `rollback()` / `transaction(closure)`; `migrate(dir)` / `migration_status(dir)`. |
+| `DbPool` / `PooledConnection` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`) | Connection pool. `DbPool::new(DbConfig)` or `DbPool::from_env()` pre-creates `pool_size` connections. `pool.get()` checks out a `PooledConnection` (returned on drop). **SQLite in-memory shortcut:** `DbPool::memory()` creates a single-connection pool backed by `":memory:"` — all callers share one database; `get()` returns `Err` on exhaustion instead of silently opening an empty DB. |
+| `DbConnection` | `model` | Single database connection. `execute(sql, params)` for DDL/DML; `query_rows(sql, params)` for SELECT; `query::<T>(sql, params)` for typed results; `begin()` / `commit()` / `rollback()` / `transaction(closure)`; `migrate(dir)` / `migration_status(dir)`. **SQLite in-memory shortcut:** `DbConnection::memory()` returns a fresh isolated `:memory:` connection — each call is a new empty database, ideal for per-test isolation. |
+| `DbConfig` | `model` | Database configuration. `DbConfig::from_env()` reads `RWS_DB_*` env vars; construct manually with `DbConfig { host, port, user, password, database, pool_size }`. **SQLite in-memory shortcut:** `DbConfig::memory()` returns `DbConfig { database: ":memory:", pool_size: 1, .. }`. |
 | `ModelRepository<T, i64>` | `model` | JPA-style CRUD: `find_by_id`, `find_all`, `save` (INSERT when pk==0, UPDATE otherwise), `save_all`, `delete_by_id`, `delete_all_by_id`, `count`, `exists_by_id`. Obtain via `T::repository(&mut conn)` when using `#[derive(Model)]`. |
 | `QueryBuilder<T>` | `model` | Fluent SQL builder: `where_eq`, `filter`, `order_by`, `limit`, `offset`, `fetch_all`, `fetch_one`, `count`, `update`, `delete`. Obtain via `T::query(&mut conn)` when using `#[derive(Model)]`. |
 | `#[derive(Model)]` | `model` (requires `macros` + a model feature) | Proc-macro that maps a struct to a DB table. Attributes: `#[table(name = "…")]` struct-level override; `#[primary_key(auto_increment)]`; `#[column(name = "…")]`; `#[ignore]`. Generates `Model` impl plus `T::repository(&mut conn)` and `T::query(&mut conn)` helpers. |
@@ -2967,4 +2968,65 @@ OidcAuth::new(config, sessions)
     .login_path("/sso/start")
     .callback_path("/sso/return")
     .logout_path("/sso/end")
+```
+
+---
+
+### 59. SQLite in-memory database for tests and prototyping
+
+`DbPool::memory()` and `DbConnection::memory()` are SQLite-only shortcuts that open a `":memory:"` database without configuring host, credentials, or a file path.
+
+**`DbPool::memory()` — shared in-memory database**
+
+All callers that check out the pool's single connection see the same data. Use when multiple handlers or test steps need to share state:
+
+```rust
+use rust_web_server::model::{DbPool, Value};
+
+// single connection to one shared in-memory database
+let pool = DbPool::memory().unwrap();
+
+{
+    let mut conn = pool.get().unwrap();
+    conn.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)", &[]).unwrap();
+    conn.execute("INSERT INTO items (name) VALUES (?1)", &[Value::Text("apple".into())]).unwrap();
+}
+
+let mut conn = pool.get().unwrap();
+let rows = conn.query_rows("SELECT name FROM items", &[]).unwrap();
+assert_eq!(1, rows.len());
+```
+
+When the single connection is already checked out and `get()` is called again, it returns `Err` instead of silently opening an empty new database:
+
+```rust
+let pool = DbPool::memory().unwrap();
+let _held = pool.get().unwrap();         // checks out the only connection
+let err = pool.get().unwrap_err();       // second get() returns Err
+assert!(err.0.contains("exhausted"));
+```
+
+**`DbConnection::memory()` — isolated per-test database**
+
+Each call returns a brand-new empty database. Ideal for unit tests where tests must not share state:
+
+```rust
+use rust_web_server::model::{DbConnection, Value};
+
+// test A
+let mut conn = DbConnection::memory().unwrap();
+conn.execute("CREATE TABLE t (v TEXT)", &[]).unwrap();
+conn.execute("INSERT INTO t VALUES (?1)", &[Value::Text("x".into())]).unwrap();
+
+// test B — completely separate database, zero setup cost
+let mut conn2 = DbConnection::memory().unwrap();
+let rows = conn2.query_rows("SELECT name FROM sqlite_master", &[]).unwrap();
+assert!(rows.is_empty());  // conn2 has no tables
+```
+
+Enable with the `model-sqlite` feature (no feature flag needed for `DbConnection::memory()` in the same binary, but the SQLite driver must be compiled in):
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["model-sqlite"] }
 ```

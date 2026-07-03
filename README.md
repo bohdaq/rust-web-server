@@ -60,7 +60,7 @@ $ curl http://localhost:7878/hello
 Hello, world!
 ```
 
-See [DEVELOPER](DEVELOPER.md) for 58 use-case examples covering JSON, auth, WebSocket, SSE, middleware, ORM, MCP, and more.
+See [DEVELOPER](DEVELOPER.md) for 59 use-case examples covering JSON, auth, WebSocket, SSE, middleware, ORM, MCP, and more.
 
 ---
 
@@ -209,6 +209,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 - Migrations — `db.migrate("migrations/")` runs `*.sql` files in lexicographic order, idempotent
 - Relations — `HasMany<T>`, `HasOne<O>`, `BelongsTo<O>`; explicit load, no hidden N+1
 - Backends — SQLite (`model-sqlite`), PostgreSQL (`model-postgres`), MySQL (`model-mysql`)
+- In-memory SQLite — `DbPool::memory()` (shared) and `DbConnection::memory()` (isolated per call) for tests and prototyping
 
 ---
 

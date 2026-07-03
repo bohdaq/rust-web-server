@@ -116,6 +116,7 @@ export default defineConfig({
             { label: 'Transactions',         link: '/database/transactions/' },
             { label: 'Migrations',           link: '/database/migrations/' },
             { label: 'Relations',            link: '/database/relations/' },
+            { label: 'In-memory SQLite',     link: '/database/in-memory/' },
           ],
         },
         {

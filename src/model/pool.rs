@@ -37,7 +37,14 @@ impl DbPool {
 
     /// Check out a connection from the pool.
     ///
-    /// If the pool is empty, a new connection is opened.
+    /// If the pool is empty and the configured database is a file or network
+    /// backend, a new connection is opened on demand.
+    ///
+    /// **SQLite `:memory:` exception** — when the database is `":memory:"`,
+    /// opening a new connection on overflow would create a *separate* empty
+    /// database, silently discarding all data written by other connections.
+    /// Instead, `get()` returns `Err` when the pool is exhausted so that the
+    /// caller sees a clear error rather than operating on stale state.
     pub fn get(&self) -> Result<PooledConnection<'_>, DbError> {
         let conn = {
             let mut guard = self
@@ -49,13 +56,53 @@ impl DbPool {
 
         let conn = match conn {
             Some(c) => c,
-            None => DbConnection::open(&self.config)?,
+            None => {
+                // Guard against the silent empty-database bug for in-memory SQLite.
+                #[cfg(feature = "model-sqlite")]
+                if self.config.database == ":memory:" {
+                    return Err(DbError::new(
+                        "in-memory SQLite pool exhausted — all connections are in use. \
+                         Use pool_size = 1 or wait for a connection to be returned.",
+                    ));
+                }
+                DbConnection::open(&self.config)?
+            }
         };
 
         Ok(PooledConnection {
             conn: Some(conn),
             pool: self,
         })
+    }
+
+    /// Create a pool backed by a SQLite in-memory database.
+    ///
+    /// Equivalent to `DbPool::new(DbConfig::memory())` — creates a single
+    /// pooled connection to `":memory:"`. All callers that check out this
+    /// connection via [`DbPool::get`] see the same data because they share
+    /// the one pre-created connection.
+    ///
+    /// If the pool is exhausted (the single connection is already checked out),
+    /// [`DbPool::get`] returns an error rather than opening a new empty
+    /// in-memory database. See [`DbConfig::memory`] for details on the
+    /// single-connection design.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # #[cfg(feature = "model-sqlite")]
+    /// # {
+    /// use rust_web_server::model::{DbPool, Value};
+    ///
+    /// let pool = DbPool::memory().unwrap();
+    /// let mut conn = pool.get().unwrap();
+    /// conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)", &[]).unwrap();
+    /// conn.execute("INSERT INTO t (v) VALUES (?1)", &[Value::Text("hello".into())]).unwrap();
+    /// # }
+    /// ```
+    #[cfg(feature = "model-sqlite")]
+    pub fn memory() -> Result<Self, DbError> {
+        DbPool::new(DbConfig::memory())
     }
 
     /// Return a connection to the pool.
