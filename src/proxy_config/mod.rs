@@ -40,6 +40,7 @@ use crate::core::New;
 use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
+use crate::server_config::ServerConfig;
 
 // ── Public config types ────────────────────────────────────────────────────────
 
@@ -651,12 +652,14 @@ impl RouteMatcher {
 /// An `Application` that routes requests based on a parsed `ProxyConfig`.
 ///
 /// `Clone` is cheap: `routes` is an `Arc<Vec<...>>` (pointer copy), and
-/// `fallback` is `App` which is `Copy`.
+/// `fallback` is `App`, itself cheap to clone (an `Option<Arc<ServerConfig>>`).
 #[derive(Clone)]
 pub struct ConfigDrivenApp {
     routes: Arc<Vec<CompiledRoute>>,
     /// Fallback for unmatched requests — handles /healthz, /readyz, /metrics,
-    /// static files, and the 404 controller.
+    /// static files, and the 404 controller. Reads `RWS_CONFIG_*` env vars
+    /// per request (`App::new()`'s default) unless pinned via
+    /// [`ConfigDrivenApp::with_config`].
     fallback: App,
 }
 
@@ -667,6 +670,26 @@ impl ConfigDrivenApp {
             routes: Arc::new(routes),
             fallback: App::new(),
         }
+    }
+
+    /// Pin the fallback [`App`] (used for any request none of the
+    /// config-driven routes match) to an explicit [`ServerConfig`], instead
+    /// of reading `RWS_CONFIG_*` environment variables per request.
+    ///
+    /// Mirrors [`App::with_config`] / [`crate::state::AppWithState::with_config`]
+    /// — same rationale: safe for parallel tests, and lets multiple
+    /// differently-configured proxy instances coexist in one process.
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::proxy_config::build_from_file;
+    /// use rust_web_server::server_config::ServerConfig;
+    ///
+    /// let (app, _handles) = build_from_file();
+    /// let app = app.with_config(ServerConfig::default());
+    /// ```
+    pub fn with_config(mut self, config: ServerConfig) -> Self {
+        self.fallback = App::with_config(config);
+        self
     }
 }
 

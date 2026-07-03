@@ -86,17 +86,42 @@ struct AsyncRoute<S> {
 pub struct AsyncAppWithState<S> {
     state: Arc<S>,
     routes: Vec<AsyncRoute<S>>,
+    /// When `Some`, the fallback `App` is pinned to this config (see
+    /// [`App::with_config`]); when `None`, the fallback reads
+    /// `RWS_CONFIG_*` env vars per request via `App::new()`, same as `App`'s
+    /// own default.
+    config: Option<Arc<crate::server_config::ServerConfig>>,
 }
 
 impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
     /// Create a new `AsyncAppWithState` wrapping `state`.
     pub fn new(state: S) -> Self {
-        AsyncAppWithState { state: Arc::new(state), routes: Vec::new() }
+        AsyncAppWithState { state: Arc::new(state), routes: Vec::new(), config: None }
+    }
+
+    /// Pin the fallback [`App`] (used for any request this app's own routes
+    /// don't match) to an explicit [`crate::server_config::ServerConfig`],
+    /// instead of reading `RWS_CONFIG_*` environment variables per request.
+    ///
+    /// Mirrors [`App::with_config`] / [`crate::state::AppWithState::with_config`].
+    pub fn with_config(mut self, config: crate::server_config::ServerConfig) -> Self {
+        self.config = Some(Arc::new(config));
+        self
     }
 
     /// Return a reference to the shared state.
     pub fn state(&self) -> &S {
         &self.state
+    }
+
+    /// The fallback `App` for requests this app's own routes don't match —
+    /// pinned to `self.config` if set, otherwise `App::new()`'s default
+    /// per-request env read.
+    fn fallback_app(&self) -> App {
+        match &self.config {
+            Some(c) => App::with_config((**c).clone()),
+            None => App::new(),
+        }
     }
 
     fn add<F, Fut>(mut self, method: &str, pattern: &str, handler: F) -> Self
@@ -181,7 +206,7 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
             }
         }
 
-        App::new().execute(request, connection)
+        self.fallback_app().execute(request, connection)
     }
 }
 

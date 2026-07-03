@@ -88,10 +88,10 @@ The crate exposes its core types so you can compose them in your own server or t
 | `FromRequest` / `Body` / `BodyText` / `Query` | `extract` | Typed request extractors — parse body or query params, returning a ready error on failure |
 | `RateLimiter` | `rate_limit` | Per-IP sliding-window rate limiter; `global()` reads config from env vars |
 | `WebSocket` / `Frame` | `websocket` | RFC 6455 WebSocket handshake, frame read/write; SHA-1 and base64 built in |
-| `AppWithState<S>` | `state` | State-aware application with built-in dynamic routing; state shared via `Arc<S>`. Use `App::with_state(S)` as the entry point. |
+| `AppWithState<S>` | `state` | State-aware application with built-in dynamic routing; state shared via `Arc<S>`. Use `App::with_state(S)` as the entry point. `.with_config(ServerConfig)` pins the fallback `App` (for requests none of this app's routes match) to explicit CORS/CSP settings instead of reading `RWS_CONFIG_*` env vars per request — mirrors `App::with_config`. |
 | `Middleware` / `WithMiddleware` | `middleware` | Composable middleware pipeline wrapping any `Application`. Use `App::new().wrap(layer)` or `AppWithState::wrap(layer)`. |
 | `RateLimitLayer` | `middleware` | Built-in middleware that enforces the global rate limiter per client IP |
-| `AsyncAppWithState<S>` | `async_state` | Like `AppWithState<S>` but handlers are `async fn`; requires `http2` feature. Entry point: `App::with_async_state(S)`. |
+| `AsyncAppWithState<S>` | `async_state` | Like `AppWithState<S>` but handlers are `async fn`; requires `http2` feature. Entry point: `App::with_async_state(S)`. `.with_config(ServerConfig)` pins the fallback `App`, same as `AppWithState::with_config`. |
 | `Sse` / `SseEvent` | `sse` | Build a buffered `text/event-stream` response from a sequence of events. Correct headers set automatically. |
 | `SessionStore` / `Session` | `session` | Thread-safe in-memory session store with TTL expiry. Cookie helpers: `session_id_from_request`, `session_cookie`, `destroy_cookie`. |
 | `DbSessionStore` | `session` (requires `model-sqlite`, `model-postgres`, or `model-mysql`) | Persistent session store backed by the model-layer `DbPool`. Created with `DbSessionStore::new(pool, ttl_secs).await`. Auto-creates `rws_sessions` table. All methods are `async fn` returning `Result`. Survives restarts and shared across multiple instances. |
@@ -143,9 +143,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `S3Storage` / `S3Config` | `storage` (requires `storage-s3` feature) | `Storage` implementation for S3-compatible object storage (AWS S3, Cloudflare R2, MinIO) via the outbound HTTP client — no AWS SDK. Signs every request with AWS Signature Version 4 (`hmac` + `sha2`, already-in-tree crates). `S3Storage::from_env()` reads `RWS_S3_BUCKET/REGION/ACCESS_KEY/SECRET_KEY/ENDPOINT`. Uses path-style addressing (`{endpoint}/{bucket}/{key}`) for compatibility with custom endpoints. |
 | `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. |
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
-| `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware proxying with a per-`[[upstream]]` `strategy`: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), or `least_connections` (routes to the live backend with fewest in-flight requests). |
+| `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware proxying with a per-`[[upstream]]` `strategy`: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), or `least_connections` (routes to the live backend with fewest in-flight requests). `ConfigDrivenApp::with_config(ServerConfig)` pins its fallback `App` (unmatched requests — healthz/readyz/metrics/static/404) to explicit settings instead of reading `RWS_CONFIG_*` env vars per request. |
 | `StaticAdapter` | `proxy_config` | Action handler for `type = "static"` routes in `rws.config.toml`. Serves files from a configured `root` directory (independent of the process working directory), trying each `index` entry in order for directory requests; rejects any request path with a `..` segment (before or after percent-decoding) with `403`, missing files with `404`. |
-| `Container` | `di` | Type-keyed dependency injection container. `register::<T>(service)` stores concrete types; `provide::<dyn Trait>(Arc::new(...))` stores trait objects; both keyed by `TypeId`. Named services via `register_named` / `provide_named` / `get_named`. Share across handlers with `container.into_arc()` as `AppWithState` state. |
+| `Container` | `di` | Type-keyed dependency injection container. `register::<T>(service)` stores concrete types; `provide::<dyn Trait>(Arc::new(...))` stores trait objects; both keyed by `TypeId`. Named services via `register_named` / `provide_named` / `get_named`. Pass the container directly as `AppWithState`/`AsyncAppWithState`'s state (`App::with_state(container)`) — **not** `container.into_arc()`, which double-wraps in `Arc` since `with_state` already wraps `S` internally. `into_arc()` is for sharing one container across multiple hand-built `Application`s outside of `with_state`. |
 | `DbPool` / `DbTransaction` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`; implies `http2`) | Async connection pool backed by `sqlx`. `DbPool::new(DbConfig).await` or `DbPool::from_env().await`. All SQL operations are `async fn`: `execute`, `query_rows`, `query::<T>`, `begin`, `transaction(closure)`, `migrate`, `migration_status`. **SQLite in-memory shortcut:** `DbPool::memory().await` creates a single-connection pool backed by `":memory:"` — each call is an isolated empty database, ideal for tests. Cheap to clone (Arc-wrapped). |
 | `DbConfig` | `model` | Database configuration. `DbConfig::from_env()` reads `RWS_DB_*` env vars; construct manually with `DbConfig { host, port, user, password, database, pool_size }`. |
 | `ModelRepository<T, i64>` | `model` | Async JPA-style CRUD: `find_by_id`, `find_all`, `save` (INSERT when pk==0, UPDATE otherwise), `save_all`, `delete_by_id`, `delete_all_by_id`, `count`, `exists_by_id` — all `async fn`. Obtain via `T::repository(&pool)` when using `#[derive(Model)]`. |
@@ -3266,6 +3266,25 @@ fn cors_allowed_for_listed_origin() {
 ```
 
 For tests that depend on filesystem paths (e.g. serving static files), continue using `App::handle_request` with `test_env::lock()` and `override_environment_variables_from_config`, since those tests need the config file to set the correct root directory.
+
+**`AppWithState`, `AsyncAppWithState`, and `ConfigDrivenApp` all support the same pattern.** Each falls through to a built-in `App` for anything its own routes don't handle; by default that fallback is `App::new()` (reads `RWS_CONFIG_*` per request, same as if you'd called `App::new()` yourself). Call `.with_config(ServerConfig)` on any of them to pin that fallback instead:
+
+```rust
+use rust_web_server::state::AppWithState;
+use rust_web_server::server_config::ServerConfig;
+use rust_web_server::test_client::TestClient;
+
+let config = ServerConfig { cors_allow_all: false, cors_allow_origins: String::new(), ..ServerConfig::default() };
+
+// No env writes → no test_env::lock() needed, even though this app
+// registers its own routes and falls through to App for everything else.
+let app = AppWithState::new(())
+    .with_config(config)
+    .get("/version", |_req, _params, _conn, _state| Response::new());
+let client = TestClient::new(app);
+```
+
+`AsyncAppWithState::with_config` (requires `http2`) and `ConfigDrivenApp::with_config` (config-driven proxy — call it on the `ConfigDrivenApp` returned by `build_from_file()`/`build()`) work identically.
 
 ### 62. Background job queue
 

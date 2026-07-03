@@ -256,6 +256,21 @@ fn cors_passes_for_listed_origin() {
 
 `App::with_config(config)` pins the app to a fixed `ServerConfig` for the lifetime of the `App` instance — SIGHUP and `POST /admin/config/reload` do not affect it. `App::new()` (no pinned config) continues to read env vars per request, which is correct for production and for tests that specifically verify hot-reload behavior.
 
+`AppWithState`, `AsyncAppWithState` (requires `http2`), and `ConfigDrivenApp` (config-driven proxy) each fall through to a built-in `App` for any request their own routes/rules don't handle. That fallback reads env vars per request by default, same as `App::new()` — call `.with_config(ServerConfig)` on any of them for the same parallel-test-safe pinning:
+
+```rust
+use rust_web_server::state::AppWithState;
+use rust_web_server::server_config::ServerConfig;
+use rust_web_server::test_client::TestClient;
+
+let config = ServerConfig { cors_allow_all: false, cors_allow_origins: String::new(), ..ServerConfig::default() };
+
+let app = AppWithState::new(())
+    .with_config(config)
+    .get("/version", |_req, _params, _conn, _state| rust_web_server::response::Response::new());
+let client = TestClient::new(app);
+```
+
 :::note[No TCP overhead]
 Because `TestClient` bypasses the network stack entirely, tests do not need `#[tokio::test]`, `async`, or any port allocation. They run in plain `#[test]` functions and complete in microseconds.
 :::

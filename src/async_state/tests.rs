@@ -5,6 +5,7 @@ use crate::application::Application;
 use crate::async_state::AsyncAppWithState;
 use crate::core::New;
 use crate::di::Container;
+use crate::header::Header;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::Range;
@@ -12,6 +13,7 @@ use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::router::PathParams;
 use crate::server::{Address, ConnectionInfo};
+use crate::server_config::ServerConfig;
 
 fn conn() -> ConnectionInfo {
     ConnectionInfo {
@@ -261,4 +263,45 @@ async fn container_resolves_trait_object_service_through_an_async_handler() {
     let resp = app.execute(&get("/greet"), &conn()).unwrap();
     let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
     assert_eq!("hi from async", body);
+}
+
+// ── with_config: fallback App pinned to an explicit ServerConfig ───────────────
+
+#[tokio::test]
+async fn with_config_pins_cors_denial_on_fallback_request() {
+    let config = ServerConfig {
+        cors_allow_all: false,
+        cors_allow_origins: String::new(),
+        ..ServerConfig::default()
+    };
+    let app = AsyncAppWithState::new(()).with_config(config);
+
+    let mut req = get("/does-not-exist");
+    req.headers.push(Header {
+        name: Header::_ORIGIN.to_string(),
+        value: "https://evil.example.com".to_string(),
+    });
+
+    let resp = app.execute(&req, &conn()).unwrap();
+    assert!(resp._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).is_none());
+}
+
+#[tokio::test]
+async fn with_config_allows_cors_for_configured_origin_on_fallback_request() {
+    let config = ServerConfig {
+        cors_allow_all: false,
+        cors_allow_origins: "https://trusted.example.com".to_string(),
+        ..ServerConfig::default()
+    };
+    let app = AsyncAppWithState::new(()).with_config(config);
+
+    let mut req = get("/does-not-exist");
+    req.headers.push(Header {
+        name: Header::_ORIGIN.to_string(),
+        value: "https://trusted.example.com".to_string(),
+    });
+
+    let resp = app.execute(&req, &conn()).unwrap();
+    let acao = resp._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
+    assert_eq!("https://trusted.example.com", acao.value);
 }

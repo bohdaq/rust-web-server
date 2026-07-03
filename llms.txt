@@ -915,6 +915,19 @@ let res = client.get("/").send();
 
 `ServerConfig::from_env()` reads all `RWS_CONFIG_*` vars (used by `App::new()` on each request for hot-reload). `ServerConfig::default()` returns hardcoded defaults without touching env vars.
 
+`AppWithState`, `AsyncAppWithState` (requires `http2`), and `ConfigDrivenApp` (config-driven proxy) each
+fall through to a built-in `App` for anything their own routes/rules don't match. By default that
+fallback reads env vars per request like `App::new()`; call `.with_config(ServerConfig)` on any of
+them to pin it instead — same rationale, same parallel-test safety:
+
+```rust
+use rust_web_server::state::AppWithState;
+
+let app = AppWithState::new(my_state)
+    .with_config(config)
+    .get("/version", version_handler);
+```
+
 ---
 
 ## Background scheduler (src/scheduler/mod.rs)

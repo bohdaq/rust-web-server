@@ -1,11 +1,13 @@
 //! Unit tests for the proxy_config module.
 
 use crate::application::Application;
+use crate::header::Header;
 use crate::proxy_config::{
     ActionConfig, DynamicProxy, MatchConfig, ProxyConfig, RouteMatcher,
 };
 use crate::request::Request;
 use crate::server::{Address, ConnectionInfo};
+use crate::server_config::ServerConfig;
 
 fn make_conn(ip: &str) -> ConnectionInfo {
     ConnectionInfo {
@@ -271,6 +273,46 @@ content_type = "text/plain"
     let req = make_request("GET", "/healthz");
     let resp = app.execute(&req, &conn).unwrap();
     assert_eq!(resp.status_code, 200);
+}
+
+#[test]
+fn config_driven_app_with_config_pins_fallback_cors_denial() {
+    let cfg = ProxyConfig::from_str(
+        r#"
+[[route]]
+name = "ping"
+
+[route.match]
+path = "/ping"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "pong"
+content_type = "text/plain"
+"#,
+    );
+    let (app, _handles) = crate::proxy_config::builder::build(cfg);
+    let config = ServerConfig {
+        cors_allow_all: false,
+        cors_allow_origins: String::new(), // no allowed origins -> CORS denied
+        ..ServerConfig::default()
+    };
+    let app = app.with_config(config);
+
+    let conn = make_conn("127.0.0.1");
+    // /healthz is not a configured route, so this falls through to the
+    // pinned fallback App and should reflect its CORS settings, not env vars.
+    let mut req = make_request("GET", "/healthz");
+    req.headers.push(Header {
+        name: Header::_ORIGIN.to_string(),
+        value: "https://evil.example.com".to_string(),
+    });
+
+    let resp = app.execute(&req, &conn).unwrap();
+    assert!(resp._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).is_none());
 }
 
 #[test]

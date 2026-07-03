@@ -60,6 +60,7 @@ use crate::request::Request;
 use crate::response::Response;
 use crate::router::{PathParams, Router};
 use crate::server::ConnectionInfo;
+use crate::server_config::ServerConfig;
 
 /// An [`Application`] that combines user-defined state-aware routes with the
 /// built-in [`App`] controller chain as a fallback.
@@ -70,6 +71,11 @@ use crate::server::ConnectionInfo;
 pub struct AppWithState<S> {
     state: Arc<S>,
     router: Router,
+    /// When `Some`, the fallback `App` is pinned to this config (see
+    /// [`App::with_config`]); when `None`, the fallback reads
+    /// `RWS_CONFIG_*` env vars per request via `App::new()`, same as `App`'s
+    /// own default.
+    config: Option<Arc<ServerConfig>>,
 }
 
 impl<S: Send + Sync + 'static> AppWithState<S> {
@@ -81,12 +87,35 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
         AppWithState {
             state: Arc::new(state),
             router: Router::new(),
+            config: None,
         }
+    }
+
+    /// Pin the fallback [`App`] (used for any request this app's own routes
+    /// don't match) to an explicit [`ServerConfig`], instead of reading
+    /// `RWS_CONFIG_*` environment variables per request.
+    ///
+    /// Mirrors [`App::with_config`] — same rationale: safe for parallel
+    /// tests (no `test_env::lock()` needed) and lets multiple
+    /// differently-configured instances coexist in one process.
+    pub fn with_config(mut self, config: ServerConfig) -> Self {
+        self.config = Some(Arc::new(config));
+        self
     }
 
     /// Return a reference to the shared state.
     pub fn state(&self) -> &S {
         &self.state
+    }
+
+    /// The fallback `App` for requests this app's own routes don't match —
+    /// pinned to `self.config` if set, otherwise `App::new()`'s default
+    /// per-request env read.
+    fn fallback_app(&self) -> App {
+        match &self.config {
+            Some(c) => App::with_config((**c).clone()),
+            None => App::new(),
+        }
     }
 
     /// Register a `GET` handler for `pattern`.
@@ -206,6 +235,6 @@ impl<S: Send + Sync + 'static> Application for AppWithState<S> {
         if let Some(response) = self.router.handle(request, connection) {
             return Ok(response);
         }
-        App::new().execute(request, connection)
+        self.fallback_app().execute(request, connection)
     }
 }

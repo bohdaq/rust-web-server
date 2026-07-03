@@ -158,7 +158,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 - HTML templates — Tera engine (Jinja2 syntax); `template::render()` one-liner (`tera` feature)
 - Dependency injection — `Container` keyed by `TypeId`; concrete types and `dyn Trait`
 - In-process test client — `TestClient::new(app)` dispatches without a TCP socket
-- Per-instance typed config — `ServerConfig` struct; `App::with_config(config)` pins an app to explicit settings for parallel-safe integration tests without env-var writes
+- Per-instance typed config — `ServerConfig` struct; `App::with_config(config)`, `AppWithState::with_config`, `AsyncAppWithState::with_config`, and `ConfigDrivenApp::with_config` all pin an app to explicit settings for parallel-safe integration tests without env-var writes
 
 ### Proxy & gateway
 

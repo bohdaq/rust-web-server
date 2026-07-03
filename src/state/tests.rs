@@ -3,12 +3,14 @@ use std::sync::Arc;
 use crate::application::Application;
 use crate::core::New;
 use crate::di::Container;
+use crate::header::Header;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::Range;
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::{Address, ConnectionInfo};
+use crate::server_config::ServerConfig;
 use crate::state::AppWithState;
 
 fn conn() -> ConnectionInfo {
@@ -246,4 +248,62 @@ fn container_resolution_miss_does_not_panic_the_handler() {
     let resp = app.execute(&get("/x"), &conn()).unwrap();
     let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
     assert_eq!("missing", body);
+}
+
+// ── with_config: fallback App pinned to an explicit ServerConfig ───────────────
+//
+// No env writes here — App::with_config's whole point is to avoid them — so
+// these run safely without test_env::lock(), unlike a test that touched
+// RWS_CONFIG_* directly.
+
+#[test]
+fn with_config_pins_cors_denial_on_fallback_request() {
+    let config = ServerConfig {
+        cors_allow_all: false,
+        cors_allow_origins: String::new(), // no allowed origins -> CORS denied
+        ..ServerConfig::default()
+    };
+    // No routes registered, so every request falls through to the built-in App.
+    let app = AppWithState::new(()).with_config(config);
+
+    let mut req = get("/does-not-exist");
+    req.headers.push(Header {
+        name: Header::_ORIGIN.to_string(),
+        value: "https://evil.example.com".to_string(),
+    });
+
+    let resp = app.execute(&req, &conn()).unwrap();
+    assert!(resp._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).is_none());
+}
+
+#[test]
+fn with_config_allows_cors_for_configured_origin_on_fallback_request() {
+    let config = ServerConfig {
+        cors_allow_all: false,
+        cors_allow_origins: "https://trusted.example.com".to_string(),
+        ..ServerConfig::default()
+    };
+    let app = AppWithState::new(()).with_config(config);
+
+    let mut req = get("/does-not-exist");
+    req.headers.push(Header {
+        name: Header::_ORIGIN.to_string(),
+        value: "https://trusted.example.com".to_string(),
+    });
+
+    let resp = app.execute(&req, &conn()).unwrap();
+    let acao = resp._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
+    assert_eq!("https://trusted.example.com", acao.value);
+}
+
+#[test]
+fn own_routes_still_take_priority_over_fallback_when_config_is_pinned() {
+    let config = ServerConfig { cors_allow_all: false, ..ServerConfig::default() };
+    let app = AppWithState::new(())
+        .with_config(config)
+        .get("/greet", |_req, _params, _conn, _state| ok_text("hi"));
+
+    let resp = app.execute(&get("/greet"), &conn()).unwrap();
+    let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+    assert_eq!("hi", body);
 }
