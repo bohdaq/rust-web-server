@@ -527,6 +527,54 @@ let claims = cache.verify_jwt(&id_token, &VerifyOptions {
 
 ---
 
+## Email / SMTP (src/mailer/mod.rs, requires `mailer` feature)
+
+STARTTLS and SMTPS additionally require `http-client` or `http2`. Plain SMTP (`SmtpTls::None`) works with only `mailer`.
+
+```rust
+use rust_web_server::mailer::{Email, Mailer, SmtpTls};
+
+// From environment variables (RWS_SMTP_HOST, RWS_SMTP_FROM, etc.)
+let mailer = Mailer::from_env()?;
+
+// Direct construction
+let mailer = Mailer {
+    host: "smtp.gmail.com".into(),
+    port: 587,
+    user: Some("you@gmail.com".into()),
+    password: Some("app-password".into()),
+    from: "you@gmail.com".into(),
+    tls: SmtpTls::Starttls,   // Starttls | Smtps | None
+    timeout_ms: 10_000,
+};
+
+// Build and send an email
+let email = Email::builder()
+    .to("user@example.com")
+    .cc("team@example.com")        // optional
+    .subject("Welcome!")
+    .text("Thanks for signing up.") // plain text
+    .html("<p>Thanks for <b>signing up</b>.</p>") // HTML (multipart if both set)
+    .reply_to("support@example.com")
+    .build()?;
+
+mailer.send(&email)?;
+```
+
+| Env variable | Default | Notes |
+|---|---|---|
+| `RWS_SMTP_HOST` | required | SMTP server hostname |
+| `RWS_SMTP_PORT` | `587` | 25=relay, 587=STARTTLS, 465=SMTPS |
+| `RWS_SMTP_USER` | — | Omit to skip AUTH |
+| `RWS_SMTP_PASSWORD` | — | |
+| `RWS_SMTP_FROM` | required | Envelope + `From:` address |
+| `RWS_SMTP_TLS` | `starttls` | `starttls` \| `smtps` \| `none` |
+| `RWS_SMTP_TIMEOUT_MS` | `10000` | Connect/read/write timeout ms |
+
+`Email::builder()` validates: at least one `to`, non-empty `subject`, at least one of `text`/`html`. Generates `multipart/alternative` when both text and HTML are provided. SMTP dot-stuffing applied automatically (RFC 5321 §4.5.2).
+
+---
+
 ## Outbound HTTP client (src/http_client/, always available)
 
 ```rust
@@ -962,6 +1010,7 @@ src/scheduler/          — Scheduler (fixed-rate, fixed-delay, cron)
 src/server/             — Server (bind, accept, process), ConnectionInfo, Address
 src/service_discovery/  — BackendPool, DiscoverySource variants
 src/session/            — SessionStore, Session, cookie helpers
+src/mailer/             — Mailer, Email, EmailBuilder, SmtpTls, MailerError (mailer feature)
 src/sso/                — OidcAuth, OidcConfig, OidcProvider, JwksCache (sso feature)
 src/state/              — AppWithState<S>
 src/symbol/             — ASCII/byte constants

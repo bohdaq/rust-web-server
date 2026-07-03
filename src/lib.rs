@@ -130,6 +130,8 @@ pub mod crypto;
 pub mod csrf;
 #[cfg(feature = "sso")]
 pub mod sso;
+#[cfg(feature = "mailer")]
+pub mod mailer;
 pub mod prelude;
 
 #[cfg(feature = "http2")]

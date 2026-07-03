@@ -76,6 +76,7 @@ export default defineConfig({
             { label: 'OAuth2 / OIDC SSO',      link: '/features/sso/' },
             { label: 'CSRF Protection',        link: '/features/csrf/' },
             { label: 'Sessions',               link: '/features/sessions/' },
+            { label: 'Email / SMTP',           link: '/features/email/' },
             { label: 'Response Caching',       link: '/features/caching/' },
             { label: 'Metrics',                link: '/features/metrics/' },
             { label: 'Distributed Tracing',    link: '/features/tracing/' },

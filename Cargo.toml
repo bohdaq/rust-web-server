@@ -37,6 +37,7 @@ model-postgres = ["dep:postgres"]
 model-mysql    = ["dep:mysql"]
 crypto = ["dep:argon2", "dep:rand_core"]
 csrf   = ["dep:rand_core"]
+mailer = []  # plain SMTP; STARTTLS/SMTPS additionally requires http-client or http2
 sso    = ["dep:rsa", "dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:serde_json", "http-client"]
 
 [dependencies]

@@ -160,6 +160,10 @@ The crate exposes its core types so you can compose them in your own server or t
 | `JwksCache` | `sso` | Thread-safe JWKS key cache. Lazy-fetches and auto-rotates on `kid` miss. `verify_jwt(token, opts)` validates RS256 and ES256 JWTs end-to-end (signature + expiry + aud + iss). |
 | `OidcClient` | `sso` | OAuth2 client: `authorization_url(pkce, state, nonce)` builds the IdP redirect URL; `exchange_code(code, verifier)` posts to the token endpoint; `fetch_user_info(token)` calls the UserInfo endpoint. |
 | `PkceVerifier` / `PkceChallenge` | `sso` | RFC 7636 PKCE. `PkceVerifier::new()` generates a 32-byte random code verifier; `.challenge()` returns the S256 `PkceChallenge` to include in the authorization URL. |
+| `Mailer` | `mailer` (requires `mailer` feature; STARTTLS/SMTPS additionally require `http-client` or `http2`) | SMTP mailer. `Mailer::from_env()` reads `RWS_SMTP_HOST/PORT/USER/PASSWORD/FROM/TLS/TIMEOUT_MS`. `mailer.send(&email)` opens a TCP connection, negotiates TLS (STARTTLS or SMTPS), authenticates with `AUTH PLAIN`, and delivers the message. Three TLS modes: `SmtpTls::None` (plain, port 25), `SmtpTls::Starttls` (default, port 587), `SmtpTls::Smtps` (implicit TLS, port 465). |
+| `Email` / `EmailBuilder` | `mailer` | RFC 5322 email builder. `Email::builder().to(addr).subject(s).text(body).html(body).cc(addr).bcc(addr).reply_to(addr).build()`. Validates that at least one `To:` address, a subject, and a body (text or HTML) are provided. Generates `multipart/alternative` when both text and HTML are set. |
+| `SmtpTls` | `mailer` | Enum for SMTP TLS mode: `None`, `Starttls`, `Smtps`. |
+| `MailerError` | `mailer` | Error type for SMTP failures: `MissingConfig`, `Io`, `Smtp`, `Build`. Implements `std::error::Error`. |
 
 ---
 
@@ -3108,3 +3112,92 @@ Enable with the `model-sqlite` feature (no feature flag needed for `DbConnection
 [dependencies]
 rust-web-server = { version = "17", features = ["model-sqlite"] }
 ```
+
+---
+
+### 60. Sending transactional email (SMTP)
+
+Enable the `mailer` feature, set `RWS_SMTP_*` env vars, and call `Mailer::send()` from any handler. STARTTLS and SMTPS require the `http-client` or `http2` feature for TLS.
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["mailer", "http-client"] }
+```
+
+**Sending a password-reset email**
+
+```rust,no_run
+use rust_web_server::mailer::{Email, Mailer};
+
+// Read SMTP config from environment
+let mailer = Mailer::from_env().expect("SMTP not configured");
+
+let email = Email::builder()
+    .to("user@example.com")
+    .subject("Reset your password")
+    .text("Click here to reset: https://example.com/reset?token=abc123")
+    .html("<p>Click <a href=\"https://example.com/reset?token=abc123\">here</a> to reset.</p>")
+    .build()
+    .unwrap();
+
+mailer.send(&email).expect("send failed");
+```
+
+**From a handler with shared mailer state**
+
+```rust,no_run
+use std::sync::Arc;
+use rust_web_server::app::App;
+use rust_web_server::mailer::{Email, Mailer};
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+struct State {
+    mailer: Arc<Mailer>,
+}
+
+let state = State {
+    mailer: Arc::new(Mailer::from_env().unwrap()),
+};
+
+let app = App::with_state(state)
+    .post("/register", |req, _params, _conn, state| {
+        let email = Email::builder()
+            .to("new_user@example.com")
+            .subject("Welcome!")
+            .text("Thanks for signing up.")
+            .build()
+            .unwrap();
+        let _ = state.mailer.send(&email); // send in background in real code
+
+        let mut r = Response::new();
+        r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        r
+    });
+```
+
+**Direct construction (no env vars)**
+
+```rust,no_run
+use rust_web_server::mailer::{Mailer, SmtpTls};
+
+let mailer = Mailer {
+    host: "smtp.sendgrid.net".into(),
+    port: 587,
+    user: Some("apikey".into()),
+    password: Some("SG.xxxxx".into()),
+    from: "noreply@example.com".into(),
+    tls: SmtpTls::Starttls,
+    timeout_ms: 10_000,
+};
+```
+
+| Env variable | Default | Notes |
+|---|---|---|
+| `RWS_SMTP_HOST` | — (required) | Hostname of the SMTP server |
+| `RWS_SMTP_PORT` | `587` | 25 = relay, 587 = STARTTLS, 465 = SMTPS |
+| `RWS_SMTP_USER` | — | Omit to skip AUTH |
+| `RWS_SMTP_PASSWORD` | — | |
+| `RWS_SMTP_FROM` | — (required) | Envelope and `From:` address |
+| `RWS_SMTP_TLS` | `starttls` | `starttls`, `smtps`, or `none` |
+| `RWS_SMTP_TIMEOUT_MS` | `10000` | Connect / read / write timeout |
