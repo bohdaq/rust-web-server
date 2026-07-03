@@ -47,6 +47,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **File / object storage** — `Storage` trait; `LocalStorage` (disk) or `S3Storage` (AWS S3, R2, MinIO via AWS SigV4, no SDK) — `storage-local` / `storage-s3`
 - **OpenAPI / Swagger** — `.openapi(OpenApiConfig)` generates `GET /openapi.json` + `GET /docs` (Swagger UI) from registered routes — `openapi`
 - **Per-route timeouts** — `with_timeout`/`with_timeout_state`/`with_timeout_async` wrap a handler with its own deadline; `TimeoutLayer` for a whole app; config-driven proxy's `timeout_ms`
+- **Request ID middleware** — `RequestIdLayer` injects/echoes `X-Request-Id` on every request and response; `RequestId` extractor to read it
 
 ---
 

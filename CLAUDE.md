@@ -153,7 +153,7 @@ trait Middleware: Send + Sync {
 ```
 `WithMiddleware<A>::wrap(layer)` pushes layers onto a `Vec<Box<dyn Middleware>>`; layers are applied in push order (first-pushed is outermost). Any `Application` can be wrapped via `.wrap(layer)`.
 
-Built-in middleware: `RateLimitLayer`, `MetricsLayer`, `CacheLayer`, `OtelLayer`, `RewriteLayer`, `ReverseProxy`, `H2ReverseProxy`, `GrpcProxy`, `BasicAuthLayer`, `JwtLayer`, `IpFilter`.
+Built-in middleware: `RateLimitLayer`, `MetricsLayer`, `CacheLayer`, `OtelLayer`, `RewriteLayer`, `ReverseProxy`, `H2ReverseProxy`, `GrpcProxy`, `BasicAuthLayer`, `JwtLayer`, `IpFilter`, `RequestIdLayer`.
 
 ### Configuration
 

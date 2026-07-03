@@ -1081,6 +1081,31 @@ actually stops it).
 
 ---
 
+## Request ID / correlation ID middleware (src/request_id/mod.rs)
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::request_id::RequestIdLayer;
+
+let app = App::new().wrap(RequestIdLayer::new());
+```
+
+Ensures every request/response pair carries a stable `X-Request-Id` value:
+- Incoming request already has the header (set by an upstream gateway/service)? Echoed back unchanged
+  — the same ID follows the request across service boundaries.
+- Otherwise, generates one (`generate_request_id()` — UUID-v4-shaped, not crypto-random, fine for log
+  correlation) and injects it into the request *before* the handler runs, so handlers can read it like
+  any other header.
+- Always set on the response too.
+
+`.header("X-Correlation-Id")` overrides the header name. Read it in a handler via the `RequestId`
+extractor (`rust_web_server::extract::RequestId`, never fails — empty string if unset) or any normal
+header-reading path. Complements `OtelLayer`'s W3C `traceparent` spans rather than replacing them —
+`X-Request-Id` is a simple app-level ID; `traceparent` is the OTEL distributed-tracing context.
+
+---
+
 ## HTML templates (requires `tera` feature)
 
 ```rust
@@ -1193,6 +1218,7 @@ src/proxy_config/       — Config-driven proxy: ProxyConfig, ConfigDrivenApp, S
 src/range/              — Range, ContentRange, body construction
 src/rate_limit/         — RateLimiter, global()
 src/request/            — Request struct and HTTP/1.1 parsing
+src/request_id/         — RequestIdLayer, generate_request_id
 src/request_log/        — Per-request log middleware
 src/response/           — Response struct, STATUS_CODE_REASON_PHRASE
 src/rewrite/            — RewriteLayer (request/response rewriting)

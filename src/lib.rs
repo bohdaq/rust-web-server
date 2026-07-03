@@ -74,6 +74,7 @@ pub mod maintenance;
 pub mod metrics;
 pub mod mcp;
 pub mod request_log;
+pub mod request_id;
 pub mod otel;
 #[cfg(feature = "acme")]
 pub mod acme;

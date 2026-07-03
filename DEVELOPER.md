@@ -86,7 +86,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `VirtualHostConfig` | `virtual_host` | Per-domain cert configuration `{ domain, cert_file, key_file }` for multi-domain SNI routing |
 | `IntoResponse` / `AppError` | `error` | Typed errors that map to HTTP status codes |
 | `TestClient` | `test_client` | In-process HTTP test client — no TCP socket required |
-| `FromRequest` / `Body` / `BodyText` / `Query` | `extract` | Typed request extractors — parse body or query params, returning a ready error on failure |
+| `FromRequest` / `Body` / `BodyText` / `Query` / `RequestHeaders` / `RequestId` | `extract` | Typed request extractors — parse body, query params, headers, or the request-id header, returning a ready error on failure (`RequestId` never fails; empty string if unset) |
 | `RateLimiter` | `rate_limit` | Per-IP sliding-window rate limiter; `global()` reads config from env vars |
 | `WebSocket` / `Frame` | `websocket` | RFC 6455 WebSocket handshake, frame read/write; SHA-1 and base64 built in |
 | `AppWithState<S>` | `state` | State-aware application with built-in dynamic routing; state shared via `Arc<S>`. Use `App::with_state(S)` as the entry point. `.with_config(ServerConfig)` pins the fallback `App` (for requests none of this app's routes match) to explicit CORS/CSP settings instead of reading `RWS_CONFIG_*` env vars per request — mirrors `App::with_config`. |
@@ -102,6 +102,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `JwtLayer` | `auth` | JWT HS256 middleware; verifies `Authorization: Bearer` tokens with constant-time HMAC-SHA256. Requires `features = ["auth"]`. |
 | `build_jwt` / `verify_jwt` / `Claims` | `auth` | Sign and verify HS256 JWTs; `Claims` exposes `sub`, `exp`, and raw JSON payload. |
 | `IpFilter` | `ip_filter` | Allow/deny middleware keyed on client IPv4 address or CIDR range. `IpFilter::allow([...])` passes only listed addresses; `IpFilter::deny([...])` blocks them. |
+| `RequestIdLayer` / `RequestId` | `request_id` | Correlation-ID middleware. Echoes an incoming `X-Request-Id` unchanged, or generates one (`generate_request_id()`, UUID-v4-shaped, not crypto-random) — either way it's injected into the request (readable by handlers) and set on the response. `.header(name)` overrides the header name. `RequestId` (in `extract`) is a `FromRequest` convenience for reading it. |
 | `routes!` | `macros` | Declarative routing macro — builds `AppWithState`, `AsyncAppWithState`, or `Router` from a `METHOD "path" => handler` table. |
 | `OpenApiConfig` / `build_spec` | `openapi` (requires `openapi` feature) | OpenAPI 3.0 schema generation. `AppWithState::openapi(config)` / `AsyncAppWithState::openapi(config)` add `GET /openapi.json` (generated spec) and `GET /docs` (Swagger UI via CDN) covering every route registered so far. Scope: paths, methods, path parameters (`:name`/`*name` → `{name}`) — no request/response body schemas, since Rust has no runtime type reflection to extract them from `#[derive(Validate)]`/serde types. |
 | `#[route]`, `#[get]`, `#[post]`, … | `macros` (proc-macro) | Attribute macros that annotate handler functions with their HTTP method and path. Requires `features = ["macros"]`. |
@@ -3540,4 +3541,41 @@ timeout_ms = 120000
 ```
 
 **The honest limitation, in one place**: Rust cannot forcibly stop a running synchronous thread. `with_timeout`, `with_timeout_state`, and `TimeoutLayer` (used internally for the config-driven proxy case) all run the wrapped work on a background thread and return `504 Gateway Timeout` to the caller as soon as the deadline passes — but if the handler ignores its deadline, it keeps running to completion in the background; its result is just discarded. This bounds the **client's** wait time, not the handler's actual resource usage. Only `with_timeout_async` (backed by `tokio::time::timeout`) gets genuine cancellation, because dropping a suspended `Future` actually stops it at its next `.await` point.
+
+### 66. Correlating log lines with a request ID
+
+Wrap the app with `RequestIdLayer` so every request/response pair carries a stable ID your handlers and logs can reference, and that follows a request across service boundaries when the caller already sends one.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::request_id::RequestIdLayer;
+
+let app = App::new().wrap(RequestIdLayer::new());
 ```
+
+- If the incoming request already has an `X-Request-Id` header (set by an upstream gateway, load balancer, or calling service), that exact value is kept and echoed back — one ID follows the request across every hop instead of getting a new one at each service.
+- Otherwise, a fresh ID (`generate_request_id()`, UUID-v4-shaped but not cryptographically random — fine for correlating logs, not for security tokens) is generated and injected into the request *before* your handler runs.
+- Either way, the same value is always set on the response.
+
+Read it in a handler with the `RequestId` extractor, or any of the usual header-reading paths:
+
+```rust
+use rust_web_server::extract::{FromRequest, RequestId};
+use rust_web_server::request::Request;
+
+fn handler(request: &Request) {
+    let id = RequestId::from_request(request).unwrap();
+    println!("[{}] handling request", id.as_str());
+}
+```
+
+Use a different header (e.g. to match an existing convention) with `.header(...)`:
+
+```rust
+use rust_web_server::request_id::RequestIdLayer;
+
+let layer = RequestIdLayer::new().header("X-Correlation-Id");
+```
+
+`RequestIdLayer` composes with other middleware the same way any layer does — put it outermost (registered first via `.wrap()`, so it wraps everything else) if you want the same ID visible to every other middleware in the stack, including `OtelLayer` or your own access-logging middleware.

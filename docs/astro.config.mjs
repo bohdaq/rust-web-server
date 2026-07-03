@@ -84,6 +84,7 @@ export default defineConfig({
             { label: 'Hot Config Reload',      link: '/features/hot-reload/' },
             { label: 'Rewrite Middleware',     link: '/features/rewrite/' },
             { label: 'IP Filtering',           link: '/features/ip-filter/' },
+            { label: 'Request ID',             link: '/features/request-id/' },
             { label: 'Background Scheduler',   link: '/features/scheduler/' },
             { label: 'Background Job Queue',   link: '/features/jobs/' },
             { label: 'OpenAPI / Swagger',      link: '/features/openapi/' },

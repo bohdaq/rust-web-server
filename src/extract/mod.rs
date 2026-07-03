@@ -126,6 +126,33 @@ impl RequestHeaders {
     }
 }
 
+/// The request's correlation ID (`X-Request-Id` by default — see
+/// [`crate::request_id::DEFAULT_HEADER`]), for handlers that want it without
+/// reaching for [`RequestHeaders`] directly.
+///
+/// Never fails: if [`crate::request_id::RequestIdLayer`] isn't wrapping this
+/// app (or the caller didn't send the header), `.0` is an empty string.
+#[derive(Debug, Clone)]
+pub struct RequestId(pub String);
+
+impl FromRequest for RequestId {
+    fn from_request(request: &Request) -> Result<Self, Response> {
+        Ok(RequestId(
+            request
+                .get_header(crate::request_id::DEFAULT_HEADER.to_string())
+                .map(|h| h.value.clone())
+                .unwrap_or_default(),
+        ))
+    }
+}
+
+impl RequestId {
+    /// Returns the ID as a string slice, or `""` if none was set.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 fn bad_request(request: &Request, msg: &str) -> Response {
     let header_list = Header::get_header_list(request);
     let cr = Range::get_content_range(msg.as_bytes().to_vec(), MimeType::TEXT_PLAIN.to_string());
