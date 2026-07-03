@@ -10,7 +10,7 @@ use crate::application::Application;
 use crate::core::New;
 use crate::http::VERSION;
 use crate::middleware::Middleware;
-use crate::proxy::{ConnPool, LoadBalancing, ReverseProxy, read_response_poolable};
+use crate::proxy::{ConnPool, LoadBalancing, ReverseProxy, read_headers_only, read_response_from_partial};
 use crate::request::{METHOD, Request};
 use crate::server::{Address, ConnectionInfo};
 
@@ -443,7 +443,17 @@ fn pool_respects_max_idle_limit() {
     assert_eq!(2, pool.idle_count());
 }
 
-// ── Chunked decoding (read_response_poolable) ─────────────────────────────────
+// ── Chunked decoding (production path: read_headers_only + read_response_from_partial) ──
+
+/// Reads a full response the same way `ReverseProxy::try_backend`'s buffered
+/// path does — split header/body-prefix read followed by the pooling-aware
+/// body reader — rather than through a standalone single-buffer reader, so
+/// these tests exercise the exact code path production traffic takes.
+fn read_full_response(stream: &mut std::net::TcpStream) -> Result<(Vec<u8>, bool), String> {
+    let mut tmp = [0u8; 4096];
+    let (header_bytes, body_prefix) = read_headers_only(stream, &mut tmp)?;
+    read_response_from_partial(stream, header_bytes, body_prefix, &mut tmp)
+}
 
 #[test]
 fn chunked_response_is_decoded_and_poolable() {
@@ -463,7 +473,7 @@ fn chunked_response_is_decoded_and_poolable() {
     // Send a dummy request
     let _ = stream.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
 
-    let (resp_bytes, can_reuse) = read_response_poolable(&mut stream).unwrap();
+    let (resp_bytes, can_reuse) = read_full_response(&mut stream).unwrap();
     let resp = crate::response::Response::parse(&resp_bytes).unwrap();
 
     assert_eq!(200, resp.status_code);
@@ -489,7 +499,7 @@ fn chunked_multi_chunk_response_is_decoded_correctly() {
 
     let mut stream = std::net::TcpStream::connect(format!("127.0.0.1:{}", port)).unwrap();
     let _ = stream.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    let (resp_bytes, can_reuse) = read_response_poolable(&mut stream).unwrap();
+    let (resp_bytes, can_reuse) = read_full_response(&mut stream).unwrap();
     let resp = crate::response::Response::parse(&resp_bytes).unwrap();
     let body: Vec<u8> = resp.content_range_list.iter().flat_map(|c| c.body.iter().copied()).collect();
     assert_eq!(b"hello", body.as_slice());
@@ -510,7 +520,7 @@ fn connection_close_response_is_not_reusable() {
 
     let mut stream = std::net::TcpStream::connect(format!("127.0.0.1:{}", port)).unwrap();
     let _ = stream.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    let (_resp_bytes, can_reuse) = read_response_poolable(&mut stream).unwrap();
+    let (_resp_bytes, can_reuse) = read_full_response(&mut stream).unwrap();
     assert!(!can_reuse, "Connection: close responses must not be pooled");
 }
 

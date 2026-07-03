@@ -511,7 +511,13 @@ impl RespConn {
             drop(guard);
             return self.cmd(args);
         }
-        read_reply(stream)
+        match read_reply(stream)? {
+            // Surface RESP-level errors (auth failure, wrong type, readonly
+            // replica, ...) as a real error instead of letting callers treat
+            // them as "not found" / zero / success.
+            RespReply::Error(msg) => Err(std::io::Error::new(std::io::ErrorKind::Other, msg)),
+            reply => Ok(reply),
+        }
     }
 }
 
