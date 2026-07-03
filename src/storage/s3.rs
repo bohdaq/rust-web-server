@@ -1,3 +1,4 @@
+use super::aws_credentials::CredentialsProvider;
 use super::aws_sigv4;
 use super::{Storage, StorageError};
 use crate::http_client::{Client, Response};
@@ -9,7 +10,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct S3Config {
     pub bucket: String,
     pub region: String,
+    /// Empty string means "no static key — auto-detect workload identity
+    /// (EKS IRSA, ECS task role, EC2 IMDSv2) instead". See
+    /// [`S3Storage::new`].
     pub access_key: String,
+    /// Empty string means "no static key — auto-detect workload identity".
+    /// See [`S3Storage::new`].
     pub secret_key: String,
     /// Scheme + host, e.g. `https://s3.us-east-1.amazonaws.com`. Point this
     /// at a custom host to use Cloudflare R2, MinIO, or any other
@@ -24,17 +30,15 @@ impl S3Config {
     /// |---|---|
     /// | `RWS_S3_BUCKET` | **(required)** |
     /// | `RWS_S3_REGION` | `us-east-1` |
-    /// | `RWS_S3_ACCESS_KEY` | **(required)** |
-    /// | `RWS_S3_SECRET_KEY` | **(required)** |
+    /// | `RWS_S3_ACCESS_KEY` | optional — falls back to workload identity (IRSA/ECS/IMDS) when unset |
+    /// | `RWS_S3_SECRET_KEY` | optional — falls back to workload identity (IRSA/ECS/IMDS) when unset |
     /// | `RWS_S3_ENDPOINT` | `https://s3.{region}.amazonaws.com` |
     pub fn from_env() -> Result<Self, StorageError> {
         let bucket = env::var("RWS_S3_BUCKET")
             .map_err(|_| StorageError::new("RWS_S3_BUCKET environment variable is required"))?;
         let region = env::var("RWS_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string());
-        let access_key = env::var("RWS_S3_ACCESS_KEY")
-            .map_err(|_| StorageError::new("RWS_S3_ACCESS_KEY environment variable is required"))?;
-        let secret_key = env::var("RWS_S3_SECRET_KEY")
-            .map_err(|_| StorageError::new("RWS_S3_SECRET_KEY environment variable is required"))?;
+        let access_key = env::var("RWS_S3_ACCESS_KEY").unwrap_or_default();
+        let secret_key = env::var("RWS_S3_SECRET_KEY").unwrap_or_default();
         let endpoint = env::var("RWS_S3_ENDPOINT")
             .unwrap_or_else(|_| format!("https://s3.{region}.amazonaws.com"));
         Ok(S3Config { bucket, region, access_key, secret_key, endpoint })
@@ -48,14 +52,23 @@ impl S3Config {
 /// path-style addressing (`{endpoint}/{bucket}/{key}`), which every
 /// S3-compatible provider supports; virtual-hosted-style (`{bucket}.{host}`)
 /// is not used since custom endpoints for R2/MinIO don't reliably support it.
+///
+/// Credentials come from `config.access_key`/`config.secret_key` when both
+/// are non-empty; otherwise they're auto-detected from EKS IRSA, ECS task
+/// role, or EC2 IMDSv2 (in that order), cached, and refreshed shortly before
+/// expiry. See `crate::storage::aws_credentials`.
 pub struct S3Storage {
     config: S3Config,
     client: Client,
+    credentials: CredentialsProvider,
 }
 
 impl S3Storage {
     pub fn new(config: S3Config) -> Self {
-        S3Storage { config, client: Client::new() }
+        let access_key = non_empty(&config.access_key);
+        let secret_key = non_empty(&config.secret_key);
+        let credentials = CredentialsProvider::detect(&config.region, access_key, secret_key);
+        S3Storage { config, client: Client::new(), credentials }
     }
 
     /// Shortcut for `S3Storage::new(S3Config::from_env()?)`.
@@ -93,18 +106,20 @@ impl S3Storage {
         format!("{}{}", self.config.endpoint.trim_end_matches('/'), self.canonical_path(key))
     }
 
-    fn signed_headers(&self, method: &str, key: &str, payload: &[u8]) -> Vec<(String, String)> {
+    fn signed_headers(&self, method: &str, key: &str, payload: &[u8]) -> Result<Vec<(String, String)>, StorageError> {
+        let creds = self.credentials.get()?;
         let epoch_secs = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-        aws_sigv4::sign(
+        Ok(aws_sigv4::sign(
             method,
             &self.host(),
             &self.canonical_path(key),
             payload,
             &self.config.region,
-            &self.config.access_key,
-            &self.config.secret_key,
+            &creds.access_key,
+            &creds.secret_key,
+            creds.session_token.as_deref(),
             epoch_secs,
-        )
+        ))
     }
 
     fn error_from_response(action: &str, key: &str, resp: &Response) -> StorageError {
@@ -120,7 +135,7 @@ impl Storage for S3Storage {
     fn put(&self, key: &str, data: &[u8], content_type: &str) -> Result<String, StorageError> {
         let url = self.request_url(key);
         let mut builder = self.client.put(&url).header("Content-Type", content_type);
-        for (name, value) in self.signed_headers("PUT", key, data) {
+        for (name, value) in self.signed_headers("PUT", key, data)? {
             // The `host` entry documents what was signed; the actual `Host:`
             // header is already sent by `Client`, derived from `url`.
             if name.eq_ignore_ascii_case("host") {
@@ -141,7 +156,7 @@ impl Storage for S3Storage {
     fn get(&self, key: &str) -> Result<Vec<u8>, StorageError> {
         let url = self.request_url(key);
         let mut builder = self.client.get(&url);
-        for (name, value) in self.signed_headers("GET", key, b"") {
+        for (name, value) in self.signed_headers("GET", key, b"")? {
             if name.eq_ignore_ascii_case("host") {
                 continue;
             }
@@ -157,7 +172,7 @@ impl Storage for S3Storage {
     fn delete(&self, key: &str) -> Result<(), StorageError> {
         let url = self.request_url(key);
         let mut builder = self.client.delete(&url);
-        for (name, value) in self.signed_headers("DELETE", key, b"") {
+        for (name, value) in self.signed_headers("DELETE", key, b"")? {
             if name.eq_ignore_ascii_case("host") {
                 continue;
             }
@@ -175,6 +190,10 @@ impl Storage for S3Storage {
     fn url(&self, key: &str) -> String {
         self.request_url(key)
     }
+}
+
+fn non_empty(s: &str) -> Option<String> {
+    if s.is_empty() { None } else { Some(s.to_string()) }
 }
 
 #[cfg(test)]

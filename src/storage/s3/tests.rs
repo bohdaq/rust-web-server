@@ -110,6 +110,11 @@ fn header<'a>(req: &'a CapturedRequest, name: &str) -> Option<&'a str> {
 
 #[test]
 fn put_sends_signed_request_with_correct_path_and_body() {
+    // `RWS_S3_CREDENTIAL_SOURCE` is a process-wide override that takes
+    // priority over static keys (see `aws_credentials::CredentialsProvider::
+    // detect`), so any test constructing an `S3Storage` — even with static
+    // keys — races with tests that set it unless they share this lock.
+    let _g = crate::storage::aws_credentials::credential_env_lock().lock().unwrap();
     let (port, captured) = spawn_mock_s3("HTTP/1.1 200 OK", b"");
     let store = S3Storage::new(test_config(port));
 
@@ -131,10 +136,15 @@ fn put_sends_signed_request_with_correct_path_and_body() {
     // Exactly one Host header — no duplicate from the signed header list.
     let host_count = req.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("host")).count();
     assert_eq!(1, host_count);
+
+    // Regression guard: static credentials never carry a session token, so
+    // no x-amz-security-token header should appear on the wire.
+    assert!(header(&req, "x-amz-security-token").is_none());
 }
 
 #[test]
 fn get_returns_body_on_success() {
+    let _g = crate::storage::aws_credentials::credential_env_lock().lock().unwrap();
     let (port, _captured) = spawn_mock_s3("HTTP/1.1 200 OK", b"file contents");
     let store = S3Storage::new(test_config(port));
     let bytes = store.get("uploads/photo.png").unwrap();
@@ -143,6 +153,7 @@ fn get_returns_body_on_success() {
 
 #[test]
 fn get_returns_error_on_404() {
+    let _g = crate::storage::aws_credentials::credential_env_lock().lock().unwrap();
     let (port, _captured) = spawn_mock_s3("HTTP/1.1 404 Not Found", b"NoSuchKey");
     let store = S3Storage::new(test_config(port));
     let err = store.get("missing.png").unwrap_err();
@@ -151,6 +162,7 @@ fn get_returns_error_on_404() {
 
 #[test]
 fn delete_sends_delete_method() {
+    let _g = crate::storage::aws_credentials::credential_env_lock().lock().unwrap();
     let (port, captured) = spawn_mock_s3("HTTP/1.1 204 No Content", b"");
     let store = S3Storage::new(test_config(port));
     store.delete("uploads/photo.png").unwrap();
@@ -167,11 +179,77 @@ fn url_uses_path_style_addressing() {
 
 #[test]
 fn key_with_special_characters_is_percent_encoded_in_path() {
+    let _g = crate::storage::aws_credentials::credential_env_lock().lock().unwrap();
     let (port, captured) = spawn_mock_s3("HTTP/1.1 200 OK", b"");
     let store = S3Storage::new(test_config(port));
     store.put("a file.txt", b"x", "text/plain").unwrap();
     let req = captured.lock().unwrap().take().unwrap();
     assert_eq!("/test-bucket/a%20file.txt", req.path);
+}
+
+// ── Dynamic (workload-identity) credentials ─────────────────────────────────
+
+const DYNAMIC_CREDENTIAL_ENV_VARS: &[&str] = &[
+    "RWS_S3_CREDENTIAL_SOURCE",
+    "AWS_ROLE_ARN",
+    "AWS_WEB_IDENTITY_TOKEN_FILE",
+    "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+    "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+    "AWS_CONTAINER_AUTHORIZATION_TOKEN",
+];
+
+fn clear_dynamic_credential_env_vars() {
+    for v in DYNAMIC_CREDENTIAL_ENV_VARS {
+        std::env::remove_var(v);
+    }
+}
+
+#[test]
+fn put_sends_x_amz_security_token_header_when_using_dynamic_credentials() {
+    // Shared with `aws_credentials::tests` — both files mutate the same
+    // process-wide AWS_*/RWS_S3_CREDENTIAL_SOURCE env vars.
+    let _g = crate::storage::aws_credentials::credential_env_lock().lock().unwrap();
+    clear_dynamic_credential_env_vars();
+
+    // Stand-in ECS task-role metadata endpoint returning temporary
+    // credentials with a session token.
+    let creds_json = br#"{"Code":"Success","AccessKeyId":"AKIADYNAMIC","SecretAccessKey":"secretdynamic","Token":"dynamictoken","Expiration":"2099-01-01T00:00:00Z"}"#;
+    let (ecs_port, _ecs_captured) = spawn_mock_s3("HTTP/1.1 200 OK", creds_json);
+    std::env::set_var("AWS_CONTAINER_CREDENTIALS_FULL_URI", format!("http://127.0.0.1:{ecs_port}/creds"));
+
+    let (s3_port, s3_captured) = spawn_mock_s3("HTTP/1.1 200 OK", b"");
+    let mut config = test_config(s3_port);
+    config.access_key = String::new();
+    config.secret_key = String::new();
+    let store = S3Storage::new(config);
+
+    store.put("uploads/photo.png", b"data", "image/png").unwrap();
+
+    let req = s3_captured.lock().unwrap().take().unwrap();
+    assert_eq!(Some("dynamictoken"), header(&req, "x-amz-security-token"));
+    assert!(header(&req, "Authorization").unwrap().starts_with("AWS4-HMAC-SHA256 Credential=AKIADYNAMIC/"));
+
+    clear_dynamic_credential_env_vars();
+}
+
+#[test]
+fn put_returns_storage_error_when_credential_source_is_unreachable() {
+    let _g = crate::storage::aws_credentials::credential_env_lock().lock().unwrap();
+    clear_dynamic_credential_env_vars();
+    // Force IMDS with nothing listening — the request must fail cleanly
+    // rather than hang or panic.
+    std::env::set_var("RWS_S3_CREDENTIAL_SOURCE", "imds");
+
+    let (s3_port, _s3_captured) = spawn_mock_s3("HTTP/1.1 200 OK", b"");
+    let mut config = test_config(s3_port);
+    config.access_key = String::new();
+    config.secret_key = String::new();
+    let store = S3Storage::new(config);
+
+    let err = store.put("uploads/photo.png", b"data", "image/png").unwrap_err();
+    assert!(err.to_string().contains("IMDSv2"));
+
+    clear_dynamic_credential_env_vars();
 }
 
 // ── S3Config::from_env ───────────────────────────────────────────────────────
@@ -182,12 +260,30 @@ fn env_lock() -> &'static Mutex<()> {
 }
 
 #[test]
-fn from_env_requires_bucket_and_credentials() {
+fn from_env_requires_bucket() {
     let _g = env_lock().lock().unwrap();
     std::env::remove_var("RWS_S3_BUCKET");
     std::env::remove_var("RWS_S3_ACCESS_KEY");
     std::env::remove_var("RWS_S3_SECRET_KEY");
     assert!(S3Config::from_env().is_err());
+}
+
+#[test]
+fn from_env_no_longer_requires_access_and_secret_key() {
+    // Static keys are optional: when absent, credentials are auto-detected
+    // from workload identity (IRSA/ECS/IMDS) instead — see
+    // `crate::storage::aws_credentials`. Construction itself does no I/O
+    // and must not fail just because the keys are unset.
+    let _g = env_lock().lock().unwrap();
+    std::env::set_var("RWS_S3_BUCKET", "my-bucket");
+    std::env::remove_var("RWS_S3_ACCESS_KEY");
+    std::env::remove_var("RWS_S3_SECRET_KEY");
+
+    let cfg = S3Config::from_env().unwrap();
+    assert_eq!("", cfg.access_key);
+    assert_eq!("", cfg.secret_key);
+
+    std::env::remove_var("RWS_S3_BUCKET");
 }
 
 #[test]

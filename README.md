@@ -251,6 +251,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - `Storage` trait — `put`/`get`/`delete`/`url`; write handler code once, swap backends
 - `LocalStorage` — stores files on local disk; `storage-local` feature, no new deps
 - `S3Storage` — AWS S3, Cloudflare R2, MinIO via AWS Signature V4 over the outbound HTTP client; no AWS SDK; `storage-s3` feature
+- Workload identity — EKS IRSA, ECS task roles, EC2 IMDSv2 auto-detected when static keys aren't set; no static keys required in cloud deployments
 
 ---
 
@@ -274,7 +275,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 | `mailer` | SMTP email — `Mailer::from_env()` + `Email::builder()`; plain, STARTTLS, and SMTPS; multipart text+HTML; AUTH PLAIN; no third-party mail library (STARTTLS/SMTPS additionally require `http-client` or `http2`) |
 | `jobs` | `JobQueue` — in-memory background job queue with retry + exponential backoff. `PersistentJobQueue` (additionally requires a `model-*` feature) persists jobs to survive a crash/restart. |
 | `storage-local` | `LocalStorage` — file storage on local disk; no new deps |
-| `storage-s3` | `S3Storage` — S3-compatible object storage (AWS S3, R2, MinIO); AWS SigV4 signing via `hmac` + `sha2`, no AWS SDK |
+| `storage-s3` | `S3Storage` — S3-compatible object storage (AWS S3, R2, MinIO); AWS SigV4 signing via `hmac` + `sha2`; static keys or auto-detected workload identity (EKS IRSA / ECS task role / EC2 IMDSv2), no AWS SDK |
 | `openapi` | `AppWithState`/`AsyncAppWithState::openapi(config)` — generates `GET /openapi.json` + `GET /docs` (Swagger UI) from registered routes; no new deps |
 | `webhook` | `verify_webhook_signature` — HMAC signature verification for GitHub, Shopify, and Stripe webhooks; `hmac` + `sha2`, no new deps beyond what `auth`/`crypto` already use |
 | `rewrite-regex` | `RewriteLayer::request_uri_regex_rewrite` — regex URI rewriting with capture-group expansion, nginx `rewrite`-directive style; adds `regex` |

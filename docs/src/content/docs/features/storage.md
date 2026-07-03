@@ -80,8 +80,8 @@ let public_url = store.url(&key);
 |---|---|
 | `RWS_S3_BUCKET` | **(required)** |
 | `RWS_S3_REGION` | `us-east-1` |
-| `RWS_S3_ACCESS_KEY` | **(required)** |
-| `RWS_S3_SECRET_KEY` | **(required)** |
+| `RWS_S3_ACCESS_KEY` | optional — falls back to workload identity (below) when unset |
+| `RWS_S3_SECRET_KEY` | optional — falls back to workload identity (below) when unset |
 | `RWS_S3_ENDPOINT` | `https://s3.{region}.amazonaws.com` |
 
 Point `RWS_S3_ENDPOINT` at a custom host to use a non-AWS provider:
@@ -108,12 +108,32 @@ let store = S3Storage::new(S3Config {
 });
 ```
 
+### Workload identity (no static keys)
+
+When `RWS_S3_ACCESS_KEY`/`RWS_S3_SECRET_KEY` are unset, `S3Storage` auto-detects short-lived credentials from the environment instead — no AWS SDK, no static keys to rotate or leak. Detection follows the same precedence AWS's own SDKs use:
+
+| Source | Triggered by | Notes |
+|---|---|---|
+| EKS IRSA | `AWS_ROLE_ARN` + `AWS_WEB_IDENTITY_TOKEN_FILE` | Injected automatically by the EKS pod-identity webhook. Calls STS `AssumeRoleWithWebIdentity`. |
+| ECS task role | `AWS_CONTAINER_CREDENTIALS_FULL_URI` or `_RELATIVE_URI` | Injected automatically by the ECS agent. |
+| EC2 IMDSv2 | — (last resort) | Each request uses a short timeout so a non-EC2 host (local dev, CI, GCP, Azure) fails fast instead of hanging. |
+
+Set `RWS_S3_CREDENTIAL_SOURCE=static|irsa|ecs|imds` to force a specific source and skip detection entirely — useful to guarantee a non-cloud host never even probes the EC2 metadata endpoint.
+
+Credentials are cached in memory and refreshed automatically shortly before they expire — no per-request network overhead once a request has been signed at least once.
+
+```bash
+# On EKS/ECS/EC2, just omit the static keys — no code change needed:
+RWS_S3_BUCKET=my-bucket
+RWS_S3_REGION=us-east-1
+```
+
 ### Addressing style
 
 `S3Storage` always uses **path-style** addressing — `{endpoint}/{bucket}/{key}` — rather than virtual-hosted-style (`{bucket}.{host}/{key}`). Path-style works against every S3-compatible provider, including custom endpoints (R2, MinIO) where a wildcard DNS entry for virtual-hosted-style isn't set up.
 
 :::note[Signing scope]
-Every request signs exactly three headers: `host`, `x-amz-content-sha256`, and `x-amz-date`. This covers standard single-object `PUT`/`GET`/`DELETE` — there's no support for presigned URLs, multipart (chunked) uploads, or query-string signing.
+Every request signs `host`, `x-amz-content-sha256`, and `x-amz-date` — plus `x-amz-security-token` when using temporary/workload-identity credentials. This covers standard single-object `PUT`/`GET`/`DELETE` — there's no support for presigned URLs, multipart (chunked) uploads, or query-string signing.
 :::
 
 ## Writing handler code against `Storage`

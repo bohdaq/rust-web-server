@@ -166,3 +166,17 @@ pub(crate) fn days_to_ymd(days: u64) -> (u32, u32, u32) {
     let y = if m <= 2 { y + 1 } else { y };
     (y as u32, m as u32, d as u32)
 }
+
+/// Inverse of [`days_to_ymd`]: Gregorian (year, month, day) to days since
+/// 1970-01-01. Uses Howard Hinnant's days-from-civil algorithm. Only valid
+/// for `year >= 1970` (the only range this codebase ever parses — AWS
+/// credential expiration timestamps).
+pub(crate) fn ymd_to_days(y: u32, m: u32, d: u32) -> u64 {
+    let y = if m <= 2 { (y - 1) as u64 } else { y as u64 };
+    let era = y / 400;
+    let yoe = y - era * 400;
+    let mp = if m > 2 { (m - 3) as u64 } else { (m + 9) as u64 };
+    let doy = (153 * mp + 2) / 5 + d as u64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
+}

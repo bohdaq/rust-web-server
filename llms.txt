@@ -1132,8 +1132,10 @@ let public_url = store.url(&key); // "/uploads/avatars/42.png"
 ```rust,no_run
 use rust_web_server::storage::{S3Storage, Storage}; // requires `storage-s3` feature
 
-// Reads RWS_S3_BUCKET, RWS_S3_REGION, RWS_S3_ACCESS_KEY, RWS_S3_SECRET_KEY,
-// and optionally RWS_S3_ENDPOINT (point at R2 / MinIO / any S3-compatible host).
+// Reads RWS_S3_BUCKET, RWS_S3_REGION, and optionally RWS_S3_ENDPOINT (point at
+// R2 / MinIO / any S3-compatible host). RWS_S3_ACCESS_KEY/SECRET_KEY are
+// optional — when unset, credentials are auto-detected from EKS IRSA, ECS
+// task role, or EC2 IMDSv2 workload identity instead (see below).
 let store = S3Storage::from_env()?;
 let key = store.put("avatars/42.png", &file_bytes, "image/png")?;
 ```
@@ -1141,6 +1143,14 @@ let key = store.put("avatars/42.png", &file_bytes, "image/png")?;
 `S3Storage` signs every request with AWS Signature V4 via the outbound HTTP client (`hmac`+`sha2`) —
 no AWS SDK. Path-style addressing (`{endpoint}/{bucket}/{key}`) works against every S3-compatible
 provider. `LocalStorage` rejects `..` key segments to prevent escaping its root directory.
+
+**Workload identity** — when static keys aren't set, `S3Storage` auto-detects short-lived credentials
+in this order: EKS IRSA (`AWS_ROLE_ARN`+`AWS_WEB_IDENTITY_TOKEN_FILE`, via STS
+`AssumeRoleWithWebIdentity`), ECS task role (`AWS_CONTAINER_CREDENTIALS_FULL_URI`/`_RELATIVE_URI`),
+then EC2 IMDSv2 (last resort, short timeout so non-EC2 hosts fail fast). `RWS_S3_CREDENTIAL_SOURCE=
+static|irsa|ecs|imds` forces a source. Credentials are cached and refreshed shortly before expiry.
+No XML/JSON parser dependency — STS/IMDS/ECS responses are read with hand-rolled field extractors
+(`src/storage/aws_credentials.rs`), the same idiom already used for JWT claims elsewhere in the crate.
 
 ---
 
@@ -1363,7 +1373,8 @@ src/session/            — SessionStore, Session, cookie helpers
 src/mailer/             — Mailer, Email, EmailBuilder, SmtpTls, MailerError (mailer feature)
 src/sso/                — OidcAuth, OidcConfig, OidcProvider, JwksCache (sso feature)
 src/state/              — AppWithState<S>
-src/storage/            — Storage, LocalStorage, S3Storage (storage-local / storage-s3 features)
+src/storage/            — Storage, LocalStorage, S3Storage (storage-local / storage-s3 features);
+                          aws_credentials — EKS IRSA / ECS / EC2 IMDSv2 workload-identity credentials
 src/symbol/             — ASCII/byte constants
 src/tcp_proxy/          — TcpProxy (L4)
 src/template/           — TeraEngine, global init/render (tera feature)

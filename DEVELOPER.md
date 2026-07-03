@@ -150,7 +150,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Job` / `JobQueue` | `jobs` (requires `jobs` feature) | In-memory background job queue for one-shot, fire-and-forget work from handlers. `Job` trait (blanket-implemented for `Fn() -> Result<(), String> + Send` closures); `JobQueue::new(workers)` spawns a fixed worker pool; `.submit(job)` enqueues; failed jobs retry with exponential backoff (`.max_retries(n)`, `.backoff(initial, multiplier)`); `.join()` drains and waits. Not crash-safe — see `PersistentJobQueue`. |
 | `PersistentJobQueue` | `jobs` (requires `jobs` **and** a `model-sqlite`/`model-postgres`/`model-mysql` feature) | Crash-safe job queue backed by the model layer: jobs are written to a `rws_jobs` table before being acknowledged. Jobs are `(job_type, payload)` string pairs dispatched to a handler registered via `.register(job_type, fn)` — not arbitrary closures, since closures can't be persisted. `PersistentJobQueue::new(pool).await` creates the table and resets any row left `running` by a crash back to `pending`. `.enqueue(job_type, payload).await` / `.enqueue_with_retries(...)` persist a job; `.start(workers)` spawns polling worker threads (each with its own Tokio runtime); `.tick().await` runs a single poll-claim-execute cycle for tests or custom loops. |
 | `Storage` / `LocalStorage` | `storage` (requires `storage-local` feature) | File storage abstraction. `Storage` trait: `put(key, data, content_type) -> Result<String, StorageError>`, `get(key)`, `delete(key)`, `url(key)` (no I/O). `LocalStorage::new(root)` stores objects as files under `root`; rejects `..` path segments; `.with_base_url(prefix)` makes `url()` return an HTTP path instead of a filesystem path. |
-| `S3Storage` / `S3Config` | `storage` (requires `storage-s3` feature) | `Storage` implementation for S3-compatible object storage (AWS S3, Cloudflare R2, MinIO) via the outbound HTTP client — no AWS SDK. Signs every request with AWS Signature Version 4 (`hmac` + `sha2`, already-in-tree crates). `S3Storage::from_env()` reads `RWS_S3_BUCKET/REGION/ACCESS_KEY/SECRET_KEY/ENDPOINT`. Uses path-style addressing (`{endpoint}/{bucket}/{key}`) for compatibility with custom endpoints. |
+| `S3Storage` / `S3Config` | `storage` (requires `storage-s3` feature) | `Storage` implementation for S3-compatible object storage (AWS S3, Cloudflare R2, MinIO) via the outbound HTTP client — no AWS SDK. Signs every request with AWS Signature Version 4 (`hmac` + `sha2`, already-in-tree crates). `S3Storage::from_env()` reads `RWS_S3_BUCKET/REGION/ENDPOINT`; credentials come from `RWS_S3_ACCESS_KEY`/`SECRET_KEY` if both are set, else auto-detected EKS IRSA / ECS task role / EC2 IMDSv2 workload identity (`RWS_S3_CREDENTIAL_SOURCE` forces a specific source). Uses path-style addressing (`{endpoint}/{bucket}/{key}`) for compatibility with custom endpoints. |
 | `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. |
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
 | `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware proxying with a per-`[[upstream]]` `strategy`: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), or `least_connections` (routes to the live backend with fewest in-flight requests). `ConfigDrivenApp::with_config(ServerConfig)` pins its fallback `App` (unmatched requests — healthz/readyz/metrics/static/404) to explicit settings instead of reading `RWS_CONFIG_*` env vars per request. |
@@ -3446,6 +3446,27 @@ fn save_avatar(store: &dyn Storage, user_id: u64, bytes: &[u8]) -> Result<String
 ```
 
 `S3Storage` signs every request with AWS Signature Version 4 using the existing outbound HTTP client — no AWS SDK dependency. Path-style addressing (`{endpoint}/{bucket}/{key}`) is used throughout, since it works against every S3-compatible provider including custom endpoints where virtual-hosted-style (`{bucket}.{host}`) DNS isn't set up.
+
+**Workload identity (no static keys)** — when `RWS_S3_ACCESS_KEY`/`RWS_S3_SECRET_KEY` are unset, `S3Storage` auto-detects short-lived credentials from the environment instead of requiring static keys:
+
+```rust,no_run
+use rust_web_server::storage::{S3Config, S3Storage, Storage};
+
+// No RWS_S3_ACCESS_KEY / RWS_S3_SECRET_KEY needed when running on EKS, ECS,
+// or EC2 — credentials are detected automatically, cached, and refreshed
+// shortly before they expire.
+let store = S3Storage::from_env()?;
+let key = store.put("avatars/42.png", &file_bytes, "image/png")?;
+# Ok::<(), rust_web_server::storage::StorageError>(())
+```
+
+Detection follows this precedence, matching the order AWS's own SDKs use:
+
+1. **EKS IRSA** — `AWS_ROLE_ARN` + `AWS_WEB_IDENTITY_TOKEN_FILE` (injected by the EKS pod-identity webhook), via STS `AssumeRoleWithWebIdentity`.
+2. **ECS task role** — `AWS_CONTAINER_CREDENTIALS_FULL_URI` or `_RELATIVE_URI` (injected by the ECS agent).
+3. **EC2 IMDSv2** — last resort; each request uses a short timeout so a non-EC2 host (local dev, CI, GCP/Azure) fails fast instead of hanging.
+
+Set `RWS_S3_CREDENTIAL_SOURCE=static|irsa|ecs|imds` to force a specific source and skip detection entirely. No AWS SDK or XML/JSON parser dependency is added — STS's XML and IMDS/ECS's JSON responses are read with small hand-rolled field extractors (`src/storage/aws_credentials.rs`), the same approach already used for JWT claims elsewhere in the crate.
 
 ### 64. OpenAPI / Swagger documentation for your API
 

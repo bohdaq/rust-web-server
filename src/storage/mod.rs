@@ -44,6 +44,8 @@
 //! ```
 
 #[cfg(feature = "storage-s3")]
+mod aws_credentials;
+#[cfg(feature = "storage-s3")]
 mod aws_sigv4;
 
 #[cfg(feature = "storage-local")]

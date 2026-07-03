@@ -1,4 +1,4 @@
-use super::cron::{CronSchedule, days_to_ymd, epoch_to_datetime, Field};
+use super::cron::{CronSchedule, days_to_ymd, epoch_to_datetime, ymd_to_days, Field};
 use super::Scheduler;
 use std::time::Duration;
 
@@ -86,6 +86,29 @@ fn days_to_ymd_2024_jan_01() {
 fn days_to_ymd_leap_day_2024() {
     // 2024-02-29 = 19723 + 59 = 19782
     assert_eq!(days_to_ymd(19782), (2024, 2, 29));
+}
+
+#[test]
+fn ymd_to_days_epoch_zero() {
+    assert_eq!(ymd_to_days(1970, 1, 1), 0);
+}
+
+#[test]
+fn ymd_to_days_2024_jan_01() {
+    assert_eq!(ymd_to_days(2024, 1, 1), 19723);
+}
+
+#[test]
+fn ymd_to_days_leap_day_2024() {
+    assert_eq!(ymd_to_days(2024, 2, 29), 19782);
+}
+
+#[test]
+fn ymd_to_days_is_inverse_of_days_to_ymd() {
+    for days in [0u64, 1, 365, 19723, 19782, 40000, 100000] {
+        let (y, m, d) = days_to_ymd(days);
+        assert_eq!(ymd_to_days(y, m, d), days, "roundtrip failed for {days} days");
+    }
 }
 
 #[test]

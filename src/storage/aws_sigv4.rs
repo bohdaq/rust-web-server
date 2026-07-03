@@ -61,6 +61,13 @@ fn amz_date_and_datetime(epoch_secs: u64) -> (String, String) {
 /// percent-encoded (see [`uri_encode_path`]) and must be byte-identical to
 /// the path sent on the wire. Returns the headers to attach to the request,
 /// in addition to any headers the caller adds itself (e.g. `Content-Type`).
+///
+/// `session_token` is `Some` when signing with temporary credentials (EKS
+/// IRSA, ECS task role, EC2 IMDSv2) — it adds `x-amz-security-token` to the
+/// canonical request and signed-headers list, sorted last alphabetically so
+/// it never needs interleaving with the three fixed headers. `None`
+/// reproduces byte-identical output to signing without a token.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn sign(
     method: &str,
     host: &str,
@@ -69,15 +76,25 @@ pub(super) fn sign(
     region: &str,
     access_key: &str,
     secret_key: &str,
+    session_token: Option<&str>,
     epoch_secs: u64,
 ) -> Vec<(String, String)> {
     let (date, datetime) = amz_date_and_datetime(epoch_secs);
     let payload_hash = to_hex(&Sha256::digest(payload));
 
-    let canonical_headers = format!(
-        "host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{datetime}\n"
-    );
-    let signed_headers = "host;x-amz-content-sha256;x-amz-date";
+    let canonical_headers = match session_token {
+        Some(token) => format!(
+            "host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{datetime}\nx-amz-security-token:{token}\n"
+        ),
+        None => format!(
+            "host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{datetime}\n"
+        ),
+    };
+    let signed_headers = if session_token.is_some() {
+        "host;x-amz-content-sha256;x-amz-date;x-amz-security-token"
+    } else {
+        "host;x-amz-content-sha256;x-amz-date"
+    };
 
     let canonical_request = format!(
         "{method}\n{canonical_path}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
@@ -98,12 +115,16 @@ pub(super) fn sign(
         "AWS4-HMAC-SHA256 Credential={access_key}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}"
     );
 
-    vec![
+    let mut headers = vec![
         ("host".to_string(), host.to_string()),
         ("x-amz-content-sha256".to_string(), payload_hash),
         ("x-amz-date".to_string(), datetime),
-        ("Authorization".to_string(), authorization),
-    ]
+    ];
+    if let Some(token) = session_token {
+        headers.push(("x-amz-security-token".to_string(), token.to_string()));
+    }
+    headers.push(("Authorization".to_string(), authorization));
+    headers
 }
 
 #[cfg(test)]
