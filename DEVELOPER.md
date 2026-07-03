@@ -94,6 +94,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `AsyncAppWithState<S>` | `async_state` | Like `AppWithState<S>` but handlers are `async fn`; requires `http2` feature. Entry point: `App::with_async_state(S)`. |
 | `Sse` / `SseEvent` | `sse` | Build a buffered `text/event-stream` response from a sequence of events. Correct headers set automatically. |
 | `SessionStore` / `Session` | `session` | Thread-safe in-memory session store with TTL expiry. Cookie helpers: `session_id_from_request`, `session_cookie`, `destroy_cookie`. |
+| `DbSessionStore` | `session` (requires `model-sqlite`, `model-postgres`, or `model-mysql`) | Persistent session store backed by the model-layer `DbPool`. Auto-creates `rws_sessions` table. Same API as `SessionStore` but all methods return `Result`. Survives restarts and shared across multiple instances. |
+| `RedisSessionStore` | `session` | Persistent session store backed by a Redis server via a hand-rolled RESP v2 client. `RedisSessionStore::new(addr, password, ttl)` or `from_env()` (reads `RWS_REDIS_HOST/PORT/PASSWORD/TTL_SECS`). Sessions expire automatically via Redis TTL. |
 | `Json<T>` | `json` | Serde-backed JSON extractor (`from_request`) and responder (`into_response`). Requires `features = ["serde"]`. |
 | `BasicAuthLayer<F>` | `auth` | HTTP Basic Auth middleware; validates `Authorization: Basic` credentials via a closure. Requires `features = ["auth"]`. |
 | `JwtLayer` | `auth` | JWT HS256 middleware; verifies `Authorization: Bearer` tokens with constant-time HMAC-SHA256. Requires `features = ["auth"]`. |
@@ -996,6 +998,54 @@ let app = App::with_state(State { sessions: SessionStore::new(3600) })
 ```
 
 Call `store.purge_expired()` periodically (e.g. from a background thread) to reclaim memory from expired sessions.
+
+**Persistent sessions with DbSessionStore** (requires `model-sqlite` / `model-postgres` / `model-mysql`):
+
+```rust
+use rust_web_server::model::DbPool;
+use rust_web_server::session::{self, DbSessionStore};
+use rust_web_server::header::Header;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+// One pool → one persistent database; sessions survive restarts.
+// For production use a file or network database instead of :memory:.
+let pool = DbPool::memory().unwrap();
+let store = DbSessionStore::new(pool, 3600).unwrap();
+
+// create / save / load / destroy all return Result
+let mut sess = store.create().unwrap();
+sess.set("user_id", "99");
+store.save(&sess).unwrap();
+
+let loaded = store.load(&sess.id).unwrap().unwrap();
+assert_eq!(Some("99"), loaded.get("user_id"));
+
+// Purge expired rows when needed (no automatic sweep)
+store.purge_expired().unwrap();
+```
+
+`DbSessionStore` auto-creates the `rws_sessions(id, data, expires_at)` table on first construction.
+
+**Persistent sessions with RedisSessionStore** (requires a running Redis server):
+
+```rust
+use rust_web_server::session::RedisSessionStore;
+
+// Connect to localhost:6379 with no auth; or use from_env()
+let store = RedisSessionStore::new("127.0.0.1:6379", None, 3600);
+
+let mut sess = store.create().unwrap();
+sess.set("role", "editor");
+store.save(&sess).unwrap();
+
+let loaded = store.load(&sess.id).unwrap().unwrap();
+assert_eq!(Some("editor"), loaded.get("role"));
+
+// Redis TTL expires sessions automatically — purge_expired() is a no-op
+store.destroy(&sess.id).unwrap();
+```
+
+`RedisSessionStore::from_env()` reads `RWS_REDIS_HOST`, `RWS_REDIS_PORT`, `RWS_REDIS_PASSWORD`, `RWS_REDIS_TTL_SECS`.
 
 ---
 

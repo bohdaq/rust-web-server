@@ -221,3 +221,113 @@ fn destroy_cookie_sets_max_age_zero() {
     assert!(value.contains("sid="), "got: {}", value);
     assert!(value.contains("Max-Age=0"), "got: {}", value);
 }
+
+// ── DbSessionStore ────────────────────────────────────────────────────────────
+
+#[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
+mod db_session_tests {
+    use crate::model::DbPool;
+    use crate::session::DbSessionStore;
+
+    fn make_store() -> DbSessionStore {
+        let pool = DbPool::memory().expect("in-memory pool");
+        DbSessionStore::new(pool, 3600).expect("create store")
+    }
+
+    #[test]
+    fn db_create_and_load_session() {
+        let store = make_store();
+        let sess = store.create().unwrap();
+        let loaded = store.load(&sess.id).unwrap();
+        assert!(loaded.is_some());
+        assert_eq!(sess.id, loaded.unwrap().id);
+    }
+
+    #[test]
+    fn db_load_unknown_id_returns_none() {
+        let store = make_store();
+        assert!(store.load("no-such-id").unwrap().is_none());
+    }
+
+    #[test]
+    fn db_save_persists_data() {
+        let store = make_store();
+        let mut sess = store.create().unwrap();
+        sess.set("role", "admin");
+        store.save(&sess).unwrap();
+        let loaded = store.load(&sess.id).unwrap().unwrap();
+        assert_eq!(Some("admin"), loaded.get("role"));
+    }
+
+    #[test]
+    fn db_unsaved_changes_not_visible() {
+        let store = make_store();
+        let mut sess = store.create().unwrap();
+        sess.set("role", "admin");
+        // no save()
+        let loaded = store.load(&sess.id).unwrap().unwrap();
+        assert!(loaded.get("role").is_none());
+    }
+
+    #[test]
+    fn db_destroy_removes_session() {
+        let store = make_store();
+        let sess = store.create().unwrap();
+        let id = sess.id.clone();
+        store.destroy(&id).unwrap();
+        assert!(store.load(&id).unwrap().is_none());
+    }
+
+    #[test]
+    fn db_purge_expired_removes_stale_rows() {
+        let pool = DbPool::memory().expect("in-memory pool");
+        let store = DbSessionStore::new(pool, 0).expect("create store"); // 0-second TTL
+        store.create().unwrap();
+        store.create().unwrap();
+        assert_eq!(2, store.len().unwrap());
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        store.purge_expired().unwrap();
+        assert_eq!(0, store.len().unwrap());
+    }
+
+    #[test]
+    fn db_len_and_is_empty() {
+        let store = make_store();
+        assert!(store.is_empty().unwrap());
+        store.create().unwrap();
+        assert_eq!(1, store.len().unwrap());
+        assert!(!store.is_empty().unwrap());
+    }
+
+    #[test]
+    fn db_expired_session_not_loadable() {
+        let pool = DbPool::memory().expect("in-memory pool");
+        let store = DbSessionStore::new(pool, 0).expect("create store"); // 0-second TTL
+        let sess = store.create().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        assert!(store.load(&sess.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn db_clone_shares_pool() {
+        let store = make_store();
+        let clone = store.clone();
+        let mut sess = store.create().unwrap();
+        sess.set("x", "1");
+        store.save(&sess).unwrap();
+        let loaded = clone.load(&sess.id).unwrap().unwrap();
+        assert_eq!(Some("1"), loaded.get("x"));
+    }
+
+    #[test]
+    fn db_session_data_with_special_chars() {
+        let store = make_store();
+        let mut sess = store.create().unwrap();
+        sess.set("name", "O'Brien & Co");
+        sess.set("redirect", "/foo?bar=baz");
+        store.save(&sess).unwrap();
+        let loaded = store.load(&sess.id).unwrap().unwrap();
+        assert_eq!(Some("O'Brien & Co"), loaded.get("name"));
+        assert_eq!(Some("/foo?bar=baz"), loaded.get("redirect"));
+    }
+}

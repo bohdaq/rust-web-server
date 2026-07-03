@@ -18,7 +18,7 @@ These gaps make rws unsuitable for real production workloads regardless of how c
 
 - [x] **TLS to WebSocket upstreams** (`wss://`) — `WsProxy` now accepts `wss://host:port` backend URLs (port defaults to 443). TLS path uses `rustls::StreamOwned` + a single-thread polling loop (5 ms timeout per side, 1 ms sleep when idle) to avoid the deadlock that arises when sharing a TLS stream between two blocking relay threads. Plain `ws://` backends continue to use the two-thread `std::io::copy` approach. Requires `http-client` or `http2` feature; returns 502 otherwise. Closes GAPS_V3 §2.4.
 
-- [ ] **Persistent sessions** (`src/session/store.rs`) — `SessionStore` is an in-process `HashMap`; all sessions are lost on restart. Required for zero-downtime deploys and horizontal scaling. Add `PersistentSessionStore` backed by the model layer (`rws_sessions` table) and a `RedisSessionStore`. Closes GAPS_V3 §3.5.
+- [x] **Persistent sessions** (`src/session/mod.rs`) — Added `DbSessionStore` backed by the model layer (`rws_sessions` table: id TEXT PK, data TEXT URL-encoded, expires_at INTEGER epoch). Auto-creates table on first `new()`. All methods return `Result`. Added `RedisSessionStore` backed by a hand-rolled RESP v2 client (no external crate); sessions keyed as `rws:sess:{id}`, TTL via `SET … EX`, auto-reconnect. `from_env()` reads `RWS_REDIS_HOST/PORT/PASSWORD/TTL_SECS`. 10 new tests. Closes GAPS_V3 §3.5.
 
 - [ ] **Email / SMTP** (`src/mailer/mod.rs`, `mailer` feature) — no path to send email from a handler today. Add `Mailer::from_env()` reading `RWS_SMTP_HOST/PORT/USER/PASSWORD/FROM`; minimal SMTP or thin `lettre` wrapper. Required for password reset, verification emails, transactional notifications. Closes GAPS_V3 §3.1 and GAPS_V2 §5.
 

@@ -370,6 +370,38 @@ response.headers.push(Header {
 
 `Session.id` is a public `String` field.
 
+**Persistent sessions — DbSessionStore** (requires `model-sqlite` / `model-postgres` / `model-mysql`):
+
+```rust
+use rust_web_server::model::DbPool;
+use rust_web_server::session::DbSessionStore;
+
+let pool = DbPool::new(config)?;           // or DbPool::memory() for SQLite
+let store = DbSessionStore::new(pool, 3600)?;  // auto-creates rws_sessions table
+
+let mut sess = store.create()?;            // returns Result
+sess.set("user_id", "42");
+store.save(&sess)?;
+
+let loaded = store.load(&sess.id)?.unwrap();
+store.purge_expired()?;                    // DELETE WHERE expires_at <= now
+```
+
+**Persistent sessions — RedisSessionStore**:
+
+```rust
+use rust_web_server::session::RedisSessionStore;
+
+// From args or from_env() (RWS_REDIS_HOST/PORT/PASSWORD/TTL_SECS):
+let store = RedisSessionStore::new("127.0.0.1:6379", None, 3600);
+
+let mut sess = store.create()?;            // returns io::Result
+sess.set("role", "admin");
+store.save(&sess)?;                        // SET rws:sess:{id} EX ttl
+store.destroy(&sess.id)?;                  // DEL rws:sess:{id}
+store.purge_expired();                     // no-op — Redis TTL handles it
+```
+
 ---
 
 ## Auth middleware (src/auth/mod.rs, requires `auth` feature)

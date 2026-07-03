@@ -153,7 +153,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 - Request validation — `#[derive(Validate)]` with `length`, `range`, `email`, `url`; returns `422`
 - Typed errors — `AppError` enum (400–500); `IntoResponse` trait for custom error types
 - Cookie jar — `CookieJar` parses; `SetCookie` builder writes all RFC 6265 attributes
-- Sessions — `SessionStore` in-memory TTL sessions; cookie helpers included
+- Sessions — `SessionStore` in-memory TTL sessions; `DbSessionStore` persistent sessions backed by the model layer (survives restarts, multi-instance); `RedisSessionStore` Redis-backed sessions with automatic TTL expiry; cookie helpers included
 - JSON — `Json<T>` extractor + responder via `serde_json` (`serde` feature)
 - HTML templates — Tera engine (Jinja2 syntax); `template::render()` one-liner (`tera` feature)
 - Dependency injection — `Container` keyed by `TypeId`; concrete types and `dyn Trait`
