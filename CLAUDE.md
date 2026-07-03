@@ -153,7 +153,7 @@ trait Middleware: Send + Sync {
 ```
 `WithMiddleware<A>::wrap(layer)` pushes layers onto a `Vec<Box<dyn Middleware>>`; layers are applied in push order (first-pushed is outermost). Any `Application` can be wrapped via `.wrap(layer)`.
 
-Built-in middleware: `RateLimitLayer`, `MetricsLayer`, `CacheLayer`, `OtelLayer`, `RewriteLayer`, `ReverseProxy`, `H2ReverseProxy`, `GrpcProxy`, `BasicAuthLayer`, `JwtLayer`, `IpFilter`, `RequestIdLayer`.
+Built-in middleware: `RateLimitLayer`, `MetricsLayer`, `CacheLayer`, `OtelLayer`, `RewriteLayer`, `ReverseProxy`, `H2ReverseProxy`, `GrpcProxy`, `BasicAuthLayer`, `JwtLayer`, `ForwardAuthLayer`, `IpFilter`, `RequestIdLayer`, `TimeoutLayer`.
 
 ### Configuration
 
@@ -281,7 +281,7 @@ When built with the `http3` feature (which implies `http2`), a second listener s
 
 `src/proxy_config/` — turns `rws.config.toml` into a live proxy stack at startup; activated when the config file contains `[[route]]` or `[[upstream]]` sections.
 
-- `mod.rs` — all config types (`ProxyConfig`, `UpstreamConfig`, `RouteConfig`, `ActionConfig`, `MiddlewareConfig`, etc.); `ProxyConfig::is_proxy_mode()` scans the file; `ProxyConfig::load()` and `ProxyConfig::from_str()` parse it. `ConfigDrivenApp { routes: Arc<Vec<CompiledRoute>>, fallback: App }` implements `Application + Clone` (first-match router). `RouteMatcher` evaluates host, path prefix/exact, method, content-type prefix. `DynamicProxy` picks a live backend from `Arc<RwLock<Vec<String>>>` with an atomic round-robin counter. `RedirectAdapter` and `RespondAdapter` handle redirect/fixed-response actions. `PerRouteRateLimit` and `BearerAuthMiddleware` implement `Middleware`.
+- `mod.rs` — all config types (`ProxyConfig`, `UpstreamConfig`, `RouteConfig`, `ActionConfig`, `MiddlewareConfig`, `AuthConfig`, etc.); `ProxyConfig::is_proxy_mode()` scans the file; `ProxyConfig::load()` and `ProxyConfig::from_str()` parse it. `ConfigDrivenApp { routes: Arc<Vec<CompiledRoute>>, fallback: App }` implements `Application + Clone` (first-match router). `RouteMatcher` evaluates host, path prefix/exact, method, content-type prefix. `DynamicProxy` picks a live backend from `Arc<RwLock<Vec<String>>>` with an atomic round-robin counter. `RedirectAdapter` and `RespondAdapter` handle redirect/fixed-response actions. `PerRouteRateLimit` and `BearerAuthMiddleware` implement `Middleware`. `route.middleware.auth` accepts `AuthConfig::Bearer { token_env }`, `AuthConfig::Jwt { secret_env }` (wraps `auth::JwtLayer`, requires the `auth` feature), or `AuthConfig::Basic { htpasswd_file }` (wraps `auth::BasicAuthLayer::from_htpasswd_file`, requires the `auth` feature) — `builder.rs::apply_middleware()` returns a config error if the feature isn't compiled in.
 - `parser.rs` — hand-rolled TOML parser producing `SectionMap` (`HashMap<String, Vec<(String, String)>>`). Tracks `[[array]]` tables with counters (`upstream[0]`, `route[0].match`), expands inline tables and arrays of strings.
 - `health.rs` — `start_health_checker()` spawns a daemon thread per upstream; sends `GET {path} HTTP/1.1` with connect+read timeouts, tracks consecutive pass/fail, writes updated live-backend list via `RwLock`.
 - `builder.rs` — `build_from_file()` / `build(config)`: creates upstream live-backend pools, starts health-checker threads, compiles routes (applies middleware stack via `apply_middleware()`), spawns L4/WS proxy threads. `ArcApp` adapter wraps `Arc<dyn Application>` so `WithMiddleware::new()` can take ownership.
@@ -290,6 +290,26 @@ When built with the `http3` feature (which implies `http2`), a second listener s
 ### Rewrite middleware
 
 - `src/rewrite/mod.rs` — `RewriteLayer` implements `Middleware`; clones `Request` and applies `RequestRule` variants (header set/remove, URI set/strip-prefix/add-prefix) before dispatch, then applies `ResponseRule` variants (header set/remove, status override, body byte find-and-replace) on the way back. Private `replace_bytes()` does linear non-overlapping scan.
+
+### Authentication middleware (`auth` feature)
+
+`src/auth/mod.rs` — gated behind the `auth` Cargo feature (adds `hmac` + `sha2`, RustCrypto). All base64/JWT logic is hand-rolled — no third-party JWT or base64 crate.
+
+- `BasicAuthLayer<F>` — validates `Authorization: Basic` against a `Fn(&str, &str) -> bool` closure; `BasicAuthLayer::from_htpasswd_file(path)` loads an htpasswd-style file once at construction (supports plain-text and rws's own `{SHA256}` scheme — not Apache's real `{SHA}`/`$apr1$`/bcrypt hashes). Issues `401` with a `WWW-Authenticate` challenge when the header is missing/malformed, `401` without a challenge when validation fails.
+- `JwtLayer` — verifies `Authorization: Bearer <jwt>` signed HS256; rejects expired (`exp`) tokens. `build_jwt(claims_json, secret)` and `verify_jwt(token, secret) -> Option<Claims>` are public helpers for issuing/inspecting tokens outside the middleware (e.g. a login handler). `extract_bearer_token(request)` pulls the raw token string.
+- `src/auth/forward.rs` — `ForwardAuthLayer` (Traefik/nginx-style forward-auth): forwards every request header as a `GET` to an external auth URL via `http_client::Client`. 2xx → request proceeds, with any `.copy_header(name)`-listed response header replacing the same-named request header (e.g. an auth service resolving a cookie to `X-User-Id`). Any other status → the auth service's response (status/headers/body) is passed through to the client verbatim, preserving `WWW-Authenticate`/`Location`/custom bodies. Unreachable auth service → `502 Bad Gateway` (fails closed). `.timeout_ms()` defaults to 5000ms.
+
+### Request timeouts
+
+`src/timeout/mod.rs` — per-route timeouts layered on top of the single global 30s connection read timeout. Rust cannot forcibly preempt a running synchronous handler, so the sync-side helpers (`with_timeout`, `with_timeout_state` for `Router`/`AppWithState` handlers, and `TimeoutLayer` for wrapping a whole `Application`) run the wrapped work on a background thread and bound how long they *wait*: past the deadline the caller gets `504 Gateway Timeout` immediately, but the spawned thread keeps running to completion with its result discarded. Only `with_timeout_async` (requires `http2`, for `AsyncAppWithState`) achieves genuine cancellation — dropping the `Future` via `tokio::time::timeout` actually stops it at its next `.await`.
+
+### Request ID / correlation ID middleware
+
+`src/request_id/mod.rs` — `RequestIdLayer` ensures every request/response pair carries a stable ID in a header (default `X-Request-Id`, override via `.header(name)`). If the incoming request already has the header (set by an upstream gateway), that value is echoed back unchanged so one ID follows a request across hops; otherwise `generate_request_id()` mints a UUID-v4-*shaped* (not spec-compliant, not cryptographically random) ID from a monotonic counter + timestamp splitmix64 finalizer. Works without OpenTelemetry configured, unlike `otel`'s span-based tracing.
+
+### OpenAPI generation (`openapi` feature)
+
+`src/openapi/mod.rs` — generates a minimal OpenAPI 3.0.3 JSON document directly from `Router::route_entries()` (paths, methods, path parameters only — no request/response body schemas, since Rust has no runtime type reflection). `build_spec(&OpenApiConfig, &[RouteInfo])` merges routes sharing a path into one `paths` entry and converts `:name`/`*name` segments to `{name}`. `swagger_ui_html(spec_url)` returns a self-contained Swagger UI page loading `swagger-ui-dist` from a CDN. Wired in via `AppWithState`/`AsyncAppWithState::openapi(OpenApiConfig::new(title, version))`, which registers `GET /openapi.json` and `GET /docs`.
 
 ### Model layer
 
