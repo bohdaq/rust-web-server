@@ -1,9 +1,9 @@
 ---
 title: Relations
-description: Load related records with HasMany, HasOne, and BelongsTo helpers that make queries explicit and prevent hidden N+1 problems.
+description: Load related records with async HasMany, HasOne, and BelongsTo helpers that make queries explicit and prevent hidden N+1 problems.
 ---
 
-The ORM provides three relationship helpers: `HasMany<T>`, `HasOne<O>`, and `BelongsTo<O>`. Each holds the information needed to load related records on demand. There is no lazy loading — you call `.load(&mut conn)` explicitly when you want the data.
+The ORM provides three relationship helpers: `HasMany<T>`, `HasOne<O>`, and `BelongsTo<O>`. Each holds the information needed to load related records on demand. There is no lazy loading — you call `.load(&pool).await` explicitly when you want the data.
 
 ## HasMany
 
@@ -35,13 +35,13 @@ impl User {
 }
 ```
 
-Load the related records by calling `.load`:
+Load the related records by calling `.load(&pool).await`:
 
 ```rust
-let mut conn = DbConnection::open(&config)?;
+let pool = DbPool::from_env().await?;
 let user = /* fetch user */;
 
-let posts: Vec<Post> = user.posts.load(&mut conn)?;
+let posts: Vec<Post> = user.posts.load(&pool).await?;
 ```
 
 Under the hood this issues: `SELECT * FROM posts WHERE user_id = ?`.
@@ -71,7 +71,7 @@ impl User {
 }
 
 // Loading
-let profile: Option<Profile> = user.profile.load(&mut conn)?;
+let profile: Option<Profile> = user.profile.load(&pool).await?;
 ```
 
 Under the hood: `SELECT * FROM profiles WHERE user_id = ? LIMIT 1`.
@@ -103,7 +103,7 @@ impl Post {
 }
 
 // Loading
-let author: Option<User> = post.user.load(&mut conn)?;
+let author: Option<User> = post.user.load(&pool).await?;
 ```
 
 Under the hood: `SELECT * FROM users WHERE id = ? LIMIT 1`.
@@ -111,68 +111,47 @@ Under the hood: `SELECT * FROM users WHERE id = ? LIMIT 1`.
 ## Complete User + Post example
 
 ```rust
-use rust_web_server::model::{DbConfig, DbConnection, Value};
+use rust_web_server::model::{DbPool, Value};
 use rust_web_server::model::relation::{HasMany, BelongsTo};
 
-// --- Models ---
-
-pub struct User {
-    pub id: i64,
-    pub name: String,
-    pub posts: HasMany<Post>,
-}
-
-pub struct Post {
-    pub id: i64,
-    pub user_id: i64,
-    pub title: String,
-    pub user: BelongsTo<User>,
-}
-
-// --- Usage ---
-
-let config = DbConfig::from_env()?;
-let mut conn = DbConnection::open(&config)?;
+let pool = DbPool::from_env().await?;
 
 // Load a user
-let rows = conn.query_raw("SELECT * FROM users WHERE id = ? LIMIT 1", &[Value::Int(1)])?;
+let rows = pool.query_raw("SELECT * FROM users WHERE id = ? LIMIT 1", &[Value::Int(1)]).await?;
 let row = rows.into_iter().next().unwrap();
 let user = User {
     id: row.get::<i64>("id")?,
     name: row.get::<String>("name")?,
-    posts: HasMany::new(row.get::<Value>("id").unwrap_or(Value::Null), "user_id"),
+    posts: HasMany::new(Value::Int(row.get::<i64>("id")?), "user_id"),
 };
 
 // Load that user's posts — one extra query
-let posts: Vec<Post> = user.posts.load(&mut conn)?;
+let posts: Vec<Post> = user.posts.load(&pool).await?;
 
 // Load the author of a post — one extra query
 if let Some(post) = posts.first() {
-    let author: Option<User> = post.user.load(&mut conn)?;
+    let author: Option<User> = post.user.load(&pool).await?;
 }
 ```
 
 ## Avoiding N+1 queries
 
-The explicit `.load()` design makes N+1 queries visible — if you call `.load()` inside a loop you will issue one query per iteration. The recommended pattern is to batch-load related records using `IN (…)`.
+The explicit `.load().await` design makes N+1 queries visible — if you call `.load().await` inside a loop you will issue one query per iteration. The recommended pattern is to batch-load related records using `IN (…)`.
 
 ```rust
-use rust_web_server::model::{DbConnection, ModelRow, Value};
+use rust_web_server::model::{DbPool, Value};
 
 // Step 1 — load users (1 query)
-let users: Vec<User> = conn.query::<User>("SELECT * FROM users WHERE active = ?", &[Value::Bool(true)])?;
+let users: Vec<User> = pool.query::<User>("SELECT * FROM users WHERE active = ?", &[Value::Bool(true)]).await?;
 
 // Step 2 — collect IDs
 let user_ids: Vec<Value> = users.iter().map(|u| Value::Int(u.id)).collect();
 
 // Step 3 — build IN clause and load all posts (1 query)
 if !user_ids.is_empty() {
-    let placeholders = user_ids.iter().enumerate()
-        .map(|(i, _)| format!("?"))          // use $N for PostgreSQL
-        .collect::<Vec<_>>()
-        .join(", ");
+    let placeholders = user_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
     let sql = format!("SELECT * FROM posts WHERE user_id IN ({})", placeholders);
-    let posts: Vec<Post> = conn.query::<Post>(&sql, &user_ids)?;
+    let posts: Vec<Post> = pool.query::<Post>(&sql, &user_ids).await?;
 
     // Step 4 — group in memory
     use std::collections::HashMap;
@@ -186,5 +165,5 @@ if !user_ids.is_empty() {
 This loads N users and all their posts in exactly 2 queries regardless of how many users there are.
 
 :::note[No lazy loading by design]
-Lazy loading hides database access behind field access, making it easy to accidentally trigger hundreds of queries. Explicit `.load()` calls keep all I/O visible at the call site, making performance characteristics clear during code review.
+Lazy loading hides database access behind field access, making it easy to accidentally trigger hundreds of queries. Explicit `.load().await` calls keep all I/O visible at the call site, making performance characteristics clear during code review.
 :::

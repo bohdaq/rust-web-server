@@ -3,46 +3,45 @@ title: Raw SQL
 description: Execute hand-written SQL queries and map results to typed structs or untyped rows.
 ---
 
-The query builder covers most common queries, but sometimes you need raw SQL — complex joins, CTEs, window functions, or database-specific syntax. `DbConnection` exposes three methods for this.
+The query builder covers most common queries, but sometimes you need raw SQL — complex joins, CTEs, window functions, or database-specific syntax. `DbPool` exposes three async methods for this.
 
 ## Typed query: `query::<T>`
 
-`conn.query::<T>(sql, params)` executes a SQL statement and deserialises each row into `T` using `T::from_row`. `T` must implement `Model` (typically via `#[derive(Model)]`).
+`pool.query::<T>(sql, params).await` executes a SQL statement and deserialises each row into `T` using `T::from_row`. `T` must implement `Model` (typically via `#[derive(Model)]`).
 
 ```rust
-use rust_web_server::model::{DbConfig, DbConnection, Value};
+use rust_web_server::model::{DbPool, Value};
 
-let config = DbConfig::from_env()?;
-let mut conn = DbConnection::open(&config)?;
+let pool = DbPool::from_env().await?;
 
-let users: Vec<User> = conn.query::<User>(
+let users: Vec<User> = pool.query::<User>(
     "SELECT * FROM users WHERE role = ? AND active = ?",
     &[Value::Text("admin".into()), Value::Bool(true)],
-)?;
+).await?;
 ```
 
 For PostgreSQL replace `?` with `$1`, `$2`, etc.:
 
 ```rust
-let users: Vec<User> = conn.query::<User>(
+let users: Vec<User> = pool.query::<User>(
     "SELECT * FROM users WHERE role = $1 AND active = $2",
     &[Value::Text("admin".into()), Value::Bool(true)],
-)?;
+).await?;
 ```
 
 ## Untyped query: `query_raw`
 
-`conn.query_raw(sql, params)` returns `Vec<ModelRow>` — column-name/value pairs without deserialisation. Use this for ad-hoc queries, reporting, or when no matching `Model` type exists.
+`pool.query_raw(sql, params).await` returns `Vec<ModelRow>` — column-name/value pairs without deserialisation. Use this for ad-hoc queries, reporting, or when no matching `Model` type exists.
 
 ```rust
-let rows: Vec<ModelRow> = conn.query_raw(
+let rows = pool.query_raw(
     "SELECT u.name, COUNT(p.id) AS post_count \
      FROM users u \
      LEFT JOIN posts p ON p.user_id = u.id \
      GROUP BY u.id, u.name \
      ORDER BY post_count DESC",
     &[],
-)?;
+).await?;
 
 for row in &rows {
     let name: String = row.get::<String>("name")?;
@@ -53,13 +52,13 @@ for row in &rows {
 
 ## Execute: `execute`
 
-`conn.execute(sql, params)` runs INSERT, UPDATE, DELETE, or DDL statements and returns the number of rows affected.
+`pool.execute(sql, params).await` runs INSERT, UPDATE, DELETE, or DDL statements and returns the number of rows affected.
 
 ```rust
-let affected: u64 = conn.execute(
+let affected: u64 = pool.execute(
     "UPDATE users SET last_login = ? WHERE id = ?",
     &[Value::Text("2026-07-02T10:00:00Z".into()), Value::Int(42)],
-)?;
+).await?;
 println!("{affected} row(s) updated");
 ```
 
@@ -113,7 +112,7 @@ use rust_web_server::model::{FromColumn, Value, DbError};
 pub enum UserRole { Admin, Member, Guest }
 
 impl FromColumn for UserRole {
-    fn from_column(v: Value) -> Result<Self, DbError> {
+    fn from_column(v: &Value) -> Result<Self, DbError> {
         match v {
             Value::Text(s) => match s.as_str() {
                 "admin"  => Ok(UserRole::Admin),

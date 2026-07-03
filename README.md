@@ -204,12 +204,13 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 
 ### Database / ORM
 
-- `#[derive(Model)]` — maps structs to tables; `Repository<T, i64>` for zero-boilerplate CRUD
-- `QueryBuilder<T>` — `.where_eq()`, `.order_by()`, `.limit()`, `.fetch_all()`, `.count()`
-- Migrations — `db.migrate("migrations/")` runs `*.sql` files in lexicographic order, idempotent
-- Relations — `HasMany<T>`, `HasOne<O>`, `BelongsTo<O>`; explicit load, no hidden N+1
-- Backends — SQLite (`model-sqlite`), PostgreSQL (`model-postgres`), MySQL (`model-mysql`)
-- In-memory SQLite — `DbPool::memory()` (shared) and `DbConnection::memory()` (isolated per call) for tests and prototyping
+- `#[derive(Model)]` — maps structs to tables; async `Repository<T, i64>` for zero-boilerplate CRUD (all methods `.await`)
+- `QueryBuilder<T>` — `.where_eq()`, `.order_by()`, `.limit()`, `.fetch_all().await`, `.count().await`
+- Migrations — `pool.migrate("migrations/").await` runs `*.sql` files in lexicographic order, idempotent
+- Relations — `HasMany<T>`, `HasOne<O>`, `BelongsTo<O>`; explicit async load, no hidden N+1
+- Backends — SQLite (`model-sqlite`), PostgreSQL (`model-postgres`), MySQL (`model-mysql`); all imply `http2` (tokio runtime)
+- Backed by `sqlx` — async-native driver; `DbPool` is a cheap-to-clone `Arc`-wrapped `sqlx::Pool`
+- In-memory SQLite — `DbPool::memory().await` for isolated per-test databases
 
 ---
 
@@ -223,9 +224,9 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 | `macros` | `#[get]`, `#[post]`, …, `#[derive(FromRequest)]`, `#[derive(Validate)]`, `#[derive(Config)]` |
 | `acme` | Automatic TLS via Let's Encrypt (ACME RFC 8555); implies `http2` |
 | `tera` | Tera HTML template engine (Jinja2/Django syntax) |
-| `model-sqlite` | ORM backed by SQLite (bundled via `rusqlite`) |
-| `model-postgres` | ORM backed by PostgreSQL |
-| `model-mysql` | ORM backed by MySQL |
+| `model-sqlite` | Async ORM backed by SQLite (via `sqlx`); implies `http2` |
+| `model-postgres` | Async ORM backed by PostgreSQL (via `sqlx`); implies `http2` |
+| `model-mysql` | Async ORM backed by MySQL (via `sqlx`); implies `http2` |
 | `crypto` | Argon2id password hashing + CSPRNG token generation |
 | `csrf` | Double-submit cookie CSRF protection |
 | `sso` | OAuth2/OIDC SSO — `OidcAuth` middleware, RS256/ES256 JWT via JWKS, PKCE, provider presets (Google · Microsoft · GitHub · Okta · Auth0 · Keycloak) |

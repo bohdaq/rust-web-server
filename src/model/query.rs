@@ -1,9 +1,9 @@
-//! Fluent `QueryBuilder<T>` for constructing SQL queries.
+//! Async fluent `QueryBuilder<T>` for constructing SQL queries.
 
 use std::marker::PhantomData;
 
-use super::connection::DbConnection;
-use super::repository::placeholder;
+use super::pool::DbPool;
+use super::repository::{extract_count, placeholder};
 use super::{DbError, Model, ToColumn, Value};
 
 // ── Order ─────────────────────────────────────────────────────────────────────
@@ -16,7 +16,7 @@ pub enum Order {
 }
 
 impl Order {
-    fn as_sql(&self) -> &'static str {
+    fn as_sql(self) -> &'static str {
         match self {
             Order::Asc => "ASC",
             Order::Desc => "DESC",
@@ -26,11 +26,29 @@ impl Order {
 
 // ── QueryBuilder ──────────────────────────────────────────────────────────────
 
-/// Fluent query builder for `SELECT`, `COUNT`, `DELETE`, and `UPDATE`.
+/// Fluent async query builder for `SELECT`, `COUNT`, `DELETE`, and `UPDATE`.
+///
+/// ```rust,no_run
+/// # #[cfg(feature = "model-sqlite")]
+/// # async fn example() -> Result<(), rust_web_server::model::DbError> {
+/// use rust_web_server::model::{DbPool, Order, QueryBuilder};
+///
+/// let pool = DbPool::memory().await?;
+/// // pool.execute("CREATE TABLE users …", &[]).await?;
+///
+/// // let users: Vec<User> = QueryBuilder::<User>::new(&pool)
+/// //     .where_eq("active", true)
+/// //     .order_by("name", Order::Asc)
+/// //     .limit(10)
+/// //     .fetch_all()
+/// //     .await?;
+/// # Ok(())
+/// # }
+/// ```
 pub struct QueryBuilder<'a, T: Model> {
-    conn: &'a mut DbConnection,
-    /// Each filter is a (sql_fragment, params) pair. The sql_fragment uses
-    /// `__placeholder__` (for where_eq) or raw `?` / positional markers.
+    pool: &'a DbPool,
+    /// Each filter is a (sql_fragment, params) pair.
+    /// sql_fragment may contain `__placeholder__` (from `where_eq`) or raw `?`.
     filters: Vec<(String, Vec<Value>)>,
     order: Option<(String, Order)>,
     limit: Option<u64>,
@@ -39,9 +57,9 @@ pub struct QueryBuilder<'a, T: Model> {
 }
 
 impl<'a, T: Model> QueryBuilder<'a, T> {
-    pub fn new(conn: &'a mut DbConnection) -> Self {
+    pub fn new(pool: &'a DbPool) -> Self {
         QueryBuilder {
-            conn,
+            pool,
             filters: Vec::new(),
             order: None,
             limit: None,
@@ -61,7 +79,6 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
 
     /// Add a raw SQL filter fragment with bind parameters.
     ///
-    /// # Example
     /// ```ignore
     /// .filter("age >= ?", vec![Value::Int(18)])
     /// ```
@@ -88,19 +105,23 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
         self
     }
 
+    // ── Terminal operations ───────────────────────────────────────────────────
+
     /// Execute `SELECT * FROM table WHERE … ORDER BY … LIMIT … OFFSET …`.
-    pub fn fetch_all(self) -> Result<Vec<T>, DbError> {
-        let QueryBuilder { conn, filters, order, limit, offset, .. } = self;
-        let (sql, params) = build_select::<T>(filters, order, limit, offset, "*", None);
-        let rows = conn.query_rows(&sql, &params)?;
+    pub async fn fetch_all(self) -> Result<Vec<T>, DbError> {
+        let (sql, params) = build_select::<T>(
+            self.filters, self.order, self.limit, self.offset, "*",
+        );
+        let rows = self.pool.query_rows(&sql, &params).await?;
         rows.iter().map(|r| T::from_row(r)).collect()
     }
 
     /// Execute `SELECT * … LIMIT 1` and return the first result.
-    pub fn fetch_one(self) -> Result<Option<T>, DbError> {
-        let QueryBuilder { conn, filters, order, limit: _, offset, .. } = self;
-        let (sql, params) = build_select::<T>(filters, order, Some(1), offset, "*", None);
-        let rows = conn.query_rows(&sql, &params)?;
+    pub async fn fetch_one(self) -> Result<Option<T>, DbError> {
+        let (sql, params) = build_select::<T>(
+            self.filters, self.order, Some(1), self.offset, "*",
+        );
+        let rows = self.pool.query_rows(&sql, &params).await?;
         match rows.into_iter().next() {
             Some(row) => Ok(Some(T::from_row(&row)?)),
             None => Ok(None),
@@ -108,68 +129,49 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
     }
 
     /// Execute `SELECT COUNT(*) FROM table WHERE …`.
-    pub fn count(self) -> Result<i64, DbError> {
-        let QueryBuilder { conn, filters, order, limit, offset, .. } = self;
-        let (sql, params) = build_select::<T>(filters, order, limit, offset, "COUNT(*)", None);
-        let rows = conn.query_rows(&sql, &params)?;
-        match rows.into_iter().next() {
-            Some(row) => {
-                let cols = &row.columns;
-                if let Some((_, val)) = cols.first() {
-                    match val.clone() {
-                        Value::Int(n) => return Ok(n),
-                        other => return Err(DbError::new(format!("unexpected count value: {:?}", other))),
-                    }
-                }
-                Err(DbError::new("count returned empty row"))
-            }
-            None => Ok(0),
-        }
+    pub async fn count(self) -> Result<i64, DbError> {
+        let (sql, params) = build_select::<T>(
+            self.filters, self.order, self.limit, self.offset, "COUNT(*)",
+        );
+        let rows = self.pool.query_rows(&sql, &params).await?;
+        extract_count(rows)
     }
 
     /// Execute `DELETE FROM table WHERE …`.
-    pub fn delete(self) -> Result<(), DbError> {
-        let QueryBuilder { conn, filters, .. } = self;
-        let (where_clause, params, _) = build_where(filters, 0);
+    pub async fn delete(self) -> Result<(), DbError> {
+        let (where_clause, params, _) = build_where(self.filters, 0);
         let sql = format!("DELETE FROM {}{}", T::table_name(), where_clause);
-        conn.execute(&sql, &params)?;
+        self.pool.execute(&sql, &params).await?;
         Ok(())
     }
 
     /// Execute `UPDATE table SET col = ? WHERE …`.
-    pub fn update(self, col: &str, val: impl ToColumn) -> Result<(), DbError> {
-        let QueryBuilder { conn, filters, .. } = self;
+    pub async fn update(self, col: &str, val: impl ToColumn) -> Result<(), DbError> {
         let set_ph = placeholder(1);
         let set_val = val.to_column();
-        let (where_clause, mut where_params, _) = build_where(filters, 1);
+        let (where_clause, mut where_params, _) = build_where(self.filters, 1);
         let mut params = vec![set_val];
         params.append(&mut where_params);
         let sql = format!(
             "UPDATE {} SET {} = {}{}",
-            T::table_name(),
-            col,
-            set_ph,
-            where_clause
+            T::table_name(), col, set_ph, where_clause,
         );
-        conn.execute(&sql, &params)?;
+        self.pool.execute(&sql, &params).await?;
         Ok(())
     }
 }
 
-// ── Internal builders (free functions to avoid borrow issues) ─────────────────
+// ── Internal SQL builders ─────────────────────────────────────────────────────
 
-/// Build a SELECT query string and its params.
 fn build_select<T: Model>(
     filters: Vec<(String, Vec<Value>)>,
     order: Option<(String, Order)>,
     limit: Option<u64>,
     offset: Option<u64>,
     projection: &str,
-    _extra_limit: Option<u64>,
 ) -> (String, Vec<Value>) {
     let (where_clause, params, _) = build_where(filters, 0);
     let mut sql = format!("SELECT {} FROM {}{}", projection, T::table_name(), where_clause);
-
     if let Some((col, ord)) = order {
         sql.push_str(&format!(" ORDER BY {} {}", col, ord.as_sql()));
     }
@@ -182,8 +184,7 @@ fn build_select<T: Model>(
     (sql, params)
 }
 
-/// Build the WHERE clause and collect all params. `start_idx` offsets
-/// PostgreSQL `$N` placeholders so they don't collide with SET params.
+/// Build the WHERE clause. `start_idx` offsets PostgreSQL `$N` placeholders.
 pub(crate) fn build_where(
     filters: Vec<(String, Vec<Value>)>,
     start_idx: usize,
@@ -195,12 +196,10 @@ pub(crate) fn build_where(
     for (mut fragment, params) in filters {
         for param in params {
             idx += 1;
-            // Replace `__placeholder__` (from where_eq) with the real placeholder.
             if fragment.contains("__placeholder__") {
                 fragment = fragment.replacen("__placeholder__", &placeholder(idx), 1);
             } else {
-                // For raw filters using `?` syntax with Postgres, replace `?` with `$N`.
-                #[cfg(feature = "model-postgres")]
+                #[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
                 {
                     fragment = fragment.replacen("?", &placeholder(idx), 1);
                 }

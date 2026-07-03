@@ -1,17 +1,17 @@
 ---
 title: Database Overview
-description: Connect to SQLite, PostgreSQL, or MySQL with a built-in connection pool and zero third-party ORM dependencies.
+description: Async SQLite, PostgreSQL, or MySQL with a built-in connection pool via sqlx.
 ---
 
-The database layer in `rust-web-server` is a JPA/Hibernate-style ORM implemented from scratch. There are no third-party ORM dependencies. A single feature flag selects the backend driver; exactly one driver can be active per compilation unit.
+The database layer in `rust-web-server` is a JPA/Hibernate-style async ORM backed by [`sqlx`](https://github.com/launchbadge/sqlx). All database operations are `async fn` and require a tokio runtime, which is automatically included when any `model-*` feature is enabled (they all imply `http2`).
 
 ## Feature flags
 
 | Flag | Driver | Notes |
 |---|---|---|
-| `model-sqlite` | `rusqlite` (bundles libsqlite3) | Best for development and embedded use |
-| `model-postgres` | `postgres` crate | Standard PostgreSQL driver |
-| `model-mysql` | `mysql` crate | MySQL and MariaDB |
+| `model-sqlite` | `sqlx/sqlite` | Best for development and embedded use; implies `http2` |
+| `model-postgres` | `sqlx/postgres` | Standard PostgreSQL driver; implies `http2` |
+| `model-mysql` | `sqlx/mysql` | MySQL and MariaDB; implies `http2` |
 
 Add the flag to `Cargo.toml`:
 
@@ -33,39 +33,37 @@ Only one of `model-sqlite`, `model-postgres`, or `model-mysql` should be enabled
 | `RWS_DB_USER` | — | Ignored for SQLite |
 | `RWS_DB_PASSWORD` | — | Ignored for SQLite |
 | `RWS_DB_NAME` | **required** | File path for SQLite; use `:memory:` for in-memory |
-| `RWS_DB_POOL_SIZE` | `10` | Number of connections pre-created in the pool |
+| `RWS_DB_POOL_SIZE` | `10` | Maximum number of connections in the pool |
 
 ## Quick start
 
-The typical startup sequence is: read config, create pool, run migrations, then serve requests.
+The typical startup sequence is: read config, create pool, run migrations, then serve requests. All pool operations are `async fn`.
 
 ```rust
-use rust_web_server::model::{DbConfig, DbPool};
+use rust_web_server::model::{DbConfig, DbPool, Value};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // 1. Build config from environment variables.
     let config = DbConfig::from_env().expect("database config");
 
-    // 2. Create the connection pool (opens pool_size connections eagerly).
-    let pool = DbPool::new(config).expect("connection pool");
+    // 2. Create the async connection pool.
+    let pool = DbPool::new(config).await.expect("connection pool");
 
-    // 3. Check out a connection and run pending migrations.
-    {
-        let mut conn = pool.get().expect("pool connection");
-        conn.migrate("migrations/").expect("migrations");
-    }
+    // 3. Run pending migrations.
+    pool.migrate("migrations/").await.expect("migrations");
 
-    // 4. Use the pool in request handlers.
-    let mut conn = pool.get().expect("pool connection");
-    let users: Vec<User> = conn
+    // 4. Use the pool in request handlers (pool is Clone).
+    let users: Vec<User> = pool
         .query("SELECT * FROM users WHERE active = ?", &[Value::Bool(true)])
+        .await
         .expect("query");
 
     println!("active users: {}", users.len());
 }
 ```
 
-The `PooledConnection` guard is returned to the pool automatically when it goes out of scope — no explicit `release` call is needed.
+`DbPool` wraps a `sqlx::Pool` and is cheap to clone — pass it by value into your `AppWithState` state.
 
 ## Manual config
 
@@ -96,14 +94,7 @@ let config = DbConfig {
 
 ## Pool behaviour
 
-`DbPool::new(config)` opens exactly `config.pool_size` connections at construction time. `pool.get()` pops a connection from an internal `Mutex<Vec<DbConnection>>`. If the pool is empty (all connections are checked out), a new connection is opened on demand. The connection is returned to the pool when the `PooledConnection` is dropped.
-
-```rust
-{
-    let mut conn = pool.get()?;   // checked out
-    // ... use conn ...
-}                                  // returned to pool here
-```
+`DbPool::new(config).await` creates a `sqlx::Pool` with `max_connections = config.pool_size`. sqlx manages the connection lifecycle internally — connections are acquired on demand and returned to the pool automatically after each `await` point. There is no `get()`/`PooledConnection` API; just `pool.execute(...)` and `pool.query_rows(...)` directly.
 
 ## What's next
 

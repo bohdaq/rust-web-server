@@ -888,14 +888,14 @@ fn impl_model(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         }
 
         impl #struct_name {
-            /// Create a `ModelRepository` tied to the given connection.
-            pub fn repository(conn: &mut ::rust_web_server::model::DbConnection) -> ::rust_web_server::model::ModelRepository<#struct_name, i64> {
-                ::rust_web_server::model::ModelRepository::new(conn)
+            /// Create a `ModelRepository` tied to the given pool.
+            pub fn repository(pool: &::rust_web_server::model::DbPool) -> ::rust_web_server::model::ModelRepository<#struct_name, i64> {
+                ::rust_web_server::model::ModelRepository::new(pool)
             }
 
-            /// Create a `QueryBuilder` tied to the given connection.
-            pub fn query(conn: &mut ::rust_web_server::model::DbConnection) -> ::rust_web_server::model::QueryBuilder<#struct_name> {
-                ::rust_web_server::model::QueryBuilder::new(conn)
+            /// Create a `QueryBuilder` tied to the given pool.
+            pub fn query(pool: &::rust_web_server::model::DbPool) -> ::rust_web_server::model::QueryBuilder<#struct_name> {
+                ::rust_web_server::model::QueryBuilder::new(pool)
             }
         }
     })

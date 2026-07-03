@@ -306,25 +306,29 @@ pub fn destroy_cookie(cookie_name: &str) -> String {
 /// Session data is serialized as a URL-encoded string
 /// (`key1=val1&key2=val2`). Expired sessions are **not** removed
 /// automatically — call [`purge_expired`][DbSessionStore::purge_expired]
-/// periodically (e.g. from a background thread).
+/// periodically.
+///
+/// All methods are `async fn` — `model-*` features imply the `http2` feature
+/// which provides a tokio runtime.
 ///
 /// # Example
 ///
 /// ```rust,no_run
 /// # #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
-/// # {
+/// # async fn example() -> Result<(), rust_web_server::model::DbError> {
 /// use rust_web_server::model::DbPool;
 /// use rust_web_server::session::DbSessionStore;
 ///
-/// let pool = DbPool::memory().unwrap();
-/// let store = DbSessionStore::new(pool, 3600).unwrap();
+/// let pool = DbPool::memory().await?;
+/// let store = DbSessionStore::new(pool, 3600).await?;
 ///
-/// let mut sess = store.create().unwrap();
+/// let mut sess = store.create().await?;
 /// sess.set("user_id", "42");
-/// store.save(&sess).unwrap();
+/// store.save(&sess).await?;
 ///
-/// let loaded = store.load(&sess.id).unwrap().unwrap();
+/// let loaded = store.load(&sess.id).await?.unwrap();
 /// assert_eq!(Some("42"), loaded.get("user_id"));
+/// # Ok(())
 /// # }
 /// ```
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
@@ -346,22 +350,21 @@ impl DbSessionStore {
     ///
     /// Creates the `rws_sessions` table on the first call if it is absent.
     /// Returns `Err` if the DDL fails.
-    pub fn new(pool: crate::model::DbPool, ttl_secs: u64) -> Result<Self, crate::model::DbError> {
+    pub async fn new(pool: crate::model::DbPool, ttl_secs: u64) -> Result<Self, crate::model::DbError> {
         let store = DbSessionStore {
             pool: Arc::new(pool),
             ttl: Duration::from_secs(ttl_secs),
         };
-        store.ensure_table()?;
+        store.ensure_table().await?;
         Ok(store)
     }
 
-    fn ensure_table(&self) -> Result<(), crate::model::DbError> {
-        let mut conn = self.pool.get()?;
-        conn.execute(
+    async fn ensure_table(&self) -> Result<(), crate::model::DbError> {
+        self.pool.execute(
             "CREATE TABLE IF NOT EXISTS rws_sessions \
              (id TEXT PRIMARY KEY, data TEXT NOT NULL DEFAULT '', expires_at INTEGER NOT NULL)",
             &[],
-        )?;
+        ).await?;
         Ok(())
     }
 
@@ -381,36 +384,34 @@ impl DbSessionStore {
     }
 
     /// Create a new empty session and persist it immediately.
-    pub fn create(&self) -> Result<Session, crate::model::DbError> {
-        self.create_with_id(generate_id())
+    pub async fn create(&self) -> Result<Session, crate::model::DbError> {
+        self.create_with_id(generate_id()).await
     }
 
     /// Create a new empty session with a caller-supplied ID and persist it.
-    pub fn create_with_id(&self, id: String) -> Result<Session, crate::model::DbError> {
+    pub async fn create_with_id(&self, id: String) -> Result<Session, crate::model::DbError> {
         let expires_at = Self::now_epoch() + self.ttl.as_secs() as i64;
-        let mut conn = self.pool.get()?;
-        conn.execute(
-            "INSERT INTO rws_sessions (id, data, expires_at) VALUES (?1, ?2, ?3)",
+        self.pool.execute(
+            "INSERT INTO rws_sessions (id, data, expires_at) VALUES (?, ?, ?)",
             &[
                 crate::model::Value::Text(id.clone()),
                 crate::model::Value::Text(String::new()),
                 crate::model::Value::Int(expires_at),
             ],
-        )?;
+        ).await?;
         Ok(Session { id, data: HashMap::new() })
     }
 
     /// Load a session by ID. Returns `None` if unknown or expired.
-    pub fn load(&self, id: &str) -> Result<Option<Session>, crate::model::DbError> {
+    pub async fn load(&self, id: &str) -> Result<Option<Session>, crate::model::DbError> {
         let now = Self::now_epoch();
-        let mut conn = self.pool.get()?;
-        let rows = conn.query_rows(
-            "SELECT data FROM rws_sessions WHERE id = ?1 AND expires_at > ?2",
+        let rows = self.pool.query_rows(
+            "SELECT data FROM rws_sessions WHERE id = ? AND expires_at > ?",
             &[
                 crate::model::Value::Text(id.to_string()),
                 crate::model::Value::Int(now),
             ],
-        )?;
+        ).await?;
         if rows.is_empty() {
             return Ok(None);
         }
@@ -419,43 +420,39 @@ impl DbSessionStore {
     }
 
     /// Persist a session's data back to the store.
-    pub fn save(&self, session: &Session) -> Result<(), crate::model::DbError> {
-        let mut conn = self.pool.get()?;
-        conn.execute(
-            "UPDATE rws_sessions SET data = ?1 WHERE id = ?2",
+    pub async fn save(&self, session: &Session) -> Result<(), crate::model::DbError> {
+        self.pool.execute(
+            "UPDATE rws_sessions SET data = ? WHERE id = ?",
             &[
                 crate::model::Value::Text(Self::serialize(&session.data)),
                 crate::model::Value::Text(session.id.clone()),
             ],
-        )?;
+        ).await?;
         Ok(())
     }
 
     /// Delete a session immediately.
-    pub fn destroy(&self, id: &str) -> Result<(), crate::model::DbError> {
-        let mut conn = self.pool.get()?;
-        conn.execute(
-            "DELETE FROM rws_sessions WHERE id = ?1",
+    pub async fn destroy(&self, id: &str) -> Result<(), crate::model::DbError> {
+        self.pool.execute(
+            "DELETE FROM rws_sessions WHERE id = ?",
             &[crate::model::Value::Text(id.to_string())],
-        )?;
+        ).await?;
         Ok(())
     }
 
     /// Delete all sessions whose TTL has elapsed.
-    pub fn purge_expired(&self) -> Result<(), crate::model::DbError> {
+    pub async fn purge_expired(&self) -> Result<(), crate::model::DbError> {
         let now = Self::now_epoch();
-        let mut conn = self.pool.get()?;
-        conn.execute(
-            "DELETE FROM rws_sessions WHERE expires_at <= ?1",
+        self.pool.execute(
+            "DELETE FROM rws_sessions WHERE expires_at <= ?",
             &[crate::model::Value::Int(now)],
-        )?;
+        ).await?;
         Ok(())
     }
 
     /// Total number of sessions in the store, including expired ones not yet purged.
-    pub fn len(&self) -> Result<usize, crate::model::DbError> {
-        let mut conn = self.pool.get()?;
-        let rows = conn.query_rows("SELECT COUNT(*) AS n FROM rws_sessions", &[])?;
+    pub async fn len(&self) -> Result<usize, crate::model::DbError> {
+        let rows = self.pool.query_rows("SELECT COUNT(*) AS n FROM rws_sessions", &[]).await?;
         if rows.is_empty() {
             return Ok(0);
         }
@@ -464,8 +461,8 @@ impl DbSessionStore {
     }
 
     /// `true` if the store contains no sessions.
-    pub fn is_empty(&self) -> Result<bool, crate::model::DbError> {
-        Ok(self.len()? == 0)
+    pub async fn is_empty(&self) -> Result<bool, crate::model::DbError> {
+        Ok(self.len().await? == 0)
     }
 }
 
@@ -494,7 +491,7 @@ impl RespConn {
 
     /// Send a Redis command (array of byte slices) and return the raw reply.
     fn cmd(&self, args: &[&[u8]]) -> std::io::Result<RespReply> {
-        use std::io::{Read, Write};
+        use std::io::Write;
         let mut guard = self.stream.lock().unwrap();
         // Lazy connect / reconnect
         if guard.is_none() {

@@ -94,7 +94,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `AsyncAppWithState<S>` | `async_state` | Like `AppWithState<S>` but handlers are `async fn`; requires `http2` feature. Entry point: `App::with_async_state(S)`. |
 | `Sse` / `SseEvent` | `sse` | Build a buffered `text/event-stream` response from a sequence of events. Correct headers set automatically. |
 | `SessionStore` / `Session` | `session` | Thread-safe in-memory session store with TTL expiry. Cookie helpers: `session_id_from_request`, `session_cookie`, `destroy_cookie`. |
-| `DbSessionStore` | `session` (requires `model-sqlite`, `model-postgres`, or `model-mysql`) | Persistent session store backed by the model-layer `DbPool`. Auto-creates `rws_sessions` table. Same API as `SessionStore` but all methods return `Result`. Survives restarts and shared across multiple instances. |
+| `DbSessionStore` | `session` (requires `model-sqlite`, `model-postgres`, or `model-mysql`) | Persistent session store backed by the model-layer `DbPool`. Created with `DbSessionStore::new(pool, ttl_secs).await`. Auto-creates `rws_sessions` table. All methods are `async fn` returning `Result`. Survives restarts and shared across multiple instances. |
 | `RedisSessionStore` | `session` | Persistent session store backed by a Redis server via a hand-rolled RESP v2 client. `RedisSessionStore::new(addr, password, ttl)` or `from_env()` (reads `RWS_REDIS_HOST/PORT/PASSWORD/TTL_SECS`). Sessions expire automatically via Redis TTL. |
 | `Json<T>` | `json` | Serde-backed JSON extractor (`from_request`) and responder (`into_response`). Requires `features = ["serde"]`. |
 | `BasicAuthLayer<F>` | `auth` | HTTP Basic Auth middleware; validates `Authorization: Basic` credentials via a closure. Requires `features = ["auth"]`. |
@@ -139,13 +139,12 @@ The crate exposes its core types so you can compose them in your own server or t
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
 | `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware round-robin proxying. |
 | `Container` | `di` | Type-keyed dependency injection container. `register::<T>(service)` stores concrete types; `provide::<dyn Trait>(Arc::new(...))` stores trait objects; both keyed by `TypeId`. Named services via `register_named` / `provide_named` / `get_named`. Share across handlers with `container.into_arc()` as `AppWithState` state. |
-| `DbPool` / `PooledConnection` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`) | Connection pool. `DbPool::new(DbConfig)` or `DbPool::from_env()` pre-creates `pool_size` connections. `pool.get()` checks out a `PooledConnection` (returned on drop). **SQLite in-memory shortcut:** `DbPool::memory()` creates a single-connection pool backed by `":memory:"` — all callers share one database; `get()` returns `Err` on exhaustion instead of silently opening an empty DB. |
-| `DbConnection` | `model` | Single database connection. `execute(sql, params)` for DDL/DML; `query_rows(sql, params)` for SELECT; `query::<T>(sql, params)` for typed results; `begin()` / `commit()` / `rollback()` / `transaction(closure)`; `migrate(dir)` / `migration_status(dir)`. **SQLite in-memory shortcut:** `DbConnection::memory()` returns a fresh isolated `:memory:` connection — each call is a new empty database, ideal for per-test isolation. |
-| `DbConfig` | `model` | Database configuration. `DbConfig::from_env()` reads `RWS_DB_*` env vars; construct manually with `DbConfig { host, port, user, password, database, pool_size }`. **SQLite in-memory shortcut:** `DbConfig::memory()` returns `DbConfig { database: ":memory:", pool_size: 1, .. }`. |
-| `ModelRepository<T, i64>` | `model` | JPA-style CRUD: `find_by_id`, `find_all`, `save` (INSERT when pk==0, UPDATE otherwise), `save_all`, `delete_by_id`, `delete_all_by_id`, `count`, `exists_by_id`. Obtain via `T::repository(&mut conn)` when using `#[derive(Model)]`. |
-| `QueryBuilder<T>` | `model` | Fluent SQL builder: `where_eq`, `filter`, `order_by`, `limit`, `offset`, `fetch_all`, `fetch_one`, `count`, `update`, `delete`. Obtain via `T::query(&mut conn)` when using `#[derive(Model)]`. |
-| `#[derive(Model)]` | `model` (requires `macros` + a model feature) | Proc-macro that maps a struct to a DB table. Attributes: `#[table(name = "…")]` struct-level override; `#[primary_key(auto_increment)]`; `#[column(name = "…")]`; `#[ignore]`. Generates `Model` impl plus `T::repository(&mut conn)` and `T::query(&mut conn)` helpers. |
-| `HasMany<T>` / `HasOne<T>` / `BelongsTo<O>` | `model` | Explicit-load relationship helpers. `HasMany::new(owner_pk, fk_col).load(&mut conn)` returns `Vec<T>`; no hidden N+1 queries. |
+| `DbPool` / `DbTransaction` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`; implies `http2`) | Async connection pool backed by `sqlx`. `DbPool::new(DbConfig).await` or `DbPool::from_env().await`. All SQL operations are `async fn`: `execute`, `query_rows`, `query::<T>`, `begin`, `transaction(closure)`, `migrate`, `migration_status`. **SQLite in-memory shortcut:** `DbPool::memory().await` creates a single-connection pool backed by `":memory:"` — each call is an isolated empty database, ideal for tests. Cheap to clone (Arc-wrapped). |
+| `DbConfig` | `model` | Database configuration. `DbConfig::from_env()` reads `RWS_DB_*` env vars; construct manually with `DbConfig { host, port, user, password, database, pool_size }`. |
+| `ModelRepository<T, i64>` | `model` | Async JPA-style CRUD: `find_by_id`, `find_all`, `save` (INSERT when pk==0, UPDATE otherwise), `save_all`, `delete_by_id`, `delete_all_by_id`, `count`, `exists_by_id` — all `async fn`. Obtain via `T::repository(&pool)` when using `#[derive(Model)]`. |
+| `QueryBuilder<T>` | `model` | Async fluent SQL builder: `where_eq`, `filter`, `order_by`, `limit`, `offset`, then `fetch_all`, `fetch_one`, `count`, `update`, `delete` (all `.await`). Obtain via `T::query(&pool)` when using `#[derive(Model)]`. |
+| `#[derive(Model)]` | `model` (requires `macros` + a model feature) | Proc-macro that maps a struct to a DB table. Attributes: `#[table(name = "…")]` struct-level override; `#[primary_key(auto_increment)]`; `#[column(name = "…")]`; `#[ignore]`. Generates `Model` impl plus `T::repository(&pool)` and `T::query(&pool)` helpers. |
+| `HasMany<T>` / `HasOne<T>` / `BelongsTo<O>` | `model` | Async explicit-load relationship helpers. `HasMany::new(owner_pk, fk_col).load(&pool).await` returns `Vec<T>`; no hidden N+1 queries. |
 | `Client` / `RequestBuilder` / `Response` | `http_client` | Synchronous outbound HTTP/1.1 client. `Client::new().get(url).header(k,v).timeout_ms(ms).send()` returns `Response`. Follows redirects automatically. Plain HTTP works in all builds; HTTPS requires `http-client` or `http2` feature. |
 | `AsyncClient` / `AsyncRequestBuilder` | `http_client` (requires `http2` feature) | Async variant of the outbound client. Same builder API with `.send().await`. |
 | `HttpClientError` | `http_client` | Error type returned by the HTTP client; implements `std::error::Error`. |
@@ -1007,25 +1006,23 @@ Call `store.purge_expired()` periodically (e.g. from a background thread) to rec
 
 ```rust
 use rust_web_server::model::DbPool;
-use rust_web_server::session::{self, DbSessionStore};
-use rust_web_server::header::Header;
-use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::session::DbSessionStore;
 
 // One pool → one persistent database; sessions survive restarts.
 // For production use a file or network database instead of :memory:.
-let pool = DbPool::memory().unwrap();
-let store = DbSessionStore::new(pool, 3600).unwrap();
+let pool = DbPool::memory().await?;
+let store = DbSessionStore::new(pool, 3600).await?;
 
-// create / save / load / destroy all return Result
-let mut sess = store.create().unwrap();
+// All methods are async fn returning Result
+let mut sess = store.create().await?;
 sess.set("user_id", "99");
-store.save(&sess).unwrap();
+store.save(&sess).await?;
 
-let loaded = store.load(&sess.id).unwrap().unwrap();
+let loaded = store.load(&sess.id).await?.unwrap();
 assert_eq!(Some("99"), loaded.get("user_id"));
 
 // Purge expired rows when needed (no automatic sweep)
-store.purge_expired().unwrap();
+store.purge_expired().await?;
 ```
 
 `DbSessionStore` auto-creates the `rws_sessions(id, data, expires_at)` table on first construction.
@@ -2709,7 +2706,7 @@ pub struct User {
 }
 ```
 
-Open a connection pool and run migrations:
+Open a connection pool and run migrations (all async; requires a tokio runtime — implied by any `model-*` feature):
 
 ```rust
 use rust_web_server::model::{DbConfig, DbPool};
@@ -2721,57 +2718,55 @@ let pool = DbPool::new(DbConfig {
     password:  "secret".into(),
     database:  "myapp.db".into(),   // file path for SQLite
     pool_size: 5,
-})?;
+}).await?;
 
-let mut db = pool.get()?;
-db.migrate("migrations/")?;
+pool.migrate("migrations/").await?;
 ```
 
 CRUD via the repository:
 
 ```rust
-let mut db = pool.get()?;
-let mut repo = User::repository(&mut db);
+let repo = User::repository(&pool);
 
 // INSERT
-let alice = repo.save(&User { id: 0, name: "Alice".into(), email: "alice@example.com".into(), age: Some(30), display_label: "".into() })?;
+let alice = repo.save(&User { id: 0, name: "Alice".into(), email: "alice@example.com".into(), age: Some(30), display_label: "".into() }).await?;
 println!("saved with id={}", alice.id);
 
 // SELECT by PK
-let found: Option<User> = repo.find_by_id(alice.id)?;
+let found: Option<User> = repo.find_by_id(alice.id).await?;
 
 // UPDATE
 let mut updated = found.unwrap();
 updated.age = Some(31);
-repo.save(&updated)?;
+repo.save(&updated).await?;
 
 // DELETE
-repo.delete_by_id(alice.id)?;
+repo.delete_by_id(alice.id).await?;
 
 // COUNT
-let n: i64 = repo.count()?;
+let n: i64 = repo.count().await?;
 ```
 
 Fluent query builder:
 
 ```rust
-let page: Vec<User> = User::query(&mut db)
+let page: Vec<User> = User::query(&pool)
     .filter("age >= ?", vec![rust_web_server::model::Value::Int(18)])
     .order_by("name", rust_web_server::model::Order::Asc)
     .limit(20)
     .offset(40)
-    .fetch_all()?;
+    .fetch_all().await?;
 ```
 
 Transactions:
 
 ```rust
-let mut db = pool.get()?;
-db.transaction(|conn| {
-    let user = User::repository(conn).save(&new_user)?;
+pool.transaction(|mut tx| async move {
+    let user = tx.execute("INSERT INTO users ...", &[...]).await?;
     // more work...
+    tx.commit().await?;
     Ok(user)
-})?;
+}).await?;
 ```
 
 ---
@@ -3058,55 +3053,24 @@ OidcAuth::new(config, sessions)
 
 `DbPool::memory()` and `DbConnection::memory()` are SQLite-only shortcuts that open a `":memory:"` database without configuring host, credentials, or a file path.
 
-**`DbPool::memory()` — shared in-memory database**
+**`DbPool::memory()` — isolated in-memory database (SQLite only)**
 
-All callers that check out the pool's single connection see the same data. Use when multiple handlers or test steps need to share state:
+Each call to `DbPool::memory().await` returns an independent empty database backed by a single connection. All async pool operations go through that connection. Ideal for tests where isolation is required:
 
 ```rust
 use rust_web_server::model::{DbPool, Value};
 
-// single connection to one shared in-memory database
-let pool = DbPool::memory().unwrap();
+// Each call is a new, isolated in-memory database
+let pool = DbPool::memory().await.unwrap();
 
-{
-    let mut conn = pool.get().unwrap();
-    conn.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)", &[]).unwrap();
-    conn.execute("INSERT INTO items (name) VALUES (?1)", &[Value::Text("apple".into())]).unwrap();
-}
+pool.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)", &[]).await.unwrap();
+pool.execute("INSERT INTO items (name) VALUES (?)", &[Value::Text("apple".into())]).await.unwrap();
 
-let mut conn = pool.get().unwrap();
-let rows = conn.query_rows("SELECT name FROM items", &[]).unwrap();
+let rows = pool.query_rows("SELECT name FROM items", &[]).await.unwrap();
 assert_eq!(1, rows.len());
 ```
 
-When the single connection is already checked out and `get()` is called again, it returns `Err` instead of silently opening an empty new database:
-
-```rust
-let pool = DbPool::memory().unwrap();
-let _held = pool.get().unwrap();         // checks out the only connection
-let err = pool.get().unwrap_err();       // second get() returns Err
-assert!(err.0.contains("exhausted"));
-```
-
-**`DbConnection::memory()` — isolated per-test database**
-
-Each call returns a brand-new empty database. Ideal for unit tests where tests must not share state:
-
-```rust
-use rust_web_server::model::{DbConnection, Value};
-
-// test A
-let mut conn = DbConnection::memory().unwrap();
-conn.execute("CREATE TABLE t (v TEXT)", &[]).unwrap();
-conn.execute("INSERT INTO t VALUES (?1)", &[Value::Text("x".into())]).unwrap();
-
-// test B — completely separate database, zero setup cost
-let mut conn2 = DbConnection::memory().unwrap();
-let rows = conn2.query_rows("SELECT name FROM sqlite_master", &[]).unwrap();
-assert!(rows.is_empty());  // conn2 has no tables
-```
-
-Enable with the `model-sqlite` feature (no feature flag needed for `DbConnection::memory()` in the same binary, but the SQLite driver must be compiled in):
+Enable with the `model-sqlite` feature:
 
 ```toml
 [dependencies]

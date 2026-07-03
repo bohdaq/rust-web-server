@@ -7,10 +7,10 @@ The migration runner reads `*.sql` files from a directory in lexicographic order
 
 ## How it works
 
-1. `conn.migrate("migrations/")` creates `_schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT)` if it does not already exist.
+1. `pool.migrate("migrations/").await` creates `_schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT)` if it does not already exist.
 2. It reads every `*.sql` file in the directory sorted lexicographically by filename.
 3. Files whose name is already in `_schema_migrations` are skipped.
-4. Each unapplied file is executed in a `BEGIN` / `COMMIT` transaction. If the file fails, the transaction is rolled back and `migrate` returns `Err` immediately — subsequent files are not attempted.
+4. Each unapplied file is executed inside a `BEGIN` / `COMMIT` transaction. If the file fails, the transaction is rolled back and `migrate` returns `Err` immediately — subsequent files are not attempted.
 
 ## File naming convention
 
@@ -66,13 +66,14 @@ ALTER TABLE posts ADD COLUMN published_at TEXT;
 Call `migrate` once at server startup, before the application begins accepting requests:
 
 ```rust
-use rust_web_server::model::{DbConfig, DbConnection};
+use rust_web_server::model::{DbConfig, DbPool};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let config = DbConfig::from_env().expect("database config");
-    let mut conn = DbConnection::open(&config).expect("database connection");
+    let pool = DbPool::new(config).await.expect("connection pool");
 
-    conn.migrate("migrations/").expect("migrations failed");
+    pool.migrate("migrations/").await.expect("migrations failed");
 
     // start the server ...
 }
@@ -82,12 +83,12 @@ If all migrations have already been applied, `migrate` is a no-op and returns im
 
 ## Checking migration status
 
-`conn.migration_status(dir)` returns a `Vec<MigrationStatus>` — one entry per SQL file in the directory — without executing anything. Use it for health checks, admin endpoints, or CLI tooling.
+`pool.migration_status(dir).await` returns a `Vec<MigrationStatus>` — one entry per SQL file in the directory — without executing anything. Use it for health checks, admin endpoints, or CLI tooling.
 
 ```rust
 use rust_web_server::model::MigrationStatus;
 
-let statuses: Vec<MigrationStatus> = conn.migration_status("migrations/")?;
+let statuses: Vec<MigrationStatus> = pool.migration_status("migrations/").await?;
 
 for s in &statuses {
     let state = if s.applied { "applied" } else { "pending" };
@@ -110,32 +111,27 @@ if pending {
 
 ## Startup pattern
 
-A typical server startup sequence:
+A typical async server startup sequence:
 
 ```rust
 use rust_web_server::model::{DbConfig, DbPool};
 use rust_web_server::app::App;
 use rust_web_server::server::Server;
 
-fn main() {
-    let db_config = DbConfig::from_env().expect("db config");
+#[tokio::main]
+async fn main() {
+    let config = DbConfig::from_env().expect("db config");
 
-    // Run migrations using a dedicated connection
-    {
-        let mut conn = rust_web_server::model::DbConnection::open(&db_config)
-            .expect("migration connection");
-        conn.migrate("migrations/").expect("migrations");
-    }
+    // Create pool and run migrations
+    let pool = DbPool::new(config).await.expect("connection pool");
+    pool.migrate("migrations/").await.expect("migrations");
 
-    // Create a pool for request handlers
-    let pool = DbPool::new(&db_config, db_config.pool_size)
-        .expect("connection pool");
-
-    let app = App::with_state(std::sync::Arc::new(pool))
+    // Pass the pool (Clone) into your app state
+    let app = App::with_async_state(std::sync::Arc::new(pool))
         // register routes ...
         ;
 
-    Server::new().run(app);
+    Server::new().run_tls(app).await;
 }
 ```
 

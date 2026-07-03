@@ -245,9 +245,9 @@ let mcp = App::new().mcp("my-server", "1.0.0")
 | `macros` | `#[get]`, `#[derive(FromRequest)]`, `#[derive(Validate)]`, `#[derive(Config)]`, `routes!` | `rws-macros` |
 | `acme` | Automatic TLS via Let's Encrypt (implies `http2`) | `rcgen`, `aws-lc-rs` |
 | `tera` | Tera HTML template engine (Jinja2/Django syntax) | `tera`, `serde`, `serde_json` |
-| `model-sqlite` | ORM backed by bundled SQLite | `rusqlite` |
-| `model-postgres` | ORM backed by PostgreSQL | `postgres` |
-| `model-mysql` | ORM backed by MySQL | `mysql` |
+| `model-sqlite` | Async ORM backed by SQLite (implies `http2`) | `sqlx` |
+| `model-postgres` | Async ORM backed by PostgreSQL (implies `http2`) | `sqlx` |
+| `model-mysql` | Async ORM backed by MySQL (implies `http2`) | `sqlx` |
 | `crypto` | `hash_password`/`verify_password` (Argon2id), `generate_token` (CSPRNG) | `argon2`, `rand_core` |
 | `csrf` | `CsrfLayer` + `CsrfToken` — double-submit cookie CSRF protection | `rand_core` |
 | `sso` | `OidcAuth` middleware, PKCE, RS256/ES256 JWT via JWKS, provider presets | `rsa`, `p256`, `sha2`, `serde`, `serde_json` |
@@ -379,12 +379,12 @@ response.headers.push(Header {
 use rust_web_server::model::DbPool;
 use rust_web_server::session::DbSessionStore;
 
-let pool = DbPool::new(config)?;           // or DbPool::memory() for SQLite
-let store = DbSessionStore::new(pool, 3600)?;  // auto-creates rws_sessions table
+let pool = DbPool::new(config).await?;     // or DbPool::memory().await for SQLite
+let store = DbSessionStore::new(pool, 3600).await?;  // auto-creates rws_sessions table
 
-let mut sess = store.create()?;            // returns Result
+let mut sess = store.create().await?;      // all methods are async fn
 sess.set("user_id", "42");
-store.save(&sess)?;
+store.save(&sess).await?;
 
 let loaded = store.load(&sess.id)?.unwrap();
 store.purge_expired()?;                    // DELETE WHERE expires_at <= now
@@ -605,6 +605,8 @@ Follows redirects automatically. GET-downgrade on 301/302/303; method-preserve o
 
 ## Model layer / ORM (src/model/, requires `model-sqlite` / `model-postgres` / `model-mysql`)
 
+All model features imply `http2` (tokio runtime). The driver is `sqlx`; `DbPool` wraps `sqlx::Pool` and is cheap to clone.
+
 ```rust
 use rust_web_server::model::{DbPool, DbConfig};
 
@@ -617,42 +619,42 @@ struct User {
     pub email: String,
 }
 
-let pool = DbPool::new(DbConfig::from_env()?);
-let mut conn = pool.get()?;
+let pool = DbPool::new(DbConfig::from_env()?).await?;
 
 // Migration:
-conn.migrate("migrations/")?;
+pool.migrate("migrations/").await?;
 
-// CRUD:
-let mut repo = User::repository(&mut conn);
-let user = repo.find_by_id(1)?;
-repo.save(&mut User { id: 0, name: "Alice".into(), email: "a@b.com".into() })?;
-repo.delete_by_id(1)?;
-let all = repo.find_all()?;
+// CRUD (all async):
+let repo = User::repository(&pool);
+let user = repo.find_by_id(1).await?;
+repo.save(&User { id: 0, name: "Alice".into(), email: "a@b.com".into() }).await?;
+repo.delete_by_id(1).await?;
+let all = repo.find_all().await?;
 
-// Query builder:
-let adults = User::query(&mut conn)
-    .filter("age >= ?", &[&18i64])
-    .order_by("name ASC")
+// Query builder (terminal methods are async):
+let adults: Vec<User> = User::query(&pool)
+    .filter("age >= ?", vec![Value::Int(18)])
+    .order_by("name", Order::Asc)
     .limit(10)
-    .fetch_all()?;
+    .fetch_all().await?;
+
+// Transactions:
+pool.transaction(|mut tx| async move {
+    tx.execute("INSERT INTO users (name, email) VALUES (?, ?)", &[...]).await?;
+    tx.commit().await
+}).await?;
 ```
 
 `DbConfig::from_env()` reads `RWS_DB_HOST`, `RWS_DB_PORT`, `RWS_DB_USER`, `RWS_DB_PASSWORD`, `RWS_DB_DATABASE`, `RWS_DB_POOL_SIZE`.
 
-**SQLite in-memory shortcuts (model-sqlite only):**
+**SQLite in-memory pool (model-sqlite only):**
 
 ```rust
-// Shared in-memory database — all pool.get() calls see the same data:
-let pool = DbPool::memory()?;
-
-// Isolated per-call database — each call is a fresh empty database (ideal for tests):
-let mut conn = DbConnection::memory()?;
+// Each call is a fresh isolated in-memory database — ideal for tests:
+let pool = DbPool::memory().await?;
 ```
 
-`DbPool::memory()` creates a single-connection pool on `":memory:"`; `get()` returns `Err` on exhaustion rather than silently opening a new empty database. `DbPool::memory()` = `DbPool::new(DbConfig::memory())` = `DbPool::new(DbConfig { database: ":memory:", pool_size: 1, .. })`.
-
-Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&mut conn)`, no lazy loading, no hidden N+1.
+Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&pool).await`, no lazy loading, no hidden N+1.
 
 ---
 
@@ -993,7 +995,7 @@ src/mcp/                — McpServer (MCP Streamable HTTP)
 src/metrics/            — Prometheus metrics, MetricsLayer
 src/middleware/         — Middleware trait, WithMiddleware, RateLimitLayer
 src/mime_type/          — MIME type constants and detection
-src/model/              — ORM: DbPool, DbConnection, Model, Repository, QueryBuilder
+src/model/              — Async ORM (sqlx): DbPool, DbTransaction, Model, Repository, QueryBuilder
 src/null/               — NullApplication (returns 404 for everything)
 src/otel/               — OtelLayer, setup, span export
 src/prelude/            — Re-exports of the most commonly used types

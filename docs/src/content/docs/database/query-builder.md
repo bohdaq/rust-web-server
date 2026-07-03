@@ -1,20 +1,19 @@
 ---
 title: Query Builder
-description: Use QueryBuilder to construct typed SELECT, COUNT, DELETE, and UPDATE queries without writing SQL.
+description: Use QueryBuilder to construct typed async SELECT, COUNT, DELETE, and UPDATE queries without writing SQL.
 ---
 
-`QueryBuilder<T>` is obtained from `T::query(&mut conn)` and provides a fluent API for building queries against the table mapped to `T`. All methods consume `self` and return a new `QueryBuilder`, making the chain easy to compose.
+`QueryBuilder<T>` is obtained from `T::query(&pool)` and provides a fluent API for building queries against the table mapped to `T`. All builder methods consume `self` and return a new `QueryBuilder`. Terminal methods (`fetch_all`, `fetch_one`, `count`, `delete`, `update`) are `async fn`.
 
 ## Obtaining a builder
 
 ```rust
-use rust_web_server::model::{DbConfig, DbConnection};
+use rust_web_server::model::DbPool;
 
-let config = DbConfig::from_env()?;
-let mut conn = DbConnection::open(&config)?;
+let pool = DbPool::from_env().await?;
 
 // QueryBuilder<User> — tied to the `users` table
-let qb = User::query(&mut conn);
+let qb = User::query(&pool);
 ```
 
 ## Filtering
@@ -24,18 +23,18 @@ let qb = User::query(&mut conn);
 `where_eq(col, val)` adds a `col = ?` condition. The placeholder is `?` for SQLite and MySQL, `$N` for PostgreSQL — the builder handles the substitution automatically.
 
 ```rust
-let admins: Vec<User> = User::query(&mut conn)
+let admins: Vec<User> = User::query(&pool)
     .where_eq("role", "admin")
-    .fetch_all()?;
+    .fetch_all().await?;
 ```
 
 Chain multiple calls to AND conditions together:
 
 ```rust
-let result = User::query(&mut conn)
+let result = User::query(&pool)
     .where_eq("role", "admin")
     .where_eq("active", true)
-    .fetch_all()?;
+    .fetch_all().await?;
 ```
 
 ### Raw filter
@@ -45,9 +44,9 @@ let result = User::query(&mut conn)
 ```rust
 use rust_web_server::model::Value;
 
-let adults = User::query(&mut conn)
+let adults = User::query(&pool)
     .filter("age >= ?", vec![Value::Int(18)])
-    .fetch_all()?;
+    .fetch_all().await?;
 ```
 
 ## Ordering
@@ -55,13 +54,13 @@ let adults = User::query(&mut conn)
 ```rust
 use rust_web_server::model::Order;
 
-let recent = User::query(&mut conn)
+let recent = User::query(&pool)
     .order_by("created_at", Order::Desc)
-    .fetch_all()?;
+    .fetch_all().await?;
 
-let alphabetical = User::query(&mut conn)
+let alphabetical = User::query(&pool)
     .order_by("name", Order::Asc)
-    .fetch_all()?;
+    .fetch_all().await?;
 ```
 
 ## Pagination
@@ -72,36 +71,36 @@ let alphabetical = User::query(&mut conn)
 let page = 2u64;
 let page_size = 20u64;
 
-let users = User::query(&mut conn)
+let users = User::query(&pool)
     .order_by("id", Order::Asc)
     .limit(page_size)
     .offset((page - 1) * page_size)
-    .fetch_all()?;
+    .fetch_all().await?;
 ```
 
 ## Fetching results
 
 | Method | SQL | Return type |
 |---|---|---|
-| `fetch_all()` | `SELECT * FROM … WHERE … ORDER BY … LIMIT … OFFSET …` | `Result<Vec<T>, DbError>` |
-| `fetch_one()` | same with `LIMIT 1` | `Result<Option<T>, DbError>` |
-| `count()` | `SELECT COUNT(*) FROM … WHERE …` | `Result<i64, DbError>` |
+| `fetch_all().await` | `SELECT * FROM … WHERE … ORDER BY … LIMIT … OFFSET …` | `Result<Vec<T>, DbError>` |
+| `fetch_one().await` | same with `LIMIT 1` | `Result<Option<T>, DbError>` |
+| `count().await` | `SELECT COUNT(*) FROM … WHERE …` | `Result<i64, DbError>` |
 
 ```rust
 // all matching rows
-let users: Vec<User> = User::query(&mut conn)
+let users: Vec<User> = User::query(&pool)
     .where_eq("active", true)
-    .fetch_all()?;
+    .fetch_all().await?;
 
 // first match only
-let user: Option<User> = User::query(&mut conn)
+let user: Option<User> = User::query(&pool)
     .where_eq("email", "alice@example.com")
-    .fetch_one()?;
+    .fetch_one().await?;
 
 // count without loading rows
-let total: i64 = User::query(&mut conn)
+let total: i64 = User::query(&pool)
     .where_eq("role", "admin")
-    .count()?;
+    .count().await?;
 ```
 
 ## Mutation
@@ -109,19 +108,19 @@ let total: i64 = User::query(&mut conn)
 ### Delete matching rows
 
 ```rust
-User::query(&mut conn)
+User::query(&pool)
     .where_eq("active", false)
-    .delete()?;
+    .delete().await?;
 ```
 
 ### Update a single column
 
-`update(col, val)` issues `UPDATE table SET col = ? WHERE …`. Combine with filters to scope the update.
+`update(col, val).await` issues `UPDATE table SET col = ? WHERE …`. Combine with filters to scope the update.
 
 ```rust
-User::query(&mut conn)
+User::query(&pool)
     .where_eq("id", 42i64)
-    .update("role", "moderator")?;
+    .update("role", "moderator").await?;
 ```
 
 ## Placeholder rules
@@ -136,56 +135,34 @@ You never need to pick a style; write `?` in raw `.filter()` expressions and the
 ## Complete example: paginated list endpoint
 
 ```rust
-use rust_web_server::app::App;
-use rust_web_server::model::{DbConfig, DbConnection, Order};
-use rust_web_server::request::Request;
-use rust_web_server::router::PathParams;
-use rust_web_server::server::ConnectionInfo;
+use rust_web_server::model::{DbPool, Order};
 use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
-use rust_web_server::extract::Query;
-use rust_web_server::routes;
-use std::collections::HashMap;
 use std::sync::Arc;
 
-fn list_users(
-    req: &Request,
-    _params: &PathParams,
-    _conn: &ConnectionInfo,
-    _state: &Arc<()>,
-) -> Response {
-    // Parse ?page=N&per_page=N from query string
-    let qs: HashMap<String, String> = req.request_uri
-        .split_once('?')
-        .map(|(_, q)| url_decode_pairs(q))
-        .unwrap_or_default();
+async fn list_users(pool: Arc<DbPool>, page: u64, per_page: u64) -> Response {
+    let per_page = per_page.min(100);
 
-    let page: u64 = qs.get("page").and_then(|s| s.parse().ok()).unwrap_or(1);
-    let per_page: u64 = qs.get("per_page").and_then(|s| s.parse().ok()).unwrap_or(20).min(100);
-
-    let config = DbConfig::from_env().unwrap();
-    let mut db = DbConnection::open(&config).unwrap();
-
-    let total = User::query(&mut db)
+    let total = User::query(&pool)
         .where_eq("active", true)
-        .count()
+        .count().await
         .unwrap_or(0);
 
-    let users = User::query(&mut db)
+    let users = User::query(&pool)
         .where_eq("active", true)
         .order_by("created_at", Order::Desc)
         .limit(per_page)
         .offset((page - 1) * per_page)
-        .fetch_all()
+        .fetch_all().await
         .unwrap_or_default();
 
     let mut r = Response::new();
     r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-    // serialize `users` and `total` into the response body as needed
+    // serialize `users` and `total` into the response body
     r
 }
 ```
 
 :::note[Zero rows is not an error]
-`fetch_all()` returns an empty `Vec` when no rows match — it only returns `Err` on a real database error. Similarly, `fetch_one()` returns `Ok(None)` for no match.
+`fetch_all().await` returns an empty `Vec` when no rows match — it only returns `Err` on a real database error. Similarly, `fetch_one().await` returns `Ok(None)` for no match.
 :::

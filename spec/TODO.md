@@ -40,7 +40,7 @@ Commonly needed; workarounds exist but are painful. **This is the current focus.
 
 - [ ] **Config-driven load balancing strategies** — `DynamicProxy` round-robin only (the `strategy` field is parsed but never applied). Add `least_connections`, `ip_hash`, and `random` via `load_balancing = "…"` in `rws.config.toml`. `least_connections` is the most important (WebSocket and SSE stickiness). See IDEAS.md §3. Closes GAPS_V3 §2.1.
 
-- [ ] **Async ORM** — `src/model/` uses blocking I/O; calling ORM methods in `AsyncAppWithState` handlers blocks a tokio worker thread. Add `async fn save`, `async fn find_all`, async `Repository` via `tokio::task::spawn_blocking` or `sqlx` as an alternative async backend. Closes GAPS_V3 §3.7.
+- [x] **Async ORM** — `src/model/` rewritten to use `sqlx 0.8` as the async database driver. `DbPool` wraps `sqlx::Pool<Db>` (cheap to clone); `DbTransaction` wraps `sqlx::Transaction<'static, Db>`. Old `DbConnection` and `PooledConnection` types removed. All ORM methods (`save`, `find_all`, `find_by_id`, `delete_by_id`, `count`, `exists_by_id`, `QueryBuilder` terminals, relation `.load()`, `migrate()`, `migration_status()`) are now `async fn` and return `Result<_, DbError>`. `DbSessionStore` updated to `async fn`. All model and session tests use `#[tokio::test]`. 16 model integration tests + 31 session tests pass. Closes GAPS_V3 §3.7.
 
 - [ ] **Per-route timeouts** — a single global read timeout applies to every route. A file-upload endpoint needs 120 s; a health check needs 500 ms. Add a per-route override in the config and a `TimeoutLayer` middleware. Closes GAPS_V3 §1.5.
 

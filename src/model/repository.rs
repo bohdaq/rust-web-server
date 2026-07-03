@@ -1,242 +1,200 @@
-//! Repository trait and `ModelRepository` implementation.
+//! Async `Repository` trait and `ModelRepository` implementation.
 
 use std::marker::PhantomData;
 
-use super::connection::DbConnection;
+use super::pool::DbPool;
 use super::{DbError, Model, Value};
 
 // ── Repository trait ──────────────────────────────────────────────────────────
 
-/// CRUD operations for a model type.
+/// Async CRUD operations for a model type.
 pub trait Repository<T: Model, ID> {
-    fn find_by_id(&mut self, id: ID) -> Result<Option<T>, DbError>;
-    fn find_all(&mut self) -> Result<Vec<T>, DbError>;
-    fn save(&mut self, entity: &T) -> Result<T, DbError>;
-    fn save_all(&mut self, entities: &[T]) -> Result<Vec<T>, DbError>;
-    fn delete_by_id(&mut self, id: ID) -> Result<(), DbError>;
-    fn delete_all_by_id(&mut self, ids: &[ID]) -> Result<(), DbError>;
-    fn count(&mut self) -> Result<i64, DbError>;
-    fn exists_by_id(&mut self, id: ID) -> Result<bool, DbError>;
+    async fn find_by_id(&self, id: ID) -> Result<Option<T>, DbError>;
+    async fn find_all(&self) -> Result<Vec<T>, DbError>;
+    async fn save(&self, entity: &T) -> Result<T, DbError>;
+    async fn save_all(&self, entities: &[T]) -> Result<Vec<T>, DbError>;
+    async fn delete_by_id(&self, id: ID) -> Result<(), DbError>;
+    async fn delete_all_by_id(&self, ids: &[ID]) -> Result<(), DbError>;
+    async fn count(&self) -> Result<i64, DbError>;
+    async fn exists_by_id(&self, id: ID) -> Result<bool, DbError>;
 }
 
 // ── ModelRepository ───────────────────────────────────────────────────────────
 
-/// Repository tied to a specific model type and a connection.
+/// Repository tied to a model type and a pool.
 pub struct ModelRepository<'a, T: Model, ID> {
-    pub(crate) conn: &'a mut DbConnection,
+    pub(crate) pool: &'a DbPool,
     _phantom: PhantomData<(T, ID)>,
 }
 
 impl<'a, T: Model, ID> ModelRepository<'a, T, ID> {
-    pub fn new(conn: &'a mut DbConnection) -> Self {
-        ModelRepository {
-            conn,
-            _phantom: PhantomData,
-        }
+    pub fn new(pool: &'a DbPool) -> Self {
+        ModelRepository { pool, _phantom: PhantomData }
     }
 }
 
 // ── impl Repository<T, i64> ───────────────────────────────────────────────────
 
 impl<'a, T: Model> Repository<T, i64> for ModelRepository<'a, T, i64> {
-    fn find_by_id(&mut self, id: i64) -> Result<Option<T>, DbError> {
+    async fn find_by_id(&self, id: i64) -> Result<Option<T>, DbError> {
         let sql = format!(
             "SELECT * FROM {} WHERE {} = {}",
             T::table_name(),
             T::primary_key_name(),
-            placeholder(1)
+            placeholder(1),
         );
-        let rows = self.conn.query_rows(&sql, &[Value::Int(id)])?;
+        let rows = self.pool.query_rows(&sql, &[Value::Int(id)]).await?;
         match rows.into_iter().next() {
             Some(row) => Ok(Some(T::from_row(&row)?)),
             None => Ok(None),
         }
     }
 
-    fn find_all(&mut self) -> Result<Vec<T>, DbError> {
+    async fn find_all(&self) -> Result<Vec<T>, DbError> {
         let sql = format!("SELECT * FROM {}", T::table_name());
-        let rows = self.conn.query_rows(&sql, &[])?;
+        let rows = self.pool.query_rows(&sql, &[]).await?;
         rows.iter().map(|r| T::from_row(r)).collect()
     }
 
-    fn save(&mut self, entity: &T) -> Result<T, DbError> {
+    async fn save(&self, entity: &T) -> Result<T, DbError> {
         let pk_val = entity.primary_key_value();
-        let is_new = match &pk_val {
-            Value::Int(n) => *n == 0,
-            Value::Null => true,
-            _ => false,
-        };
-
-        if is_new || T::primary_key_auto_increment() && is_new {
-            insert_entity(self.conn, entity)
+        let is_new = matches!(&pk_val, Value::Int(n) if *n == 0) || matches!(&pk_val, Value::Null);
+        if is_new {
+            insert_entity(self.pool, entity).await
         } else {
-            update_entity(self.conn, entity)
+            update_entity(self.pool, entity).await
         }
     }
 
-    fn save_all(&mut self, entities: &[T]) -> Result<Vec<T>, DbError> {
+    async fn save_all(&self, entities: &[T]) -> Result<Vec<T>, DbError> {
         let mut result = Vec::with_capacity(entities.len());
         for e in entities {
-            result.push(self.save(e)?);
+            result.push(self.save(e).await?);
         }
         Ok(result)
     }
 
-    fn delete_by_id(&mut self, id: i64) -> Result<(), DbError> {
+    async fn delete_by_id(&self, id: i64) -> Result<(), DbError> {
         let sql = format!(
             "DELETE FROM {} WHERE {} = {}",
             T::table_name(),
             T::primary_key_name(),
-            placeholder(1)
+            placeholder(1),
         );
-        self.conn.execute(&sql, &[Value::Int(id)])?;
+        self.pool.execute(&sql, &[Value::Int(id)]).await?;
         Ok(())
     }
 
-    fn delete_all_by_id(&mut self, ids: &[i64]) -> Result<(), DbError> {
+    async fn delete_all_by_id(&self, ids: &[i64]) -> Result<(), DbError> {
         for &id in ids {
-            self.delete_by_id(id)?;
+            self.delete_by_id(id).await?;
         }
         Ok(())
     }
 
-    fn count(&mut self) -> Result<i64, DbError> {
+    async fn count(&self) -> Result<i64, DbError> {
         let sql = format!("SELECT COUNT(*) FROM {}", T::table_name());
-        let rows = self.conn.query_rows(&sql, &[])?;
-        match rows.into_iter().next() {
-            Some(row) => {
-                // The column might be named "COUNT(*)" or "count(*)"
-                let cols = &row.columns;
-                if let Some((_, val)) = cols.first() {
-                    match val.clone() {
-                        Value::Int(n) => return Ok(n),
-                        other => return Err(DbError::new(format!("unexpected count value: {:?}", other))),
-                    }
-                }
-                Err(DbError::new("count query returned empty row"))
-            }
-            None => Ok(0),
-        }
+        let rows = self.pool.query_rows(&sql, &[]).await?;
+        extract_count(rows)
     }
 
-    fn exists_by_id(&mut self, id: i64) -> Result<bool, DbError> {
-        Ok(self.find_by_id(id)?.is_some())
+    async fn exists_by_id(&self, id: i64) -> Result<bool, DbError> {
+        Ok(self.find_by_id(id).await?.is_some())
     }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Placeholder helpers ───────────────────────────────────────────────────────
 
 /// Return the DB-appropriate placeholder for position `pos` (1-indexed).
 /// SQLite and MySQL use `?`, PostgreSQL uses `$1`, `$2`, …
-pub(crate) fn placeholder(pos: usize) -> String {
-    #[cfg(feature = "model-postgres")]
-    {
-        return format!("${}", pos);
-    }
+pub(crate) fn placeholder(_pos: usize) -> String {
+    #[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
+    return format!("${}", _pos);
+
     #[allow(unreachable_code)]
     "?".to_string()
 }
 
-/// Build a comma-separated list of placeholders: `?, ?, ?` or `$1, $2, $3`.
+/// Build a comma-separated list of placeholders.
 pub(crate) fn placeholders(count: usize) -> String {
-    (1..=count)
-        .map(|i| placeholder(i))
-        .collect::<Vec<_>>()
-        .join(", ")
+    (1..=count).map(placeholder).collect::<Vec<_>>().join(", ")
 }
 
-/// INSERT a new entity and return the persisted entity with PK filled in.
-pub(crate) fn insert_entity<T: Model>(conn: &mut DbConnection, entity: &T) -> Result<T, DbError> {
+// ── Insert / Update helpers ───────────────────────────────────────────────────
+
+pub(crate) async fn insert_entity<T: Model>(pool: &DbPool, entity: &T) -> Result<T, DbError> {
     let values = entity.to_values();
 
-    // For auto-increment PKs, exclude the PK column from the INSERT list.
     let insert_vals: Vec<(&'static str, Value)> = if T::primary_key_auto_increment() {
-        values
-            .into_iter()
-            .filter(|(col, _)| *col != T::primary_key_name())
-            .collect()
+        values.into_iter().filter(|(col, _)| *col != T::primary_key_name()).collect()
     } else {
         values
     };
 
     let cols: Vec<&str> = insert_vals.iter().map(|(c, _)| *c).collect();
     let params: Vec<Value> = insert_vals.into_iter().map(|(_, v)| v).collect();
-    let ph = (1..=cols.len())
-        .map(|i| placeholder(i))
-        .collect::<Vec<_>>()
-        .join(", ");
+    let ph = (1..=cols.len()).map(placeholder).collect::<Vec<_>>().join(", ");
     let col_list = cols.join(", ");
 
-    // PostgreSQL supports RETURNING; SQLite and MySQL do not (we query after).
+    let insert_sql = format!(
+        "INSERT INTO {} ({}) VALUES ({})",
+        T::table_name(), col_list, ph
+    );
+
+    // PostgreSQL: use RETURNING
     #[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
     {
-        let sql = format!(
-            "INSERT INTO {} ({}) VALUES ({}) RETURNING {}",
-            T::table_name(),
-            col_list,
-            ph,
-            T::primary_key_name()
-        );
-        let rows = conn.query_rows(&sql, &params)?;
-        let pk_row = rows.into_iter().next().ok_or_else(|| DbError::new("INSERT RETURNING returned no row"))?;
-        let new_id: i64 = pk_row.get(T::primary_key_name())?;
+        let new_id = super::pool::pg_insert_returning(
+            &pool.0, &insert_sql, &params, T::primary_key_name(),
+        ).await?;
         let select_sql = format!(
             "SELECT * FROM {} WHERE {} = {}",
-            T::table_name(),
-            T::primary_key_name(),
-            placeholder(1)
+            T::table_name(), T::primary_key_name(), placeholder(1),
         );
-        let sel_rows = conn.query_rows(&select_sql, &[Value::Int(new_id)])?;
-        let row = sel_rows.into_iter().next().ok_or_else(|| DbError::new("inserted row not found"))?;
-        return T::from_row(&row);
+        let rows = pool.query_rows(&select_sql, &[Value::Int(new_id)]).await?;
+        return rows.into_iter().next()
+            .ok_or_else(|| DbError::new("inserted row not found"))
+            .and_then(|r| T::from_row(&r));
     }
 
-    #[allow(unreachable_code)]
-    {
-        let sql = format!(
-            "INSERT INTO {} ({}) VALUES ({})",
-            T::table_name(),
-            col_list,
-            ph
-        );
-        conn.execute(&sql, &params)?;
-
-        // Retrieve the generated PK.
-        let new_id = get_last_insert_id(conn)?;
-
-        let select_sql = format!(
-            "SELECT * FROM {} WHERE {} = {}",
-            T::table_name(),
-            T::primary_key_name(),
-            placeholder(1)
-        );
-        let rows = conn.query_rows(&select_sql, &[Value::Int(new_id)])?;
-        let row = rows.into_iter().next().ok_or_else(|| DbError::new("inserted row not found"))?;
-        T::from_row(&row)
-    }
-}
-
-/// Get the last inserted row ID from the appropriate backend.
-pub(crate) fn get_last_insert_id(conn: &mut DbConnection) -> Result<i64, DbError> {
+    // SQLite: use last_insert_rowid
     #[cfg(feature = "model-sqlite")]
     {
-        return Ok(conn.last_insert_rowid());
+        let new_id = super::pool::sqlite_last_insert_id(&pool.0, &insert_sql, &params).await?;
+        let select_sql = format!(
+            "SELECT * FROM {} WHERE {} = {}",
+            T::table_name(), T::primary_key_name(), placeholder(1),
+        );
+        let rows = pool.query_rows(&select_sql, &[Value::Int(new_id)]).await?;
+        return rows.into_iter().next()
+            .ok_or_else(|| DbError::new("inserted row not found"))
+            .and_then(|r| T::from_row(&r));
     }
 
-    #[cfg(feature = "model-mysql")]
+    // MySQL: use last_insert_id
+    #[cfg(all(
+        feature = "model-mysql",
+        not(feature = "model-sqlite"),
+        not(feature = "model-postgres")
+    ))]
     {
-        return Ok(conn.last_insert_id() as i64);
+        let new_id = super::pool::mysql_last_insert_id(&pool.0, &insert_sql, &params).await?;
+        let select_sql = format!(
+            "SELECT * FROM {} WHERE {} = {}",
+            T::table_name(), T::primary_key_name(), placeholder(1),
+        );
+        let rows = pool.query_rows(&select_sql, &[Value::Int(new_id)]).await?;
+        return rows.into_iter().next()
+            .ok_or_else(|| DbError::new("inserted row not found"))
+            .and_then(|r| T::from_row(&r));
     }
 
     #[allow(unreachable_code)]
-    Err(DbError::new("last insert id not supported for this backend"))
+    Err(DbError::new("no database feature enabled"))
 }
 
-/// UPDATE an existing entity.
-pub(crate) fn update_entity<T: Model>(conn: &mut DbConnection, entity: &T) -> Result<T, DbError> {
+pub(crate) async fn update_entity<T: Model>(pool: &DbPool, entity: &T) -> Result<T, DbError> {
     let values = entity.to_values();
-
-    // Build SET clause excluding the PK column.
     let set_pairs: Vec<(&str, Value)> = values
         .into_iter()
         .filter(|(col, _)| *col != T::primary_key_name())
@@ -252,34 +210,38 @@ pub(crate) fn update_entity<T: Model>(conn: &mut DbConnection, entity: &T) -> Re
     let pk_placeholder = placeholder(set_pairs.len() + 1);
     let sql = format!(
         "UPDATE {} SET {} WHERE {} = {}",
-        T::table_name(),
-        set_clause,
-        T::primary_key_name(),
-        pk_placeholder
+        T::table_name(), set_clause, T::primary_key_name(), pk_placeholder,
     );
 
     let mut params: Vec<Value> = set_pairs.into_iter().map(|(_, v)| v).collect();
     params.push(entity.primary_key_value());
+    pool.execute(&sql, &params).await?;
 
-    conn.execute(&sql, &params)?;
-
-    // Re-fetch to return the updated entity.
-    let pk_val = entity.primary_key_value();
-    let pk_id = match &pk_val {
-        Value::Int(n) => *n,
+    let pk_id = match entity.primary_key_value() {
+        Value::Int(n) => n,
         _ => return Err(DbError::new("primary key must be an integer for UPDATE")),
     };
-
     let select_sql = format!(
         "SELECT * FROM {} WHERE {} = {}",
-        T::table_name(),
-        T::primary_key_name(),
-        placeholder(1)
+        T::table_name(), T::primary_key_name(), placeholder(1),
     );
-    let rows = conn.query_rows(&select_sql, &[Value::Int(pk_id)])?;
-    let row = rows
-        .into_iter()
-        .next()
-        .ok_or_else(|| DbError::new("updated row not found"))?;
-    T::from_row(&row)
+    let rows = pool.query_rows(&select_sql, &[Value::Int(pk_id)]).await?;
+    rows.into_iter().next()
+        .ok_or_else(|| DbError::new("updated row not found"))
+        .and_then(|r| T::from_row(&r))
+}
+
+pub(crate) fn extract_count(rows: Vec<super::ModelRow>) -> Result<i64, DbError> {
+    match rows.into_iter().next() {
+        Some(row) => {
+            if let Some((_, val)) = row.columns.first() {
+                match val.clone() {
+                    Value::Int(n) => return Ok(n),
+                    other => return Err(DbError::new(format!("unexpected count value: {:?}", other))),
+                }
+            }
+            Err(DbError::new("count query returned empty row"))
+        }
+        None => Ok(0),
+    }
 }

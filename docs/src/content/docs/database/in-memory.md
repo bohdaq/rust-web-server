@@ -1,107 +1,71 @@
 ---
 title: In-memory SQLite
-description: Use DbPool::memory() and DbConnection::memory() for zero-config SQLite databases ideal for tests and prototyping.
+description: Use DbPool::memory() for zero-config isolated SQLite databases ideal for tests and prototyping.
 ---
 
-The `model-sqlite` feature ships two ergonomic constructors that open a SQLite
-`":memory:"` database without a file path, hostname, or credentials.
+The `model-sqlite` feature ships an ergonomic constructor that opens a SQLite `":memory:"` database without a file path, hostname, or credentials. All operations are `async fn`.
 
-## When to use each
+## DbPool::memory() — isolated in-memory database
 
-| Constructor | Scope | Typical use |
-|---|---|---|
-| `DbPool::memory()` | Shared — all `pool.get()` calls see the same database | App state shared across handlers; integration tests that need multiple steps on one dataset |
-| `DbConnection::memory()` | Isolated — each call is a new, empty database | Unit tests that must not share state; one-shot scripts |
-
-## DbPool::memory() — shared database
-
-`DbPool::memory()` is equivalent to `DbPool::new(DbConfig::memory())`, which creates
-`DbConfig { database: ":memory:", pool_size: 1, .. }` and opens one connection.
+`DbPool::memory().await` creates a `sqlx::Pool` with `max_connections = 1` connected to `sqlite::memory:`. Each call returns a **separate, independent** in-memory database — ideal for tests that must not share state.
 
 ```rust
 use rust_web_server::model::{DbPool, Value};
 
-let pool = DbPool::memory().unwrap();
+let pool = DbPool::memory().await.unwrap();
 
-{
-    let mut conn = pool.get().unwrap();
-    conn.execute(
-        "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)",
-        &[],
-    ).unwrap();
-    conn.execute(
-        "INSERT INTO items (name) VALUES (?1)",
-        &[Value::Text("apple".into())],
-    ).unwrap();
-}  // PooledConnection dropped → connection returned to pool
+pool.execute(
+    "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)",
+    &[],
+).await.unwrap();
 
-let mut conn = pool.get().unwrap();
-let rows = conn.query_rows("SELECT name FROM items", &[]).unwrap();
+pool.execute(
+    "INSERT INTO items (name) VALUES (?)",
+    &[Value::Text("apple".into())],
+).await.unwrap();
+
+let rows = pool.query_rows("SELECT name FROM items", &[]).await.unwrap();
 assert_eq!(1, rows.len());
 let name: String = rows[0].get("name").unwrap();
 assert_eq!("apple", name);
 ```
 
-### Pool exhaustion returns an error
+## Test isolation
 
-When `pool_size = 1` and the single connection is already checked out, `pool.get()`
-returns `Err` with a clear message instead of silently opening a new empty database
-(which would discard all data written by the held connection).
+Each `DbPool::memory().await` call is a new, empty database. Two pools have no shared state:
 
 ```rust
-let pool = DbPool::memory().unwrap();
-let _held = pool.get().unwrap();   // the only connection is now checked out
-let err = pool.get();
-assert!(err.is_err());
-assert!(err.unwrap_err().0.contains("exhausted"));
-```
-
-## DbConnection::memory() — isolated database
-
-Every call to `DbConnection::memory()` returns a fresh connection to a brand-new
-empty in-memory database. Two connections returned from successive calls have no
-shared state.
-
-```rust
-use rust_web_server::model::{DbConnection, Value};
-
-fn fresh_db() -> DbConnection {
-    let mut conn = DbConnection::memory().unwrap();
-    conn.execute(
-        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)",
-        &[],
-    ).unwrap();
-    conn
+async fn test_db() -> DbPool {
+    let pool = DbPool::memory().await.unwrap();
+    pool.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)", &[]).await.unwrap();
+    pool
 }
 
 // Test A
-let mut conn_a = fresh_db();
-conn_a.execute("INSERT INTO users (name) VALUES (?1)", &[Value::Text("Alice".into())]).unwrap();
+let pool_a = test_db().await;
+pool_a.execute("INSERT INTO users (name) VALUES (?)", &[Value::Text("Alice".into())]).await.unwrap();
 
 // Test B — completely isolated
-let mut conn_b = fresh_db();
-let rows = conn_b.query_rows("SELECT * FROM users", &[]).unwrap();
-assert!(rows.is_empty());  // Alice is only in conn_a's database
+let pool_b = test_db().await;
+let rows = pool_b.query_rows("SELECT * FROM users", &[]).await.unwrap();
+assert!(rows.is_empty());  // Alice is only in pool_a's database
 ```
 
-## DbConfig::memory()
-
-Both helpers ultimately use `DbConfig::memory()`:
+Use `#[tokio::test]` for async tests:
 
 ```rust
-use rust_web_server::model::DbConfig;
-
-let cfg = DbConfig::memory();
-// cfg.database == ":memory:"
-// cfg.pool_size == 1
+#[tokio::test]
+async fn test_example() {
+    let pool = DbPool::memory().await.unwrap();
+    pool.execute("CREATE TABLE t (v TEXT)", &[]).await.unwrap();
+    let rows = pool.query_rows("SELECT * FROM t", &[]).await.unwrap();
+    assert!(rows.is_empty());
+}
 ```
-
-Build it directly when you need to inspect or pass the config separately, then
-hand it to `DbPool::new(cfg)`.
 
 ## Feature requirement
 
-All three constructors require the `model-sqlite` feature:
+`DbPool::memory()` requires the `model-sqlite` feature, which also implies `http2` (tokio runtime):
 
 ```toml
 [dependencies]

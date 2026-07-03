@@ -187,12 +187,30 @@ In addition, two inherent methods are generated on the struct:
 
 ```rust
 impl User {
-    /// Returns a ModelRepository bound to this connection.
-    pub fn repository(conn: &mut DbConnection) -> ModelRepository<User, i64>;
+    /// Returns a ModelRepository bound to this pool.
+    pub fn repository(pool: &DbPool) -> ModelRepository<User, i64>;
 
-    /// Returns a QueryBuilder bound to this connection.
-    pub fn query(conn: &mut DbConnection) -> QueryBuilder<User>;
+    /// Returns a QueryBuilder bound to this pool.
+    pub fn query(pool: &DbPool) -> QueryBuilder<User>;
 }
 ```
 
 These are the primary entry points for [repository operations](/database/repository/) and [query building](/database/query-builder/).
+
+Usage example:
+
+```rust
+use rust_web_server::model::DbPool;
+
+let pool = DbPool::from_env().await?;
+
+// Save a new user
+let mut user = User { id: 0, email: "alice@example.com".into(), active: true };
+let mut repo = User::repository(&pool);
+repo.save(&mut user).await?;      // id is populated after insert
+
+// Query with the builder
+let admins: Vec<User> = User::query(&pool)
+    .where_eq("active", true)
+    .fetch_all().await?;
+```
