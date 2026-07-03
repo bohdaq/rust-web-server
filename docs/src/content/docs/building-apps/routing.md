@@ -148,6 +148,22 @@ let www_router = Router::new()
 
 `AppWithState` and `AsyncAppWithState` already compose the two: they hold a `Router` internally, try it first, and fall through to `App`'s built-in controller chain for anything the router doesn't match — so static files, health checks, and metrics keep working automatically even in a fully custom, stateful app.
 
-:::caution[Coming Soon]
-Attribute macros (`#[get("/path")]`, `#[post("/path")]`, etc.) via the `macros` feature flag are planned but not yet implemented. Use the `routes!` macro or builder-style `.get()` / `.post()` calls in the meantime.
-:::
+## Attribute macros
+
+The `macros` feature also adds `#[get("/path")]`, `#[post("/path")]`, etc. — annotate a handler function directly instead of listing it separately in a `routes!` table or a `.get()` builder call:
+
+```toml
+# Cargo.toml
+rust-web-server = { version = "17", features = ["macros"] }
+```
+
+```rust
+use rust_web_server::get;
+
+#[get("/items")]
+fn list_items(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &Db) -> Response {
+    // ...
+}
+```
+
+See [DEVELOPER.md](https://github.com/bohdaq/rust-web-server/blob/main/DEVELOPER.md) for the full building-blocks reference and a combined example with `routes!`.

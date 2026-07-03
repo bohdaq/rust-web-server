@@ -148,5 +148,5 @@ spec:
 ```
 
 :::caution[Coming Soon]
-Direct in-cluster TLS access to `https://kubernetes.default.svc` using the mounted service account certificate bundle (`/var/run/secrets/kubernetes.io/serviceaccount/ca.crt`). Once available, `KubernetesIngressWatcher::from_service_account()` will read both the token and CA cert automatically.
+Direct in-cluster TLS access to `https://kubernetes.default.svc` using the mounted service account certificate bundle (`/var/run/secrets/kubernetes.io/serviceaccount/ca.crt`). `KubernetesIngressWatcher::from_service_account()` already exists as a documented stub — it always returns `Err` today, pointing back at the `kubectl proxy` + `from_env()` workaround above, rather than silently doing the wrong thing. Once in-cluster TLS is implemented, it'll read both the token and CA cert automatically instead of erroring.
 :::

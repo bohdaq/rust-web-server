@@ -6,18 +6,6 @@ description: Planned features for rust-web-server — each appears as a callout 
 These features are planned. Each appears as a callout on the relevant docs page.
 
 :::caution[Coming Soon]
-**Regex URI rewriting in RewriteLayer**
-
-Pattern-based URI rewriting (e.g. capture groups, back-references) in addition to the current prefix-strip and prefix-add operations in `RewriteLayer`.
-:::
-
-:::caution[Coming Soon]
-**ForwardAuthLayer middleware**
-
-Delegate authentication decisions to an external HTTP service. The middleware calls the auth service with a copy of the request headers; a non-2xx response rejects the original request.
-:::
-
-:::caution[Coming Soon]
 **Multi-span distributed tracing**
 
 Child spans, baggage propagation, and per-database-query spans within a single inbound request. Currently `OtelLayer` creates one span per request with no nested structure.

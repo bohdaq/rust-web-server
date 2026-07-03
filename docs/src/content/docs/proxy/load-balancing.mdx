@@ -1,6 +1,6 @@
 ---
 title: Load Balancing
-description: How rws distributes traffic across backends today and what strategies are planned.
+description: How rws distributes traffic across backends — round-robin everywhere, plus random, IP-hash, and least-connections in config-driven mode.
 ---
 
 Every proxy component in `rust-web-server` — `ReverseProxy`, `H2ReverseProxy`, `GrpcProxy`, `TcpProxy`, `UdpProxy`, `WsProxy`, and `DynamicProxy` (config-driven mode) — uses the same underlying selection mechanism: a **lock-free atomic round-robin counter**.
@@ -29,14 +29,23 @@ The `.strategy()` method exists to allow future strategies to be added without a
 
 ## Config-driven mode
 
-In config-driven mode the `strategy` field in `[[upstream]]` is parsed and stored but only `"round_robin"` is active:
+In config-driven mode, `[[upstream]]`'s `strategy` field selects between four strategies:
 
 ```toml
 [[upstream]]
 name     = "api"
 backends = ["api-1:3000", "api-2:3000", "api-3:3000"]
-strategy = "round_robin"    # default; only supported value today
+strategy = "least_connections"   # "round_robin" (default) | "random" | "ip_hash" | "least_connections"
 ```
+
+| Strategy | Behavior |
+|---|---|
+| `round_robin` (default) | The same lock-free atomic counter described above. |
+| `random` | Uniform random selection, mixing a nanosecond timestamp with the round-robin counter — no new dependency. |
+| `ip_hash` | Hashes the client IP (`DefaultHasher`) to pick a backend — the same client IP is consistently routed to the same backend as long as the live backend list doesn't change, giving basic session affinity without a session store. |
+| `least_connections` | Routes to whichever live backend currently has the fewest in-flight requests, tracked via a `ConnectionGuard` (RAII, decrements on `Drop`) around each proxied request. |
+
+An unrecognized or omitted `strategy` value falls back to `round_robin`.
 
 ### DynamicProxy and live backend lists
 
@@ -78,10 +87,6 @@ CanaryLayer::new(vec![
 
 See [Canary / Traffic Splitting](/proxy/canary/) for full details.
 
-:::caution[Coming Soon: additional strategies]
-The following strategies are planned for future releases:
-
-- **`least_connections`** — route to the backend with the fewest in-flight requests.
-- **`ip_hash`** — consistent hashing on client IP for session affinity.
-- **`random`** — uniform random selection (useful when backends have heterogeneous weights not expressible as integers).
+:::note[Strategy selection is config-driven-proxy only]
+The library API (`ReverseProxy::strategy(LoadBalancing::RoundRobin)` above) only has the one variant today. `random`/`ip_hash`/`least_connections` are implemented in `DynamicProxy`, the adapter backing `rws.config.toml`'s `[[upstream]]` mode — see [Config-driven mode](#config-driven-mode) above.
 :::

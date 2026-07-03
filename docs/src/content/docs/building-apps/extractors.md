@@ -156,6 +156,25 @@ impl FromRequest for BearerToken {
 // let BearerToken(token) = BearerToken::from_request(request)?;
 ```
 
-:::caution[Coming Soon]
-`#[derive(FromRequest)]` for named-field structs (reads each field from a corresponding query parameter or header) is planned via the `macros` feature flag but is not yet implemented. Use the manual implementation pattern above in the meantime.
-:::
+## `#[derive(FromRequest)]`
+
+The `macros` feature can generate the boilerplate above for a named-field struct where every field is itself already an extractor — each field's `from_request` runs in declaration order, and the first failure short-circuits with that field's error response:
+
+```toml
+# Cargo.toml
+rust-web-server = { version = "17", features = ["macros"] }
+```
+
+```rust
+use rust_web_server::extract::{BodyText, Query};
+
+#[derive(rust_web_server::FromRequest)]
+struct Payload {
+    body: BodyText,
+    params: Query,
+}
+
+// let Payload { body, params } = Payload::from_request(request)?;
+```
+
+This covers structs built from existing extractors (`Body`, `BodyText`, `Query`, `RequestHeaders`, or your own custom ones). A field like `BearerToken` above works too, as long as it implements `FromRequest` itself — the derive doesn't know how to pull an arbitrary field from a query parameter or header on its own; write a small custom extractor (as shown above) for that and include it as a field.
