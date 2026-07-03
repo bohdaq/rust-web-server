@@ -6,12 +6,6 @@ description: Planned features for rust-web-server — each appears as a callout 
 These features are planned. Each appears as a callout on the relevant docs page.
 
 :::caution[Coming Soon]
-**Additional load-balancing strategies**
-
-`least_connections`, `ip_hash`, and `random` as alternatives to the current round-robin backend selection in `ConfigDrivenApp` and `BackendPool`.
-:::
-
-:::caution[Coming Soon]
 **No-code auth in proxy mode**
 
 JWT and HTTP Basic auth configured directly in `rws.config.toml` without writing Rust code — equivalent to `JwtLayer` and `BasicAuthLayer` but activated through `[[route]]` middleware entries.

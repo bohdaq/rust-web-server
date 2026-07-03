@@ -193,6 +193,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 - Hot config reload — `SIGHUP` or `POST /admin/config/reload`; no restart required
 - Graceful shutdown — SIGTERM drains connections; `/readyz` returns `503` during drain
 - Background scheduler — fixed-rate, fixed-delay, 6-field cron; one thread per task
+- Background job queue — `JobQueue` (in-memory) or `PersistentJobQueue` (crash-safe, model-backed); retry with exponential backoff; `jobs` feature
 - Kubernetes-ready — `/healthz`, `/readyz`, `/metrics`; `0.0.0.0` default bind; Dockerfile included
 - Compression — automatic gzip for text types; chunked streaming for files > 8 MB
 
@@ -232,6 +233,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 | `csrf` | Double-submit cookie CSRF protection |
 | `sso` | OAuth2/OIDC SSO — `OidcAuth` middleware, RS256/ES256 JWT via JWKS, PKCE, provider presets (Google · Microsoft · GitHub · Okta · Auth0 · Keycloak) |
 | `mailer` | SMTP email — `Mailer::from_env()` + `Email::builder()`; plain, STARTTLS, and SMTPS; multipart text+HTML; AUTH PLAIN; no third-party mail library (STARTTLS/SMTPS additionally require `http-client` or `http2`) |
+| `jobs` | `JobQueue` — in-memory background job queue with retry + exponential backoff. `PersistentJobQueue` (additionally requires a `model-*` feature) persists jobs to survive a crash/restart. |
 
 ```toml
 [dependencies]

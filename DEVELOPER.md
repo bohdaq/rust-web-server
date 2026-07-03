@@ -137,9 +137,11 @@ The crate exposes its core types so you can compose them in your own server or t
 | `BackendPool` / `DiscoverySource` | `service_discovery` | Dynamic backend pool updated by a background thread. Sources: `Static`, `EnvPrefix` (env vars), `File` (one host:port per line), `Dns` (A-record lookup). |
 | `IngressRule` / `KubernetesIngressWatcher` / `IngressRouter` | `ingress` | Kubernetes Ingress watcher: polls the K8s API, parses Ingress rules, and routes requests to the correct upstream service. `IngressRouter` implements `Application`. |
 | `Scheduler` / `CronSchedule` | `scheduler` | `@Scheduled`-equivalent background task runner. Three modes: `.every(Duration, fn)` (fixed rate), `.after(Duration, fn)` (fixed delay), `.cron("sec min hour day month weekday", fn)`. Full cron syntax: `*`, exact, `*/step`, `N-M`, comma list. |
+| `Job` / `JobQueue` | `jobs` (requires `jobs` feature) | In-memory background job queue for one-shot, fire-and-forget work from handlers. `Job` trait (blanket-implemented for `Fn() -> Result<(), String> + Send` closures); `JobQueue::new(workers)` spawns a fixed worker pool; `.submit(job)` enqueues; failed jobs retry with exponential backoff (`.max_retries(n)`, `.backoff(initial, multiplier)`); `.join()` drains and waits. Not crash-safe — see `PersistentJobQueue`. |
+| `PersistentJobQueue` | `jobs` (requires `jobs` **and** a `model-sqlite`/`model-postgres`/`model-mysql` feature) | Crash-safe job queue backed by the model layer: jobs are written to a `rws_jobs` table before being acknowledged. Jobs are `(job_type, payload)` string pairs dispatched to a handler registered via `.register(job_type, fn)` — not arbitrary closures, since closures can't be persisted. `PersistentJobQueue::new(pool).await` creates the table and resets any row left `running` by a crash back to `pending`. `.enqueue(job_type, payload).await` / `.enqueue_with_retries(...)` persist a job; `.start(workers)` spawns polling worker threads (each with its own Tokio runtime); `.tick().await` runs a single poll-claim-execute cycle for tests or custom loops. |
 | `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. |
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
-| `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware round-robin proxying. |
+| `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware proxying with a per-`[[upstream]]` `strategy`: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), or `least_connections` (routes to the live backend with fewest in-flight requests). |
 | `StaticAdapter` | `proxy_config` | Action handler for `type = "static"` routes in `rws.config.toml`. Serves files from a configured `root` directory (independent of the process working directory), trying each `index` entry in order for directory requests; rejects any request path with a `..` segment (before or after percent-decoding) with `403`, missing files with `404`. |
 | `Container` | `di` | Type-keyed dependency injection container. `register::<T>(service)` stores concrete types; `provide::<dyn Trait>(Arc::new(...))` stores trait objects; both keyed by `TypeId`. Named services via `register_named` / `provide_named` / `get_named`. Share across handlers with `container.into_arc()` as `AppWithState` state. |
 | `DbPool` / `DbTransaction` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`; implies `http2`) | Async connection pool backed by `sqlx`. `DbPool::new(DbConfig).await` or `DbPool::from_env().await`. All SQL operations are `async fn`: `execute`, `query_rows`, `query::<T>`, `begin`, `transaction(closure)`, `migrate`, `migration_status`. **SQLite in-memory shortcut:** `DbPool::memory().await` creates a single-connection pool backed by `":memory:"` — each call is an isolated empty database, ideal for tests. Cheap to clone (Arc-wrapped). |
@@ -2488,6 +2490,7 @@ if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
 [[upstream]]
 name     = "backend"
 backends = ["10.0.0.10:8080", "10.0.0.11:8080"]
+strategy = "least_connections"  # "round_robin" (default) | "random" | "ip_hash" | "least_connections"
 
   [upstream.health_check]
   path                = "/healthz"
@@ -3238,3 +3241,83 @@ fn cors_allowed_for_listed_origin() {
 ```
 
 For tests that depend on filesystem paths (e.g. serving static files), continue using `App::handle_request` with `test_env::lock()` and `override_environment_variables_from_config`, since those tests need the config file to set the correct root directory.
+
+### 62. Background job queue
+
+Run one-shot work — "send this email after signup" — off the request path without blocking the response. Requires the `jobs` feature.
+
+**In-memory queue**
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["jobs"] }
+```
+
+```rust
+use rust_web_server::jobs::JobQueue;
+use std::time::Duration;
+
+// 4 worker threads; retry failed jobs up to 5 times with a 200ms initial backoff.
+let queue = JobQueue::new(4)
+    .max_retries(5)
+    .backoff(Duration::from_millis(200), 2);
+
+// In a request handler, after committing the signup:
+let to = "new-user@example.com".to_string();
+queue.submit(move || {
+    // send_welcome_email(&to) — return Err(msg) to trigger a retry
+    Ok(())
+});
+```
+
+Named, stateful jobs implement `Job` directly instead of using a closure:
+
+```rust
+use rust_web_server::jobs::Job;
+
+struct SendWelcomeEmail { to: String }
+
+impl Job for SendWelcomeEmail {
+    fn run(&self) -> Result<(), String> {
+        // send_welcome_email(&self.to)
+        Ok(())
+    }
+    fn name(&self) -> &str { "send_welcome_email" } // used in retry/failure log lines
+}
+
+queue.submit(SendWelcomeEmail { to: "new-user@example.com".to_string() });
+```
+
+**Persistent queue** (survives a crash/restart) — additionally requires a `model-*` feature:
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["jobs", "model-sqlite"] }
+```
+
+```rust,no_run
+# async fn example() -> Result<(), rust_web_server::model::DbError> {
+use rust_web_server::jobs::PersistentJobQueue;
+use rust_web_server::model::DbPool;
+use std::sync::Arc;
+
+let pool = DbPool::from_env().await?;
+let queue = Arc::new(PersistentJobQueue::new(pool).await?);
+
+// Register every job_type this process enqueues *before* starting workers —
+// this must also run on the process that restarts after a crash, since jobs
+// are resumed from the `rws_jobs` table by job_type, not by closure.
+queue.register("send_welcome_email", |payload /* the email address */| {
+    // send_welcome_email(payload)
+    Ok(())
+});
+
+let _worker_handles = Arc::clone(&queue).start(4); // 4 polling workers
+
+// From a request handler:
+queue.enqueue("send_welcome_email", "new-user@example.com").await?;
+# Ok(())
+# }
+```
+
+Unlike the in-memory queue, jobs here are `(job_type, payload)` strings, not closures — a closure can't survive a process restart, but a row in `rws_jobs` can. A job left `running` when the process crashes is reset to `pending` the next time `PersistentJobQueue::new` runs.

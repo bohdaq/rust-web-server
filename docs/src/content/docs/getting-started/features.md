@@ -43,6 +43,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **WebSocket** — RFC 6455 handshake and frame codec built in; no third-party WebSocket library
 - **SSE (Server-Sent Events)** — `Sse` builder for streaming events; ideal for streaming AI model output
 - **Background scheduler** — `Scheduler::new().every(duration, fn).cron("…", fn).start()`
+- **Background job queue** — `JobQueue` (in-memory) or `PersistentJobQueue` (crash-safe, model-backed); retry with exponential backoff — `jobs`
 
 ---
 

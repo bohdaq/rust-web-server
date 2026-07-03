@@ -2,7 +2,7 @@
 
 use crate::application::Application;
 use crate::proxy_config::{
-    ActionConfig, MatchConfig, ProxyConfig, RouteMatcher,
+    ActionConfig, DynamicProxy, MatchConfig, ProxyConfig, RouteMatcher,
 };
 use crate::request::Request;
 use crate::server::{Address, ConnectionInfo};
@@ -1092,4 +1092,137 @@ fn is_proxy_mode_false_when_no_config_file() {
     // [[route]] sections — so this should return false.
     // We can't guarantee the file doesn't exist, so just assert it doesn't panic.
     let _ = ProxyConfig::is_proxy_mode();
+}
+
+// ── DynamicProxy load-balancing strategy tests ──────────────────────────────────
+
+fn two_backends() -> std::sync::Arc<std::sync::RwLock<Vec<String>>> {
+    std::sync::Arc::new(std::sync::RwLock::new(vec![
+        "127.0.0.1:1".to_string(),
+        "127.0.0.1:2".to_string(),
+    ]))
+}
+
+#[test]
+fn dynamic_proxy_round_robin_cycles_backends() {
+    let dp = DynamicProxy::new(two_backends(), 100, 100, None, None, false, "round_robin".to_string());
+    let first = dp.next_backend("10.0.0.1").unwrap();
+    let second = dp.next_backend("10.0.0.1").unwrap();
+    let third = dp.next_backend("10.0.0.1").unwrap();
+    assert_ne!(first, second);
+    assert_eq!(first, third);
+}
+
+#[test]
+fn dynamic_proxy_default_strategy_is_round_robin() {
+    // Empty/unset `strategy` must behave exactly like `strategy = "round_robin"`.
+    let dp = DynamicProxy::new(two_backends(), 100, 100, None, None, false, String::new());
+    let first = dp.next_backend("10.0.0.1").unwrap();
+    let second = dp.next_backend("10.0.0.1").unwrap();
+    assert_ne!(first, second);
+}
+
+#[test]
+fn dynamic_proxy_unknown_strategy_falls_back_to_round_robin() {
+    let dp = DynamicProxy::new(two_backends(), 100, 100, None, None, false, "not-a-real-strategy".to_string());
+    let first = dp.next_backend("10.0.0.1").unwrap();
+    let second = dp.next_backend("10.0.0.1").unwrap();
+    assert_ne!(first, second);
+}
+
+#[test]
+fn dynamic_proxy_ip_hash_is_sticky_per_client() {
+    let dp = DynamicProxy::new(two_backends(), 100, 100, None, None, false, "ip_hash".to_string());
+    let a1 = dp.next_backend("10.0.0.5").unwrap();
+    let a2 = dp.next_backend("10.0.0.5").unwrap();
+    let a3 = dp.next_backend("10.0.0.5").unwrap();
+    assert_eq!(a1, a2);
+    assert_eq!(a2, a3);
+}
+
+#[test]
+fn dynamic_proxy_random_always_picks_a_live_backend() {
+    let live = two_backends();
+    let dp = DynamicProxy::new(live.clone(), 100, 100, None, None, false, "random".to_string());
+    for _ in 0..20 {
+        let backend = dp.next_backend("10.0.0.1").unwrap();
+        assert!(live.read().unwrap().contains(&backend));
+    }
+}
+
+#[test]
+fn dynamic_proxy_least_connections_avoids_busy_backend() {
+    let dp = DynamicProxy::new(two_backends(), 100, 100, None, None, false, "least_connections".to_string());
+
+    // Mark "127.0.0.1:1" as already having 3 in-flight connections.
+    let busy_counter = dp.connection_counter("127.0.0.1:1");
+    busy_counter.fetch_add(3, std::sync::atomic::Ordering::Relaxed);
+
+    let chosen = dp.next_backend("10.0.0.1").unwrap();
+    assert_eq!(chosen, "127.0.0.1:2");
+}
+
+/// Spawns a backend that accepts up to `max_conns` sequential TCP connections
+/// (each request gets a fresh connection, matching `proxy_http1`'s no-pooling
+/// behavior for `DynamicProxy`) and replies with a body of `tag` each time.
+fn spawn_tagged_backend(tag: &'static str, max_conns: usize) -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind backend");
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        for _ in 0..max_conns {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
+                    tag.len(),
+                    tag
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        }
+    });
+    port
+}
+
+#[test]
+fn config_driven_app_ip_hash_strategy_is_sticky_end_to_end() {
+    let port_a = spawn_tagged_backend("A", 5);
+    let port_b = spawn_tagged_backend("B", 5);
+
+    let cfg = ProxyConfig::from_str(&format!(
+        r#"
+[[upstream]]
+name = "backend"
+backends = ["127.0.0.1:{port_a}", "127.0.0.1:{port_b}"]
+strategy = "ip_hash"
+
+[[route]]
+name = "api"
+
+[route.match]
+path = "/*"
+
+[route.action]
+type = "proxy"
+
+[route.action.proxy]
+upstream = "backend"
+"#
+    ));
+
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("10.0.0.42");
+
+    let first = app.execute(&make_request("GET", "/x"), &conn).unwrap();
+    let second = app.execute(&make_request("GET", "/y"), &conn).unwrap();
+
+    let body_of = |resp: &crate::response::Response| -> Vec<u8> {
+        resp.content_range_list.iter().flat_map(|c| c.body.iter().copied()).collect()
+    };
+
+    assert_eq!(first.status_code, 200);
+    assert_eq!(second.status_code, 200);
+    assert_eq!(body_of(&first), body_of(&second));
 }

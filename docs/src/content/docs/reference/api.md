@@ -100,6 +100,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `TestClient` | `test_client` | In-process test client — dispatches requests without a TCP socket |
 | `Container` | `di` | `TypeId`-keyed dependency injection container |
 | `Scheduler` | `scheduler` | Background task scheduler for recurring or one-off jobs |
+| `JobQueue` | `jobs` | In-memory background job queue with retry-with-backoff (`jobs` feature) |
+| `PersistentJobQueue` | `jobs` | Crash-safe job queue backed by the model layer (`jobs` + a `model-*` feature) |
 | `KubernetesIngressWatcher` | `ingress` | Polls the Kubernetes API for Ingress resources and maintains a live route table |
 
 ## Typed extractors and errors

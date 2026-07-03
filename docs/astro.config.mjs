@@ -84,6 +84,7 @@ export default defineConfig({
             { label: 'Rewrite Middleware',     link: '/features/rewrite/' },
             { label: 'IP Filtering',           link: '/features/ip-filter/' },
             { label: 'Background Scheduler',   link: '/features/scheduler/' },
+            { label: 'Background Job Queue',   link: '/features/jobs/' },
             { label: 'Typed Config Binding',   link: '/features/config-binding/' },
           ],
         },

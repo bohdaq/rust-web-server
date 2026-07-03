@@ -33,8 +33,15 @@ Each `[[upstream]]` block defines a named pool of HTTP or HTTPS backends.
 [[upstream]]
 name        = "api"                              # required; referenced by route actions
 backends    = ["10.0.0.1:3000", "10.0.0.2:3000"] # plain HTTP (host:port)
-strategy    = "round_robin"                       # currently only "round_robin" is active
+strategy    = "round_robin"                       # "round_robin" | "random" | "ip_hash" | "least_connections"
 ```
+
+- `round_robin` (default) — cycles through live backends in order.
+- `random` — picks a live backend at random on each request.
+- `ip_hash` — hashes the client IP so the same client always reaches the same backend (useful for WebSocket/SSE stickiness without shared session state).
+- `least_connections` — routes to whichever live backend currently has the fewest in-flight requests through this route.
+
+An unrecognized or empty `strategy` value falls back to `round_robin`.
 
 ### TLS (HTTPS) upstreams
 

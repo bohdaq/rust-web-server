@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.46.0"
+version = "17.47.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
@@ -39,6 +39,7 @@ crypto = ["dep:argon2", "dep:rand_core"]
 csrf   = ["dep:rand_core"]
 mailer = []  # plain SMTP; STARTTLS/SMTPS additionally requires http-client or http2
 sso    = ["dep:rsa", "dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:serde_json", "http-client"]
+jobs   = []  # in-memory JobQueue; PersistentJobQueue additionally requires a model-* feature
 
 [dependencies]
 ctrlc = { version = "3", optional = true }

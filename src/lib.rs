@@ -133,6 +133,8 @@ pub mod csrf;
 pub mod sso;
 #[cfg(feature = "mailer")]
 pub mod mailer;
+#[cfg(feature = "jobs")]
+pub mod jobs;
 pub mod prelude;
 
 #[cfg(feature = "http2")]

@@ -699,9 +699,34 @@ impl Application for NullApp {
 
 // ── DynamicProxy ──────────────────────────────────────────────────────────────
 
+use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// Backend-selection strategy for `DynamicProxy`, configured via the
+/// `strategy` field on `[[upstream]]` in `rws.config.toml`. Unknown or empty
+/// values fall back to `RoundRobin`, matching the parser's own default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LoadBalanceStrategy {
+    RoundRobin,
+    Random,
+    IpHash,
+    LeastConnections,
+}
+
+impl LoadBalanceStrategy {
+    fn parse(s: &str) -> Self {
+        match s {
+            "random" => LoadBalanceStrategy::Random,
+            "ip_hash" => LoadBalanceStrategy::IpHash,
+            "least_connections" => LoadBalanceStrategy::LeastConnections,
+            _ => LoadBalanceStrategy::RoundRobin,
+        }
+    }
+}
 
 /// A proxy adapter that reads its backend list from a shared, health-checker-
 /// maintained live list at request time. Supports dynamic removal/restoration
@@ -717,6 +742,8 @@ pub(crate) struct DynamicProxy {
     strip_prefix: Option<Arc<String>>,
     add_prefix: Option<Arc<String>>,
     tls: bool,
+    strategy: LoadBalanceStrategy,
+    connections: Arc<RwLock<HashMap<String, Arc<AtomicUsize>>>>,
 }
 
 impl DynamicProxy {
@@ -727,6 +754,7 @@ impl DynamicProxy {
         strip_prefix: Option<String>,
         add_prefix: Option<String>,
         tls: bool,
+        strategy: String,
     ) -> Self {
         DynamicProxy {
             live,
@@ -736,26 +764,94 @@ impl DynamicProxy {
             strip_prefix: strip_prefix.map(Arc::new),
             add_prefix: add_prefix.map(Arc::new),
             tls,
+            strategy: LoadBalanceStrategy::parse(&strategy),
+            connections: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
-    fn next_backend(&self) -> Option<String> {
+    fn next_backend(&self, client_ip: &str) -> Option<String> {
         let live = self.live.read().unwrap();
         if live.is_empty() {
             return None;
         }
-        let idx = self.counter.fetch_add(1, Ordering::Relaxed) % live.len();
+
+        let idx = match self.strategy {
+            LoadBalanceStrategy::RoundRobin => {
+                self.counter.fetch_add(1, Ordering::Relaxed) % live.len()
+            }
+            LoadBalanceStrategy::Random => {
+                let nanos = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.subsec_nanos())
+                    .unwrap_or(0) as usize;
+                let salt = self.counter.fetch_add(1, Ordering::Relaxed);
+                nanos.wrapping_add(salt) % live.len()
+            }
+            LoadBalanceStrategy::IpHash => {
+                let mut hasher = DefaultHasher::new();
+                client_ip.hash(&mut hasher);
+                (hasher.finish() as usize) % live.len()
+            }
+            LoadBalanceStrategy::LeastConnections => {
+                let connections = self.connections.read().unwrap();
+                live.iter()
+                    .enumerate()
+                    .min_by_key(|(_, backend)| {
+                        connections
+                            .get(*backend)
+                            .map(|c| c.load(Ordering::Relaxed))
+                            .unwrap_or(0)
+                    })
+                    .map(|(i, _)| i)
+                    .unwrap_or(0)
+            }
+        };
+
         Some(live[idx].clone())
+    }
+
+    /// Returns the shared in-flight connection counter for `backend`,
+    /// creating it on first use. Only consulted under `LeastConnections`.
+    fn connection_counter(&self, backend: &str) -> Arc<AtomicUsize> {
+        if let Some(counter) = self.connections.read().unwrap().get(backend) {
+            return Arc::clone(counter);
+        }
+        let mut connections = self.connections.write().unwrap();
+        Arc::clone(
+            connections
+                .entry(backend.to_string())
+                .or_insert_with(|| Arc::new(AtomicUsize::new(0))),
+        )
+    }
+}
+
+/// Decrements a backend's in-flight connection count when the request
+/// finishes (including early returns), keeping `least_connections` accurate.
+struct ConnectionGuard {
+    counter: Arc<AtomicUsize>,
+}
+
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        self.counter.fetch_sub(1, Ordering::Relaxed);
     }
 }
 
 impl Application for DynamicProxy {
     fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
-        let backend = match self.next_backend() {
+        let backend = match self.next_backend(&conn.client.ip) {
             Some(b) => b,
             None => {
                 return Ok(bad_gateway());
             }
+        };
+
+        let _connection_guard = if self.strategy == LoadBalanceStrategy::LeastConnections {
+            let counter = self.connection_counter(&backend);
+            counter.fetch_add(1, Ordering::Relaxed);
+            Some(ConnectionGuard { counter })
+        } else {
+            None
         };
 
         let (host, port, _) = match crate::proxy_config::health::parse_backend_url(&backend) {
