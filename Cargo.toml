@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.57.1"
+version = "17.58.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
@@ -44,6 +44,7 @@ jobs   = []  # in-memory JobQueue; PersistentJobQueue additionally requires a mo
 storage-local = []  # LocalStorage; no new deps
 storage-s3    = ["dep:hmac", "dep:sha2", "http-client"]  # S3Storage; AWS SigV4 via hmac+sha2, no AWS SDK
 openapi = []  # AppWithState::openapi() / AsyncAppWithState::openapi(); no new deps
+webhook = ["dep:hmac", "dep:sha2"]  # verify_webhook_signature: GitHub, Shopify, Stripe
 
 [dependencies]
 ctrlc = { version = "3", optional = true }

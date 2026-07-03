@@ -252,6 +252,7 @@ let mcp = App::new().mcp("my-server", "1.0.0")
 | `crypto` | `hash_password`/`verify_password` (Argon2id), `generate_token` (CSPRNG), `signed_cookie`/`verify_signed_cookie` (HMAC-SHA256), `encrypted_cookie`/`decrypt_cookie` (AES-256-GCM) | `argon2`, `rand_core`, `hmac`, `sha2`, `aes-gcm` |
 | `csrf` | `CsrfLayer` + `CsrfToken` — double-submit cookie CSRF protection | `rand_core` |
 | `sso` | `OidcAuth` middleware, PKCE, RS256/ES256 JWT via JWKS, provider presets | `rsa`, `p256`, `sha2`, `serde`, `serde_json` |
+| `webhook` | `verify_webhook_signature`, `WebhookProvider` (GitHub/Shopify/Stripe HMAC verification) | `hmac`, `sha2` |
 
 Build commands:
 ```bash
@@ -478,6 +479,25 @@ Flow, per request:
 2. `2xx` → request proceeds to `next`. Each `.copy_header(name)` value present on the *auth response* **replaces** (not appends alongside) any same-named header already on the forwarded request — this is what stops a client from smuggling a forged `X-User-Id` past the auth service's verified value.
 3. Any other status → the auth service's response is returned to the client **verbatim** (status code, headers minus hop-by-hop/framing ones, body) — preserves `WWW-Authenticate` challenges and OAuth `Location` redirects.
 4. Auth service unreachable (connection refused, timeout, DNS failure) → `502 Bad Gateway`. Fails closed.
+
+---
+
+## Webhook signature verification (src/webhook/mod.rs, requires `webhook` feature)
+
+HMAC verification for the three most common inbound-webhook conventions, so handlers don't hand-wire `hmac`+`sha2` per integration. `body` must be the exact raw request bytes — a re-serialized `Json<T>` will not reproduce what the provider signed.
+
+```rust
+use rust_web_server::webhook::{verify_webhook_signature, WebhookProvider};
+
+verify_webhook_signature(WebhookProvider::GitHub, body, secret, header_value);
+// or call the provider-specific function directly:
+use rust_web_server::webhook::{verify_github_signature, verify_shopify_signature, verify_stripe_signature};
+verify_github_signature(body, secret, header_value);   // X-Hub-Signature-256: sha256=<hex>
+verify_shopify_signature(body, secret, header_value);  // X-Shopify-Hmac-Sha256: <base64>
+verify_stripe_signature(body, secret, header_value);   // Stripe-Signature: t=<unix_ts>,v1=<hex>[,v1=...]
+```
+
+Stripe's signed payload is `"{timestamp}.{body}"`; checked against a 300s replay-window by default (`STRIPE_DEFAULT_TOLERANCE_SECS`) — use `verify_stripe_signature_with_tolerance(body, secret, header_value, tolerance_secs)` to override it. Multiple `v1=` entries (secret rotation) pass if any one matches. GitHub's legacy SHA-1 `X-Hub-Signature` is intentionally not supported — only `X-Hub-Signature-256`.
 
 ---
 
@@ -1243,6 +1263,7 @@ let www_router = Router::new().with_host("www.example.com").get("/", home_handle
 - JWT RS256/ES256 without a JWKS endpoint — `JwtLayer::rs256`/`::es256`; static PEM public key, `auth-asymmetric` feature
 - Forward-auth to an external service — `auth::forward::ForwardAuthLayer`; fails closed (502) if the auth service is unreachable
 - JWT RS256/ES256 — `sso::JwksCache`; signature + expiry + aud + iss validated
+- Webhook signature verification — `webhook::verify_webhook_signature`; GitHub/Shopify/Stripe HMAC-SHA256, constant-time compare, Stripe replay-window timestamp check
 - Argon2id password hashing — `crypto` module; random salt; PHC string output
 - Signed/encrypted cookies — `cookie::signed_cookie` (HMAC-SHA256) / `cookie::encrypted_cookie` (AES-256-GCM); fails closed (`None`) on tampering or wrong key
 - `SameSite=Strict` session cookies — set via `session_cookie()` helper
@@ -1332,6 +1353,7 @@ src/udp_proxy/          — UdpProxy
 src/url/                — URL parsing, percent-encode/decode
 src/validate/           — Validate trait, Validated<T>, ValidationErrors
 src/virtual_host/       — VirtualHostConfig
+src/webhook/            — verify_webhook_signature, WebhookProvider (GitHub/Shopify/Stripe) (webhook feature)
 src/websocket/          — WebSocket handshake, Frame codec
 src/ws_proxy/           — WsProxy (WebSocket proxy)
 ```

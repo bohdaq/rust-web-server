@@ -90,6 +90,7 @@ export default defineConfig({
             { label: 'OpenAPI / Swagger',      link: '/features/openapi/' },
             { label: 'Per-Route Timeouts',     link: '/features/timeouts/' },
             { label: 'Typed Config Binding',   link: '/features/config-binding/' },
+            { label: 'Webhook Verification',   link: '/features/webhooks/' },
           ],
         },
         {

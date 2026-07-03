@@ -140,6 +140,8 @@ pub mod jobs;
 pub mod storage;
 #[cfg(feature = "openapi")]
 pub mod openapi;
+#[cfg(feature = "webhook")]
+pub mod webhook;
 pub mod timeout;
 pub mod prelude;
 

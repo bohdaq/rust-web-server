@@ -104,6 +104,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `JwtLayer` | `auth` | JWT HS256 middleware; verifies `Authorization: Bearer` tokens with constant-time HMAC-SHA256. Requires `features = ["auth"]`. `JwtLayer::rs256(pem)` / `JwtLayer::es256(pem)` verify RS256/ES256 tokens against a static RSA/P-256 public key (SubjectPublicKeyInfo PEM) — no JWKS endpoint needed. Requires `features = ["auth-asymmetric"]`. |
 | `verify_jwt_rs256` / `verify_jwt_es256` | `auth` | Standalone RS256/ES256 JWT verification functions backing `JwtLayer::rs256`/`::es256` — call directly in a handler for the decoded `Claims`. Requires `features = ["auth-asymmetric"]`. |
 | `ForwardAuthLayer` | `auth::forward` | Delegates the allow/deny decision to an external HTTP service (Traefik `forwardAuth`, nginx `auth_request` style). `2xx` → request proceeds, `.copy_header(name)` values from the auth response replace same-named headers on the forwarded request; any other status → the auth service's response is returned verbatim (status, headers, body); unreachable auth service → `502 Bad Gateway`. No new deps — reuses `http_client::Client`. Requires `features = ["auth"]`. |
+| `verify_webhook_signature` / `WebhookProvider` | `webhook` | Verifies inbound webhook HMAC signatures. `WebhookProvider::GitHub` (`X-Hub-Signature-256: sha256=<hex>`), `::Shopify` (`X-Shopify-Hmac-Sha256: <base64>`), `::Stripe` (`Stripe-Signature: t=<ts>,v1=<hex>[,v1=...]`, default 300s replay tolerance). Requires `features = ["webhook"]`. |
+| `verify_github_signature` / `verify_shopify_signature` / `verify_stripe_signature` / `verify_stripe_signature_with_tolerance` | `webhook` | Per-provider verification functions backing `verify_webhook_signature` — call directly when the provider is known at the call site. `_with_tolerance` overrides Stripe's default `STRIPE_DEFAULT_TOLERANCE_SECS` (300s) timestamp window. Requires `features = ["webhook"]`. |
 | `build_jwt` / `verify_jwt` / `Claims` | `auth` | Sign and verify HS256 JWTs; `Claims` exposes `sub`, `exp`, and raw JSON payload. |
 | `IpFilter` | `ip_filter` | Allow/deny middleware keyed on client IPv4 address or CIDR range. `IpFilter::allow([...])` passes only listed addresses; `IpFilter::deny([...])` blocks them. |
 | `RequestIdLayer` / `RequestId` | `request_id` | Correlation-ID middleware. Echoes an incoming `X-Request-Id` unchanged, or generates one (`generate_request_id()`, UUID-v4-shaped, not crypto-random) — either way it's injected into the request (readable by handlers) and set on the response. `.header(name)` overrides the header name. `RequestId` (in `extract`) is a `FromRequest` convenience for reading it. |
@@ -3709,4 +3711,34 @@ If a handler also needs the decoded claims, call `verify_jwt_rs256(token, &publi
 
 :::note[When to reach for `sso::JwksCache` instead]
 Use the full `sso` feature's `JwksCache` when the signing key can rotate and you need to fetch current keys from a live JWKS URL (`.well-known/jwks.json`), keyed by `kid`. `JwtLayer::rs256`/`::es256` pin a single static public key at construction time — right for a service-to-service integration with one known signer, not for a provider that rotates keys behind a JWKS endpoint.
+:::
+
+### 71. Verifying webhook signatures (GitHub, Shopify, Stripe)
+
+A handler receiving webhooks from a third party needs to confirm the request actually came from that provider — anyone who finds the endpoint URL can otherwise send a forged payload. `verify_webhook_signature` (`src/webhook/mod.rs`, requires `features = ["webhook"]`) covers the three most common HMAC-based conventions without hand-wiring `hmac`+`sha2` per integration:
+
+```rust
+use rust_web_server::webhook::{verify_webhook_signature, WebhookProvider};
+
+fn handle_github_webhook(body: &[u8], signature_header: &str, secret: &[u8]) -> bool {
+    verify_webhook_signature(WebhookProvider::GitHub, body, secret, signature_header)
+}
+```
+
+`body` must be the exact raw request bytes read off the wire — re-serializing a parsed JSON body before verifying will not reproduce what the provider actually signed, and verification will always fail. Read it via the `Body` extractor (or `request.body` directly), not a `Json<T>`-deserialized-then-reserialized value.
+
+Each provider's header format differs, so `verify_webhook_signature` dispatches to a provider-specific function — call these directly when the provider is known at the call site and you don't need the enum:
+
+```rust
+use rust_web_server::webhook::{verify_github_signature, verify_shopify_signature, verify_stripe_signature};
+
+verify_github_signature(body, secret, header_value);   // X-Hub-Signature-256: sha256=<hex>
+verify_shopify_signature(body, secret, header_value);  // X-Shopify-Hmac-Sha256: <base64>
+verify_stripe_signature(body, secret, header_value);   // Stripe-Signature: t=<ts>,v1=<hex>[,v1=...]
+```
+
+Stripe's signature embeds a timestamp and is checked against a 300-second replay-protection window by default; use `verify_stripe_signature_with_tolerance(body, secret, header_value, tolerance_secs)` to widen or narrow it. Stripe may list multiple `v1=` entries during a secret rotation — verification succeeds if any one of them matches.
+
+:::note[GitHub's legacy `X-Hub-Signature` header]
+GitHub also sends an older SHA-1-based `X-Hub-Signature` for backward compatibility. `verify_github_signature` deliberately only supports `X-Hub-Signature-256` — SHA-1 is broken and this crate has no SHA-1 dependency. Always prefer the SHA-256 header.
 :::
