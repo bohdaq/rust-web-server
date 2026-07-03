@@ -18,6 +18,7 @@ use matcher::Segment;
 ///
 /// Wildcard segments (`*name`) capture everything after the prefix:
 /// `/files/*path` matched against `/files/a/b/c` gives `path = "a/b/c"`.
+#[derive(Clone)]
 pub struct PathParams {
     params: HashMap<String, String>,
 }

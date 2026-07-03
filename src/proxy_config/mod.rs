@@ -131,6 +131,11 @@ pub struct MiddlewareConfig {
     pub rewrite_response: Vec<RewriteRuleConfig>,
     pub ip_allow: Vec<String>,
     pub ip_deny: Vec<String>,
+    /// `timeout_ms` — if the route (including all its other middleware)
+    /// doesn't produce a response within this many milliseconds, the client
+    /// gets `504 Gateway Timeout` instead of waiting further. See
+    /// `crate::timeout` for the underlying mechanism and its limitations.
+    pub timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -486,7 +491,15 @@ fn parse_middleware_config(
 
     let _ = route_idx; // used implicitly via mw_sec paths
 
-    MiddlewareConfig { rate_limit, cache, auth, rewrite_request, rewrite_response, ip_allow, ip_deny }
+    // Flat scalar directly under [route.middleware] (or the global
+    // [middleware] table), not a nested sub-table like rate_limit/cache —
+    // 0/absent both mean "no timeout configured".
+    let timeout_ms = match get_u64(map, mw_sec, "timeout_ms", 0) {
+        0 => None,
+        ms => Some(ms),
+    };
+
+    MiddlewareConfig { rate_limit, cache, auth, rewrite_request, rewrite_response, ip_allow, ip_deny, timeout_ms }
 }
 
 /// Collect `[[{mw_sec}.rewrite.{direction}]]` entries.

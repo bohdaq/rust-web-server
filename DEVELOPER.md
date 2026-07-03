@@ -82,6 +82,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `CookieJar` | `cookie` | Parse the `Cookie` request header into individual cookies |
 | `SetCookie` | `cookie` | Build `Set-Cookie` response header values with all RFC 6265 attributes |
 | `Router` / `PathParams` | `router` | Standalone dynamic router with `:param` and `*wildcard` path matching; `.with_host(name)` restricts a router to one virtual host. `App`'s own built-in controllers deliberately don't use `Router` — that set is small, static, and known at compile time, so a fixed if-chain is simpler than a segment matcher there. `Router` is for user-defined routes; `AppWithState`/`AsyncAppWithState` build on it and fall through to `App`'s controller chain for anything unmatched. |
+| `with_timeout` / `with_timeout_state` / `with_timeout_async` / `TimeoutLayer` | `timeout` | Per-route request timeouts. `with_timeout`/`with_timeout_state` wrap a `Router`/`AppWithState` handler to return `504 Gateway Timeout` if it doesn't finish in time (runs on a background thread — bounds the client's wait, can't truly cancel sync work). `with_timeout_async` (requires `http2`) wraps an `AsyncAppWithState` handler with genuine cancellation via `tokio::time::timeout`. `TimeoutLayer::new`/`::from_arc` wraps a whole `Application` (used by the config-driven proxy's per-route `timeout_ms`). |
 | `VirtualHostConfig` | `virtual_host` | Per-domain cert configuration `{ domain, cert_file, key_file }` for multi-domain SNI routing |
 | `IntoResponse` / `AppError` | `error` | Typed errors that map to HTTP status codes |
 | `TestClient` | `test_client` | In-process HTTP test client — no TCP socket required |
@@ -2567,6 +2568,7 @@ resolved path that doesn't exist returns `404`.
 | `ip_allow` / `ip_deny` | `["192.168.1.0/24", "10.0.0.1"]` |
 | `rewrite.request[]` | `[{ type = "header_set", name = "X-Real-IP", value = "$client_ip" }]` |
 | `rewrite.response[]` | `[{ type = "header_remove", name = "Server" }]` |
+| `timeout_ms` | `500` — flat key directly under `[route.middleware]`, not a sub-table. Bounds this route's *total* time (including its other middleware); `0`/absent means no timeout. |
 
 **L4 proxies (separate listeners, spawned from config)**
 
@@ -3464,4 +3466,78 @@ use rust_web_server::router::RouteInfo;
 // post-process it, without wiring it into an app):
 let routes = vec![RouteInfo { method: "GET".to_string(), pattern: "/users/:id".to_string() }];
 let spec_json = build_spec(&OpenApiConfig::new("My API", "1.0.0"), &routes);
+```
+
+### 65. Per-route timeouts
+
+A single global read timeout applies to every route by default. A file-upload endpoint may need 120 s while a health check should fail fast at 500 ms. Wrap individual handlers with `crate::timeout`'s helpers to give them their own budget.
+
+**`Router` / stateless handlers**
+
+```rust
+use rust_web_server::router::Router;
+use rust_web_server::timeout::with_timeout;
+use rust_web_server::response::Response;
+use rust_web_server::core::New;
+use std::time::Duration;
+
+let router = Router::new()
+    .get("/healthz", with_timeout(Duration::from_millis(500), |_req, _params, _conn| Response::new()))
+    .post("/upload", with_timeout(Duration::from_secs(120), |_req, _params, _conn| Response::new()));
+```
+
+**`AppWithState<S>`** — requires `S: Clone` (the wrapped call runs on a background thread and needs its own owned copy of the state, since the handler only receives `&S`):
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::timeout::with_timeout_state;
+use rust_web_server::response::Response;
+use rust_web_server::core::New;
+use std::time::Duration;
+
+#[derive(Clone)]
+struct Db; // holds e.g. an Arc<DbPool> internally — cheap to clone
+
+let app = App::with_state(Db)
+    .get("/healthz", with_timeout_state(Duration::from_millis(500), |_req, _params, _conn, _db| Response::new()))
+    .post("/upload", with_timeout_state(Duration::from_secs(120), |_req, _params, _conn, _db| Response::new()));
+```
+
+**`AsyncAppWithState<S>`** — no `Clone` bound needed (state is already passed as an owned `Arc<S>`), and genuine cancellation via `tokio::time::timeout` (requires `http2`):
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::timeout::with_timeout_async;
+use rust_web_server::response::Response;
+use rust_web_server::core::New;
+use std::time::Duration;
+
+struct Db;
+
+let app = App::with_async_state(Db)
+    .post("/upload", with_timeout_async(Duration::from_secs(120), |_req, _params, _conn, _db| async {
+        Response::new()
+    }));
+```
+
+**Config-driven proxy** — `timeout_ms` as a flat key under `[route.middleware]`:
+
+```toml
+[[route]]
+name = "slow-upload"
+
+[route.match]
+path = "/upload"
+
+[route.action]
+type = "proxy"
+
+[route.action.proxy]
+upstream = "backend"
+
+[route.middleware]
+timeout_ms = 120000
+```
+
+**The honest limitation, in one place**: Rust cannot forcibly stop a running synchronous thread. `with_timeout`, `with_timeout_state`, and `TimeoutLayer` (used internally for the config-driven proxy case) all run the wrapped work on a background thread and return `504 Gateway Timeout` to the caller as soon as the deadline passes — but if the handler ignores its deadline, it keeps running to completion in the background; its result is just discarded. This bounds the **client's** wait time, not the handler's actual resource usage. Only `with_timeout_async` (backed by `tokio::time::timeout`) gets genuine cancellation, because dropping a suspended `Future` actually stops it at its next `.await` point.
 ```

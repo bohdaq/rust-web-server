@@ -1047,6 +1047,40 @@ Schema from a `#[derive(Validate)]` struct, so every operation gets a generic `2
 
 ---
 
+## Per-route timeouts (src/timeout/mod.rs)
+
+A single global read timeout applies to every route by default. Wrap individual handlers to give
+them their own budget — a file upload might need 120s, a health check should fail at 500ms.
+
+```rust
+use rust_web_server::router::Router;
+use rust_web_server::timeout::with_timeout;
+use std::time::Duration;
+
+let router = Router::new()
+    .get("/healthz", with_timeout(Duration::from_millis(500), health_handler))
+    .post("/upload", with_timeout(Duration::from_secs(120), upload_handler));
+```
+
+`with_timeout_state` is the `AppWithState<S>` equivalent (requires `S: Clone`). `with_timeout_async`
+is the `AsyncAppWithState<S>` equivalent (requires `http2`, no `Clone` bound, genuine cancellation via
+`tokio::time::timeout`). `TimeoutLayer::new`/`::from_arc` wraps a whole `Application`.
+
+Config-driven proxy: `timeout_ms` as a flat key under `[route.middleware]`:
+```toml
+[route.middleware]
+timeout_ms = 120000
+```
+
+**Honest limitation**: Rust cannot forcibly stop a running synchronous thread. The sync variants
+(`with_timeout`, `with_timeout_state`, `TimeoutLayer`) run the wrapped work on a background thread and
+return `504 Gateway Timeout` as soon as the deadline passes, but a handler that ignores its deadline
+keeps running to completion in the background — this bounds the client's wait time, not the handler's
+resource usage. Only `with_timeout_async` gets genuine cancellation (dropping a suspended `Future`
+actually stops it).
+
+---
+
 ## HTML templates (requires `tera` feature)
 
 ```rust
@@ -1176,6 +1210,7 @@ src/tcp_proxy/          — TcpProxy (L4)
 src/template/           — TeraEngine, global init/render (tera feature)
 src/test_client/        — TestClient
 src/thread_pool/        — ThreadPool (http1 feature)
+src/timeout/            — with_timeout, with_timeout_state, with_timeout_async, TimeoutLayer
 src/tls/                — SniCertResolver, TlsAcceptor builders (http2 feature)
 src/udp_proxy/          — UdpProxy
 src/url/                — URL parsing, percent-encode/decode

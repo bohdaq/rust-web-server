@@ -139,6 +139,7 @@ pub mod jobs;
 pub mod storage;
 #[cfg(feature = "openapi")]
 pub mod openapi;
+pub mod timeout;
 pub mod prelude;
 
 #[cfg(feature = "http2")]

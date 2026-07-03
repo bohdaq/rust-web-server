@@ -1268,3 +1268,141 @@ upstream = "backend"
     assert_eq!(second.status_code, 200);
     assert_eq!(body_of(&first), body_of(&second));
 }
+
+// ── Per-route timeout (route.middleware.timeout_ms) ─────────────────────────────
+
+#[test]
+fn from_str_parses_timeout_ms() {
+    let cfg = ProxyConfig::from_str(
+        r#"
+[[route]]
+name = "slow-upload"
+
+[route.match]
+path = "/upload"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "ok"
+content_type = "text/plain"
+
+[route.middleware]
+timeout_ms = 120000
+"#,
+    );
+    assert_eq!(Some(120000), cfg.routes[0].middleware.timeout_ms);
+}
+
+#[test]
+fn timeout_ms_absent_by_default() {
+    let cfg = ProxyConfig::from_str(
+        r#"
+[[route]]
+name = "ping"
+
+[route.match]
+path = "/ping"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "pong"
+content_type = "text/plain"
+"#,
+    );
+    assert_eq!(None, cfg.routes[0].middleware.timeout_ms);
+}
+
+/// Spawns a one-shot backend that sleeps `delay_ms` before replying — used
+/// to prove a route's `timeout_ms` actually cuts off a slow upstream.
+fn spawn_slow_backend(delay_ms: u64) -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind slow backend");
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = [0u8; 4096];
+            let _ = stream.read(&mut buf);
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nslow",
+            );
+        }
+    });
+    port
+}
+
+#[test]
+fn route_timeout_ms_cuts_off_a_slow_upstream() {
+    let port = spawn_slow_backend(300);
+
+    let cfg = ProxyConfig::from_str(&format!(
+        r#"
+[[upstream]]
+name = "backend"
+backends = ["127.0.0.1:{port}"]
+
+[[route]]
+name = "api"
+
+[route.match]
+path = "/*"
+
+[route.action]
+type = "proxy"
+
+[route.action.proxy]
+upstream = "backend"
+
+[route.middleware]
+timeout_ms = 20
+"#
+    ));
+
+    let (app, _handles) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+
+    let start = std::time::Instant::now();
+    let resp = app.execute(&make_request("GET", "/x"), &conn).unwrap();
+    let elapsed = start.elapsed();
+
+    assert_eq!(504, resp.status_code);
+    // The backend sleeps 300ms; the route timeout is 20ms. This must return
+    // close to the timeout, not wait for the full backend delay.
+    assert!(elapsed < std::time::Duration::from_millis(150), "took {elapsed:?}, expected well under 150ms");
+}
+
+#[test]
+fn route_without_timeout_ms_waits_for_the_full_upstream_response() {
+    let port = spawn_slow_backend(50);
+
+    let cfg = ProxyConfig::from_str(&format!(
+        r#"
+[[upstream]]
+name = "backend"
+backends = ["127.0.0.1:{port}"]
+
+[[route]]
+name = "api"
+
+[route.match]
+path = "/*"
+
+[route.action]
+type = "proxy"
+
+[route.action.proxy]
+upstream = "backend"
+"#
+    ));
+
+    let (app, _handles) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    let resp = app.execute(&make_request("GET", "/x"), &conn).unwrap();
+    assert_eq!(200, resp.status_code);
+}

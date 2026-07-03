@@ -255,13 +255,22 @@ fn apply_middleware(
         );
     }
 
-    // ── IP filter (outermost) ──────────────────────────────────────────────
+    // ── IP filter ────────────────────────────────────────────────────────────
     if !mw.ip_allow.is_empty() {
         let filter = crate::ip_filter::IpFilter::allow(mw.ip_allow.iter().map(|s| s.as_str()));
         app = arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(filter));
     } else if !mw.ip_deny.is_empty() {
         let filter = crate::ip_filter::IpFilter::deny(mw.ip_deny.iter().map(|s| s.as_str()));
         app = arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(filter));
+    }
+
+    // ── Timeout (outermost — bounds this route's total time, including every
+    // other middleware above) ───────────────────────────────────────────────
+    if let Some(timeout_ms) = mw.timeout_ms {
+        app = arc_app(crate::timeout::TimeoutLayer::from_arc(
+            app,
+            std::time::Duration::from_millis(timeout_ms),
+        ));
     }
 
     app
