@@ -4,11 +4,13 @@
 
 Consolidated, prioritized task list synthesized from GAPS_V3.md, IDEAS.md, ADMIN_ROADMAP.md, and all open roadmap items. Items are ordered within each tier by the ratio of impact to implementation effort.
 
+**Status as of 2026-07-03:** Priority 1 is fully complete. Priority 2 is the current focus.
+
 ---
 
-## Priority 1 — Blocking for production adoption
+## ✅ Priority 1 — Complete
 
-These gaps make rws unsuitable for real production workloads regardless of how complete the feature set is.
+All six blocking gaps have been resolved. rws is now suitable for real production workloads.
 
 - [x] **Upstream connection pooling** (`src/proxy/pool.rs`) — `ConnPool` (Mutex-backed, per-backend VecDeque of TcpStream) is embedded in `ReverseProxy`. Idle connections are reused when the backend sends `Connection: keep-alive`; chunked `Transfer-Encoding` is decoded so body length is known. Share pools across instances with `Arc<ConnPool>` via `ReverseProxy::with_pool()`. Closes GAPS_V3 §1.1 and §2.6.
 
@@ -20,23 +22,23 @@ These gaps make rws unsuitable for real production workloads regardless of how c
 
 - [x] **Persistent sessions** (`src/session/mod.rs`) — Added `DbSessionStore` backed by the model layer (`rws_sessions` table: id TEXT PK, data TEXT URL-encoded, expires_at INTEGER epoch). Auto-creates table on first `new()`. All methods return `Result`. Added `RedisSessionStore` backed by a hand-rolled RESP v2 client (no external crate); sessions keyed as `rws:sess:{id}`, TTL via `SET … EX`, auto-reconnect. `from_env()` reads `RWS_REDIS_HOST/PORT/PASSWORD/TTL_SECS`. 10 new tests. Closes GAPS_V3 §3.5.
 
-- [x] **Email / SMTP** (`src/mailer/mod.rs`, `mailer` feature) — Added `Mailer`, `Email`, `EmailBuilder`, `MailerError`, `SmtpTls`. Hand-rolled SMTP client (no external crate): plain TCP (`SmtpTls::None`), STARTTLS upgrade (`SmtpTls::Starttls`, requires `http-client`/`http2`), implicit TLS (`SmtpTls::Smtps`). AUTH PLAIN, RFC 5322 message builder with text/html/multipart bodies, SMTP dot-stuffing. `Mailer::from_env()` reads `RWS_SMTP_HOST/PORT/USER/PASSWORD/FROM/TLS/TIMEOUT_MS`. 14 tests. Closes GAPS_V3 §3.1 and GAPS_V2 §5.
-
 - [x] **Streaming response passthrough through proxy** — Added `Response::stream_pipe: Option<Box<dyn Read + Send>>` and `Server::pipe_stream()`. `ReverseProxy::try_backend()` now reads only headers, detects streaming signals (`Content-Type: text/event-stream`, `Transfer-Encoding: chunked`, `Content-Length > 1 MB`), and for matching responses sets `stream_pipe` to a `ConcatReader(body_prefix, TcpStream)` instead of buffering. `pipe_stream` forwards chunked-backend bytes as raw passthrough; plain SSE bytes are re-encoded as chunks. Closes GAPS_V3 §1.2.
+
+- [x] **Email / SMTP** (`src/mailer/mod.rs`, `mailer` feature) — Added `Mailer`, `Email`, `EmailBuilder`, `MailerError`, `SmtpTls`. Hand-rolled SMTP client (no external crate): plain TCP (`SmtpTls::None`), STARTTLS upgrade (`SmtpTls::Starttls`, requires `http-client`/`http2`), implicit TLS (`SmtpTls::Smtps`). AUTH PLAIN, RFC 5322 message builder with text/html/multipart bodies, SMTP dot-stuffing. `Mailer::from_env()` reads `RWS_SMTP_HOST/PORT/USER/PASSWORD/FROM/TLS/TIMEOUT_MS`. 14 tests. Closes GAPS_V3 §3.1 and GAPS_V2 §5.
 
 ---
 
 ## Priority 2 — High friction without these
 
-Commonly needed; workarounds exist but are painful.
-
-- [ ] **Config-driven load balancing strategies** — `DynamicProxy` round-robin only. Add `least_connections`, `ip_hash`, and `random` via `load_balancing = "…"` in `rws.config.toml`. `least_connections` is the most important (WebSocket and SSE stickiness). See IDEAS.md §3. Closes GAPS_V3 §2.1.
-
-- [ ] **File / object storage abstraction** (`src/storage/`, `storage-local` / `storage-s3` features) — `FormMultipartData::parse()` returns raw bytes with no place to put them. Add a `Storage` trait with `LocalStorage` (no deps) and `S3Storage` using the existing outbound HTTP client to sign AWS Signature V4 requests. Closes GAPS_V3 §3.2 and GAPS_V2 §6.
+Commonly needed; workarounds exist but are painful. **This is the current focus.**
 
 - [ ] **Background job queue** (`src/jobs/`, `jobs` feature) — no facility for ad-hoc one-shot jobs from handlers ("send this email after signup"). Add a `Job` trait, `JobQueue::new(workers)`, retry-with-backoff, and a `PersistentJobQueue` backed by the model layer for crash safety. Closes GAPS_V3 §3.3 and GAPS_V2 §7.
 
+- [ ] **File / object storage abstraction** (`src/storage/`, `storage-local` / `storage-s3` features) — `FormMultipartData::parse()` returns raw bytes with no place to put them. Add a `Storage` trait with `LocalStorage` (no deps) and `S3Storage` using the existing outbound HTTP client to sign AWS Signature V4 requests. Closes GAPS_V3 §3.2 and GAPS_V2 §6.
+
 - [ ] **OpenAPI / Swagger schema generation** (`src/openapi/`, `openapi` feature) — no API schema from routes. `AppWithState` route registrations and `#[derive(Validate)]` already capture all needed data. Serve `GET /openapi.json`; optionally serve Swagger UI as embedded HTML. Closes GAPS_V3 §3.4 and GAPS_V2 §8.
+
+- [ ] **Config-driven load balancing strategies** — `DynamicProxy` round-robin only (the `strategy` field is parsed but never applied). Add `least_connections`, `ip_hash`, and `random` via `load_balancing = "…"` in `rws.config.toml`. `least_connections` is the most important (WebSocket and SSE stickiness). See IDEAS.md §3. Closes GAPS_V3 §2.1.
 
 - [ ] **Async ORM** — `src/model/` uses blocking I/O; calling ORM methods in `AsyncAppWithState` handlers blocks a tokio worker thread. Add `async fn save`, `async fn find_all`, async `Repository` via `tokio::task::spawn_blocking` or `sqlx` as an alternative async backend. Closes GAPS_V3 §3.7.
 
@@ -46,7 +48,7 @@ Commonly needed; workarounds exist but are painful.
 
 - [ ] **JWT / Basic auth from `rws.config.toml`** — `JwtLayer` and `BasicAuthLayer` require Rust code. Add `auth = { type = "jwt", secret_env = "JWT_SECRET" }` and `auth = { type = "basic", htpasswd_file = ".htpasswd" }` in `[route.middleware]`. Wire to existing middleware in `builder.rs`. Closes GAPS_V3 §2.7 and IDEAS.md §4.
 
-- [ ] **Static site action in config-driven proxy** (`type = "static"`) — serving a local directory from `rws.config.toml` without Rust code is currently broken; the builder falls through to `App::new()` without applying a root directory. Fix `builder.rs` to create a `StaticAdapter` that wraps the existing file-serving logic. Closes GAPS_V3 §2.8 and IDEAS.md §5.
+- [ ] **Static site action in config-driven proxy** (`type = "static"`) — serving a local directory from `rws.config.toml` without Rust code is broken; `builder.rs` falls through to `App::new()` without applying a root directory. Fix `builder.rs` to create a `StaticAdapter` that wraps the existing file-serving logic. Closes GAPS_V3 §2.8 and IDEAS.md §5.
 
 - [ ] **ForwardAuth middleware** (`src/auth/forward.rs`) — delegate auth decisions to an external service (OPA, Casbin, a centralized auth API). On 2xx, copy nominated headers onto the downstream request. On 4xx, return the auth service response verbatim. No new deps. Closes GAPS_V3 §2.9 and IDEAS.md §8.
 
@@ -84,7 +86,7 @@ Genuine gaps that real applications hit; none are blockers with a workaround.
 
 - [ ] **`100 Continue` support** — rws reads the full body unconditionally; clients sending `Expect: 100-continue` waste bandwidth on requests the server would reject. Reply with `100 Continue` before reading the body. Closes GAPS_V3 §1.4.
 
-- [ ] **`wss://` proxy health checks** — `health.rs` sends `GET / HTTP/1.1` over plain TCP. Health checks for TLS-only backends fail silently. Add TLS-aware health-check connections.
+- [ ] **`wss://` proxy health checks** — `health.rs` parses `https://` backends and performs TLS health checks, but `wss://` scheme is not recognised. Health checks for `wss://` backends in `rws.config.toml` fall back to plain TCP and fail silently on TLS-only backends. Add `wss://` to `parse_backend_url`.
 
 - [ ] **Proxy max body size** — no `max_body_size` in `MatchConfig` or `MiddlewareConfig`. A client can stream an unbounded POST to a proxied route consuming all RAM. Closes GAPS_V3 §2.13.
 
@@ -125,8 +127,8 @@ Low urgency; workarounds are acceptable or audience is small.
 
 | This file | Source spec |
 |---|---|
-| Priority 1 + 2 items | [GAPS_V3.md](GAPS_V3.md) — §1–§3 priority table |
-| Email, storage, jobs, OpenAPI | [GAPS_V2.md](GAPS_V2.md) — §5–§8 |
+| Priority 2 + 3 items | [GAPS_V3.md](GAPS_V3.md) — §1–§3 priority table |
+| Storage, jobs, OpenAPI | [GAPS_V2.md](GAPS_V2.md) — §6–§8 |
 | LB strategies, ForwardAuth, regex rewrite, access log | [IDEAS.md](IDEAS.md) — §1–§10 |
 | Admin UI phases | [ADMIN_ROADMAP.md](ADMIN_ROADMAP.md) |
 | GAPS_V3 shortest path | [GAPS_V3.md §Shortest path](GAPS_V3.md) |
