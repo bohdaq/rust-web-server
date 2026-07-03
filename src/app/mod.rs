@@ -3,6 +3,8 @@ mod tests;
 
 pub mod controller;
 
+use std::sync::Arc;
+
 use crate::app::controller::favicon::FaviconController;
 use crate::app::controller::health::HealthController;
 use crate::app::controller::ready::ReadyController;
@@ -25,6 +27,7 @@ use crate::middleware::{Middleware, WithMiddleware};
 use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
+use crate::server_config::ServerConfig;
 use crate::state::AppWithState;
 
 /// A pair of function pointers representing one entry in the controller chain.
@@ -72,18 +75,69 @@ fn entry<C: Controller>() -> ControllerEntry {
 ///         r
 ///     });
 /// ```
-#[derive(Copy, Clone)]
-pub struct App {}
+///
+/// # Per-instance configuration
+///
+/// By default `App::new()` reads CORS, CSP, and other settings from
+/// environment variables on each request (matching the current process state,
+/// including hot-reloaded values). Call [`App::with_config`] to pin the
+/// configuration to a specific [`ServerConfig`] — this is the recommended
+/// pattern for parallel integration tests, which should not touch environment
+/// variables at all.
+///
+/// ```rust,ignore
+/// use rust_web_server::app::App;
+/// use rust_web_server::server_config::ServerConfig;
+/// use rust_web_server::test_client::TestClient;
+///
+/// // No env writes, no lock needed — safe to run in parallel.
+/// let app = App::with_config(ServerConfig {
+///     cors_allow_all: false,
+///     cors_allow_origins: "https://trusted.example.com".to_string(),
+///     ..ServerConfig::default()
+/// });
+/// let client = TestClient::new(app);
+/// ```
+#[derive(Clone)]
+pub struct App {
+    /// When `Some`, every request is served using this fixed config.
+    /// When `None`, config is read from environment variables on each request
+    /// (supports hot-reload via SIGHUP / `POST /admin/config/reload`).
+    config: Option<Arc<ServerConfig>>,
+}
 
 impl New for App {
     fn new() -> Self {
-        App{}
+        App { config: None }
+    }
+}
+
+impl App {
+    /// Create an `App` pinned to an explicit [`ServerConfig`].
+    ///
+    /// All CORS, CSP, and other header settings are taken from `config` rather
+    /// than from environment variables. The configuration is fixed for the
+    /// lifetime of the `App` instance — SIGHUP / hot-reload do not affect it.
+    ///
+    /// This is the preferred constructor for integration tests: build a
+    /// [`ServerConfig`] with the exact settings under test, pass it here, and
+    /// use [`TestClient`] to drive requests. No environment writes and no
+    /// [`test_env::lock()`] are needed.
+    ///
+    /// [`TestClient`]: crate::test_client::TestClient
+    /// [`test_env::lock()`]: crate::test_env::lock
+    pub fn with_config(config: ServerConfig) -> Self {
+        App { config: Some(Arc::new(config)) }
     }
 }
 
 impl Application for App {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
-        let header_list = Header::get_header_list(request);
+        let config = match &self.config {
+            Some(c) => (**c).clone(),
+            None => ServerConfig::from_env(),
+        };
+        let header_list = Header::get_header_list_with_config(request, &config);
         let response = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n501_not_implemented,
             Some(header_list),
@@ -135,7 +189,7 @@ impl App {
         };
         let app = App::new();
         let response = app.execute(&request, &conn).unwrap_or_else(|_| {
-            let header_list = Header::get_header_list(&request);
+            let header_list = Header::get_header_list_with_config(&request, &ServerConfig::from_env());
             Response::get_response(
                 STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
                 Some(header_list),

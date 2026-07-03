@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::application::Application;
 use crate::client_hint::ClientHint;
 use crate::cors::Cors;
 use crate::entry_point::config_file::override_environment_variables_from_config;
@@ -6,6 +7,8 @@ use crate::header::Header;
 use crate::request::{METHOD, Request};
 use crate::http::VERSION;
 use crate::response::STATUS_CODE_REASON_PHRASE;
+use crate::server::{Address, ConnectionInfo};
+use crate::server_config::ServerConfig;
 
 #[test]
 fn not_found() {
@@ -145,38 +148,38 @@ fn static_file_cors_options_preflight_request_client_hints() {
 
 #[test]
 fn static_file_cors_off_options_preflight_request_client_hints() {
-    let _g = crate::test_env::lock();
-    override_environment_variables_from_config(Some("/src/test/app/rws.config_cors_off.toml"));
-
+    // Uses App::with_config — no env writes, no test_env::lock needed.
     let origin_value = "origin-value.com";
     let custom_header = "X-CUSTOM-HEADER";
-
     let expected_allow_headers = format!("{},{}", Header::_CONTENT_TYPE, custom_header);
 
-
+    let config = ServerConfig {
+        cors_allow_all: false,
+        cors_allow_origins: String::new(),   // no allowed origins → CORS denied
+        ..ServerConfig::default()
+    };
+    let app = App::with_config(config);
+    let conn = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+        request_size: 16000,
+        sni_hostname: None,
+    };
     let request = Request {
         method: METHOD.options.to_string(),
         request_uri: "/static/content.png".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![
-            Header {
-                name: Header::_ORIGIN.to_string(),
-                value: origin_value.to_string()
-            },
-            Header {
-                name: Header::_ACCESS_CONTROL_REQUEST_METHOD.to_string(),
-                value: METHOD.post.to_string()
-            },
-            Header {
-                name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
-                value: expected_allow_headers
-            },
+            Header { name: Header::_ORIGIN.to_string(), value: origin_value.to_string() },
+            Header { name: Header::_ACCESS_CONTROL_REQUEST_METHOD.to_string(), value: METHOD.post.to_string() },
+            Header { name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string(), value: expected_allow_headers },
         ],
         body: vec![],
     };
+    let response = app.execute(&request, &conn).unwrap();
 
-    let (response, _request) = App::handle_request(request);
-
+    // No CORS headers should be present (origin not in allowed list)
+    assert!(response._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).is_none());
 
     let vary_header = response._get_header(Header::_VARY.to_string()).unwrap();
     assert_eq!(
@@ -185,10 +188,7 @@ fn static_file_cors_off_options_preflight_request_client_hints() {
     );
 
     let client_hints = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).unwrap();
-    assert_eq!(
-        client_hints.value,
-        ClientHint::get_client_hint_list()
-    );
+    assert_eq!(client_hints.value, ClientHint::get_client_hint_list());
 
     let x_frame_options = response._get_header(Header::_X_FRAME_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);

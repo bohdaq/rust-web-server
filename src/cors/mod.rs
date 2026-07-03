@@ -1,12 +1,10 @@
 #[cfg(test)]
 mod tests;
 
-use std::env;
 use crate::header::Header;
-
-use crate::entry_point::Config;
 use crate::request::{METHOD, Request};
-use crate::response::{Error};
+use crate::response::Error;
+use crate::server_config::ServerConfig;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Cors {
@@ -146,150 +144,89 @@ impl Cors {
         Ok(headers)
     }
 
-    pub fn process_using_default_config(request: &Request) -> Result<Vec<Header>, Error> {
-        let mut headers : Vec<Header> = vec![];
-        let boxed_allow_origins = env::var(Config::RWS_CONFIG_CORS_ALLOW_ORIGINS);
-        let mut allow_origins: String = "".to_string();
-        if boxed_allow_origins.is_err() {
-            eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_ALLOW_ORIGINS);
-        } else {
-            allow_origins = boxed_allow_origins.unwrap();
+    /// Build CORS headers using the provided [`ServerConfig`].
+    ///
+    /// This is the primary implementation. [`get_headers`] is the legacy
+    /// entry point that reads from environment variables; all new call-sites
+    /// should prefer this version.
+    pub fn get_headers_from_config(request: &Request, config: &ServerConfig) -> Vec<Header> {
+        if config.cors_allow_all {
+            return Cors::allow_all(request).unwrap_or_default();
         }
+        Cors::process_using_config(request, config).unwrap_or_default()
+    }
+
+    fn process_using_config(request: &Request, config: &ServerConfig) -> Result<Vec<Header>, Error> {
+        let mut headers: Vec<Header> = vec![];
 
         let boxed_origin = request.get_header(Header::_ORIGIN.to_string());
-
         if boxed_origin.is_none() {
-            return Ok(headers)
+            return Ok(headers);
+        }
+        let origin_value = boxed_origin.unwrap().value.clone();
+
+        if !config.cors_allow_origins.contains(&origin_value) {
+            return Ok(headers);
         }
 
-        let origin = boxed_origin.unwrap();
-        let origin_value = format!("{}", origin.value);
-
-        let is_valid_origin = allow_origins.contains(&origin_value);
-        if !is_valid_origin {
-            return Ok(headers)
-        }
-
-        let allow_origin = Header {
+        headers.push(Header {
             name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
-            value: origin_value
-        };
-        headers.push(allow_origin);
+            value: origin_value,
+        });
 
-        let boxed_is_allow_credentials = env::var(Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS);
-        if boxed_is_allow_credentials.is_err() {
-            eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS);
-        } else {
-            let boxed_parse = boxed_is_allow_credentials.unwrap().parse::<bool>();
-            if boxed_parse.is_err() {
-                eprintln!("unable to parse as boolean {} environment variable. Possible values are true or false", Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS);
-            } else {
-                let is_allow_credentials : bool = boxed_parse.unwrap();
-                if is_allow_credentials {
-                    let allow_credentials = Header {
-                        name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
-                        value: is_allow_credentials.to_string()
-                    };
-                    headers.push(allow_credentials);
-                }
-            }
+        let credentials_str = &config.cors_allow_credentials;
+        if credentials_str.eq_ignore_ascii_case("true") {
+            headers.push(Header {
+                name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
+                value: "true".to_string(),
+            });
         }
 
-
-        let is_options = request.method == METHOD.options;
-        if is_options {
-            let boxed_methods = env::var(Config::RWS_CONFIG_CORS_ALLOW_METHODS);
-            if boxed_methods.is_err() {
-                eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_ALLOW_METHODS);
-            } else {
-                let methods = boxed_methods.unwrap();
-                let allow_methods = Header {
+        if request.method == METHOD.options {
+            if !config.cors_allow_methods.is_empty() {
+                headers.push(Header {
                     name: Header::_ACCESS_CONTROL_ALLOW_METHODS.to_string(),
-                    value: methods
-                };
-                headers.push(allow_methods);
+                    value: config.cors_allow_methods.clone(),
+                });
             }
-
-
-            let boxed_allow_headers_env_variable = env::var(Config::RWS_CONFIG_CORS_ALLOW_HEADERS);
-            if boxed_allow_headers_env_variable.is_err() {
-                eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_ALLOW_HEADERS);
-            } else {
-                let allow_headers_env_variable = boxed_allow_headers_env_variable.unwrap();
-                let allow_headers = Header {
+            if !config.cors_allow_headers.is_empty() {
+                headers.push(Header {
                     name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
-                    value: allow_headers_env_variable.to_lowercase()
-                };
-                headers.push(allow_headers);
+                    value: config.cors_allow_headers.to_lowercase(),
+                });
             }
-
-
-            let boxed_allow_expose_headers = env::var(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS);
-            if boxed_allow_expose_headers.is_err() {
-                eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_EXPOSE_HEADERS);
-            } else {
-                let allow_expose_headers  = boxed_allow_expose_headers.unwrap();
-                let expose_headers = Header {
+            if !config.cors_expose_headers.is_empty() {
+                headers.push(Header {
                     name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
-                    value: allow_expose_headers.to_lowercase()
-                };
-                headers.push(expose_headers);
+                    value: config.cors_expose_headers.to_lowercase(),
+                });
             }
-
-
-            let boxed_max_age_value = env::var(Config::RWS_CONFIG_CORS_MAX_AGE);
-            if boxed_max_age_value.is_err() {
-                eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_MAX_AGE);
-            } else {
-                let max_age_value  = boxed_max_age_value.unwrap();
-                let max_age = Header {
+            if !config.cors_max_age.is_empty() {
+                headers.push(Header {
                     name: Header::_ACCESS_CONTROL_MAX_AGE.to_string(),
-                    value: max_age_value
-                };
-                headers.push(max_age);
+                    value: config.cors_max_age.clone(),
+                });
             }
-
         }
-
 
         Ok(headers)
     }
 
+    /// Legacy entry point that reads CORS settings from environment variables.
+    ///
+    /// Prefer [`get_headers_from_config`] when a [`ServerConfig`] is available
+    /// (e.g. inside [`App::execute`]). This variant is kept for call-sites that
+    /// do not yet have an `App`-level config reference.
+    pub fn process_using_default_config(request: &Request) -> Result<Vec<Header>, Error> {
+        let config = ServerConfig::from_env();
+        Self::process_using_config(request, &config)
+    }
+
+    /// Legacy entry point that reads CORS settings from environment variables.
+    ///
+    /// Prefer [`get_headers_from_config`] when a [`ServerConfig`] is available.
     pub fn get_headers(request: &Request) -> Vec<Header> {
-
-        let boxed_rws_config_cors_allow_all = env::var(Config::RWS_CONFIG_CORS_ALLOW_ALL);
-        if boxed_rws_config_cors_allow_all.is_err() {
-            eprintln!("unable to read {} environment variable", Config::RWS_CONFIG_CORS_ALLOW_ALL);
-            let boxed_cors_header_list = Cors::allow_all(&request);
-            if boxed_cors_header_list.is_err() {
-                eprintln!("unable to get Cors::allow_all headers {}", boxed_cors_header_list.err().unwrap().message);
-            } else {
-                return boxed_cors_header_list.unwrap()
-            }
-        } else {
-            let boxed_parse = boxed_rws_config_cors_allow_all.unwrap().parse::<bool>();
-            if boxed_parse.is_err() {
-                eprintln!("unable to parse as boolean {} environment variable. Possible values are true or false", Config::RWS_CONFIG_CORS_ALLOW_ALL);
-            } else {
-                let is_cors_set_to_allow_all_requests = boxed_parse.unwrap();
-                if !is_cors_set_to_allow_all_requests {
-                    let boxed_cors_header_list = Cors::process_using_default_config(&request);
-                    if boxed_cors_header_list.is_err() {
-                        eprintln!("unable to get Cors::process_using_default_config headers {}", boxed_cors_header_list.err().unwrap().message);
-                    } else {
-                        return boxed_cors_header_list.unwrap()
-                    }
-                }
-            }
-        }
-
-
-        let boxed_cors_header_list = Cors::allow_all(&request);
-        if boxed_cors_header_list.is_err() {
-            eprintln!("unable to get Cors::allow_all headers {}", boxed_cors_header_list.err().unwrap().message);
-            vec![]
-        } else {
-            return boxed_cors_header_list.unwrap()
-        }
+        let config = ServerConfig::from_env();
+        Cors::get_headers_from_config(request, &config)
     }
 }

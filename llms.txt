@@ -877,6 +877,27 @@ assert_eq!(201, res.status());
 
 `TestClient` dispatches requests directly through `Application::execute` — no TCP socket, no async runtime required.
 
+### Isolated configuration (`ServerConfig` / `App::with_config`)
+
+Tests that check CORS, CSP, or other header behavior should not write `RWS_CONFIG_*` env vars — that causes races under `cargo test --jobs`. Instead build a `ServerConfig` struct and pass it to `App::with_config`:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::server_config::ServerConfig;
+use rust_web_server::test_client::TestClient;
+
+// No env writes → no test_env::lock() → parallel-safe
+let config = ServerConfig {
+    cors_allow_all: false,
+    cors_allow_origins: "https://trusted.example.com".to_string(),
+    ..ServerConfig::default()
+};
+let client = TestClient::new(App::with_config(config));
+let res = client.get("/").send();
+```
+
+`ServerConfig::from_env()` reads all `RWS_CONFIG_*` vars (used by `App::new()` on each request for hot-reload). `ServerConfig::default()` returns hardcoded defaults without touching env vars.
+
 ---
 
 ## Background scheduler (src/scheduler/mod.rs)

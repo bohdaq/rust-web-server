@@ -71,6 +71,28 @@ fn my_test() {
 
 When adding a new test, ask: *does any function I call eventually call `env::set_var`?* If yes, take the lock.
 
+#### Preferred alternative: `App::with_config` for CORS/CSP tests
+
+Tests that only verify CORS, CSP, or other header behavior (not filesystem-dependent paths) should prefer the lock-free pattern:
+
+```rust
+#[test]
+fn my_cors_test() {
+    // No env writes, no lock needed — runs safely in parallel.
+    use crate::server_config::ServerConfig;
+    let config = ServerConfig {
+        cors_allow_all: false,
+        cors_allow_origins: "https://example.com".to_string(),
+        ..ServerConfig::default()
+    };
+    let app = App::with_config(config);
+    let client = crate::test_client::TestClient::new(app);
+    // ... assertions
+}
+```
+
+`App::with_config(config)` pins the app to a fixed `ServerConfig` — no env reads happen during request processing, so no lock is needed even under parallelism. The `test_env::lock()` pattern is still required for tests that call `bootstrap()`, `override_environment_variables_from_config()`, or any function that writes `RWS_CONFIG_*` vars.
+
 ### 2. DEVELOPER.md
 
 - **Building blocks table** — add a row for every new public type, function, or middleware: `| Name | Module | What it does |`

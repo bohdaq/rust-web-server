@@ -155,14 +155,21 @@ impl Header {
 
 
 
-    pub fn get_header_list(request: &Request) -> Vec<Header> {
-        let mut header_list : Vec<Header>;
-        let mut vary_value : Vec<String>;
-
+    /// Build the standard response header list using settings from
+    /// [`ServerConfig`].
+    ///
+    /// Prefer this method inside [`App::execute`] and any call-site that has
+    /// an `App`-level config available. It avoids reading environment variables
+    /// at request time, which enables proper test isolation via
+    /// [`App::with_config`].
+    pub fn get_header_list_with_config(
+        request: &Request,
+        config: &crate::server_config::ServerConfig,
+    ) -> Vec<Header> {
         let cors_vary = Cors::get_vary_header_value();
-        vary_value = vec![cors_vary];
-        let cors_header_list: Vec<Header> = Cors::get_headers(&request);
-        header_list = cors_header_list;
+        let mut vary_value = vec![cors_vary];
+
+        let mut header_list = Cors::get_headers_from_config(request, config);
 
         let client_hint_header = ClientHint::get_accept_client_hints_header();
         header_list.push(client_hint_header);
@@ -173,46 +180,45 @@ impl Header {
         let client_hint_vary = ClientHint::get_vary_header_value();
         vary_value.push(client_hint_vary);
 
-        let vary_header = Header { name: Header::_VARY.to_string(), value: vary_value.join(", ") };
-        header_list.push(vary_header);
+        header_list.push(Header {
+            name: Header::_VARY.to_string(),
+            value: vary_value.join(", "),
+        });
 
-        let x_content_type_options_header = Header::get_x_content_type_options_header();
-        header_list.push(x_content_type_options_header);
+        header_list.push(Header::get_x_content_type_options_header());
+        header_list.push(Header::get_accept_ranges_header());
+        header_list.push(Header::get_x_frame_options_header());
+        header_list.push(Header::get_date_iso_8601_header());
+        header_list.push(Header::get_no_cache_header());
 
-        let accept_ranges_header = Header::get_accept_ranges_header();
-        header_list.push(accept_ranges_header);
-
-        let x_frame_options_header = Header::get_x_frame_options_header();
-        header_list.push(x_frame_options_header);
-
-        let date_iso_8601_header = Header::get_date_iso_8601_header();
-        header_list.push(date_iso_8601_header);
-
-        let no_cache = Header::get_no_cache_header();
-        header_list.push(no_cache);
-
-        let referrer_policy = Header {
+        header_list.push(Header {
             name: Header::_REFERRER_POLICY.to_string(),
             value: Header::_REFERRER_POLICY_VALUE_DEFAULT.to_string(),
-        };
-        header_list.push(referrer_policy);
-
-        let permissions_policy = Header {
+        });
+        header_list.push(Header {
             name: Header::_PERMISSIONS_POLICY.to_string(),
             value: Header::_PERMISSIONS_POLICY_VALUE_DEFAULT.to_string(),
-        };
-        header_list.push(permissions_policy);
+        });
 
-        let csp_value = std::env::var("RWS_CONFIG_CSP")
-            .unwrap_or_else(|_| Header::_CONTENT_SECURITY_POLICY_VALUE_DEFAULT.to_string());
-        if !csp_value.is_empty() {
+        if !config.csp.is_empty() {
             header_list.push(Header {
                 name: Header::_CONTENT_SECURITY_POLICY.to_string(),
-                value: csp_value,
+                value: config.csp.clone(),
             });
         }
 
         header_list
+    }
+
+    /// Build the standard response header list, reading CORS and CSP settings
+    /// from environment variables.
+    ///
+    /// This is the legacy entry point retained for call-sites that do not yet
+    /// have access to a [`ServerConfig`] (e.g. error helpers in
+    /// `src/extract/mod.rs`). For all call-sites inside [`App::execute`] use
+    /// [`get_header_list_with_config`] instead.
+    pub fn get_header_list(request: &Request) -> Vec<Header> {
+        Self::get_header_list_with_config(request, &crate::server_config::ServerConfig::from_env())
     }
 
 

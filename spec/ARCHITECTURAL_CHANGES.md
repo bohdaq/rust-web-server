@@ -40,12 +40,14 @@ Two dispatch mechanisms living side by side isn't wrong — the built-in control
 
 ## 4. Config-as-global-env-vars is the largest structural cost in the repo
 
+> **Status: partially resolved (v17.45.0).** `ServerConfig` struct added (`src/server_config/mod.rs`). `App::with_config(config)` pins an app to explicit settings — no env reads during request processing. `Cors::get_headers_from_config` and `Header::get_header_list_with_config` are the config-aware entry points. `App::new()` preserves backward compat and hot-reload by calling `ServerConfig::from_env()` per request. Tests that check CORS/CSP behavior should use `App::with_config` and no longer need `test_env::lock()`. `ConfigDrivenApp` and `AppWithState` are not yet wired — see below.
+
 All configuration is read once at startup into process environment variables and accessed globally via `env::var(...)` (see CLAUDE.md's "Configuration" section). This has two real costs, not just style:
 
 - **It's the entire reason the mandatory test-locking rule exists.** CLAUDE.md documents an extensive, easy-to-violate protocol (`test_env::lock()`, the "transitive trap" of `bootstrap()`/`override_environment_variables_from_config`/`config_reload::reload()` all silently writing shared state) that every new test has to get right by hand. That's not a testing nitpick — it's evidence that the underlying design (global mutable process state) doesn't compose with parallel test execution, and the workaround is a manual discipline problem rather than something the type system prevents.
 - **It rules out running more than one differently-configured server in a process.** Because config lives in `std::env`, there is no way to construct two `App`/`ConfigDrivenApp` instances with different settings side by side — which matters the moment rws is used as an embedded library rather than a standalone binary (multi-tenant hosting, in-process test harnesses that want two configs, etc.).
 
-**What's missing:** threading a `Config` struct (or the existing `di::Container` from §1) through `App`/`AppWithState`/`ConfigDrivenApp` construction instead of reading `env::var` at point of use, keeping env vars only as the *source* that populates the struct at startup. This is a larger refactor than anything in `TODO.md` — it touches every module that currently calls `env::var("RWS_CONFIG_*")` directly — but it's the one change that would remove an entire category of test flakiness and unlock embedding use cases, rather than adding one more feature to an already-large surface area.
+**What remains:** `ConfigDrivenApp` (`src/proxy_config/mod.rs`) and `AppWithState` still read env vars at point of use. Threading `ServerConfig` through those types would complete the fix and allow multi-instance deployments. The hard part (the `Cors` + `Header` refactor) is done; the remaining sites are mechanical.
 
 ---
 

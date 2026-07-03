@@ -114,6 +114,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `LoadBalancing` | `proxy` | Enum selecting the balancing strategy (`RoundRobin`). Passed to `ReverseProxy::strategy()`. |
 | `MetricsLayer` | `metrics` | Middleware that records per-route request counts and latency histograms. Adds `rws_route_requests_total{method,path,status}` and `rws_route_duration_seconds{method,path}` to `/metrics`. |
 | `CacheLayer` | `cache` | In-memory TTL response cache middleware for GET requests. Builder: `.ttl(secs)`, `.vary_by_header(name)`. Injects `Age` on hits; respects `Cache-Control: no-store/private`. |
+| `ServerConfig` | `server_config` | Typed snapshot of all per-instance config (CORS, CSP, log format, request allocation). `ServerConfig::from_env()` reads `RWS_CONFIG_*` vars; `ServerConfig::default()` returns hardcoded defaults. Pass to `App::with_config(config)` to create a fully isolated app instance. |
+| `App::with_config` | `app` | Constructor that pins an `App` to a fixed `ServerConfig` — no env reads happen during request processing. Preferred pattern for parallel integration tests that verify CORS/CSP behavior; no `test_env::lock()` needed. |
 | `ConfigSnapshot` | `config_reload` | Point-in-time snapshot of all hot-reloadable config values. Read with `config_reload::current()`. |
 | `config_reload::reload` | `config_reload` | Re-reads `rws.config.toml` and applies CORS, rate-limit, log-format changes live. Triggered by SIGHUP or `POST /admin/config/reload`. |
 | `OtelLayer` | `otel` | Middleware that creates HTTP server spans, propagates W3C `traceparent`, and exports to stdout or OTLP HTTP. Call `otel::setup()` or `otel::setup_from_env()` at startup. |
@@ -3165,3 +3167,59 @@ let mailer = Mailer {
 | `RWS_SMTP_FROM` | — (required) | Envelope and `From:` address |
 | `RWS_SMTP_TLS` | `starttls` | `starttls`, `smtps`, or `none` |
 | `RWS_SMTP_TIMEOUT_MS` | `10000` | Connect / read / write timeout |
+
+### 61. Isolated configuration in tests (`App::with_config`)
+
+Tests that verify CORS, CSP, or security-header behavior should not read from environment variables — that causes races when `cargo test` runs in parallel. Use `App::with_config` to pin the app to a fixed `ServerConfig`:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::application::Application;
+use rust_web_server::server_config::ServerConfig;
+use rust_web_server::test_client::TestClient;
+use rust_web_server::header::Header;
+use rust_web_server::request::{METHOD, Request};
+use rust_web_server::http::VERSION;
+
+#[test]
+fn cors_denied_when_origin_not_listed() {
+    // Build a ServerConfig with CORS allow-list enabled but no origins listed.
+    // No env writes → no test_env::lock() needed → runs safely in parallel.
+    let config = ServerConfig {
+        cors_allow_all: false,
+        cors_allow_origins: String::new(),
+        ..ServerConfig::default()
+    };
+    let client = TestClient::new(App::with_config(config));
+
+    let resp = client
+        .options("/static/file.png")
+        .header(Header::_ORIGIN, "https://evil.example.com")
+        .send();
+
+    // No ACAO header → CORS denied
+    assert!(resp._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).is_none());
+}
+
+#[test]
+fn cors_allowed_for_listed_origin() {
+    let config = ServerConfig {
+        cors_allow_all: false,
+        cors_allow_origins: "https://trusted.example.com".to_string(),
+        cors_allow_credentials: "true".to_string(),
+        ..ServerConfig::default()
+    };
+    let client = TestClient::new(App::with_config(config));
+
+    let resp = client
+        .options("/static/file.png")
+        .header(Header::_ORIGIN, "https://trusted.example.com")
+        .header(Header::_ACCESS_CONTROL_REQUEST_METHOD, METHOD.get)
+        .send();
+
+    let acao = resp._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
+    assert_eq!("https://trusted.example.com", acao.value);
+}
+```
+
+For tests that depend on filesystem paths (e.g. serving static files), continue using `App::handle_request` with `test_env::lock()` and `override_environment_variables_from_config`, since those tests need the config file to set the correct root directory.

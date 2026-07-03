@@ -201,6 +201,61 @@ mod tests {
 }
 ```
 
+## Isolated CORS and security-header tests
+
+By default, `App::new()` reads CORS, CSP, and other settings from `RWS_CONFIG_*` environment variables on each request. That means tests which set those env vars can race against each other when `cargo test` runs in parallel — and any test that calls `override_environment_variables_from_config` must hold `test_env::lock()` for its duration.
+
+For tests that only verify header behavior, the cleaner approach is `App::with_config`:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::server_config::ServerConfig;
+use rust_web_server::test_client::TestClient;
+use rust_web_server::header::Header;
+
+#[test]
+fn cors_denied_for_unlisted_origin() {
+    // No env writes → no test_env::lock() → runs safely in parallel.
+    let config = ServerConfig {
+        cors_allow_all: false,
+        cors_allow_origins: String::new(),
+        ..ServerConfig::default()
+    };
+    let client = TestClient::new(App::with_config(config));
+
+    let resp = client
+        .options("/static/file.png")
+        .header(Header::_ORIGIN, "https://evil.example.com")
+        .send();
+
+    assert!(resp.header("access-control-allow-origin").is_none());
+}
+
+#[test]
+fn cors_passes_for_listed_origin() {
+    let config = ServerConfig {
+        cors_allow_all: false,
+        cors_allow_origins: "https://trusted.example.com".to_string(),
+        cors_allow_credentials: "true".to_string(),
+        ..ServerConfig::default()
+    };
+    let client = TestClient::new(App::with_config(config));
+
+    let resp = client
+        .options("/static/file.png")
+        .header(Header::_ORIGIN, "https://trusted.example.com")
+        .header(Header::_ACCESS_CONTROL_REQUEST_METHOD, "GET")
+        .send();
+
+    assert_eq!(
+        "https://trusted.example.com",
+        resp.header("access-control-allow-origin").unwrap_or("")
+    );
+}
+```
+
+`App::with_config(config)` pins the app to a fixed `ServerConfig` for the lifetime of the `App` instance — SIGHUP and `POST /admin/config/reload` do not affect it. `App::new()` (no pinned config) continues to read env vars per request, which is correct for production and for tests that specifically verify hot-reload behavior.
+
 :::note[No TCP overhead]
 Because `TestClient` bypasses the network stack entirely, tests do not need `#[tokio::test]`, `async`, or any port allocation. They run in plain `#[test]` functions and complete in microseconds.
 :::
