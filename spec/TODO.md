@@ -16,7 +16,7 @@ These gaps make rws unsuitable for real production workloads regardless of how c
 
 - [x] **TLS to gRPC upstreams** (`grpcs://`) — `GrpcProxy` inherits TLS from `H2ReverseProxy`. `grpcs://` and `https://` backend URLs connect over TLS with ALPN `h2`. Closes GAPS_V3 §2.3.
 
-- [ ] **TLS to WebSocket upstreams** (`wss://`) — `WsProxy` cannot reach backends that require TLS. Closes GAPS_V3 §2.4.
+- [x] **TLS to WebSocket upstreams** (`wss://`) — `WsProxy` now accepts `wss://host:port` backend URLs (port defaults to 443). TLS path uses `rustls::StreamOwned` + a single-thread polling loop (5 ms timeout per side, 1 ms sleep when idle) to avoid the deadlock that arises when sharing a TLS stream between two blocking relay threads. Plain `ws://` backends continue to use the two-thread `std::io::copy` approach. Requires `http-client` or `http2` feature; returns 502 otherwise. Closes GAPS_V3 §2.4.
 
 - [ ] **Persistent sessions** (`src/session/store.rs`) — `SessionStore` is an in-process `HashMap`; all sessions are lost on restart. Required for zero-downtime deploys and horizontal scaling. Add `PersistentSessionStore` backed by the model layer (`rws_sessions` table) and a `RedisSessionStore`. Closes GAPS_V3 §3.5.
 
