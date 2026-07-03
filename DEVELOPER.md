@@ -102,6 +102,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `build_jwt` / `verify_jwt` / `Claims` | `auth` | Sign and verify HS256 JWTs; `Claims` exposes `sub`, `exp`, and raw JSON payload. |
 | `IpFilter` | `ip_filter` | Allow/deny middleware keyed on client IPv4 address or CIDR range. `IpFilter::allow([...])` passes only listed addresses; `IpFilter::deny([...])` blocks them. |
 | `routes!` | `macros` | Declarative routing macro — builds `AppWithState`, `AsyncAppWithState`, or `Router` from a `METHOD "path" => handler` table. |
+| `OpenApiConfig` / `build_spec` | `openapi` (requires `openapi` feature) | OpenAPI 3.0 schema generation. `AppWithState::openapi(config)` / `AsyncAppWithState::openapi(config)` add `GET /openapi.json` (generated spec) and `GET /docs` (Swagger UI via CDN) covering every route registered so far. Scope: paths, methods, path parameters (`:name`/`*name` → `{name}`) — no request/response body schemas, since Rust has no runtime type reflection to extract them from `#[derive(Validate)]`/serde types. |
 | `#[route]`, `#[get]`, `#[post]`, … | `macros` (proc-macro) | Attribute macros that annotate handler functions with their HTTP method and path. Requires `features = ["macros"]`. |
 | `#[derive(FromRequest)]` | `macros` (proc-macro) | Derive `FromRequest` for a named-field struct; calls `from_request` on each field in declaration order, short-circuiting on the first error. Requires `features = ["macros"]`. |
 | `Validate` / `ValidationErrors` | `validate` | Field-level validation trait; `ValidationErrors` collects all failures before returning. Implement manually or derive. |
@@ -3420,3 +3421,47 @@ fn save_avatar(store: &dyn Storage, user_id: u64, bytes: &[u8]) -> Result<String
 ```
 
 `S3Storage` signs every request with AWS Signature Version 4 using the existing outbound HTTP client — no AWS SDK dependency. Path-style addressing (`{endpoint}/{bucket}/{key}`) is used throughout, since it works against every S3-compatible provider including custom endpoints where virtual-hosted-style (`{bucket}.{host}`) DNS isn't set up.
+
+### 64. OpenAPI / Swagger documentation for your API
+
+Generate an OpenAPI 3.0 spec and a browsable Swagger UI directly from your registered routes — no separate spec file to keep in sync. Requires the `openapi` feature.
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["openapi"] }
+```
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::openapi::OpenApiConfig;
+use rust_web_server::response::Response;
+use rust_web_server::core::New;
+
+struct Db;
+
+let app = App::with_state(Db)
+    .get("/users", |_req, _params, _conn, _db| Response::new())
+    .get("/users/:id", |_req, _params, _conn, _db| Response::new())
+    .post("/users", |_req, _params, _conn, _db| Response::new())
+    // Register .openapi() last — it snapshots routes registered so far.
+    .openapi(OpenApiConfig::new("My API", "1.0.0").description("Example API"));
+```
+
+This adds two routes:
+
+- `GET /openapi.json` — the generated OpenAPI 3.0.3 document (`Content-Type: application/json`)
+- `GET /docs` — Swagger UI (loaded from the `unpkg.com/swagger-ui-dist` CDN), pointed at `/openapi.json`
+
+`AsyncAppWithState::openapi(config)` works identically for apps with `async fn` handlers (requires `http2`).
+
+**Scope**: paths, HTTP methods, and path parameters only. `:id` and `*path` segments both become `{id}`/`{path}` in the OpenAPI path template, with a `parameters` entry (`in: "path"`, `type: "string"`). Every operation is documented with a generic `200 OK` response and no request/response body schema — Rust has no runtime type reflection, so extracting a JSON Schema from a `#[derive(Validate)]` struct or a plain Rust type isn't something this can do without a much larger, separate code-generation feature. If you need full body schemas today, generate them by hand into the same `paths` structure, or post-process `build_spec`'s output.
+
+```rust
+use rust_web_server::openapi::{build_spec, OpenApiConfig};
+use rust_web_server::router::RouteInfo;
+
+// Build the spec string directly from a route list (e.g. to inspect or
+// post-process it, without wiring it into an app):
+let routes = vec![RouteInfo { method: "GET".to_string(), pattern: "/users/:id".to_string() }];
+let spec_json = build_spec(&OpenApiConfig::new("My API", "1.0.0"), &routes);
+```

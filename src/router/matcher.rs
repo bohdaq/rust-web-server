@@ -67,3 +67,21 @@ pub(crate) fn try_match(pattern: &[Segment], path: &[&str]) -> Option<HashMap<St
 
     if pi == path.len() { Some(params) } else { None }
 }
+
+/// Reconstructs the original `.get()`/`.post()`/etc. pattern string from
+/// parsed segments — the inverse of [`parse_pattern`]. Used by both
+/// `Router::route_entries` and `AsyncAppWithState::route_entries`.
+pub(crate) fn segments_to_pattern(segs: &[Segment]) -> String {
+    if segs.is_empty() {
+        return "/".to_string();
+    }
+    let parts: Vec<String> = segs
+        .iter()
+        .map(|s| match s {
+            Segment::Literal(l) => l.clone(),
+            Segment::Param(n) => format!(":{}", n),
+            Segment::Wildcard(n) => format!("*{}", n),
+        })
+        .collect();
+    format!("/{}", parts.join("/"))
+}

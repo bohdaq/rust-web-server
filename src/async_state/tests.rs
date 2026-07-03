@@ -305,3 +305,49 @@ async fn with_config_allows_cors_for_configured_origin_on_fallback_request() {
     let acao = resp._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
     assert_eq!("https://trusted.example.com", acao.value);
 }
+
+// ── openapi() ────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "openapi")]
+mod openapi_tests {
+    use super::*;
+    use crate::openapi::OpenApiConfig;
+
+    #[tokio::test]
+    async fn openapi_json_serves_a_spec_covering_registered_routes() {
+        let app = AsyncAppWithState::new(())
+            .get("/users", |_req, _params, _conn, _state| async { ok_text("users") })
+            .get("/users/:id", |_req, _params, _conn, _state| async { ok_text("user") })
+            .openapi(OpenApiConfig::new("My API", "1.0.0"));
+
+        let resp = app.execute(&get("/openapi.json"), &conn()).unwrap();
+        assert_eq!(200, resp.status_code);
+        let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        assert!(body.contains(r#""title":"My API""#));
+        assert!(body.contains(r#""/users":"#));
+        assert!(body.contains(r#""/users/{id}":"#));
+    }
+
+    #[tokio::test]
+    async fn docs_serves_swagger_ui_html() {
+        let app = AsyncAppWithState::new(())
+            .get("/users", |_req, _params, _conn, _state| async { ok_text("users") })
+            .openapi(OpenApiConfig::new("My API", "1.0.0"));
+
+        let resp = app.execute(&get("/docs"), &conn()).unwrap();
+        assert_eq!(200, resp.status_code);
+        let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        assert!(body.contains("swagger-ui"));
+    }
+
+    #[tokio::test]
+    async fn own_routes_are_unaffected_after_calling_openapi() {
+        let app = AsyncAppWithState::new(())
+            .get("/users", |_req, _params, _conn, _state| async { ok_text("users") })
+            .openapi(OpenApiConfig::new("My API", "1.0.0"));
+
+        let resp = app.execute(&get("/users"), &conn()).unwrap();
+        let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        assert_eq!("users", body);
+    }
+}

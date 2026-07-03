@@ -86,6 +86,7 @@ export default defineConfig({
             { label: 'IP Filtering',           link: '/features/ip-filter/' },
             { label: 'Background Scheduler',   link: '/features/scheduler/' },
             { label: 'Background Job Queue',   link: '/features/jobs/' },
+            { label: 'OpenAPI / Swagger',      link: '/features/openapi/' },
             { label: 'Typed Config Binding',   link: '/features/config-binding/' },
           ],
         },

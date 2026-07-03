@@ -61,6 +61,12 @@ use crate::response::Response;
 use crate::router::{PathParams, Router};
 use crate::server::ConnectionInfo;
 use crate::server_config::ServerConfig;
+#[cfg(feature = "openapi")]
+use crate::mime_type::MimeType;
+#[cfg(feature = "openapi")]
+use crate::range::Range;
+#[cfg(feature = "openapi")]
+use crate::response::STATUS_CODE_REASON_PHRASE;
 
 /// An [`Application`] that combines user-defined state-aware routes with the
 /// built-in [`App`] controller chain as a fallback.
@@ -227,6 +233,55 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
     /// ```
     pub fn wrap<M: Middleware + 'static>(self, layer: M) -> WithMiddleware<AppWithState<S>> {
         WithMiddleware::new(self).wrap(layer)
+    }
+
+    /// Add `GET /openapi.json` (a generated OpenAPI 3.0 document covering
+    /// every route registered so far) and `GET /docs` (Swagger UI, loaded
+    /// from a CDN, pointed at `/openapi.json`).
+    ///
+    /// Call this *after* registering your routes — routes added afterward
+    /// still work but won't appear in the generated spec, since it's built
+    /// once at this call rather than read dynamically per request.
+    ///
+    /// Requires the `openapi` feature.
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::openapi::OpenApiConfig;
+    /// use rust_web_server::response::Response;
+    /// use rust_web_server::core::New;
+    ///
+    /// let app = App::with_state(())
+    ///     .get("/users", |_req, _params, _conn, _state| Response::new())
+    ///     .get("/users/:id", |_req, _params, _conn, _state| Response::new())
+    ///     .openapi(OpenApiConfig::new("My API", "1.0.0"));
+    /// ```
+    #[cfg(feature = "openapi")]
+    pub fn openapi(self, config: crate::openapi::OpenApiConfig) -> Self {
+        let spec_json = Arc::new(crate::openapi::build_spec(&config, &self.route_entries()));
+        let html = Arc::new(crate::openapi::swagger_ui_html("/openapi.json"));
+
+        let spec_for_route = Arc::clone(&spec_json);
+        self.get("/openapi.json", move |_req, _params, _conn, _state| {
+            let mut r = Response::new();
+            r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+            r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+            r.content_range_list = vec![Range::get_content_range(
+                spec_for_route.as_bytes().to_vec(),
+                MimeType::APPLICATION_JSON.to_string(),
+            )];
+            r
+        })
+        .get("/docs", move |_req, _params, _conn, _state| {
+            let mut r = Response::new();
+            r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+            r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+            r.content_range_list = vec![Range::get_content_range(
+                html.as_bytes().to_vec(),
+                MimeType::TEXT_HTML.to_string(),
+            )];
+            r
+        })
     }
 }
 

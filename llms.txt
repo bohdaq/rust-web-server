@@ -1021,6 +1021,32 @@ provider. `LocalStorage` rejects `..` key segments to prevent escaping its root 
 
 ---
 
+## OpenAPI / Swagger (src/openapi/mod.rs, requires `openapi` feature)
+
+Generates an OpenAPI 3.0 spec directly from registered routes — no separate spec file to maintain.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::openapi::OpenApiConfig;
+use rust_web_server::response::Response;
+use rust_web_server::core::New;
+
+let app = App::with_state(db)
+    .get("/users", list_users)
+    .get("/users/:id", get_user)
+    .openapi(OpenApiConfig::new("My API", "1.0.0")); // call last — snapshots routes registered so far
+```
+
+Adds `GET /openapi.json` (the generated spec, `application/json`) and `GET /docs` (Swagger UI via the
+`unpkg.com/swagger-ui-dist` CDN, pointed at `/openapi.json`). `AsyncAppWithState::openapi(config)` works
+the same way for `async fn` handlers (requires `http2`).
+
+Scope: paths, methods, and path parameters only (`:id`/`*path` → `{id}`/`{path}` with a `parameters`
+entry). No request/response body schemas — Rust has no runtime type reflection to extract a JSON
+Schema from a `#[derive(Validate)]` struct, so every operation gets a generic `200 OK` response.
+
+---
+
 ## HTML templates (requires `tera` feature)
 
 ```rust
@@ -1125,6 +1151,7 @@ src/middleware/         — Middleware trait, WithMiddleware, RateLimitLayer
 src/mime_type/          — MIME type constants and detection
 src/model/              — Async ORM (sqlx): DbPool, DbTransaction, Model, Repository, QueryBuilder
 src/null/               — NullApplication (returns 404 for everything)
+src/openapi/            — OpenApiConfig, build_spec, swagger_ui_html (openapi feature)
 src/otel/               — OtelLayer, setup, span export
 src/prelude/            — Re-exports of the most commonly used types
 src/proxy/              — ReverseProxy, H2ReverseProxy, GrpcProxy, ConnPool (pool.rs)

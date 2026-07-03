@@ -59,6 +59,12 @@ use crate::response::Response;
 use crate::router::matcher::{self, Segment};
 use crate::router::PathParams;
 use crate::server::ConnectionInfo;
+#[cfg(feature = "openapi")]
+use crate::mime_type::MimeType;
+#[cfg(feature = "openapi")]
+use crate::range::Range;
+#[cfg(feature = "openapi")]
+use crate::response::STATUS_CODE_REASON_PHRASE;
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -112,6 +118,17 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
     /// Return a reference to the shared state.
     pub fn state(&self) -> &S {
         &self.state
+    }
+
+    /// Return a snapshot of all registered routes as `(method, pattern)` pairs.
+    pub fn route_entries(&self) -> Vec<crate::router::RouteInfo> {
+        self.routes
+            .iter()
+            .map(|r| crate::router::RouteInfo {
+                method: r.method.clone(),
+                pattern: matcher::segments_to_pattern(&r.segments),
+            })
+            .collect()
     }
 
     /// The fallback `App` for requests this app's own routes don't match —
@@ -180,6 +197,50 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
         Fut: Future<Output = Response> + Send + 'static,
     {
         self.add("DELETE", pattern, handler)
+    }
+
+    /// Add `GET /openapi.json` (a generated OpenAPI 3.0 document covering
+    /// every route registered so far) and `GET /docs` (Swagger UI, loaded
+    /// from a CDN, pointed at `/openapi.json`).
+    ///
+    /// Call this *after* registering your routes — routes added afterward
+    /// still work but won't appear in the generated spec, since it's built
+    /// once at this call rather than read dynamically per request.
+    ///
+    /// Requires the `openapi` feature (and `http2`, since `AsyncAppWithState`
+    /// already requires it).
+    #[cfg(feature = "openapi")]
+    pub fn openapi(self, config: crate::openapi::OpenApiConfig) -> Self {
+        let spec_json = Arc::new(crate::openapi::build_spec(&config, &self.route_entries()));
+        let html = Arc::new(crate::openapi::swagger_ui_html("/openapi.json"));
+
+        let spec_for_route = Arc::clone(&spec_json);
+        self.get("/openapi.json", move |_req, _params, _conn, _state| {
+            let spec_for_route = Arc::clone(&spec_for_route);
+            async move {
+                let mut r = Response::new();
+                r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+                r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+                r.content_range_list = vec![Range::get_content_range(
+                    spec_for_route.as_bytes().to_vec(),
+                    MimeType::APPLICATION_JSON.to_string(),
+                )];
+                r
+            }
+        })
+        .get("/docs", move |_req, _params, _conn, _state| {
+            let html = Arc::clone(&html);
+            async move {
+                let mut r = Response::new();
+                r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+                r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+                r.content_range_list = vec![Range::get_content_range(
+                    html.as_bytes().to_vec(),
+                    MimeType::TEXT_HTML.to_string(),
+                )];
+                r
+            }
+        })
     }
 
     async fn execute_async(

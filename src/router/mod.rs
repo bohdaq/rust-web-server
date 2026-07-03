@@ -157,20 +157,8 @@ impl Router {
     pub fn route_entries(&self) -> Vec<RouteInfo> {
         self.routes.iter().map(|r| RouteInfo {
             method: r.method.clone(),
-            pattern: Self::segments_to_pattern(&r.segments),
+            pattern: matcher::segments_to_pattern(&r.segments),
         }).collect()
-    }
-
-    fn segments_to_pattern(segs: &[Segment]) -> String {
-        if segs.is_empty() {
-            return "/".to_string();
-        }
-        let parts: Vec<String> = segs.iter().map(|s| match s {
-            Segment::Literal(l) => l.clone(),
-            Segment::Param(n) => format!(":{}", n),
-            Segment::Wildcard(n) => format!("*{}", n),
-        }).collect();
-        format!("/{}", parts.join("/"))
     }
 
     /// Try to match `request` against registered routes in registration order.

@@ -307,3 +307,73 @@ fn own_routes_still_take_priority_over_fallback_when_config_is_pinned() {
     let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
     assert_eq!("hi", body);
 }
+
+// ── openapi() ────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "openapi")]
+mod openapi_tests {
+    use super::*;
+    use crate::openapi::OpenApiConfig;
+
+    #[test]
+    fn openapi_json_serves_a_spec_covering_registered_routes() {
+        let app = AppWithState::new(())
+            .get("/users", |_req, _params, _conn, _state| ok_text("users"))
+            .get("/users/:id", |_req, _params, _conn, _state| ok_text("user"))
+            .openapi(OpenApiConfig::new("My API", "1.0.0"));
+
+        let resp = app.execute(&get("/openapi.json"), &conn()).unwrap();
+        assert_eq!(200, resp.status_code);
+        assert_eq!(
+            Some("application/json"),
+            resp.content_range_list.first().map(|c| c.content_type.as_str())
+        );
+        let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        assert!(body.contains(r#""title":"My API""#));
+        assert!(body.contains(r#""/users":"#));
+        assert!(body.contains(r#""/users/{id}":"#));
+    }
+
+    #[test]
+    fn docs_serves_swagger_ui_html() {
+        let app = AppWithState::new(())
+            .get("/users", |_req, _params, _conn, _state| ok_text("users"))
+            .openapi(OpenApiConfig::new("My API", "1.0.0"));
+
+        let resp = app.execute(&get("/docs"), &conn()).unwrap();
+        assert_eq!(200, resp.status_code);
+        assert_eq!(
+            Some("text/html"),
+            resp.content_range_list.first().map(|c| c.content_type.as_str())
+        );
+        let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        assert!(body.contains("swagger-ui"));
+        assert!(body.contains("/openapi.json"));
+    }
+
+    #[test]
+    fn own_routes_are_unaffected_after_calling_openapi() {
+        let app = AppWithState::new(())
+            .get("/users", |_req, _params, _conn, _state| ok_text("users"))
+            .openapi(OpenApiConfig::new("My API", "1.0.0"));
+
+        let resp = app.execute(&get("/users"), &conn()).unwrap();
+        let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        assert_eq!("users", body);
+    }
+
+    #[test]
+    fn routes_registered_after_openapi_still_work_but_are_not_in_the_spec() {
+        let app = AppWithState::new(())
+            .get("/users", |_req, _params, _conn, _state| ok_text("users"))
+            .openapi(OpenApiConfig::new("My API", "1.0.0"))
+            .get("/posts", |_req, _params, _conn, _state| ok_text("posts"));
+
+        let resp = app.execute(&get("/posts"), &conn()).unwrap();
+        assert_eq!(200, resp.status_code);
+
+        let spec_resp = app.execute(&get("/openapi.json"), &conn()).unwrap();
+        let spec = String::from_utf8(spec_resp.content_range_list[0].body.clone()).unwrap();
+        assert!(!spec.contains("/posts"));
+    }
+}
