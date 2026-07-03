@@ -12,9 +12,9 @@ These gaps make rws unsuitable for real production workloads regardless of how c
 
 - [x] **Upstream connection pooling** (`src/proxy/pool.rs`) — `ConnPool` (Mutex-backed, per-backend VecDeque of TcpStream) is embedded in `ReverseProxy`. Idle connections are reused when the backend sends `Connection: keep-alive`; chunked `Transfer-Encoding` is decoded so body length is known. Share pools across instances with `Arc<ConnPool>` via `ReverseProxy::with_pool()`. Closes GAPS_V3 §1.1 and §2.6.
 
-- [ ] **TLS to HTTP/2 upstreams** (`H2ReverseProxy`) — `H2ReverseProxy` connects over plain TCP. `h2://` prefixed backends that require TLS (every managed cloud service) are unreachable. Reuse the `rustls` dep already in the tree. Closes GAPS_V3 §2.2.
+- [x] **TLS to HTTP/2 upstreams** (`H2ReverseProxy`) — `H2ReverseProxy` now supports `https://` and `h2s://` backend URLs. `Backend::parse()` detects TLS schemes (port defaults to 443); `forward_h2_async` branches: plain path uses `TcpStream` directly; TLS path wraps in `tokio_rustls::TlsConnector` with ALPN `h2` before the h2 handshake. Generic `send_h2_request<T>` accepts both stream types. Requires `http2` feature. Closes GAPS_V3 §2.2.
 
-- [ ] **TLS to gRPC upstreams** (`grpcs://`) — `GrpcProxy` inherits the plain-TCP limitation of `H2ReverseProxy`. The common production case is `grpcs://`. Closes GAPS_V3 §2.3.
+- [x] **TLS to gRPC upstreams** (`grpcs://`) — `GrpcProxy` inherits TLS from `H2ReverseProxy`. `grpcs://` and `https://` backend URLs connect over TLS with ALPN `h2`. Closes GAPS_V3 §2.3.
 
 - [ ] **TLS to WebSocket upstreams** (`wss://`) — `WsProxy` cannot reach backends that require TLS. Closes GAPS_V3 §2.4.
 

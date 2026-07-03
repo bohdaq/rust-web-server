@@ -570,31 +570,45 @@ fn bad_gateway() -> Response {
 struct Backend {
     host: String,
     port: u16,
+    /// Whether the upstream connection should use TLS.
+    /// Set when the URL scheme is `https://`, `h2s://`, or `grpcs://`.
+    #[cfg_attr(not(feature = "http2"), allow(dead_code))]
+    tls: bool,
 }
 
 impl Backend {
     fn parse(url: &str) -> Option<Self> {
-        let rest = url
-            .strip_prefix("https://")
-            .or_else(|| url.strip_prefix("http://"))
-            .or_else(|| url.strip_prefix("h2://"))
-            .unwrap_or(url);
-        // Drop any path component
+        let (rest, tls, default_port) = if let Some(r) = url.strip_prefix("https://") {
+            (r, true, 443u16)
+        } else if let Some(r) = url.strip_prefix("h2s://") {
+            (r, true, 443u16)
+        } else if let Some(r) = url.strip_prefix("grpcs://") {
+            (r, true, 443u16)
+        } else if let Some(r) = url.strip_prefix("http://") {
+            (r, false, 80u16)
+        } else if let Some(r) = url.strip_prefix("h2://") {
+            (r, false, 80u16)
+        } else if let Some(r) = url.strip_prefix("grpc://") {
+            (r, false, 80u16)
+        } else {
+            (url, false, 80u16)
+        };
+        // Drop any path component.
         let host_port = rest.split('/').next().unwrap_or(rest);
         let (host, port) = if let Some(colon) = host_port.rfind(':') {
             let port_str = &host_port[colon + 1..];
             if let Ok(p) = port_str.parse::<u16>() {
                 (host_port[..colon].to_string(), p)
             } else {
-                (host_port.to_string(), 80)
+                (host_port.to_string(), default_port)
             }
         } else {
-            (host_port.to_string(), 80)
+            (host_port.to_string(), default_port)
         };
         if host.is_empty() {
             return None;
         }
-        Some(Backend { host, port })
+        Some(Backend { host, port, tls })
     }
 }
 
@@ -616,7 +630,15 @@ pub struct H2ReverseProxy {
 #[cfg(feature = "http2")]
 impl H2ReverseProxy {
     /// Create a proxy distributing requests across `backends` in round-robin order.
-    /// Each entry must be `"host:port"` or `"h2://host:port"`.
+    ///
+    /// Each backend entry can be:
+    /// - `"host:port"` — plain TCP (HTTP/2 cleartext)
+    /// - `"h2://host:port"` — plain TCP (explicit scheme)
+    /// - `"h2s://host:port"` — TLS (HTTP/2 over HTTPS; port defaults to 443)
+    /// - `"https://host:port"` — TLS (same as `h2s://`)
+    ///
+    /// TLS backends require the `http2` Cargo feature (includes `rustls` +
+    /// `webpki-roots`).  Certificate verification uses the WebPKI trust store.
     pub fn new<I, S>(backends: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -703,11 +725,7 @@ async fn forward_h2_async(
     backend: &Backend,
     connect_timeout: Duration,
 ) -> Result<Response, String> {
-    use bytes::Bytes;
-    use http as hc;
-
     let addr = format!("{}:{}", backend.host, backend.port);
-
     let tcp = tokio::time::timeout(
         connect_timeout,
         tokio::net::TcpStream::connect(&addr),
@@ -716,7 +734,54 @@ async fn forward_h2_async(
     .map_err(|_| format!("h2 proxy: connect to {} timed out", addr))?
     .map_err(|e| format!("h2 proxy: connect to {} failed: {}", addr, e))?;
 
-    let (send_req, conn) = h2::client::handshake(tcp)
+    if backend.tls {
+        use rustls::pki_types::ServerName;
+        use rustls::ClientConfig;
+        use std::sync::Arc;
+        use tokio_rustls::TlsConnector;
+
+        let root_store = rustls::RootCertStore::from_iter(
+            webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
+        );
+        let mut config = ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+        // Advertise h2 via ALPN so the server selects HTTP/2.
+        config.alpn_protocols = vec![b"h2".to_vec()];
+        let connector = TlsConnector::from(Arc::new(config));
+        let server_name = ServerName::try_from(backend.host.as_str())
+            .map_err(|e| format!("invalid upstream hostname '{}': {}", backend.host, e))?
+            .to_owned();
+        let tls_stream = connector
+            .connect(server_name, tcp)
+            .await
+            .map_err(|e| format!("h2 proxy: TLS handshake with {} failed: {}", addr, e))?;
+        send_h2_request(request, client_ip, backend, tls_stream).await
+    } else {
+        send_h2_request(request, client_ip, backend, tcp).await
+    }
+}
+
+/// Drive the h2 client handshake + request/response over any async I/O stream.
+///
+/// Accepts both plain `TcpStream` and `TlsStream<TcpStream>` — anything that
+/// satisfies `AsyncRead + AsyncWrite + Unpin + Send + 'static`.
+#[cfg(feature = "http2")]
+async fn send_h2_request<T>(
+    request: &Request,
+    client_ip: &str,
+    backend: &Backend,
+    stream: T,
+) -> Result<Response, String>
+where
+    T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    use bytes::Bytes;
+    use http as hc;
+
+    let addr = format!("{}:{}", backend.host, backend.port);
+
+    let (send_req, conn) = h2::client::handshake(stream)
         .await
         .map_err(|e| format!("h2 proxy: handshake with {} failed: {}", addr, e))?;
 
@@ -724,7 +789,8 @@ async fn forward_h2_async(
         let _ = conn.await;
     });
 
-    let uri_str = format!("http://{}{}", addr, request.request_uri);
+    let scheme = if backend.tls { "https" } else { "http" };
+    let uri_str = format!("{}://{}{}", scheme, addr, request.request_uri);
     let uri: hc::Uri = uri_str.parse().map_err(|e: hc::uri::InvalidUri| e.to_string())?;
     let method = hc::Method::from_bytes(request.method.as_bytes()).map_err(|e| e.to_string())?;
 
@@ -771,11 +837,14 @@ async fn forward_h2_async(
     response.status_code = parts.status.as_u16() as i16;
     response.reason_phrase = parts.status.canonical_reason().unwrap_or("").to_string();
 
-    const H2_HOP: &[&str] = &["connection", "keep-alive", "transfer-encoding",
-                                "upgrade", "proxy-connection", "te"];
+    const H2_HOP: &[&str] = &[
+        "connection", "keep-alive", "transfer-encoding", "upgrade", "proxy-connection", "te",
+    ];
     for (name, value) in &parts.headers {
         let lower = name.as_str().to_lowercase();
-        if H2_HOP.contains(&lower.as_str()) { continue; }
+        if H2_HOP.contains(&lower.as_str()) {
+            continue;
+        }
         if let Ok(v) = value.to_str() {
             response.headers.push(crate::header::Header {
                 name: name.as_str().to_string(),
@@ -818,6 +887,14 @@ pub struct GrpcProxy {
 #[cfg(feature = "http2")]
 impl GrpcProxy {
     /// Create a proxy distributing gRPC connections across `backends` in round-robin order.
+    ///
+    /// Each backend entry can be:
+    /// - `"host:port"` — plain TCP (gRPC cleartext)
+    /// - `"grpc://host:port"` — plain TCP (explicit scheme)
+    /// - `"grpcs://host:port"` — TLS (gRPC over TLS; port defaults to 443)
+    /// - `"https://host:port"` — TLS (same as `grpcs://`)
+    ///
+    /// TLS backends require the `http2` Cargo feature.
     pub fn new<I, S>(backends: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -850,5 +927,76 @@ impl crate::middleware::Middleware for GrpcProxy {
         } else {
             next.execute(request, connection)
         }
+    }
+}
+
+// ── Backend::parse unit tests ─────────────────────────────────────────────────
+
+#[cfg(test)]
+mod backend_parse_tests {
+    use super::Backend;
+
+    fn parse(url: &str) -> Option<(String, u16, bool)> {
+        Backend::parse(url).map(|b| (b.host, b.port, b.tls))
+    }
+
+    #[test]
+    fn bare_host_port() {
+        assert_eq!(Some(("api.example.com".into(), 8080, false)), parse("api.example.com:8080"));
+    }
+
+    #[test]
+    fn http_scheme() {
+        assert_eq!(Some(("backend".into(), 3000, false)), parse("http://backend:3000"));
+    }
+
+    #[test]
+    fn h2_scheme_plain() {
+        assert_eq!(Some(("svc".into(), 50051, false)), parse("h2://svc:50051"));
+    }
+
+    #[test]
+    fn grpc_scheme_plain() {
+        assert_eq!(Some(("svc".into(), 50051, false)), parse("grpc://svc:50051"));
+    }
+
+    #[test]
+    fn https_scheme_sets_tls_and_default_port() {
+        assert_eq!(Some(("api.example.com".into(), 443, true)), parse("https://api.example.com"));
+    }
+
+    #[test]
+    fn https_scheme_explicit_port() {
+        assert_eq!(Some(("api.example.com".into(), 8443, true)), parse("https://api.example.com:8443"));
+    }
+
+    #[test]
+    fn h2s_scheme_sets_tls() {
+        assert_eq!(Some(("svc".into(), 443, true)), parse("h2s://svc"));
+    }
+
+    #[test]
+    fn h2s_scheme_explicit_port() {
+        assert_eq!(Some(("svc".into(), 8443, true)), parse("h2s://svc:8443"));
+    }
+
+    #[test]
+    fn grpcs_scheme_sets_tls() {
+        assert_eq!(Some(("grpc-svc".into(), 443, true)), parse("grpcs://grpc-svc"));
+    }
+
+    #[test]
+    fn grpcs_scheme_explicit_port() {
+        assert_eq!(Some(("grpc-svc".into(), 50052, true)), parse("grpcs://grpc-svc:50052"));
+    }
+
+    #[test]
+    fn empty_host_returns_none() {
+        assert_eq!(None, parse("https://"));
+    }
+
+    #[test]
+    fn bare_host_no_port_defaults_to_80() {
+        assert_eq!(Some(("myhost".into(), 80, false)), parse("myhost"));
     }
 }
