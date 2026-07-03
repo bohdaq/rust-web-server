@@ -101,7 +101,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `RedisSessionStore` | `session` | Persistent session store backed by a Redis server via a hand-rolled RESP v2 client. `RedisSessionStore::new(addr, password, ttl)` or `from_env()` (reads `RWS_REDIS_HOST/PORT/PASSWORD/TTL_SECS`). Sessions expire automatically via Redis TTL. |
 | `Json<T>` | `json` | Serde-backed JSON extractor (`from_request`) and responder (`into_response`). Requires `features = ["serde"]`. |
 | `BasicAuthLayer<F>` | `auth` | HTTP Basic Auth middleware; validates `Authorization: Basic` credentials via a closure. `BasicAuthLayer::from_htpasswd_file(path)` loads `user:password` (plain text) or `user:{SHA256}<base64>` (rws's own scheme) entries from a file — not Apache's `{SHA}`/`$apr1$`/bcrypt. Requires `features = ["auth"]`. |
-| `JwtLayer` | `auth` | JWT HS256 middleware; verifies `Authorization: Bearer` tokens with constant-time HMAC-SHA256. Requires `features = ["auth"]`. |
+| `JwtLayer` | `auth` | JWT HS256 middleware; verifies `Authorization: Bearer` tokens with constant-time HMAC-SHA256. Requires `features = ["auth"]`. `JwtLayer::rs256(pem)` / `JwtLayer::es256(pem)` verify RS256/ES256 tokens against a static RSA/P-256 public key (SubjectPublicKeyInfo PEM) — no JWKS endpoint needed. Requires `features = ["auth-asymmetric"]`. |
+| `verify_jwt_rs256` / `verify_jwt_es256` | `auth` | Standalone RS256/ES256 JWT verification functions backing `JwtLayer::rs256`/`::es256` — call directly in a handler for the decoded `Claims`. Requires `features = ["auth-asymmetric"]`. |
 | `ForwardAuthLayer` | `auth::forward` | Delegates the allow/deny decision to an external HTTP service (Traefik `forwardAuth`, nginx `auth_request` style). `2xx` → request proceeds, `.copy_header(name)` values from the auth response replace same-named headers on the forwarded request; any other status → the auth service's response is returned verbatim (status, headers, body); unreachable auth service → `502 Bad Gateway`. No new deps — reuses `http_client::Client`. Requires `features = ["auth"]`. |
 | `build_jwt` / `verify_jwt` / `Claims` | `auth` | Sign and verify HS256 JWTs; `Claims` exposes `sub`, `exp`, and raw JSON payload. |
 | `IpFilter` | `ip_filter` | Allow/deny middleware keyed on client IPv4 address or CIDR range. `IpFilter::allow([...])` passes only listed addresses; `IpFilter::deny([...])` blocks them. |
@@ -3685,3 +3686,27 @@ assert_eq!(Some("session-token-abc123".to_string()), decrypt_cookie(&encrypted, 
 ```
 
 `signed_cookie` is HMAC-SHA256 over the value, output as `"<value>.<hex-signature>"` — splitting on the *last* `.` means a value that itself contains dots still round-trips correctly, since the fixed-length hex signature never contains one. `encrypted_cookie` is AES-256-GCM with a fresh random 96-bit nonce per call (so encrypting the same value twice never produces the same ciphertext), output as `"<hex-nonce>.<hex-ciphertext-and-tag>"`. Both verification functions return `None` on any failure — missing separator, malformed hex, tampering, or the wrong secret/key — rather than a detailed error, so a caller can't use error contents as an oracle.
+
+### 70. Verifying RS256 / ES256 JWTs without the `sso` feature
+
+Service-to-service auth is a common pattern: a separate auth server issues JWTs signed with its RSA or P-256 *private* key, and `rws` only ever needs the corresponding *public* key to verify them — no OAuth login flow, no JWKS endpoint, no key rotation. `JwtLayer::rs256`/`JwtLayer::es256` (`src/auth/mod.rs`, requires `features = ["auth-asymmetric"]`) cover exactly this, without pulling in the full `sso` feature (OIDC login/callback handlers, PKCE, JWKS fetching):
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::auth::JwtLayer;
+use rust_web_server::core::New;
+
+// public_key_pem is SubjectPublicKeyInfo PEM — e.g. `openssl rsa -in key.pem -pubout`
+// (RS256) or `openssl ec -in key.pem -pubout` (ES256).
+let app = App::new().wrap(JwtLayer::rs256(&public_key_pem).unwrap());
+// or:
+let app = App::new().wrap(JwtLayer::es256(&public_key_pem).unwrap());
+```
+
+Both reject a token whose header doesn't actually claim the matching algorithm — an RS256 key can't be used to wave through a token whose header says `"alg":"HS256"` just because the bytes happen to parse. ES256 tokens use the raw 64-byte `r || s` signature JWTs specify, not the ASN.1 DER encoding OpenSSL produces by default when signing outside of a JWT library.
+
+If a handler also needs the decoded claims, call `verify_jwt_rs256(token, &public_key)` / `verify_jwt_es256(token, &public_key)` directly — same functions `JwtLayer` uses internally.
+
+:::note[When to reach for `sso::JwksCache` instead]
+Use the full `sso` feature's `JwksCache` when the signing key can rotate and you need to fetch current keys from a live JWKS URL (`.well-known/jwks.json`), keyed by `kid`. `JwtLayer::rs256`/`::es256` pin a single static public key at construction time — right for a service-to-service integration with one known signer, not for a provider that rotates keys behind a JWKS endpoint.
+:::

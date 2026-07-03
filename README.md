@@ -181,7 +181,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 
 - Per-IP rate limiting — sliding-window `RateLimiter` + `RateLimitLayer`; hot-reloadable
 - CORS — configurable origins, methods, headers; updated live via `SIGHUP`
-- Auth — `BasicAuthLayer` (HTTP Basic), `JwtLayer` (HS256 Bearer), `ForwardAuthLayer` (delegate to an external auth service, Traefik/nginx `auth_request` style) (`auth` feature)
+- Auth — `BasicAuthLayer` (HTTP Basic), `JwtLayer` (HS256 Bearer), `ForwardAuthLayer` (delegate to an external auth service, Traefik/nginx `auth_request` style) (`auth` feature); `JwtLayer::rs256`/`::es256` (RS256/ES256 against a static public key, no JWKS needed) (`auth-asymmetric` feature)
 - IP filter — `IpFilter::allow([...])` / `deny([...])`; exact IPv4 and CIDR ranges
 - CSRF — double-submit cookie, `SameSite=Strict`, constant-time compare (`csrf` feature)
 - Password hashing — Argon2id + CSPRNG token generation (`crypto` feature)
@@ -233,6 +233,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 | `http-client` | HTTPS for outbound `Client` — adds `rustls` + `webpki-roots` |
 | `serde` | `Json<T>` extractor and responder via `serde_json` |
 | `auth` | `BasicAuthLayer` (HTTP Basic, plus `from_htpasswd_file`), `JwtLayer` (HS256), and `ForwardAuthLayer` (delegates auth decisions to an external HTTP service); also wires `type = "jwt"`/`"basic"` in the config-driven proxy's `[route.middleware.auth]` |
+| `auth-asymmetric` | `JwtLayer::rs256`/`::es256` — verify RS256/ES256 JWTs against a static RSA/P-256 public key (PEM), no JWKS endpoint or full `sso` feature required; implies `auth` |
 | `macros` | `#[get]`, `#[post]`, …, `#[derive(FromRequest)]`, `#[derive(Validate)]`, `#[derive(Config)]` |
 | `acme` | Automatic TLS via Let's Encrypt (ACME RFC 8555); implies `http2` |
 | `tera` | Tera HTML template engine (Jinja2/Django syntax) |

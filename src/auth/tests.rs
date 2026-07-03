@@ -253,6 +253,238 @@ fn jwt_layer_expired_token_returns_401() {
     assert_eq!(401, resp.status_code);
 }
 
+// ── JwtLayer::rs256 / JwtLayer::es256 ────────────────────────────────────────────
+
+#[cfg(feature = "auth-asymmetric")]
+mod asymmetric_jwt {
+    use super::*;
+    use crate::auth::{verify_jwt_es256, verify_jwt_rs256};
+    use p256::ecdsa::signature::Signer as EcSigner;
+    use p256::ecdsa::{Signature as EcSignature, SigningKey as EcSigningKey, VerifyingKey as EcVerifyingKey};
+    use rsa::pkcs1v15::SigningKey as RsaSigningKey;
+    use rsa::pkcs8::EncodePublicKey as RsaEncodePublicKey;
+    use rsa::signature::{SignatureEncoding, Signer as RsaSigner};
+    use rsa::{RsaPrivateKey, RsaPublicKey};
+    use std::sync::OnceLock;
+
+    // RSA keygen (2048-bit) is real cryptographic work, not instantaneous —
+    // generate it once and reuse across every RS256 test in this module.
+    fn rsa_keypair() -> &'static (RsaPrivateKey, RsaPublicKey) {
+        static KEYPAIR: OnceLock<(RsaPrivateKey, RsaPublicKey)> = OnceLock::new();
+        KEYPAIR.get_or_init(|| {
+            let priv_key = RsaPrivateKey::new(&mut rand_core::OsRng, 2048).expect("RSA keygen");
+            let pub_key = priv_key.to_public_key();
+            (priv_key, pub_key)
+        })
+    }
+
+    fn ec_keypair() -> &'static (EcSigningKey, EcVerifyingKey) {
+        static KEYPAIR: OnceLock<(EcSigningKey, EcVerifyingKey)> = OnceLock::new();
+        KEYPAIR.get_or_init(|| {
+            let signing_key = EcSigningKey::random(&mut rand_core::OsRng);
+            let verifying_key = *signing_key.verifying_key();
+            (signing_key, verifying_key)
+        })
+    }
+
+    fn build_jwt_rs256(claims_json: &str, priv_key: &RsaPrivateKey) -> String {
+        let header = base64url_encode(br#"{"alg":"RS256","typ":"JWT"}"#);
+        let payload = base64url_encode(claims_json.as_bytes());
+        let message = format!("{}.{}", header, payload);
+        let signing_key = RsaSigningKey::<Sha256>::new(priv_key.clone());
+        let signature = signing_key.sign(message.as_bytes());
+        format!("{}.{}", message, base64url_encode(&signature.to_vec()))
+    }
+
+    fn build_jwt_es256(claims_json: &str, signing_key: &EcSigningKey) -> String {
+        let header = base64url_encode(br#"{"alg":"ES256","typ":"JWT"}"#);
+        let payload = base64url_encode(claims_json.as_bytes());
+        let message = format!("{}.{}", header, payload);
+        let signature: EcSignature = signing_key.sign(message.as_bytes());
+        format!("{}.{}", message, base64url_encode(&signature.to_bytes()))
+    }
+
+    fn rsa_public_key_pem(pub_key: &RsaPublicKey) -> String {
+        pub_key.to_public_key_pem(Default::default()).expect("PEM encode")
+    }
+
+    fn ec_public_key_pem(pub_key: &EcVerifyingKey) -> String {
+        use p256::pkcs8::EncodePublicKey;
+        pub_key.to_public_key_pem(Default::default()).expect("PEM encode")
+    }
+
+    // ── verify_jwt_rs256 ──────────────────────────────────────────────────────
+
+    #[test]
+    fn verify_jwt_rs256_valid_token_returns_claims() {
+        let (priv_key, pub_key) = rsa_keypair();
+        let token = build_jwt_rs256(&format!(r#"{{"sub":"u","exp":{}}}"#, FAR_FUTURE), priv_key);
+        let claims = verify_jwt_rs256(&token, pub_key).unwrap();
+        assert_eq!(Some("u".to_string()), claims.sub);
+    }
+
+    #[test]
+    fn verify_jwt_rs256_wrong_key_returns_none() {
+        let (priv_key, _) = rsa_keypair();
+        let other_priv = RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap();
+        let other_pub = other_priv.to_public_key();
+        let token = build_jwt_rs256(r#"{"sub":"u"}"#, priv_key);
+        assert!(verify_jwt_rs256(&token, &other_pub).is_none());
+    }
+
+    #[test]
+    fn verify_jwt_rs256_tampered_payload_returns_none() {
+        let (priv_key, pub_key) = rsa_keypair();
+        let token = build_jwt_rs256(r#"{"sub":"u"}"#, priv_key);
+        let mut parts: Vec<&str> = token.splitn(3, '.').collect();
+        parts[1] = "dGFtcGVyZWQ"; // "tampered"
+        let tampered = parts.join(".");
+        assert!(verify_jwt_rs256(&tampered, pub_key).is_none());
+    }
+
+    #[test]
+    fn verify_jwt_rs256_expired_token_returns_none() {
+        let (priv_key, pub_key) = rsa_keypair();
+        let token = build_jwt_rs256(r#"{"sub":"u","exp":1}"#, priv_key);
+        assert!(verify_jwt_rs256(&token, pub_key).is_none());
+    }
+
+    #[test]
+    fn verify_jwt_rs256_rejects_hs256_token_even_with_matching_secret_shaped_input() {
+        // A token whose header claims HS256 must not verify against an RSA
+        // key just because signature bytes happen to be well-formed noise.
+        let (_, pub_key) = rsa_keypair();
+        let hs256_token = build_jwt(r#"{"sub":"u"}"#, b"some-secret");
+        assert!(verify_jwt_rs256(&hs256_token, pub_key).is_none());
+    }
+
+    #[test]
+    fn verify_jwt_rs256_malformed_token_returns_none() {
+        let (_, pub_key) = rsa_keypair();
+        assert!(verify_jwt_rs256("not.a.jwt.with.extra.dots", pub_key).is_none());
+        assert!(verify_jwt_rs256("onlytwoparts", pub_key).is_none());
+        assert!(verify_jwt_rs256("", pub_key).is_none());
+    }
+
+    // ── verify_jwt_es256 ──────────────────────────────────────────────────────
+
+    #[test]
+    fn verify_jwt_es256_valid_token_returns_claims() {
+        let (signing_key, verifying_key) = ec_keypair();
+        let token = build_jwt_es256(&format!(r#"{{"sub":"u","exp":{}}}"#, FAR_FUTURE), signing_key);
+        let claims = verify_jwt_es256(&token, verifying_key).unwrap();
+        assert_eq!(Some("u".to_string()), claims.sub);
+    }
+
+    #[test]
+    fn verify_jwt_es256_wrong_key_returns_none() {
+        let (signing_key, _) = ec_keypair();
+        let other_signing = EcSigningKey::random(&mut rand_core::OsRng);
+        let other_verifying = *other_signing.verifying_key();
+        let token = build_jwt_es256(r#"{"sub":"u"}"#, signing_key);
+        assert!(verify_jwt_es256(&token, &other_verifying).is_none());
+    }
+
+    #[test]
+    fn verify_jwt_es256_tampered_payload_returns_none() {
+        let (signing_key, verifying_key) = ec_keypair();
+        let token = build_jwt_es256(r#"{"sub":"u"}"#, signing_key);
+        let mut parts: Vec<&str> = token.splitn(3, '.').collect();
+        parts[1] = "dGFtcGVyZWQ";
+        let tampered = parts.join(".");
+        assert!(verify_jwt_es256(&tampered, verifying_key).is_none());
+    }
+
+    #[test]
+    fn verify_jwt_es256_expired_token_returns_none() {
+        let (signing_key, verifying_key) = ec_keypair();
+        let token = build_jwt_es256(r#"{"sub":"u","exp":1}"#, signing_key);
+        assert!(verify_jwt_es256(&token, verifying_key).is_none());
+    }
+
+    #[test]
+    fn verify_jwt_es256_malformed_token_returns_none() {
+        let (_, verifying_key) = ec_keypair();
+        assert!(verify_jwt_es256("not.a.jwt.with.extra.dots", verifying_key).is_none());
+        assert!(verify_jwt_es256("onlytwoparts", verifying_key).is_none());
+        assert!(verify_jwt_es256("", verifying_key).is_none());
+    }
+
+    #[test]
+    fn verify_jwt_es256_rejects_signature_of_wrong_length() {
+        let (signing_key, verifying_key) = ec_keypair();
+        let token = build_jwt_es256(r#"{"sub":"u"}"#, signing_key);
+        let mut parts: Vec<&str> = token.splitn(3, '.').collect();
+        parts[2] = "dG9vc2hvcnQ"; // "tooshort" — valid base64url, wrong length
+        let truncated = parts.join(".");
+        assert!(verify_jwt_es256(&truncated, verifying_key).is_none());
+    }
+
+    // ── JwtLayer::rs256 / JwtLayer::es256 (middleware, end-to-end) ───────────
+
+    #[test]
+    fn jwt_layer_rs256_valid_token_passes_through() {
+        let (priv_key, pub_key) = rsa_keypair();
+        let layer = JwtLayer::rs256(&rsa_public_key_pem(pub_key)).unwrap();
+        let token = build_jwt_rs256(&format!(r#"{{"sub":"u","exp":{}}}"#, FAR_FUTURE), priv_key);
+        let req = with_header(get("/"), "Authorization", &format!("Bearer {}", token));
+        let resp = layer.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(200, resp.status_code);
+    }
+
+    #[test]
+    fn jwt_layer_rs256_missing_token_returns_401() {
+        let (_, pub_key) = rsa_keypair();
+        let layer = JwtLayer::rs256(&rsa_public_key_pem(pub_key)).unwrap();
+        let resp = layer.handle(&get("/"), &conn(), &OkApp).unwrap();
+        assert_eq!(401, resp.status_code);
+    }
+
+    #[test]
+    fn jwt_layer_rs256_wrong_key_returns_401() {
+        let (priv_key, _) = rsa_keypair();
+        let other_priv = RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap();
+        let other_pub = other_priv.to_public_key();
+        let layer = JwtLayer::rs256(&rsa_public_key_pem(&other_pub)).unwrap();
+        let token = build_jwt_rs256(r#"{"sub":"u"}"#, priv_key);
+        let req = with_header(get("/"), "Authorization", &format!("Bearer {}", token));
+        let resp = layer.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(401, resp.status_code);
+    }
+
+    #[test]
+    fn jwt_layer_rs256_rejects_malformed_pem() {
+        assert!(JwtLayer::rs256("not a pem").is_err());
+    }
+
+    #[test]
+    fn jwt_layer_es256_valid_token_passes_through() {
+        let (signing_key, verifying_key) = ec_keypair();
+        let layer = JwtLayer::es256(&ec_public_key_pem(verifying_key)).unwrap();
+        let token = build_jwt_es256(&format!(r#"{{"sub":"u","exp":{}}}"#, FAR_FUTURE), signing_key);
+        let req = with_header(get("/"), "Authorization", &format!("Bearer {}", token));
+        let resp = layer.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(200, resp.status_code);
+    }
+
+    #[test]
+    fn jwt_layer_es256_wrong_key_returns_401() {
+        let (signing_key, _) = ec_keypair();
+        let other_signing = EcSigningKey::random(&mut rand_core::OsRng);
+        let other_verifying = *other_signing.verifying_key();
+        let layer = JwtLayer::es256(&ec_public_key_pem(&other_verifying)).unwrap();
+        let token = build_jwt_es256(r#"{"sub":"u"}"#, signing_key);
+        let req = with_header(get("/"), "Authorization", &format!("Bearer {}", token));
+        let resp = layer.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(401, resp.status_code);
+    }
+
+    #[test]
+    fn jwt_layer_es256_rejects_malformed_pem() {
+        assert!(JwtLayer::es256("not a pem").is_err());
+    }
+}
+
 // ── BasicAuthLayer::from_htpasswd_file ──────────────────────────────────────────
 
 fn temp_htpasswd(contents: &str) -> std::path::PathBuf {

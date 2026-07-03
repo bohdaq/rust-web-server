@@ -73,7 +73,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 
 - **`RateLimitLayer`** — sliding-window rate limiter keyed by client IP; global singleton via `rate_limit::global()`; returns `429` when budget exceeded
 - **`BasicAuthLayer`** — HTTP Basic authentication middleware
-- **`JwtLayer`** — JWT Bearer token validation middleware — `auth`
+- **`JwtLayer`** — JWT Bearer token validation middleware (HS256) — `auth`; RS256/ES256 against a static public key via `::rs256`/`::es256` — `auth-asymmetric`
 - **`ForwardAuthLayer`** — delegates the allow/deny decision to an external HTTP service (Traefik/nginx `auth_request` style) — `auth`
 - **`IpFilter`** — allowlist / denylist middleware keyed by client IP
 - **`crypto`** — Argon2id password hashing and verification; `signed_cookie`/`verify_signed_cookie` (HMAC-SHA256) and `encrypted_cookie`/`decrypt_cookie` (AES-256-GCM) — `crypto`

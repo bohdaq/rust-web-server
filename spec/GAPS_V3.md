@@ -241,6 +241,8 @@ The model layer (`src/model/`) uses `std::sync::Mutex`-guarded connections and b
 
 ### 3.10 `JwtLayer` is HS256 only
 
+> **Status: resolved.** `JwtLayer::rs256(public_key_pem)` and `JwtLayer::es256(public_key_pem)` added, gated behind a new slim `auth-asymmetric` feature (reuses the `sso` feature's `rsa`/`p256` deps without pulling in the full OAuth/OIDC/JWKS machinery). See `spec/TODO.md` for full detail.
+
 The programmatic `JwtLayer` middleware (in `src/auth/`) only verifies HS256 (HMAC-SHA256) Bearer tokens. RS256/ES256 asymmetric tokens are supported only through the `sso` feature's `JwksCache`. Building a service-to-service auth pattern where the caller presents an RS256 JWT (issued by a separate auth server) requires importing the `sso` feature even when the full OIDC flow is not needed.
 
 ---

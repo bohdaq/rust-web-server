@@ -1,16 +1,18 @@
 ---
 title: Authentication
-description: HTTP Basic Auth, HS256 JWT, and forward-auth middleware with helper functions for issuing and verifying tokens.
+description: HTTP Basic Auth, HS256/RS256/ES256 JWT, and forward-auth middleware with helper functions for issuing and verifying tokens.
 ---
 
-The `auth` Cargo feature adds `BasicAuthLayer`, `JwtLayer`, and `ForwardAuthLayer` middleware, plus standalone helpers for building and verifying HS256 JWTs.
+The `auth` Cargo feature adds `BasicAuthLayer`, `JwtLayer`, and `ForwardAuthLayer` middleware, plus standalone helpers for building and verifying HS256 JWTs. The `auth-asymmetric` feature (on top of `auth`) adds `JwtLayer::rs256`/`::es256` for verifying RS256/ES256 tokens against a static public key.
 
 ```toml
 [dependencies]
 rust-web-server = { version = "17", features = ["auth"] }
+# or, for RS256/ES256 support too:
+rust-web-server = { version = "17", features = ["auth-asymmetric"] }
 ```
 
-The feature pulls in `hmac` and `sha2` (RustCrypto) as additional dependencies. No other HTTP or JWT crates are required.
+The `auth` feature pulls in `hmac` and `sha2` (RustCrypto) as additional dependencies. `auth-asymmetric` additionally pulls in `rsa` and `p256` (also RustCrypto) — the same crates the `sso` feature uses, without the rest of `sso`'s OAuth/OIDC/JWKS machinery.
 
 ## HTTP Basic Auth
 
@@ -186,7 +188,44 @@ fn login(req: &Request) -> Response {
 ```
 
 :::note[Algorithm support]
-`build_jwt` and `verify_jwt` only support HS256. For RS256/ES256 (public-key JWTs from an identity provider), use the `sso` feature which provides `JwksCache`.
+`build_jwt` and `verify_jwt` only support HS256. For RS256/ES256 against a static public key, see the next section. For public-key JWTs from an identity provider that rotates keys behind a live JWKS endpoint, use the `sso` feature's `JwksCache` instead.
+:::
+
+## JWT — RS256 / ES256 (`auth-asymmetric` feature)
+
+A common pattern: a separate auth server issues JWTs signed with its RSA or P-256 *private* key, and your service only ever needs the corresponding *public* key to verify them — no OAuth login flow, no JWKS endpoint, no key rotation to track. `JwtLayer::rs256` and `JwtLayer::es256` cover exactly this, without pulling in the full `sso` feature (OIDC login/callback handlers, PKCE, JWKS fetching):
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["auth-asymmetric"] }
+```
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::auth::JwtLayer;
+use rust_web_server::core::New;
+
+// public_key_pem is SubjectPublicKeyInfo PEM, e.g.:
+//   openssl rsa -in key.pem -pubout   (RS256)
+//   openssl ec  -in key.pem -pubout   (ES256)
+let app = App::new().wrap(JwtLayer::rs256(&rsa_public_key_pem).expect("invalid RSA public key"));
+// or:
+let app = App::new().wrap(JwtLayer::es256(&ec_public_key_pem).expect("invalid P-256 public key"));
+```
+
+Both reject a token whose header `alg` doesn't actually match what was verified — an RS256 key can't wave through a token whose header claims `"alg":"HS256"` just because the bytes happen to parse as something. ES256 signatures are validated in the raw 64-byte `r || s` form JWTs specify, not the ASN.1 DER encoding OpenSSL produces by default when signing outside of a JWT library.
+
+If a handler also needs the decoded claims, call the standalone verify functions directly — same code `JwtLayer` uses internally:
+
+```rust
+use rust_web_server::auth::{verify_jwt_rs256, verify_jwt_es256};
+
+let claims = verify_jwt_rs256(&token, &rsa_public_key).unwrap();
+let claims = verify_jwt_es256(&token, &ec_public_key).unwrap();
+```
+
+:::note[When to use `sso::JwksCache` instead]
+`JwtLayer::rs256`/`::es256` pin a single static public key at construction time. Use `sso::JwksCache` when the signing key can rotate and you need to fetch current keys from a live JWKS URL (`.well-known/jwks.json`), keyed by `kid` — the right fit for a full OIDC identity provider, not a service-to-service integration with one known signer.
 :::
 
 ## Forward-auth (delegate to an external service)

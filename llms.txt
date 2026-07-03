@@ -242,6 +242,7 @@ let mcp = App::new().mcp("my-server", "1.0.0")
 | `http-client` | HTTPS for outbound `Client` | `rustls`, `webpki-roots` |
 | `serde` | `Json<T>` extractor/responder via `serde_json` | `serde`, `serde_json` |
 | `auth` | `BasicAuthLayer`, `JwtLayer`, `ForwardAuthLayer`, `build_jwt`/`verify_jwt` (HS256) | `hmac`, `sha2` |
+| `auth-asymmetric` | `JwtLayer::rs256`/`::es256`, `verify_jwt_rs256`/`verify_jwt_es256` (implies `auth`) | `rsa`, `p256`, `rand_core` |
 | `macros` | `#[get]`, `#[derive(FromRequest)]`, `#[derive(Validate)]`, `#[derive(Config)]`, `routes!` | `rws-macros` |
 | `acme` | Automatic TLS via Let's Encrypt (implies `http2`) | `rcgen`, `aws-lc-rs` |
 | `tera` | Tera HTML template engine (Jinja2/Django syntax) | `tera`, `serde`, `serde_json` |
@@ -436,6 +437,23 @@ let token = build_jwt(r#"{"sub":"user-123","exp":9999999999}"#, b"my-secret-key"
 let claims = verify_jwt(&token, b"my-secret-key").unwrap();
 // claims.sub: Option<String>, claims.exp: Option<u64>, claims.raw: String (raw JSON)
 ```
+
+### RS256 / ES256 (requires `auth-asymmetric` feature)
+
+Verifies JWTs signed by a separate auth server's RSA/P-256 private key, given only its public key — no JWKS endpoint, no full `sso` feature. Both `public_key_pem` args are SubjectPublicKeyInfo PEM (`-----BEGIN PUBLIC KEY-----`), e.g. `openssl rsa -in key.pem -pubout` / `openssl ec -in key.pem -pubout`.
+
+```rust
+use rust_web_server::auth::{JwtLayer, verify_jwt_rs256, verify_jwt_es256};
+
+let app = App::new().wrap(JwtLayer::rs256(&rsa_public_key_pem)?);
+let app = App::new().wrap(JwtLayer::es256(&ec_public_key_pem)?);
+
+// Standalone verify (same functions JwtLayer uses internally), for use in a handler:
+let claims = verify_jwt_rs256(&token, &rsa_public_key).unwrap();
+let claims = verify_jwt_es256(&token, &ec_public_key).unwrap();
+```
+
+Both reject a token whose header `alg` doesn't match what was actually verified — an RS256 key can't wave through a token whose header claims `HS256`. ES256 signatures are the raw 64-byte `r || s` JWTs specify, not ASN.1 DER. Use `sso::JwksCache` instead when the signing key rotates behind a live JWKS URL.
 
 Config-driven proxy wiring for JWT/Basic — see "Config-driven proxy server" below.
 
@@ -725,7 +743,7 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 |---|---|---|
 | `RateLimitLayer` | `middleware` | Per-IP sliding-window; reads `RWS_CONFIG_RATE_LIMIT_*`; 429 on exceeded |
 | `BasicAuthLayer<F>` | `auth` | HTTP Basic; closure `(user, pass) -> bool`; 401 on failure. `::from_htpasswd_file(path)` loads plain-text/`{SHA256}` entries from a file. |
-| `JwtLayer` | `auth` | HS256 Bearer token; 401 on invalid |
+| `JwtLayer` | `auth` | HS256 Bearer token; 401 on invalid. `::rs256`/`::es256` (RS256/ES256 against a static PEM public key) require `auth-asymmetric` |
 | `ForwardAuthLayer` | `auth::forward` | Delegates the allow/deny decision to an external HTTP service; 2xx copies configured headers through, other statuses pass the auth response through verbatim, unreachable → 502 |
 | `IpFilter` | `ip_filter` | Allow or deny by IPv4/CIDR; 403 on block |
 | `CsrfLayer` | `csrf` | Double-submit cookie; 403 on mismatch for POST/PUT/PATCH/DELETE |
@@ -1222,6 +1240,7 @@ let www_router = Router::new().with_host("www.example.com").get("/", home_handle
 - mTLS — set `RWS_CONFIG_TLS_CLIENT_CA_FILE`
 - IP filtering — `IpFilter::allow([…])` / `.deny([…])`
 - JWT HS256 — `auth` module; constant-time HMAC
+- JWT RS256/ES256 without a JWKS endpoint — `JwtLayer::rs256`/`::es256`; static PEM public key, `auth-asymmetric` feature
 - Forward-auth to an external service — `auth::forward::ForwardAuthLayer`; fails closed (502) if the auth service is unreachable
 - JWT RS256/ES256 — `sso::JwksCache`; signature + expiry + aud + iss validated
 - Argon2id password hashing — `crypto` module; random salt; PHC string output
@@ -1239,6 +1258,7 @@ src/app/                — App (zero-config) and controller dispatch
 src/application/        — Application trait
 src/async_state/        — AsyncAppWithState
 src/auth/               — BasicAuthLayer, JwtLayer, build_jwt, verify_jwt (auth feature)
+                          JwtLayer::rs256/::es256, verify_jwt_rs256/verify_jwt_es256 (auth-asymmetric feature)
 src/auth/forward.rs     — ForwardAuthLayer, delegates auth decisions to an external HTTP service (auth feature)
 src/blocklist/          — IP blocklist middleware
 src/body/               — multipart_form_data, form_urlencoded parsers
