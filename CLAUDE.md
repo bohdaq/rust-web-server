@@ -172,6 +172,8 @@ Key config constants (all in `src/entry_point/mod.rs`):
 - `RWS_CONFIG_HTTP_REDIRECT_PORT` — if set, `Server::run_redirect()` sends `301` to HTTPS on this port
 - `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS`, `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS`
 - `RWS_CONFIG_LOG_FORMAT` — `"combined"` (default) or `"json"`
+- `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` — per-read chunk size (default 10000); bodies larger than this span multiple reads automatically
+- `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` — max accepted request body size (default `0`, unlimited); `413 Payload Too Large` before buffering when exceeded, checked in `Server::process`, `process_h1_tls`, `h2_handler`, and `h3_handler`
 
 Hot reload: `SIGHUP` (or `POST /admin/config/reload`) calls `config_reload::reload()` which re-reads CORS rules, rate limits, log format, and request allocation size. On TLS builds, SIGHUP also rebuilds the `TlsAcceptor` from updated certs for all virtual hosts.
 

@@ -127,6 +127,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `App::with_config` | `app` | Constructor that pins an `App` to a fixed `ServerConfig` — no env reads happen during request processing. Preferred pattern for parallel integration tests that verify CORS/CSP behavior; no `test_env::lock()` needed. |
 | `ConfigSnapshot` | `config_reload` | Point-in-time snapshot of all hot-reloadable config values. Read with `config_reload::current()`. |
 | `config_reload::reload` | `config_reload` | Re-reads `rws.config.toml` and applies CORS, rate-limit, log-format changes live. Triggered by SIGHUP or `POST /admin/config/reload`. |
+| `get_max_body_size` | `entry_point` | Reads `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (default `0`, unlimited). `Server::process`, `process_h1_tls`, `h2_handler`, and `h3_handler` all check a request's declared `Content-Length` (or accumulated body, for H2/H3) against this before buffering it; requests over the limit get `413 Payload Too Large` and the connection is closed. |
 | `OtelLayer` | `otel` | Middleware that creates HTTP server spans, propagates W3C `traceparent`, and exports to stdout or OTLP HTTP. Call `otel::setup()` or `otel::setup_from_env()` at startup. |
 | `TracingConfig` / `ExporterConfig` | `otel` | Configure the tracing subsystem: service name, exporter backend, sample rate, batch size. |
 | `otel::setup` / `otel::setup_from_env` | `otel` | Initialize the global tracer. Call once before the server starts. `setup_from_env` reads `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_TRACES_SAMPLER_ARG`. |
@@ -1523,6 +1524,7 @@ fn my_handler(request: &Request, response: Response, conn: &ConnectionInfo) -> R
 | Rate-limit thresholds (`RWS_CONFIG_RATE_LIMIT_*`) | ✅ |
 | Log format (`RWS_CONFIG_LOG_FORMAT`) | ✅ |
 | Request allocation size | ✅ |
+| Max body size (`RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`) | ✅ (applies to new connections) |
 | IP / port | ❌ bound socket cannot move |
 | Thread count | ❌ thread pool is fixed at startup |
 | TLS cert / key paths | ❌ acceptor is built once |
@@ -3752,4 +3754,33 @@ Stripe's signature embeds a timestamp and is checked against a 300-second replay
 
 :::note[GitHub's legacy `X-Hub-Signature` header]
 GitHub also sends an older SHA-1-based `X-Hub-Signature` for backward compatibility. `verify_github_signature` deliberately only supports `X-Hub-Signature-256` — SHA-1 is broken and this crate has no SHA-1 dependency. Always prefer the SHA-256 header.
+:::
+
+---
+
+### 72. Bounding request body size
+
+Every read path (`Server::process` for plain HTTP/1.1, `process_h1_tls`, `h2_handler`, `h3_handler`) now accumulates a request's body across as many socket reads as it takes to receive the full declared `Content-Length` — previously, HTTP/1.1 only ever performed a single `request_allocation_size`-sized read, silently truncating (and, for bodies shorter than that buffer, zero-padding) anything that didn't fit in one syscall.
+
+```bash
+# Reject any request whose Content-Length exceeds 5 MB, before reading its body
+export RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES=5242880
+```
+
+`RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` defaults to `0` (unlimited) — enforcing a cap is opt-in, not a behavior change for existing deployments. When set:
+
+- **HTTP/1.1** — `Server::payload_too_large_response()` is sent and the connection is closed (not kept alive) the moment the declared `Content-Length` exceeds the limit; no body bytes are read at all.
+- **HTTP/2 / HTTP/3** — bodies are already accumulated via an async streaming loop over `DATA` frames (no truncation bug there), so the cap is checked as chunks arrive; exceeding it sends `413 Payload Too Large` and stops reading immediately rather than after the full (oversized) body has already been buffered.
+
+```rust
+use rust_web_server::config_reload;
+
+fn my_handler() {
+    let cfg = config_reload::current();
+    println!("max body size: {} bytes (0 = unlimited)", cfg.max_body_size);
+}
+```
+
+:::note[Why there's no per-route limit]
+Route matching (`Router`, `AppWithState`, the config-driven proxy's `RouteMatcher`) only runs *after* `Request` is fully built — by which point the body has already been read. A per-route cap that's actually enforced *before* buffering would require resolving the route from the request line and headers alone, ahead of reading the body, which is a larger restructuring of the read pipeline across all three protocols. `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` is a single global limit that protects total server memory regardless of which route a request eventually matches; a handler that needs a *stricter* per-route limit can check `request.body.len()` itself and return `AppError::UnprocessableEntity` (or similar) once inside its own logic — the memory for that one request is already spent by then, but no more requests can exceed the global ceiling.
 :::

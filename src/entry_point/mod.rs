@@ -55,6 +55,15 @@ impl Config {
     pub const RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES: &'static str = "RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES";
     pub const RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES_DEFAULT_VALUE: &'static str = "10000";
 
+    /// Maximum accepted request body size in bytes, checked against `Content-Length`
+    /// before any body bytes are read off the socket. `0` (the default) means
+    /// unlimited — this is opt-in, not a default-on behavior change. Requests whose
+    /// declared body exceeds this get `413 Payload Too Large` and the connection is
+    /// closed (not kept alive), since bytes the server chose not to read are still
+    /// queued on the client's side of the socket.
+    pub const RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: &'static str = "RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES";
+    pub const RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES_DEFAULT_VALUE: &'static str = "0";
+
     pub const RWS_CONFIG_TLS_CERT_FILE: &'static str = "RWS_CONFIG_TLS_CERT_FILE";
     pub const RWS_CONFIG_TLS_CERT_FILE_DEFAULT_VALUE: &'static str = "";
 
@@ -348,5 +357,15 @@ pub fn get_request_allocation_size() -> i64 {
 
 
     request_allocation_size
+}
+
+/// Maximum accepted request body size in bytes. `0` means unlimited (the default —
+/// enforcing a cap is opt-in). Read fresh on every call, so `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`
+/// takes effect immediately, the same as [`get_request_allocation_size`].
+pub fn get_max_body_size() -> u64 {
+    env::var(Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES)
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(0)
 }
 

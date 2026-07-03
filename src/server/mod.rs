@@ -105,6 +105,40 @@ impl Server {
         return response;
     }
 
+    /// Builds a `413 Payload Too Large` raw response for a request whose declared
+    /// `Content-Length` exceeds `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`. The connection
+    /// is always closed after this is sent (see [`Server::process`]) — the client's
+    /// unread body bytes are still queued on the socket, so keep-alive framing
+    /// can't be trusted.
+    pub fn payload_too_large_response(message: String) -> Vec<u8> {
+        let error_request = Request {
+            method: METHOD.get.to_string(),
+            request_uri: "".to_string(),
+            http_version: "".to_string(),
+            headers: vec![],
+            body: vec![],
+        };
+
+        let size = message.chars().count() as u64;
+        let content_range = ContentRange {
+            unit: Range::BYTES.to_string(),
+            range: Range { start: 0, end: size },
+            size: size.to_string(),
+            body: Vec::from(message.as_bytes()),
+            content_type: MimeType::TEXT_PLAIN.to_string(),
+        };
+
+        let mut header_list = Header::get_header_list(&error_request);
+        header_list.push(Header { name: Header::_CONNECTION.to_string(), value: "close".to_string() });
+        let error_response: Response = Response::get_response(
+            STATUS_CODE_REASON_PHRASE.n413_payload_too_large,
+            Some(header_list),
+            Some(vec![content_range])
+        );
+
+        Response::generate_response(error_response, error_request)
+    }
+
     pub fn process(mut stream: impl Read + Write + Unpin,
                    connection: ConnectionInfo,
                    app: impl Application) -> Result<(), String> {
@@ -114,18 +148,21 @@ impl Server {
         let client = connection.client.clone();
         let client_addr = SocketAddr::new(IpAddr::from_str(client.ip.as_str()).unwrap(), client.port as u16);
 
+        let max_body_size = crate::entry_point::get_max_body_size();
+
         loop {
             let mut buffer = vec![0; request_allocation_size as usize];
             let boxed_read = stream.read(&mut buffer);
-            if boxed_read.is_err() {
+            let n = match boxed_read {
                 // timeout or client closed — normal end of keep-alive session
-                break;
-            }
-            if boxed_read.unwrap() == 0 {
-                break;
-            }
+                Err(_) => break,
+                Ok(0) => break,
+                Ok(n) => n,
+            };
 
-            let request = match Request::parse(&buffer) {
+            // Trim to the bytes actually read — passing the zero-padded rest of
+            // `buffer` to Request::parse would append trailing NUL bytes to the body.
+            let mut request = match Request::parse(&buffer[..n]) {
                 Ok(r) => r,
                 Err(message) => {
                     let raw_response = Server::bad_request_response(message.clone());
@@ -134,6 +171,32 @@ impl Server {
                     return Err(message);
                 }
             };
+
+            // If Content-Length declares more body than this one read delivered,
+            // keep reading until it's fully received — a single `request_allocation_size`
+            // read is not big enough for bodies larger than that buffer.
+            if let Some(declared_len) = request
+                .get_header(Header::_CONTENT_LENGTH.to_string())
+                .and_then(|h| h.value.trim().parse::<u64>().ok())
+            {
+                if max_body_size > 0 && declared_len > max_body_size {
+                    let raw_response = Server::payload_too_large_response(format!(
+                        "413 Payload Too Large: declared Content-Length {} exceeds the {} byte limit",
+                        declared_len, max_body_size
+                    ));
+                    let boxed_stream = stream.write(raw_response.borrow());
+                    if boxed_stream.is_ok() { stream.flush().unwrap(); }
+                    break;
+                }
+
+                while (request.body.len() as u64) < declared_len {
+                    let mut more = vec![0u8; request_allocation_size as usize];
+                    match stream.read(&mut more) {
+                        Ok(0) | Err(_) => break, // peer closed early; proceed with the short body
+                        Ok(k) => request.body.extend_from_slice(&more[..k]),
+                    }
+                }
+            }
 
             let keep_alive = {
                 let conn_hdr = request.get_header(Header::_CONNECTION.to_string());
@@ -797,13 +860,18 @@ impl Server {
         let request_allocation_size = get_request_allocation_size();
 
         let mut buffer = vec![0u8; request_allocation_size as usize];
-        if let Err(e) = stream.read(&mut buffer).await {
-            let raw = Server::bad_request_response(e.to_string());
-            let _ = stream.write_all(&raw).await;
-            return Ok(());
-        }
+        let n = match stream.read(&mut buffer).await {
+            Ok(n) => n,
+            Err(e) => {
+                let raw = Server::bad_request_response(e.to_string());
+                let _ = stream.write_all(&raw).await;
+                return Ok(());
+            }
+        };
 
-        let request = match Request::parse(&buffer) {
+        // Trim to the bytes actually read — passing the zero-padded rest of
+        // `buffer` to Request::parse would append trailing NUL bytes to the body.
+        let mut request = match Request::parse(&buffer[..n]) {
             Ok(r) => r,
             Err(message) => {
                 let raw = Server::bad_request_response(message);
@@ -811,6 +879,32 @@ impl Server {
                 return Ok(());
             }
         };
+
+        // If Content-Length declares more body than this one read delivered,
+        // keep reading until it's fully received — a single `request_allocation_size`
+        // read is not big enough for bodies larger than that buffer.
+        if let Some(declared_len) = request
+            .get_header(Header::_CONTENT_LENGTH.to_string())
+            .and_then(|h| h.value.trim().parse::<u64>().ok())
+        {
+            let max_body_size = crate::entry_point::get_max_body_size();
+            if max_body_size > 0 && declared_len > max_body_size {
+                let raw = Server::payload_too_large_response(format!(
+                    "413 Payload Too Large: declared Content-Length {} exceeds the {} byte limit",
+                    declared_len, max_body_size
+                ));
+                let _ = stream.write_all(&raw).await;
+                return Ok(());
+            }
+
+            while (request.body.len() as u64) < declared_len {
+                let mut more = vec![0u8; request_allocation_size as usize];
+                match stream.read(&mut more).await {
+                    Ok(0) | Err(_) => break, // peer closed early; proceed with the short body
+                    Ok(k) => request.body.extend_from_slice(&more[..k]),
+                }
+            }
+        }
 
         let connection = ConnectionInfo {
             client: Address {

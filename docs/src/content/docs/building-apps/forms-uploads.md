@@ -179,10 +179,15 @@ See [File / Object Storage](/features/storage/) for the full API, including `S3S
 
 ## Size limits
 
-Request bodies are limited by `request_allocation_size` from `ConnectionInfo`. The default is configured via `RWS_CONFIG_REQUEST_ALLOCATION_SIZE`. Large uploads beyond this limit are rejected at the TCP read stage before any parser is called.
+Two independent knobs apply to request bodies:
+
+- **`RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES`** (default `10000`) — the size of each individual socket read. Bodies larger than this are accumulated across multiple reads automatically as long as the request declares `Content-Length`; this is a buffer-chunking size, not a hard cap on upload size.
+- **`RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`** (default `0`, unlimited) — the actual maximum accepted body size. When set, a request whose declared `Content-Length` exceeds it is rejected with `413 Payload Too Large` **before** any of its body is read off the socket, and the connection is closed rather than kept alive.
+
+For an upload endpoint, set `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` to the largest file you intend to accept; leave it at `0` if uploads are already bounded some other way (e.g. a reverse proxy in front of `rws`).
 
 :::note[Streaming uploads]
-The multipart parser reads the entire body into memory before returning. For very large files, consider streaming the upload to disk at the TCP layer or using an object-storage pre-signed URL workflow and directing the client to upload directly.
+The multipart parser reads the entire body into memory before returning — `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` bounds *how much* memory that can consume, but handlers still see the whole body at once rather than incrementally. For very large files, consider streaming the upload to disk at the TCP layer or using an object-storage pre-signed URL workflow and directing the client to upload directly.
 :::
 
 ## Generating multipart bodies (testing)

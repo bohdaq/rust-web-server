@@ -70,6 +70,23 @@ fn snapshot_from_env_reads_request_allocation_size() {
 }
 
 #[test]
+fn snapshot_from_env_reads_max_body_size() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES", "5242880");
+    let snap = ConfigSnapshot::from_env();
+    std::env::remove_var("RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES");
+    assert_eq!(5242880, snap.max_body_size);
+}
+
+#[test]
+fn snapshot_from_env_max_body_size_defaults_to_unlimited() {
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES");
+    let snap = ConfigSnapshot::from_env();
+    assert_eq!(0, snap.max_body_size);
+}
+
+#[test]
 fn current_returns_a_snapshot() {
     // Verifies that current() doesn't panic and returns a structurally valid value.
     let snap = current();

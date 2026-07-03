@@ -836,6 +836,8 @@ RWS_CONFIG_HTTP_REDIRECT_PORT    if set, listens on this port and sends 301 → 
 RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS   default: 1000
 RWS_CONFIG_RATE_LIMIT_WINDOW_SECS   default: 60
 RWS_CONFIG_LOG_FORMAT            "combined" (default) | "json"
+RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES   default: 10000 (per-read chunk size; bodies larger than this span multiple reads)
+RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES   default: 0 (unlimited); 413 before buffering when exceeded
 ```
 
 ### Typed config binding (requires `macros` feature)
@@ -1258,6 +1260,7 @@ let www_router = Router::new().with_host("www.example.com").get("/", home_handle
 - PKCE (RFC 7636) — `sso` module; `PkceVerifier::new()` + `verifier.challenge()`
 - CSRF double-submit cookie — `csrf` module; constant-time comparison
 - Rate limiting — `RateLimitLayer` or `rate_limit::global().check(ip)`
+- Max request body size — `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`; 413 before buffering, across HTTP/1.1/2/3
 - mTLS — set `RWS_CONFIG_TLS_CLIENT_CA_FILE`
 - IP filtering — `IpFilter::allow([…])` / `.deny([…])`
 - JWT HS256 — `auth` module; constant-time HMAC

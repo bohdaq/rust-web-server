@@ -19,7 +19,8 @@ order.
 | `RWS_CONFIG_IP` | `0.0.0.0` | string | IP address the server binds to. `0.0.0.0` makes the server reachable from any interface, including inside containers and Kubernetes pods. Override to `127.0.0.1` for local-only development. |
 | `RWS_CONFIG_PORT` | `7878` | integer | TCP port the server listens on. |
 | `RWS_CONFIG_THREAD_COUNT` | `200` | integer | Size of the worker thread pool (synchronous HTTP/1.1 build only). |
-| `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` | `10000` | integer | Maximum number of bytes allocated per incoming request read buffer. Increase this if your clients send large request bodies or headers. |
+| `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` | `10000` | integer | Size in bytes of each individual socket read. Bodies larger than this are accumulated across multiple reads automatically (as long as `Content-Length` is present) — this tunes read-syscall chunk size, not the maximum accepted body size. |
+| `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` | `0` | integer | Maximum accepted request body size in bytes. `0` means unlimited. When set, a request whose `Content-Length` exceeds this is rejected with `413 Payload Too Large` before any body bytes are read, and the connection is closed. Applies to HTTP/1.1, HTTP/2, and HTTP/3. |
 
 :::note[Thread count and the async build]
 `RWS_CONFIG_THREAD_COUNT` only applies to the `http1`-only build, which uses a

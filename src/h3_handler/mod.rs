@@ -97,12 +97,17 @@ async fn handle_stream(
         }
     }
 
+    let max_body_size = crate::entry_point::get_max_body_size();
     let mut body: Vec<u8> = Vec::new();
     loop {
         match stream.recv_data().await {
             Ok(Some(mut chunk)) => {
                 let bytes = chunk.copy_to_bytes(chunk.remaining());
                 body.extend_from_slice(&bytes);
+                if max_body_size > 0 && body.len() as u64 > max_body_size {
+                    send_error_response(stream, StatusCode::PAYLOAD_TOO_LARGE).await;
+                    return;
+                }
             }
             Ok(None) => break,
             Err(e) => {
@@ -124,7 +129,7 @@ async fn handle_stream(
         Ok(r) => r,
         Err(message) => {
             eprintln!("App error on H3 stream: {}", message);
-            send_error_response(stream).await;
+            send_error_response(stream, StatusCode::INTERNAL_SERVER_ERROR).await;
             return;
         }
     };
@@ -211,9 +216,10 @@ async fn send_h3_response(
 
 async fn send_error_response(
     mut stream: h3::server::RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>,
+    status: StatusCode,
 ) {
     let response = match http::Response::builder()
-        .status(StatusCode::INTERNAL_SERVER_ERROR)
+        .status(status)
         .body(())
     {
         Ok(r) => r,

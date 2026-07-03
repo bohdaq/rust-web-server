@@ -180,6 +180,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 ### Security
 
 - Per-IP rate limiting — sliding-window `RateLimiter` + `RateLimitLayer`; hot-reloadable
+- Max request body size — `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` rejects oversized bodies with `413` before buffering them, across HTTP/1.1, HTTP/2, and HTTP/3; `0` (default) is unlimited
 - CORS — configurable origins, methods, headers; updated live via `SIGHUP`
 - Auth — `BasicAuthLayer` (HTTP Basic), `JwtLayer` (HS256 Bearer), `ForwardAuthLayer` (delegate to an external auth service, Traefik/nginx `auth_request` style) (`auth` feature); `JwtLayer::rs256`/`::es256` (RS256/ES256 against a static public key, no JWKS needed) (`auth-asymmetric` feature)
 - IP filter — `IpFilter::allow([...])` / `deny([...])`; exact IPv4 and CIDR ranges

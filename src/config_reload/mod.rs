@@ -21,6 +21,7 @@
 //! | Rate-limit thresholds | `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS`, `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS` |
 //! | Log format | `RWS_CONFIG_LOG_FORMAT` |
 //! | Request allocation size | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
+//! | Max body size | `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` |
 //!
 //! # What is NOT hot-reloadable (requires restart)
 //!
@@ -76,6 +77,8 @@ pub struct ConfigSnapshot {
     pub log_format: String,
     /// `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES`
     pub request_allocation_size: i64,
+    /// `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`
+    pub max_body_size: u64,
 }
 
 impl ConfigSnapshot {
@@ -105,6 +108,7 @@ impl ConfigSnapshot {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(*Config::RWS_DEFAULT_REQUEST_ALLOCATION_SIZE_IN_BYTES),
+            max_body_size: crate::entry_point::get_max_body_size(),
         }
     }
 }

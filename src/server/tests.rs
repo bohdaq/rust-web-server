@@ -1475,3 +1475,133 @@ fn address_to_socket_addr_returns_none_for_negative_port() {
     let addr = Address { ip: "127.0.0.1".to_string(), port: -1 };
     assert!(addr.to_socket_addr().is_none());
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Body reading: multi-read accumulation and max_body_size
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Captures the request `Server::process` dispatched to the app, via a shared
+/// `Arc<Mutex<_>>` since `Server::process` takes `app` by value.
+struct BodyCapturingApp {
+    captured: std::sync::Arc<std::sync::Mutex<Option<Request>>>,
+}
+
+impl crate::application::Application for BodyCapturingApp {
+    fn execute(&self, request: &Request, _connection: &crate::server::ConnectionInfo) -> Result<Response, String> {
+        *self.captured.lock().unwrap() = Some(request.clone());
+        let mut response = Response::new();
+        response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        Ok(response)
+    }
+}
+
+fn raw_post_request(body: &[u8]) -> Vec<u8> {
+    let mut req = format!(
+        "POST /echo HTTP/1.1\r\nHost: localhost:7878\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    ).into_bytes();
+    req.extend_from_slice(body);
+    req
+}
+
+#[test]
+fn body_larger_than_a_single_read_is_fully_accumulated() {
+    let _g = crate::test_env::lock();
+    std::env::remove_var(crate::entry_point::Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES);
+
+    let body = vec![b'x'; 5000];
+    let full_request = raw_post_request(&body);
+
+    // Split the raw request into two chunks to simulate the body arriving
+    // across two separate TCP reads — the exact scenario the old single-read
+    // implementation could not handle.
+    let split_at = full_request.len() / 2;
+    let first_chunk = full_request[..split_at].to_vec();
+    let second_chunk = full_request[split_at..].to_vec();
+
+    let mut stream = SequentialMockStream::new(vec![first_chunk, second_chunk]);
+    let captured = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let app = BodyCapturingApp { captured: captured.clone() };
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    let received = captured.lock().unwrap().clone().expect("app was not called");
+    assert_eq!(body, received.body, "body split across two reads should be fully reassembled");
+    assert!(String::from_utf8_lossy(&stream.written).contains("200"));
+}
+
+#[test]
+fn get_request_body_has_no_trailing_padding() {
+    let _g = crate::test_env::lock();
+    std::env::remove_var(crate::entry_point::Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES);
+
+    // make_connection() sizes the read buffer at 16000 bytes; a request far
+    // smaller than that must not pick up trailing zero-byte padding from the
+    // unused rest of the read buffer.
+    let mut stream = SequentialMockStream::new(vec![raw_get_request("/static/test.txt", VERSION.http_1_1, &[])]);
+    let captured = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let app = BodyCapturingApp { captured: captured.clone() };
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    let received = captured.lock().unwrap().clone().expect("app was not called");
+    assert_eq!(Vec::<u8>::new(), received.body, "GET request body should be empty, not zero-padded");
+}
+
+#[test]
+fn max_body_size_rejects_oversized_declared_content_length() {
+    let _g = crate::test_env::lock();
+    std::env::set_var(crate::entry_point::Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES, "10");
+
+    let body = vec![b'x'; 1000];
+    let mut stream = SequentialMockStream::new(vec![raw_post_request(&body)]);
+    let captured = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let app = BodyCapturingApp { captured: captured.clone() };
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    std::env::remove_var(crate::entry_point::Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES);
+
+    assert!(captured.lock().unwrap().is_none(), "app should never be called for a rejected request");
+    let written = String::from_utf8_lossy(&stream.written);
+    assert!(written.contains("413"), "expected a 413 response, got:\n{}", written);
+    assert!(written.contains("Connection: close"), "connection must close after rejecting an oversized body");
+}
+
+#[test]
+fn max_body_size_allows_requests_within_the_limit() {
+    let _g = crate::test_env::lock();
+    std::env::set_var(crate::entry_point::Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES, "10000");
+
+    let body = vec![b'x'; 500];
+    let mut stream = SequentialMockStream::new(vec![raw_post_request(&body)]);
+    let captured = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let app = BodyCapturingApp { captured: captured.clone() };
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    std::env::remove_var(crate::entry_point::Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES);
+
+    let received = captured.lock().unwrap().clone().expect("app should have been called");
+    assert_eq!(body, received.body);
+    assert!(String::from_utf8_lossy(&stream.written).contains("200"));
+}
+
+#[test]
+fn max_body_size_zero_means_unlimited() {
+    let _g = crate::test_env::lock();
+    std::env::set_var(crate::entry_point::Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES, "0");
+
+    let body = vec![b'x'; 20000];
+    let full_request = raw_post_request(&body);
+    let split_at = full_request.len() / 2;
+    let mut stream = SequentialMockStream::new(vec![
+        full_request[..split_at].to_vec(),
+        full_request[split_at..].to_vec(),
+    ]);
+    let captured = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let app = BodyCapturingApp { captured: captured.clone() };
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    std::env::remove_var(crate::entry_point::Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES);
+
+    let received = captured.lock().unwrap().clone().expect("app should have been called");
+    assert_eq!(body, received.body);
+}

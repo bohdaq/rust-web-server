@@ -83,6 +83,7 @@ async fn handle_stream(
         }
     }
 
+    let max_body_size = crate::entry_point::get_max_body_size();
     let mut body_stream = request.into_body();
     let mut body: Vec<u8> = Vec::new();
     while let Some(chunk) = body_stream.data().await {
@@ -91,6 +92,10 @@ async fn handle_stream(
                 let len = data.len();
                 body.extend_from_slice(&data);
                 let _ = body_stream.flow_control().release_capacity(len);
+                if max_body_size > 0 && body.len() as u64 > max_body_size {
+                    send_error_response(respond, StatusCode::PAYLOAD_TOO_LARGE);
+                    return;
+                }
             }
             Err(e) => {
                 eprintln!("H2 body read error: {}", e);
