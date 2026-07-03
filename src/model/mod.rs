@@ -34,6 +34,7 @@ pub use pool::{DbPool, DbTransaction};
 pub use query::{Order, QueryBuilder};
 pub use relation::{BelongsTo, HasMany, HasOne};
 pub use repository::{ModelRepository, Repository};
+pub use crate::pagination::{CursorPage, Page};
 
 // ── Value ─────────────────────────────────────────────────────────────────────
 

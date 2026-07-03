@@ -8,7 +8,7 @@
 #[cfg(all(test, feature = "model-sqlite"))]
 mod model_tests {
     use crate::model::{
-        DbPool, HasMany, Model, ModelRow, Order, QueryBuilder, Repository, Value,
+        CursorPage, DbPool, HasMany, Model, ModelRow, Order, Page, QueryBuilder, Repository, Value,
     };
     use crate::model::repository::ModelRepository;
 
@@ -425,5 +425,145 @@ mod model_tests {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         format!("/tmp/rws_model_test_migrations_{}", n)
+    }
+
+    // ── Pagination ────────────────────────────────────────────────────────────
+
+    async fn seed_users(pool: &DbPool, count: i64, age: impl Fn(i64) -> i32) {
+        for i in 1..=count {
+            pool.execute(
+                "INSERT INTO users (name, email, age) VALUES (?, ?, ?)",
+                &[
+                    Value::Text(format!("User{}", i)),
+                    Value::Text(format!("u{}@t.com", i)),
+                    Value::Int(age(i) as i64),
+                ],
+            )
+            .await
+            .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_14_query_builder_paginate_returns_pages_in_order() {
+        let pool = test_pool().await;
+        seed_users(&pool, 25, |_| 20).await;
+
+        let page1: Page<User> = QueryBuilder::new(&pool)
+            .order_by("id", Order::Asc)
+            .paginate(1, 10).await.expect("paginate page 1");
+        assert_eq!(1, page1.page);
+        assert_eq!(10, page1.per_page);
+        assert_eq!(25, page1.total_items);
+        assert_eq!(3, page1.total_pages);
+        assert_eq!(10, page1.items.len());
+        assert_eq!("User1", page1.items[0].name);
+        assert_eq!("User10", page1.items[9].name);
+        assert!(page1.has_next());
+        assert!(!page1.has_prev());
+
+        let page2: Page<User> = QueryBuilder::new(&pool)
+            .order_by("id", Order::Asc)
+            .paginate(2, 10).await.expect("paginate page 2");
+        assert_eq!(10, page2.items.len());
+        assert_eq!("User11", page2.items[0].name);
+        assert!(page2.has_next());
+        assert!(page2.has_prev());
+
+        let page3: Page<User> = QueryBuilder::new(&pool)
+            .order_by("id", Order::Asc)
+            .paginate(3, 10).await.expect("paginate page 3");
+        assert_eq!(5, page3.items.len(), "last page should have the 5 remaining rows");
+        assert_eq!("User25", page3.items[4].name);
+        assert!(!page3.has_next());
+        assert!(page3.has_prev());
+    }
+
+    #[tokio::test]
+    async fn test_14b_query_builder_paginate_respects_filters_in_both_queries() {
+        let pool = test_pool().await;
+        seed_users(&pool, 10, |i| if i <= 5 { 20 } else { 30 }).await;
+
+        // Only the 5 rows with age = 30 should be counted and paginated over,
+        // not all 10 — proves the COUNT(*) uses the same filters as the SELECT.
+        let page: Page<User> = QueryBuilder::new(&pool)
+            .filter("age = ?", vec![Value::Int(30)])
+            .order_by("id", Order::Asc)
+            .paginate(1, 3).await.expect("paginate filtered");
+
+        assert_eq!(5, page.total_items);
+        assert_eq!(2, page.total_pages);
+        assert_eq!(3, page.items.len());
+        assert!(page.items.iter().all(|u| u.age == Some(30)));
+    }
+
+    #[tokio::test]
+    async fn test_14c_query_builder_paginate_empty_table_returns_empty_page() {
+        let pool = test_pool().await;
+        let page: Page<User> = QueryBuilder::new(&pool).paginate(1, 10).await.expect("paginate empty");
+        assert!(page.items.is_empty());
+        assert_eq!(0, page.total_items);
+        assert_eq!(0, page.total_pages);
+        assert!(!page.has_next());
+        assert!(!page.has_prev());
+    }
+
+    #[tokio::test]
+    async fn test_15_query_builder_paginate_after_forward_iterates_every_row_exactly_once() {
+        let pool = test_pool().await;
+        seed_users(&pool, 25, |_| 20).await;
+
+        let mut cursor: Option<String> = None;
+        let mut collected: Vec<String> = Vec::new();
+        loop {
+            let page: CursorPage<User> = QueryBuilder::new(&pool)
+                .paginate_after(cursor.as_deref(), 10).await.expect("paginate_after");
+            collected.extend(page.items.iter().map(|u| u.name.clone()));
+            if !page.has_next() {
+                break;
+            }
+            cursor = page.next_cursor.clone();
+        }
+
+        assert_eq!(25, collected.len());
+        assert_eq!("User1", collected[0], "keyset pagination should order by primary key ascending");
+        assert_eq!("User25", collected[24]);
+        // No duplicates and no gaps.
+        let mut sorted = collected.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(25, sorted.len());
+    }
+
+    #[tokio::test]
+    async fn test_15b_query_builder_paginate_after_last_page_has_no_next_cursor() {
+        let pool = test_pool().await;
+        seed_users(&pool, 5, |_| 20).await;
+
+        let page: CursorPage<User> = QueryBuilder::new(&pool)
+            .paginate_after(None, 10).await.expect("paginate_after single page");
+        assert_eq!(5, page.items.len());
+        assert!(!page.has_next());
+        assert_eq!(None, page.next_cursor);
+    }
+
+    #[tokio::test]
+    async fn test_15c_query_builder_paginate_after_rejects_non_numeric_cursor() {
+        let pool = test_pool().await;
+        let result = QueryBuilder::<User>::new(&pool).paginate_after(Some("not-a-number"), 10).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_15d_query_builder_paginate_after_respects_filters() {
+        let pool = test_pool().await;
+        seed_users(&pool, 10, |i| if i <= 5 { 20 } else { 30 }).await;
+
+        let page: CursorPage<User> = QueryBuilder::new(&pool)
+            .filter("age = ?", vec![Value::Int(30)])
+            .paginate_after(None, 10).await.expect("paginate_after filtered");
+
+        assert_eq!(5, page.items.len());
+        assert!(page.items.iter().all(|u| u.age == Some(30)));
     }
 }

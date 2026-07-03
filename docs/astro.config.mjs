@@ -119,6 +119,7 @@ export default defineConfig({
             { label: '#[derive(Model)]',     link: '/database/model-derive/' },
             { label: 'Repository',           link: '/database/repository/' },
             { label: 'Query Builder',        link: '/database/query-builder/' },
+            { label: 'Pagination',           link: '/database/pagination/' },
             { label: 'Raw SQL',              link: '/database/raw-sql/' },
             { label: 'Transactions',         link: '/database/transactions/' },
             { label: 'Migrations',           link: '/database/migrations/' },

@@ -65,7 +65,7 @@ let alphabetical = User::query(&pool)
 
 ## Pagination
 
-`.limit(n)` and `.offset(n)` map directly to SQL `LIMIT` and `OFFSET`.
+`.limit(n)` and `.offset(n)` map directly to SQL `LIMIT` and `OFFSET`, for full manual control:
 
 ```rust
 let page = 2u64;
@@ -77,6 +77,8 @@ let users = User::query(&pool)
     .offset((page - 1) * page_size)
     .fetch_all().await?;
 ```
+
+For most list endpoints, `.paginate(page, per_page)` (offset-based, with total counts) and `.paginate_after(cursor, per_page)` (cursor/keyset-based, for large tables) do the `COUNT(*)` + `LIMIT`/`OFFSET` bookkeeping above for you and return a `Page<T>`/`CursorPage<T>` — see [Pagination](/database/pagination/) for both, plus a built-in `Link` response header builder.
 
 ## Fetching results
 
@@ -135,33 +137,32 @@ You never need to pick a style; write `?` in raw `.filter()` expressions and the
 ## Complete example: paginated list endpoint
 
 ```rust
-use rust_web_server::model::{DbPool, Order};
+use rust_web_server::header::Header;
+use rust_web_server::model::{DbPool, Order, Page};
 use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
 use std::sync::Arc;
 
 async fn list_users(pool: Arc<DbPool>, page: u64, per_page: u64) -> Response {
     let per_page = per_page.min(100);
 
-    let total = User::query(&pool)
-        .where_eq("active", true)
-        .count().await
-        .unwrap_or(0);
-
-    let users = User::query(&pool)
+    let page: Page<User> = User::query(&pool)
         .where_eq("active", true)
         .order_by("created_at", Order::Desc)
-        .limit(per_page)
-        .offset((page - 1) * per_page)
-        .fetch_all().await
-        .unwrap_or_default();
+        .paginate(page, per_page).await
+        .unwrap_or_else(|_| Page::new(vec![], page, per_page, 0));
 
     let mut r = Response::new();
     r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-    // serialize `users` and `total` into the response body
+    if let Some(link) = page.link_header("https://api.example.com/users") {
+        r.headers.push(Header { name: "Link".to_string(), value: link });
+    }
+    // serialize `page.items`, `page.total_items`, `page.total_pages` into the response body
     r
 }
 ```
+
+See [Pagination](/database/pagination/) for `.paginate_after()` (cursor/keyset pagination) and more on the `Link` header.
 
 :::note[Zero rows is not an error]
 `fetch_all().await` returns an empty `Vec` when no rows match — it only returns `Err` on a real database error. Similarly, `fetch_one().await` returns `Ok(None)` for no match.

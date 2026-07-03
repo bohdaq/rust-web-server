@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use super::pool::DbPool;
 use super::repository::{extract_count, placeholder};
 use super::{DbError, Model, ToColumn, Value};
+use crate::pagination::{CursorPage, Page};
 
 // ── Order ─────────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,23 @@ pub struct QueryBuilder<'a, T: Model> {
     limit: Option<u64>,
     offset: Option<u64>,
     _phantom: PhantomData<T>,
+}
+
+// Implemented by hand rather than `#[derive(Clone)]`: the derive macro adds a
+// `T: Clone` bound even though `T` only appears behind `PhantomData`, which
+// would force every `QueryBuilder<T>` user's model type to be `Clone` just to
+// call `.paginate()`.
+impl<'a, T: Model> Clone for QueryBuilder<'a, T> {
+    fn clone(&self) -> Self {
+        QueryBuilder {
+            pool: self.pool,
+            filters: self.filters.clone(),
+            order: self.order.clone(),
+            limit: self.limit,
+            offset: self.offset,
+            _phantom: PhantomData,
+        }
+    }
 }
 
 impl<'a, T: Model> QueryBuilder<'a, T> {
@@ -158,6 +176,74 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
         );
         self.pool.execute(&sql, &params).await?;
         Ok(())
+    }
+
+    /// Offset-paginated fetch: runs a `COUNT(*)` (with the same filters, no
+    /// limit/offset) and a `SELECT … LIMIT … OFFSET …`, and wraps both into a
+    /// [`Page`]. `page` is 1-based; both `page` and `per_page` are clamped to
+    /// a minimum of `1`. Overrides any `.limit()`/`.offset()` set earlier in
+    /// the chain — `page`/`per_page` are authoritative.
+    ///
+    /// Two queries, not one — if you're paginating a very large, frequently
+    /// appended-to table and don't need `total_pages`, [`Self::paginate_after`]
+    /// (keyset pagination) needs only one.
+    pub async fn paginate(self, page: u64, per_page: u64) -> Result<Page<T>, DbError> {
+        let page = page.max(1);
+        let per_page = per_page.max(1);
+        let offset = (page - 1) * per_page;
+
+        let total_items = self.clone().count().await? as u64;
+        let items = self.limit(per_page).offset(offset).fetch_all().await?;
+
+        Ok(Page::new(items, page, per_page, total_items))
+    }
+
+    /// Cursor (keyset) paginated fetch: orders by the primary key ascending,
+    /// fetches `per_page + 1` rows to cheaply detect whether there's a next
+    /// page, and returns a [`CursorPage`] whose `next_cursor` is the last
+    /// returned row's primary key (as a string) — pass it back as `cursor` to
+    /// get the next page. `cursor: None` fetches the first page.
+    ///
+    /// A single query, unlike [`Self::paginate`] — no `COUNT(*)`, and no
+    /// `OFFSET` to skip over on every subsequent page, which is what makes
+    /// keyset pagination scale on large tables where offset pagination gets
+    /// slower page by page. The tradeoff: no `total_items`/`total_pages`, and
+    /// only forward iteration (no jumping to an arbitrary page).
+    ///
+    /// Overrides any `.order_by()` set earlier in the chain — keyset
+    /// pagination requires ordering by the cursor column. Requires the
+    /// primary key to be numeric (parsed as `i64`); returns `Err` if `cursor`
+    /// isn't a valid integer.
+    pub async fn paginate_after(self, cursor: Option<&str>, per_page: u64) -> Result<CursorPage<T>, DbError> {
+        let per_page = per_page.max(1);
+        let pk_col = T::primary_key_name();
+
+        let mut builder = self;
+        if let Some(cursor_str) = cursor {
+            let cursor_val: i64 = cursor_str
+                .parse()
+                .map_err(|_| DbError::new(format!("invalid cursor '{}': expected an integer primary key", cursor_str)))?;
+            builder = builder.filter(&format!("{} > __placeholder__", pk_col), vec![Value::Int(cursor_val)]);
+        }
+
+        let mut rows = builder.order_by(pk_col, Order::Asc).limit(per_page + 1).fetch_all().await?;
+
+        let has_more = rows.len() as u64 > per_page;
+        if has_more {
+            rows.truncate(per_page as usize);
+        }
+
+        let next_cursor = if has_more {
+            rows.last().map(|item| match item.primary_key_value() {
+                Value::Int(n) => n.to_string(),
+                Value::Text(s) => s,
+                other => format!("{:?}", other),
+            })
+        } else {
+            None
+        };
+
+        Ok(CursorPage { items: rows, next_cursor })
     }
 }
 

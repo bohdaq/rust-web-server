@@ -239,6 +239,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 
 - `#[derive(Model)]` — maps structs to tables; async `Repository<T, i64>` for zero-boilerplate CRUD (all methods `.await`)
 - `QueryBuilder<T>` — `.where_eq()`, `.order_by()`, `.limit()`, `.fetch_all().await`, `.count().await`
+- Pagination — `.paginate(page, per_page)` → `Page<T>` (with `total_pages`) or `.paginate_after(cursor, per_page)` → `CursorPage<T>` (keyset, for large tables); both build an RFC 8288 `Link` response header
 - Migrations — `pool.migrate("migrations/").await` runs `*.sql` files in lexicographic order, idempotent
 - Relations — `HasMany<T>`, `HasOne<O>`, `BelongsTo<O>`; explicit async load, no hidden N+1
 - Backends — SQLite (`model-sqlite`), PostgreSQL (`model-postgres`), MySQL (`model-mysql`); all imply `http2` (tokio runtime)

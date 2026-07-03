@@ -159,7 +159,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `DbPool` / `DbTransaction` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`; implies `http2`) | Async connection pool backed by `sqlx`. `DbPool::new(DbConfig).await` or `DbPool::from_env().await`. All SQL operations are `async fn`: `execute`, `query_rows`, `query::<T>`, `begin`, `transaction(closure)`, `migrate`, `migration_status`. **SQLite in-memory shortcut:** `DbPool::memory().await` creates a single-connection pool backed by `":memory:"` — each call is an isolated empty database, ideal for tests. Cheap to clone (Arc-wrapped). |
 | `DbConfig` | `model` | Database configuration. `DbConfig::from_env()` reads `RWS_DB_*` env vars; construct manually with `DbConfig { host, port, user, password, database, pool_size }`. |
 | `ModelRepository<T, i64>` | `model` | Async JPA-style CRUD: `find_by_id`, `find_all`, `save` (INSERT when pk==0, UPDATE otherwise), `save_all`, `delete_by_id`, `delete_all_by_id`, `count`, `exists_by_id` — all `async fn`. Obtain via `T::repository(&pool)` when using `#[derive(Model)]`. |
-| `QueryBuilder<T>` | `model` | Async fluent SQL builder: `where_eq`, `filter`, `order_by`, `limit`, `offset`, then `fetch_all`, `fetch_one`, `count`, `update`, `delete` (all `.await`). Obtain via `T::query(&pool)` when using `#[derive(Model)]`. |
+| `QueryBuilder<T>` | `model` | Async fluent SQL builder: `where_eq`, `filter`, `order_by`, `limit`, `offset`, then `fetch_all`, `fetch_one`, `count`, `update`, `delete`, `paginate`, `paginate_after` (all `.await`). Obtain via `T::query(&pool)` when using `#[derive(Model)]`. |
+| `Page<T>` | `pagination` (re-exported from `model`) | Offset-paginated result: `items`, `page`, `per_page`, `total_items`, `total_pages`, plus `has_next`/`has_prev`/`next_page`/`prev_page`, `.map(f)`, and `.link_header(base_url)` (RFC 8288 `Link` header with `rel="first"/"prev"/"next"/"last"`). Returned by `QueryBuilder::paginate(page, per_page)`; not tied to the model layer — construct directly with `Page::new(items, page, per_page, total_items)`. |
+| `CursorPage<T>` | `pagination` (re-exported from `model`) | Keyset-paginated result: `items`, `next_cursor: Option<String>`, plus `has_next`, `.map(f)`, and `.link_header(base_url, cursor_param)` (single `rel="next"` entry). Returned by `QueryBuilder::paginate_after(cursor, per_page)`, which orders by the primary key ascending and fetches `per_page + 1` rows to detect a next page without a separate `COUNT(*)`. |
 | `#[derive(Model)]` | `model` (requires `macros` + a model feature) | Proc-macro that maps a struct to a DB table. Attributes: `#[table(name = "…")]` struct-level override; `#[primary_key(auto_increment)]`; `#[column(name = "…")]`; `#[ignore]`. Generates `Model` impl plus `T::repository(&pool)` and `T::query(&pool)` helpers. |
 | `HasMany<T>` / `HasOne<T>` / `BelongsTo<O>` | `model` | Async explicit-load relationship helpers. `HasMany::new(owner_pk, fk_col).load(&pool).await` returns `Vec<T>`; no hidden N+1 queries. |
 | `Client` / `RequestBuilder` / `Response` | `http_client` | Synchronous outbound HTTP/1.1 client. `Client::new().get(url).header(k,v).timeout_ms(ms).send()` returns `Response`. Follows redirects automatically. Plain HTTP works in all builds; HTTPS requires `http-client` or `http2` feature. |
@@ -3784,3 +3786,48 @@ fn my_handler() {
 :::note[Why there's no per-route limit]
 Route matching (`Router`, `AppWithState`, the config-driven proxy's `RouteMatcher`) only runs *after* `Request` is fully built — by which point the body has already been read. A per-route cap that's actually enforced *before* buffering would require resolving the route from the request line and headers alone, ahead of reading the body, which is a larger restructuring of the read pipeline across all three protocols. `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` is a single global limit that protects total server memory regardless of which route a request eventually matches; a handler that needs a *stricter* per-route limit can check `request.body.len()` itself and return `AppError::UnprocessableEntity` (or similar) once inside its own logic — the memory for that one request is already spent by then, but no more requests can exceed the global ceiling.
 :::
+
+---
+
+### 73. Pagination — `Page<T>`, `CursorPage<T>`, and a `Link` header builder
+
+`QueryBuilder::paginate(page, per_page)` replaces the hand-rolled "run a `COUNT(*)`, then a `SELECT … LIMIT … OFFSET …`, then wire up the two results" every list endpoint used to reimplement:
+
+```rust
+use rust_web_server::model::{Order, Page};
+
+let page: Page<User> = User::query(&pool)
+    .where_eq("active", true)
+    .order_by("created_at", Order::Desc)
+    .paginate(2, 20).await?;
+
+// page.items: Vec<User>, page.total_items, page.total_pages, page.has_next(), page.has_prev()
+```
+
+For large or high-write tables where offset pagination's per-page scan cost becomes a problem, `QueryBuilder::paginate_after(cursor, per_page)` does keyset pagination instead — orders by the primary key ascending, fetches `per_page + 1` rows in one query to detect a next page, and returns a `CursorPage<T>` with no `COUNT(*)` and no `total_pages` (keyset pagination can't jump to an arbitrary page, only iterate forward):
+
+```rust
+use rust_web_server::model::CursorPage;
+
+let mut cursor: Option<String> = None;
+loop {
+    let page: CursorPage<User> = User::query(&pool).paginate_after(cursor.as_deref(), 100).await?;
+    // process page.items ...
+    if !page.has_next() { break; }
+    cursor = page.next_cursor.clone();
+}
+```
+
+Both result types build an RFC 8288 `Link` response header:
+
+```rust
+use rust_web_server::header::Header;
+
+if let Some(link) = page.link_header("https://api.example.com/users") {
+    response.headers.push(Header { name: "Link".to_string(), value: link });
+}
+// Link: <...?page=1&per_page=20>; rel="first", <...?page=1&per_page=20>; rel="prev",
+//       <...?page=3&per_page=20>; rel="next", <...?page=5&per_page=20>; rel="last"
+```
+
+`Page<T>`/`CursorPage<T>` live in `src/pagination/mod.rs`, a standalone module with no feature gate and no dependency on the model layer — `Page::new(items, page, per_page, total_items)` builds one directly if your data source is a `Vec` or an external API rather than `QueryBuilder`. `.map(f)` transforms `items` (e.g. a DB row struct into an API DTO) while leaving pagination metadata untouched.

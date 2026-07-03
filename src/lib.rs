@@ -105,6 +105,7 @@ pub mod server;
 pub mod symbol;
 pub mod thread_pool;
 pub mod url;
+pub mod pagination;
 pub mod proxy;
 pub mod rewrite;
 pub mod scheduler;

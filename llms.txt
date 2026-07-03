@@ -743,9 +743,25 @@ pool.transaction(|mut tx| async move {
     tx.execute("INSERT INTO users (name, email) VALUES (?, ?)", &[...]).await?;
     tx.commit().await
 }).await?;
+
+// Pagination — offset-based (Page<T>, with total_items/total_pages):
+use rust_web_server::model::Page;
+let page: Page<User> = User::query(&pool).order_by("id", Order::Asc).paginate(2, 20).await?;
+// page.items, page.total_items, page.total_pages, page.has_next(), page.has_prev()
+
+// Pagination — cursor/keyset-based (CursorPage<T>, no COUNT(*), forward-only):
+use rust_web_server::model::CursorPage;
+let page: CursorPage<User> = User::query(&pool).paginate_after(None, 20).await?;
+let next: CursorPage<User> = User::query(&pool).paginate_after(page.next_cursor.as_deref(), 20).await?;
+
+// Both build an RFC 8288 Link header:
+let link = page.link_header("https://api.example.com/users", "cursor"); // CursorPage
+// Page::link_header(base_url) instead builds rel="first"/"prev"/"next"/"last"
 ```
 
 `DbConfig::from_env()` reads `RWS_DB_HOST`, `RWS_DB_PORT`, `RWS_DB_USER`, `RWS_DB_PASSWORD`, `RWS_DB_DATABASE`, `RWS_DB_POOL_SIZE`.
+
+`Page<T>`/`CursorPage<T>` live in `src/pagination/mod.rs` — no feature gate, no dependency on the model layer; construct one directly with `Page::new(items, page, per_page, total_items)` if your data source isn't `QueryBuilder`.
 
 **SQLite in-memory pool (model-sqlite only):**
 
@@ -1327,6 +1343,7 @@ src/model/              — Async ORM (sqlx): DbPool, DbTransaction, Model, Repo
 src/null/               — NullApplication (returns 404 for everything)
 src/openapi/            — OpenApiConfig, build_spec, swagger_ui_html (openapi feature)
 src/otel/               — OtelLayer, setup, span export
+src/pagination/         — Page<T>, CursorPage<T>, RFC 8288 Link header builder (no feature gate)
 src/prelude/            — Re-exports of the most commonly used types
 src/proxy/              — ReverseProxy, H2ReverseProxy, GrpcProxy, ConnPool (pool.rs)
 src/proxy_config/       — Config-driven proxy: ProxyConfig, ConfigDrivenApp, StaticAdapter
