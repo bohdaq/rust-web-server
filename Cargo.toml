@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.58.0"
+version = "17.59.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
@@ -45,6 +45,7 @@ storage-local = []  # LocalStorage; no new deps
 storage-s3    = ["dep:hmac", "dep:sha2", "http-client"]  # S3Storage; AWS SigV4 via hmac+sha2, no AWS SDK
 openapi = []  # AppWithState::openapi() / AsyncAppWithState::openapi(); no new deps
 webhook = ["dep:hmac", "dep:sha2"]  # verify_webhook_signature: GitHub, Shopify, Stripe
+rewrite-regex = ["dep:regex"]  # RewriteLayer::request_uri_regex_rewrite
 
 [dependencies]
 ctrlc = { version = "3", optional = true }
@@ -78,3 +79,4 @@ sqlx = { version = "0.8", default-features = false, optional = true }
 argon2    = { version = "0.5", features = ["password-hash"], optional = true }
 rand_core = { version = "0.6", features = ["getrandom"], optional = true }
 aes-gcm   = { version = "0.10", optional = true }
+regex     = { version = "1", optional = true }

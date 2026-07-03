@@ -119,7 +119,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `#[derive(Validate)]` | `macros` (proc-macro) | Derive `Validate` from `#[validate(...)]` field annotations. Validators: `length(min,max)`, `range(min,max)`, `email`, `required`, `url`. Requires `features = ["macros"]`. |
 | `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. Reuses idle TCP connections via the built-in `ConnPool`. SSE (`text/event-stream`), chunked AI token streams, and large downloads (`Content-Length > 1 MB`) are forwarded without buffering via `Response::stream_pipe`. |
 | `ConnPool` | `proxy` | Per-backend HTTP/1.1 connection pool. `ConnPool::new(max_idle, idle_timeout)` or `ConnPool::new_default()`. Share across proxy instances with `Arc<ConnPool>` via `ReverseProxy::with_pool()`. |
-| `RewriteLayer` | `rewrite` | Composable request/response rewriting middleware: request header add/replace/remove, URI set/strip-prefix/add-prefix, response header add/replace/remove, status override, body byte find-and-replace. |
+| `RewriteLayer` | `rewrite` | Composable request/response rewriting middleware: request header add/replace/remove, URI set/strip-prefix/add-prefix, response header add/replace/remove, status override, body byte find-and-replace. `.request_uri_regex_rewrite(pattern, replacement)` (requires `features = ["rewrite-regex"]`) rewrites the URI by regex, nginx `rewrite`-directive style, with `$1`/`${name}` capture expansion; returns `Result<Self, regex::Error>`. |
 | `LoadBalancing` | `proxy` | Enum selecting the balancing strategy (`RoundRobin`). Passed to `ReverseProxy::strategy()`. |
 | `MetricsLayer` | `metrics` | Middleware that records per-route request counts and latency histograms. Adds `rws_route_requests_total{method,path,status}` and `rws_route_duration_seconds{method,path}` to `/metrics`. |
 | `CacheLayer` | `cache` | In-memory TTL response cache middleware for GET requests. Builder: `.ttl(secs)`, `.vary_by_header(name)`. Injects `Age` on hits; respects `Cache-Control: no-store/private`. |
@@ -1938,6 +1938,17 @@ let app = App::new()
 ```
 
 Rules are applied in the order they are registered. The incoming `Request` is cloned before modification — the original is never mutated, so other middleware layers in the stack see the unmodified request.
+
+**Regex URI rewriting** (requires `features = ["rewrite-regex"]`) — for rewrites that depend on part of the path (versioning, locale prefixes, ID extraction) rather than a fixed string:
+
+```rust
+use rust_web_server::rewrite::RewriteLayer;
+
+let layer = RewriteLayer::new()
+    .request_uri_regex_rewrite(r"^/api/v\d+/(.*)$", "/$1")?;
+```
+
+If the pattern matches anywhere in the URI, the **entire** URI is replaced by `replacement` with capture groups expanded — `$1`, `$2`, ... for numbered groups, `${name}` for named groups (`(?P<name>...)`) — the same semantics as nginx's `rewrite` directive. If the pattern doesn't match, the URI is left unchanged. `request_uri_regex_rewrite` returns `Result<Self, regex::Error>` (invalid patterns are the one way this builder can fail), so chain it with `?` rather than the other infallible builder methods.
 
 ---
 

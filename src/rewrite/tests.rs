@@ -151,6 +151,73 @@ fn request_uri_add_prefix_prepends() {
     assert_eq!("/v2/users", spy.captured().request_uri);
 }
 
+// ── Regex URI rewriting (rewrite-regex feature) ────────────────────────────────
+
+#[cfg(feature = "rewrite-regex")]
+#[test]
+fn request_uri_regex_rewrite_expands_numbered_capture() {
+    let spy = Spy::new(ok(b""));
+    let layer = RewriteLayer::new()
+        .request_uri_regex_rewrite(r"^/api/v\d+/(.*)$", "/$1")
+        .unwrap();
+    layer.handle(&get("/api/v1/users/42"), &conn(), &spy).unwrap();
+    assert_eq!("/users/42", spy.captured().request_uri);
+}
+
+#[cfg(feature = "rewrite-regex")]
+#[test]
+fn request_uri_regex_rewrite_expands_named_capture() {
+    let spy = Spy::new(ok(b""));
+    let layer = RewriteLayer::new()
+        .request_uri_regex_rewrite(r"^/(?P<locale>[a-z]{2})/(?P<rest>.*)$", "/$rest?locale=$locale")
+        .unwrap();
+    layer.handle(&get("/fr/products"), &conn(), &spy).unwrap();
+    assert_eq!("/products?locale=fr", spy.captured().request_uri);
+}
+
+#[cfg(feature = "rewrite-regex")]
+#[test]
+fn request_uri_regex_rewrite_noop_when_no_match() {
+    let spy = Spy::new(ok(b""));
+    let layer = RewriteLayer::new()
+        .request_uri_regex_rewrite(r"^/api/v\d+/(.*)$", "/$1")
+        .unwrap();
+    layer.handle(&get("/static/logo.png"), &conn(), &spy).unwrap();
+    assert_eq!("/static/logo.png", spy.captured().request_uri);
+}
+
+#[cfg(feature = "rewrite-regex")]
+#[test]
+fn request_uri_regex_rewrite_matches_mid_string() {
+    let spy = Spy::new(ok(b""));
+    // No anchors: the pattern matches anywhere, and the whole URI is still
+    // replaced by the (fully static, in this case) expansion.
+    let layer = RewriteLayer::new()
+        .request_uri_regex_rewrite(r"old", "new")
+        .unwrap();
+    layer.handle(&get("/path/old/thing"), &conn(), &spy).unwrap();
+    assert_eq!("new", spy.captured().request_uri);
+}
+
+#[cfg(feature = "rewrite-regex")]
+#[test]
+fn request_uri_regex_rewrite_invalid_pattern_returns_err() {
+    let result = RewriteLayer::new().request_uri_regex_rewrite("(unclosed", "/x");
+    assert!(result.is_err());
+}
+
+#[cfg(feature = "rewrite-regex")]
+#[test]
+fn request_uri_regex_rewrite_composes_with_other_rules() {
+    let spy = Spy::new(ok(b""));
+    let layer = RewriteLayer::new()
+        .request_uri_regex_rewrite(r"^/api/v\d+/(.*)$", "/$1")
+        .unwrap()
+        .request_uri_add_prefix("/internal");
+    layer.handle(&get("/api/v2/orders"), &conn(), &spy).unwrap();
+    assert_eq!("/internal/orders", spy.captured().request_uri);
+}
+
 // ── Response rules ────────────────────────────────────────────────────────────
 
 #[test]

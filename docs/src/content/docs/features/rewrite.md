@@ -73,6 +73,29 @@ Prepend a prefix to the request URI.
 .request_uri_add_prefix("/internal")
 ```
 
+### `.request_uri_regex_rewrite(pattern, replacement)` (requires `rewrite-regex` feature)
+
+The operations above cover fixed strings. When the rewrite depends on part of the incoming path — API versioning, locale prefixes, extracting an ID — match the URI against a regex and rewrite it using the match's capture groups. Semantics are the same as nginx's `rewrite` directive: if `pattern` matches anywhere in the URI, the **entire** URI is replaced by `replacement` with capture groups expanded (`$1`, `$2`, ... for numbered groups, `${name}` for named groups); if it doesn't match, the URI is left unchanged.
+
+```toml
+# Cargo.toml
+rust-web-server = { version = "17", features = ["rewrite-regex"] }
+```
+
+```rust
+use rust_web_server::rewrite::RewriteLayer;
+
+// /api/v1/users/42 → /users/42
+let layer = RewriteLayer::new()
+    .request_uri_regex_rewrite(r"^/api/v\d+/(.*)$", "/$1")?;
+
+// Named captures: /fr/products → /products?locale=fr
+let layer = RewriteLayer::new()
+    .request_uri_regex_rewrite(r"^/(?P<locale>[a-z]{2})/(?P<rest>.*)$", "/$rest?locale=$locale")?;
+```
+
+Unlike the other `.request_*`/`.response_*` builders, this one returns `Result<Self, regex::Error>` — an invalid pattern is a compile-time-unchecked but very real failure mode, so chain it with `?` rather than treating it as infallible.
+
 ## Response rewriting
 
 Applied after the handler returns, before the response is sent to the client.

@@ -18,6 +18,36 @@
 //!         .response_header_set("Cache-Control", "no-store")
 //!         .response_body_replace("http://staging.internal", "https://example.com"));
 //! ```
+//!
+//! # Regex URI rewriting (`rewrite-regex` feature)
+//!
+//! The prefix/set operations above cover fixed strings. When the rewrite
+//! depends on part of the incoming path — versioning schemes, locale
+//! prefixes, ID extraction — [`RewriteLayer::request_uri_regex_rewrite`]
+//! matches the URI against a regex and rewrites it using the match's capture
+//! groups, the same `rewrite` semantics as nginx: if the pattern matches
+//! anywhere in the URI, the **entire** URI is replaced by the expanded
+//! replacement string; otherwise the URI is left untouched.
+//!
+//! ```rust,no_run
+//! # #[cfg(feature = "rewrite-regex")]
+//! # fn example() -> Result<(), regex::Error> {
+//! use rust_web_server::app::App;
+//! use rust_web_server::core::New;
+//! use rust_web_server::rewrite::RewriteLayer;
+//!
+//! let app = App::new()
+//!     .wrap(RewriteLayer::new()
+//!         .request_uri_regex_rewrite(r"^/api/v\d+/(.*)$", "/$1")?);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Requires the `rewrite-regex` feature (adds the `regex` crate) — this is
+//! the one place in `rws` a third-party regex engine is worth the
+//! dependency; hand-rolling one is out of scope for this crate's "no
+//! third-party HTTP dependencies" philosophy, which doesn't extend to
+//! general-purpose text processing.
 
 #[cfg(test)]
 mod tests;
@@ -29,12 +59,17 @@ use crate::request::Request;
 use crate::response::Response;
 use crate::server::ConnectionInfo;
 
+#[cfg(feature = "rewrite-regex")]
+use regex::Regex;
+
 enum RequestRule {
     SetHeader { name: String, value: String },
     RemoveHeader(String),
     SetUri(String),
     StripUriPrefix(String),
     AddUriPrefix(String),
+    #[cfg(feature = "rewrite-regex")]
+    RewriteUri { pattern: Regex, replacement: String },
 }
 
 enum ResponseRule {
@@ -92,6 +127,26 @@ impl RewriteLayer {
     pub fn request_uri_add_prefix(mut self, prefix: &str) -> Self {
         self.request_rules.push(RequestRule::AddUriPrefix(prefix.to_string()));
         self
+    }
+
+    /// Rewrite the request URI by regex, nginx `rewrite`-directive style.
+    ///
+    /// If `pattern` matches anywhere in the URI, the **entire** URI is
+    /// replaced by `replacement` with capture-group references expanded —
+    /// `$1`, `$2`, ... for numbered groups, `${name}` for named groups
+    /// (`(?P<name>...)`), or `$0`/`${0}` for the whole match. If `pattern`
+    /// does not match, the URI is left unchanged.
+    ///
+    /// Returns `Err` if `pattern` is not a valid regex. Requires the
+    /// `rewrite-regex` feature.
+    #[cfg(feature = "rewrite-regex")]
+    pub fn request_uri_regex_rewrite(mut self, pattern: &str, replacement: &str) -> Result<Self, regex::Error> {
+        let compiled = Regex::new(pattern)?;
+        self.request_rules.push(RequestRule::RewriteUri {
+            pattern: compiled,
+            replacement: replacement.to_string(),
+        });
+        Ok(self)
     }
 
     /// Add or replace a response header (case-insensitive name match).
@@ -157,6 +212,14 @@ impl Middleware for RewriteLayer {
                 }
                 RequestRule::AddUriPrefix(prefix) => {
                     req.request_uri = format!("{}{}", prefix, req.request_uri);
+                }
+                #[cfg(feature = "rewrite-regex")]
+                RequestRule::RewriteUri { pattern, replacement } => {
+                    if let Some(captures) = pattern.captures(&req.request_uri) {
+                        let mut expanded = String::new();
+                        captures.expand(replacement, &mut expanded);
+                        req.request_uri = expanded;
+                    }
                 }
             }
         }

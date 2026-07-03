@@ -188,7 +188,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 - Signed and encrypted cookies — `signed_cookie` (HMAC-SHA256, tamper-evident) and `encrypted_cookie` (AES-256-GCM, confidential) (`crypto` feature)
 - OAuth2 / OIDC SSO — authorization-code + PKCE flow; RS256/ES256 JWT via JWKS; `OidcAuth` middleware; presets for Google, Microsoft, GitHub, Okta, Auth0, Keycloak; `from_env()`; `sso` feature
 - Webhook signature verification — `verify_webhook_signature` for GitHub (`X-Hub-Signature-256`), Shopify (`X-Shopify-Hmac-Sha256`), and Stripe (`Stripe-Signature`, with replay-window tolerance) (`webhook` feature)
-- Request / response rewriting — `RewriteLayer` rewrites headers, URI, status, body bytes
+- Request / response rewriting — `RewriteLayer` rewrites headers, URI, status, body bytes; `.request_uri_regex_rewrite()` for nginx-style regex URI rewrites with capture-group expansion (`rewrite-regex` feature)
 
 ### Observability & ops
 
@@ -250,6 +250,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 | `storage-s3` | `S3Storage` — S3-compatible object storage (AWS S3, R2, MinIO); AWS SigV4 signing via `hmac` + `sha2`, no AWS SDK |
 | `openapi` | `AppWithState`/`AsyncAppWithState::openapi(config)` — generates `GET /openapi.json` + `GET /docs` (Swagger UI) from registered routes; no new deps |
 | `webhook` | `verify_webhook_signature` — HMAC signature verification for GitHub, Shopify, and Stripe webhooks; `hmac` + `sha2`, no new deps beyond what `auth`/`crypto` already use |
+| `rewrite-regex` | `RewriteLayer::request_uri_regex_rewrite` — regex URI rewriting with capture-group expansion, nginx `rewrite`-directive style; adds `regex` |
 
 ```toml
 [dependencies]

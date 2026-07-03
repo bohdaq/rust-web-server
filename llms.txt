@@ -253,6 +253,7 @@ let mcp = App::new().mcp("my-server", "1.0.0")
 | `csrf` | `CsrfLayer` + `CsrfToken` — double-submit cookie CSRF protection | `rand_core` |
 | `sso` | `OidcAuth` middleware, PKCE, RS256/ES256 JWT via JWKS, provider presets | `rsa`, `p256`, `sha2`, `serde`, `serde_json` |
 | `webhook` | `verify_webhook_signature`, `WebhookProvider` (GitHub/Shopify/Stripe HMAC verification) | `hmac`, `sha2` |
+| `rewrite-regex` | `RewriteLayer::request_uri_regex_rewrite` — regex URI rewrite with `$1`/`${name}` capture expansion | `regex` |
 
 Build commands:
 ```bash
@@ -775,7 +776,7 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 | `ConnPool` | `proxy` | Per-backend HTTP/1.1 keep-alive connection pool; `new(max_idle, timeout)` |
 | `H2ReverseProxy` | `proxy` | HTTP/2 upstream proxy; `h2://` plain TCP, `h2s://`/`https://` TLS (ALPN `h2`); port defaults to 443 for TLS schemes; `http2` feature |
 | `GrpcProxy` | `proxy` | gRPC proxy; filters on `Content-Type: application/grpc*`; `grpc://` plain, `grpcs://`/`https://` TLS; `http2` feature |
-| `RewriteLayer` | `rewrite` | Request/response header, URI, status, body rewriting |
+| `RewriteLayer` | `rewrite` | Request/response header, URI, status, body rewriting. `.request_uri_regex_rewrite(pattern, replacement)` (requires `rewrite-regex`) — regex match against the URI, whole URI replaced by the `$1`/`${name}`-expanded replacement on match, no-op otherwise |
 | `CanaryLayer` | `canary` | Weighted traffic splitting; `.add(backend, weight)` |
 | `RetryLayer` | `circuit_breaker` | Retry on 502/503/504 up to `max_retries` |
 | `OidcAuth` | `sso` | OIDC auth flow + claims injection; `.exclude(prefix)` |
@@ -1333,6 +1334,7 @@ src/request_id/         — RequestIdLayer, generate_request_id
 src/request_log/        — Per-request log middleware
 src/response/           — Response struct, STATUS_CODE_REASON_PHRASE
 src/rewrite/            — RewriteLayer (request/response rewriting)
+                          request_uri_regex_rewrite (regex URI rewrite) (rewrite-regex feature)
 src/router/             — Router, PathParams, named/wildcard routing
 src/scheduler/          — Scheduler (fixed-rate, fixed-delay, cron)
 src/server/             — Server (bind, accept, process), ConnectionInfo, Address
