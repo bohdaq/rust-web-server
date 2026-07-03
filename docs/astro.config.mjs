@@ -77,6 +77,7 @@ export default defineConfig({
             { label: 'CSRF Protection',        link: '/features/csrf/' },
             { label: 'Sessions',               link: '/features/sessions/' },
             { label: 'Email / SMTP',           link: '/features/email/' },
+            { label: 'File / Object Storage',  link: '/features/storage/' },
             { label: 'Response Caching',       link: '/features/caching/' },
             { label: 'Metrics',                link: '/features/metrics/' },
             { label: 'Distributed Tracing',    link: '/features/tracing/' },

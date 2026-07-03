@@ -164,6 +164,19 @@ Each `Part` returned by `FormMultipartData::parse` has:
 
 Call `part.get_header("header-name")` for case-insensitive lookup of a single header.
 
+## Storing uploaded files
+
+`FormMultipartData::parse` hands back raw bytes — it doesn't decide where they go. Use the [`Storage`](/features/storage/) trait (`storage-local` / `storage-s3` features) so the same handler code works against local disk in development and S3-compatible object storage in production:
+
+```rust
+use rust_web_server::storage::{LocalStorage, Storage};
+
+let store = LocalStorage::new("/var/data/uploads");
+let key = store.put("avatars/42.png", &part.body, "image/png")?;
+```
+
+See [File / Object Storage](/features/storage/) for the full API, including `S3Storage` for AWS S3, Cloudflare R2, and MinIO.
+
 ## Size limits
 
 Request bodies are limited by `request_allocation_size` from `ConnectionInfo`. The default is configured via `RWS_CONFIG_REQUEST_ALLOCATION_SIZE`. Large uploads beyond this limit are rejected at the TCP read stage before any parser is called.

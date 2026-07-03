@@ -139,6 +139,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Scheduler` / `CronSchedule` | `scheduler` | `@Scheduled`-equivalent background task runner. Three modes: `.every(Duration, fn)` (fixed rate), `.after(Duration, fn)` (fixed delay), `.cron("sec min hour day month weekday", fn)`. Full cron syntax: `*`, exact, `*/step`, `N-M`, comma list. |
 | `Job` / `JobQueue` | `jobs` (requires `jobs` feature) | In-memory background job queue for one-shot, fire-and-forget work from handlers. `Job` trait (blanket-implemented for `Fn() -> Result<(), String> + Send` closures); `JobQueue::new(workers)` spawns a fixed worker pool; `.submit(job)` enqueues; failed jobs retry with exponential backoff (`.max_retries(n)`, `.backoff(initial, multiplier)`); `.join()` drains and waits. Not crash-safe — see `PersistentJobQueue`. |
 | `PersistentJobQueue` | `jobs` (requires `jobs` **and** a `model-sqlite`/`model-postgres`/`model-mysql` feature) | Crash-safe job queue backed by the model layer: jobs are written to a `rws_jobs` table before being acknowledged. Jobs are `(job_type, payload)` string pairs dispatched to a handler registered via `.register(job_type, fn)` — not arbitrary closures, since closures can't be persisted. `PersistentJobQueue::new(pool).await` creates the table and resets any row left `running` by a crash back to `pending`. `.enqueue(job_type, payload).await` / `.enqueue_with_retries(...)` persist a job; `.start(workers)` spawns polling worker threads (each with its own Tokio runtime); `.tick().await` runs a single poll-claim-execute cycle for tests or custom loops. |
+| `Storage` / `LocalStorage` | `storage` (requires `storage-local` feature) | File storage abstraction. `Storage` trait: `put(key, data, content_type) -> Result<String, StorageError>`, `get(key)`, `delete(key)`, `url(key)` (no I/O). `LocalStorage::new(root)` stores objects as files under `root`; rejects `..` path segments; `.with_base_url(prefix)` makes `url()` return an HTTP path instead of a filesystem path. |
+| `S3Storage` / `S3Config` | `storage` (requires `storage-s3` feature) | `Storage` implementation for S3-compatible object storage (AWS S3, Cloudflare R2, MinIO) via the outbound HTTP client — no AWS SDK. Signs every request with AWS Signature Version 4 (`hmac` + `sha2`, already-in-tree crates). `S3Storage::from_env()` reads `RWS_S3_BUCKET/REGION/ACCESS_KEY/SECRET_KEY/ENDPOINT`. Uses path-style addressing (`{endpoint}/{bucket}/{key}`) for compatibility with custom endpoints. |
 | `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. |
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
 | `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware proxying with a per-`[[upstream]]` `strategy`: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), or `least_connections` (routes to the live backend with fewest in-flight requests). |
@@ -3321,3 +3323,58 @@ queue.enqueue("send_welcome_email", "new-user@example.com").await?;
 ```
 
 Unlike the in-memory queue, jobs here are `(job_type, payload)` strings, not closures — a closure can't survive a process restart, but a row in `rws_jobs` can. A job left `running` when the process crashes is reset to `pending` the next time `PersistentJobQueue::new` runs.
+
+### 63. File / object storage abstraction
+
+Store uploaded files on local disk in development and swap in S3-compatible object storage in production without changing handler code.
+
+**Local disk** (requires the `storage-local` feature)
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["storage-local"] }
+```
+
+```rust
+use rust_web_server::storage::{LocalStorage, Storage};
+
+// `.with_base_url()` is only needed if you also serve `root` as a static
+// directory and want `url()` to return an HTTP path instead of a filesystem path.
+let store = LocalStorage::new("/var/data/uploads").with_base_url("/uploads");
+
+// In a multipart upload handler, after FormMultipartData::parse():
+let key = store.put("avatars/42.png", &file_bytes, "image/png")?;
+let public_url = store.url(&key); // "/uploads/avatars/42.png"
+```
+
+**S3-compatible storage** (requires the `storage-s3` feature — AWS S3, Cloudflare R2, MinIO)
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["storage-s3"] }
+```
+
+```rust,no_run
+use rust_web_server::storage::{S3Storage, Storage};
+
+// Reads RWS_S3_BUCKET, RWS_S3_REGION, RWS_S3_ACCESS_KEY, RWS_S3_SECRET_KEY,
+// and optionally RWS_S3_ENDPOINT (point this at R2 / MinIO / any S3-compatible host).
+let store = S3Storage::from_env()?;
+
+let key = store.put("avatars/42.png", &file_bytes, "image/png")?;
+let public_url = store.url(&key);
+# Ok::<(), rust_web_server::storage::StorageError>(())
+```
+
+Write handler code against the `Storage` trait so it works with either backend:
+
+```rust
+use rust_web_server::storage::Storage;
+
+fn save_avatar(store: &dyn Storage, user_id: u64, bytes: &[u8]) -> Result<String, rust_web_server::storage::StorageError> {
+    let key = format!("avatars/{user_id}.png");
+    store.put(&key, bytes, "image/png")
+}
+```
+
+`S3Storage` signs every request with AWS Signature Version 4 using the existing outbound HTTP client — no AWS SDK dependency. Path-style addressing (`{endpoint}/{bucket}/{key}`) is used throughout, since it works against every S3-compatible provider including custom endpoints where virtual-hosted-style (`{bucket}.{host}`) DNS isn't set up.

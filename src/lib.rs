@@ -135,6 +135,8 @@ pub mod sso;
 pub mod mailer;
 #[cfg(feature = "jobs")]
 pub mod jobs;
+#[cfg(any(feature = "storage-local", feature = "storage-s3"))]
+pub mod storage;
 pub mod prelude;
 
 #[cfg(feature = "http2")]

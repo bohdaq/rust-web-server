@@ -214,6 +214,12 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 - Backed by `sqlx` — async-native driver; `DbPool` is a cheap-to-clone `Arc`-wrapped `sqlx::Pool`
 - In-memory SQLite — `DbPool::memory().await` for isolated per-test databases
 
+### File / object storage
+
+- `Storage` trait — `put`/`get`/`delete`/`url`; write handler code once, swap backends
+- `LocalStorage` — stores files on local disk; `storage-local` feature, no new deps
+- `S3Storage` — AWS S3, Cloudflare R2, MinIO via AWS Signature V4 over the outbound HTTP client; no AWS SDK; `storage-s3` feature
+
 ---
 
 ## Optional features
@@ -234,6 +240,8 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 | `sso` | OAuth2/OIDC SSO — `OidcAuth` middleware, RS256/ES256 JWT via JWKS, PKCE, provider presets (Google · Microsoft · GitHub · Okta · Auth0 · Keycloak) |
 | `mailer` | SMTP email — `Mailer::from_env()` + `Email::builder()`; plain, STARTTLS, and SMTPS; multipart text+HTML; AUTH PLAIN; no third-party mail library (STARTTLS/SMTPS additionally require `http-client` or `http2`) |
 | `jobs` | `JobQueue` — in-memory background job queue with retry + exponential backoff. `PersistentJobQueue` (additionally requires a `model-*` feature) persists jobs to survive a crash/restart. |
+| `storage-local` | `LocalStorage` — file storage on local disk; no new deps |
+| `storage-s3` | `S3Storage` — S3-compatible object storage (AWS S3, R2, MinIO); AWS SigV4 signing via `hmac` + `sha2`, no AWS SDK |
 
 ```toml
 [dependencies]

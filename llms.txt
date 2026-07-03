@@ -968,6 +968,33 @@ queue.enqueue("send_welcome_email", "new-user@example.com").await?;
 
 ---
 
+## File / object storage (src/storage/mod.rs)
+
+`Storage` trait — write handler code once, swap the backend via config.
+
+```rust
+use rust_web_server::storage::{LocalStorage, Storage}; // requires `storage-local` feature
+
+let store = LocalStorage::new("/var/data/uploads").with_base_url("/uploads");
+let key = store.put("avatars/42.png", &file_bytes, "image/png")?;
+let public_url = store.url(&key); // "/uploads/avatars/42.png"
+```
+
+```rust,no_run
+use rust_web_server::storage::{S3Storage, Storage}; // requires `storage-s3` feature
+
+// Reads RWS_S3_BUCKET, RWS_S3_REGION, RWS_S3_ACCESS_KEY, RWS_S3_SECRET_KEY,
+// and optionally RWS_S3_ENDPOINT (point at R2 / MinIO / any S3-compatible host).
+let store = S3Storage::from_env()?;
+let key = store.put("avatars/42.png", &file_bytes, "image/png")?;
+```
+
+`S3Storage` signs every request with AWS Signature V4 via the outbound HTTP client (`hmac`+`sha2`) —
+no AWS SDK. Path-style addressing (`{endpoint}/{bucket}/{key}`) works against every S3-compatible
+provider. `LocalStorage` rejects `..` key segments to prevent escaping its root directory.
+
+---
+
 ## HTML templates (requires `tera` feature)
 
 ```rust
@@ -1090,6 +1117,7 @@ src/session/            — SessionStore, Session, cookie helpers
 src/mailer/             — Mailer, Email, EmailBuilder, SmtpTls, MailerError (mailer feature)
 src/sso/                — OidcAuth, OidcConfig, OidcProvider, JwksCache (sso feature)
 src/state/              — AppWithState<S>
+src/storage/            — Storage, LocalStorage, S3Storage (storage-local / storage-s3 features)
 src/symbol/             — ASCII/byte constants
 src/tcp_proxy/          — TcpProxy (L4)
 src/template/           — TeraEngine, global init/render (tera feature)

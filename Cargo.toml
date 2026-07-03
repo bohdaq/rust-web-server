@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.47.0"
+version = "17.48.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
@@ -40,6 +40,8 @@ csrf   = ["dep:rand_core"]
 mailer = []  # plain SMTP; STARTTLS/SMTPS additionally requires http-client or http2
 sso    = ["dep:rsa", "dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:serde_json", "http-client"]
 jobs   = []  # in-memory JobQueue; PersistentJobQueue additionally requires a model-* feature
+storage-local = []  # LocalStorage; no new deps
+storage-s3    = ["dep:hmac", "dep:sha2", "http-client"]  # S3Storage; AWS SigV4 via hmac+sha2, no AWS SDK
 
 [dependencies]
 ctrlc = { version = "3", optional = true }

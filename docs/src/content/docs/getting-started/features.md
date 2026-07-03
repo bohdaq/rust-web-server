@@ -44,6 +44,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **SSE (Server-Sent Events)** — `Sse` builder for streaming events; ideal for streaming AI model output
 - **Background scheduler** — `Scheduler::new().every(duration, fn).cron("…", fn).start()`
 - **Background job queue** — `JobQueue` (in-memory) or `PersistentJobQueue` (crash-safe, model-backed); retry with exponential backoff — `jobs`
+- **File / object storage** — `Storage` trait; `LocalStorage` (disk) or `S3Storage` (AWS S3, R2, MinIO via AWS SigV4, no SDK) — `storage-local` / `storage-s3`
 
 ---
 
