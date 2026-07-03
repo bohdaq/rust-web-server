@@ -1405,6 +1405,7 @@ fn write_chunked_file_produces_valid_chunked_encoding() {
         }],
         content_range_list: vec![],
         stream_file: None,
+        stream_pipe: None,
     };
 
     let request = Request {

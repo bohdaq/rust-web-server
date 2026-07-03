@@ -58,6 +58,7 @@ fn body_in_response() {
         headers: vec![],
         content_range_list: vec![content_range],
         stream_file: None,
+        stream_pipe: None,
     };
 
     let response_body : &ContentRange = response.content_range_list.get(0).unwrap();
@@ -190,6 +191,7 @@ fn multipart_form_data_body_in_response() {
         headers: vec![host, content_type],
         content_range_list: vec![content_range],
         stream_file: None,
+        stream_pipe: None,
     };
 
     let response_body : &ContentRange = response.content_range_list.get(0).unwrap();
@@ -328,6 +330,7 @@ fn json_body_in_response() {
         headers: vec![host, content_type],
         content_range_list: vec![content_range],
         stream_file: None,
+        stream_pipe: None,
     };
 
     // replace with your logic
@@ -369,6 +372,7 @@ fn multipart_body_in_response() {
         headers: vec![host, content_type],
         content_range_list, // same as `content_range_list: content_range_list`
         stream_file: None,
+        stream_pipe: None,
     };
 
 

@@ -22,6 +22,7 @@ fn as_response() {
         headers: vec![],
         content_range_list: vec![content_range],
         stream_file: None,
+        stream_pipe: None,
     };
 }
 

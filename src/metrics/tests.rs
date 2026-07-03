@@ -41,6 +41,7 @@ fn ok_response() -> Response {
         headers: vec![],
         content_range_list: vec![],
         stream_file: None,
+        stream_pipe: None,
     }
 }
 

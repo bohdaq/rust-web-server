@@ -92,7 +92,10 @@ Request         src/request/mod.rs       — method: String, request_uri: String
 Response        src/response/mod.rs      — status_code: i16, reason_phrase: String,
                                            headers: Vec<Header>,
                                            content_range_list: Vec<ContentRange>,
-                                           stream_file: Option<String>
+                                           stream_file: Option<String>,
+                                           stream_pipe: Option<Box<dyn Read + Send>>
+                                           (pipe bytes to client via chunked encoding;
+                                            set by ReverseProxy for SSE / AI streams / large downloads)
 
 Header          src/header/mod.rs        — name: String, value: String
                                            (constants: Header::_CONTENT_TYPE, etc.)
@@ -618,7 +621,7 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&mu
 | `MetricsLayer` | `metrics` | Per-route Prometheus counters + histograms |
 | `OtelLayer` | `otel` | W3C traceparent spans; exports to stdout or OTLP |
 | `CacheLayer` | `cache` | In-memory GET response cache; builder `.ttl(secs)` |
-| `ReverseProxy` | `proxy` | HTTP/1.1 upstream proxy; round-robin; 502 on all-fail; built-in `ConnPool` |
+| `ReverseProxy` | `proxy` | HTTP/1.1 upstream proxy; round-robin; 502 on all-fail; built-in `ConnPool`; SSE + chunked AI streams + large downloads forwarded without buffering via `Response::stream_pipe` |
 | `ConnPool` | `proxy` | Per-backend HTTP/1.1 keep-alive connection pool; `new(max_idle, timeout)` |
 | `H2ReverseProxy` | `proxy` | HTTP/2 upstream proxy; `h2://` plain TCP, `h2s://`/`https://` TLS (ALPN `h2`); port defaults to 443 for TLS schemes; `http2` feature |
 | `GrpcProxy` | `proxy` | gRPC proxy; filters on `Content-Type: application/grpc*`; `grpc://` plain, `grpcs://`/`https://` TLS; `http2` feature |

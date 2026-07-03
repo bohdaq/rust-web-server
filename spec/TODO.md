@@ -22,7 +22,7 @@ These gaps make rws unsuitable for real production workloads regardless of how c
 
 - [ ] **Email / SMTP** (`src/mailer/mod.rs`, `mailer` feature) — no path to send email from a handler today. Add `Mailer::from_env()` reading `RWS_SMTP_HOST/PORT/USER/PASSWORD/FROM`; minimal SMTP or thin `lettre` wrapper. Required for password reset, verification emails, transactional notifications. Closes GAPS_V3 §3.1 and GAPS_V2 §5.
 
-- [ ] **Streaming response passthrough through proxy** — `read_response_from()` buffers the entire backend response before forwarding. Breaks SSE-through-proxy, AI token streams (OpenAI, Anthropic), and large file downloads. Pass body bytes to the client as they arrive. Closes GAPS_V3 §1.2.
+- [x] **Streaming response passthrough through proxy** — Added `Response::stream_pipe: Option<Box<dyn Read + Send>>` and `Server::pipe_stream()`. `ReverseProxy::try_backend()` now reads only headers, detects streaming signals (`Content-Type: text/event-stream`, `Transfer-Encoding: chunked`, `Content-Length > 1 MB`), and for matching responses sets `stream_pipe` to a `ConcatReader(body_prefix, TcpStream)` instead of buffering. `pipe_stream` forwards chunked-backend bytes as raw passthrough; plain SSE bytes are re-encoded as chunks. Closes GAPS_V3 §1.2.
 
 ---
 

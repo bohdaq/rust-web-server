@@ -261,6 +261,7 @@ fn cors_allow_all() {
         headers: vec![],
         content_range_list: vec![],
         stream_file: None,
+        stream_pipe: None,
     };
 
     response.headers = Cors::allow_all(&request).unwrap();
@@ -317,6 +318,7 @@ fn cors_process() {
         headers: vec![],
         content_range_list: vec![],
         stream_file: None,
+        stream_pipe: None,
     };
 
     let first_domain = "https://foo.example";
@@ -393,6 +395,7 @@ fn cors_process_default_config() {
         headers: vec![],
         content_range_list: vec![],
         stream_file: None,
+        stream_pipe: None,
     };
 
     let custom_header = "x-custom-header";
@@ -454,6 +457,7 @@ fn cors_process_empty_config() {
         headers: vec![],
         content_range_list: vec![],
         stream_file: None,
+        stream_pipe: None,
     };
 
     let cors_config = Cors {

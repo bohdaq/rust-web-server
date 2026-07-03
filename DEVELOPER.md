@@ -108,7 +108,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Validated<T>` | `validate` | `FromRequest` wrapper — extracts then validates in one step; `400` on extraction failure, `422 Unprocessable Entity` with JSON error body on validation failure. |
 | `is_email` / `is_url` | `validate` | Format check helpers used by the derive macro; callable directly. |
 | `#[derive(Validate)]` | `macros` (proc-macro) | Derive `Validate` from `#[validate(...)]` field annotations. Validators: `length(min,max)`, `range(min,max)`, `email`, `required`, `url`. Requires `features = ["macros"]`. |
-| `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. Reuses idle TCP connections via the built-in `ConnPool`. |
+| `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. Reuses idle TCP connections via the built-in `ConnPool`. SSE (`text/event-stream`), chunked AI token streams, and large downloads (`Content-Length > 1 MB`) are forwarded without buffering via `Response::stream_pipe`. |
 | `ConnPool` | `proxy` | Per-backend HTTP/1.1 connection pool. `ConnPool::new(max_idle, idle_timeout)` or `ConnPool::new_default()`. Share across proxy instances with `Arc<ConnPool>` via `ReverseProxy::with_pool()`. |
 | `RewriteLayer` | `rewrite` | Composable request/response rewriting middleware: request header add/replace/remove, URI set/strip-prefix/add-prefix, response header add/replace/remove, status override, body byte find-and-replace. |
 | `LoadBalancing` | `proxy` | Enum selecting the balancing strategy (`RoundRobin`). Passed to `ReverseProxy::strategy()`. |
@@ -1342,6 +1342,34 @@ To tune the built-in pool without sharing it:
 use rust_web_server::proxy::ReverseProxy;
 
 let proxy = ReverseProxy::new(["http://backend:8080"]).max_idle_conns(16);
+```
+
+**Streaming responses (SSE, AI token streams, large downloads)**
+
+`ReverseProxy` automatically detects streaming backend responses and forwards bytes to the client as they arrive without buffering the full body. Detection criteria:
+
+| Condition | Example |
+|-----------|---------|
+| `Content-Type: text/event-stream` | SSE endpoints |
+| `Transfer-Encoding: chunked` | OpenAI / Anthropic streaming APIs |
+| `Content-Length > 1 MB` | Large file downloads |
+
+For chunked backends, raw chunk frames are forwarded as-is (client decodes). For SSE and plain streams, bytes are re-encoded as chunked so the browser receives each fragment immediately. Streamed connections are never returned to the pool — the TCP socket is consumed by the pipe.
+
+The same `Response::stream_pipe` field is available to any handler for custom streaming:
+
+```rust
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::header::Header;
+
+fn sse_handler(_req: &_, _p: &_, _c: &_, _s: &_) -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r.headers.push(Header { name: "Content-Type".into(), value: "text/event-stream".into() });
+    r.stream_pipe = Some(Box::new(std::io::Cursor::new(b"data: hello\n\n".to_vec())));
+    r
+}
 ```
 
 ### 33. Per-route metrics

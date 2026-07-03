@@ -162,7 +162,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 ### Proxy & gateway
 
 - Config-driven proxy — `rws.config.toml` with `[[route]]` / `[[upstream]]`; per-route middleware
-- Reverse proxy middleware — `ReverseProxy`; round-robin; `502` when all backends fail; built-in `ConnPool` reuses keep-alive TCP streams
+- Reverse proxy middleware — `ReverseProxy`; round-robin; `502` when all backends fail; built-in `ConnPool` reuses keep-alive TCP streams; SSE, chunked AI streams, and large downloads are streamed without buffering via `Response::stream_pipe`
 - HTTP/2 reverse proxy — `H2ReverseProxy` (`h2://`, `h2s://`, `https://`); `GrpcProxy` wraps it for `Content-Type: application/grpc*` (`grpc://`, `grpcs://`); TLS upstreams via rustls + ALPN `h2`
 - L4 TCP proxy — `TcpProxy` bidirectional relay, any TCP protocol (databases, legacy HTTP)
 - UDP proxy — `UdpProxy` datagram proxy; DNS / syslog style

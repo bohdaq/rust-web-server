@@ -44,6 +44,7 @@ fn make_response(status: i16, phrase: &str) -> Response {
         headers: vec![],
         content_range_list: vec![cr],
         stream_file: None,
+        stream_pipe: None,
     }
 }
 

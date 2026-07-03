@@ -86,6 +86,7 @@ fn build() {
         headers: vec![host],
         content_range_list: vec![content_range],
         stream_file: None,
+        stream_pipe: None,
     };
 
     let response_as_array : Vec<u8> = response.generate();

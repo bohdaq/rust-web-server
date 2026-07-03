@@ -30,7 +30,10 @@ pub struct Error {
 /// For large files, set `stream_file` to the absolute file path instead of loading
 /// the body into `content_range_list`. The server will stream it with
 /// `Transfer-Encoding: chunked` so memory usage stays constant regardless of file size.
-#[derive(PartialEq, Eq, Clone, Debug)]
+///
+/// For proxy passthrough (SSE, AI token streams, large downloads), set `stream_pipe`
+/// to a boxed `Read` source instead. The server streams its output with
+/// `Transfer-Encoding: chunked` immediately after sending the response headers.
 pub struct Response {
     /// HTTP version string, e.g. `"HTTP/1.1"`.
     pub http_version: String,
@@ -45,6 +48,51 @@ pub struct Response {
     /// If set, the server streams this file with `Transfer-Encoding: chunked`
     /// instead of using `content_range_list`. Use for files larger than ~8 MB.
     pub stream_file: Option<String>,
+    /// If set, the server pipes bytes from this reader with `Transfer-Encoding: chunked`
+    /// immediately after sending the response headers. Takes precedence over
+    /// `content_range_list` and `stream_file`. The reader is consumed and not cloned.
+    pub stream_pipe: Option<Box<dyn std::io::Read + Send>>,
+}
+
+impl Clone for Response {
+    fn clone(&self) -> Self {
+        Response {
+            http_version: self.http_version.clone(),
+            status_code: self.status_code,
+            reason_phrase: self.reason_phrase.clone(),
+            headers: self.headers.clone(),
+            content_range_list: self.content_range_list.clone(),
+            stream_file: self.stream_file.clone(),
+            stream_pipe: None,
+        }
+    }
+}
+
+impl PartialEq for Response {
+    fn eq(&self, other: &Self) -> bool {
+        self.http_version == other.http_version
+            && self.status_code == other.status_code
+            && self.reason_phrase == other.reason_phrase
+            && self.headers == other.headers
+            && self.content_range_list == other.content_range_list
+            && self.stream_file == other.stream_file
+    }
+}
+
+impl Eq for Response {}
+
+impl std::fmt::Debug for Response {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Response")
+            .field("http_version", &self.http_version)
+            .field("status_code", &self.status_code)
+            .field("reason_phrase", &self.reason_phrase)
+            .field("headers", &self.headers)
+            .field("content_range_list", &self.content_range_list)
+            .field("stream_file", &self.stream_file)
+            .field("stream_pipe", &self.stream_pipe.as_ref().map(|_| "<stream>"))
+            .finish()
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -219,6 +267,7 @@ impl Response {
             headers: header_list,
             content_range_list: body,
             stream_file: None,
+            stream_pipe: None,
         }
     }
 
@@ -427,6 +476,7 @@ impl Response {
             headers: vec![],
             content_range_list: vec![],
             stream_file: None,
+            stream_pipe: None,
         };
 
         let content_length: usize = 0;
@@ -629,6 +679,7 @@ impl Response {
             headers: header_list,
             content_range_list,
             stream_file: None,
+            stream_pipe: None,
         };
 
         response
@@ -726,6 +777,7 @@ impl Response {
             headers: vec![],
             content_range_list: vec![],
             stream_file: None,
+            stream_pipe: None,
         };
 
         let content_length: usize = 0;
@@ -911,6 +963,7 @@ impl New for Response {
             headers: vec![],
             content_range_list: vec![],
             stream_file: None,
+            stream_pipe: None,
         }
     }
 }

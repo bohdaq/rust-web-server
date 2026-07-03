@@ -515,23 +515,133 @@ fn connection_close_response_is_not_reusable() {
 }
 
 #[test]
-fn proxy_serves_chunked_response_body_correctly() {
+fn proxy_streams_chunked_response() {
+    // Chunked responses are now forwarded via stream_pipe (not buffered into
+    // content_range_list) so the client receives bytes as they arrive.
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     thread::spawn(move || {
-        for _ in 0..2 {
-            if let Ok((mut s, _)) = listener.accept() {
-                let mut buf = [0u8; 4096];
-                let _ = s.read(&mut buf);
-                let _ = s.write_all(CHUNKED_KEEPALIVE_RESPONSE.as_bytes());
-                thread::sleep(Duration::from_millis(200));
-            }
+        if let Ok((mut s, _)) = listener.accept() {
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            let _ = s.write_all(CHUNKED_KEEPALIVE_RESPONSE.as_bytes());
+            thread::sleep(Duration::from_millis(200));
+        }
+    });
+
+    let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)]);
+    let mut resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(200, resp.status_code);
+    assert!(resp.stream_pipe.is_some(), "chunked response must use stream_pipe");
+    assert!(resp.content_range_list.is_empty(), "body must not be buffered");
+
+    // Drain the pipe — the raw bytes contain the chunk framing from the backend.
+    let mut raw = Vec::new();
+    resp.stream_pipe.as_mut().unwrap().read_to_end(&mut raw).ok();
+    assert!(raw.contains(&b'h'), "chunk data must be present in raw bytes");
+}
+
+#[test]
+fn proxy_streams_sse_response() {
+    // SSE (text/event-stream) responses are forwarded via stream_pipe so the
+    // client receives each event as soon as the backend sends it.
+    let sse_response = concat!(
+        "HTTP/1.1 200 OK\r\n",
+        "Content-Type: text/event-stream\r\n",
+        "Cache-Control: no-cache\r\n",
+        "Connection: keep-alive\r\n",
+        "\r\n",
+        "data: hello\n\n",
+        "data: world\n\n",
+    );
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    thread::spawn(move || {
+        if let Ok((mut s, _)) = listener.accept() {
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            let _ = s.write_all(sse_response.as_bytes());
+            thread::sleep(Duration::from_millis(200));
+        }
+    });
+
+    let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)]);
+    let mut resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(200, resp.status_code);
+    assert!(resp.stream_pipe.is_some(), "SSE response must use stream_pipe");
+    assert!(resp.content_range_list.is_empty(), "body must not be buffered");
+
+    let mut raw = Vec::new();
+    resp.stream_pipe.as_mut().unwrap().read_to_end(&mut raw).ok();
+    let body = String::from_utf8_lossy(&raw);
+    assert!(body.contains("data: hello"), "SSE event must be forwarded: {}", body);
+}
+
+#[test]
+fn proxy_buffers_small_content_length_response() {
+    // Small fixed-size responses still go through the buffered path so the
+    // connection can be returned to the pool.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    thread::spawn(move || {
+        if let Ok((mut s, _)) = listener.accept() {
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            let _ = s.write_all(KEEPALIVE_RESPONSE.as_bytes());
+            thread::sleep(Duration::from_millis(200));
         }
     });
 
     let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)]);
     let resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
     assert_eq!(200, resp.status_code);
-    let body: Vec<u8> = resp.content_range_list.iter().flat_map(|c| c.body.iter().copied()).collect();
-    assert_eq!(b"hello", body.as_slice(), "proxy must decode chunked body");
+    assert!(resp.stream_pipe.is_none(), "small responses must be buffered");
+    let body: Vec<u8> = resp.content_range_list.iter()
+        .flat_map(|c| c.body.iter().copied())
+        .collect();
+    assert_eq!(b"hello", body.as_slice());
+}
+
+#[test]
+fn concat_reader_drains_prefix_then_inner() {
+    use super::ConcatReader;
+    use std::io::Read;
+
+    let prefix = b"hello".to_vec();
+    let inner = std::io::Cursor::new(b" world".to_vec());
+    let mut r = ConcatReader::new(prefix, inner);
+
+    let mut out = Vec::new();
+    r.read_to_end(&mut out).unwrap();
+    assert_eq!(b"hello world", out.as_slice());
+}
+
+#[test]
+fn should_stream_detects_sse() {
+    use super::should_stream_response;
+    let h = "http/1.1 200 ok\r\ncontent-type: text/event-stream\r\n\r\n";
+    assert!(should_stream_response(h));
+}
+
+#[test]
+fn should_stream_detects_chunked() {
+    use super::should_stream_response;
+    let h = "http/1.1 200 ok\r\ntransfer-encoding: chunked\r\n\r\n";
+    assert!(should_stream_response(h));
+}
+
+#[test]
+fn should_not_stream_small_content_length() {
+    use super::should_stream_response;
+    let h = "http/1.1 200 ok\r\ncontent-length: 5\r\n\r\n";
+    assert!(!should_stream_response(h));
+}
+
+#[test]
+fn should_stream_large_content_length() {
+    use super::should_stream_response;
+    // 2 MB > 1 MB threshold
+    let h = "http/1.1 200 ok\r\ncontent-length: 2097152\r\n\r\n";
+    assert!(should_stream_response(h));
 }

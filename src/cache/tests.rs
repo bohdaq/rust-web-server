@@ -55,6 +55,7 @@ fn ok_response() -> Response {
         headers: vec![Header { name: "Content-Type".to_string(), value: "text/plain".to_string() }],
         content_range_list: vec![],
         stream_file: None,
+        stream_pipe: None,
     }
 }
 
@@ -86,6 +87,7 @@ fn response_with_status(status: i16) -> Response {
         headers: vec![],
         content_range_list: vec![],
         stream_file: None,
+        stream_pipe: None,
     }
 }
 

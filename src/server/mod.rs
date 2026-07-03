@@ -163,7 +163,11 @@ impl Server {
 
             Log::log_access(&request, &response, &client_addr);
 
-            if let Some(ref filepath) = response.stream_file.clone() {
+            if let Some(reader) = response.stream_pipe.take() {
+                if let Err(e) = Server::pipe_stream(&mut stream, response, request, reader) {
+                    return Err(e);
+                }
+            } else if let Some(ref filepath) = response.stream_file.clone() {
                 if let Err(e) = Server::write_chunked_file(&mut stream, response, request, filepath) {
                     return Err(e);
                 }
@@ -228,6 +232,89 @@ impl Server {
             }
             // terminal chunk
             stream.write_all(b"0\r\n\r\n").map_err(|e| e.to_string())?;
+        }
+
+        stream.flush().map_err(|e| e.to_string())
+    }
+
+    /// Streams a `Read` source to `stream` using HTTP/1.1 chunked transfer encoding.
+    ///
+    /// Called when `response.stream_pipe` is set (proxy passthrough for SSE, AI token
+    /// streams, and large downloads). The response headers are written first (with
+    /// `Transfer-Encoding: chunked` injected and any `Content-Length` stripped), then
+    /// bytes are read from `reader` and forwarded in 8 KB chunks. Each chunk is flushed
+    /// immediately so the client sees data as it arrives.
+    pub(crate) fn pipe_stream(
+        stream: &mut impl Write,
+        mut response: Response,
+        request: Request,
+        mut reader: Box<dyn std::io::Read + Send>,
+    ) -> Result<(), String> {
+        // If the backend already uses chunked encoding we pass the raw chunk
+        // frames through; otherwise we wrap the raw bytes in our own chunked
+        // framing so the client can receive data incrementally.
+        let backend_is_chunked = response.headers.iter().any(|h| {
+            h.name.eq_ignore_ascii_case("transfer-encoding")
+                && h.value.to_lowercase().contains("chunked")
+        });
+
+        response.headers.retain(|h| !h.name.eq_ignore_ascii_case("content-length"));
+        if !backend_is_chunked {
+            response.headers.push(Header {
+                name: Header::_TRANSFER_ENCODING.to_string(),
+                value: "chunked".to_string(),
+            });
+        }
+
+        let status = [
+            response.http_version.clone(),
+            response.status_code.to_string(),
+            response.reason_phrase.clone(),
+        ].join(SYMBOL.whitespace);
+
+        let mut head = format!("{}\r\n", status);
+        for header in &response.headers {
+            head.push_str(&header.name);
+            head.push_str(Header::NAME_VALUE_SEPARATOR);
+            head.push_str(&header.value);
+            head.push_str(SYMBOL.new_line_carriage_return);
+        }
+        head.push_str(SYMBOL.new_line_carriage_return);
+        stream.write_all(head.as_bytes()).map_err(|e| e.to_string())?;
+
+        if request.method != METHOD.head && request.method != METHOD.options {
+            let mut buf = [0u8; 8192];
+            if backend_is_chunked {
+                // Passthrough: forward raw chunk frames as-is; the client
+                // decodes them itself (avoids double-chunking).
+                loop {
+                    match reader.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => {
+                            stream.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+                            stream.flush().map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
+            } else {
+                // Re-encode: wrap the raw byte stream in chunked framing so
+                // the client can receive each fragment as it arrives (SSE,
+                // large downloads).
+                loop {
+                    match reader.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => {
+                            stream
+                                .write_all(format!("{:x}\r\n", n).as_bytes())
+                                .map_err(|e| e.to_string())?;
+                            stream.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+                            stream.write_all(b"\r\n").map_err(|e| e.to_string())?;
+                            stream.flush().map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
+                stream.write_all(b"0\r\n\r\n").map_err(|e| e.to_string())?;
+            }
         }
 
         stream.flush().map_err(|e| e.to_string())

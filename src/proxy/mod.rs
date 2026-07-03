@@ -197,13 +197,28 @@ impl ReverseProxy {
         let mut stream = stream;
         stream.write_all(&req_bytes).map_err(|e| format!("write to backend failed: {}", e))?;
 
-        let (resp_bytes, reusable) = read_response_poolable(&mut stream)?;
+        let mut tmp = [0u8; 4096];
+        let (header_bytes, body_prefix) = read_headers_only(&mut stream, &mut tmp)?;
+        let header_lower =
+            std::str::from_utf8(&header_bytes).unwrap_or("").to_ascii_lowercase();
 
-        if reusable {
-            self.pool.release(&key, stream);
+        if should_stream_response(&header_lower) {
+            // Streaming path — pipe bytes straight to the client.
+            // The connection cannot be reused while the body is in flight.
+            let mut resp = parse_status_and_headers(&header_bytes)?;
+            resp.stream_pipe =
+                Some(Box::new(ConcatReader::new(body_prefix, stream)));
+            Ok(resp)
+        } else {
+            // Buffered path — read the full body, then optionally return the
+            // connection to the pool.
+            let (resp_bytes, reusable) =
+                read_response_from_partial(&mut stream, header_bytes, body_prefix, &mut tmp)?;
+            if reusable {
+                self.pool.release(&key, stream);
+            }
+            Response::parse(&resp_bytes)
         }
-
-        Response::parse(&resp_bytes)
     }
 }
 
@@ -563,6 +578,161 @@ fn bad_gateway() -> Response {
         .to_string();
     r.content_range_list = vec![cr];
     r
+}
+
+// ── Streaming proxy helpers ───────────────────────────────────────────────────
+
+/// Responses larger than this threshold are streamed instead of buffered.
+const STREAM_THRESHOLD: usize = 1024 * 1024; // 1 MB
+
+/// A `Read` implementation that drains a prefix buffer before reading from the
+/// inner stream. Used to replay body bytes that arrived with the HTTP headers.
+pub(crate) struct ConcatReader<R: Read + Send> {
+    prefix: Vec<u8>,
+    prefix_pos: usize,
+    inner: R,
+}
+
+impl<R: Read + Send> ConcatReader<R> {
+    fn new(prefix: Vec<u8>, inner: R) -> Self {
+        ConcatReader { prefix, prefix_pos: 0, inner }
+    }
+}
+
+impl<R: Read + Send> Read for ConcatReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.prefix_pos < self.prefix.len() {
+            let avail = &self.prefix[self.prefix_pos..];
+            let n = buf.len().min(avail.len());
+            buf[..n].copy_from_slice(&avail[..n]);
+            self.prefix_pos += n;
+            return Ok(n);
+        }
+        self.inner.read(buf)
+    }
+}
+
+/// Read exactly the HTTP response headers (up to and including `\r\n\r\n`).
+///
+/// Returns `(header_bytes, body_prefix)` where `body_prefix` contains any
+/// body bytes that arrived in the same TCP segment as the headers.
+fn read_headers_only(stream: &mut TcpStream, tmp: &mut [u8]) -> Result<(Vec<u8>, Vec<u8>), String> {
+    let mut buf: Vec<u8> = Vec::with_capacity(4096);
+    loop {
+        let n = stream.read(tmp).map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Err("backend closed connection before headers were complete".to_string());
+        }
+        buf.extend_from_slice(&tmp[..n]);
+        if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+            let body_prefix = buf[pos + 4..].to_vec();
+            buf.truncate(pos + 4);
+            return Ok((buf, body_prefix));
+        }
+    }
+}
+
+/// Returns `true` when the response should be streamed rather than buffered.
+///
+/// Streams when any of the following hold:
+/// - `Content-Type: text/event-stream` — SSE
+/// - `Transfer-Encoding: chunked` — AI token streams, etc.
+/// - `Content-Length` exceeds 1 MB — large file downloads
+pub(crate) fn should_stream_response(header_lower: &str) -> bool {
+    let is_sse = header_lower.lines().any(|l| {
+        l.starts_with("content-type:") && l.contains("text/event-stream")
+    });
+    let is_chunked = header_lower.lines().any(|l| {
+        l.starts_with("transfer-encoding:") && l.contains("chunked")
+    });
+    let content_length: Option<usize> = header_lower.lines().find_map(|l| {
+        l.strip_prefix("content-length:")?.trim().parse().ok()
+    });
+    let is_large = content_length.map_or(false, |n| n > STREAM_THRESHOLD);
+    is_sse || is_chunked || is_large
+}
+
+/// Parse the status line and headers from raw header bytes (ending at `\r\n\r\n`).
+fn parse_status_and_headers(header_bytes: &[u8]) -> Result<Response, String> {
+    let s = std::str::from_utf8(header_bytes)
+        .map_err(|e| format!("non-UTF-8 response headers: {}", e))?;
+    let mut lines = s.lines();
+    let status_line = lines.next().ok_or("empty backend response")?;
+    let mut parts = status_line.splitn(3, ' ');
+    let http_version = parts.next().unwrap_or("HTTP/1.1").to_string();
+    let status_code: i16 = parts
+        .next()
+        .unwrap_or("502")
+        .parse()
+        .map_err(|_| format!("invalid status code in '{}'", status_line))?;
+    let reason_phrase = parts.next().unwrap_or("").trim_end_matches('\r').to_string();
+    let mut headers = Vec::new();
+    for line in lines {
+        let line = line.trim_end_matches('\r');
+        if line.is_empty() { break; }
+        if let Some(colon) = line.find(':') {
+            headers.push(crate::header::Header {
+                name: line[..colon].trim().to_string(),
+                value: line[colon + 1..].trim().to_string(),
+            });
+        }
+    }
+    Ok(Response {
+        http_version,
+        status_code,
+        reason_phrase,
+        headers,
+        content_range_list: vec![],
+        stream_file: None,
+        stream_pipe: None,
+    })
+}
+
+/// Read the remaining body after headers have already been read.
+///
+/// `header_bytes` ends with `\r\n\r\n`; `body_prefix` holds any body bytes
+/// that arrived in the same TCP read.  Handles all three body mechanisms
+/// (chunked, content-length, read-to-EOF).  Returns `(full_response_bytes, can_reuse)`.
+fn read_response_from_partial(
+    stream: &mut TcpStream,
+    header_bytes: Vec<u8>,
+    body_prefix: Vec<u8>,
+    tmp: &mut [u8],
+) -> Result<(Vec<u8>, bool), String> {
+    let header_end = header_bytes.len();
+    let mut buf = header_bytes;
+    buf.extend_from_slice(&body_prefix);
+
+    let header_lower =
+        std::str::from_utf8(&buf[..header_end]).unwrap_or("").to_ascii_lowercase();
+    let connection_close =
+        header_lower.lines().any(|l| l.starts_with("connection:") && l.contains("close"));
+    let is_chunked = header_lower
+        .lines()
+        .any(|l| l.starts_with("transfer-encoding:") && l.contains("chunked"));
+    let content_length: Option<usize> = header_lower.lines().find_map(|l| {
+        l.strip_prefix("content-length:")?.trim().parse().ok()
+    });
+
+    if is_chunked {
+        let decoded = decode_chunked(stream, &buf, header_end, tmp)?;
+        rewrite_as_content_length(&mut buf, header_end, &decoded);
+        Ok((buf, !connection_close))
+    } else if let Some(len) = content_length {
+        while buf.len() < header_end + len {
+            let n = stream.read(tmp).map_err(|e| e.to_string())?;
+            if n == 0 { break; }
+            buf.extend_from_slice(&tmp[..n]);
+        }
+        Ok((buf, !connection_close))
+    } else {
+        loop {
+            let n = stream.read(tmp).map_err(|e| e.to_string())?;
+            if n == 0 { break; }
+            buf.extend_from_slice(&tmp[..n]);
+        }
+        Ok((buf, false))
+    }
 }
 
 // ── Backend URL parsing ───────────────────────────────────────────────────────

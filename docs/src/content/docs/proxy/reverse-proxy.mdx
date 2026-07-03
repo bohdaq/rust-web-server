@@ -86,7 +86,9 @@ The following headers are never forwarded to the upstream or back to the client,
 
 ## Connection pooling
 
-`ReverseProxy` ships with a built-in `ConnPool` that reuses idle TCP connections to backends. When a backend responds with `Connection: keep-alive` (or uses chunked `Transfer-Encoding`, which is decoded in-place so the body length is known), the stream is returned to the pool and reused for the next request to the same backend.
+`ReverseProxy` ships with a built-in `ConnPool` that reuses idle TCP connections to backends. When a backend responds with `Connection: keep-alive` and a fixed-size body (`Content-Length`), the stream is returned to the pool and reused for the next request to the same backend.
+
+Streaming responses (SSE, chunked, large downloads) are forwarded directly to the client without buffering — see [Streaming responses](#streaming-responses).
 
 **Defaults:** 8 idle connections per backend, 60-second idle timeout. No configuration needed.
 
@@ -122,8 +124,10 @@ let auth = App::new().wrap(
 
 | Backend response | Pool action |
 |-----------------|-------------|
-| `Connection: keep-alive` + `Content-Length` | Stream returned to pool after body is read |
-| `Transfer-Encoding: chunked` + keep-alive | Chunks decoded; `Content-Length` rewritten; stream returned to pool |
+| `Connection: keep-alive` + `Content-Length` ≤ 1 MB | Stream returned to pool after body is read |
+| `Transfer-Encoding: chunked` | Streamed to client (raw passthrough); connection not pooled |
+| `Content-Type: text/event-stream` | Streamed to client (chunked re-encoding); connection not pooled |
+| `Content-Length` > 1 MB | Streamed to client; connection not pooled |
 | `Connection: close` or EOF | Stream dropped; TCP connection closed |
 | Idle stream older than `idle_timeout` | Evicted on next `acquire()` |
 | Pool at `max_idle` for this backend | Extra stream dropped (TCP closed) |
@@ -146,6 +150,72 @@ host                  # port defaults to 80
 :::note[TLS to upstream]
 The programmatic `ReverseProxy` middleware connects over plain TCP. For HTTPS backends, use the **config-driven proxy** with `https://` backend URLs — see [Config-Driven Proxy](/proxy/config-driven/#tls-https-upstreams). Alternatively, terminate TLS at the backend itself (e.g., a sidecar that unwraps TLS and proxies to the app on a localhost port).
 :::
+
+## Streaming responses
+
+`ReverseProxy` detects streaming backend responses and forwards bytes to the client as they arrive, without buffering the full body in memory. A response is streamed when any of these conditions are true:
+
+| Condition | Use case |
+|-----------|----------|
+| `Content-Type: text/event-stream` | SSE / Server-Sent Events |
+| `Transfer-Encoding: chunked` | AI token streams (OpenAI, Anthropic, etc.) |
+| `Content-Length` > 1 MB | Large file downloads |
+
+### How it works
+
+1. The proxy reads only the response headers from the backend.
+2. It creates a `Response` with the parsed headers and sets `Response::stream_pipe` to a reader backed by the live backend TCP connection.
+3. The server detects `stream_pipe` and calls `Server::pipe_stream()`:
+   - **Chunked backend**: raw chunk frames are forwarded byte-for-byte (client handles decoding).
+   - **SSE / plain body**: bytes are re-encoded as `Transfer-Encoding: chunked` so the client receives each fragment immediately.
+
+Streamed connections are never returned to the `ConnPool` — the backend socket is consumed by the pipe.
+
+### SSE through the proxy
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::proxy::ReverseProxy;
+
+// All SSE responses from the backend are forwarded without buffering.
+let app = App::new()
+    .wrap(ReverseProxy::new(["http://event-service:9000"])
+        .path_prefix("/events"));
+```
+
+The client connects with `Accept: text/event-stream` as usual. The proxy transparently forwards each SSE event as a chunked frame the moment it arrives from the backend.
+
+### AI token stream through the proxy
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::proxy::ReverseProxy;
+
+// OpenAI / Anthropic APIs send Transfer-Encoding: chunked.
+// The proxy forwards each token chunk without waiting for the full response.
+let app = App::new()
+    .wrap(ReverseProxy::new(["https://api.openai.com"])
+        .path_prefix("/v1"));
+```
+
+### Custom stream_pipe (application code)
+
+Any application handler can use `stream_pipe` to stream arbitrary `Read` sources:
+
+```rust
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+fn my_handler(_req: &_, _params: &_, _conn: &_, _state: &_) -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    // Any std::io::Read + Send value works: files, cursors, sockets, generators …
+    r.stream_pipe = Some(Box::new(std::io::Cursor::new(b"data: hello\n\n".to_vec())));
+    r
+}
+```
 
 ## 502 Bad Gateway
 
