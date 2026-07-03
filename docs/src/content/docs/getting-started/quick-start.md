@@ -215,6 +215,7 @@ Pass `--tls-cert-file` and `--tls-key-file` (or set `RWS_CONFIG_TLS_CERT_FILE` /
 
 ## Next steps
 
+- **[Dev Workflow](/getting-started/dev-workflow/)** — auto-rebuild and restart on every code change with `cargo-watch`
 - **Routing** — named path parameters (`:id`), wildcards, virtual-host routing
 - **Middleware** — `RateLimitLayer`, `JwtLayer`, `CacheLayer`, `OtelLayer`, and more via `.wrap(layer)`
 - **MCP Server** — expose tools and resources to AI agents over the MCP Streamable HTTP protocol

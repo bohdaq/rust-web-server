@@ -24,6 +24,7 @@ export default defineConfig({
           items: [
             { label: 'Quick Start',   link: '/getting-started/quick-start/' },
             { label: 'Installation',  link: '/getting-started/installation/' },
+            { label: 'Dev Workflow',  link: '/getting-started/dev-workflow/' },
             { label: 'All Features',  link: '/getting-started/features/' },
           ],
         },
