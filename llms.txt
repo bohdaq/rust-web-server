@@ -420,16 +420,24 @@ use rust_web_server::auth::{BasicAuthLayer, JwtLayer, build_jwt, verify_jwt};
 // Basic Auth — closure receives (username, password):
 let app = App::new().wrap(BasicAuthLayer::new(|user, pass| user == "admin" && pass == "secret"));
 
-// JWT HS256:
-let app = App::new().wrap(JwtLayer::new("my-secret-key"));
+// Basic Auth from an htpasswd-style file (loaded once at construction):
+// lines are "user:password" (plain text) or "user:{SHA256}<base64>" (rws's own
+// scheme — NOT Apache's {SHA}/SHA-1, $apr1$, or bcrypt; generate an entry with
+// `printf '%s' 'pw' | openssl dgst -sha256 -binary | openssl base64`).
+let app = App::new().wrap(BasicAuthLayer::from_htpasswd_file(".htpasswd")?);
 
-// Build a JWT:
-let token = build_jwt("user-123", 3600, "my-secret-key")?;  // subject, ttl_secs, secret
+// JWT HS256 (secret is `impl Into<Vec<u8>>` — a byte string or String, not &str):
+let app = App::new().wrap(JwtLayer::new(b"my-secret-key"));
 
-// Verify manually:
-let claims = verify_jwt(&token, "my-secret-key")?;
-// claims.sub: String, claims.exp: u64, claims.raw: serde_json::Value
+// Build a JWT — build_jwt(claims_json: &str, secret: &[u8]) -> String:
+let token = build_jwt(r#"{"sub":"user-123","exp":9999999999}"#, b"my-secret-key");
+
+// Verify manually — verify_jwt(token: &str, secret: &[u8]) -> Option<Claims>:
+let claims = verify_jwt(&token, b"my-secret-key").unwrap();
+// claims.sub: Option<String>, claims.exp: Option<u64>, claims.raw: String (raw JSON)
 ```
+
+Config-driven proxy wiring for JWT/Basic — see "Config-driven proxy server" below.
 
 ---
 
@@ -668,7 +676,7 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 | Type | Module | Effect |
 |---|---|---|
 | `RateLimitLayer` | `middleware` | Per-IP sliding-window; reads `RWS_CONFIG_RATE_LIMIT_*`; 429 on exceeded |
-| `BasicAuthLayer<F>` | `auth` | HTTP Basic; closure `(user, pass) -> bool`; 401 on failure |
+| `BasicAuthLayer<F>` | `auth` | HTTP Basic; closure `(user, pass) -> bool`; 401 on failure. `::from_htpasswd_file(path)` loads plain-text/`{SHA256}` entries from a file. |
 | `JwtLayer` | `auth` | HS256 Bearer token; 401 on invalid |
 | `IpFilter` | `ip_filter` | Allow or deny by IPv4/CIDR; 403 on block |
 | `CsrfLayer` | `csrf` | Double-submit cookie; 403 on mismatch for POST/PUT/PATCH/DELETE |
@@ -802,8 +810,17 @@ strategy = "least_connections"  # "round_robin" (default) | "random" | "ip_hash"
 ```
 
 Route action types: `proxy`, `grpc`, `static`, `redirect`, `respond`, `mcp`.
-Per-route middleware: `rate_limit`, `cache`, `auth`, `ip_allow`/`ip_deny`, `rewrite`.
+Per-route middleware: `rate_limit`, `cache`, `auth`, `ip_allow`/`ip_deny`, `rewrite`, `timeout_ms`.
 Upstream load-balancing strategies: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), `least_connections`.
+
+`auth` types (`[route.middleware.auth]`):
+- `{ type = "bearer", token_env = "API_TOKEN" }` — static token, always available
+- `{ type = "jwt", secret_env = "JWT_SECRET" }` — HS256 via `JwtLayer`, requires `auth` feature
+- `{ type = "basic", htpasswd_file = ".htpasswd" }` — via `BasicAuthLayer::from_htpasswd_file`, requires `auth`
+  feature; file supports plain-text and `{SHA256}` (rws's own scheme) entries only, not Apache's real
+  `{SHA}`/`$apr1$`/bcrypt
+- Unset/empty `secret_env`, a missing `htpasswd_file`, or no `auth` feature at build time all skip that
+  route's auth check (warning logged to stderr at startup) rather than blocking every request
 
 ---
 

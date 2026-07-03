@@ -369,13 +369,13 @@ Health check state is visible via `GET /metrics` (Prometheus) and the `server_me
 ### ✅ Phase 5 — Config-driven TCP/UDP/WS proxies
 - `[[tcp_proxy]]`, `[[udp_proxy]]`, `[[ws_proxy]]` sections spawn dedicated threads via `TcpProxy::bind()`, `UdpProxy::bind()`, `WsProxy::bind()`
 
-### ⏳ Phase 6 — Per-route auth from config
+### ✅ Phase 6 — Per-route auth from config
 - `bearer` auth via `BearerAuthMiddleware` ✅
-- `jwt` auth is a no-op placeholder (requires `auth` feature future wiring) ⏳
-- `basic` auth with htpasswd file not yet implemented ⏳
+- `jwt` auth wired to `JwtLayer` (requires `auth` feature; fails open with a stderr warning if `secret_env` is unset/empty or the feature is off) ✅
+- `basic` auth via `BasicAuthLayer::from_htpasswd_file` (requires `auth` feature; plain-text and rws's own `{SHA256}` scheme only — not Apache's real `{SHA}`/`$apr1$`/bcrypt) ✅
 
-### ⏳ Phase 7 — Static site action
-- `type = "static"` falls through to built-in `App` (which serves from the working directory); `root` / `directory_listing` config fields not yet honored
+### ✅ Phase 7 — Static site action
+- `type = "static"` serves `root` (with `index` fallback) via `StaticAdapter`, independent of the process's working directory; rejects `..` path segments
 
 ---
 

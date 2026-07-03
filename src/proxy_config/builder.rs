@@ -229,16 +229,37 @@ fn apply_middleware(
             }
             #[cfg(feature = "auth")]
             AuthConfig::Jwt { secret_env } => {
-                let _secret = std::env::var(secret_env).unwrap_or_default();
-                // JWT verification would be wired in here when auth feature is enabled.
-                // For now this is a no-op placeholder.
+                let secret = std::env::var(secret_env).unwrap_or_default();
+                if !secret.is_empty() {
+                    app = arc_app(
+                        WithMiddleware::new(ArcApp(Arc::clone(&app)))
+                            .wrap(crate::auth::JwtLayer::new(secret)),
+                    );
+                } else {
+                    eprintln!(
+                        "[proxy_config] JWT auth: env var '{}' is unset or empty; skipping JwtLayer for this route.",
+                        secret_env
+                    );
+                }
             }
             #[cfg(not(feature = "auth"))]
             AuthConfig::Jwt { .. } => {
                 eprintln!("[proxy_config] JWT auth requires the 'auth' feature; skipping.");
             }
+            #[cfg(feature = "auth")]
+            AuthConfig::Basic { htpasswd_file } => {
+                match crate::auth::BasicAuthLayer::from_htpasswd_file(htpasswd_file) {
+                    Ok(layer) => {
+                        app = arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(layer));
+                    }
+                    Err(e) => {
+                        eprintln!("[proxy_config] Basic auth: {e}; skipping Basic auth for this route.");
+                    }
+                }
+            }
+            #[cfg(not(feature = "auth"))]
             AuthConfig::Basic { .. } => {
-                eprintln!("[proxy_config] Basic auth is not yet implemented; skipping.");
+                eprintln!("[proxy_config] Basic auth requires the 'auth' feature; skipping.");
             }
         }
     }

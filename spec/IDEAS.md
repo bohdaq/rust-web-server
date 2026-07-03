@@ -101,6 +101,8 @@ Implementation in `src/proxy_config/mod.rs`:
 
 ## 4. JWT and Basic auth from `rws.config.toml`
 
+> **Status: resolved.** Wired as described below, with one deviation from the original plan: instead of a full htpasswd parser supporting MD5/SHA1/bcrypt, `BasicAuthLayer::from_htpasswd_file` supports only plain-text passwords and rws's own `{SHA256}` scheme (via the already-in-tree `sha2` crate) — real Apache `{SHA}` (SHA-1), `$apr1$`, and bcrypt are out of scope, since hand-rolling those hash algorithms isn't a risk worth taking for an auth check and this crate has no third-party crypto dependency for them. The `htpasswd_file` config key itself matches this doc's example exactly (the code previously read `users_file` — renamed to match, since the field was a no-op until this change). See `spec/TODO.md` for full detail.
+
 Phase 6 of [PROXY_SERVER_CONFIG.md](PROXY_SERVER_CONFIG.md). Bearer token auth from config already works. JWT and htpasswd-file Basic auth are placeholders.
 
 ```toml

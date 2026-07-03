@@ -6,13 +6,6 @@ description: Planned features for rust-web-server — each appears as a callout 
 These features are planned. Each appears as a callout on the relevant docs page.
 
 :::caution[Coming Soon]
-**No-code auth in proxy mode**
-
-JWT and HTTP Basic auth configured directly in `rws.config.toml` without writing Rust code — equivalent to `JwtLayer` and `BasicAuthLayer` but activated through `[[route]]` middleware entries.
-:::
-
-
-:::caution[Coming Soon]
 **Regex URI rewriting in RewriteLayer**
 
 Pattern-based URI rewriting (e.g. capture groups, back-references) in addition to the current prefix-strip and prefix-add operations in `RewriteLayer`.

@@ -200,7 +200,11 @@ max_requests = 100    # requests allowed per window (default: 1000)
 window_secs  = 60     # sliding window size in seconds (default: 60)
 ```
 
-#### Bearer token authentication
+#### Authentication
+
+Three `type`s, all under `[route.middleware.auth]`:
+
+**Bearer token** — always available, no extra feature:
 
 ```toml
 [route.middleware.auth]
@@ -210,8 +214,26 @@ token_env = "API_TOKEN"    # environment variable holding the expected token
 
 Incoming requests must include `Authorization: Bearer <value of API_TOKEN>`. Returns `401 Unauthorized` on mismatch.
 
-:::caution[Coming Soon: JWT and Basic auth from config]
-`type = "jwt"` (reads `secret_env`) and `type = "basic"` (reads `users_file`) are parsed but not yet wired to middleware implementations.
+**JWT (HS256)** — requires the `auth` feature; wires into [`JwtLayer`](/features/auth/):
+
+```toml
+[route.middleware.auth]
+type       = "jwt"
+secret_env = "JWT_SECRET"   # environment variable holding the HS256 signing secret
+```
+
+**HTTP Basic (htpasswd file)** — requires the `auth` feature; wires into [`BasicAuthLayer::from_htpasswd_file`](/features/auth/#validating-against-an-htpasswd-style-file):
+
+```toml
+[route.middleware.auth]
+type          = "basic"
+htpasswd_file = ".htpasswd"
+```
+
+The htpasswd file supports plain-text and `{SHA256}` (rws's own scheme) entries only — not Apache's real `{SHA}`/`$apr1$`/bcrypt. See the [auth feature page](/features/auth/#validating-against-an-htpasswd-style-file) for the exact file format and how to generate a `{SHA256}` entry with `openssl`.
+
+:::note[Fails open with a warning, not silently]
+If `secret_env`/`htpasswd_file` is unset, empty, or unreadable — or the binary was built without the `auth` feature — that route's auth check is skipped (logged to stderr at startup) rather than blocking every request or aborting the whole config. Check your server's startup logs after changing `[route.middleware.auth]`.
 :::
 
 #### IP filter

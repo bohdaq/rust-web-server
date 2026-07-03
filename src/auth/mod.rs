@@ -35,10 +35,11 @@
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use hmac::{Hmac, Mac};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 
 use crate::application::Application;
 use crate::error::{AppError, IntoResponse};
@@ -105,7 +106,8 @@ fn base64url_encode(input: &[u8]) -> String {
 }
 
 // Standard base64 encoding with padding — used to build Basic Auth headers.
-fn base64_encode(input: &[u8]) -> String {
+// pub(crate): reused by proxy_config's tests to build Authorization headers.
+pub(crate) fn base64_encode(input: &[u8]) -> String {
     const C: &[u8; 64] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
@@ -278,6 +280,65 @@ impl<F: Fn(&str, &str) -> bool + Send + Sync + 'static> BasicAuthLayer<F> {
     /// Create a layer with a `validate(username, password) -> bool` closure.
     pub fn new(validate: F) -> Self {
         BasicAuthLayer { validate }
+    }
+}
+
+impl BasicAuthLayer<Box<dyn Fn(&str, &str) -> bool + Send + Sync>> {
+    /// Create a layer that validates credentials against an htpasswd-style
+    /// file, loaded once at construction time (not re-read per request).
+    ///
+    /// Each non-empty, non-comment (`#`-prefixed) line must be
+    /// `username:credential`, where `credential` is one of:
+    /// - a plain-text password (Apache's `htpasswd -p` format), or
+    /// - `{SHA256}` followed by the base64-encoded SHA-256 digest of the
+    ///   password — **this is rws's own scheme, not Apache's**.
+    ///
+    /// # Not supported
+    ///
+    /// Apache's real `{SHA}` scheme (SHA-1), `$apr1$` (iterated MD5), and
+    /// bcrypt (`$2y$`/`$2b$`) are **not** supported — this crate has no
+    /// third-party HTTP/crypto dependencies beyond the audited RustCrypto
+    /// hash crates it already uses, and hand-rolling SHA-1/MD5/bcrypt from
+    /// scratch is not a risk worth taking for a security check. A real
+    /// Apache-generated htpasswd file (which defaults to bcrypt or `$apr1$`
+    /// in modern `htpasswd` versions) will **not** verify against this —
+    /// regenerate it with `htpasswd -p` (plain text) or write your own
+    /// `{SHA256}` entries, or use [`BasicAuthLayer::new`] with your own
+    /// closure (e.g. backed by the `bcrypt` crate) if you need real
+    /// Apache-hash compatibility.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `path` can't be read.
+    pub fn from_htpasswd_file(path: &str) -> Result<Self, String> {
+        let contents = std::fs::read_to_string(path)
+            .map_err(|e| format!("failed to read htpasswd file '{path}': {e}"))?;
+        let users = parse_htpasswd(&contents);
+
+        let validate: Box<dyn Fn(&str, &str) -> bool + Send + Sync> =
+            Box::new(move |user: &str, pass: &str| match users.get(user) {
+                Some(stored) => verify_htpasswd_credential(pass, stored),
+                None => false,
+            });
+
+        Ok(BasicAuthLayer::new(validate))
+    }
+}
+
+fn parse_htpasswd(contents: &str) -> HashMap<String, String> {
+    contents
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .filter_map(|line| line.split_once(':'))
+        .map(|(user, cred)| (user.to_string(), cred.to_string()))
+        .collect()
+}
+
+fn verify_htpasswd_credential(password: &str, stored: &str) -> bool {
+    match stored.strip_prefix("{SHA256}") {
+        Some(expected_b64) => base64_encode(&Sha256::digest(password.as_bytes())) == expected_b64,
+        None => stored == password,
     }
 }
 

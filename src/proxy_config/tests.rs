@@ -599,6 +599,64 @@ token_env = "MY_API_TOKEN"
 }
 
 #[test]
+fn from_str_parses_jwt_auth() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "protected"
+
+[route.match]
+path = "/secret"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "secret data"
+content_type = "text/plain"
+
+[route.middleware.auth]
+type = "jwt"
+secret_env = "JWT_SECRET"
+"#);
+    match cfg.routes[0].middleware.auth.as_ref().unwrap() {
+        crate::proxy_config::AuthConfig::Jwt { secret_env } => {
+            assert_eq!(secret_env, "JWT_SECRET");
+        }
+        other => panic!("expected Jwt, got {:?}", other),
+    }
+}
+
+#[test]
+fn from_str_parses_basic_auth() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+name = "protected"
+
+[route.match]
+path = "/secret"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "secret data"
+content_type = "text/plain"
+
+[route.middleware.auth]
+type = "basic"
+htpasswd_file = ".htpasswd"
+"#);
+    match cfg.routes[0].middleware.auth.as_ref().unwrap() {
+        crate::proxy_config::AuthConfig::Basic { htpasswd_file } => {
+            assert_eq!(htpasswd_file, ".htpasswd");
+        }
+        other => panic!("expected Basic, got {:?}", other),
+    }
+}
+
+#[test]
 fn from_str_parses_rewrite_request_rules() {
     let cfg = ProxyConfig::from_str(r#"
 [[route]]
@@ -896,6 +954,177 @@ token_env = "RWSTEST_PROXY_BEARER_C"
     });
     let resp = app.execute(&req, &conn).unwrap();
     assert_eq!(resp.status_code, 200);
+}
+
+#[cfg(feature = "auth")]
+mod auth_feature_tests {
+    use super::*;
+
+    fn jwt_route_config(secret_env: &str) -> String {
+        format!(
+            r#"
+[[route]]
+name = "protected"
+
+[route.match]
+path = "/secret"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "secret"
+content_type = "text/plain"
+
+[route.middleware.auth]
+type = "jwt"
+secret_env = "{secret_env}"
+"#
+        )
+    }
+
+    #[test]
+    fn jwt_auth_rejects_missing_token() {
+        std::env::set_var("RWSTEST_PROXY_JWT_A", "my-signing-secret");
+        let cfg = ProxyConfig::from_str(&jwt_route_config("RWSTEST_PROXY_JWT_A"));
+        let (app, _) = crate::proxy_config::builder::build(cfg);
+        let conn = make_conn("127.0.0.1");
+        let resp = app.execute(&make_request("GET", "/secret"), &conn).unwrap();
+        assert_eq!(401, resp.status_code);
+    }
+
+    #[test]
+    fn jwt_auth_rejects_invalid_token() {
+        std::env::set_var("RWSTEST_PROXY_JWT_B", "my-signing-secret");
+        let cfg = ProxyConfig::from_str(&jwt_route_config("RWSTEST_PROXY_JWT_B"));
+        let (app, _) = crate::proxy_config::builder::build(cfg);
+        let conn = make_conn("127.0.0.1");
+        let mut req = make_request("GET", "/secret");
+        req.headers.push(crate::header::Header {
+            name: "Authorization".to_string(),
+            value: "Bearer not-a-valid-jwt".to_string(),
+        });
+        let resp = app.execute(&req, &conn).unwrap();
+        assert_eq!(401, resp.status_code);
+    }
+
+    #[test]
+    fn jwt_auth_passes_with_valid_token() {
+        std::env::set_var("RWSTEST_PROXY_JWT_C", "my-signing-secret");
+        let cfg = ProxyConfig::from_str(&jwt_route_config("RWSTEST_PROXY_JWT_C"));
+        let (app, _) = crate::proxy_config::builder::build(cfg);
+        let conn = make_conn("127.0.0.1");
+
+        let token = crate::auth::build_jwt(r#"{"sub":"u1"}"#, b"my-signing-secret");
+        let mut req = make_request("GET", "/secret");
+        req.headers.push(crate::header::Header {
+            name: "Authorization".to_string(),
+            value: format!("Bearer {token}"),
+        });
+        let resp = app.execute(&req, &conn).unwrap();
+        assert_eq!(200, resp.status_code);
+    }
+
+    #[test]
+    fn jwt_auth_skipped_when_secret_env_is_unset() {
+        std::env::remove_var("RWSTEST_PROXY_JWT_UNSET");
+        let cfg = ProxyConfig::from_str(&jwt_route_config("RWSTEST_PROXY_JWT_UNSET"));
+        let (app, _) = crate::proxy_config::builder::build(cfg);
+        let conn = make_conn("127.0.0.1");
+        // No JwtLayer applied since the secret is empty -> falls through to the action.
+        let resp = app.execute(&make_request("GET", "/secret"), &conn).unwrap();
+        assert_eq!(200, resp.status_code);
+    }
+
+    fn basic_route_config(htpasswd_file: &str) -> String {
+        format!(
+            r#"
+[[route]]
+name = "protected"
+
+[route.match]
+path = "/secret"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "secret"
+content_type = "text/plain"
+
+[route.middleware.auth]
+type = "basic"
+htpasswd_file = "{htpasswd_file}"
+"#
+        )
+    }
+
+    fn temp_htpasswd(contents: &str, suffix: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("rws_proxy_htpasswd_{}_{}", std::process::id(), suffix));
+        std::fs::write(&path, contents).unwrap();
+        path
+    }
+
+    #[test]
+    fn basic_auth_passes_with_correct_credentials() {
+        let path = temp_htpasswd("alice:s3cret\n", "ok");
+        let cfg = ProxyConfig::from_str(&basic_route_config(path.to_str().unwrap()));
+        let (app, _) = crate::proxy_config::builder::build(cfg);
+        let conn = make_conn("127.0.0.1");
+
+        let mut req = make_request("GET", "/secret");
+        req.headers.push(crate::header::Header {
+            name: "Authorization".to_string(),
+            value: format!("Basic {}", crate::auth::base64_encode(b"alice:s3cret")),
+        });
+        let resp = app.execute(&req, &conn).unwrap();
+        assert_eq!(200, resp.status_code);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn basic_auth_rejects_wrong_password() {
+        let path = temp_htpasswd("alice:s3cret\n", "wrong");
+        let cfg = ProxyConfig::from_str(&basic_route_config(path.to_str().unwrap()));
+        let (app, _) = crate::proxy_config::builder::build(cfg);
+        let conn = make_conn("127.0.0.1");
+
+        let mut req = make_request("GET", "/secret");
+        req.headers.push(crate::header::Header {
+            name: "Authorization".to_string(),
+            value: format!("Basic {}", crate::auth::base64_encode(b"alice:wrongpass")),
+        });
+        let resp = app.execute(&req, &conn).unwrap();
+        assert_eq!(401, resp.status_code);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn basic_auth_rejects_missing_authorization_header() {
+        let path = temp_htpasswd("alice:s3cret\n", "missing");
+        let cfg = ProxyConfig::from_str(&basic_route_config(path.to_str().unwrap()));
+        let (app, _) = crate::proxy_config::builder::build(cfg);
+        let conn = make_conn("127.0.0.1");
+
+        let resp = app.execute(&make_request("GET", "/secret"), &conn).unwrap();
+        assert_eq!(401, resp.status_code);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn basic_auth_skipped_when_htpasswd_file_is_missing() {
+        let cfg = ProxyConfig::from_str(&basic_route_config("/nonexistent/.htpasswd-rws-test"));
+        let (app, _) = crate::proxy_config::builder::build(cfg);
+        let conn = make_conn("127.0.0.1");
+        // BasicAuthLayer construction fails (file not found) -> falls through to the action.
+        let resp = app.execute(&make_request("GET", "/secret"), &conn).unwrap();
+        assert_eq!(200, resp.status_code);
+    }
 }
 
 #[test]

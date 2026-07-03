@@ -37,6 +37,43 @@ Credential check outcomes:
 | Header present but closure returns `false` | `401` (no challenge) |
 | Closure returns `true` | Request forwarded to next layer |
 
+### Validating against an htpasswd-style file
+
+`BasicAuthLayer::from_htpasswd_file(path)` loads credentials from a file instead of a closure — the file is read once, at construction time:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::auth::BasicAuthLayer;
+use rust_web_server::core::New;
+
+let app = App::new()
+    .wrap(BasicAuthLayer::from_htpasswd_file(".htpasswd").expect("failed to read htpasswd file"));
+```
+
+Each non-empty, non-comment (`#`-prefixed) line is `username:credential`, where `credential` is one of:
+
+- a plain-text password (Apache's `htpasswd -p` format), or
+- `{SHA256}` followed by the base64-encoded SHA-256 digest of the password — **rws's own scheme**, not Apache's.
+
+```
+# .htpasswd
+alice:s3cret
+bob:{SHA256}9S+9MrKzuG/4jvbEkGKChfSCrxXdyylUH5S89Saj9sc=
+```
+
+Generate a `{SHA256}` entry with `openssl` (no need to write Rust code):
+
+```bash
+printf '%s' 'hunter2' | openssl dgst -sha256 -binary | openssl base64
+# -> 9S+9MrKzuG/4jvbEkGKChfSCrxXdyylUH5S89Saj9sc=
+```
+
+:::caution[Not compatible with real Apache htpasswd files]
+Apache's actual `{SHA}` scheme is SHA-1 (not SHA-256), and modern `htpasswd` tool versions default to bcrypt or `$apr1$` (iterated MD5) when no flag is given. None of `{SHA}`, `$apr1$`, or bcrypt are supported here — this crate has no third-party crypto dependencies beyond the audited RustCrypto hash crates it already uses (`hmac`, `sha2`), and hand-rolling SHA-1, MD5, or bcrypt from scratch isn't a risk worth taking for an authentication check. A real Apache-generated htpasswd file will **not** verify against `from_htpasswd_file`.
+
+If you need genuine Apache-hash compatibility, use [`BasicAuthLayer::new`](#http-basic-auth) with your own closure backed by the `bcrypt`/`sha1` crate of your choice, or regenerate the file with `htpasswd -p` (plain text) or the `{SHA256}` scheme above.
+:::
+
 ## JWT — HS256
 
 `JwtLayer` verifies `Authorization: Bearer <token>` JWTs signed with HMAC-SHA256.
@@ -151,3 +188,33 @@ fn login(req: &Request) -> Response {
 :::note[Algorithm support]
 `build_jwt` and `verify_jwt` only support HS256. For RS256/ES256 (public-key JWTs from an identity provider), use the `sso` feature which provides `JwksCache`.
 :::
+
+## No-code auth in the config-driven proxy
+
+`rws.config.toml`'s `[route.middleware.auth]` wires directly into `JwtLayer` and `BasicAuthLayer` — no Rust code required. Both need the `auth` feature enabled at build time (`cargo build --features auth`, or the full-featured default build).
+
+```toml
+[[route]]
+name = "api"
+
+[route.match]
+path = "/api/*"
+
+[route.action]
+type = "proxy"
+
+[route.action.proxy]
+upstream = "backend"
+
+[route.middleware.auth]
+type = "jwt"
+secret_env = "JWT_SECRET"
+```
+
+```toml
+[route.middleware.auth]
+type = "basic"
+htpasswd_file = ".htpasswd"
+```
+
+See [Config-Driven Proxy](/proxy/config-driven/) for the full `[route.middleware]` reference. Fail-open-with-a-warning behavior applies to both: an unset/empty `secret_env`, a missing `htpasswd_file`, or building without the `auth` feature all skip that route's auth check (logged to stderr at startup) rather than aborting the whole config — the route falls through to its normal action, unprotected. Check your server's startup logs after changing auth config.

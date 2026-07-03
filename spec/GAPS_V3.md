@@ -123,6 +123,8 @@ Every forwarded request from `ReverseProxy`, `H2ReverseProxy`, `DynamicProxy`, o
 
 ### 2.7 No no-code auth from `rws.config.toml`
 
+> **Status: resolved.** `type = "jwt"` (`secret_env`) and `type = "basic"` (`htpasswd_file`) now wire into `JwtLayer`/`BasicAuthLayer` via `apply_middleware()` in `builder.rs`, gated on the `auth` feature. `BasicAuthLayer::from_htpasswd_file` supports plain-text and rws's own `{SHA256}` scheme — not Apache's real `{SHA}`/`$apr1$`/bcrypt, a deliberate scope boundary (see `src/auth/mod.rs` and `docs/features/auth.md`). See `spec/TODO.md`'s entry for full detail.
+
 `[[route]]` supports `[route.middleware] auth = { type = "bearer", token_env = "API_TOKEN" }` for static bearer tokens, but JWT verification and HTTP Basic auth must be added in Rust code. `JwtLayer` and `BasicAuthLayer` have no `rws.config.toml` equivalent. (Already in the docs roadmap.)
 
 ---

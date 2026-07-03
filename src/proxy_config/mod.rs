@@ -152,7 +152,13 @@ pub struct CacheConfig {
 
 #[derive(Debug, Clone)]
 pub enum AuthConfig {
-    Basic { users_file: String },
+    /// `auth = { type = "basic", htpasswd_file = ".htpasswd" }`. See
+    /// `crate::auth::BasicAuthLayer::from_htpasswd_file` for the supported
+    /// file format (plain text and `{SHA256}` only — not Apache's `{SHA}`,
+    /// `$apr1$`, or bcrypt).
+    Basic { htpasswd_file: String },
+    /// `auth = { type = "jwt", secret_env = "JWT_SECRET" }`. Requires the
+    /// `auth` feature; verifies HS256 JWTs via `crate::auth::JwtLayer`.
     Jwt { secret_env: String },
     Bearer { token_env: String },
 }
@@ -461,7 +467,7 @@ fn parse_middleware_config(
                 secret_env: get_str(map, &a_sec, "secret_env"),
             }),
             "basic" => Some(AuthConfig::Basic {
-                users_file: get_str(map, &a_sec, "users_file"),
+                htpasswd_file: get_str(map, &a_sec, "htpasswd_file"),
             }),
             _ => None,
         }

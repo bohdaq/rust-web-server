@@ -3,6 +3,7 @@ use crate::auth::{
     BasicAuthLayer, Claims, JwtLayer, base64_decode, base64_encode, base64url_encode,
     build_jwt, extract_bearer_token, verify_jwt,
 };
+use sha2::{Digest, Sha256};
 use crate::core::New;
 use crate::error::IntoResponse;
 use crate::header::Header;
@@ -250,4 +251,132 @@ fn jwt_layer_expired_token_returns_401() {
     let req = with_header(get("/"), "Authorization", &format!("Bearer {}", token));
     let resp = layer.handle(&req, &conn(), &OkApp).unwrap();
     assert_eq!(401, resp.status_code);
+}
+
+// ── BasicAuthLayer::from_htpasswd_file ──────────────────────────────────────────
+
+fn temp_htpasswd(contents: &str) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!("rws_htpasswd_test_{}_{}", std::process::id(), rand_suffix()));
+    std::fs::write(&path, contents).unwrap();
+    path
+}
+
+fn rand_suffix() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    nanos ^ COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
+fn sha256_entry(password: &str) -> String {
+    format!("{{SHA256}}{}", base64_encode(&Sha256::digest(password.as_bytes())))
+}
+
+#[test]
+fn sha256_entry_matches_independently_computed_openssl_output() {
+    // Cross-check against `printf '%s' 'hunter2' | openssl dgst -sha256 -binary | openssl base64`,
+    // computed independently of this crate — also the exact value used in DEVELOPER.md's example.
+    assert_eq!(
+        "{SHA256}9S+9MrKzuG/4jvbEkGKChfSCrxXdyylUH5S89Saj9sc=",
+        sha256_entry("hunter2")
+    );
+}
+
+#[test]
+fn from_htpasswd_file_accepts_plain_text_password() {
+    let path = temp_htpasswd("alice:s3cret\n");
+    let layer = BasicAuthLayer::from_htpasswd_file(path.to_str().unwrap()).unwrap();
+
+    let req = with_header(get("/"), "Authorization", &basic_header("alice", "s3cret"));
+    let resp = layer.handle(&req, &conn(), &OkApp).unwrap();
+    assert_eq!(200, resp.status_code);
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn from_htpasswd_file_rejects_wrong_plain_text_password() {
+    let path = temp_htpasswd("alice:s3cret\n");
+    let layer = BasicAuthLayer::from_htpasswd_file(path.to_str().unwrap()).unwrap();
+
+    let req = with_header(get("/"), "Authorization", &basic_header("alice", "wrong"));
+    let resp = layer.handle(&req, &conn(), &OkApp).unwrap();
+    assert_eq!(401, resp.status_code);
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn from_htpasswd_file_accepts_sha256_scheme() {
+    let path = temp_htpasswd(&format!("bob:{}\n", sha256_entry("hunter2")));
+    let layer = BasicAuthLayer::from_htpasswd_file(path.to_str().unwrap()).unwrap();
+
+    let req = with_header(get("/"), "Authorization", &basic_header("bob", "hunter2"));
+    let resp = layer.handle(&req, &conn(), &OkApp).unwrap();
+    assert_eq!(200, resp.status_code);
+
+    let req_wrong = with_header(get("/"), "Authorization", &basic_header("bob", "wrong"));
+    let resp_wrong = layer.handle(&req_wrong, &conn(), &OkApp).unwrap();
+    assert_eq!(401, resp_wrong.status_code);
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn from_htpasswd_file_rejects_unknown_user() {
+    let path = temp_htpasswd("alice:s3cret\n");
+    let layer = BasicAuthLayer::from_htpasswd_file(path.to_str().unwrap()).unwrap();
+
+    let req = with_header(get("/"), "Authorization", &basic_header("mallory", "s3cret"));
+    let resp = layer.handle(&req, &conn(), &OkApp).unwrap();
+    assert_eq!(401, resp.status_code);
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn from_htpasswd_file_ignores_comments_and_blank_lines() {
+    let path = temp_htpasswd("# comment\n\nalice:s3cret\n   \n");
+    let layer = BasicAuthLayer::from_htpasswd_file(path.to_str().unwrap()).unwrap();
+
+    let req = with_header(get("/"), "Authorization", &basic_header("alice", "s3cret"));
+    let resp = layer.handle(&req, &conn(), &OkApp).unwrap();
+    assert_eq!(200, resp.status_code);
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn from_htpasswd_file_supports_multiple_users() {
+    let path = temp_htpasswd(&format!("alice:s3cret\nbob:{}\n", sha256_entry("hunter2")));
+    let layer = BasicAuthLayer::from_htpasswd_file(path.to_str().unwrap()).unwrap();
+
+    let alice = with_header(get("/"), "Authorization", &basic_header("alice", "s3cret"));
+    assert_eq!(200, layer.handle(&alice, &conn(), &OkApp).unwrap().status_code);
+
+    let bob = with_header(get("/"), "Authorization", &basic_header("bob", "hunter2"));
+    assert_eq!(200, layer.handle(&bob, &conn(), &OkApp).unwrap().status_code);
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn from_htpasswd_file_errors_when_file_is_missing() {
+    let result = BasicAuthLayer::from_htpasswd_file("/nonexistent/path/.htpasswd-rws-test");
+    assert!(result.is_err());
+}
+
+#[test]
+fn from_htpasswd_file_missing_authorization_header_returns_401_challenge() {
+    let path = temp_htpasswd("alice:s3cret\n");
+    let layer = BasicAuthLayer::from_htpasswd_file(path.to_str().unwrap()).unwrap();
+
+    let resp = layer.handle(&get("/"), &conn(), &OkApp).unwrap();
+    assert_eq!(401, resp.status_code);
+    assert!(resp._get_header("WWW-Authenticate".to_string()).is_some());
+
+    std::fs::remove_file(&path).ok();
 }

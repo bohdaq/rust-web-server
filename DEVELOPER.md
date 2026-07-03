@@ -98,7 +98,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `DbSessionStore` | `session` (requires `model-sqlite`, `model-postgres`, or `model-mysql`) | Persistent session store backed by the model-layer `DbPool`. Created with `DbSessionStore::new(pool, ttl_secs).await`. Auto-creates `rws_sessions` table. All methods are `async fn` returning `Result`. Survives restarts and shared across multiple instances. |
 | `RedisSessionStore` | `session` | Persistent session store backed by a Redis server via a hand-rolled RESP v2 client. `RedisSessionStore::new(addr, password, ttl)` or `from_env()` (reads `RWS_REDIS_HOST/PORT/PASSWORD/TTL_SECS`). Sessions expire automatically via Redis TTL. |
 | `Json<T>` | `json` | Serde-backed JSON extractor (`from_request`) and responder (`into_response`). Requires `features = ["serde"]`. |
-| `BasicAuthLayer<F>` | `auth` | HTTP Basic Auth middleware; validates `Authorization: Basic` credentials via a closure. Requires `features = ["auth"]`. |
+| `BasicAuthLayer<F>` | `auth` | HTTP Basic Auth middleware; validates `Authorization: Basic` credentials via a closure. `BasicAuthLayer::from_htpasswd_file(path)` loads `user:password` (plain text) or `user:{SHA256}<base64>` (rws's own scheme) entries from a file — not Apache's `{SHA}`/`$apr1$`/bcrypt. Requires `features = ["auth"]`. |
 | `JwtLayer` | `auth` | JWT HS256 middleware; verifies `Authorization: Bearer` tokens with constant-time HMAC-SHA256. Requires `features = ["auth"]`. |
 | `build_jwt` / `verify_jwt` / `Claims` | `auth` | Sign and verify HS256 JWTs; `Claims` exposes `sub`, `exp`, and raw JSON payload. |
 | `IpFilter` | `ip_filter` | Allow/deny middleware keyed on client IPv4 address or CIDR range. `IpFilter::allow([...])` passes only listed addresses; `IpFilter::deny([...])` blocks them. |
@@ -2565,7 +2565,7 @@ resolved path that doesn't exist returns `404`.
 |---|---|
 | `rate_limit` | `{ max_requests = 500, window_secs = 60 }` |
 | `cache` | `{ ttl_secs = 3600, vary_by = ["Accept-Encoding"] }` |
-| `auth` | `{ type = "bearer", token_env = "API_TOKEN" }` |
+| `auth` | `{ type = "bearer", token_env = "API_TOKEN" }` — static token, always available. `{ type = "jwt", secret_env = "JWT_SECRET" }` — HS256 verification via `JwtLayer`, requires `features = ["auth"]`. `{ type = "basic", htpasswd_file = ".htpasswd" }` — via `BasicAuthLayer::from_htpasswd_file`, requires `features = ["auth"]` (plain-text and `{SHA256}` entries only — see the `BasicAuthLayer` row above). Without the `auth` feature, `jwt`/`basic` are parsed but skipped with a startup warning; an empty/unset `secret_env` or a missing `htpasswd_file` skips just that route's auth the same way. |
 | `ip_allow` / `ip_deny` | `["192.168.1.0/24", "10.0.0.1"]` |
 | `rewrite.request[]` | `[{ type = "header_set", name = "X-Real-IP", value = "$client_ip" }]` |
 | `rewrite.response[]` | `[{ type = "header_remove", name = "Server" }]` |
@@ -3579,3 +3579,55 @@ let layer = RequestIdLayer::new().header("X-Correlation-Id");
 ```
 
 `RequestIdLayer` composes with other middleware the same way any layer does — put it outermost (registered first via `.wrap()`, so it wraps everything else) if you want the same ID visible to every other middleware in the stack, including `OtelLayer` or your own access-logging middleware.
+
+### 67. JWT / Basic auth from `rws.config.toml`
+
+The config-driven proxy's `[route.middleware.auth]` already supported `type = "bearer"` (a static token). `jwt` and `basic` now work too, wiring straight into the existing `JwtLayer`/`BasicAuthLayer` — no Rust code required. Both require the `auth` Cargo feature.
+
+**JWT (HS256)**
+
+```toml
+[[route]]
+name = "api"
+
+[route.match]
+path = "/api/*"
+
+[route.action]
+type = "proxy"
+
+[route.action.proxy]
+upstream = "backend"
+
+[route.middleware.auth]
+type = "jwt"
+secret_env = "JWT_SECRET"   # reads the signing secret from this env var at startup
+```
+
+A request without a valid `Authorization: Bearer <token>` (missing, malformed, wrong signature, or expired `exp`) gets `401 Unauthorized`. If `JWT_SECRET` is unset or empty, that route's JWT check is skipped (with a startup warning) rather than locking every request out.
+
+**HTTP Basic (htpasswd file)**
+
+```toml
+[route.middleware.auth]
+type = "basic"
+htpasswd_file = ".htpasswd"
+```
+
+```
+# .htpasswd — one "user:credential" per line, '#' comments and blank lines ignored
+alice:s3cret
+bob:{SHA256}9S+9MrKzuG/4jvbEkGKChfSCrxXdyylUH5S89Saj9sc=
+```
+
+`{SHA256}<base64>` is **rws's own scheme** (SHA-256, using the already-in-tree `sha2` crate) — not Apache's real `{SHA}` (SHA-1), `$apr1$` (iterated MD5), or bcrypt. A real Apache-generated htpasswd file (which defaults to bcrypt or `$apr1$` in modern `htpasswd` tool versions) will **not** verify here. Either regenerate it with `htpasswd -p` (plain text — fine behind TLS, but avoid for anything sensitive) or generate a `{SHA256}` entry with `openssl`:
+
+```bash
+printf '%s' 'hunter2' | openssl dgst -sha256 -binary | openssl base64
+# -> 9S+9MrKzuG/4jvbEkGKChfSCrxXdyylUH5S89Saj9sc=
+echo 'bob:{SHA256}9S+9MrKzuG/4jvbEkGKChfSCrxXdyylUH5S89Saj9sc=' >> .htpasswd
+```
+
+If you need real Apache-hash compatibility, write your own `BasicAuthLayer::new(closure)` in Rust code backed by the `bcrypt`/`sha1` crate of your choice — the config-driven `htpasswd_file` path is intentionally scoped to avoid hand-rolling deprecated hash algorithms.
+
+If `htpasswd_file` can't be read (missing, wrong permissions), that route's Basic auth check is skipped (with a startup warning), the same fail-open behavior as an unset JWT secret — a misconfigured auth file doesn't lock out the whole route silently with no explanation, but it also doesn't accidentally leave a route open forever without you noticing the warning in the logs.

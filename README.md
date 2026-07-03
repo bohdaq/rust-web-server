@@ -165,7 +165,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 
 ### Proxy & gateway
 
-- Config-driven proxy — `rws.config.toml` with `[[route]]` / `[[upstream]]`; per-route middleware
+- Config-driven proxy — `rws.config.toml` with `[[route]]` / `[[upstream]]`; per-route middleware including bearer/JWT/Basic auth (`auth` feature for JWT/Basic — no Rust code needed)
 - Reverse proxy middleware — `ReverseProxy`; round-robin; `502` when all backends fail; built-in `ConnPool` reuses keep-alive TCP streams; SSE, chunked AI streams, and large downloads are streamed without buffering via `Response::stream_pipe`
 - HTTP/2 reverse proxy — `H2ReverseProxy` (`h2://`, `h2s://`, `https://`); `GrpcProxy` wraps it for `Content-Type: application/grpc*` (`grpc://`, `grpcs://`); TLS upstreams via rustls + ALPN `h2`
 - L4 TCP proxy — `TcpProxy` bidirectional relay, any TCP protocol (databases, legacy HTTP)
@@ -231,7 +231,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 |---------|--------------|
 | `http-client` | HTTPS for outbound `Client` — adds `rustls` + `webpki-roots` |
 | `serde` | `Json<T>` extractor and responder via `serde_json` |
-| `auth` | `BasicAuthLayer` (HTTP Basic) and `JwtLayer` (HS256) |
+| `auth` | `BasicAuthLayer` (HTTP Basic, plus `from_htpasswd_file`) and `JwtLayer` (HS256); also wires `type = "jwt"`/`"basic"` in the config-driven proxy's `[route.middleware.auth]` |
 | `macros` | `#[get]`, `#[post]`, …, `#[derive(FromRequest)]`, `#[derive(Validate)]`, `#[derive(Config)]` |
 | `acme` | Automatic TLS via Let's Encrypt (ACME RFC 8555); implies `http2` |
 | `tera` | Tera HTML template engine (Jinja2/Django syntax) |
