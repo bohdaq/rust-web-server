@@ -142,6 +142,12 @@ let www_router = Router::new()
 
 `handle()` returns `None` immediately when `.with_host()` is set and the incoming request's hostname does not match, so composing multiple host-scoped routers is safe and efficient.
 
+## Relationship to `App`'s built-in routes
+
+`App`'s built-in controllers — static file serving, `/healthz`/`/readyz`/`/metrics`, form handling, the 404 fallback — deliberately don't go through `Router`. That set is small, static, and known at compile time, so a fixed if-chain is simpler and just as fast as a segment matcher would be there. `Router` is for **your** routes, with dynamic path params and wildcards a fixed if-chain can't express cleanly.
+
+`AppWithState` and `AsyncAppWithState` already compose the two: they hold a `Router` internally, try it first, and fall through to `App`'s built-in controller chain for anything the router doesn't match — so static files, health checks, and metrics keep working automatically even in a fully custom, stateful app.
+
 :::caution[Coming Soon]
 Attribute macros (`#[get("/path")]`, `#[post("/path")]`, etc.) via the `macros` feature flag are planned but not yet implemented. Use the `routes!` macro or builder-style `.get()` / `.post()` calls in the meantime.
 :::

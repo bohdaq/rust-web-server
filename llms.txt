@@ -289,6 +289,11 @@ Matches requests whose SNI hostname (TLS) or `Host` header (plain HTTP) equals t
 - `:name` — matches one path segment; `params.get("name")` → `Option<&str>`
 - `*name` — matches the rest of the path (trailing wildcard)
 
+`App`'s own built-in controllers (static files, health/ready/metrics, forms, 404) deliberately don't
+use `Router` — that set is small, static, and known at compile time, so a fixed if-chain is simpler
+than a segment matcher there. `Router` is for user-defined routes; `AppWithState`/`AsyncAppWithState`
+build on it and fall through to `App`'s controller chain for anything unmatched.
+
 ---
 
 ## Extractors (src/extract/mod.rs)
@@ -845,18 +850,26 @@ WsProxy::new(["wss://chat.example.com"]).bind("0.0.0.0:8443"); // TLS, port defa
 
 ```rust
 use rust_web_server::di::Container;
+use rust_web_server::app::App;
 
-let mut c = Container::new();
-c.register::<RedisClient>(RedisClient::new("redis://localhost"));
-c.provide::<dyn Cache>(Arc::new(MemoryCache::new()));
-c.register_named("primary_db", PgPool::new(…));
+let mut container = Container::new();
+container.register::<RedisClient>(RedisClient::new("redis://localhost"));
+container.provide::<dyn Cache>(Arc::new(MemoryCache::new()));
+container.register_named("primary_db", PgPool::new(…));
 
-let container = c.into_arc();
-
-// In handlers (container as AppState):
-let redis: Arc<RedisClient> = state.get::<RedisClient>().unwrap();
-let cache: Arc<dyn Cache>   = state.get::<dyn Cache>().unwrap();
+// Pass the container itself as AppWithState's state — NOT container.into_arc().
+// `with_state`/`with_async_state` already wrap `S` in an Arc internally, so
+// `.into_arc()` first would double-wrap it (Arc<Arc<Container>>) for no benefit.
+let app = App::with_state(container)
+    .get("/x", |_req, _params, _conn, state| {
+        let redis: Arc<RedisClient> = state.get::<RedisClient>().unwrap();
+        let cache: Arc<dyn Cache>   = state.get::<dyn Cache>().unwrap();
+        // ...
+        Response::new()
+    });
 ```
+
+`Container::into_arc()` is for sharing one container across multiple hand-built `Application`s outside of `App::with_state`/`with_async_state`.
 
 ---
 

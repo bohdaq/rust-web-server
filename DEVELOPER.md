@@ -81,7 +81,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Log` | `log` | Combined Log Format access log lines |
 | `CookieJar` | `cookie` | Parse the `Cookie` request header into individual cookies |
 | `SetCookie` | `cookie` | Build `Set-Cookie` response header values with all RFC 6265 attributes |
-| `Router` / `PathParams` | `router` | Standalone dynamic router with `:param` and `*wildcard` path matching; `.with_host(name)` restricts a router to one virtual host |
+| `Router` / `PathParams` | `router` | Standalone dynamic router with `:param` and `*wildcard` path matching; `.with_host(name)` restricts a router to one virtual host. `App`'s own built-in controllers deliberately don't use `Router` — that set is small, static, and known at compile time, so a fixed if-chain is simpler than a segment matcher there. `Router` is for user-defined routes; `AppWithState`/`AsyncAppWithState` build on it and fall through to `App`'s controller chain for anything unmatched. |
 | `VirtualHostConfig` | `virtual_host` | Per-domain cert configuration `{ domain, cert_file, key_file }` for multi-domain SNI routing |
 | `IntoResponse` / `AppError` | `error` | Typed errors that map to HTTP status codes |
 | `TestClient` | `test_client` | In-process HTTP test client — no TCP socket required |
@@ -2595,7 +2595,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 
 ### 53. Dependency injection
 
-`Container` is a type-keyed service store. Register services at startup; resolve them in handlers via `Arc<Container>` passed as `AppWithState` state.
+`Container` is a type-keyed service store. Register services at startup; resolve them in handlers via `Container` passed directly as `AppWithState`/`AsyncAppWithState`'s state — `Container` is `Send + Sync + 'static` like any other state type, so no special-cased integration or wrapper is needed.
 
 **Concrete services**
 
@@ -2658,6 +2658,8 @@ assert_eq!(*c.get_named::<u16>("replica").unwrap(), 5433);
 
 **Wire into `App::with_state`**
 
+Pass the container itself — **not** `container.into_arc()`. `App::with_state` already wraps its state in an `Arc` internally, so calling `.into_arc()` first just double-wraps it (`Arc<Arc<Container>>>`) for no benefit; handlers then receive `&Container` directly instead of `&Arc<Container>`.
+
 ```rust
 use std::sync::Arc;
 use rust_web_server::app::App;
@@ -2668,7 +2670,7 @@ fn get_user(
     req: &Request,
     params: &PathParams,
     _conn: &ConnectionInfo,
-    state: &Arc<Container>,
+    state: &Container,
 ) -> Response {
     let repo = state.get::<dyn UserRepository>().unwrap();
     // use repo.find(...)
@@ -2680,9 +2682,30 @@ container.provide::<dyn UserRepository>(Arc::new(PgUserRepository));
 // register more services...
 
 let app = routes! {
-    App::with_state(container.into_arc()),
+    App::with_state(container),
     GET "/users/:id" => get_user,
 };
+```
+
+**Wire into `App::with_async_state`**
+
+Same pattern, `async fn` handlers (requires the `http2` feature):
+
+```rust
+use std::sync::Arc;
+use rust_web_server::app::App;
+use rust_web_server::di::Container;
+
+let mut container = Container::new();
+container.provide::<dyn UserRepository>(Arc::new(PgUserRepository));
+
+let app = App::with_async_state(container)
+    .get("/users/:id", |_req, params, _conn, state| async move {
+        let repo = state.get::<dyn UserRepository>().unwrap();
+        let id: u64 = params.get("id").unwrap_or("0").parse().unwrap_or(0);
+        let _user = repo.find(id);
+        Response::new()
+    });
 ```
 
 **API summary**

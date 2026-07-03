@@ -47,7 +47,6 @@
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -57,6 +56,7 @@ use crate::application::Application;
 use crate::core::New;
 use crate::request::Request;
 use crate::response::Response;
+use crate::router::matcher::{self, Segment};
 use crate::router::PathParams;
 use crate::server::ConnectionInfo;
 
@@ -65,66 +65,6 @@ type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 type AsyncHandlerFn<S> = Arc<
     dyn Fn(Request, PathParams, ConnectionInfo, Arc<S>) -> BoxFuture<Response> + Send + Sync,
 >;
-
-// ── Internal pattern matching (mirrors Router) ────────────────────────────────
-
-#[derive(Clone)]
-enum Segment {
-    Literal(String),
-    Param(String),
-    Wildcard(String),
-}
-
-fn parse_pattern(pattern: &str) -> Vec<Segment> {
-    if pattern == "/" {
-        return vec![];
-    }
-    pattern
-        .split('/')
-        .filter(|s| !s.is_empty())
-        .map(|seg| {
-            if let Some(name) = seg.strip_prefix(':') {
-                Segment::Param(name.to_string())
-            } else if let Some(name) = seg.strip_prefix('*') {
-                Segment::Wildcard(name.to_string())
-            } else {
-                Segment::Literal(seg.to_string())
-            }
-        })
-        .collect()
-}
-
-fn try_match(pattern: &[Segment], path: &[&str]) -> Option<HashMap<String, String>> {
-    let mut params = HashMap::new();
-    let mut pi = 0;
-
-    for (si, seg) in pattern.iter().enumerate() {
-        match seg {
-            Segment::Literal(lit) => {
-                if pi >= path.len() || path[pi] != lit.as_str() {
-                    return None;
-                }
-                pi += 1;
-            }
-            Segment::Param(name) => {
-                if pi >= path.len() {
-                    return None;
-                }
-                params.insert(name.clone(), path[pi].to_string());
-                pi += 1;
-            }
-            Segment::Wildcard(name) => {
-                if si != pattern.len() - 1 {
-                    return None;
-                }
-                params.insert(name.clone(), path[pi..].join("/"));
-                pi = path.len();
-            }
-        }
-    }
-
-    if pi == path.len() { Some(params) } else { None }
-}
 
 // ── AsyncRoute ────────────────────────────────────────────────────────────────
 
@@ -166,7 +106,7 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
     {
         self.routes.push(AsyncRoute {
             method: method.to_string(),
-            segments: parse_pattern(pattern),
+            segments: matcher::parse_pattern(pattern),
             handler: Arc::new(move |req, params, conn, state| Box::pin(handler(req, params, conn, state))),
         });
         self
@@ -229,7 +169,7 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
             if route.method != request.method {
                 continue;
             }
-            if let Some(params_map) = try_match(&route.segments, &path_segs) {
+            if let Some(params_map) = matcher::try_match(&route.segments, &path_segs) {
                 let params = PathParams::from_map(params_map);
                 let fut = (route.handler)(
                     request.clone(),

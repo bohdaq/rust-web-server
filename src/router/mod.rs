@@ -1,3 +1,4 @@
+pub(crate) mod matcher;
 #[cfg(test)]
 mod tests;
 
@@ -7,6 +8,7 @@ use std::sync::Arc;
 use crate::request::Request;
 use crate::response::Response;
 use crate::server::ConnectionInfo;
+use matcher::Segment;
 
 /// Named path-segment values extracted from a matched route pattern.
 ///
@@ -21,11 +23,8 @@ pub struct PathParams {
 }
 
 impl PathParams {
-    fn new() -> Self {
-        PathParams { params: HashMap::new() }
-    }
-
-    /// Build a `PathParams` from an existing map. Used by `AsyncAppWithState`.
+    /// Build a `PathParams` from an existing map — used to adapt
+    /// [`matcher::try_match`]'s output for both `Router` and `AsyncAppWithState`.
     pub(crate) fn from_map(params: HashMap<String, String>) -> Self {
         PathParams { params }
     }
@@ -34,17 +33,6 @@ impl PathParams {
     pub fn get(&self, name: &str) -> Option<&str> {
         self.params.get(name).map(String::as_str)
     }
-
-    fn insert(&mut self, key: String, value: String) {
-        self.params.insert(key, value);
-    }
-}
-
-#[derive(Clone)]
-enum Segment {
-    Literal(String),
-    Param(String),
-    Wildcard(String),
 }
 
 type HandlerFn =
@@ -156,29 +144,10 @@ impl Router {
     where F: Fn(&Request, &PathParams, &ConnectionInfo) -> Response + Send + Sync + 'static {
         self.routes.push(Route {
             method: method.to_string(),
-            segments: Self::parse_pattern(pattern),
+            segments: matcher::parse_pattern(pattern),
             handler: Arc::new(handler),
         });
         self
-    }
-
-    fn parse_pattern(pattern: &str) -> Vec<Segment> {
-        if pattern == "/" {
-            return vec![];
-        }
-        pattern
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .map(|seg| {
-                if let Some(name) = seg.strip_prefix(':') {
-                    Segment::Param(name.to_string())
-                } else if let Some(name) = seg.strip_prefix('*') {
-                    Segment::Wildcard(name.to_string())
-                } else {
-                    Segment::Literal(seg.to_string())
-                }
-            })
-            .collect()
     }
 
     /// Return a snapshot of all registered routes as `(method, pattern)` pairs.
@@ -230,42 +199,11 @@ impl Router {
             if route.method != request.method {
                 continue;
             }
-            if let Some(params) = Self::try_match(&route.segments, &path_segs) {
+            if let Some(params) = matcher::try_match(&route.segments, &path_segs) {
+                let params = PathParams::from_map(params);
                 return Some((route.handler)(request, &params, connection));
             }
         }
         None
-    }
-
-    fn try_match(pattern: &[Segment], path: &[&str]) -> Option<PathParams> {
-        let mut params = PathParams::new();
-        let mut pi = 0;
-
-        for (si, seg) in pattern.iter().enumerate() {
-            match seg {
-                Segment::Literal(lit) => {
-                    if pi >= path.len() || path[pi] != lit.as_str() {
-                        return None;
-                    }
-                    pi += 1;
-                }
-                Segment::Param(name) => {
-                    if pi >= path.len() {
-                        return None;
-                    }
-                    params.insert(name.clone(), path[pi].to_string());
-                    pi += 1;
-                }
-                Segment::Wildcard(name) => {
-                    if si != pattern.len() - 1 {
-                        return None; // wildcard must be the last segment
-                    }
-                    params.insert(name.clone(), path[pi..].join("/"));
-                    pi = path.len();
-                }
-            }
-        }
-
-        if pi == path.len() { Some(params) } else { None }
     }
 }

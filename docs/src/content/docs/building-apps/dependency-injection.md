@@ -3,7 +3,7 @@ title: Dependency Injection
 description: Use Container to register and resolve typed services across request handlers.
 ---
 
-`Container` is a type-keyed service store backed by `HashMap<TypeId, Box<dyn Any + Send + Sync>>`. Register services at startup, seal the container with `into_arc()`, then share it as application state.
+`Container` is a type-keyed service store backed by `HashMap<TypeId, Box<dyn Any + Send + Sync>>`. Register services at startup, then pass the container directly as `AppWithState`/`AsyncAppWithState`'s state — it's `Send + Sync + 'static` like any other state type, so it needs no wrapping.
 
 ## Registering concrete services
 
@@ -81,19 +81,23 @@ assert_eq!(*container.get_named::<u16>("replica").unwrap(), 5433);
 
 `provide_named::<dyn Trait>("name", arc)` is the trait-object equivalent.
 
-## Sealing the container
+## `into_arc()` — sharing outside `App::with_state`
 
-`into_arc()` wraps the container in `Arc<Container>`, making it immutable and safe to clone across threads and handler closures.
+`into_arc()` wraps the container in `Arc<Container>`, for call sites that need to share one container across multiple hand-built `Application`s.
 
 ```rust
 let arc = container.into_arc(); // Arc<Container>
 ```
 
-Once sealed you cannot add more registrations. Perform all registrations before calling `into_arc()`.
+Once wrapped you cannot add more registrations — perform all registrations first.
+
+:::caution[Don't use `into_arc()` with `App::with_state`]
+`App::with_state`/`App::with_async_state` already wrap their state argument in an `Arc` internally. Passing `container.into_arc()` there double-wraps it (`Arc<Arc<Container>>`) for no benefit, and handlers end up with `&Arc<Container>` instead of the simpler `&Container`. Pass the container itself — see below.
+:::
 
 ## Wiring into request handlers
 
-Pass the sealed container as application state using `App::with_state`. Each handler receives `state: &Arc<Container>` and can call `state.get::<T>()` to resolve dependencies.
+Pass the container directly as application state using `App::with_state`. Each handler receives `state: &Container` and can call `state.get::<T>()` to resolve dependencies.
 
 ```rust
 use std::sync::Arc;
@@ -109,7 +113,7 @@ fn get_version(
     _req: &Request,
     _params: &PathParams,
     _conn: &ConnectionInfo,
-    state: &Arc<Container>,
+    state: &Container,
 ) -> Response {
     let svc = state.get::<EmailService>().unwrap();
     let mut r = Response::new();
@@ -122,10 +126,12 @@ let mut container = Container::new();
 container.register(EmailService { host: "smtp.example.com".into() });
 
 let app = routes! {
-    App::with_state(container.into_arc()),
+    App::with_state(container),
     GET "/version" => get_version,
 };
 ```
+
+The same pattern works with `App::with_async_state` (requires the `http2` feature) for `async fn` handlers — pass the container directly there too.
 
 ## Complete example: UserRepository + DI wiring
 
@@ -164,7 +170,7 @@ fn get_user(
     req: &Request,
     params: &PathParams,
     _conn: &ConnectionInfo,
-    state: &Arc<Container>,
+    state: &Container,
 ) -> Response {
     let repo = state.get::<dyn UserRepository>().unwrap();
     let id: i64 = params.get("id").and_then(|s| s.parse().ok()).unwrap_or(0);
@@ -191,7 +197,7 @@ let mut container = Container::new();
 container.provide::<dyn UserRepository>(Arc::new(repo));
 
 let app = routes! {
-    App::with_state(container.into_arc()),
+    App::with_state(container),
     GET "/users/:id" => get_user,
 };
 ```

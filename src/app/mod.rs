@@ -132,6 +132,14 @@ impl App {
 }
 
 impl Application for App {
+    // `App` dispatches through a fixed if-chain of built-in `Controller`s
+    // rather than a `Router`: the built-in set is small, static, and known
+    // at compile time, so a linear scan is simpler and just as fast as a
+    // segment-matching router would be here. This is a deliberate choice,
+    // not an oversight — `Router` (src/router/mod.rs) is the right tool for
+    // user-defined routes with named path params/wildcards, and `AppWithState`
+    // / `AsyncAppWithState` use exactly that, falling through to this same
+    // controller chain for anything they don't handle themselves.
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         let config = match &self.config {
             Some(c) => (**c).clone(),

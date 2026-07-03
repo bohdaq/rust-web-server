@@ -2,8 +2,8 @@
 //!
 //! [`Container`] stores services keyed by their Rust type (`TypeId`). Register
 //! services at startup; resolve them anywhere that has access to the container.
-//! Share across request handlers by wrapping in `Arc<Container>` and using
-//! `App::with_state(container.into_arc())`.
+//! Share across request handlers with `App::with_state(container)` — see
+//! "Usage with `App::with_state`" below.
 //!
 //! # Concrete services
 //!
@@ -54,10 +54,19 @@
 //! assert_eq!(*c.get_named::<u16>("replica").unwrap(), 5433);
 //! ```
 //!
-//! # Usage with `App::with_state`
+//! # Usage with `App::with_state` / `App::with_async_state`
+//!
+//! `Container` needs no special-cased integration — it's `Send + Sync +
+//! 'static` like any other state type, so it plugs directly into
+//! [`App::with_state`](crate::app::App::with_state) as `S`. Pass the
+//! container itself, **not** `container.into_arc()`: `with_state` already
+//! wraps `S` in an `Arc` internally, so calling `into_arc()` first just
+//! double-wraps it (`Arc<Arc<Container>>`) for no benefit — handlers then
+//! receive `&Container` directly instead of `&Arc<Container>`. `into_arc()`
+//! exists for call sites that need to share one container across multiple
+//! `Application`s built by hand, outside of `App::with_state`/`with_async_state`.
 //!
 //! ```rust,no_run
-//! use std::sync::Arc;
 //! use rust_web_server::app::App;
 //! use rust_web_server::di::Container;
 //! use rust_web_server::request::Request;
@@ -72,7 +81,7 @@
 //!     _req: &Request,
 //!     _p: &PathParams,
 //!     _c: &ConnectionInfo,
-//!     state: &Arc<Container>,
+//!     state: &Container,
 //! ) -> Response {
 //!     let _cfg = state.get::<Config>().unwrap();
 //!     Response::get_response(&STATUS_CODE_REASON_PHRASE.n200_ok, None, None)
@@ -82,10 +91,14 @@
 //! container.register(Config { version: "1.0" });
 //!
 //! let app = routes! {
-//!     App::with_state(container.into_arc()),
+//!     App::with_state(container),
 //!     GET "/version" => get_version,
 //! };
 //! ```
+//!
+//! The async counterpart works the same way with [`App::with_async_state`](crate::app::App::with_async_state)
+//! (requires the `http2` feature) — handlers are `async fn`s that receive
+//! `&Container` and can `.await` inside the closure while resolving services.
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;

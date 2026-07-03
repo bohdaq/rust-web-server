@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use crate::application::Application;
 use crate::core::New;
+use crate::di::Container;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::Range;
@@ -180,4 +183,67 @@ fn put_patch_delete_are_registered() {
         let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
         assert_eq!(expected, body, "method={}", method);
     }
+}
+
+// ── di::Container as AppWithState's state ───────────────────────────────────────
+//
+// `Container` needs no special-cased integration: it's `Send + Sync + 'static`
+// like any other state type, so `AppWithState::new(container)` (not
+// `container.into_arc()`, which would double-wrap in `Arc`) works directly.
+// These tests exist so that claim is verified, not just documented.
+
+#[test]
+fn container_resolves_concrete_service_through_a_request() {
+    struct Greeting(String);
+
+    let mut container = Container::new();
+    container.register(Greeting("hello from the container".to_string()));
+
+    let app = AppWithState::new(container).get("/greet", |_req, _params, _conn, state| {
+        let greeting = state.get::<Greeting>().unwrap();
+        ok_text(&greeting.0)
+    });
+
+    let resp = app.execute(&get("/greet"), &conn()).unwrap();
+    assert_eq!(200, resp.status_code);
+    let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+    assert_eq!("hello from the container", body);
+}
+
+#[test]
+fn container_resolves_trait_object_service_through_a_request() {
+    trait Greeter: Send + Sync {
+        fn greet(&self) -> String;
+    }
+    struct EnglishGreeter;
+    impl Greeter for EnglishGreeter {
+        fn greet(&self) -> String {
+            "hi".to_string()
+        }
+    }
+
+    let mut container = Container::new();
+    container.provide::<dyn Greeter>(Arc::new(EnglishGreeter));
+
+    let app = AppWithState::new(container).get("/greet", |_req, _params, _conn, state| {
+        ok_text(&state.get::<dyn Greeter>().unwrap().greet())
+    });
+
+    let resp = app.execute(&get("/greet"), &conn()).unwrap();
+    let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+    assert_eq!("hi", body);
+}
+
+#[test]
+fn container_resolution_miss_does_not_panic_the_handler() {
+    let app = AppWithState::new(Container::new()).get("/x", |_req, _params, _conn, state| {
+        match state.get::<u32>() {
+            Some(_) => ok_text("found"),
+            None => ok_text("missing"),
+        }
+    });
+
+    let resp = app.execute(&get("/x"), &conn()).unwrap();
+    let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+    assert_eq!("missing", body);
 }

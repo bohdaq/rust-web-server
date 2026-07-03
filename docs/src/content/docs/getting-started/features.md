@@ -133,5 +133,6 @@ All ORM features require exactly one of `model-sqlite`, `model-postgres`, or `mo
 - **`register::<T>(value)`** — wraps in `Arc<T>`, keyed by `TypeId::of::<T>()`
 - **`provide::<T: ?Sized>(Arc<T>)`** — stores trait objects directly
 - **Named services** — `get_named::<T>(name)` / `register_named::<T>(name, value)` for multiple instances of the same type
-- **`into_arc()`** — seals the container as `Arc<Container>` for sharing across handlers
+- **`App::with_state(container)`** — pass the container directly as state; it's `Send + Sync + 'static` like any other state type, no wrapping needed
+- **`into_arc()`** — for sharing one container across multiple hand-built `Application`s outside of `with_state`
 - No external dependencies

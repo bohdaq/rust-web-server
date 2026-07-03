@@ -8,6 +8,8 @@
 
 ## 1. `di::Container` is built but unused by the framework itself
 
+> **Status: resolved (v17.49.0).** Took the "wire it in" option below. `Container` needed no code changes to work as `AppWithState`/`AsyncAppWithState`'s `S` — it's already `Send + Sync + 'static` like any other state type — but the two places that documented this pattern (`src/di/mod.rs`'s module doc, `DEVELOPER.md`'s "Dependency injection" use case) both showed `App::with_state(container.into_arc())`, which double-wraps in `Arc` (`with_state` already wraps `S` internally) and was never exercised by a real test, only by an unrun (`no_run`) doc example. Fixed both to `App::with_state(container)` (handlers now receive `&Container`, not `&Arc<Container>`), added the missing `App::with_async_state` example, and added 5 real tests (`src/state/tests.rs`, `src/async_state/tests.rs`) that register concrete and trait-object services and resolve them through an actual request via `Application::execute` — not just documentation claims. `llms.txt`'s dependency-injection section had the same ambiguity and was fixed the same way.
+
 `src/di/mod.rs` implements a real type-keyed service container (`register::<T>`, `provide::<T: ?Sized>`, `get::<T>`, named services, `into_arc()`). Nothing in `App`, `AppWithState`, `AsyncAppWithState`, or the model layer actually uses it — a repo-wide grep for `Container::new` / `di::Container` outside `src/di/` and its own tests turns up nothing.
 
 Meanwhile the framework's actual mechanism for shared, process-wide state is `RWS_CONFIG_*` environment variables (see §4). If `Container` was meant to be the seam that eventually replaces env-var config, it hasn't been wired in anywhere yet. If it's meant as a standalone opt-in utility for user code, that's a reasonable design but should be stated explicitly — right now it reads as unfinished plumbing rather than an intentional choice.
@@ -29,6 +31,8 @@ The codebase is already aware that blocking calls inside async contexts need exp
 ---
 
 ## 3. `App::execute` and `Router` are two competing dispatch strategies
+
+> **Status: resolved (v17.49.0).** Added a comment on `impl Application for App` (`src/app/mod.rs`) stating explicitly why the built-in controller chain is a fixed if-chain rather than a `Router` — the built-in set is small, static, and known at compile time, so a linear scan is simpler and just as fast as a segment matcher would be there; `Router` is for user-defined routes with dynamic path params, and `AppWithState`/`AsyncAppWithState` already build on it, falling through to this same controller chain. Also added a clarifying line to the `Router` row in DEVELOPER.md's building-blocks table. As a related, previously-undocumented duplication found while looking at this: `AsyncAppWithState` had copy-pasted `Router`'s segment/pattern-matching code (`Segment`, `parse_pattern`, `try_match`) verbatim because its handlers return `Future`s, which `Router`'s `HandlerFn` type doesn't support. That logic is now extracted into `src/router/matcher.rs` (`pub(crate)`) and shared by both `Router` and `AsyncAppWithState`, so the two matchers can no longer drift apart. No public API changed; `Controller` remains available for third-party use, and `App`/`AppWithState`/`AsyncAppWithState` behavior is unchanged.
 
 `App::execute` ([`src/app/mod.rs`](../src/app/mod.rs)) walks a hardcoded `Vec<ControllerEntry>` and calls `is_matching` on each in declaration order — an O(n) linear scan per request across the built-in controllers. `Router` ([`src/router/mod.rs`](../src/router/mod.rs)) does proper path-segment matching with named params and wildcards, and is the documented "prefer this for new code" path.
 
@@ -57,7 +61,7 @@ All configuration is read once at startup into process environment variables and
 |---|-------|---------------------|--------|---------------|
 | 2 | Sync DB pool blocking async handlers | Silent throughput cliff in production under load | Small (doc/wrapper) to Large (real async pool) | Model layer + docs only |
 | 4 | Config as global env vars | Ongoing test flakiness risk; blocks embedding/multi-instance use | Large | Touches every `env::var("RWS_CONFIG_*")` call site |
-| 1 | Unused `di::Container` | Confusing to contributors; duplicate-looking abstraction | Small (document) to Medium (wire in) | `di` module + one integration point |
-| 3 | Two dispatch mechanisms (`App` if-chain vs `Router`) | Minor — easy to misread as an oversight | Trivial (comment) | None |
+| 1 | ~~Unused `di::Container`~~ ✅ | ~~Confusing to contributors; duplicate-looking abstraction~~ | ~~Small (document) to Medium (wire in)~~ | ~~`di` module + one integration point~~ |
+| 3 | ~~Two dispatch mechanisms (`App` if-chain vs `Router`)~~ ✅ | ~~Minor — easy to misread as an oversight~~ | ~~Trivial (comment)~~ | ~~None~~ |
 
-**Recommended order:** #2 first (cheapest, highest real-world risk — a production incident waiting to happen), then use #1's `Container` as the vehicle for #4's config refactor rather than solving them separately, and pick up #3 opportunistically whenever `app/mod.rs` is next touched.
+**Recommended order:** #2 first (cheapest, highest real-world risk — a production incident waiting to happen), then use #1's `Container` as the vehicle for #4's config refactor rather than solving them separately.

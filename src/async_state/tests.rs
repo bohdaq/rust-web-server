@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use crate::application::Application;
 use crate::async_state::AsyncAppWithState;
 use crate::core::New;
+use crate::di::Container;
 use crate::http::VERSION;
 use crate::mime_type::MimeType;
 use crate::range::Range;
@@ -212,4 +213,52 @@ async fn put_patch_delete_registered() {
 async fn state_accessor_returns_inner_value() {
     let app = AsyncAppWithState::new("sentinel".to_string());
     assert_eq!("sentinel", app.state());
+}
+
+// ── di::Container as AsyncAppWithState's state ──────────────────────────────────
+//
+// Same as `AppWithState`: `Container` is `Send + Sync + 'static` like any other
+// state type, so `AsyncAppWithState::new(container)` works directly — no
+// `.into_arc()` double-wrap needed.
+
+#[tokio::test]
+async fn container_resolves_concrete_service_through_an_async_handler() {
+    struct Greeting(String);
+
+    let mut container = Container::new();
+    container.register(Greeting("hello from async state".to_string()));
+
+    let app = AsyncAppWithState::new(container).get("/greet", |_req, _params, _conn, state| async move {
+        let greeting = state.get::<Greeting>().unwrap();
+        ok_text(&greeting.0)
+    });
+
+    let resp = app.execute(&get("/greet"), &conn()).unwrap();
+    assert_eq!(200, resp.status_code);
+    let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+    assert_eq!("hello from async state", body);
+}
+
+#[tokio::test]
+async fn container_resolves_trait_object_service_through_an_async_handler() {
+    trait Greeter: Send + Sync {
+        fn greet(&self) -> String;
+    }
+    struct EnglishGreeter;
+    impl Greeter for EnglishGreeter {
+        fn greet(&self) -> String {
+            "hi from async".to_string()
+        }
+    }
+
+    let mut container = Container::new();
+    container.provide::<dyn Greeter>(Arc::new(EnglishGreeter));
+
+    let app = AsyncAppWithState::new(container).get("/greet", |_req, _params, _conn, state| async move {
+        ok_text(&state.get::<dyn Greeter>().unwrap().greet())
+    });
+
+    let resp = app.execute(&get("/greet"), &conn()).unwrap();
+    let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+    assert_eq!("hi from async", body);
 }
