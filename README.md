@@ -7,7 +7,7 @@
 
 **Website:** [rws8.tech](https://rws8.tech/)
 
-An HTTP web framework, reverse proxy, and server for Rust — HTTP/1.1 · HTTP/2 · HTTP/3/QUIC · TLS · No third-party HTTP dependencies.
+A dependency-minimal Rust web platform: HTTP/1.1, HTTP/2, and HTTP/3 server, reverse proxy, and application framework with routing, middleware (auth, rate limiting, tracing), an async ORM, background jobs, object storage, and a mailer. Runs as a zero-code config-driven proxy or as a library crate. No third-party HTTP dependencies.
 
 | Mode | Setup | Code required |
 |---|---|---|
