@@ -185,6 +185,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 - IP filter — `IpFilter::allow([...])` / `deny([...])`; exact IPv4 and CIDR ranges
 - CSRF — double-submit cookie, `SameSite=Strict`, constant-time compare (`csrf` feature)
 - Password hashing — Argon2id + CSPRNG token generation (`crypto` feature)
+- Signed and encrypted cookies — `signed_cookie` (HMAC-SHA256, tamper-evident) and `encrypted_cookie` (AES-256-GCM, confidential) (`crypto` feature)
 - OAuth2 / OIDC SSO — authorization-code + PKCE flow; RS256/ES256 JWT via JWKS; `OidcAuth` middleware; presets for Google, Microsoft, GitHub, Okta, Auth0, Keycloak; `from_env()`; `sso` feature
 - Request / response rewriting — `RewriteLayer` rewrites headers, URI, status, body bytes
 
@@ -238,7 +239,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 | `model-sqlite` | Async ORM backed by SQLite (via `sqlx`); implies `http2` |
 | `model-postgres` | Async ORM backed by PostgreSQL (via `sqlx`); implies `http2` |
 | `model-mysql` | Async ORM backed by MySQL (via `sqlx`); implies `http2` |
-| `crypto` | Argon2id password hashing + CSPRNG token generation |
+| `crypto` | Argon2id password hashing + CSPRNG token generation; `signed_cookie`/`verify_signed_cookie` (HMAC-SHA256) and `encrypted_cookie`/`decrypt_cookie` (AES-256-GCM) in `cookie` |
 | `csrf` | Double-submit cookie CSRF protection |
 | `sso` | OAuth2/OIDC SSO — `OidcAuth` middleware, RS256/ES256 JWT via JWKS, PKCE, provider presets (Google · Microsoft · GitHub · Okta · Auth0 · Keycloak) |
 | `mailer` | SMTP email — `Mailer::from_env()` + `Email::builder()`; plain, STARTTLS, and SMTPS; multipart text+HTML; AUTH PLAIN; no third-party mail library (STARTTLS/SMTPS additionally require `http-client` or `http2`) |

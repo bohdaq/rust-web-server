@@ -1,6 +1,6 @@
 ---
 title: Cookies
-description: Read cookies from incoming requests with CookieJar and set cookies on responses with the SetCookie builder.
+description: Read cookies from incoming requests, set cookies with the SetCookie builder, and sign or encrypt cookie values.
 ---
 
 `rust-web-server` provides two types in `rust_web_server::cookie` for working with HTTP cookies:
@@ -115,6 +115,64 @@ session=eyJhbGc...; Path=/; Max-Age=3600; Secure; HttpOnly; SameSite=Strict
 
 :::note[Expires attribute]
 The `Expires` attribute (an absolute date) is not directly supported by `SetCookie`. Use `Max-Age` instead — it is preferred by RFC 6265 and avoids clock skew issues. If you need `Expires`, append it manually to the string returned by `.build()`.
+:::
+
+## Signed and encrypted cookie values
+
+Plain `SetCookie` values are readable and forgeable by the client — fine for a UI preference like a theme, wrong for anything a handler trusts without re-checking server-side (a session identifier, a role, a discount eligibility flag). The `crypto` feature adds two function pairs in `rust_web_server::cookie` for exactly this:
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["crypto"] }
+```
+
+| Function pair | Guarantee | Use when |
+|---|---|---|
+| `signed_cookie` / `verify_signed_cookie` | Tamper-evident, but still plain-text and readable by the client | The client only needs to *see* the value, not silently modify it |
+| `encrypted_cookie` / `decrypt_cookie` | Confidential — unreadable and unmodifiable by the client | The value shouldn't be visible to the client at all |
+
+### Signing (HMAC-SHA256)
+
+```rust
+use rust_web_server::cookie::{signed_cookie, verify_signed_cookie, SetCookie};
+
+let secret = b"my-signing-secret"; // load from an env var in real code
+
+// Issuing:
+let cookie_value = signed_cookie("plan=pro", secret);
+let header_value = SetCookie::new("prefs", &cookie_value).http_only().build();
+
+// Reading it back later:
+match verify_signed_cookie(&cookie_value, secret) {
+    Some(value) => { /* value == "plan=pro"; trust it */ }
+    None => { /* missing, malformed, or tampered — treat as absent */ }
+}
+```
+
+`signed_cookie` returns `"<value>.<hex-signature>"`. `verify_signed_cookie` splits on the *last* `.`, so a value that itself contains dots still round-trips correctly — the fixed-length hex HMAC signature never contains one. Any tampering with either half, or verifying with the wrong secret, returns `None`.
+
+### Encryption (AES-256-GCM)
+
+```rust
+use rust_web_server::cookie::{encrypted_cookie, decrypt_cookie, SetCookie};
+
+let key = b"my-encryption-key"; // any length — SHA-256-derived into the 256-bit AES key
+
+// Issuing:
+let cookie_value = encrypted_cookie("session-token-abc123", key);
+let header_value = SetCookie::new("sess", &cookie_value).http_only().secure().build();
+
+// Reading it back later:
+match decrypt_cookie(&cookie_value, key) {
+    Some(value) => { /* value == "session-token-abc123" */ }
+    None => { /* missing, malformed, tampered, or wrong key */ }
+}
+```
+
+`encrypted_cookie` returns `"<hex-nonce>.<hex-ciphertext-and-tag>"`, generating a fresh random 96-bit nonce on every call — encrypting the same value twice never produces the same cookie value, so an observer can't correlate repeated issuances. `decrypt_cookie` returns `None` on any failure (GCM's authentication tag check fails closed rather than returning garbage on a tampered ciphertext).
+
+:::note[Choosing between the two]
+Both fail closed to `None` rather than exposing *why* verification failed — this avoids giving an attacker an oracle to probe. If you don't need confidentiality, prefer `signed_cookie`: it's cheaper and the value stays inspectable in a browser's dev tools during development.
 :::
 
 ## Deleting a cookie

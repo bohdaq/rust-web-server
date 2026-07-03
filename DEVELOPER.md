@@ -81,6 +81,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Log` | `log` | Combined Log Format access log lines |
 | `CookieJar` | `cookie` | Parse the `Cookie` request header into individual cookies |
 | `SetCookie` | `cookie` | Build `Set-Cookie` response header values with all RFC 6265 attributes |
+| `signed_cookie` / `verify_signed_cookie` | `cookie` (requires `crypto` feature) | HMAC-SHA256 tamper-evident cookie value: `"<value>.<hex-signature>"`. Value stays plain-text/readable by the client; verification fails closed (`None`) on any tampering or wrong secret. |
+| `encrypted_cookie` / `decrypt_cookie` | `cookie` (requires `crypto` feature) | AES-256-GCM confidential cookie value: `"<hex-nonce>.<hex-ciphertext+tag>"`. Key is SHA-256-derived from any-length input; fresh random nonce per call; decryption fails closed (`None`) on tampering or the wrong key. |
 | `Router` / `PathParams` | `router` | Standalone dynamic router with `:param` and `*wildcard` path matching; `.with_host(name)` restricts a router to one virtual host. `App`'s own built-in controllers deliberately don't use `Router` — that set is small, static, and known at compile time, so a fixed if-chain is simpler than a segment matcher there. `Router` is for user-defined routes; `AppWithState`/`AsyncAppWithState` build on it and fall through to `App`'s controller chain for anything unmatched. |
 | `with_timeout` / `with_timeout_state` / `with_timeout_async` / `TimeoutLayer` | `timeout` | Per-route request timeouts. `with_timeout`/`with_timeout_state` wrap a `Router`/`AppWithState` handler to return `504 Gateway Timeout` if it doesn't finish in time (runs on a background thread — bounds the client's wait, can't truly cancel sync work). `with_timeout_async` (requires `http2`) wraps an `AsyncAppWithState` handler with genuine cancellation via `tokio::time::timeout`. `TimeoutLayer::new`/`::from_arc` wraps a whole `Application` (used by the config-driven proxy's per-route `timeout_ms`). |
 | `VirtualHostConfig` | `virtual_host` | Per-domain cert configuration `{ domain, cert_file, key_file }` for multi-domain SNI routing |
@@ -161,6 +163,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `HttpClientError` | `http_client` | Error type returned by the HTTP client; implements `std::error::Error`. |
 | `hash_password` / `verify_password` | `crypto` | Argon2id password hashing and verification. `hash_password(pwd)` returns a PHC string (salt embedded). `verify_password(pwd, hash)` is constant-time. |
 | `generate_token` | `crypto` | CSPRNG-backed `generate_token(n_bytes) -> String` — lowercase hex, suitable for reset tokens and API keys. |
+| `CryptoError` | `crypto` | Error type for `hash_password`/`verify_password`. Implements `std::error::Error`. |
 | `CsrfLayer` | `csrf` | Double-submit cookie CSRF middleware. Validates `X-CSRF-Token` header or `_csrf` form field against the `_csrf` cookie on mutating requests; returns 403 on mismatch. Builder: `.cookie_name()`, `.http_only()`, `.secure()`. |
 | `CsrfToken` | `csrf` | Extractor for the current CSRF token. `CsrfToken::from_request(&req)` returns the token inside a GET handler (after `CsrfLayer` has run). Implements `Display` for easy HTML embedding. |
 | `OidcAuth` | `sso` | OAuth2/OIDC middleware. Intercepts `/auth/login`, `/auth/callback`, `/auth/logout`; validates sessions; injects `OidcClaims` via `OidcAuth::claims(req)`. Builder: `.exclude(prefix)`, `.login_path()`, `.callback_path()`. |
@@ -3656,3 +3659,29 @@ On every request, `ForwardAuthLayer` sends a `GET` to the configured URL carryin
 - **Auth service unreachable** (connection refused, timeout, DNS failure) — `502 Bad Gateway`. This fails *closed*: an unreachable auth service is never treated as "access granted."
 
 No new Cargo dependency — it reuses the existing `crate::http_client::Client`, the same one used by the SDK's outbound HTTP calls elsewhere in the framework.
+
+### 69. Signed and encrypted cookies
+
+`SetCookie` produces plain-text values — fine for a UI preference, wrong for anything a handler needs to trust without the client being able to forge or read it. `signed_cookie`/`verify_signed_cookie` and `encrypted_cookie`/`decrypt_cookie` (`src/cookie/crypto_ext.rs`, requires `features = ["crypto"]`) cover both cases:
+
+```rust
+use rust_web_server::cookie::{signed_cookie, verify_signed_cookie, encrypted_cookie, decrypt_cookie, SetCookie};
+
+// Tamper-evident but still client-readable — e.g. a value the client only
+// needs to see, not modify undetected:
+let secret = b"my-signing-secret";
+let signed = signed_cookie("plan=pro", secret);
+let header_value = SetCookie::new("prefs", &signed).http_only().build();
+// ... later, reading the incoming Cookie header ...
+assert_eq!(Some("plan=pro".to_string()), verify_signed_cookie(&signed, secret));
+assert_eq!(None, verify_signed_cookie(&signed, b"wrong-secret")); // tampered or wrong key
+
+// Confidential — the client cannot read or modify the value at all:
+let key = b"my-encryption-key"; // any length; SHA-256-derived into a 256-bit AES key
+let encrypted = encrypted_cookie("session-token-abc123", key);
+let header_value = SetCookie::new("sess", &encrypted).http_only().secure().build();
+// ... later ...
+assert_eq!(Some("session-token-abc123".to_string()), decrypt_cookie(&encrypted, key));
+```
+
+`signed_cookie` is HMAC-SHA256 over the value, output as `"<value>.<hex-signature>"` — splitting on the *last* `.` means a value that itself contains dots still round-trips correctly, since the fixed-length hex signature never contains one. `encrypted_cookie` is AES-256-GCM with a fresh random 96-bit nonce per call (so encrypting the same value twice never produces the same ciphertext), output as `"<hex-nonce>.<hex-ciphertext-and-tag>"`. Both verification functions return `None` on any failure — missing separator, malformed hex, tampering, or the wrong secret/key — rather than a detailed error, so a caller can't use error contents as an oracle.

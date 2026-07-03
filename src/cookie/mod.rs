@@ -1,6 +1,11 @@
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "crypto")]
+mod crypto_ext;
+#[cfg(feature = "crypto")]
+pub use crypto_ext::{decrypt_cookie, encrypted_cookie, signed_cookie, verify_signed_cookie};
+
 /// A single HTTP cookie name/value pair.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cookie {

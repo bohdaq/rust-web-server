@@ -248,7 +248,7 @@ let mcp = App::new().mcp("my-server", "1.0.0")
 | `model-sqlite` | Async ORM backed by SQLite (implies `http2`) | `sqlx` |
 | `model-postgres` | Async ORM backed by PostgreSQL (implies `http2`) | `sqlx` |
 | `model-mysql` | Async ORM backed by MySQL (implies `http2`) | `sqlx` |
-| `crypto` | `hash_password`/`verify_password` (Argon2id), `generate_token` (CSPRNG) | `argon2`, `rand_core` |
+| `crypto` | `hash_password`/`verify_password` (Argon2id), `generate_token` (CSPRNG), `signed_cookie`/`verify_signed_cookie` (HMAC-SHA256), `encrypted_cookie`/`decrypt_cookie` (AES-256-GCM) | `argon2`, `rand_core`, `hmac`, `sha2`, `aes-gcm` |
 | `csrf` | `CsrfLayer` + `CsrfToken` — double-submit cookie CSRF protection | `rand_core` |
 | `sso` | `OidcAuth` middleware, PKCE, RS256/ES256 JWT via JWKS, provider presets | `rsa`, `p256`, `sha2`, `serde`, `serde_json` |
 
@@ -499,6 +499,32 @@ let tok  = generate_token(32);            // 64-char lowercase hex from OS CSPRN
 ```
 
 Store the PHC string as-is — salt is embedded. Use `generate_token` for password-reset tokens, API keys, email verification codes.
+
+---
+
+## Signed and encrypted cookies (src/cookie/crypto_ext.rs, requires `crypto` feature)
+
+`SetCookie` values are plain-text and forgeable by the client. These two function pairs cover tamper-evidence and confidentiality:
+
+```rust
+use rust_web_server::cookie::{signed_cookie, verify_signed_cookie, encrypted_cookie, decrypt_cookie, SetCookie};
+
+// HMAC-SHA256 — value stays plain-text/readable by the client, but tampering
+// (to the value or the signature) is detected. Format: "<value>.<hex-sig>".
+let signed = signed_cookie("plan=pro", b"my-signing-secret");
+let header_value = SetCookie::new("prefs", &signed).http_only().build();
+let original = verify_signed_cookie(&signed, b"my-signing-secret"); // Some("plan=pro")
+let tampered = verify_signed_cookie(&signed, b"wrong-secret");      // None
+
+// AES-256-GCM — value is neither readable nor tamperable by the client.
+// `key` can be any length (SHA-256-derived into the required 256-bit key).
+// Format: "<hex-nonce>.<hex-ciphertext-and-tag>"; fresh random nonce per call.
+let encrypted = encrypted_cookie("session-token-abc123", b"my-encryption-key");
+let header_value = SetCookie::new("sess", &encrypted).http_only().secure().build();
+let original = decrypt_cookie(&encrypted, b"my-encryption-key"); // Some("session-token-abc123")
+```
+
+Both verify/decrypt functions return `None` on any failure (missing separator, malformed hex, tampering, or the wrong secret/key) rather than a detailed error — avoids using error contents as an oracle. `verify_signed_cookie` splits on the *last* `.`, so a value containing dots still round-trips correctly.
 
 ---
 
@@ -1199,6 +1225,7 @@ let www_router = Router::new().with_host("www.example.com").get("/", home_handle
 - Forward-auth to an external service — `auth::forward::ForwardAuthLayer`; fails closed (502) if the auth service is unreachable
 - JWT RS256/ES256 — `sso::JwksCache`; signature + expiry + aud + iss validated
 - Argon2id password hashing — `crypto` module; random salt; PHC string output
+- Signed/encrypted cookies — `cookie::signed_cookie` (HMAC-SHA256) / `cookie::encrypted_cookie` (AES-256-GCM); fails closed (`None`) on tampering or wrong key
 - `SameSite=Strict` session cookies — set via `session_cookie()` helper
 - `HttpOnly` flag — controllable on all `Set-Cookie` builders
 - XSS: no built-in output escaping — use Tera templates which auto-escape HTML
@@ -1223,6 +1250,7 @@ src/compression/        — gzip compression applied in Server::process
 src/config_reload/      — hot-reload logic; ConfigSnapshot
 src/controller/         — Controller trait; built-in controllers
 src/cookie/             — CookieJar, SetCookie builder
+src/cookie/crypto_ext.rs — signed_cookie, verify_signed_cookie, encrypted_cookie, decrypt_cookie (crypto feature)
 src/core/               — New trait (used for App::new())
 src/cors/               — CORS handler controller
 src/csrf/               — CsrfLayer, CsrfToken (csrf feature)

@@ -53,6 +53,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `RewriteLayer` | `rewrite` | Request/response header, URI, body, and status rewriting |
 | `BasicAuthLayer` | `auth` | HTTP Basic authentication middleware |
 | `JwtLayer` | `auth` | HS256 Bearer JWT validation middleware |
+| `ForwardAuthLayer` | `auth::forward` | Delegates the allow/deny decision to an external HTTP service; verbatim pass-through on non-2xx, 502 if unreachable |
 | `IpFilter` | `ip_filter` | IP address allowlist or denylist middleware |
 | `RequestIdLayer` / `RequestId` | `request_id` | Correlation-ID middleware — injects/echoes `X-Request-Id`; `RequestId` is the matching `FromRequest` extractor |
 | `CsrfLayer` | `csrf` | CSRF double-submit cookie protection middleware |

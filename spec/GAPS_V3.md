@@ -247,6 +247,8 @@ The programmatic `JwtLayer` middleware (in `src/auth/`) only verifies HS256 (HMA
 
 ### 3.11 Cookie signing/encryption absent
 
+> **Status: resolved.** `signed_cookie`/`verify_signed_cookie` (HMAC-SHA256) and `encrypted_cookie`/`decrypt_cookie` (AES-256-GCM) added in `src/cookie/crypto_ext.rs` (`crypto` feature). See `spec/TODO.md` for full detail.
+
 `SetCookie` builder and `session_cookie()` helper produce plain-text cookie values. There is no `signed_cookie(value, secret)` (HMAC-SHA256 to prevent tampering) or `encrypted_cookie(value, key)` (AES-GCM to prevent reading). Applications storing anything sensitive in a cookie must implement their own signing.
 
 ---
