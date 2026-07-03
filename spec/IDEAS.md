@@ -181,6 +181,8 @@ The `regex` crate is already used by several Rust HTTP frameworks; pinning to `"
 
 ## 8. Forward-auth middleware
 
+> **Status: resolved.** Implemented as `ForwardAuthLayer` in `src/auth/forward.rs` (per the more specific path named in `spec/TODO.md`, rather than directly in `src/auth/mod.rs` as sketched below). One addition beyond the original sketch: the internal HTTP client disables redirect-following (`max_redirects(0)`) so a `3xx` from the auth service reaches the client verbatim instead of being silently followed. See `spec/TODO.md` for full detail.
+
 `GAPS.md` lists this under authentication: delegate auth decisions to an external HTTP service (Traefik's `ForwardAuth`, nginx `auth_request`).
 
 ```rust

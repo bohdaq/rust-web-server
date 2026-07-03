@@ -32,6 +32,8 @@
 //!     .wrap(JwtLayer::new(b"my-signing-secret"));
 //! ```
 
+pub mod forward;
+
 #[cfg(test)]
 mod tests;
 

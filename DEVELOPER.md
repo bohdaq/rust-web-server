@@ -100,6 +100,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Json<T>` | `json` | Serde-backed JSON extractor (`from_request`) and responder (`into_response`). Requires `features = ["serde"]`. |
 | `BasicAuthLayer<F>` | `auth` | HTTP Basic Auth middleware; validates `Authorization: Basic` credentials via a closure. `BasicAuthLayer::from_htpasswd_file(path)` loads `user:password` (plain text) or `user:{SHA256}<base64>` (rws's own scheme) entries from a file — not Apache's `{SHA}`/`$apr1$`/bcrypt. Requires `features = ["auth"]`. |
 | `JwtLayer` | `auth` | JWT HS256 middleware; verifies `Authorization: Bearer` tokens with constant-time HMAC-SHA256. Requires `features = ["auth"]`. |
+| `ForwardAuthLayer` | `auth::forward` | Delegates the allow/deny decision to an external HTTP service (Traefik `forwardAuth`, nginx `auth_request` style). `2xx` → request proceeds, `.copy_header(name)` values from the auth response replace same-named headers on the forwarded request; any other status → the auth service's response is returned verbatim (status, headers, body); unreachable auth service → `502 Bad Gateway`. No new deps — reuses `http_client::Client`. Requires `features = ["auth"]`. |
 | `build_jwt` / `verify_jwt` / `Claims` | `auth` | Sign and verify HS256 JWTs; `Claims` exposes `sub`, `exp`, and raw JSON payload. |
 | `IpFilter` | `ip_filter` | Allow/deny middleware keyed on client IPv4 address or CIDR range. `IpFilter::allow([...])` passes only listed addresses; `IpFilter::deny([...])` blocks them. |
 | `RequestIdLayer` / `RequestId` | `request_id` | Correlation-ID middleware. Echoes an incoming `X-Request-Id` unchanged, or generates one (`generate_request_id()`, UUID-v4-shaped, not crypto-random) — either way it's injected into the request (readable by handlers) and set on the response. `.header(name)` overrides the header name. `RequestId` (in `extract`) is a `FromRequest` convenience for reading it. |
@@ -3631,3 +3632,27 @@ echo 'bob:{SHA256}9S+9MrKzuG/4jvbEkGKChfSCrxXdyylUH5S89Saj9sc=' >> .htpasswd
 If you need real Apache-hash compatibility, write your own `BasicAuthLayer::new(closure)` in Rust code backed by the `bcrypt`/`sha1` crate of your choice — the config-driven `htpasswd_file` path is intentionally scoped to avoid hand-rolling deprecated hash algorithms.
 
 If `htpasswd_file` can't be read (missing, wrong permissions), that route's Basic auth check is skipped (with a startup warning), the same fail-open behavior as an unset JWT secret — a misconfigured auth file doesn't lock out the whole route silently with no explanation, but it also doesn't accidentally leave a route open forever without you noticing the warning in the logs.
+
+### 68. Delegating auth to an external service (ForwardAuth)
+
+Traefik's `forwardAuth` and nginx's `auth_request` both delegate the allow/deny decision to a separate HTTP service instead of embedding the check in the app itself — useful for a centralized policy engine (OPA, Casbin) or a shared SSO/session service. `ForwardAuthLayer` (`src/auth/forward.rs`, requires `features = ["auth"]`) is the same pattern as middleware:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::auth::forward::ForwardAuthLayer;
+
+let app = App::new()
+    .wrap(ForwardAuthLayer::new("http://auth.internal/verify")
+        .copy_header("X-User-Id")
+        .copy_header("X-Roles")
+        .timeout_ms(2000));
+```
+
+On every request, `ForwardAuthLayer` sends a `GET` to the configured URL carrying a copy of every incoming request header (so the auth service can inspect a session cookie, an existing `Authorization` header, etc.):
+
+- **`2xx`** — the request proceeds. Any header named via `.copy_header(...)` that's present on the *auth service's response* replaces the same-named header on the forwarded request (not appended alongside it — a client can't smuggle its own `X-User-Id` past the auth service's verified value this way).
+- **Any other status** — the auth service's response is returned to the client **verbatim**: status code, headers (except hop-by-hop and body-framing ones), and body. This preserves a `WWW-Authenticate` challenge or a `Location` redirect into an OAuth login flow without `rws` needing to understand either.
+- **Auth service unreachable** (connection refused, timeout, DNS failure) — `502 Bad Gateway`. This fails *closed*: an unreachable auth service is never treated as "access granted."
+
+No new Cargo dependency — it reuses the existing `crate::http_client::Client`, the same one used by the SDK's outbound HTTP calls elsewhere in the framework.

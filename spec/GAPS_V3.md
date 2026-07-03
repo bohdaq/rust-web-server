@@ -137,6 +137,8 @@ The `type = "static"` action is documented in `ActionConfig` as a planned varian
 
 ### 2.9 ForwardAuth middleware missing
 
+> **Status: resolved.** `ForwardAuthLayer` added in `src/auth/forward.rs` (`auth` feature). See `spec/TODO.md` for full detail.
+
 Delegate authentication decisions to an external HTTP service (like Traefik's `forwardAuth`). The middleware calls the auth service with a copy of the incoming headers; a non-2xx response rejects the request. This is the standard pattern for integrating a policy engine (OPA, Casbin) or a centralized auth service without embedding the logic in rws. (Already in the docs roadmap.)
 
 ---

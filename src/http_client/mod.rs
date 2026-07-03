@@ -216,6 +216,13 @@ impl Response {
             .map(|(_, v)| v.as_str())
     }
 
+    /// All response headers, in the order the server sent them. Use this
+    /// when you need to enumerate every header rather than look one up by
+    /// name — e.g. forwarding a response verbatim.
+    pub fn headers(&self) -> &[(String, String)] {
+        &self.headers
+    }
+
     /// Raw response body bytes.
     pub fn bytes(&self) -> &[u8] {
         &self.body

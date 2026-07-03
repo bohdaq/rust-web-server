@@ -1,9 +1,9 @@
 ---
 title: Authentication
-description: HTTP Basic Auth and HS256 JWT middleware with helper functions for issuing and verifying tokens.
+description: HTTP Basic Auth, HS256 JWT, and forward-auth middleware with helper functions for issuing and verifying tokens.
 ---
 
-The `auth` Cargo feature adds `BasicAuthLayer` and `JwtLayer` middleware, plus standalone helpers for building and verifying HS256 JWTs.
+The `auth` Cargo feature adds `BasicAuthLayer`, `JwtLayer`, and `ForwardAuthLayer` middleware, plus standalone helpers for building and verifying HS256 JWTs.
 
 ```toml
 [dependencies]
@@ -187,6 +187,40 @@ fn login(req: &Request) -> Response {
 
 :::note[Algorithm support]
 `build_jwt` and `verify_jwt` only support HS256. For RS256/ES256 (public-key JWTs from an identity provider), use the `sso` feature which provides `JwksCache`.
+:::
+
+## Forward-auth (delegate to an external service)
+
+`ForwardAuthLayer` delegates the allow/deny decision to an external HTTP service — the same pattern as Traefik's `forwardAuth` or nginx's `auth_request`. Use it to gate requests behind a centralized policy engine (OPA, Casbin) or a shared SSO/session service, without embedding that logic in your app.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::auth::forward::ForwardAuthLayer;
+use rust_web_server::core::New;
+
+let app = App::new()
+    .wrap(ForwardAuthLayer::new("http://auth.internal/verify")
+        .copy_header("X-User-Id")
+        .copy_header("X-Roles")
+        .timeout_ms(2000));
+```
+
+On every request, the layer sends a `GET` to the configured URL with every incoming request header copied onto it (so the auth service can inspect a session cookie or an existing `Authorization` header):
+
+1. **`2xx`** — the request proceeds to the next layer/handler. Any header named via `.copy_header(name)` that's present on the *auth service's response* **replaces** the same-named header on the forwarded request. This is deliberate: if it merely appended, a client could send its own `X-User-Id` and have it coexist with the trusted value.
+2. **Any other status** — the auth service's response is returned to the client **verbatim**: status code, headers (minus hop-by-hop and body-framing ones), and body. This preserves a `WWW-Authenticate` challenge or a `Location` redirect into an OAuth login flow without `rws` needing to understand either.
+3. **Auth service unreachable** (connection refused, timeout, DNS failure) — `502 Bad Gateway`. This fails *closed*: an unreachable auth service is never treated as "access granted."
+
+Redirects from the auth service itself are not followed (`max_redirects(0)` internally) so a `3xx` response reaches step 2 intact instead of being silently resolved to whatever it points to.
+
+No new Cargo dependency — `ForwardAuthLayer` reuses the existing `crate::http_client::Client`, the same synchronous outbound HTTP client used elsewhere in the framework.
+
+:::note[Builder options]
+| Method | Default | Purpose |
+|---|---|---|
+| `ForwardAuthLayer::new(url)` | — | Auth service URL, e.g. `"http://auth.internal/verify"` |
+| `.copy_header(name)` | none | Copy `name` from the auth response onto the forwarded request on `2xx`; call multiple times for multiple headers |
+| `.timeout_ms(ms)` | `5000` | Auth service call timeout |
 :::
 
 ## No-code auth in the config-driven proxy
