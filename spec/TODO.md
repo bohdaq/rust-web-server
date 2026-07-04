@@ -179,6 +179,24 @@ Surfaced by a 2026-07-04 review of what's missing for Data/ML use cases specific
 
 ---
 
+## Robotics readiness
+
+Surfaced by a 2026-07-04 review of what's missing for robotics use cases specifically. No MQTT, CoAP, ROS, serial/GPIO, or WebRTC support exists in this codebase today (confirmed via grep, not assumption). The *fleet/gateway/ops* side of robotics — telemetry ingestion, device authentication, command queuing, OTA distribution, fleet monitoring — is already reasonably well covered by existing building blocks; the gaps below are what a Rust HTTP framework should reasonably add on top of that, plus explicit scope boundaries worth stating rather than leaving implicit.
+
+- [ ] **ROS / ROS 2 bridge** — ROS 2 (DDS-based) is the dominant robotics middleware, not HTTP. A `rosbridge`-style adapter — HTTP/WebSocket ↔ ROS topics/services, JSON-encoded, compatible with the existing `rosbridge_suite` protocol other tools already speak — would let rws act as a cloud/web gateway for a robot's ROS graph without needing real DDS integration. Given the WebSocket implementation already exists, this is the single highest-leverage robotics-specific addition.
+
+- [ ] **MQTT** — the dominant pub/sub protocol in robotics/IoT (ROS topic bridges, industrial robots, AWS IoT Core / Azure IoT Hub style fleet telemetry). Nothing here today; would need a new feature (client, and/or a minimal embedded broker).
+
+- [ ] **CoAP** — the constrained-device analogue of HTTP (UDP-based, built for embedded/battery-powered devices). Not supported; comparable scope to the WebSocket implementation already in the crate.
+
+- [ ] **Binary/schema-based telemetry serialization** — the same underlying gap as the Data/ML section's Protobuf item; high-frequency sensor streams (IMU, lidar, joint states) are usually Protobuf/Cap'n Proto/FlatBuffers over WebSocket, not JSON, for size and parse-speed reasons.
+
+- [ ] **Document the real-time scope boundary** — not a code gap: this is a general-purpose async/thread-pool server, fine for telemetry, fleet management, and command/control at "soft real-time" (tens of ms), not for closed-loop motor-control loops (kHz), which belong in a real-time layer regardless of HTTP framework choice. Worth a docs callout so it's an explicit boundary rather than an implicit unknown for someone evaluating rws for a control-loop use case.
+
+- [ ] **Document the embedded/`no_std` scope boundary** — same boundary as the already-tracked WASM target gap: rws needs `std` (threads, `TcpListener`, tokio), so it targets Linux-class robot computers (Raspberry Pi, Jetson, industrial PCs), not microcontroller firmware itself.
+
+---
+
 ## Cross-reference
 
 | This file | Source spec |
