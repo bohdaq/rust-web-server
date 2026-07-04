@@ -160,7 +160,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware proxying with a per-`[[upstream]]` `strategy`: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), or `least_connections` (routes to the live backend with fewest in-flight requests). `ConfigDrivenApp::with_config(ServerConfig)` pins its fallback `App` (unmatched requests — healthz/readyz/metrics/static/404) to explicit settings instead of reading `RWS_CONFIG_*` env vars per request. |
 | `StaticAdapter` | `proxy_config` | Action handler for `type = "static"` routes in `rws.config.toml`. Serves files from a configured `root` directory (independent of the process working directory), trying each `index` entry in order for directory requests; rejects any request path with a `..` segment (before or after percent-decoding) with `403`, missing files with `404`. |
 | `Container` | `di` | Type-keyed dependency injection container. `register::<T>(service)` stores concrete types; `provide::<dyn Trait>(Arc::new(...))` stores trait objects; both keyed by `TypeId`. Named services via `register_named` / `provide_named` / `get_named`. Pass the container directly as `AppWithState`/`AsyncAppWithState`'s state (`App::with_state(container)`) — **not** `container.into_arc()`, which double-wraps in `Arc` since `with_state` already wraps `S` internally. `into_arc()` is for sharing one container across multiple hand-built `Application`s outside of `with_state`. |
-| `DbPool` / `DbTransaction` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`; implies `http2`) | Async connection pool backed by `sqlx`. `DbPool::new(DbConfig).await` or `DbPool::from_env().await`. All SQL operations are `async fn`: `execute`, `query_rows`, `query::<T>`, `begin`, `transaction(closure)`, `migrate`, `migration_status`. **SQLite in-memory shortcut:** `DbPool::memory().await` creates a single-connection pool backed by `":memory:"` — each call is an isolated empty database, ideal for tests. Cheap to clone (Arc-wrapped). |
+| `DbPool` / `DbTransaction` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`; implies `http2`) | Async connection pool backed by `sqlx`. `DbPool::new(DbConfig).await` or `DbPool::from_env().await`. All SQL operations are `async fn`: `execute`, `query_rows`, `query::<T>`, `begin`, `transaction(closure)`, `migrate`, `migration_status`, `rollback_last`, `rollback`. **SQLite in-memory shortcut:** `DbPool::memory().await` creates a single-connection pool backed by `":memory:"` — each call is an isolated empty database, ideal for tests. Cheap to clone (Arc-wrapped). |
 | `DbConfig` | `model` | Database configuration. `DbConfig::from_env()` reads `RWS_DB_*` env vars; construct manually with `DbConfig { host, port, user, password, database, pool_size }`. |
 | `ModelRepository<T, i64>` | `model` | Async JPA-style CRUD: `find_by_id`, `find_all`, `save` (INSERT when pk==0, UPDATE otherwise), `save_all`, `delete_by_id`, `delete_all_by_id`, `count`, `exists_by_id` — all `async fn`. Obtain via `T::repository(&pool)` when using `#[derive(Model)]`. |
 | `QueryBuilder<T>` | `model` | Async fluent SQL builder: `where_eq`, `filter`, `order_by`, `limit`, `offset`, then `fetch_all`, `fetch_one`, `count`, `update`, `delete`, `paginate`, `paginate_after` (all `.await`). Obtain via `T::query(&pool)` when using `#[derive(Model)]`. |
@@ -2860,6 +2860,18 @@ let pool = DbPool::new(DbConfig {
 
 pool.migrate("migrations/").await?;
 ```
+
+Roll back migrations by pairing an up file with a `.down.sql` file of the same stem (e.g. `0001_x.sql` / `0001_x.down.sql`):
+
+```rust
+// Undo the single most recently applied migration.
+let version = pool.rollback_last("migrations/").await?; // Option<String>
+
+// Undo the last 3, most recently applied first; stops early if fewer are applied.
+let versions = pool.rollback("migrations/", 3).await?; // Vec<String>
+```
+
+Both return `Err` if the migration being undone has no `.down.sql` file — rollback is opt-in per migration. See [Migrations](/database/migrations/) for the down-file naming rule.
 
 CRUD via the repository:
 

@@ -159,6 +159,25 @@ impl DbPool {
     pub async fn migration_status(&self, dir: &str) -> Result<Vec<MigrationStatus>, DbError> {
         migration::migration_status(self, dir).await
     }
+
+    /// Roll back the most recently applied migration in `dir`.
+    ///
+    /// Requires a companion `<version-stem>.down.sql` file next to the up
+    /// migration it undoes (e.g. `0001_x.sql` → `0001_x.down.sql`); returns
+    /// `Err` if that file is missing. Returns `Ok(None)` if nothing is
+    /// currently applied.
+    pub async fn rollback_last(&self, dir: &str) -> Result<Option<String>, DbError> {
+        migration::rollback_last(self, dir).await
+    }
+
+    /// Roll back the last `n` applied migrations, most recently applied
+    /// first. Returns the versions actually rolled back — fewer than `n` if
+    /// fewer than `n` migrations were applied. Stops at the first missing
+    /// down file or SQL error; migrations already rolled back in earlier
+    /// iterations stay rolled back.
+    pub async fn rollback(&self, dir: &str, n: usize) -> Result<Vec<String>, DbError> {
+        migration::rollback(self, dir, n).await
+    }
 }
 
 // ── DbTransaction ─────────────────────────────────────────────────────────────

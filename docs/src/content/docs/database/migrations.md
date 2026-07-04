@@ -1,6 +1,6 @@
 ---
 title: Migrations
-description: Manage schema changes with versioned SQL files that run once and are tracked in the database.
+description: Manage schema changes with versioned SQL files that run once, are tracked in the database, and can be rolled back.
 ---
 
 The migration runner reads `*.sql` files from a directory in lexicographic order, executes any that have not already been applied, and records each run in a `_schema_migrations` table. No external tools or frameworks are required.
@@ -108,6 +108,59 @@ if pending {
 |---|---|---|
 | `version` | `String` | Filename used as the version key |
 | `applied` | `bool` | `true` if the migration has been run |
+| `has_down` | `bool` | `true` if a companion `.down.sql` file exists, meaning this migration can be rolled back |
+
+## Rolling back
+
+Add a companion **down file** next to any up migration you want to be reversible: take the up file's name and replace its `.sql` extension with `.down.sql`.
+
+```
+migrations/
+  001_create_users.sql
+  001_create_users.down.sql
+  002_add_email_index.sql
+  002_add_email_index.down.sql
+```
+
+```sql
+-- migrations/001_create_users.down.sql
+DROP TABLE users;
+```
+
+```sql
+-- migrations/002_add_email_index.down.sql
+DROP INDEX idx_users_email;
+```
+
+`pool.rollback_last(dir).await` undoes the single most recently applied migration: it runs the down file's SQL and deletes the migration's row from `_schema_migrations`, both inside one transaction — rolled back together if the down SQL fails. "Most recently applied" is the highest version string among applied migrations, the same lexicographic order `migrate` uses to apply them.
+
+```rust
+use rust_web_server::model::DbPool;
+
+let pool = DbPool::from_env().await.expect("connection pool");
+
+match pool.rollback_last("migrations/").await {
+    Ok(Some(version)) => println!("rolled back {}", version),
+    Ok(None) => println!("nothing to roll back"),
+    Err(e) => eprintln!("rollback failed: {}", e),
+}
+```
+
+`pool.rollback(dir, n).await` rolls back up to the last `n` applied migrations, most recent first, stopping early (without error) once nothing is left to undo:
+
+```rust
+// Roll back the last 3 migrations, in reverse order they were applied.
+let rolled_back = pool.rollback("migrations/", 3).await.expect("rollback failed");
+for version in &rolled_back {
+    println!("rolled back {}", version);
+}
+```
+
+Both methods return `Err` if the migration they're trying to undo has no companion `.down.sql` file — rollback is opt-in per migration, not automatic. Migrations already rolled back before such a failure stay rolled back; each step commits independently.
+
+:::caution[Down migrations are not automatically the inverse]
+`rust-web-server` does not generate down SQL for you — you write it, the same way you write the up file. Get it right by hand: `DROP TABLE` undoes `CREATE TABLE`, `DROP COLUMN` undoes `ADD COLUMN`, and so on. A down file that doesn't actually reverse its up file will leave the schema in an inconsistent state relative to `_schema_migrations`.
+:::
 
 ## Startup pattern
 

@@ -723,6 +723,9 @@ let pool = DbPool::new(DbConfig::from_env()?).await?;
 
 // Migration:
 pool.migrate("migrations/").await?;
+// Rollback (needs a companion `.down.sql` per up file, e.g. 0001_x.sql / 0001_x.down.sql):
+pool.rollback_last("migrations/").await?;   // -> Option<String>, undoes the most recent
+pool.rollback("migrations/", 3).await?;     // -> Vec<String>, undoes up to the last 3
 
 // CRUD (all async):
 let repo = User::repository(&pool);

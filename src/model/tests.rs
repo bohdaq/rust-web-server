@@ -398,6 +398,128 @@ mod model_tests {
     }
 
     #[tokio::test]
+    async fn test_14_rollback_last_undoes_most_recent_migration() {
+        use std::io::Write;
+
+        let pool = test_pool().await;
+        let dir = tempdir_path();
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let f1 = format!("{}/0001_create_items.sql", dir);
+        let f1_down = format!("{}/0001_create_items.down.sql", dir);
+        let f2 = format!("{}/0002_create_tags.sql", dir);
+        let f2_down = format!("{}/0002_create_tags.down.sql", dir);
+        {
+            let mut file = std::fs::File::create(&f1).unwrap();
+            writeln!(file, "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)").unwrap();
+        }
+        {
+            let mut file = std::fs::File::create(&f1_down).unwrap();
+            writeln!(file, "DROP TABLE items").unwrap();
+        }
+        {
+            let mut file = std::fs::File::create(&f2).unwrap();
+            writeln!(file, "CREATE TABLE tags (id INTEGER PRIMARY KEY, label TEXT)").unwrap();
+        }
+        {
+            let mut file = std::fs::File::create(&f2_down).unwrap();
+            writeln!(file, "DROP TABLE tags").unwrap();
+        }
+
+        pool.migrate(&dir).await.expect("run migrations");
+        pool.execute("INSERT INTO tags (label) VALUES ('x')", &[]).await.expect("insert into tags");
+
+        let rolled_back = pool.rollback_last(&dir).await.expect("rollback last");
+        assert_eq!(Some("0002_create_tags.sql".to_string()), rolled_back);
+
+        // `tags` should be gone; `items` (from the still-applied migration) remains.
+        assert!(pool.execute("SELECT 1 FROM tags", &[]).await.is_err());
+        pool.execute("INSERT INTO items (name) VALUES ('a')", &[]).await.expect("items table still exists");
+
+        let rows = pool
+            .query_rows("SELECT version FROM _schema_migrations ORDER BY version", &[])
+            .await.unwrap();
+        let versions: Vec<String> = rows.iter().map(|r| r.get("version").unwrap()).collect();
+        assert_eq!(versions, vec!["0001_create_items.sql".to_string()]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_15_rollback_n_undoes_multiple_in_reverse_order() {
+        use std::io::Write;
+
+        let pool = test_pool().await;
+        let dir = tempdir_path();
+        std::fs::create_dir_all(&dir).unwrap();
+
+        for (up_name, up_sql, down_sql) in [
+            ("0001_create_a.sql", "CREATE TABLE a (id INTEGER PRIMARY KEY)", "DROP TABLE a"),
+            ("0002_create_b.sql", "CREATE TABLE b (id INTEGER PRIMARY KEY)", "DROP TABLE b"),
+            ("0003_create_c.sql", "CREATE TABLE c (id INTEGER PRIMARY KEY)", "DROP TABLE c"),
+        ] {
+            let up_path = format!("{}/{}", dir, up_name);
+            let down_path = format!("{}/{}", dir, up_name.replace(".sql", ".down.sql"));
+            writeln!(std::fs::File::create(&up_path).unwrap(), "{}", up_sql).unwrap();
+            writeln!(std::fs::File::create(&down_path).unwrap(), "{}", down_sql).unwrap();
+        }
+
+        pool.migrate(&dir).await.expect("run migrations");
+
+        // Roll back the last two: 0003 then 0002, in that order.
+        let rolled_back = pool.rollback(&dir, 2).await.expect("rollback 2");
+        assert_eq!(vec!["0003_create_c.sql".to_string(), "0002_create_b.sql".to_string()], rolled_back);
+
+        let status = pool.migration_status(&dir).await.expect("status");
+        let applied: Vec<&str> = status.iter().filter(|s| s.applied).map(|s| s.version.as_str()).collect();
+        assert_eq!(vec!["0001_create_a.sql"], applied);
+
+        // Asking for more than what's applied stops early instead of erroring.
+        let rolled_back_rest = pool.rollback(&dir, 5).await.expect("rollback rest");
+        assert_eq!(vec!["0001_create_a.sql".to_string()], rolled_back_rest);
+        assert_eq!(0, pool.rollback(&dir, 1).await.expect("nothing left").len());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_16_rollback_last_is_none_when_nothing_applied() {
+        let pool = test_pool().await;
+        let dir = tempdir_path();
+        std::fs::create_dir_all(&dir).unwrap();
+
+        assert_eq!(None, pool.rollback_last(&dir).await.expect("rollback with nothing applied"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_17_rollback_last_errors_when_down_file_missing() {
+        use std::io::Write;
+
+        let pool = test_pool().await;
+        let dir = tempdir_path();
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let f1 = format!("{}/0001_create_items.sql", dir);
+        writeln!(std::fs::File::create(&f1).unwrap(), "CREATE TABLE items (id INTEGER PRIMARY KEY)").unwrap();
+        // No 0001_create_items.down.sql on purpose.
+
+        pool.migrate(&dir).await.expect("run migrations");
+
+        let err = pool.rollback_last(&dir).await.expect_err("missing down file should error");
+        assert!(err.to_string().contains("0001_create_items.down.sql"));
+
+        // The migration must still be recorded as applied — a failed rollback
+        // attempt must not silently mark it as undone.
+        let status = pool.migration_status(&dir).await.expect("status");
+        assert!(status[0].applied);
+        assert!(!status[0].has_down);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
     async fn db_pool_memory_single_connection_sees_correct_data() {
         let pool = DbPool::memory().await.expect("create memory pool");
         pool.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)", &[]).await.unwrap();
