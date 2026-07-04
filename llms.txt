@@ -793,7 +793,7 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 | `H2ReverseProxy` | `proxy` | HTTP/2 upstream proxy; `h2://` plain TCP, `h2s://`/`https://` TLS (ALPN `h2`); port defaults to 443 for TLS schemes; `http2` feature |
 | `GrpcProxy` | `proxy` | gRPC proxy; filters on `Content-Type: application/grpc*`; `grpc://` plain, `grpcs://`/`https://` TLS; `http2` feature |
 | `RewriteLayer` | `rewrite` | Request/response header, URI, status, body rewriting. `.request_uri_regex_rewrite(pattern, replacement)` (requires `rewrite-regex`) — regex match against the URI, whole URI replaced by the `$1`/`${name}`-expanded replacement on match, no-op otherwise |
-| `CanaryLayer` | `canary` | Weighted traffic splitting; `.add(backend, weight)` |
+| `CanaryLayer` | `canary` | Weighted traffic splitting via `WeightedBackend::new(url, weight)`; backends may be plain HTTP or TLS (`https://`/`h2s://`/`grpcs://`, requires `http-client`/`http2`) |
 | `RetryLayer` | `circuit_breaker` | Retry on 502/503/504 up to `max_retries` |
 | `OidcAuth` | `sso` | OIDC auth flow + claims injection; `.exclude(prefix)` |
 
@@ -1343,7 +1343,7 @@ src/auth/forward.rs     — ForwardAuthLayer, delegates auth decisions to an ext
 src/blocklist/          — IP blocklist middleware
 src/body/               — multipart_form_data, form_urlencoded parsers
 src/cache/              — CacheLayer middleware
-src/canary/             — CanaryLayer weighted traffic splitting
+src/canary/             — CanaryLayer weighted traffic splitting (plain HTTP or TLS backends)
 src/circuit_breaker/    — CircuitBreaker, RetryLayer
 src/client_hint/        — Client Hints header parsing
 src/compression/        — gzip compression applied in Server::process

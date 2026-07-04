@@ -4,9 +4,11 @@
 //! across a set of backends according to configurable weights.  A backend with
 //! weight 3 receives three times as many requests as one with weight 1.
 //!
-//! Backends are contacted over plain HTTP/1.1.  If a backend is unavailable the
-//! next one in the rotation is tried; after exhausting all backends the
-//! middleware returns `502 Bad Gateway`.
+//! Backends are contacted over plain HTTP/1.1, or over TLS when the backend
+//! URL uses an `https://`, `h2s://`, or `grpcs://` scheme (requires the
+//! `http-client` or `http2` feature — both pull in `rustls`). If a backend is
+//! unavailable the next one in the rotation is tried; after exhausting all
+//! backends the middleware returns `502 Bad Gateway`.
 //!
 //! # Example
 //!
@@ -68,8 +70,10 @@ impl WeightedBackend {
 /// times.  An atomic counter selects the next entry in the rotation on every
 /// request, giving a deterministic, lock-free weighted round-robin distribution.
 pub struct CanaryLayer {
-    /// Expanded rotation: each entry is `(host, port)` and appears `weight` times.
-    pub(crate) rotation: Vec<(String, u16)>,
+    /// Expanded rotation: each entry is `(host, port, tls)` and appears
+    /// `weight` times. `tls` is set when the backend's URL used an
+    /// `https://`/`h2s://`/`grpcs://` scheme.
+    pub(crate) rotation: Vec<(String, u16, bool)>,
     counter: AtomicUsize,
     connect_timeout: Duration,
     read_timeout: Duration,
@@ -81,14 +85,14 @@ impl CanaryLayer {
     ///
     /// Backends with `weight == 0` are ignored.
     pub fn new(backends: Vec<WeightedBackend>) -> Self {
-        let mut rotation: Vec<(String, u16)> = Vec::new();
+        let mut rotation: Vec<(String, u16, bool)> = Vec::new();
         for wb in &backends {
             if wb.weight == 0 {
                 continue;
             }
-            if let Some((host, port)) = parse_backend_url(&wb.url) {
+            if let Some((host, port, tls)) = parse_backend_url(&wb.url) {
                 for _ in 0..wb.weight {
-                    rotation.push((host.clone(), port));
+                    rotation.push((host.clone(), port, tls));
                 }
             }
         }
@@ -138,14 +142,34 @@ impl CanaryLayer {
                 continue;
             }
             tried.push(idx);
-            match crate::proxy::proxy_http1(
-                request,
-                &connection.client.ip,
-                &backend.0,
-                backend.1,
-                self.connect_timeout,
-                self.read_timeout,
-            ) {
+            let (host, port, tls) = backend;
+            let result = if *tls {
+                #[cfg(any(feature = "http-client", feature = "http2"))]
+                {
+                    crate::proxy::proxy_https1(
+                        request,
+                        &connection.client.ip,
+                        host,
+                        *port,
+                        self.connect_timeout,
+                        self.read_timeout,
+                    )
+                }
+                #[cfg(not(any(feature = "http-client", feature = "http2")))]
+                {
+                    Err("CanaryLayer: TLS backend requires the http-client or http2 feature".to_string())
+                }
+            } else {
+                crate::proxy::proxy_http1(
+                    request,
+                    &connection.client.ip,
+                    host,
+                    *port,
+                    self.connect_timeout,
+                    self.read_timeout,
+                )
+            };
+            match result {
                 Ok(resp) => return Ok(resp),
                 Err(_) => continue,
             }
@@ -175,14 +199,29 @@ impl Middleware for CanaryLayer {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-/// Parse a backend URL of the form `[http://]host[:port][/path]` into
-/// `(host, port)`.  Defaults to port 80 when no port is present.
-fn parse_backend_url(url: &str) -> Option<(String, u16)> {
-    let rest = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .or_else(|| url.strip_prefix("h2://"))
-        .unwrap_or(url);
+/// Parse a backend URL of the form `[scheme://]host[:port][/path]` into
+/// `(host, port, tls)`.
+///
+/// `https://`, `h2s://`, and `grpcs://` set `tls = true` and default to port
+/// 443; `http://`, `h2://`, `grpc://`, and a bare `host[:port]` set
+/// `tls = false` and default to port 80 — matching `proxy::Backend::parse`'s
+/// scheme conventions.
+fn parse_backend_url(url: &str) -> Option<(String, u16, bool)> {
+    let (rest, tls, default_port) = if let Some(r) = url.strip_prefix("https://") {
+        (r, true, 443u16)
+    } else if let Some(r) = url.strip_prefix("h2s://") {
+        (r, true, 443u16)
+    } else if let Some(r) = url.strip_prefix("grpcs://") {
+        (r, true, 443u16)
+    } else if let Some(r) = url.strip_prefix("http://") {
+        (r, false, 80u16)
+    } else if let Some(r) = url.strip_prefix("h2://") {
+        (r, false, 80u16)
+    } else if let Some(r) = url.strip_prefix("grpc://") {
+        (r, false, 80u16)
+    } else {
+        (url, false, 80u16)
+    };
     // Drop any path component
     let host_port = rest.split('/').next().unwrap_or(rest);
     let (host, port) = if let Some(colon) = host_port.rfind(':') {
@@ -190,12 +229,12 @@ fn parse_backend_url(url: &str) -> Option<(String, u16)> {
         if let Ok(p) = port_str.parse::<u16>() {
             (host_port[..colon].to_string(), p)
         } else {
-            (host_port.to_string(), 80)
+            (host_port.to_string(), default_port)
         }
     } else {
-        (host_port.to_string(), 80)
+        (host_port.to_string(), default_port)
     };
-    if host.is_empty() { None } else { Some((host, port)) }
+    if host.is_empty() { None } else { Some((host, port, tls)) }
 }
 
 fn bad_gateway() -> Response {

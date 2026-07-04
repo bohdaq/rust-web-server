@@ -77,18 +77,29 @@ CanaryLayer::new(backends)
 
 If the selected backend is unavailable, the layer tries every distinct backend in the rotation before returning `502 Bad Gateway`. The same `(host, port)` pair is never retried twice in a single request — deduplication is applied even when a backend appears multiple times due to its weight.
 
-:::note[Plain HTTP only]
-`CanaryLayer` contacts backends over plain HTTP/1.1. For HTTPS backends, place a TLS-terminating rws instance in front and use its plain HTTP port as the backend address.
-:::
+## TLS backends
+
+Use `https://`, `h2s://`, or `grpcs://` in a backend's URL to contact it over TLS instead of plain HTTP/1.1 — the default port becomes 443 instead of 80. This requires the `http-client` or `http2` feature (both pull in `rustls`); mix TLS and plain-HTTP backends freely in the same rotation:
+
+```rust
+CanaryLayer::new(vec![
+    WeightedBackend::new("http://stable-backend:8080", 9),
+    WeightedBackend::new("https://canary-backend:8443", 1),
+])
+```
+
+Without the `http-client`/`http2` feature enabled, a TLS backend fails cleanly (the next backend in the rotation is tried, or `502 Bad Gateway` if none succeed) rather than hanging or panicking.
 
 ## WeightedBackend reference
 
 ```rust
-// url can be "http://host:port", "host:port", or "h2://host:port"
+// url can be "http://host:port", "https://host:port", "host:port" (plain,
+// port 80), "h2://host:port", "h2s://host:port", "grpc://host:port", or
+// "grpcs://host:port"
 WeightedBackend::new(url: impl Into<String>, weight: u32)
 ```
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `url` | `String` | Backend address; `http://` prefix is optional |
+| `url` | `String` | Backend address; scheme determines plain vs. TLS and the default port (`http`/`h2`/`grpc` → 80, `https`/`h2s`/`grpcs` → 443); no scheme defaults to plain HTTP on port 80 |
 | `weight` | `u32` | Relative share of traffic; `0` = excluded |

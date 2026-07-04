@@ -143,7 +143,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `TcpProxy` | `tcp_proxy` | Standalone L4 TCP proxy. Accepts connections on a local address and relays bytes bidirectionally to round-robin backends. |
 | `UdpProxy` | `udp_proxy` | Standalone UDP proxy (request-reply model). Forwards each datagram to a backend and returns the reply to the original client. |
 | `WsProxy` | `ws_proxy` | Standalone WebSocket proxy. `ws://` plain TCP (two-thread relay), `wss://` TLS (single-thread polling relay; `http-client` or `http2` feature). Port defaults to 80/443. |
-| `WeightedBackend` / `CanaryLayer` | `canary` | Weighted traffic-splitting proxy middleware; each backend has a `weight` — distribution is proportional. Useful for canary releases and A/B testing. |
+| `WeightedBackend` / `CanaryLayer` | `canary` | Weighted traffic-splitting proxy middleware; each backend has a `weight` — distribution is proportional. Backends are contacted over plain HTTP/1.1, or TLS when the URL uses `https://`/`h2s://`/`grpcs://` (requires the `http-client` or `http2` feature). Useful for canary releases and A/B testing. |
 | `CircuitBreaker` | `circuit_breaker` | Per-backend circuit breaker (Closed→Open→HalfOpen state machine). `global()` returns a process-wide singleton. Configurable failure threshold and recovery window. |
 | `RetryLayer` | `circuit_breaker` | Middleware that retries requests on configurable status codes (default: 502, 503, 504) up to `max_retries` times. |
 | `BackendPool` / `DiscoverySource` | `service_discovery` | Dynamic backend pool updated by a background thread. Sources: `Static`, `EnvPrefix` (env vars), `File` (one host:port per line), `Dns` (A-record lookup). |
@@ -2155,6 +2155,17 @@ let app = App::new()
 ```
 
 Setting `weight = 0` removes a backend from the rotation without removing it from the config — useful for quickly disabling a canary.
+
+**TLS backends** — use `https://`, `h2s://`, or `grpcs://` in a backend's URL to contact it over TLS instead of plain HTTP/1.1 (defaults to port 443 instead of 80). Requires the `http-client` or `http2` feature (both pull in `rustls`); without one, a TLS backend fails cleanly and the next backend in the rotation is tried instead of hanging or crashing.
+
+```rust
+// Mixing a TLS canary backend with a plain-HTTP stable one is fine — each
+// backend's scheme is resolved independently.
+CanaryLayer::new(vec![
+    WeightedBackend::new("http://stable-backend:8080", 9),
+    WeightedBackend::new("https://canary-backend:8443", 1),
+]);
+```
 
 ---
 

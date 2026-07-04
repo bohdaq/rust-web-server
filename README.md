@@ -197,7 +197,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - UDP proxy — `UdpProxy` datagram proxy; DNS / syslog style
 - WebSocket proxy — `WsProxy` performs the HTTP upgrade and relays frames bidirectionally; `wss://` backends connect over TLS via rustls
 - Health checks — per-upstream background checker; live backend list via `Arc<RwLock<Vec<String>>>`
-- Canary / traffic splitting — `CanaryLayer` distributes requests by weight, lock-free
+- Canary / traffic splitting — `CanaryLayer` distributes requests by weight, lock-free; backends can be plain HTTP or TLS (`https://`/`h2s://`/`grpcs://`)
 - Circuit breaker — Closed → Open → HalfOpen; `RetryLayer` retries on 502/503/504
 - Service discovery — `Static`, `EnvPrefix`, `File`, `Dns` sources; background refresh thread
 - Kubernetes Ingress — `KubernetesIngressWatcher` polls K8s API; routes to cluster services
