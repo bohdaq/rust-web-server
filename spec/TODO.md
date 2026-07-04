@@ -161,6 +161,24 @@ Surfaced by a 2026-07-04 review of what specifically blocks enterprise adoption 
 
 ---
 
+## Data / ML field readiness
+
+Surfaced by a 2026-07-04 review of what's missing for Data/ML use cases specifically. There is currently zero ML-specific tooling in this codebase (no gRPC server, no Arrow/Parquet, no Protobuf, no tensor/ONNX bindings — confirmed by grep, not assumption). But the *serving/ops* side of an ML workload is an HTTP-plus-pipeline problem this framework is already reasonably well-equipped for: routing, JSON, validation, SSE/WebSocket streaming, multipart/chunked file upload, object storage, `JobQueue`/`Scheduler` for batch pipelines, `Page<T>`/`CursorPage<T>` pagination, and the full rate-limit/auth/metrics/tracing ops story. The gaps below are specifically what a Rust HTTP framework — not an ML runtime — should reasonably add on top of that.
+
+- [ ] **Documented ML-runtime integration example** — no `docs/` page showing "serve a `candle` or ONNX Runtime (`ort`) model behind an rws handler." Cheap to add (no new hard dependency — a docs example, not a feature flag), and removes a lot of "does this even work for ML?" uncertainty for someone evaluating the framework.
+
+- [ ] **CSV extractor/responder** — common tabular-data interchange format; `Json<T>` exists via the `serde` feature, CSV doesn't, despite the framework hand-rolling every other parser (JSON, multipart, URL-encoded, WebSocket, chunked encoding) from scratch. A `Csv<T>` extractor/responder (`serde`-based, like `Json<T>`) would be a small, self-contained, in-character addition.
+
+- [ ] **Native gRPC server** — only `GrpcProxy` exists (forwards to an *existing* gRPC backend). Many ML-serving stacks (Triton, KServe, Seldon) are gRPC-native; exposing your *own* Rust-implemented gRPC service (not just proxying to one) needs Protobuf codegen (`prost`/`tonic`), which isn't part of the framework today. Larger, separate lift — comparable in scope to the SAML item above, not a quick add.
+
+- [ ] **Columnar/array data format support** (Arrow, Parquet, NumPy `.npy`) — datasets and feature vectors are usually exchanged in these formats, not JSON, for size/speed reasons on large numeric payloads. Nothing here today; would mean an `arrow`/`parquet` crate dependency behind a new feature flag, plus a body extractor/responder pair analogous to `Json<T>`.
+
+- [ ] **Dynamic/request batching middleware** — real inference services often coalesce concurrent requests into one batched model call for GPU throughput (e.g. wait up to N ms or until M requests queue, then invoke the model once). No queue-with-timeout batching primitive exists; would be a new middleware, not tied to any specific ML runtime.
+
+- [ ] **Content negotiation** (JSON vs. CSV vs. Arrow on the same endpoint, via `Accept`) — would matter once an endpoint serves both humans (JSON/CSV) and pipelines (Arrow/Parquet) — currently every endpoint returns one fixed format.
+
+---
+
 ## Cross-reference
 
 | This file | Source spec |
