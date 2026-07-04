@@ -132,4 +132,4 @@ Supported backend URL schemes for `H2ReverseProxy`:
 | `h2s://host:port` | TLS + ALPN `h2` | 443 |
 | `https://host:port` | TLS + ALPN `h2` | 443 |
 
-`H2ReverseProxy` uses `tokio::task::block_in_place` to bridge the synchronous middleware interface into the async tokio runtime required for HTTP/2 upstream connections.
+`H2ReverseProxy` bridges the synchronous `Middleware` interface into the async tokio runtime required for HTTP/2 upstream connections via an internal `block_on_isolated` helper: it spawns a scoped OS thread running its own single-threaded tokio runtime and blocks that thread, rather than using `tokio::task::block_in_place`. This works correctly under any tokio runtime flavor — including `current_thread`, where `block_in_place` would panic — and even when called with no tokio runtime active at all (the HTTP/1.1 thread pool).

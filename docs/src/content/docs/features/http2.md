@@ -85,8 +85,12 @@ let proxy = H2ReverseProxy::new(vec!["h2://backend:8080".to_string()]);
 let app = App::new().wrap(proxy);
 ```
 
-`H2ReverseProxy` uses `tokio::task::block_in_place` to bridge between the
-synchronous middleware calling convention and the async tokio runtime.
+`H2ReverseProxy` bridges between the synchronous middleware calling
+convention and the async tokio runtime via an internal `block_on_isolated`
+helper — a scoped OS thread running its own single-threaded tokio runtime,
+rather than `tokio::task::block_in_place`. This works under any tokio
+runtime flavor (including `current_thread`, where `block_in_place` would
+panic) and even with no runtime active at all.
 
 ## Async handlers
 

@@ -54,7 +54,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 ## Proxy & Gateway
 
 - **`ReverseProxy`** — HTTP/1.1 reverse proxy middleware; round-robin backend selection
-- **`H2ReverseProxy`** — HTTP/2 upstream proxy using `tokio::task::block_in_place` to bridge sync middleware — `http2`
+- **`H2ReverseProxy`** — HTTP/2 upstream proxy; bridges sync middleware into async via an isolated-runtime helper (works under any tokio runtime flavor) — `http2`
 - **`GrpcProxy`** — wraps `H2ReverseProxy`; filters on `Content-Type: application/grpc*` — `http2`
 - **`TcpProxy`** — standalone L4 TCP proxy; bidirectional `std::io::copy` relay; round-robin backends
 - **`UdpProxy`** — standalone UDP datagram proxy; per-datagram ephemeral socket; round-robin backends

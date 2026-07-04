@@ -275,30 +275,6 @@ impl<S: Send + Sync + 'static> Application for AsyncAppWithState<S> {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         let request = request.clone();
         let connection = connection.clone();
-        match tokio::runtime::Handle::try_current() {
-            Ok(_) => {
-                // Inside an existing runtime: run the future on a scoped OS thread
-                // with its own single-threaded runtime to avoid blocking the event loop.
-                std::thread::scope(|s| {
-                    s.spawn(|| {
-                        tokio::runtime::Builder::new_current_thread()
-                            .enable_all()
-                            .build()
-                            .unwrap()
-                            .block_on(self.execute_async(&request, &connection))
-                    })
-                    .join()
-                    .unwrap()
-                })
-            }
-            Err(_) => {
-                // Not inside any runtime (HTTP/1.1 thread pool): create a temporary one.
-                tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .unwrap()
-                    .block_on(self.execute_async(&request, &connection))
-            }
-        }
+        crate::async_bridge::block_on_isolated(|| self.execute_async(&request, &connection))
     }
 }

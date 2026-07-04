@@ -2051,7 +2051,7 @@ WsProxy::new(["wss://chat.internal:8443"]) // explicit port
 
 ### 42. HTTP/2 reverse proxy
 
-`H2ReverseProxy` forwards requests to HTTP/2 backends over plain TCP or TLS. It works as a `Middleware` in the normal stack; `block_in_place` bridges the sync handler into the tokio runtime. Requires the `http2` feature.
+`H2ReverseProxy` forwards requests to HTTP/2 backends over plain TCP or TLS. It works as a `Middleware` in the normal stack; internally it bridges into its async H2 client code via `crate::async_bridge::block_on_isolated` (a scoped OS thread running its own single-threaded tokio runtime), which works correctly under any tokio runtime flavor — including `current_thread` — and even with no runtime active at all (the HTTP/1.1 thread pool). Requires the `http2` feature.
 
 Backend URL schemes:
 - `h2://host:port` — plain TCP (cleartext HTTP/2)

@@ -57,6 +57,8 @@ pub use rws_macros::{delete, get, patch, post, put, route, Config, FromRequest, 
 pub use rws_macros::Model;
 #[cfg(feature = "http2")]
 pub mod async_state;
+#[cfg(feature = "http2")]
+pub(crate) mod async_bridge;
 pub mod session;
 pub mod sse;
 pub mod compression;

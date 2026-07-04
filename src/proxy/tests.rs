@@ -655,3 +655,23 @@ fn should_stream_large_content_length() {
     let h = "http/1.1 200 ok\r\ncontent-length: 2097152\r\n\r\n";
     assert!(should_stream_response(h));
 }
+
+// ── H2ReverseProxy async bridging ────────────────────────────────────────────
+//
+// `H2ReverseProxy::handle` used to bridge into its async H2 client code via
+// `tokio::task::block_in_place`, which panics on a `current_thread` runtime.
+// `#[tokio::test]` defaults to exactly that flavor, so this test alone would
+// have failed (panicked) under the old implementation — the connection
+// itself is expected to fail (nothing is listening on port 1), but the
+// `Middleware::handle` call must not panic getting there.
+
+#[cfg(feature = "http2")]
+#[tokio::test]
+async fn h2_reverse_proxy_does_not_panic_under_current_thread_runtime() {
+    use crate::proxy::H2ReverseProxy;
+
+    let proxy = H2ReverseProxy::new(vec!["h2://127.0.0.1:1".to_string()]).connect_timeout_ms(200);
+    let app = App::new().wrap(proxy);
+    let response = app.execute(&get("/"), &conn()).unwrap();
+    assert_eq!(502, response.status_code, "unreachable backend should yield 502, not a panic");
+}

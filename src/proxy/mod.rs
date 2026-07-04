@@ -804,15 +804,12 @@ fn try_backend_h2(
     connect_timeout: Duration,
     _read_timeout: Duration,
 ) -> Result<Response, String> {
-    use tokio::runtime::Handle;
-    match Handle::try_current() {
-        Ok(_) => tokio::task::block_in_place(|| {
-            Handle::current().block_on(forward_h2_async(request, client_ip, backend, connect_timeout))
-        }),
-        Err(_) => {
-            Err("no async runtime for H2 proxy; falling back to 502".to_string())
-        }
-    }
+    // `block_on_isolated` works on any tokio runtime flavor (including
+    // `current_thread`, unlike `tokio::task::block_in_place`, which requires
+    // `multi_thread` and panics otherwise) and doesn't pull a worker thread
+    // out of a shared pool; it also works with no runtime at all (HTTP/1.1
+    // thread pool), unlike the previous implementation, which just gave up.
+    crate::async_bridge::block_on_isolated(|| forward_h2_async(request, client_ip, backend, connect_timeout))
 }
 
 #[cfg(feature = "http2")]

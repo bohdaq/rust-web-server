@@ -790,7 +790,7 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 | `CacheLayer` | `cache` | In-memory GET response cache; builder `.ttl(secs)` |
 | `ReverseProxy` | `proxy` | HTTP/1.1 upstream proxy; round-robin; 502 on all-fail; built-in `ConnPool`; SSE + chunked AI streams + large downloads forwarded without buffering via `Response::stream_pipe` |
 | `ConnPool` | `proxy` | Per-backend HTTP/1.1 keep-alive connection pool; `new(max_idle, timeout)` |
-| `H2ReverseProxy` | `proxy` | HTTP/2 upstream proxy; `h2://` plain TCP, `h2s://`/`https://` TLS (ALPN `h2`); port defaults to 443 for TLS schemes; `http2` feature |
+| `H2ReverseProxy` | `proxy` | HTTP/2 upstream proxy; `h2://` plain TCP, `h2s://`/`https://` TLS (ALPN `h2`); port defaults to 443 for TLS schemes; async-native sync/async bridge (works under any tokio runtime flavor); `http2` feature |
 | `GrpcProxy` | `proxy` | gRPC proxy; filters on `Content-Type: application/grpc*`; `grpc://` plain, `grpcs://`/`https://` TLS; `http2` feature |
 | `RewriteLayer` | `rewrite` | Request/response header, URI, status, body rewriting. `.request_uri_regex_rewrite(pattern, replacement)` (requires `rewrite-regex`) — regex match against the URI, whole URI replaced by the `$1`/`${name}`-expanded replacement on match, no-op otherwise |
 | `CanaryLayer` | `canary` | Weighted traffic splitting via `WeightedBackend::new(url, weight)`; backends may be plain HTTP or TLS (`https://`/`h2s://`/`grpcs://`, requires `http-client`/`http2`) |
@@ -1385,6 +1385,8 @@ src/otel/               — OtelLayer, Span (nested child spans via span()/clien
 src/pagination/         — Page<T>, CursorPage<T>, RFC 8288 Link header builder (no feature gate)
 src/prelude/            — Re-exports of the most commonly used types
 src/proxy/              — ReverseProxy, H2ReverseProxy, GrpcProxy, ConnPool (pool.rs)
+src/async_bridge/       — block_on_isolated: sync/async bridge for Middleware/Application
+                          impls that need to call async code (http2 feature)
 src/proxy_config/       — Config-driven proxy: ProxyConfig, ConfigDrivenApp, StaticAdapter
 src/range/              — Range, ContentRange, body construction
 src/rate_limit/         — RateLimiter, global()
