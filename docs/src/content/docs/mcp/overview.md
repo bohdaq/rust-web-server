@@ -95,7 +95,7 @@ Override the default path with `.at("/custom-path")` if needed.
 
 Version strings are `YYYY-MM-DD` dates, so a plain string comparison already orders them correctly — no date parsing needed. A client requesting an *older* version than the server's is honored as sent (the server confirms it'll speak that version) rather than being overridden. If `protocolVersion` or `params` is missing entirely, `initialize` doesn't error — it falls back to the server's own version, same as before this negotiation existed.
 
-`params.clientInfo` (if the client sends it) is logged to stderr at `initialize` time; there's no session storage yet to make it available to tool handlers later in the connection.
+`params.clientInfo` (if the client sends it) is logged to stderr at `initialize` time and recorded under a freshly minted session id, returned to the client via an `Mcp-Session-Id` response header — see [Per-request context](/mcp/tools/#per-request-context) for how a `.tool_with_context()` handler gets it back on later requests in the same session.
 
 ## Built-in rws tools
 

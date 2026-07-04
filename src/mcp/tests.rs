@@ -255,6 +255,115 @@ fn initialize_without_params_at_all_does_not_error() {
     assert!(body.contains(&format!("\"protocolVersion\":\"{PROTOCOL_VERSION}\"")));
 }
 
+// ── McpContext / sessions ───────────────────────────────────────────────────────
+
+fn make_context_server() -> McpServer {
+    McpServer::new("test-srv", "0.1").tool_with_context(
+        "whoami",
+        "Report the caller's client info",
+        r#"{"type":"object"}"#,
+        |ctx, _args| {
+            Ok(McpContent::text(format!(
+                "name={} version={} session={}",
+                ctx.client_name.as_deref().unwrap_or("?"),
+                ctx.client_version.as_deref().unwrap_or("?"),
+                ctx.session_id.as_deref().unwrap_or("?"),
+            )))
+        },
+    )
+}
+
+#[test]
+fn initialize_returns_mcp_session_id_header() {
+    let srv = make_context_server();
+    let resp = srv.handle_request(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"clientInfo":{"name":"test","version":"1"}}}"#,
+    );
+    assert_eq!(resp.status_code, 200);
+    let session_header = resp.headers.iter().find(|h| h.name.eq_ignore_ascii_case("Mcp-Session-Id"));
+    assert!(session_header.is_some(), "expected an Mcp-Session-Id response header");
+    assert!(!session_header.unwrap().value.is_empty());
+}
+
+#[test]
+fn two_initialize_calls_get_different_session_ids() {
+    let srv = make_context_server();
+    let resp1 = srv.handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#);
+    let resp2 = srv.handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":2,"params":{}}"#);
+    let id1 = resp1.headers.iter().find(|h| h.name.eq_ignore_ascii_case("Mcp-Session-Id")).unwrap().value.clone();
+    let id2 = resp2.headers.iter().find(|h| h.name.eq_ignore_ascii_case("Mcp-Session-Id")).unwrap().value.clone();
+    assert_ne!(id1, id2, "each initialize should mint its own session id");
+}
+
+#[test]
+fn handle_request_without_context_gives_tool_with_context_an_empty_context() {
+    // handle_request() (no explicit McpContext) is what all the other tests
+    // in this file use — it must still work for a tool_with_context handler,
+    // just with every field empty.
+    let srv = make_context_server();
+    let resp = srv.handle_request(
+        r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"whoami","arguments":{}}}"#,
+    );
+    assert_eq!(resp.status_code, 200);
+    let body = body_of(&resp);
+    assert!(body.contains("name=? version=? session=?"), "expected an empty context: {body}");
+}
+
+#[test]
+fn tool_with_context_sees_client_info_recorded_at_initialize_via_execute() {
+    // The real flow: initialize over HTTP (via execute()), read back the
+    // Mcp-Session-Id the server minted, send it on a later tools/call, and
+    // confirm the tool sees the clientInfo that was sent at initialize time.
+    let client = TestClient::new(make_context_server());
+
+    let init_resp = client
+        .post("/mcp")
+        .body_text(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"claude-code","version":"1.2.3"}}}"#)
+        .send();
+    assert_eq!(init_resp.status(), 200);
+    let session_id = init_resp
+        .header("Mcp-Session-Id")
+        .expect("initialize should return a session id")
+        .to_string();
+
+    let call_resp = client
+        .post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"whoami","arguments":{}}}"#)
+        .send();
+    assert_eq!(call_resp.status(), 200);
+    let body = call_resp.body_text();
+    assert!(body.contains("name=claude-code"), "missing client name: {body}");
+    assert!(body.contains("version=1.2.3"), "missing client version: {body}");
+    assert!(body.contains(&format!("session={session_id}")), "missing session id: {body}");
+}
+
+#[test]
+fn tool_with_context_sees_empty_client_info_for_unrecognized_session_id() {
+    let client = TestClient::new(make_context_server());
+    let resp = client
+        .post("/mcp")
+        .header("Mcp-Session-Id", "not-a-real-session")
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"whoami","arguments":{}}}"#)
+        .send();
+    assert_eq!(resp.status(), 200);
+    let body = resp.body_text();
+    assert!(body.contains("name=? version=?"), "unknown session should have no stored clientInfo: {body}");
+    assert!(body.contains("session=not-a-real-session"), "session_id should still echo the header sent: {body}");
+}
+
+#[test]
+fn plain_tool_still_works_unaffected_by_context_plumbing() {
+    // Regression guard: .tool() (not .tool_with_context()) must keep
+    // ignoring context entirely and behave exactly as before.
+    let srv = make_server();
+    let resp = srv.handle_request(
+        r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"echo","arguments":{"text":"hi"}}}"#,
+    );
+    assert_eq!(resp.status_code, 200);
+    assert!(body_of(&resp).contains("hi"));
+}
+
 // ── notifications ─────────────────────────────────────────────────────────────
 
 #[test]

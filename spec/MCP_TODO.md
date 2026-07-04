@@ -38,36 +38,59 @@ existing `initialize_returns_protocol_version` test needed no changes.
 
 ---
 
-### TODO-2: Per-request context in tool handlers
+### ✅ TODO-2: Per-request context in tool handlers — Done (v17.76.0)
 
-Tool handlers receive only `arguments: &str`. They have no access to caller identity, session,
-or HTTP headers. This makes it impossible to write a tool that behaves differently per user or
-logs which MCP client called it.
+Tool handlers used to receive only `arguments: &str` — no access to caller identity, session, or
+HTTP headers, so a tool couldn't behave differently per user or log which MCP client called it.
 
-**Add `McpContext`:**
-```rust
-pub struct McpContext {
-    pub client_name:    Option<String>,   // from initialize params.clientInfo.name
-    pub client_version: Option<String>,   // from initialize params.clientInfo.version
-    pub session_id:     Option<String>,   // Mcp-Session-Id header
-    pub auth_claims:    Option<String>,   // JSON string of verified JWT claims (TODO-11)
-}
-```
+Added `McpContext` (exactly the fields this entry specified) and `.tool_with_context(name, desc,
+schema, |ctx: McpContext, args: &str| -> Result<McpContent, String> { ... })`. `.tool()` still
+works unchanged — internally it now wraps the plain `Fn(&str) -> ...` closure in one that ignores
+`McpContext`, so both builders share one `ToolFn` type (`Arc<dyn Fn(McpContext, &str) -> ...>`)
+instead of `ToolDef` needing two handler variants.
 
-**New builder method:**
-```rust
-.tool_with_context("list_files", desc, schema,
-    |ctx: McpContext, args: &str| -> Result<McpContent, String> {
-        println!("Called by {}", ctx.client_name.as_deref().unwrap_or("unknown"));
-        Ok(McpContent::text("..."))
-    }
-)
-```
+**How the session/`clientInfo` half actually works** — the entry's "store `clientInfo` from
+`initialize`" line needed an actual session mechanism, since `McpServer`/`execute()` were (and
+still are, otherwise) fully stateless with nothing to key storage on across two separate requests:
 
-Store `clientInfo` from `initialize` in the handler context. The `McpContext` is constructed
-in `execute()` from the current `Request` headers and the stored `clientInfo`.
+1. `handle_request_with_context` mints a session id (`crate::request_id::generate_request_id()` —
+   reusing the existing splitmix64 ID generator rather than inventing a new one) on every
+   successful `initialize`, records that call's `params.clientInfo` under it in a new
+   `sessions: Arc<Mutex<HashMap<String, StoredClientInfo>>>` field on `McpServer` (an `Arc` so
+   every `Clone` of the server shares the same map), and returns the id via an `Mcp-Session-Id`
+   response header — this is the actual MCP Streamable HTTP transport's session mechanism, not a
+   bespoke one.
+2. The client is expected to echo that header back on later requests. `execute()` (which has the
+   `Request` this whole feature needs headers from) reads `Mcp-Session-Id`, looks up the recorded
+   `clientInfo`, and builds the `McpContext` `do_tools_call` passes to a `tool_with_context` handler.
+3. `handle_request(body)` (used directly in the ~50 existing tests that bypass the HTTP layer) still
+   works unchanged — it delegates to a new `pub fn handle_request_with_context(body, ctx)` with
+   `McpContext::default()`, so `tool_with_context` handlers just see an empty context in that path
+   rather than every one of those tests needing rewriting to construct a `Request`.
 
-**Effort:** small — new struct, new builder variant, plumb through `do_tools_call`.
+**Known limitation, called out in the code and docs rather than silently shipped**: the session map
+has no eviction — nothing removes an entry, since the MCP Streamable HTTP transport has no
+session-termination signal to key cleanup off of. Acceptable for the expected usage (a modest,
+roughly-stable set of long-lived AI-agent clients); not recommended as-is for a public-internet-
+facing server churning through unbounded distinct clients.
+
+`auth_claims` stays `None` always, as this entry's own comment anticipated (`// JSON string of
+verified JWT claims (TODO-11)`) — no JWT verification exists in this module yet.
+
+Scoped to tools only, matching this entry's own text — `.resource()`/`.prompt()` handlers have the
+identical "no context" limitation but are out of scope here (not mentioned in the original ask).
+
+8 new tests in `src/mcp/tests.rs`: `initialize` returns a non-empty `Mcp-Session-Id` header, two
+`initialize` calls mint different session ids, a `tool_with_context` handler sees an empty context
+via plain `handle_request`, the full real flow (`initialize` via `execute()`/`TestClient` → read the
+session header → `tools/call` with that header → handler sees the recorded `clientInfo` and session
+id), an unrecognized session id gets an empty `clientInfo` but the session id is still visible on
+the context, and a regression guard that a plain `.tool()` still works unaffected by all of this.
+
+**Effort:** small — new struct, new builder variant, plumb through `do_tools_call`. (The session
+mechanism ended up being most of the actual diff, but the entry's stated effort was still roughly
+right — no new dependency, no async, no protocol extension beyond the one header MCP already
+defines for this purpose.)
 
 ---
 
@@ -295,7 +318,7 @@ let progress_token = json_rpc::extract_str(&params, "_meta.progressToken");
 }
 ```
 
-**Effort:** small once TODO-7 and TODO-2 are done.
+**Effort:** small once TODO-7 is done (TODO-2 already is).
 
 ---
 
@@ -469,7 +492,7 @@ In `execute()` the async variant uses `tokio::task::block_in_place` to bridge th
 ```
 Phase 1 — Quick wins (no new dependencies, mostly additive)
   TODO-1  protocol version negotiation     (tiny)              ✅ done (v17.75.0)
-  TODO-2  McpContext in tool handlers      (small)
+  TODO-2  McpContext in tool handlers      (small)              ✅ done (v17.76.0)
   TODO-3  tool annotations 2025-03-26      (tiny)
   TODO-4  image + embedded content types   (small)
   TODO-5  JSON-RPC batch requests          (small)
@@ -499,7 +522,7 @@ Phase 3 — Enterprise + advanced
 | # | Enhancement | Spec | Priority | Effort | Dependency |
 |---|-------------|------|----------|--------|------------|
 | 1 | Protocol version negotiation | 2024-11-05 | **P1** | Tiny | ✅ Done (v17.75.0) |
-| 2 | `McpContext` in tool handlers | Ergonomics | **P1** | Small | — |
+| 2 | `McpContext` in tool handlers | Ergonomics | **P1** | Small | ✅ Done (v17.76.0) |
 | 3 | Tool annotations | 2025-03-26 | **P1** | Tiny | — |
 | 4 | `image` + `embedded` content | 2024-11-05 | **P1** | Small | — |
 | 5 | JSON-RPC batch | JSON-RPC 2.0 | **P1** | Small | — |

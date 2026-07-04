@@ -986,12 +986,16 @@ Upstream load-balancing strategies: `round_robin` (default), `random`, `ip_hash`
 ## MCP server (Model Context Protocol)
 
 ```rust
-use rust_web_server::mcp::McpServer;
+use rust_web_server::mcp::{McpContent, McpServer};
 
 let app = App::new().mcp("my-server", "1.0.0")
     .tool("add", "Add two numbers",
-          serde_json::json!({"type":"object","properties":{"a":{"type":"number"},"b":{"type":"number"}}}),
-          |params| Ok(format!("{}", params["a"].as_f64().unwrap() + params["b"].as_f64().unwrap())))
+          r#"{"type":"object","properties":{"a":{"type":"number"},"b":{"type":"number"}}}"#,
+          |args| {
+              let a: f64 = rust_web_server::mcp::extract_arg(args, "a").unwrap_or_default().parse().unwrap_or(0.0);
+              let b: f64 = rust_web_server::mcp::extract_arg(args, "b").unwrap_or_default().parse().unwrap_or(0.0);
+              Ok(McpContent::text(format!("{}", a + b)))
+          })
     .require_bearer("my-secret-token")  // optional static Bearer auth
     .wrap(App::new());                  // fall through non-MCP requests to inner app
 
@@ -1006,7 +1010,27 @@ responds with the lower of that and the server's own version (`YYYY-MM-DD` date 
 correctly as plain strings), instead of always echoing back its own version regardless of what was
 asked for. A client requesting a newer version than this server implements is told the version it
 actually speaks; an older-version request is honored as sent. Missing `protocolVersion`/`params`
-falls back to the server's version. `params.clientInfo` is logged to stderr if present.
+falls back to the server's version.
+
+**Per-request context** — `.tool_with_context(name, desc, schema, |ctx, args| ...)` gives the handler
+an `McpContext { client_name, client_version, session_id, auth_claims }`:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let app = McpServer::new("my-server", "1.0")
+    .tool_with_context("whoami", "Report the caller", "{}", |ctx, _args| {
+        Ok(McpContent::text(format!("Called by {}", ctx.client_name.as_deref().unwrap_or("unknown"))))
+    });
+```
+
+`initialize` mints a session id (same generator as `request_id::generate_request_id`), records that
+session's `params.clientInfo`, and returns the id via an `Mcp-Session-Id` response header; the client
+echoes it back on later requests so `execute()` can look the `clientInfo` back up and build the
+`McpContext` a `tool_with_context` handler sees. `handle_request()` (bypassing `execute()`, e.g. in
+tests) gives an empty `McpContext` — use `handle_request_with_context(body, ctx)` to supply one.
+`auth_claims` is always `None` today (reserved for a future JWT integration). Session records
+accumulate for the process's lifetime with no eviction.
 
 ---
 
@@ -1455,7 +1479,7 @@ src/language/           — Accept-Language parsing
 src/log/                — Combined Log Format + JSON log helpers
 src/macros/             — routes! macro and utility macros
 src/maintenance/        — MaintenanceLayer
-src/mcp/                — McpServer (MCP Streamable HTTP)
+src/mcp/                — McpServer (MCP Streamable HTTP), McpContext (per-request tool context)
 src/metrics/            — Prometheus metrics, MetricsLayer
 src/middleware/         — Middleware trait, WithMiddleware, RateLimitLayer
 src/mime_type/          — MIME type constants and detection

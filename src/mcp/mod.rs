@@ -59,7 +59,8 @@ mod json_rpc;
 #[cfg(test)]
 mod tests;
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use crate::app::App;
 use crate::application::Application;
@@ -157,9 +158,45 @@ impl PromptArgDef {
     }
 }
 
+// ── McpContext ────────────────────────────────────────────────────────────────
+
+/// Per-request context passed to tool handlers registered via
+/// [`McpServer::tool_with_context`] — caller identity and session info that a
+/// plain `Fn(&str) -> ...` tool handler has no way to see.
+///
+/// Constructed in [`McpServer::execute`] from the current request's headers
+/// plus whatever `clientInfo` was recorded for this session at `initialize`
+/// time (see [`McpServer::handle_request_with_context`]).
+#[derive(Debug, Clone, Default)]
+pub struct McpContext {
+    /// `clientInfo.name` sent in this session's `initialize` call, if the
+    /// client sent one and this request carries a recognized `Mcp-Session-Id`.
+    pub client_name: Option<String>,
+    /// `clientInfo.version` sent in this session's `initialize` call, under
+    /// the same conditions as `client_name`.
+    pub client_version: Option<String>,
+    /// The `Mcp-Session-Id` header on this request, if present — the value
+    /// the server minted and returned in the `initialize` response header
+    /// for this session (see the module docs' Sessions section).
+    pub session_id: Option<String>,
+    /// Verified JWT claims as a JSON string. Not populated by anything in
+    /// this crate yet — reserved for a future JWT-auth integration
+    /// (MCP_TODO.md TODO-11/TODO-13); always `None` today.
+    pub auth_claims: Option<String>,
+}
+
+/// `clientInfo` recorded for one session at `initialize` time, looked up by
+/// `Mcp-Session-Id` for later requests in the same session. See
+/// `McpServer`'s `sessions` field doc comment for the unbounded-growth caveat.
+#[derive(Clone, Default)]
+struct StoredClientInfo {
+    name: Option<String>,
+    version: Option<String>,
+}
+
 // ── internal handler registrations ───────────────────────────────────────────
 
-type ToolFn     = Arc<dyn Fn(&str) -> Result<McpContent, String>    + Send + Sync>;
+type ToolFn     = Arc<dyn Fn(McpContext, &str) -> Result<McpContent, String>    + Send + Sync>;
 type ResourceFn = Arc<dyn Fn(&str) -> Result<McpContent, String>    + Send + Sync>;
 type PromptFn   = Arc<dyn Fn(&str) -> Result<Vec<PromptMessage>, String> + Send + Sync>;
 
@@ -205,6 +242,16 @@ pub struct McpServer {
     prompts: Vec<PromptDef>,
     fallback: Option<Arc<dyn Application + Send + Sync>>,
     auth_token: Option<String>,
+    /// `clientInfo` recorded per `Mcp-Session-Id`, minted at `initialize` time.
+    /// `Arc<Mutex<_>>` so every clone of this `McpServer` shares one map.
+    ///
+    /// This map only grows — nothing ever removes an entry, since there's no
+    /// session-termination signal in the MCP Streamable HTTP transport to key
+    /// eviction off of. Fine for the expected usage (a modest, roughly-stable
+    /// set of long-lived AI-agent clients); a public-internet-facing server
+    /// churning through unbounded distinct clients would leak memory here
+    /// with no built-in reaping mechanism.
+    sessions: Arc<Mutex<HashMap<String, StoredClientInfo>>>,
 }
 
 impl McpServer {
@@ -219,6 +266,7 @@ impl McpServer {
             prompts: vec![],
             fallback: None,
             auth_token: None,
+            sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -295,9 +343,46 @@ impl McpServer {
     ///
     /// The handler returns [`McpContent`] on success or an error string.  An
     /// error is returned to the client as `isError: true` (not a protocol error).
+    ///
+    /// Use [`Self::tool_with_context`] instead if the handler needs the
+    /// caller's identity, session, or headers.
     pub fn tool<F>(mut self, name: &str, description: &str, input_schema: &str, handler: F) -> Self
     where
         F: Fn(&str) -> Result<McpContent, String> + Send + Sync + 'static,
+    {
+        self.tools.push(ToolDef {
+            name: name.to_string(),
+            description: description.to_string(),
+            input_schema: input_schema.to_string(),
+            handler: Arc::new(move |_ctx: McpContext, args: &str| handler(args)),
+        });
+        self
+    }
+
+    /// Register a callable tool whose handler also receives [`McpContext`] —
+    /// caller identity/session info derived from this request's headers and
+    /// whatever `clientInfo` this session sent at `initialize` time.
+    ///
+    /// Same `name`/`description`/`input_schema` semantics as [`Self::tool`];
+    /// the only difference is the handler's first parameter.
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::mcp::{McpContent, McpServer};
+    ///
+    /// let server = McpServer::new("my-server", "1.0")
+    ///     .tool_with_context(
+    ///         "whoami",
+    ///         "Report the caller's client info",
+    ///         "{}",
+    ///         |ctx, _args| {
+    ///             let name = ctx.client_name.as_deref().unwrap_or("unknown client");
+    ///             Ok(McpContent::text(format!("Called by {name}")))
+    ///         },
+    ///     );
+    /// ```
+    pub fn tool_with_context<F>(mut self, name: &str, description: &str, input_schema: &str, handler: F) -> Self
+    where
+        F: Fn(McpContext, &str) -> Result<McpContent, String> + Send + Sync + 'static,
     {
         self.tools.push(ToolDef {
             name: name.to_string(),
@@ -365,7 +450,29 @@ impl McpServer {
     // ── request dispatch ──────────────────────────────────────────────────────
 
     /// Process a raw JSON-RPC body and return an HTTP response.
+    ///
+    /// Equivalent to [`Self::handle_request_with_context`] with an empty
+    /// [`McpContext`] — tool handlers registered via
+    /// [`Self::tool_with_context`] will see every field as `None`. Prefer
+    /// calling through [`Application::execute`] (i.e. actually serving HTTP
+    /// requests) when you need real per-request context; this method exists
+    /// for calling the JSON-RPC layer directly, e.g. in tests.
     pub fn handle_request(&self, body: &str) -> Response {
+        self.handle_request_with_context(body, McpContext::default())
+    }
+
+    /// Process a raw JSON-RPC body with an explicit [`McpContext`] and return
+    /// an HTTP response. [`Self::execute`] calls this with a context built
+    /// from the request's headers and this session's stored `clientInfo`;
+    /// [`Self::handle_request`] calls this with an empty context.
+    ///
+    /// On a successful `initialize`, this mints a new session id (reusing
+    /// [`crate::request_id::generate_request_id`]'s ID generator), records
+    /// `params.clientInfo` under it, and returns the id in an
+    /// `Mcp-Session-Id` response header — the client is expected to echo that
+    /// header back on subsequent requests so later `tools/call`s in the same
+    /// session can look their `clientInfo` back up.
+    pub fn handle_request_with_context(&self, body: &str, ctx: McpContext) -> Response {
         let method = match json_rpc::extract_str(body, "method") {
             Some(m) => m,
             None => return rpc_error(None, json_rpc::INVALID_REQUEST, "Missing method"),
@@ -382,7 +489,7 @@ impl McpServer {
             "initialize"     => self.do_initialize(body),
             "ping"           => Ok("{}".to_string()),
             "tools/list"     => self.do_tools_list(),
-            "tools/call"     => self.do_tools_call(body),
+            "tools/call"     => self.do_tools_call(body, ctx),
             "resources/list" => self.do_resources_list(),
             "resources/read" => self.do_resources_read(body),
             "prompts/list"   => self.do_prompts_list(),
@@ -391,8 +498,9 @@ impl McpServer {
         };
 
         let id_str = id.as_deref().unwrap_or("null");
+        let is_ok = result.is_ok();
 
-        match result {
+        let mut response = match result {
             Ok(result_json) => json_response(&format!(
                 r#"{{"jsonrpc":"2.0","result":{result_json},"id":{id_str}}}"#
             )),
@@ -402,7 +510,47 @@ impl McpServer {
                     r#"{{"jsonrpc":"2.0","error":{{"code":{code},"message":"{escaped}"}},"id":{id_str}}}"#
                 ))
             }
+        };
+
+        if method == "initialize" && is_ok {
+            self.start_session(body, &mut response);
         }
+
+        response
+    }
+
+    /// Mint a new session id, record `body`'s `params.clientInfo` under it
+    /// (logging the caller's identity), and attach the id to `response` as
+    /// an `Mcp-Session-Id` header. Called once, from
+    /// [`Self::handle_request_with_context`], right after a successful
+    /// `initialize`.
+    fn start_session(&self, body: &str, response: &mut Response) {
+        let client_info = json_rpc::extract_raw(body, "params")
+            .and_then(|p| json_rpc::extract_raw(&p, "clientInfo"));
+        let (name, version) = match &client_info {
+            Some(info) => (
+                json_rpc::extract_str(info, "name"),
+                json_rpc::extract_str(info, "version"),
+            ),
+            None => (None, None),
+        };
+
+        eprintln!(
+            "[mcp] initialize from client {} v{}",
+            name.as_deref().unwrap_or("unknown"),
+            version.as_deref().unwrap_or("unknown"),
+        );
+
+        let session_id = crate::request_id::generate_request_id();
+        self.sessions
+            .lock()
+            .unwrap()
+            .insert(session_id.clone(), StoredClientInfo { name, version });
+
+        response.headers.push(Header {
+            name: "Mcp-Session-Id".to_string(),
+            value: session_id,
+        });
     }
 
     // ── method handlers ───────────────────────────────────────────────────────
@@ -419,19 +567,14 @@ impl McpServer {
     /// newer than what was requested), which is always the lower of the two
     /// — version strings are `YYYY-MM-DD` dates, so a plain string comparison
     /// already orders them correctly with no date parsing needed.
+    ///
+    /// `clientInfo` is *not* handled here — [`Self::handle_request_with_context`]
+    /// extracts and stores it (under a freshly minted session id) after this
+    /// returns, so it's only ever parsed out of `body` once per call.
     fn do_initialize(&self, body: &str) -> Result<String, (i32, String)> {
         let params = json_rpc::extract_raw(body, "params");
 
         let client_version = params.as_deref().and_then(|p| json_rpc::extract_str(p, "protocolVersion"));
-
-        // Log the caller's identity if it sent one — there's no session
-        // storage yet to carry it beyond this request (see MCP_TODO.md TODO-2
-        // for that), so a log line is as far as "store clientInfo" reaches today.
-        if let Some(client_info) = params.as_deref().and_then(|p| json_rpc::extract_raw(p, "clientInfo")) {
-            let name = json_rpc::extract_str(&client_info, "name").unwrap_or_else(|| "unknown".to_string());
-            let version = json_rpc::extract_str(&client_info, "version").unwrap_or_else(|| "unknown".to_string());
-            eprintln!("[mcp] initialize from client {name} v{version}");
-        }
 
         let negotiated_version: &str = match client_version.as_deref() {
             Some(v) if v < PROTOCOL_VERSION => v,
@@ -461,7 +604,7 @@ impl McpServer {
         Ok(format!(r#"{{"tools":[{}]}}"#, items.join(",")))
     }
 
-    fn do_tools_call(&self, body: &str) -> Result<String, (i32, String)> {
+    fn do_tools_call(&self, body: &str, ctx: McpContext) -> Result<String, (i32, String)> {
         let params = json_rpc::extract_raw(body, "params")
             .ok_or((json_rpc::INVALID_PARAMS, "Missing params".to_string()))?;
         let name = json_rpc::extract_str(&params, "name")
@@ -472,7 +615,7 @@ impl McpServer {
         let tool = self.tools.iter().find(|t| t.name == name)
             .ok_or_else(|| (json_rpc::INVALID_PARAMS, format!("Unknown tool: {name}")))?;
 
-        match (tool.handler)(&args) {
+        match (tool.handler)(ctx, &args) {
             Ok(c) => Ok(format!(
                 r#"{{"content":[{}],"isError":false}}"#,
                 c.to_content_json(),
@@ -563,6 +706,25 @@ impl McpServer {
             Err(e) => Err((json_rpc::INVALID_PARAMS, e)),
         }
     }
+
+    /// Build the [`McpContext`] for an incoming request: the `Mcp-Session-Id`
+    /// header, if present, plus whatever `clientInfo` was recorded for that
+    /// session at `initialize` time (if this session is recognized).
+    fn context_for(&self, request: &Request) -> McpContext {
+        let session_id = request
+            .get_header("Mcp-Session-Id".to_string())
+            .map(|h| h.value.clone());
+
+        let (client_name, client_version) = match &session_id {
+            Some(sid) => match self.sessions.lock().unwrap().get(sid) {
+                Some(info) => (info.name.clone(), info.version.clone()),
+                None => (None, None),
+            },
+            None => (None, None),
+        };
+
+        McpContext { client_name, client_version, session_id, auth_claims: None }
+    }
 }
 
 // ── Application ───────────────────────────────────────────────────────────────
@@ -585,7 +747,8 @@ impl Application for McpServer {
             return Ok(match request.method.as_str() {
                 "POST" => {
                     let body = std::str::from_utf8(&request.body).unwrap_or("");
-                    self.handle_request(body)
+                    let ctx = self.context_for(request);
+                    self.handle_request_with_context(body, ctx)
                 }
                 "OPTIONS" => {
                     // CORS preflight for browser-based MCP clients

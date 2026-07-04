@@ -1880,7 +1880,28 @@ Use `.at("/custom/path")` to override the default `/mcp` endpoint. The bundled `
 
 **Supported MCP methods:** `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, `prompts/get`, `notifications/initialized`.
 
-**Protocol version negotiation:** `initialize` inspects the client's requested `params.protocolVersion` and responds with the lower of that and the server's own version (version strings are `YYYY-MM-DD` dates, so a plain string comparison already orders them correctly) — rather than always echoing back the server's version regardless of what the client asked for. A client requesting a newer version than this server implements gets told the version it actually speaks, so the client can decide whether to proceed or abort; a client requesting an older version is honored as-is. Missing or absent `protocolVersion`/`params` falls back to the server's own version rather than erroring `initialize` out. `params.clientInfo` (if sent) is logged to stderr — there's no session storage yet to carry it further than that one log line.
+**Protocol version negotiation:** `initialize` inspects the client's requested `params.protocolVersion` and responds with the lower of that and the server's own version (version strings are `YYYY-MM-DD` dates, so a plain string comparison already orders them correctly) — rather than always echoing back the server's version regardless of what the client asked for. A client requesting a newer version than this server implements gets told the version it actually speaks, so the client can decide whether to proceed or abort; a client requesting an older version is honored as-is. Missing or absent `protocolVersion`/`params` falls back to the server's own version rather than erroring `initialize` out.
+
+**Per-request context in tool handlers:** `.tool_with_context(name, description, schema, handler)` registers a tool whose handler receives an `McpContext` as its first argument, alongside the same `arguments: &str` a plain `.tool()` handler gets:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let server = McpServer::new("my-server", "1.0")
+    .tool_with_context(
+        "whoami",
+        "Report the caller's client info",
+        "{}",
+        |ctx, _args| {
+            let name = ctx.client_name.as_deref().unwrap_or("unknown client");
+            Ok(McpContent::text(format!("Called by {name}")))
+        },
+    );
+```
+
+`initialize` mints a session id (same ID generator as `request_id::generate_request_id`), records that session's `params.clientInfo` (logged to stderr too), and returns the id in an `Mcp-Session-Id` response header. The client is expected to echo that header back on subsequent requests; `execute()` reads it, looks up the recorded `clientInfo`, and builds the `McpContext` a `tool_with_context` handler sees. Calling `handle_request()` directly (bypassing `execute()`, e.g. in tests) gives `tool_with_context` handlers an empty `McpContext` — every field `None` — since there's no `Request` to read a session header from; use `handle_request_with_context(body, ctx)` to supply one explicitly.
+
+`McpContext`'s fields: `client_name`/`client_version` (from this session's `initialize` `clientInfo`, if recognized), `session_id` (the `Mcp-Session-Id` header on this request, if present), `auth_claims` (reserved for a future JWT-auth integration — always `None` today). Session records accumulate for the life of the process with no eviction — fine for a modest, roughly-stable set of long-lived AI-agent clients, not recommended unmodified for a public-internet-facing server churning through unbounded distinct clients.
 
 ---
 

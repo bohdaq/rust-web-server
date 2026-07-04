@@ -40,6 +40,52 @@ Fn(&str) -> Result<McpContent, String>
 
 The handler receives the raw `arguments` JSON string from the MCP `tools/call` request. On success, return `Ok(McpContent)`. On failure, return `Err(String)` — this is sent back to the AI as `isError: true` (a tool-level error, not a protocol error).
 
+## Per-request context
+
+A plain `.tool()` handler only ever sees `arguments` — it has no way to know which client is calling, what session it's part of, or anything from the request's headers. `.tool_with_context()` registers a tool whose handler additionally receives an `McpContext`:
+
+```rust
+use rust_web_server::mcp::{McpServer, McpContent};
+
+let mcp = McpServer::new("my-server", "1.0")
+    .tool_with_context(
+        "whoami",
+        "Report the caller's client info",
+        "{}",
+        |ctx, _args| {
+            let name = ctx.client_name.as_deref().unwrap_or("unknown client");
+            let version = ctx.client_version.as_deref().unwrap_or("?");
+            Ok(McpContent::text(format!("Called by {name} v{version}")))
+        },
+    );
+```
+
+`McpContext` fields:
+
+| Field | Type | Source |
+|---|---|---|
+| `client_name` | `Option<String>` | This session's `initialize` call's `params.clientInfo.name` |
+| `client_version` | `Option<String>` | This session's `initialize` call's `params.clientInfo.version` |
+| `session_id` | `Option<String>` | The `Mcp-Session-Id` header on this request |
+| `auth_claims` | `Option<String>` | Reserved for a future JWT-auth integration — always `None` today |
+
+### How the session gets established
+
+1. A client calls `initialize`, optionally with `params.clientInfo`.
+2. The server mints a session id and returns it in an `Mcp-Session-Id` response header.
+3. The client echoes that header on every later request (`tools/call`, etc.).
+4. `execute()` reads the header, looks up the `clientInfo` recorded for that session, and builds the `McpContext` your handler receives.
+
+You don't need to do anything to opt into this — it's automatic for any server driven through `execute()` (i.e. any real HTTP request, whether served directly or via `TestClient`).
+
+:::note[Calling `handle_request()` directly]
+`handle_request(body)` — used in tests that skip the HTTP layer — has no `Request` to read a session header from, so `tool_with_context` handlers see an empty `McpContext` (every field `None`). Use `handle_request_with_context(body, ctx)` to supply one explicitly.
+:::
+
+:::caution[Session storage has no eviction]
+Recorded sessions accumulate for the life of the process — nothing removes an entry, since the MCP Streamable HTTP transport has no session-termination signal to key cleanup off of. Fine for a modest, roughly-stable set of long-lived AI-agent clients; not recommended as-is for a public-internet-facing server serving unbounded distinct clients.
+:::
+
 ## McpContent variants
 
 ```rust
