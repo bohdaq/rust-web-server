@@ -94,33 +94,38 @@ defines for this purpose.)
 
 ---
 
-### TODO-3: Tool annotations (MCP 2025-03-26)
+### ✅ TODO-3: Tool annotations (MCP 2025-03-26) — Done (v17.77.0)
 
-The 2025-03-26 spec adds `annotations` to tool definitions. Claude Desktop and other clients use
-these hints to warn before destructive actions, or to skip confirmation for read-only tools.
+Added `ToolAnnotations` (exactly the four `Option<bool>` fields this entry specified:
+`read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint`) plus a private
+`to_json()` that renders only the `Some` fields, using the spec's camelCase key names
+(`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`), joined into a `{...}`
+object — `"{}"` if every field is `None`.
 
-**Add to `ToolDef`:**
+`ToolDef` gained a fifth field, `annotations: Option<ToolAnnotations>`. Both existing builders
+(`.tool()`, `.tool_with_context()`) set it to `None` — a plain-registered tool still has no
+`annotations` key in `tools/list` at all, not an empty object. New builder:
+
 ```rust
-pub struct ToolAnnotations {
-    pub read_only_hint:   Option<bool>,  // tool does not modify state
-    pub destructive_hint: Option<bool>,  // tool may delete/overwrite data
-    pub idempotent_hint:  Option<bool>,  // calling N times = calling once
-    pub open_world_hint:  Option<bool>,  // tool may contact external services
-}
+.tool_annotated(name, desc, schema, annotations, handler) // handler: Fn(&str) -> Result<McpContent, String>
 ```
 
-**Builder:**
-```rust
-.tool(name, desc, schema, handler)                       // existing — no annotations
-.tool_annotated(name, desc, schema, annotations, handler) // new
-```
+`do_tools_list` conditionally appends `,"annotations":{...}` to each tool's JSON only when
+`t.annotations` is `Some` — exactly the entry's own sketch.
 
-**Serialized in `do_tools_list`:**
-```json
-{"name":"delete_file","annotations":{"destructiveHint":true,"readOnlyHint":false}}
-```
+**Scope decision, called out explicitly rather than silently expanded:** `.tool_annotated()`'s
+handler is the plain `Fn(&str) -> ...` shape, matching `.tool()`, not the `Fn(McpContext, &str) -> ...`
+shape `.tool_with_context()` (TODO-2) added. There is no single builder combining annotations with
+per-request context — call `.tool_with_context()` instead if you need `McpContext` and don't need
+annotations. Same kind of explicit, honest limitation as TODO-2's resources/prompts context gap.
 
-**Effort:** tiny — two struct fields, one optional JSON block in `do_tools_list`.
+4 new tests in `src/mcp/tests.rs`: a `.tool_annotated()` tool's `tools/list` entry contains the
+correct camelCase keys/values for a partial hint set (one `None` field correctly omitted from the
+JSON), `ToolAnnotations::default()` (all `None`) still emits `"annotations":{}` (the key is present
+because `Some(annotations)` was passed to the builder, even though every hint inside is unset), and
+a regression guard that existing plain `.tool()`-registered tools have no `annotations` key at all.
+
+**Effort:** tiny, as estimated — two struct additions, one new builder, one conditional JSON block.
 
 ---
 
@@ -493,7 +498,7 @@ In `execute()` the async variant uses `tokio::task::block_in_place` to bridge th
 Phase 1 — Quick wins (no new dependencies, mostly additive)
   TODO-1  protocol version negotiation     (tiny)              ✅ done (v17.75.0)
   TODO-2  McpContext in tool handlers      (small)              ✅ done (v17.76.0)
-  TODO-3  tool annotations 2025-03-26      (tiny)
+  TODO-3  tool annotations 2025-03-26      (tiny)              ✅ done (v17.77.0)
   TODO-4  image + embedded content types   (small)
   TODO-5  JSON-RPC batch requests          (small)
   TODO-6  list pagination                  (small)
@@ -523,7 +528,7 @@ Phase 3 — Enterprise + advanced
 |---|-------------|------|----------|--------|------------|
 | 1 | Protocol version negotiation | 2024-11-05 | **P1** | Tiny | ✅ Done (v17.75.0) |
 | 2 | `McpContext` in tool handlers | Ergonomics | **P1** | Small | ✅ Done (v17.76.0) |
-| 3 | Tool annotations | 2025-03-26 | **P1** | Tiny | — |
+| 3 | Tool annotations | 2025-03-26 | **P1** | Tiny | ✅ Done (v17.77.0) |
 | 4 | `image` + `embedded` content | 2024-11-05 | **P1** | Small | — |
 | 5 | JSON-RPC batch | JSON-RPC 2.0 | **P1** | Small | — |
 | 6 | List pagination | 2024-11-05 | **P1** | Small | — |

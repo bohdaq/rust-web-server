@@ -194,6 +194,68 @@ struct StoredClientInfo {
     version: Option<String>,
 }
 
+// ── ToolAnnotations ───────────────────────────────────────────────────────────
+
+/// Behavioral hints for a tool, per the MCP 2025-03-26 spec's tool
+/// annotations. Clients (Claude Desktop and others) use these to decide
+/// whether to warn or ask for confirmation before calling a tool — e.g. skip
+/// confirmation for a read-only tool, or warn before a destructive one.
+///
+/// Every field is a *hint*, not something this server enforces or verifies —
+/// nothing stops a handler registered with `read_only_hint: Some(true)` from
+/// actually writing to disk. A well-behaved server sets these accurately;
+/// a client is free to ignore them or ask for confirmation anyway.
+///
+/// Register with [`McpServer::tool_annotated`]. Build one with plain struct
+/// syntax — every field defaults to `None` (no hint given, the client's own
+/// default applies):
+///
+/// ```rust
+/// use rust_web_server::mcp::ToolAnnotations;
+///
+/// let destructive = ToolAnnotations {
+///     destructive_hint: Some(true),
+///     read_only_hint: Some(false),
+///     ..Default::default()
+/// };
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ToolAnnotations {
+    /// The tool does not modify its environment.
+    pub read_only_hint: Option<bool>,
+    /// The tool may perform destructive updates (only meaningful when
+    /// `read_only_hint` is not `Some(true)`).
+    pub destructive_hint: Option<bool>,
+    /// Calling the tool repeatedly with the same arguments has no additional
+    /// effect beyond the first call.
+    pub idempotent_hint: Option<bool>,
+    /// The tool may interact with an open-ended set of external entities
+    /// (e.g. web search), as opposed to a fixed, closed set.
+    pub open_world_hint: Option<bool>,
+}
+
+impl ToolAnnotations {
+    /// Render as a JSON object containing only the hints that are `Some`,
+    /// using the spec's camelCase key names. Returns `"{}"` if every field
+    /// is `None`.
+    fn to_json(self) -> String {
+        let mut fields = Vec::with_capacity(4);
+        if let Some(v) = self.read_only_hint {
+            fields.push(format!(r#""readOnlyHint":{v}"#));
+        }
+        if let Some(v) = self.destructive_hint {
+            fields.push(format!(r#""destructiveHint":{v}"#));
+        }
+        if let Some(v) = self.idempotent_hint {
+            fields.push(format!(r#""idempotentHint":{v}"#));
+        }
+        if let Some(v) = self.open_world_hint {
+            fields.push(format!(r#""openWorldHint":{v}"#));
+        }
+        format!("{{{}}}", fields.join(","))
+    }
+}
+
 // ── internal handler registrations ───────────────────────────────────────────
 
 type ToolFn     = Arc<dyn Fn(McpContext, &str) -> Result<McpContent, String>    + Send + Sync>;
@@ -205,6 +267,7 @@ struct ToolDef {
     name: String,
     description: String,
     input_schema: String,
+    annotations: Option<ToolAnnotations>,
     handler: ToolFn,
 }
 
@@ -354,6 +417,53 @@ impl McpServer {
             name: name.to_string(),
             description: description.to_string(),
             input_schema: input_schema.to_string(),
+            annotations: None,
+            handler: Arc::new(move |_ctx: McpContext, args: &str| handler(args)),
+        });
+        self
+    }
+
+    /// Register a callable tool with [`ToolAnnotations`] — behavioral hints
+    /// (read-only, destructive, idempotent, open-world) that MCP clients use
+    /// to decide whether to warn or confirm before calling it. Otherwise
+    /// identical to [`Self::tool`] — the handler still only receives
+    /// `arguments`, not [`McpContext`] (there is currently no single builder
+    /// combining annotations with per-request context; call [`Self::tool_with_context`]
+    /// instead if you need context and don't need annotations).
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::mcp::{McpContent, McpServer, ToolAnnotations};
+    ///
+    /// let server = McpServer::new("my-server", "1.0")
+    ///     .tool_annotated(
+    ///         "delete_file",
+    ///         "Delete a file from disk",
+    ///         r#"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#,
+    ///         ToolAnnotations {
+    ///             destructive_hint: Some(true),
+    ///             read_only_hint: Some(false),
+    ///             idempotent_hint: Some(true), // deleting twice = deleting once
+    ///             ..Default::default()
+    ///         },
+    ///         |_args| Ok(McpContent::text("deleted")),
+    ///     );
+    /// ```
+    pub fn tool_annotated<F>(
+        mut self,
+        name: &str,
+        description: &str,
+        input_schema: &str,
+        annotations: ToolAnnotations,
+        handler: F,
+    ) -> Self
+    where
+        F: Fn(&str) -> Result<McpContent, String> + Send + Sync + 'static,
+    {
+        self.tools.push(ToolDef {
+            name: name.to_string(),
+            description: description.to_string(),
+            input_schema: input_schema.to_string(),
+            annotations: Some(annotations),
             handler: Arc::new(move |_ctx: McpContext, args: &str| handler(args)),
         });
         self
@@ -388,6 +498,7 @@ impl McpServer {
             name: name.to_string(),
             description: description.to_string(),
             input_schema: input_schema.to_string(),
+            annotations: None,
             handler: Arc::new(handler),
         });
         self
@@ -594,11 +705,16 @@ impl McpServer {
 
     fn do_tools_list(&self) -> Result<String, (i32, String)> {
         let items: Vec<String> = self.tools.iter().map(|t| {
+            let annotations = match t.annotations {
+                Some(a) => format!(r#","annotations":{}"#, a.to_json()),
+                None => String::new(),
+            };
             format!(
-                r#"{{"name":"{}","description":"{}","inputSchema":{}}}"#,
+                r#"{{"name":"{}","description":"{}","inputSchema":{}{}}}"#,
                 json_escape(&t.name),
                 json_escape(&t.description),
                 t.input_schema,
+                annotations,
             )
         }).collect();
         Ok(format!(r#"{{"tools":[{}]}}"#, items.join(",")))

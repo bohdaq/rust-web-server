@@ -1032,6 +1032,34 @@ tests) gives an empty `McpContext` — use `handle_request_with_context(body, ct
 `auth_claims` is always `None` today (reserved for a future JWT integration). Session records
 accumulate for the process's lifetime with no eviction.
 
+**Tool annotations (MCP 2025-03-26)** — `.tool_annotated(name, desc, schema, annotations, |args| ...)`
+attaches behavioral hints clients use to decide whether to warn/confirm before calling a tool:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer, ToolAnnotations};
+
+let app = McpServer::new("my-server", "1.0")
+    .tool_annotated(
+        "delete_file", "Delete a file from disk",
+        r#"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#,
+        ToolAnnotations {
+            destructive_hint: Some(true),
+            read_only_hint: Some(false),
+            idempotent_hint: Some(true),
+            ..Default::default()
+        },
+        |_args| Ok(McpContent::text("deleted")),
+    );
+```
+
+`ToolAnnotations` has four `Option<bool>` fields: `read_only_hint`, `destructive_hint`,
+`idempotent_hint`, `open_world_hint`; unset ones default to `None`. Only `Some` fields serialize into
+a `tools/list` entry's `annotations` object, using the spec's camelCase keys (`readOnlyHint`,
+`destructiveHint`, `idempotentHint`, `openWorldHint`) — plain `.tool()`/`.tool_with_context()` tools
+have no `annotations` key at all. Hints only — the server doesn't enforce them against handler
+behavior. No builder combines annotations with `McpContext`; `.tool_annotated()`'s handler is
+`Fn(&str) -> ...`, same shape as `.tool()`.
+
 ---
 
 ## Standalone proxies
@@ -1479,7 +1507,7 @@ src/language/           — Accept-Language parsing
 src/log/                — Combined Log Format + JSON log helpers
 src/macros/             — routes! macro and utility macros
 src/maintenance/        — MaintenanceLayer
-src/mcp/                — McpServer (MCP Streamable HTTP), McpContext (per-request tool context)
+src/mcp/                — McpServer (MCP Streamable HTTP), McpContext (per-request tool context), ToolAnnotations (2025-03-26 tool hints)
 src/metrics/            — Prometheus metrics, MetricsLayer
 src/middleware/         — Middleware trait, WithMiddleware, RateLimitLayer
 src/mime_type/          — MIME type constants and detection

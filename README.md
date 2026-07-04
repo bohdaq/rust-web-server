@@ -271,6 +271,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 
 - MCP server — `McpServer` serves tools, resources, and prompts over MCP Streamable HTTP (`POST /mcp`); bearer token auth; connects to Claude, Cursor, and other MCP clients; `initialize` negotiates the protocol version down to whichever of client/server is lower instead of always claiming its own
 - Per-request tool context — `.tool_with_context(...)` gives a tool handler an `McpContext` (caller's `clientInfo`, `Mcp-Session-Id`) tracked across a session from `initialize` to later `tools/call`s
+- Tool annotations (MCP 2025-03-26) — `.tool_annotated(...)` attaches `ToolAnnotations` (`readOnlyHint`/`destructiveHint`/`idempotentHint`/`openWorldHint`) to a tool, surfaced in `tools/list` so clients like Claude Desktop can decide whether to warn or ask for confirmation before calling it
 - 8 built-in rws tools — `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`
 - SSE streaming — `Sse` builder makes forwarding AI token streams to the browser trivial
 - Response caching — `CacheLayer` TTL cache; vary-by-header; `Cache-Control` opt-out

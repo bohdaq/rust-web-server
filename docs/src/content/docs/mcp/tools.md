@@ -86,6 +86,53 @@ You don't need to do anything to opt into this — it's automatic for any server
 Recorded sessions accumulate for the life of the process — nothing removes an entry, since the MCP Streamable HTTP transport has no session-termination signal to key cleanup off of. Fine for a modest, roughly-stable set of long-lived AI-agent clients; not recommended as-is for a public-internet-facing server serving unbounded distinct clients.
 :::
 
+## Tool annotations
+
+The MCP 2025-03-26 spec adds **annotations** — behavioral hints that clients like Claude Desktop use to decide whether to warn or ask for confirmation before calling a tool (e.g. skip confirmation for a read-only tool, warn before a destructive one). Register them with `.tool_annotated()`, which takes the same arguments as `.tool()` plus a `ToolAnnotations` value:
+
+```rust
+use rust_web_server::mcp::{McpServer, McpContent, ToolAnnotations};
+
+let mcp = McpServer::new("my-server", "1.0")
+    .tool_annotated(
+        "delete_file",
+        "Delete a file from disk",
+        r#"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#,
+        ToolAnnotations {
+            destructive_hint: Some(true),
+            read_only_hint: Some(false),
+            idempotent_hint: Some(true), // deleting twice = deleting once
+            ..Default::default()
+        },
+        |_args| Ok(McpContent::text("deleted")),
+    );
+```
+
+`ToolAnnotations` fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `read_only_hint` | `Option<bool>` | The tool does not modify its environment |
+| `destructive_hint` | `Option<bool>` | The tool may perform destructive updates (only meaningful when `read_only_hint` isn't `Some(true)`) |
+| `idempotent_hint` | `Option<bool>` | Calling the tool repeatedly with the same arguments has no additional effect beyond the first call |
+| `open_world_hint` | `Option<bool>` | The tool may interact with an open-ended set of external entities (e.g. web search), as opposed to a fixed, closed set |
+
+Every field defaults to `None` — build a partial set with `..Default::default()`. Only fields that are `Some` are serialized, using the spec's camelCase key names, into the tool's `tools/list` entry:
+
+```json
+{"name":"delete_file","description":"Delete a file from disk","inputSchema":{...},"annotations":{"destructiveHint":true,"readOnlyHint":false,"idempotentHint":true}}
+```
+
+A plain `.tool()` or `.tool_with_context()` tool has no `annotations` key at all.
+
+:::caution[Hints, not enforcement]
+These are advisory only — nothing in `McpServer` verifies that a handler registered with `read_only_hint: Some(true)` actually refrains from writing to disk. Set them accurately; a client may still ask for confirmation regardless.
+:::
+
+:::note[No combined context + annotations builder]
+`.tool_annotated()`'s handler is `Fn(&str) -> Result<McpContent, String>` — the same plain shape as `.tool()`, not the `Fn(McpContext, &str) -> ...` shape of `.tool_with_context()`. There is currently no single builder that gives you both `McpContext` and `ToolAnnotations` on the same tool.
+:::
+
 ## McpContent variants
 
 ```rust

@@ -1903,6 +1903,28 @@ let server = McpServer::new("my-server", "1.0")
 
 `McpContext`'s fields: `client_name`/`client_version` (from this session's `initialize` `clientInfo`, if recognized), `session_id` (the `Mcp-Session-Id` header on this request, if present), `auth_claims` (reserved for a future JWT-auth integration — always `None` today). Session records accumulate for the life of the process with no eviction — fine for a modest, roughly-stable set of long-lived AI-agent clients, not recommended unmodified for a public-internet-facing server churning through unbounded distinct clients.
 
+**Tool annotations (MCP 2025-03-26):** `.tool_annotated(name, description, schema, annotations, handler)` registers a tool the same way `.tool()` does, plus a `ToolAnnotations` struct of behavioral hints that clients like Claude Desktop use to decide whether to warn or ask for confirmation before calling it:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer, ToolAnnotations};
+
+let server = McpServer::new("my-server", "1.0")
+    .tool_annotated(
+        "delete_file",
+        "Delete a file from disk",
+        r#"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#,
+        ToolAnnotations {
+            destructive_hint: Some(true),
+            read_only_hint: Some(false),
+            idempotent_hint: Some(true), // deleting twice = deleting once
+            ..Default::default()
+        },
+        |_args| Ok(McpContent::text("deleted")),
+    );
+```
+
+`ToolAnnotations` has four `Option<bool>` fields — `read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint` — all defaulting to `None` (no hint given). Only fields that are `Some` are serialized, using the spec's camelCase key names (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`), into a `tools/list` entry's `annotations` object; a plain `.tool()`/`.tool_with_context()` tool has no `annotations` key at all. These are hints only — nothing in `McpServer` enforces or verifies them against what a handler actually does. There's currently no builder combining annotations with per-request context (`.tool_annotated()`'s handler is `Fn(&str) -> ...`, not `Fn(McpContext, &str) -> ...`); use `.tool_with_context()` instead if you need `McpContext` and don't need annotations.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

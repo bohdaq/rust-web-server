@@ -1,5 +1,5 @@
 use super::json_rpc;
-use super::{extract_arg, json_escape, McpContent, McpServer, PromptArgDef, PromptMessage, PROTOCOL_VERSION};
+use super::{extract_arg, json_escape, McpContent, McpServer, PromptArgDef, PromptMessage, ToolAnnotations, PROTOCOL_VERSION};
 use crate::app::App;
 use crate::core::New;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
@@ -403,6 +403,53 @@ fn tools_list_empty_when_no_tools() {
     let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
     let body = body_of(&resp);
     assert!(body.contains("\"tools\":[]"), "expected empty tools array: {body}");
+}
+
+#[test]
+fn tools_list_plain_tool_has_no_annotations_key() {
+    // Regression guard: a tool registered via plain .tool() must not gain an
+    // "annotations" key just because some other tool on the same server has one.
+    let srv = make_server();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
+    let body = body_of(&resp);
+    assert!(!body.contains("\"annotations\""), "unexpected annotations key: {body}");
+}
+
+#[test]
+fn tools_list_annotated_tool_serializes_camel_case_hints() {
+    let srv = McpServer::new("test-srv", "0.1").tool_annotated(
+        "delete_file",
+        "Delete a file",
+        r#"{"type":"object"}"#,
+        ToolAnnotations {
+            destructive_hint: Some(true),
+            read_only_hint: Some(false),
+            idempotent_hint: Some(true),
+            open_world_hint: None,
+        },
+        |_args| Ok(McpContent::text("deleted")),
+    );
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
+    let body = body_of(&resp);
+    assert!(body.contains("\"annotations\":{"), "missing annotations block: {body}");
+    assert!(body.contains("\"destructiveHint\":true"), "missing destructiveHint: {body}");
+    assert!(body.contains("\"readOnlyHint\":false"), "missing readOnlyHint: {body}");
+    assert!(body.contains("\"idempotentHint\":true"), "missing idempotentHint: {body}");
+    assert!(!body.contains("\"openWorldHint\""), "openWorldHint should be omitted when None: {body}");
+}
+
+#[test]
+fn tools_list_annotated_tool_with_all_hints_none_emits_empty_object() {
+    let srv = McpServer::new("test-srv", "0.1").tool_annotated(
+        "noop",
+        "Does nothing",
+        r#"{"type":"object"}"#,
+        ToolAnnotations::default(),
+        |_args| Ok(McpContent::text("ok")),
+    );
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
+    let body = body_of(&resp);
+    assert!(body.contains("\"annotations\":{}"), "expected empty annotations object: {body}");
 }
 
 // ── tools/call ────────────────────────────────────────────────────────────────
