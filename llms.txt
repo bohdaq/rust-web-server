@@ -984,6 +984,15 @@ UdpProxy::new().backend("10.0.0.1:53").bind("0.0.0.0:53");
 use rust_web_server::ws_proxy::WsProxy;
 WsProxy::new(["ws://chat-backend:9000"]).bind("0.0.0.0:8080");
 WsProxy::new(["wss://chat.example.com"]).bind("0.0.0.0:8443"); // TLS, port defaults to 443
+
+// WsProxy health checks (all backends always live by default — opt in):
+use std::sync::{Arc, RwLock};
+let all = vec!["wss://chat-a:8443".to_string(), "wss://chat-b:8443".to_string()];
+let live = Arc::new(RwLock::new(all.clone()));
+// ... spawn your own thread that writes the currently-healthy subset into `live` ...
+WsProxy::with_live_backends(all, live).bind("0.0.0.0:8080"); // 503 if `live` is empty
+// Or config-driven: add [ws_proxy.health_check] to rws.config.toml (same fields as
+// [upstream.health_check]) and builder.rs wires this up automatically.
 ```
 
 ---
@@ -1439,7 +1448,7 @@ src/validate/           — Validate trait, Validated<T>, ValidationErrors
 src/virtual_host/       — VirtualHostConfig
 src/webhook/            — verify_webhook_signature, WebhookProvider (GitHub/Shopify/Stripe) (webhook feature)
 src/websocket/          — WebSocket handshake, Frame codec
-src/ws_proxy/           — WsProxy (WebSocket proxy)
+src/ws_proxy/           — WsProxy (WebSocket proxy); with_live_backends() for health-check-aware routing
 ```
 
 ---

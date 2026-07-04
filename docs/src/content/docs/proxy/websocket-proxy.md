@@ -51,6 +51,52 @@ WsProxy::new([
 ])
 ```
 
+`WsProxy::new(...)` treats this list as fixed and always live — round-robin cycles through every entry, healthy or not, exactly like before health checks existed. See [Health checks](#health-checks) below for the opt-in behavior where backends can drop out of (and back into) rotation.
+
+## Health checks
+
+By default a `WsProxy` has no health checker — every configured backend is always considered live, and a WebSocket upgrade request to a dead backend simply fails with a connect error. Two ways to make it health-check-aware:
+
+**Config-driven proxy** — add `[ws_proxy.health_check]`, same fields as `[upstream.health_check]` (see [Health Checks](/proxy/health-checks/)):
+
+```toml
+[[ws_proxy]]
+name     = "chat"
+listen   = "0.0.0.0:9000"
+backends = ["wss://chat-a:8443", "wss://chat-b:8443"]
+
+[ws_proxy.health_check]
+path                = "/healthz"   # plain HTTP GET, not a WebSocket handshake
+interval_secs       = 10
+timeout_ms          = 2000
+healthy_threshold   = 2
+unhealthy_threshold = 3
+```
+
+`builder.rs` spawns the same background checker `[[upstream]]` pools use and shares its live-backend list with the `WsProxy` instance. A backend that fails `unhealthy_threshold` consecutive probes stops receiving new connections; it's restored after `healthy_threshold` consecutive successes. If every backend is currently unhealthy, new upgrade attempts get `503 Service Unavailable` instead of being routed to a backend known to be down.
+
+**Library usage** — `WsProxy::with_live_backends(all_backends, live)` takes an `Arc<RwLock<Vec<String>>>` you update yourself, from any probe logic you want (e.g. a real WebSocket handshake instead of a plain HTTP `GET`):
+
+```rust
+use std::sync::{Arc, RwLock};
+use rust_web_server::ws_proxy::WsProxy;
+
+let all = vec!["ws://chat-a:9000".to_string(), "ws://chat-b:9000".to_string()];
+let live = Arc::new(RwLock::new(all.clone()));
+
+let checker_live = Arc::clone(&live);
+std::thread::spawn(move || loop {
+    std::thread::sleep(std::time::Duration::from_secs(10));
+    // probe each backend in `all` however you like, then:
+    // *checker_live.write().unwrap() = healthy_subset;
+    let _ = &checker_live;
+});
+
+WsProxy::with_live_backends(all, live)
+    .bind("0.0.0.0:8080")
+    .unwrap();
+```
+
 ## Timeout configuration
 
 ```rust
@@ -68,13 +114,15 @@ Activate `WsProxy` from `rws.config.toml` with a `[[ws_proxy]]` section:
 ```toml
 # Plain TCP backends
 [[ws_proxy]]
-bind = "0.0.0.0:8080"
+name     = "chat-plain"
+listen   = "0.0.0.0:8080"
 backends = ["ws://ws-backend-1:9000", "ws://ws-backend-2:9000"]
 connect_timeout_ms = 3000
 
 # TLS backend (requires http-client or http2 feature)
 [[ws_proxy]]
-bind = "0.0.0.0:8443"
+name     = "chat-tls"
+listen   = "0.0.0.0:8443"
 backends = ["wss://chat.example.com"]
 ```
 

@@ -3,7 +3,7 @@ title: Health Checks
 description: Automatic background health monitoring that removes and restores backends without restarting.
 ---
 
-Health checks are available in **config-driven mode** only. Each `[[upstream]]` that includes a `[upstream.health_check]` section gets a dedicated daemon thread (`health-{upstream_name}`) that probes every backend on a regular interval and updates the live backend list without any restart.
+Health checks are available in **config-driven mode** only. Each `[[upstream]]` — and, for WebSocket backends, each `[[ws_proxy]]` — that includes a `[*.health_check]` section gets a dedicated daemon thread (`health-{name}`) that probes every backend on a regular interval and updates the live backend list without any restart. Both use the exact same checker (`start_health_checker`), so everything on this page applies to `[ws_proxy.health_check]` too, unless noted otherwise.
 
 ## Configuration
 
@@ -19,6 +19,24 @@ timeout_ms           = 3000         # connect + read timeout per probe (default:
 healthy_threshold    = 2            # consecutive successes to restore (default: 2)
 unhealthy_threshold  = 3            # consecutive failures to remove (default: 3)
 ```
+
+Same fields for a WebSocket proxy:
+
+```toml
+[[ws_proxy]]
+name     = "chat"
+listen   = "0.0.0.0:9000"
+backends = ["wss://chat-a:8443", "wss://chat-b:8443"]
+
+[ws_proxy.health_check]
+path                 = "/healthz"
+interval_secs        = 10
+timeout_ms           = 2000
+healthy_threshold    = 2
+unhealthy_threshold  = 3
+```
+
+The probe is a plain HTTP `GET` against the backend's `host:port` — not a real WebSocket handshake — connected over TLS when the backend uses `wss://`. This is deliberate: nginx and Traefik health-check WebSocket upstreams the same way, because a WS backend is almost always a regular HTTP server with an upgrade route, not a WS-only listener, so a plain HTTP endpoint is enough signal that the process and its network stack are up.
 
 ## How it works
 
@@ -77,10 +95,12 @@ State changes are logged to stderr:
 
 ## All backends unhealthy
 
-If all backends fail their health checks, the live list becomes empty. `DynamicProxy` returns `502 Bad Gateway` for every request until at least one backend recovers.
+If all backends fail their health checks, the live list becomes empty. `DynamicProxy` returns `502 Bad Gateway` for every HTTP/gRPC request until at least one backend recovers; a `[[ws_proxy]]` returns `503 Service Unavailable` for every new WebSocket upgrade attempt instead (the connection never gets far enough to be a "gateway" in the HTTP sense — it's rejected before any backend is contacted).
 
-:::note[No health checks in library mode]
+:::note[No health checks in library mode — except WsProxy]
 `ReverseProxy` does not have built-in health checks. Use `BackendPool` with a `File` or `Dns` source (see [Service Discovery](/proxy/service-discovery/)) and `CircuitBreaker` (see [Circuit Breaker](/proxy/circuit-breaker/)) to replicate the behaviour programmatically.
+
+`WsProxy` is the exception: `WsProxy::with_live_backends(all_backends, live)` takes an `Arc<RwLock<Vec<String>>>` you update from a health-check thread you write yourself — useful if you want a probe other than a plain HTTP `GET` (e.g. a real WebSocket handshake). See [WebSocket Proxy](/proxy/websocket-proxy/#health-checks).
 :::
 
 ## Implementation reference
@@ -89,4 +109,9 @@ The health checker lives in `src/proxy_config/health.rs`:
 
 - `start_health_checker(upstream_name, backends, live, config)` — spawns the daemon thread.
 - `check_backend(backend, path, timeout)` — sends a single probe, returns `true` on `2xx`.
-- `parse_host_port(backend)` — strips URL prefixes and returns `(host, port)`.
+- `parse_backend_url(backend)` — strips the `https://`/`http://`/`h2://`/`wss://`/`ws://` prefix (or none) and returns `(host, port, tls)`.
+
+`WsProxy`'s side of this lives in `src/ws_proxy/mod.rs`:
+
+- `WsProxy::with_live_backends(all_backends, live)` — the constructor `[ws_proxy.health_check]` uses internally, also public for library use.
+- `pick_backend()` reads the current `live` list on every new connection and returns `None` (→ `503`) if it's empty.

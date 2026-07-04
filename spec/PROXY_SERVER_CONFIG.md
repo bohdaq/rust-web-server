@@ -232,13 +232,27 @@ reply_timeout_ms = 2000
 buffer_size      = 8192
 
 # ── WebSocket proxy ───────────────────────────────────────────────────────────
-# WsProxy runs a separate listener (raw upgrade + byte relay).
+# WsProxy runs a separate listener (raw upgrade + byte relay). Backends may
+# use ws:// (plain), wss:// (TLS), or bare host:port (plain).
 [[ws_proxy]]
 name              = "chat"
 listen            = "0.0.0.0:9000"
-backends          = ["ws-backend1:8080", "ws-backend2:8080"]
+backends          = ["wss://ws-backend1:8443", "wss://ws-backend2:8443"]
 connect_timeout_ms = 500
 read_timeout_ms   = 30000
+
+  # Optional — same shape and semantics as [upstream.health_check]. The probe
+  # is a plain HTTP GET against each backend's host:port (wss:// connects the
+  # probe over TLS; ws:// does not) — most WebSocket backends serve a regular
+  # HTTP health endpoint alongside their upgrade route. A backend that fails
+  # unhealthy_threshold consecutive probes is removed from round-robin; new
+  # upgrade attempts get 503 if every backend is currently unhealthy.
+  [ws_proxy.health_check]
+  path                = "/healthz"
+  interval_secs       = 10
+  timeout_ms          = 2000
+  healthy_threshold   = 2
+  unhealthy_threshold = 3
 
 # ── Global middleware defaults ────────────────────────────────────────────────
 # Applied to all [[route]] blocks unless the route overrides them.
@@ -328,9 +342,11 @@ Rules in `rewrite.request[]` and `rewrite.response[]` arrays:
 
 ---
 
-## Upstream health checks
+## Upstream and WebSocket proxy health checks
 
-When `[upstream.health_check]` is present, a background task probes each backend at `interval_secs`. Backends that fail `unhealthy_threshold` consecutive probes are removed from the rotation. They are re-added after `healthy_threshold` consecutive successes. The proxy always returns `502` if no healthy backend is available.
+When `[upstream.health_check]` (for `[[route]]` proxy actions) or `[ws_proxy.health_check]` (for `[[ws_proxy]]` listeners) is present, a background task probes each backend at `interval_secs`. Backends that fail `unhealthy_threshold` consecutive probes are removed from the rotation. They are re-added after `healthy_threshold` consecutive successes. An HTTP/gRPC route always returns `502` if no healthy upstream backend is available; a WebSocket upgrade attempt gets `503` if no healthy `[[ws_proxy]]` backend is available.
+
+Both use the same background health checker (`proxy_config::health::start_health_checker`) and probe mechanism — a plain HTTP `GET {path}`, optionally over TLS. For `[[ws_proxy]]`, this means the probe hits a regular HTTP health endpoint on the backend's `host:port`, not a full WebSocket handshake; this matches how nginx/Traefik health-check WebSocket upstreams and works because WS backends are almost always regular HTTP servers with an upgrade route, not WS-only listeners.
 
 Health check state is visible via `GET /metrics` (Prometheus) and the `server_metrics` MCP tool.
 
@@ -357,8 +373,9 @@ Health check state is visible via `GET /metrics` (Prometheus) and the `server_me
 - `ProxyConfig::is_proxy_mode()` — detects `[[route]]` / `[[upstream]]` in `rws.config.toml`; `main()` checks this at startup for all three feature targets (http1 / http2 / http3)
 
 ### ✅ Phase 2 — Backend health checks
-- `src/proxy_config/health.rs` — `start_health_checker()` spawns a daemon thread per upstream; tracks per-backend consecutive successes/failures; updates `Arc<RwLock<Vec<String>>>` live-backend list
+- `src/proxy_config/health.rs` — `start_health_checker()` spawns a daemon thread per upstream; tracks per-backend consecutive successes/failures; updates `Arc<RwLock<Vec<String>>>` live-backend list. `parse_backend_url()` also accepts `ws://`/`wss://` schemes so the same checker works against `[[ws_proxy]]` backends.
 - `DynamicProxy` reads from the same `Arc<RwLock<…>>` for zero-copy health-aware round-robin
+- `WsProxy` (`src/ws_proxy/mod.rs`) supports the same pattern via `WsProxy::with_live_backends()`; `[ws_proxy.health_check]` wires it up in `builder.rs`. `WsProxy::new()` (no health check attached) is unaffected — every configured backend stays live, matching its original behavior.
 
 ### ⏳ Phase 3 — Load balancing strategies
 - `round_robin` implemented (default); `least_conn`, `ip_hash`, `random` are parsed but fall back to round-robin

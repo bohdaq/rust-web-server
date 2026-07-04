@@ -160,14 +160,24 @@ fn check_via_tls(_stream: TcpStream, _host: &str, _req: &[u8]) -> bool {
 /// Parse a backend address that may include a scheme prefix.
 ///
 /// Returns `(host, port, tls)`:
-/// - `https://` → TLS=true, default port 443
-/// - `http://`, `h2://`, or no scheme → TLS=false, default port 80
+/// - `https://`, `wss://` → TLS=true, default port 443
+/// - `http://`, `h2://`, `ws://`, or no scheme → TLS=false, default port 80
+///
+/// `ws://`/`wss://` are accepted (rather than requiring a caller to strip
+/// them first) so this same function — and [`check_backend`] — can health
+/// check `[[ws_proxy]]` backends, which are written with those schemes in
+/// `rws.config.toml`; the TCP-connect-then-optionally-TLS-wrap check is
+/// identical to an HTTP(S) backend once host/port/tls are known.
 pub(crate) fn parse_backend_url(backend: &str) -> Option<(String, u16, bool)> {
     let (rest, tls, default_port) = if let Some(r) = backend.strip_prefix("https://") {
+        (r, true, 443u16)
+    } else if let Some(r) = backend.strip_prefix("wss://") {
         (r, true, 443u16)
     } else if let Some(r) = backend.strip_prefix("http://") {
         (r, false, 80u16)
     } else if let Some(r) = backend.strip_prefix("h2://") {
+        (r, false, 80u16)
+    } else if let Some(r) = backend.strip_prefix("ws://") {
         (r, false, 80u16)
     } else {
         (backend, false, 80u16)
@@ -205,5 +215,98 @@ pub(crate) fn parse_backend_url(backend: &str) -> Option<(String, u16, bool)> {
         return None;
     }
     Some((host, port, tls))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_backend_url;
+
+    #[test]
+    fn https_scheme_is_tls_default_443() {
+        assert_eq!(
+            Some(("api.example.com".to_string(), 443, true)),
+            parse_backend_url("https://api.example.com")
+        );
+    }
+
+    #[test]
+    fn http_scheme_is_plain_default_80() {
+        assert_eq!(
+            Some(("api.example.com".to_string(), 80, false)),
+            parse_backend_url("http://api.example.com")
+        );
+    }
+
+    #[test]
+    fn h2_scheme_is_plain_with_explicit_port() {
+        assert_eq!(
+            Some(("grpc.example.com".to_string(), 9090, false)),
+            parse_backend_url("h2://grpc.example.com:9090")
+        );
+    }
+
+    #[test]
+    fn wss_scheme_is_tls_default_443() {
+        // wss:// backends (WsProxy) are health-checked with the same plain
+        // HTTP GET as http(s):// backends — only the TLS-or-not decision
+        // and default port depend on the scheme.
+        assert_eq!(
+            Some(("chat.example.com".to_string(), 443, true)),
+            parse_backend_url("wss://chat.example.com")
+        );
+    }
+
+    #[test]
+    fn wss_scheme_explicit_port() {
+        assert_eq!(
+            Some(("chat.example.com".to_string(), 8443, true)),
+            parse_backend_url("wss://chat.example.com:8443")
+        );
+    }
+
+    #[test]
+    fn ws_scheme_is_plain_default_80() {
+        assert_eq!(
+            Some(("chat.example.com".to_string(), 80, false)),
+            parse_backend_url("ws://chat.example.com")
+        );
+    }
+
+    #[test]
+    fn ws_scheme_explicit_port() {
+        assert_eq!(
+            Some(("chat.example.com".to_string(), 9000, false)),
+            parse_backend_url("ws://chat.example.com:9000")
+        );
+    }
+
+    #[test]
+    fn bare_host_port_no_scheme_is_plain() {
+        assert_eq!(
+            Some(("10.0.0.5".to_string(), 8080, false)),
+            parse_backend_url("10.0.0.5:8080")
+        );
+    }
+
+    #[test]
+    fn ipv6_literal_with_port() {
+        assert_eq!(
+            Some(("::1".to_string(), 9000, false)),
+            parse_backend_url("ws://[::1]:9000")
+        );
+    }
+
+    #[test]
+    fn path_component_is_dropped() {
+        assert_eq!(
+            Some(("chat.example.com".to_string(), 8080, false)),
+            parse_backend_url("ws://chat.example.com:8080/ws")
+        );
+    }
+
+    #[test]
+    fn empty_host_returns_none() {
+        assert_eq!(None, parse_backend_url("wss://"));
+    }
 }
 

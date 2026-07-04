@@ -199,6 +199,13 @@ pub struct WsProxyConfig {
     pub backends: Vec<String>,
     pub connect_timeout_ms: u64,
     pub read_timeout_ms: u64,
+    /// Optional `[ws_proxy.health_check]` — same shape and semantics as
+    /// `[upstream.health_check]`. The probe is a plain HTTP `GET {path}`
+    /// against the backend's `host:port` (the `ws://`/`wss://` scheme only
+    /// determines whether the probe connects over TLS); most WebSocket
+    /// backends serve a regular HTTP health endpoint alongside their upgrade
+    /// route, the same way nginx/Traefik health-check WS upstreams.
+    pub health_check: Option<HealthCheckConfig>,
 }
 
 // ── ProxyConfig loading ────────────────────────────────────────────────────────
@@ -403,12 +410,28 @@ impl ProxyConfig {
             if !section_exists(&map, &sec) {
                 break;
             }
+            let hc_sec = format!("{}.health_check", sec);
+            let health_check = if section_exists(&map, &hc_sec) {
+                Some(HealthCheckConfig {
+                    path: {
+                        let p = get_str(&map, &hc_sec, "path");
+                        if p.is_empty() { "/health".to_string() } else { p }
+                    },
+                    interval_secs: get_u64(&map, &hc_sec, "interval_secs", 30),
+                    timeout_ms: get_u64(&map, &hc_sec, "timeout_ms", 5000),
+                    healthy_threshold: get_u32(&map, &hc_sec, "healthy_threshold", 2),
+                    unhealthy_threshold: get_u32(&map, &hc_sec, "unhealthy_threshold", 3),
+                })
+            } else {
+                None
+            };
             ws_proxies.push(WsProxyConfig {
                 name: get_str(&map, &sec, "name"),
                 listen: get_str(&map, &sec, "listen"),
                 backends: get_array(&map, &sec, "backends"),
                 connect_timeout_ms: get_u64(&map, &sec, "connect_timeout_ms", 5000),
                 read_timeout_ms: get_u64(&map, &sec, "read_timeout_ms", 30000),
+                health_check,
             });
             i += 1;
         }

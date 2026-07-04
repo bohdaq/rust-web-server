@@ -14,6 +14,18 @@
 //! deadlock that arises when trying to share a `rustls::StreamOwned` between
 //! two blocking threads.
 //!
+//! # Health checks
+//!
+//! `WsProxy::new` treats every configured backend as always live — matching
+//! the original behavior, with no background monitoring. The config-driven
+//! proxy's `[ws_proxy.health_check]` (see `spec/PROXY_SERVER_CONFIG.md`) opts
+//! a `[[ws_proxy]]` block into the same background health checker used for
+//! `[[upstream]]` pools (`proxy_config::health::start_health_checker`), which
+//! periodically probes each backend with a plain HTTP `GET` and removes it
+//! from rotation after enough consecutive failures. If every backend is
+//! currently unhealthy, new WebSocket upgrade attempts get `503 Service
+//! Unavailable` instead of being routed to a backend known to be down.
+//!
 //! # Example
 //!
 //! ```rust,no_run
@@ -34,7 +46,7 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::{
-    Arc,
+    Arc, RwLock,
     atomic::{AtomicUsize, Ordering},
 };
 use std::time::Duration;
@@ -55,7 +67,15 @@ use crate::websocket::WebSocket;
 ///
 /// Call [`WsProxy::bind`] to start. It blocks the calling thread indefinitely.
 pub struct WsProxy {
-    backends: Vec<WsBackend>,
+    /// Every backend this proxy was configured with, validated at
+    /// construction — used only to reject an empty configuration in `bind()`.
+    all_backends: Vec<String>,
+    /// Backends currently considered live. Round-robin picks only from this
+    /// list. Defaults to a clone of `all_backends` (no health check attached);
+    /// [`WsProxy::with_live_backends`] lets a caller (the config-driven
+    /// proxy's builder) share this list with a background health checker
+    /// that updates it over time.
+    live: Arc<RwLock<Vec<String>>>,
     counter: Arc<AtomicUsize>,
     connect_timeout: Duration,
     read_timeout: Duration,
@@ -63,7 +83,9 @@ pub struct WsProxy {
 
 impl WsProxy {
     /// Create a proxy that distributes connections across `backends` in
-    /// round-robin order.
+    /// round-robin order. Every backend is treated as always live — no
+    /// health check is attached; use the config-driven proxy's
+    /// `[ws_proxy.health_check]` for that.
     ///
     /// Each entry may be `"host:port"`, `"ws://host:port"`, or
     /// `"wss://host:port"`.  `wss://` requires the `http-client` or `http2`
@@ -73,11 +95,57 @@ impl WsProxy {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
+        let all_backends: Vec<String> = backends
+            .into_iter()
+            .map(|b| b.into())
+            .filter(|b| WsBackend::parse(b).is_some())
+            .collect();
+        let live = Arc::new(RwLock::new(all_backends.clone()));
         WsProxy {
-            backends: backends
-                .into_iter()
-                .filter_map(|b| WsBackend::parse(&b.into()))
-                .collect(),
+            all_backends,
+            live,
+            counter: Arc::new(AtomicUsize::new(0)),
+            connect_timeout: Duration::from_secs(5),
+            read_timeout: Duration::from_secs(30),
+        }
+    }
+
+    /// Build a proxy whose live-backend list is externally managed —
+    /// `live` is shared with (and expected to be updated by) a health
+    /// checker you run yourself, on whatever schedule and probe logic you
+    /// choose. `all_backends` is the full configured list, used only for
+    /// `bind()`'s empty-configuration check; round-robin only ever picks
+    /// from `live`.
+    ///
+    /// This is what the config-driven proxy's `[ws_proxy.health_check]`
+    /// uses internally (see `proxy_config::health::start_health_checker`),
+    /// exposed directly for library users who want WS backend health
+    /// checking without the config file — e.g. a custom probe that performs
+    /// a real WebSocket handshake rather than a plain HTTP `GET`.
+    ///
+    /// ```rust,no_run
+    /// use std::sync::{Arc, RwLock};
+    /// use rust_web_server::ws_proxy::WsProxy;
+    ///
+    /// let all = vec!["ws://chat-a:9000".to_string(), "ws://chat-b:9000".to_string()];
+    /// let live = Arc::new(RwLock::new(all.clone()));
+    ///
+    /// // Run your own probe loop on another thread, writing into `live`:
+    /// let checker_live = Arc::clone(&live);
+    /// std::thread::spawn(move || loop {
+    ///     std::thread::sleep(std::time::Duration::from_secs(10));
+    ///     // *checker_live.write().unwrap() = probe_and_filter(&all);
+    ///     let _ = &checker_live;
+    /// });
+    ///
+    /// WsProxy::with_live_backends(all, live)
+    ///     .bind("0.0.0.0:8080")
+    ///     .expect("WS proxy failed");
+    /// ```
+    pub fn with_live_backends(all_backends: Vec<String>, live: Arc<RwLock<Vec<String>>>) -> Self {
+        WsProxy {
+            all_backends,
+            live,
             counter: Arc::new(AtomicUsize::new(0)),
             connect_timeout: Duration::from_secs(5),
             read_timeout: Duration::from_secs(30),
@@ -101,7 +169,7 @@ impl WsProxy {
 
     /// Bind on `addr` and start proxying WebSocket connections. Blocks indefinitely.
     pub fn bind(self, addr: &str) -> Result<(), String> {
-        if self.backends.is_empty() {
+        if self.all_backends.is_empty() {
             return Err("WsProxy: no backends configured".to_string());
         }
         let listener = TcpListener::bind(addr)
@@ -126,9 +194,17 @@ impl WsProxy {
         Ok(())
     }
 
-    fn pick_backend(&self) -> &WsBackend {
-        let i = self.counter.fetch_add(1, Ordering::Relaxed) % self.backends.len();
-        &self.backends[i]
+    /// Pick the next backend in round-robin order from the current live
+    /// list. Returns `None` if the live list is empty — every backend is
+    /// currently marked unhealthy (or, for `WsProxy::new`, every configured
+    /// backend failed to parse).
+    fn pick_backend(&self) -> Option<WsBackend> {
+        let live = self.live.read().unwrap_or_else(|e| e.into_inner());
+        if live.is_empty() {
+            return None;
+        }
+        let i = self.counter.fetch_add(1, Ordering::Relaxed) % live.len();
+        WsBackend::parse(&live[i])
     }
 
     fn handle(&self, mut client: TcpStream) -> Result<(), String> {
@@ -152,7 +228,15 @@ impl WsProxy {
             ));
         }
 
-        let backend = self.pick_backend();
+        let backend = match self.pick_backend() {
+            Some(b) => b,
+            None => {
+                let _ = client.write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
+                return Err("WsProxy: no healthy backend available".to_string());
+            }
+        };
         let addr_str = &backend.addr;
         let sock_addr = addr_str
             .to_socket_addrs()
@@ -515,5 +599,68 @@ mod backend_parse_tests {
         let b = WsBackend::parse("ws://backend:9000/ws").unwrap();
         assert_eq!("backend:9000", b.addr);
         assert_eq!("backend", b.host);
+    }
+}
+
+// ── Live-backend-list (health check) tests ────────────────────────────────────
+
+#[cfg(test)]
+mod live_backends_tests {
+    use super::WsProxy;
+    use std::sync::{Arc, RwLock};
+
+    #[test]
+    fn new_picks_backends_in_round_robin_order() {
+        let proxy = WsProxy::new(["ws://a:1", "ws://b:1", "ws://c:1"]);
+        let picked: Vec<String> = (0..6)
+            .map(|_| proxy.pick_backend().unwrap().addr)
+            .collect();
+        assert_eq!(
+            vec!["a:1", "b:1", "c:1", "a:1", "b:1", "c:1"],
+            picked
+        );
+    }
+
+    #[test]
+    fn new_filters_out_unparseable_backends() {
+        // "wss://" alone has no host and WsBackend::parse rejects it.
+        let proxy = WsProxy::new(["ws://good:1", "wss://"]);
+        assert_eq!(vec!["ws://good:1".to_string()], proxy.all_backends);
+    }
+
+    #[test]
+    fn pick_backend_returns_none_when_live_list_is_empty() {
+        let proxy = WsProxy::with_live_backends(
+            vec!["ws://a:1".to_string()],
+            Arc::new(RwLock::new(vec![])),
+        );
+        assert!(proxy.pick_backend().is_none(), "no live backends means no pick");
+    }
+
+    #[test]
+    fn pick_backend_reflects_live_list_updates() {
+        // Simulates what proxy_config::health::start_health_checker does:
+        // mutate the shared live list out from under a running proxy.
+        let live = Arc::new(RwLock::new(vec!["ws://a:1".to_string(), "ws://b:1".to_string()]));
+        let proxy = WsProxy::with_live_backends(
+            vec!["ws://a:1".to_string(), "ws://b:1".to_string()],
+            Arc::clone(&live),
+        );
+
+        assert!(proxy.pick_backend().is_some());
+
+        // "a" fails its health check and is removed from rotation.
+        *live.write().unwrap() = vec!["ws://b:1".to_string()];
+        for _ in 0..4 {
+            assert_eq!("b:1", proxy.pick_backend().unwrap().addr);
+        }
+
+        // All backends fail — no live backend left.
+        live.write().unwrap().clear();
+        assert!(proxy.pick_backend().is_none());
+
+        // "a" recovers.
+        *live.write().unwrap() = vec!["ws://a:1".to_string()];
+        assert_eq!("a:1", proxy.pick_backend().unwrap().addr);
     }
 }

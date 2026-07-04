@@ -144,7 +144,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `GrpcProxy` | `proxy` | gRPC reverse proxy middleware — filters on `Content-Type: application/grpc*` and forwards over HTTP/2. `grpc://` plain, `grpcs://`/`https://` TLS. Requires `http2` feature. |
 | `TcpProxy` | `tcp_proxy` | Standalone L4 TCP proxy. Accepts connections on a local address and relays bytes bidirectionally to round-robin backends. |
 | `UdpProxy` | `udp_proxy` | Standalone UDP proxy (request-reply model). Forwards each datagram to a backend and returns the reply to the original client. |
-| `WsProxy` | `ws_proxy` | Standalone WebSocket proxy. `ws://` plain TCP (two-thread relay), `wss://` TLS (single-thread polling relay; `http-client` or `http2` feature). Port defaults to 80/443. |
+| `WsProxy` | `ws_proxy` | Standalone WebSocket proxy. `ws://` plain TCP (two-thread relay), `wss://` TLS (single-thread polling relay; `http-client` or `http2` feature). Port defaults to 80/443. `WsProxy::new()` treats all backends as always live; `WsProxy::with_live_backends(all, Arc<RwLock<Vec<String>>>)` takes a caller-managed live list for health-check-aware round-robin — `503` if it's empty. `[ws_proxy.health_check]` in `rws.config.toml` wires this up automatically for the config-driven proxy. |
 | `WeightedBackend` / `CanaryLayer` | `canary` | Weighted traffic-splitting proxy middleware; each backend has a `weight` — distribution is proportional. Backends are contacted over plain HTTP/1.1, or TLS when the URL uses `https://`/`h2s://`/`grpcs://` (requires the `http-client` or `http2` feature). Useful for canary releases and A/B testing. |
 | `CircuitBreaker` | `circuit_breaker` | Per-backend circuit breaker (Closed→Open→HalfOpen state machine). `global()` returns a process-wide singleton. Configurable failure threshold and recovery window. |
 | `RetryLayer` | `circuit_breaker` | Middleware that retries requests on configurable status codes (default: 502, 503, 504) up to `max_retries` times. |
@@ -2075,6 +2075,24 @@ WsProxy::new(["wss://chat.internal:8443"]) // explicit port
 ```
 
 `bind()` blocks indefinitely. The proxy does raw byte relay after the handshake, so any WebSocket subprotocol passes through transparently.
+
+`WsProxy::new(...)` treats every backend as always live — no health check attached, matching its original behavior. The config-driven proxy's `[ws_proxy.health_check]` (in `rws.config.toml`) opts a `[[ws_proxy]]` listener into the same background health checker `[[upstream]]` pools use: a plain HTTP `GET {path}` (over TLS for `wss://` backends) runs on `interval_secs`, and a backend is pulled out of rotation after `unhealthy_threshold` consecutive failures, restored after `healthy_threshold` consecutive successes. If every backend is currently unhealthy, new upgrade attempts get `503 Service Unavailable` instead of being routed to a backend known to be down. See `spec/PROXY_SERVER_CONFIG.md` for the `[ws_proxy.health_check]` fields (identical shape to `[upstream.health_check]`).
+
+Using `WsProxy` directly as a library (no config file)? `WsProxy::with_live_backends(all_backends, live)` takes an `Arc<RwLock<Vec<String>>>` you update from your own health-check thread on whatever schedule and probe you choose — useful if you want a real WebSocket handshake as the health probe instead of the config-driven proxy's plain HTTP `GET`:
+
+```rust
+use std::sync::{Arc, RwLock};
+use rust_web_server::ws_proxy::WsProxy;
+
+let all = vec!["ws://chat-a:9000".to_string(), "ws://chat-b:9000".to_string()];
+let live = Arc::new(RwLock::new(all.clone()));
+
+// Spawn your own probe loop that writes into `live` on whatever interval/logic you want.
+
+WsProxy::with_live_backends(all, live)
+    .bind("0.0.0.0:8080")
+    .expect("WS proxy failed");
+```
 
 ---
 

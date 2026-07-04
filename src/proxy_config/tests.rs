@@ -539,6 +539,51 @@ read_timeout_ms = 30000
     assert_eq!(ws.backends, vec!["ws1:8080", "ws2:8080"]);
     assert_eq!(ws.connect_timeout_ms, 500);
     assert_eq!(ws.read_timeout_ms, 30000);
+    assert!(ws.health_check.is_none(), "no [ws_proxy.health_check] section was given");
+}
+
+#[test]
+fn from_str_parses_ws_proxy_health_check() {
+    let cfg = ProxyConfig::from_str(r#"
+[[ws_proxy]]
+name = "chat"
+listen = "0.0.0.0:9000"
+backends = ["wss://ws1:8443", "wss://ws2:8443"]
+
+  [ws_proxy.health_check]
+  path                = "/healthz"
+  interval_secs       = 5
+  timeout_ms          = 1000
+  healthy_threshold   = 2
+  unhealthy_threshold = 3
+"#);
+    assert_eq!(cfg.ws_proxies.len(), 1);
+    let ws = &cfg.ws_proxies[0];
+    assert_eq!(ws.backends, vec!["wss://ws1:8443", "wss://ws2:8443"]);
+    let hc = ws.health_check.as_ref().expect("[ws_proxy.health_check] should be parsed");
+    assert_eq!(hc.path, "/healthz");
+    assert_eq!(hc.interval_secs, 5);
+    assert_eq!(hc.timeout_ms, 1000);
+    assert_eq!(hc.healthy_threshold, 2);
+    assert_eq!(hc.unhealthy_threshold, 3);
+}
+
+#[test]
+fn from_str_ws_proxy_health_check_defaults() {
+    let cfg = ProxyConfig::from_str(r#"
+[[ws_proxy]]
+name = "chat"
+listen = "0.0.0.0:9000"
+backends = ["ws1:8080"]
+
+  [ws_proxy.health_check]
+"#);
+    let hc = cfg.ws_proxies[0].health_check.as_ref().unwrap();
+    assert_eq!(hc.path, "/health");
+    assert_eq!(hc.interval_secs, 30);
+    assert_eq!(hc.timeout_ms, 5000);
+    assert_eq!(hc.healthy_threshold, 2);
+    assert_eq!(hc.unhealthy_threshold, 3);
 }
 
 // ── Parser: middleware fields ──────────────────────────────────────────────────

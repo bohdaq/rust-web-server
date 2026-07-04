@@ -162,10 +162,24 @@ pub fn build(config: ProxyConfig) -> (ConfigDrivenApp, Vec<std::thread::JoinHand
         let connect_timeout_ms = ws_cfg.connect_timeout_ms;
         let read_timeout_ms = ws_cfg.read_timeout_ms;
         let name = ws_cfg.name.clone();
+
+        // With a health check configured, share a live-backend list with a
+        // background checker thread (same mechanism `[[upstream]]` pools
+        // use) instead of treating every configured backend as always live.
+        let live = Arc::new(RwLock::new(backends.clone()));
+        if let Some(ref hc) = ws_cfg.health_check {
+            crate::proxy_config::health::start_health_checker(
+                name.clone(),
+                backends.clone(),
+                Arc::clone(&live),
+                hc.clone(),
+            );
+        }
+
         let h = std::thread::Builder::new()
             .name(format!("ws-proxy-{}", name))
             .spawn(move || {
-                let proxy = crate::ws_proxy::WsProxy::new(backends)
+                let proxy = crate::ws_proxy::WsProxy::with_live_backends(backends, live)
                     .connect_timeout_ms(connect_timeout_ms)
                     .read_timeout_ms(read_timeout_ms);
                 if let Err(e) = proxy.bind(&listen) {
