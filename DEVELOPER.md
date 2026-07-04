@@ -129,6 +129,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `ConfigSnapshot` | `config_reload` | Point-in-time snapshot of all hot-reloadable config values. Read with `config_reload::current()`. |
 | `config_reload::reload` | `config_reload` | Re-reads `rws.config.toml` and applies CORS, rate-limit, log-format changes live. Triggered by SIGHUP or `POST /admin/config/reload`. |
 | `get_max_body_size` | `entry_point` | Reads `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (default `0`, unlimited). `Server::process`, `process_h1_tls`, `h2_handler`, and `h3_handler` all check a request's declared `Content-Length` (or accumulated body, for H2/H3) against this before buffering it; requests over the limit get `413 Payload Too Large` and the connection is closed. |
+| `Server::continue_response` / `expectation_failed_response` | `server` (HTTP/1.1: `Server::process`, `process_h1_tls`) | `Expect: 100-continue` support (RFC 9110 §10.1.1). A request with `Expect: 100-continue` and a `Content-Length` gets an immediate `100 Continue` interim response before the server blocks reading the body — checked *after* the `413` size-limit check, so an oversized body is rejected without ever telling the client to send it. Any other `Expect` value gets `417 Expectation Failed` without reading the body at all. HTTP/2 and HTTP/3 read bodies via async per-frame `DATA` streams rather than one blocking read, so they don't have the read-ahead deadlock this exists to avoid, and don't implement it. |
 | `OtelLayer` | `otel` | Middleware that creates the HTTP server root span, propagates W3C `traceparent`, and exports to stdout or OTLP HTTP. Call `otel::setup()` or `otel::setup_from_env()` at startup. Nest child spans under it with `otel::span`/`otel::client_span`. |
 | `Span` / `otel::span` / `otel::client_span` | `otel` | `Span` is an RAII child span — create one with `otel::span(name)` (Internal) or `otel::client_span(name)` (Client), nested under whatever span is currently active (or a fresh trace if none). `.set_attribute(key, value)`, `.set_error()`/`.record_error(msg)`, and drop (or `.end()`) to record it. |
 | `SpanKind` / `AttributeValue` | `otel` | `SpanKind`: `Internal`/`Server`/`Client` (OTLP numbering). `AttributeValue`: `String`/`Int`/`Float`/`Bool`, with `From` impls for ergonomic `set_attribute("key", 42)`. |
@@ -4016,3 +4017,40 @@ if let Some(link) = page.link_header("https://api.example.com/users") {
 ```
 
 `Page<T>`/`CursorPage<T>` live in `src/pagination/mod.rs`, a standalone module with no feature gate and no dependency on the model layer — `Page::new(items, page, per_page, total_items)` builds one directly if your data source is a `Vec` or an external API rather than `QueryBuilder`. `.map(f)` transforms `items` (e.g. a DB row struct into an API DTO) while leaving pagination metadata untouched.
+
+### 74. `Expect: 100-continue` for large request bodies
+
+A client uploading a large body can send `Expect: 100-continue` and wait for the server's go-ahead before sending it — useful for avoiding wasted upload bandwidth when a request might get rejected outright (auth, size limit) based on headers alone. `rws` handles this automatically for HTTP/1.1 (plain and TLS) — no application code needed:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+
+// Any App — Expect: 100-continue support is built into the HTTP/1.1 request loop.
+let app = App::new();
+```
+
+What happens on the wire for a compliant client:
+
+```
+PUT /upload HTTP/1.1
+Content-Length: 10485760
+Expect: 100-continue
+
+                              <- server, immediately: HTTP/1.1 100 Continue
+
+<10 MB of body data>          <- client sends the body only after seeing 100 Continue
+
+                              <- server's real response: HTTP/1.1 201 Created ...
+```
+
+If the declared `Content-Length` exceeds `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (see Use Case #72), the `413` check runs *before* the `100 Continue` is sent — the client is told to stop instead of being invited to upload a body the server has already decided to reject. An `Expect` value other than `100-continue` (the only expectation this server understands) gets `417 Expectation Failed` immediately, without reading any body.
+
+```rust
+// What a curl invocation exercising this looks like:
+// curl -v -X PUT --data-binary @big-file.bin \
+//   -H "Expect: 100-continue" http://localhost:7878/upload
+// curl itself waits for the "100 Continue" line before it starts uploading.
+```
+
+Scope: this applies to HTTP/1.1 only (`Server::process` and `process_h1_tls`), where the server reads headers and body off one raw byte stream and could otherwise block waiting for a body the client is itself waiting to be told to send. HTTP/2 (`h2_handler`) and HTTP/3 (`h3_handler`) read the body asynchronously as separate `DATA` frames after the headers frame, so that particular deadlock risk doesn't exist there, and 100-continue isn't implemented for them.

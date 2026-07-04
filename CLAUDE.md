@@ -120,6 +120,8 @@ The default build (`http3` feature) uses a tokio async runtime and serves HTTP/3
 
 `main.rs` → `Server::setup()` binds the TCP listener and creates the `ThreadPool` → `Server::run()` (plain HTTP/1.1) or `Server::run_tls()` (TLS) accepts connections → dispatches each to the thread pool → `Server::process()` implements an HTTP/1.1 keep-alive loop: reads bytes, calls `Request::parse()`, calls `app.execute()`, applies gzip compression (`compression::apply_gzip()`), records metrics, sets `Connection` header, then writes the response. For large files `response.stream_file` triggers `Server::write_chunked_file()` instead.
 
+`Server::process()` and `process_h1_tls()` (TLS) both support `Expect: 100-continue` (RFC 9110 §10.1.1): after parsing headers and passing the `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` check, a request with `Expect: 100-continue` gets `Server::continue_response()` written immediately, before the body-continuation read loop runs — otherwise the read loop would block waiting for a body the client is itself waiting to be told to send. An `Expect` value other than `100-continue` gets `Server::expectation_failed_response()` (417) without reading the body. HTTP/2 (`h2_handler`) and HTTP/3 (`h3_handler`) read bodies as separate async `DATA` frames rather than one blocking read, so they don't have this deadlock risk and don't implement it.
+
 Each connection gets a 30-second read timeout. `Server::run_redirect()` optionally listens on a second port and issues `301` redirects to HTTPS.
 
 ### Routing / controller dispatch

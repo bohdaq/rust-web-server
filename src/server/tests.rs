@@ -1605,3 +1605,104 @@ fn max_body_size_zero_means_unlimited() {
     let received = captured.lock().unwrap().clone().expect("app should have been called");
     assert_eq!(body, received.body);
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Expect: 100-continue (RFC 9110 §10.1.1)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Builds just the request line + headers (ending in the blank line), with no
+/// body bytes — simulating a 100-continue-aware client, which sends headers
+/// and then waits for an interim response before sending the body.
+fn raw_post_request_headers_only(content_length: usize, extra_headers: &[(&str, &str)]) -> Vec<u8> {
+    let mut req = format!(
+        "POST /echo HTTP/1.1\r\nHost: localhost:7878\r\nContent-Length: {}\r\nConnection: close\r\n",
+        content_length
+    );
+    for (name, value) in extra_headers {
+        req.push_str(&format!("{}: {}\r\n", name, value));
+    }
+    req.push_str("\r\n");
+    req.into_bytes()
+}
+
+#[test]
+fn continue_response_is_a_bare_100_status_line() {
+    let raw = Server::continue_response();
+    let text = String::from_utf8_lossy(&raw);
+    assert_eq!("HTTP/1.1 100 Continue\r\n\r\n", text);
+}
+
+#[test]
+fn expect_100_continue_sends_interim_response_then_reads_body() {
+    let _g = crate::test_env::lock();
+    std::env::remove_var(crate::entry_point::Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES);
+
+    let body = b"hello world".to_vec();
+    let headers = raw_post_request_headers_only(body.len(), &[("Expect", "100-continue")]);
+
+    // Headers arrive in one read; the body arrives in a second, separate
+    // read — exactly what a real client waiting for "100 Continue" does.
+    let mut stream = SequentialMockStream::new(vec![headers, body.clone()]);
+    let captured = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let app = BodyCapturingApp { captured: captured.clone() };
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    let written = String::from_utf8_lossy(&stream.written).to_string();
+    assert!(written.contains("HTTP/1.1 100 Continue"), "expected interim response, got:\n{}", written);
+    assert!(written.contains("HTTP/1.1 200"), "expected final response, got:\n{}", written);
+
+    let continue_pos = written.find("100 Continue").unwrap();
+    let ok_pos = written.rfind("HTTP/1.1 200").unwrap();
+    assert!(continue_pos < ok_pos, "100 Continue must be written before the final response");
+
+    let received = captured.lock().unwrap().clone().expect("app should have been called");
+    assert_eq!(body, received.body, "full body should still be captured after the interim response");
+}
+
+#[test]
+fn no_expect_header_never_sends_100_continue() {
+    let body = vec![b'y'; 20];
+    let mut stream = SequentialMockStream::new(vec![raw_post_request(&body)]);
+    let captured = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let app = BodyCapturingApp { captured: captured.clone() };
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    let written = String::from_utf8_lossy(&stream.written);
+    assert!(!written.contains("100 Continue"), "must not send 100 Continue without an Expect header");
+    assert!(written.contains("200"));
+}
+
+#[test]
+fn expect_unsupported_value_returns_417_without_reading_body() {
+    let mut stream = SequentialMockStream::new(vec![
+        raw_post_request_headers_only(5, &[("Expect", "gzip-trailer")]),
+        b"hello".to_vec(), // never consumed — the request is rejected before this read
+    ]);
+    let captured = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let app = BodyCapturingApp { captured: captured.clone() };
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    assert!(captured.lock().unwrap().is_none(), "app must not run for an expectation this server can't meet");
+    let written = String::from_utf8_lossy(&stream.written);
+    assert!(written.contains("417"), "expected 417 Expectation Failed, got:\n{}", written);
+    assert!(!written.contains("100 Continue"));
+}
+
+#[test]
+fn expect_100_continue_with_oversized_body_gets_413_not_100_continue() {
+    let _g = crate::test_env::lock();
+    std::env::set_var(crate::entry_point::Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES, "10");
+
+    let headers = raw_post_request_headers_only(1000, &[("Expect", "100-continue")]);
+    let mut stream = SequentialMockStream::new(vec![headers]);
+    let captured = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let app = BodyCapturingApp { captured: captured.clone() };
+    Server::process(&mut stream, make_connection(), app).unwrap();
+
+    std::env::remove_var(crate::entry_point::Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES);
+
+    assert!(captured.lock().unwrap().is_none(), "app must not run for a rejected oversized body");
+    let written = String::from_utf8_lossy(&stream.written);
+    assert!(written.contains("413"), "expected 413 Payload Too Large, got:\n{}", written);
+    assert!(!written.contains("100 Continue"), "must not tell the client to send a body we're about to reject");
+}

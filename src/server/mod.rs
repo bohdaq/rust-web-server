@@ -139,6 +139,56 @@ impl Server {
         Response::generate_response(error_response, error_request)
     }
 
+    /// Builds the `100 Continue` interim response (RFC 9110 §15.2.1) — no
+    /// headers, no body, just the status line. Sent immediately after parsing
+    /// a request with `Expect: 100-continue`, before reading its body, so the
+    /// client (which is waiting for this before it uploads the body) doesn't
+    /// stall or time out. See [`Server::process`] for where this is sent from.
+    pub fn continue_response() -> Vec<u8> {
+        let dummy_request = Request {
+            method: METHOD.get.to_string(),
+            request_uri: "".to_string(),
+            http_version: "".to_string(),
+            headers: vec![],
+            body: vec![],
+        };
+        let response = Response::get_response(STATUS_CODE_REASON_PHRASE.n100_continue, None, None);
+        Response::generate_response(response, dummy_request)
+    }
+
+    /// Builds a `417 Expectation Failed` raw response for an `Expect` header
+    /// value other than `100-continue` (RFC 9110 §10.1.1) — the only
+    /// expectation this server understands. Sent instead of reading the
+    /// request body, since the expectation can't be met either way.
+    pub fn expectation_failed_response(message: String) -> Vec<u8> {
+        let error_request = Request {
+            method: METHOD.get.to_string(),
+            request_uri: "".to_string(),
+            http_version: "".to_string(),
+            headers: vec![],
+            body: vec![],
+        };
+
+        let size = message.chars().count() as u64;
+        let content_range = ContentRange {
+            unit: Range::BYTES.to_string(),
+            range: Range { start: 0, end: size },
+            size: size.to_string(),
+            body: Vec::from(message.as_bytes()),
+            content_type: MimeType::TEXT_PLAIN.to_string(),
+        };
+
+        let mut header_list = Header::get_header_list(&error_request);
+        header_list.push(Header { name: Header::_CONNECTION.to_string(), value: "close".to_string() });
+        let error_response: Response = Response::get_response(
+            STATUS_CODE_REASON_PHRASE.n417_expectation_failed,
+            Some(header_list),
+            Some(vec![content_range])
+        );
+
+        Response::generate_response(error_response, error_request)
+    }
+
     pub fn process(mut stream: impl Read + Write + Unpin,
                    connection: ConnectionInfo,
                    app: impl Application) -> Result<(), String> {
@@ -172,6 +222,22 @@ impl Server {
                 }
             };
 
+            // RFC 9110 §10.1.1 `Expect` — the only expectation this server
+            // understands is `100-continue`; anything else fails fast with a
+            // final status instead of reading a body we can't act on.
+            let expects_continue = match request.get_header(Header::_EXPECT.to_string()) {
+                Some(h) if h.value.trim().eq_ignore_ascii_case("100-continue") => true,
+                Some(h) => {
+                    let raw_response = Server::expectation_failed_response(format!(
+                        "417 Expectation Failed: unsupported Expect value '{}'", h.value.trim()
+                    ));
+                    let boxed_stream = stream.write(raw_response.borrow());
+                    if boxed_stream.is_ok() { stream.flush().unwrap(); }
+                    break;
+                }
+                None => false,
+            };
+
             // If Content-Length declares more body than this one read delivered,
             // keep reading until it's fully received — a single `request_allocation_size`
             // read is not big enough for bodies larger than that buffer.
@@ -187,6 +253,16 @@ impl Server {
                     let boxed_stream = stream.write(raw_response.borrow());
                     if boxed_stream.is_ok() { stream.flush().unwrap(); }
                     break;
+                }
+
+                // Tell the client to go ahead and send the body now, before we
+                // block waiting for it below.
+                if expects_continue {
+                    let raw_response = Server::continue_response();
+                    match stream.write(raw_response.borrow()) {
+                        Ok(_) => stream.flush().unwrap(),
+                        Err(_) => break,
+                    }
                 }
 
                 while (request.body.len() as u64) < declared_len {
@@ -880,6 +956,21 @@ impl Server {
             }
         };
 
+        // RFC 9110 §10.1.1 `Expect` — the only expectation this server
+        // understands is `100-continue`; anything else fails fast with a
+        // final status instead of reading a body we can't act on.
+        let expects_continue = match request.get_header(Header::_EXPECT.to_string()) {
+            Some(h) if h.value.trim().eq_ignore_ascii_case("100-continue") => true,
+            Some(h) => {
+                let raw = Server::expectation_failed_response(format!(
+                    "417 Expectation Failed: unsupported Expect value '{}'", h.value.trim()
+                ));
+                let _ = stream.write_all(&raw).await;
+                return Ok(());
+            }
+            None => false,
+        };
+
         // If Content-Length declares more body than this one read delivered,
         // keep reading until it's fully received — a single `request_allocation_size`
         // read is not big enough for bodies larger than that buffer.
@@ -895,6 +986,15 @@ impl Server {
                 ));
                 let _ = stream.write_all(&raw).await;
                 return Ok(());
+            }
+
+            // Tell the client to go ahead and send the body now, before we
+            // block waiting for it below.
+            if expects_continue {
+                let raw = Server::continue_response();
+                if stream.write_all(&raw).await.is_err() {
+                    return Ok(());
+                }
             }
 
             while (request.body.len() as u64) < declared_len {

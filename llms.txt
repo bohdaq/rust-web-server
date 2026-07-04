@@ -1331,6 +1331,7 @@ let www_router = Router::new().with_host("www.example.com").get("/", home_handle
 - Rate limiting — `RateLimitLayer` or `rate_limit::global().check(ip)`
 - Distributed rate limiting — `RedisRateLimiter` (fixed-window, backed by Redis via hand-rolled RESP client); shares a budget across multiple `rws` instances, unlike the in-process `RateLimiter`
 - Max request body size — `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`; 413 before buffering, across HTTP/1.1/2/3
+- `Expect: 100-continue` (HTTP/1.1 only) — server sends `100 Continue` before reading the body; a size-limit 413 or an unsupported `Expect` value's 417 is sent instead, without reading the body at all
 - mTLS — set `RWS_CONFIG_TLS_CLIENT_CA_FILE`
 - IP filtering — `IpFilter::allow([…])` / `.deny([…])`
 - JWT HS256 — `auth` module; constant-time HMAC

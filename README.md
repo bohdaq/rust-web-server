@@ -237,6 +237,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Per-IP rate limiting — sliding-window `RateLimiter` + `RateLimitLayer`; hot-reloadable
 - Distributed rate limiting — `RedisRateLimiter`, a fixed-window limiter backed by a Redis server (hand-rolled RESP client), for a shared budget across multiple `rws` instances behind a load balancer
 - Max request body size — `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` rejects oversized bodies with `413` before buffering them, across HTTP/1.1, HTTP/2, and HTTP/3; `0` (default) is unlimited
+- `Expect: 100-continue` (HTTP/1.1) — sends the `100 Continue` interim response before reading the body, so large uploads aren't sent needlessly ahead of a `413`/`417` rejection
 - CORS — configurable origins, methods, headers; updated live via `SIGHUP`
 - Auth — `BasicAuthLayer` (HTTP Basic), `JwtLayer` (HS256 Bearer), `ForwardAuthLayer` (delegate to an external auth service, Traefik/nginx `auth_request` style) (`auth` feature); `JwtLayer::rs256`/`::es256` (RS256/ES256 against a static public key, no JWKS needed) (`auth-asymmetric` feature)
 - IP filter — `IpFilter::allow([...])` / `deny([...])`; exact IPv4 and CIDR ranges

@@ -190,6 +190,23 @@ For an upload endpoint, set `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` to the largest f
 The multipart parser reads the entire body into memory before returning — `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` bounds *how much* memory that can consume, but handlers still see the whole body at once rather than incrementally. For very large files, consider streaming the upload to disk at the TCP layer or using an object-storage pre-signed URL workflow and directing the client to upload directly.
 :::
 
+## `Expect: 100-continue` for large uploads
+
+If a client sends `Expect: 100-continue` with an upload (many HTTP clients — curl, most HTTP libraries — do this automatically for large request bodies), `rws` responds with the `100 Continue` interim status immediately after parsing the headers, before it reads any of the body. This is handled automatically on HTTP/1.1 — no application code needed:
+
+```bash
+curl -v -X PUT --data-binary @large-file.bin \
+  -H "Expect: 100-continue" http://localhost:7878/upload
+# curl waits for "< HTTP/1.1 100 Continue" before it starts uploading
+```
+
+The `413`/`417` checks above run *before* the `100 Continue` is sent, not after:
+
+- If the declared `Content-Length` exceeds `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`, the client gets `413 Payload Too Large` instead of `100 Continue` — it's never invited to upload a body that's already going to be rejected.
+- An `Expect` value other than `100-continue` (the only one this server understands) gets `417 Expectation Failed`, also without reading any body.
+
+This applies to HTTP/1.1 only (plain and TLS). HTTP/2 and HTTP/3 read request bodies as separate `DATA` frames after the headers, rather than one blocking read off a raw byte stream, so they don't have the head-of-line blocking risk `100-continue` exists to avoid.
+
 ## Generating multipart bodies (testing)
 
 `FormMultipartData::generate` can build a multipart body for outbound requests or tests:
