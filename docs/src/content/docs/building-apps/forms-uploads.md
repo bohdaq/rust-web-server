@@ -166,7 +166,7 @@ Call `part.get_header("header-name")` for case-insensitive lookup of a single he
 
 ## Storing uploaded files
 
-`FormMultipartData::parse` hands back raw bytes — it doesn't decide where they go. Use the [`Storage`](/features/storage/) trait (`storage-local` / `storage-s3` features) so the same handler code works against local disk in development and S3-compatible object storage in production:
+`FormMultipartData::parse` hands back raw bytes — it doesn't decide where they go. Use the [`Storage`](/features/storage/) trait (`storage-local` / `storage-s3` / `storage-azure` features) so the same handler code works against local disk in development and S3-compatible or Azure Blob object storage in production:
 
 ```rust
 use rust_web_server::storage::{LocalStorage, Storage};
@@ -175,7 +175,7 @@ let store = LocalStorage::new("/var/data/uploads");
 let key = store.put("avatars/42.png", &part.body, "image/png")?;
 ```
 
-See [File / Object Storage](/features/storage/) for the full API, including `S3Storage` for AWS S3, Cloudflare R2, and MinIO.
+See [File / Object Storage](/features/storage/) for the full API, including `S3Storage` for AWS S3, Cloudflare R2, and MinIO, and `AzureBlobStorage` for Azure Blob Storage.
 
 ## Size limits
 

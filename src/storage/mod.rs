@@ -3,7 +3,7 @@
 //! `FormMultipartData::parse()` hands back raw bytes with no place to put
 //! them. This module gives handlers a single `Storage` trait so the same
 //! upload code works against local disk in development and an S3-compatible
-//! bucket (AWS S3, Cloudflare R2, MinIO) in production.
+//! bucket (AWS S3, Cloudflare R2, MinIO) or Azure Blob Storage in production.
 //!
 //! # Local disk (requires the `storage-local` feature)
 //!
@@ -42,11 +42,37 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! # Azure Blob Storage (requires the `storage-azure` feature)
+//!
+//! ```rust,no_run
+//! # #[cfg(feature = "storage-azure")]
+//! # fn example() -> Result<(), rust_web_server::storage::StorageError> {
+//! use rust_web_server::storage::{AzureBlobStorage, Storage};
+//!
+//! // Reads RWS_AZURE_ACCOUNT, RWS_AZURE_CONTAINER, and optionally
+//! // RWS_AZURE_ACCOUNT_KEY (falls back to Managed Identity when unset) and
+//! // RWS_AZURE_ENDPOINT (for Azurite / a private endpoint).
+//! let store = AzureBlobStorage::from_env()?;
+//!
+//! store.put("avatars/42.png", b"...png bytes...", "image/png")?;
+//! let bytes = store.get("avatars/42.png")?;
+//! store.delete("avatars/42.png")?;
+//! # Ok(())
+//! # }
+//! ```
 
 #[cfg(feature = "storage-s3")]
 mod aws_credentials;
 #[cfg(feature = "storage-s3")]
 mod aws_sigv4;
+
+#[cfg(feature = "storage-azure")]
+mod azure_blob;
+#[cfg(feature = "storage-azure")]
+mod azure_credentials;
+#[cfg(feature = "storage-azure")]
+mod azure_signature;
 
 #[cfg(feature = "storage-local")]
 mod local;
@@ -57,6 +83,8 @@ mod s3;
 pub use local::LocalStorage;
 #[cfg(feature = "storage-s3")]
 pub use s3::{S3Config, S3Storage};
+#[cfg(feature = "storage-azure")]
+pub use azure_blob::{AzureBlobConfig, AzureBlobStorage};
 
 // ── StorageError ─────────────────────────────────────────────────────────────
 
@@ -82,9 +110,9 @@ impl std::error::Error for StorageError {}
 
 /// Backend-independent object storage.
 ///
-/// Implement this trait to plug a custom backend (GCS, Azure Blob, a
-/// database-backed store, ...) into the same handler code that already works
-/// against [`LocalStorage`] and [`S3Storage`].
+/// Implement this trait to plug a custom backend (GCS, a database-backed
+/// store, ...) into the same handler code that already works against
+/// [`LocalStorage`], [`S3Storage`], and [`AzureBlobStorage`].
 pub trait Storage: Send + Sync {
     /// Store `data` under `key`, overwriting any existing object at that key.
     /// Returns the key that was stored (backends that normalize or namespace

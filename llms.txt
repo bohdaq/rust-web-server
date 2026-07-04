@@ -1152,6 +1152,28 @@ static|irsa|ecs|imds` forces a source. Credentials are cached and refreshed shor
 No XML/JSON parser dependency — STS/IMDS/ECS responses are read with hand-rolled field extractors
 (`src/storage/aws_credentials.rs`), the same idiom already used for JWT claims elsewhere in the crate.
 
+```rust,no_run
+use rust_web_server::storage::{AzureBlobStorage, Storage}; // requires `storage-azure` feature
+
+// Reads RWS_AZURE_ACCOUNT, RWS_AZURE_CONTAINER, and optionally RWS_AZURE_ENDPOINT
+// (point at Azurite / a private endpoint). RWS_AZURE_ACCOUNT_KEY is optional —
+// when unset, a Managed Identity OAuth token is auto-detected instead (see below).
+let store = AzureBlobStorage::from_env()?;
+let key = store.put("avatars/42.png", &file_bytes, "image/png")?;
+```
+
+`AzureBlobStorage` signs every request with the Shared Key HMAC-SHA256 scheme via the outbound
+HTTP client (`hmac`+`sha2`) — no Azure SDK.
+
+**Workload identity** — when the static account key isn't set, `AzureBlobStorage` auto-detects a
+Managed Identity OAuth token in this order: App Service/Container Apps (`IDENTITY_ENDPOINT`+
+`IDENTITY_HEADER`, injected by the platform), then VM/AKS IMDS (last resort, short timeout so
+non-Azure hosts fail fast). `RWS_AZURE_CREDENTIAL_SOURCE=key|managed-identity` forces a source.
+Tokens are cached and refreshed shortly before expiry. No Azure SDK or JSON parser dependency —
+token responses use the same hand-rolled field extractor idiom as `aws_credentials`
+(`src/storage/azure_credentials.rs`); unlike AWS's ISO8601 `Expiration`, Azure's `expires_on` is
+already Unix epoch seconds, so no date parsing is needed.
+
 ---
 
 ## OpenAPI / Swagger (src/openapi/mod.rs, requires `openapi` feature)
@@ -1373,8 +1395,10 @@ src/session/            — SessionStore, Session, cookie helpers
 src/mailer/             — Mailer, Email, EmailBuilder, SmtpTls, MailerError (mailer feature)
 src/sso/                — OidcAuth, OidcConfig, OidcProvider, JwksCache (sso feature)
 src/state/              — AppWithState<S>
-src/storage/            — Storage, LocalStorage, S3Storage (storage-local / storage-s3 features);
-                          aws_credentials — EKS IRSA / ECS / EC2 IMDSv2 workload-identity credentials
+src/storage/            — Storage, LocalStorage, S3Storage, AzureBlobStorage (storage-local /
+                          storage-s3 / storage-azure features); aws_credentials — EKS IRSA / ECS /
+                          EC2 IMDSv2 workload-identity credentials; azure_credentials — Managed
+                          Identity credentials (App Service/Container Apps / VM/AKS IMDS)
 src/symbol/             — ASCII/byte constants
 src/tcp_proxy/          — TcpProxy (L4)
 src/template/           — TeraEngine, global init/render (tera feature)

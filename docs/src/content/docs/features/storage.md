@@ -136,9 +136,82 @@ RWS_S3_REGION=us-east-1
 Every request signs `host`, `x-amz-content-sha256`, and `x-amz-date` — plus `x-amz-security-token` when using temporary/workload-identity credentials. This covers standard single-object `PUT`/`GET`/`DELETE` — there's no support for presigned URLs, multipart (chunked) uploads, or query-string signing.
 :::
 
+## Azure Blob Storage (`storage-azure` feature)
+
+Signs every request with the Shared Key HMAC-SHA256 scheme using the existing outbound HTTP client (`hmac` + `sha2`) — **no Azure SDK dependency**.
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["storage-azure"] }
+```
+
+```rust,no_run
+use rust_web_server::storage::{AzureBlobStorage, Storage};
+
+let store = AzureBlobStorage::from_env()?;
+
+let key = store.put("avatars/42.png", &file_bytes, "image/png")?;
+let bytes = store.get(&key)?;
+store.delete(&key)?;
+let public_url = store.url(&key);
+# Ok::<(), rust_web_server::storage::StorageError>(())
+```
+
+### Configuration
+
+`AzureBlobStorage::from_env()` reads:
+
+| Variable | Default |
+|---|---|
+| `RWS_AZURE_ACCOUNT` | **(required)** |
+| `RWS_AZURE_CONTAINER` | **(required)** |
+| `RWS_AZURE_ACCOUNT_KEY` | optional — falls back to Managed Identity (below) when unset |
+| `RWS_AZURE_ENDPOINT` | `https://{account}.blob.core.windows.net` |
+
+Point `RWS_AZURE_ENDPOINT` at a custom host to use the Azurite local emulator or a private endpoint:
+
+```bash
+RWS_AZURE_ENDPOINT=http://127.0.0.1:10000/devstoreaccount1
+```
+
+Or construct `AzureBlobConfig` directly instead of reading the environment:
+
+```rust
+use rust_web_server::storage::{AzureBlobConfig, AzureBlobStorage};
+
+let store = AzureBlobStorage::new(AzureBlobConfig {
+    account: "myaccount".to_string(),
+    container: "my-container".to_string(),
+    account_key: "...".to_string(),
+    endpoint: "https://myaccount.blob.core.windows.net".to_string(),
+});
+```
+
+### Workload identity (no static keys)
+
+When `RWS_AZURE_ACCOUNT_KEY` is unset, `AzureBlobStorage` auto-detects a Managed Identity OAuth token instead — no Azure SDK, no static account key to rotate or leak:
+
+| Source | Triggered by | Notes |
+|---|---|---|
+| App Service / Container Apps | `IDENTITY_ENDPOINT` + `IDENTITY_HEADER` | Injected automatically by the platform. |
+| VM / AKS IMDS | — (last resort) | Each request uses a short timeout so a non-Azure host (local dev, CI, AWS, GCP) fails fast instead of hanging. |
+
+Set `RWS_AZURE_CREDENTIAL_SOURCE=key|managed-identity` to force a specific source and skip detection entirely. Tokens are cached in memory and refreshed automatically shortly before they expire.
+
+```bash
+# On AKS, a VM, App Service, or Container Apps, just omit the account key —
+# no code change needed:
+RWS_AZURE_ACCOUNT=myaccount
+RWS_AZURE_CONTAINER=my-container
+```
+
+:::note[Signing scope]
+Shared Key requests sign every `x-ms-*` header actually sent — `x-ms-date`, `x-ms-version`, and `x-ms-blob-type` on `PUT` — plus the standard `Content-Type`/`Content-Length` slots. Managed Identity requests skip signing entirely and use `Authorization: Bearer {token}` instead. This covers standard single-blob `PUT`/`GET`/`DELETE` — there's no support for SAS tokens, blob listing, or multipart (block list) uploads.
+:::
+
 ## Writing handler code against `Storage`
 
-Depend on the trait, not a concrete type, so the same function works with either backend:
+Depend on the trait, not a concrete type, so the same function works with any backend:
 
 ```rust
 use rust_web_server::storage::{Storage, StorageError};
@@ -149,4 +222,4 @@ fn save_avatar(store: &dyn Storage, user_id: u64, bytes: &[u8]) -> Result<String
 }
 ```
 
-Wire `store` in via [dependency injection](/building-apps/dependency-injection/) or [app state](/building-apps/state/) so handlers don't construct a new `LocalStorage`/`S3Storage` per request.
+Wire `store` in via [dependency injection](/building-apps/dependency-injection/) or [app state](/building-apps/state/) so handlers don't construct a new `LocalStorage`/`S3Storage`/`AzureBlobStorage` per request.

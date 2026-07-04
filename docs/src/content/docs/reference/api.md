@@ -106,6 +106,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `PersistentJobQueue` | `jobs` | Crash-safe job queue backed by the model layer (`jobs` + a `model-*` feature) |
 | `Storage` / `LocalStorage` | `storage` | File storage trait + local-disk implementation (`storage-local` feature) |
 | `S3Storage` | `storage` | S3-compatible object storage via AWS SigV4, no AWS SDK (`storage-s3` feature) |
+| `AzureBlobStorage` | `storage` | Azure Blob Storage via Shared Key HMAC signing or Managed Identity, no Azure SDK (`storage-azure` feature) |
 | `OpenApiConfig` / `build_spec` | `openapi` | OpenAPI 3.0 schema generation from registered routes (`openapi` feature) |
 | `with_timeout` / `with_timeout_state` / `with_timeout_async` / `TimeoutLayer` | `timeout` | Per-route request timeouts for `Router`/`AppWithState`/`AsyncAppWithState`/any `Application` |
 | `KubernetesIngressWatcher` | `ingress` | Polls the Kubernetes API for Ingress resources and maintains a live route table |

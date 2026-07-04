@@ -137,7 +137,7 @@ pub mod sso;
 pub mod mailer;
 #[cfg(feature = "jobs")]
 pub mod jobs;
-#[cfg(any(feature = "storage-local", feature = "storage-s3"))]
+#[cfg(any(feature = "storage-local", feature = "storage-s3", feature = "storage-azure"))]
 pub mod storage;
 #[cfg(feature = "openapi")]
 pub mod openapi;

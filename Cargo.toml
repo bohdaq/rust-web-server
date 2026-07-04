@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.62.0"
+version = "17.63.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
@@ -43,6 +43,7 @@ sso    = ["dep:rsa", "dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:
 jobs   = []  # in-memory JobQueue; PersistentJobQueue additionally requires a model-* feature
 storage-local = []  # LocalStorage; no new deps
 storage-s3    = ["dep:hmac", "dep:sha2", "http-client"]  # S3Storage; AWS SigV4 via hmac+sha2, no AWS SDK
+storage-azure = ["dep:hmac", "dep:sha2", "http-client"]  # AzureBlobStorage; Shared Key HMAC signing + Managed Identity, no Azure SDK
 openapi = []  # AppWithState::openapi() / AsyncAppWithState::openapi(); no new deps
 webhook = ["dep:hmac", "dep:sha2"]  # verify_webhook_signature: GitHub, Shopify, Stripe
 rewrite-regex = ["dep:regex"]  # RewriteLayer::request_uri_regex_rewrite

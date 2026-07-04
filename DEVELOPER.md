@@ -151,6 +151,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `PersistentJobQueue` | `jobs` (requires `jobs` **and** a `model-sqlite`/`model-postgres`/`model-mysql` feature) | Crash-safe job queue backed by the model layer: jobs are written to a `rws_jobs` table before being acknowledged. Jobs are `(job_type, payload)` string pairs dispatched to a handler registered via `.register(job_type, fn)` — not arbitrary closures, since closures can't be persisted. `PersistentJobQueue::new(pool).await` creates the table and resets any row left `running` by a crash back to `pending`. `.enqueue(job_type, payload).await` / `.enqueue_with_retries(...)` persist a job; `.start(workers)` spawns polling worker threads (each with its own Tokio runtime); `.tick().await` runs a single poll-claim-execute cycle for tests or custom loops. |
 | `Storage` / `LocalStorage` | `storage` (requires `storage-local` feature) | File storage abstraction. `Storage` trait: `put(key, data, content_type) -> Result<String, StorageError>`, `get(key)`, `delete(key)`, `url(key)` (no I/O). `LocalStorage::new(root)` stores objects as files under `root`; rejects `..` path segments; `.with_base_url(prefix)` makes `url()` return an HTTP path instead of a filesystem path. |
 | `S3Storage` / `S3Config` | `storage` (requires `storage-s3` feature) | `Storage` implementation for S3-compatible object storage (AWS S3, Cloudflare R2, MinIO) via the outbound HTTP client — no AWS SDK. Signs every request with AWS Signature Version 4 (`hmac` + `sha2`, already-in-tree crates). `S3Storage::from_env()` reads `RWS_S3_BUCKET/REGION/ENDPOINT`; credentials come from `RWS_S3_ACCESS_KEY`/`SECRET_KEY` if both are set, else auto-detected EKS IRSA / ECS task role / EC2 IMDSv2 workload identity (`RWS_S3_CREDENTIAL_SOURCE` forces a specific source). Uses path-style addressing (`{endpoint}/{bucket}/{key}`) for compatibility with custom endpoints. |
+| `AzureBlobStorage` / `AzureBlobConfig` | `storage` (requires `storage-azure` feature) | `Storage` implementation for Azure Blob Storage via the outbound HTTP client — no Azure SDK. Signs every request with the Shared Key HMAC-SHA256 scheme (`hmac` + `sha2`). `AzureBlobStorage::from_env()` reads `RWS_AZURE_ACCOUNT/CONTAINER/ENDPOINT`; credentials come from `RWS_AZURE_ACCOUNT_KEY` if set, else auto-detected Managed Identity (App Service/Container Apps identity endpoint, or VM/AKS IMDS as a last resort; `RWS_AZURE_CREDENTIAL_SOURCE` forces a specific source). |
 | `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. |
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
 | `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware proxying with a per-`[[upstream]]` `strategy`: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), or `least_connections` (routes to the live backend with fewest in-flight requests). `ConfigDrivenApp::with_config(ServerConfig)` pins its fallback `App` (unmatched requests — healthz/readyz/metrics/static/404) to explicit settings instead of reading `RWS_CONFIG_*` env vars per request. |
@@ -3467,6 +3468,47 @@ Detection follows this precedence, matching the order AWS's own SDKs use:
 3. **EC2 IMDSv2** — last resort; each request uses a short timeout so a non-EC2 host (local dev, CI, GCP/Azure) fails fast instead of hanging.
 
 Set `RWS_S3_CREDENTIAL_SOURCE=static|irsa|ecs|imds` to force a specific source and skip detection entirely. No AWS SDK or XML/JSON parser dependency is added — STS's XML and IMDS/ECS's JSON responses are read with small hand-rolled field extractors (`src/storage/aws_credentials.rs`), the same approach already used for JWT claims elsewhere in the crate.
+
+**Azure Blob Storage** (requires the `storage-azure` feature)
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["storage-azure"] }
+```
+
+```rust,no_run
+use rust_web_server::storage::{AzureBlobStorage, Storage};
+
+// Reads RWS_AZURE_ACCOUNT, RWS_AZURE_CONTAINER, and optionally
+// RWS_AZURE_ACCOUNT_KEY (falls back to Managed Identity when unset) and
+// RWS_AZURE_ENDPOINT (for Azurite / a private endpoint).
+let store = AzureBlobStorage::from_env()?;
+
+let key = store.put("avatars/42.png", &file_bytes, "image/png")?;
+let public_url = store.url(&key);
+# Ok::<(), rust_web_server::storage::StorageError>(())
+```
+
+`AzureBlobStorage` signs every request with the Shared Key HMAC-SHA256 scheme using the existing outbound HTTP client — no Azure SDK dependency.
+
+**Workload identity (no static keys)** — when `RWS_AZURE_ACCOUNT_KEY` is unset, `AzureBlobStorage` auto-detects a Managed Identity OAuth token instead:
+
+```rust,no_run
+use rust_web_server::storage::AzureBlobStorage;
+
+// No RWS_AZURE_ACCOUNT_KEY needed on AKS, a VM, App Service, or Container
+// Apps — a token is detected automatically, cached, and refreshed shortly
+// before it expires.
+let store = AzureBlobStorage::from_env()?;
+# Ok::<(), rust_web_server::storage::StorageError>(())
+```
+
+Detection follows this precedence:
+
+1. **App Service / Container Apps** — `IDENTITY_ENDPOINT` + `IDENTITY_HEADER` (injected by the platform).
+2. **VM / AKS IMDS** — last resort; each request uses a short timeout so a non-Azure host (local dev, CI, AWS/GCP) fails fast instead of hanging.
+
+Set `RWS_AZURE_CREDENTIAL_SOURCE=key|managed-identity` to force a specific source and skip detection entirely. No Azure SDK or JSON parser dependency is added — token responses are read with the same hand-rolled field extractor idiom as `aws_credentials` (`src/storage/azure_credentials.rs`); unlike AWS's ISO8601 `Expiration`, Azure's `expires_on` is already Unix epoch seconds, so no date parsing is needed either.
 
 ### 64. OpenAPI / Swagger documentation for your API
 
