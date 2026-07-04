@@ -131,6 +131,36 @@ Low urgency; workarounds are acceptable or audience is small.
 
 ---
 
+## Enterprise readiness
+
+Surfaced by a 2026-07-04 review of what specifically blocks enterprise adoption — procurement/security-review concerns and enterprise-IdP/scale features — as distinct from the general feature gaps above. Two kinds: repo governance/process (no code involved) and code features.
+
+**Governance / process:**
+
+- [ ] **CI pipeline** — `.github/` has issue templates only, no `.github/workflows/`. Nothing runs `cargo test`, a multi-feature build matrix, or a security scan automatically on push/PR — there's no automated proof the 1200+ test suite actually gates merges. Add a GitHub Actions workflow: `cargo test` across `http1`/`http2`/`http3`/`model-*` feature combinations, `cargo build --no-default-features --features <each>` for every feature flag, `cargo fmt --check`, `cargo clippy`.
+
+- [ ] **`SECURITY.md`** — no documented vulnerability disclosure process or security contact. A standard requirement in enterprise vendor-security questionnaires before a dependency gets approved. Add a supported-versions table and a reporting contact/process (GitHub private vulnerability reporting or an email alias).
+
+- [ ] **Triage the open Dependabot alerts** (6 as of 2026-07-04: 2 high, 2 moderate, 2 low) — surfaced on every push; nothing in the repo shows they've been reviewed, patched, or dismissed with rationale. Check the GitHub Security tab / run `cargo audit` and either patch, pin, or document why each is a non-issue.
+
+- [ ] **`CHANGELOG.md`** — version history lives only in commit messages (`feat(x): ... (vX.Y.Z)`); no per-release document for upgrade planning. Could plausibly be generated from commit messages given the existing `(vX.Y.Z)` convention already in every commit.
+
+- [ ] **`cargo-deny`/`cargo-audit` policy file** (`deny.toml`) — no automated license-compliance or advisory-database check today; depends entirely on manual review. Wire into the CI pipeline above once it exists.
+
+- [ ] **Support/SLA model** — single maintainer, no formal support contract. A real adoption blocker for regulated enterprises (finance, healthcare) that require a vendor support agreement or a bus-factor above 1 — not fixable by writing code, but worth naming explicitly rather than leaving implicit.
+
+**Code features:**
+
+- [ ] **SAML 2.0 SSO** (`spec/SSO.md` Phase 7 — scoped, not started) — the `sso` feature covers OAuth2/OIDC only. Many enterprise IdPs — especially older Active Directory Federation Services deployments — still require SAML, not OIDC. `spec/SSO.md` already sketches the API (`SamlSp`/`SamlConfig`) and the one new dependency needed (`quick-xml`, SAML-2.0-XML-parsing only). Larger lift than most items in this file — XML canonicalization and XML-signature verification is a materially different problem than the JWT-based OIDC flow already built.
+
+- [ ] **RBAC / authorization framework** — `auth`/`sso` cover authentication only (who are you); there's no built-in role/permission/policy model. Every app built on rws has to write its own authorization layer from scratch. A minimal `Role`/`Permission` middleware (e.g. `RbacLayer::require(role)`), shaped like the existing `IpFilter`/`RateLimitLayer`, would close the common case without pulling in a full policy-engine dependency.
+
+- [ ] **Secrets-manager integration** — JWT signing keys, DB credentials, and TLS keys are read from plain env vars or files. Enterprises with a central secrets store (Vault, AWS Secrets Manager, Azure Key Vault) have to bridge that themselves today (e.g. an init container populating env vars). A thin `secrets::resolve(key)` abstraction with pluggable backends would let config values reference `vault://path` / `aws-sm://name` instead of a raw value.
+
+- [ ] **Distributed rate limiter / circuit breaker** — already tracked in Priority 3 above; re-flagged here because it's specifically what breaks once an enterprise deployment runs more than one replica behind a load balancer, not just a "nice to have."
+
+---
+
 ## Cross-reference
 
 | This file | Source spec |
