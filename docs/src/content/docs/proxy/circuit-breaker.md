@@ -1,6 +1,6 @@
 ---
 title: Circuit Breaker & Retry
-description: Protect upstream services from cascading failures with a three-state circuit breaker and automatic retry middleware.
+description: Protect upstream services from cascading failures with a three-state circuit breaker, automatic retry middleware, and optional Redis-backed persistence.
 ---
 
 The `circuit_breaker` module provides a per-backend state machine that stops forwarding requests to a broken upstream and a `RetryLayer` middleware that automatically re-dispatches failed requests.
@@ -61,6 +61,49 @@ cb.state("backend:8080"); // BreakerState::{Closed, Open, HalfOpen}
 // Manually reset to Closed
 cb.reset("backend:8080");
 ```
+
+## Persistence (`RedisCircuitBreaker`)
+
+`CircuitBreaker` keeps state in a plain in-process `HashMap`. A restart — or a rolling deploy — resets every backend back to `Closed`, so a backend that tripped the breaker moments before a restart looks healthy again immediately, and can cascade the same failures again before anything notices.
+
+`RedisCircuitBreaker` has the exact same method names and the same Closed → Open → HalfOpen state machine, but persists each backend's state in Redis instead of an in-memory map:
+
+```rust
+use rust_web_server::circuit_breaker::RedisCircuitBreaker;
+
+// threshold=5 consecutive failures, recovery window=30s — same as CircuitBreaker::new
+let cb = RedisCircuitBreaker::new("127.0.0.1:6379", None, 5, 30);
+
+// Or from RWS_REDIS_HOST/PORT/PASSWORD +
+// RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD/RECOVERY_SECS:
+let cb = RedisCircuitBreaker::from_env();
+```
+
+Every method is the same as `CircuitBreaker`'s, except each one is a Redis round trip and therefore returns `Result` — the network call can fail:
+
+```rust
+match cb.is_available("backend-a:8080") {
+    Ok(true)  => { /* forward the request */ }
+    Ok(false) => { /* short-circuit — 503 without contacting the backend */ }
+    Err(e)    => { /* Redis unreachable — you decide: fail open or fail closed */ }
+}
+
+cb.record_success("backend-a:8080")?;
+cb.record_failure("backend-a:8080")?;
+cb.state("backend-a:8080")?;        // Result<BreakerState, io::Error>
+cb.reset("backend-a:8080")?;
+cb.set_limits(10, 60);              // update thresholds on a live breaker, no restart needed
+```
+
+Because state lives in Redis rather than in the struct, this also gets you circuit-sharing across every `rws` instance pointed at the same Redis server for free — not just restart survival, but a backend that trips the breaker on one instance is immediately seen as open by every other instance too.
+
+:::note[Why Redis, not the model layer]
+`DbPool` (the model layer) is `async fn`-only, while `CircuitBreaker`'s methods and `Middleware::handle` (what `RetryLayer` implements) are both synchronous. `RedisCircuitBreaker` reaches Redis over a plain blocking `TcpStream` (the same hand-rolled RESP client `RedisRateLimiter` and `RedisSessionStore` use), so it stays fully synchronous and drops into the same call sites `CircuitBreaker` already has, with no new Cargo dependency.
+:::
+
+:::caution[Not a distributed lock]
+Each operation is a `GET` then a `SET` against one Redis key per backend — not a single atomic command. Two `rws` instances racing to record a failure for the same backend at the same instant can lose one of the two increments. This is intentional: unlike a rate limit (a hard resource/security boundary, where `RedisRateLimiter` uses genuinely atomic `INCR` for exactly this reason), a circuit breaker is a self-healing heuristic — opening one failure later than a perfectly-synchronized count would have has no real consequence.
+:::
 
 ## RetryLayer middleware
 

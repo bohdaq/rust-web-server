@@ -226,7 +226,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - WebSocket proxy — `WsProxy` performs the HTTP upgrade and relays frames bidirectionally; `wss://` backends connect over TLS via rustls
 - Health checks — per-upstream background checker; live backend list via `Arc<RwLock<Vec<String>>>`; `[ws_proxy.health_check]` applies the same checker to `ws://`/`wss://` proxy backends (`503` if all are unhealthy); `WsProxy::with_live_backends()` for library use outside the config file
 - Canary / traffic splitting — `CanaryLayer` distributes requests by weight, lock-free; backends can be plain HTTP or TLS (`https://`/`h2s://`/`grpcs://`)
-- Circuit breaker — Closed → Open → HalfOpen; `RetryLayer` retries on 502/503/504
+- Circuit breaker — Closed → Open → HalfOpen; `RetryLayer` retries on 502/503/504; `RedisCircuitBreaker` persists state across restarts and shares it across `rws` instances (hand-rolled RESP client)
 - Service discovery — `Static`, `EnvPrefix`, `File`, `Dns` sources; background refresh thread
 - Kubernetes Ingress — `KubernetesIngressWatcher` polls K8s API; routes to cluster services
 

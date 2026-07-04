@@ -811,6 +811,40 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 
 ---
 
+## Circuit breaker (src/circuit_breaker/)
+
+```rust
+use rust_web_server::circuit_breaker::{CircuitBreaker, global as global_breaker};
+
+// In-process (resets on restart): global singleton (threshold=5, recovery=30s)
+let mut cb = global_breaker().lock().unwrap();
+cb.record_failure("backend-1:8080");
+if cb.is_available("backend-1:8080") { /* send request */ }
+cb.record_success("backend-1:8080");
+
+// Or CircuitBreaker::new(failure_threshold, recovery_secs) for a custom instance.
+```
+
+Persisted across restarts and shared across `rws` instances — `RedisCircuitBreaker`, same method names, backed by Redis (hand-rolled RESP client, no feature gate, no new dependency):
+
+```rust
+use rust_web_server::circuit_breaker::RedisCircuitBreaker;
+
+let cb = RedisCircuitBreaker::new("127.0.0.1:6379", None, 5, 30);
+// or RedisCircuitBreaker::from_env() — RWS_REDIS_HOST/PORT/PASSWORD +
+// RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD/RECOVERY_SECS
+
+cb.record_failure("backend-1:8080")?;      // every method is Result<_, io::Error> — network I/O
+if cb.is_available("backend-1:8080")? { /* send request */ }
+cb.record_success("backend-1:8080")?;
+```
+
+Each backend's state (`state|failures|opened_at`) is one Redis string key (`GET`/`SET`, not a hash) — not atomic across concurrent instances racing the same backend, unlike `RedisRateLimiter`'s `INCR` (a circuit breaker is a self-healing heuristic, not a hard resource boundary, so an occasional lost update doesn't matter).
+
+`RetryLayer` (the middleware, see table above) does not consult either breaker automatically — call `is_available`/`record_success`/`record_failure` yourself in a custom controller/middleware before forwarding.
+
+---
+
 ## Observability
 
 ### Prometheus metrics
@@ -1384,7 +1418,7 @@ src/blocklist/          — IP blocklist middleware
 src/body/               — multipart_form_data, form_urlencoded parsers
 src/cache/              — CacheLayer middleware
 src/canary/             — CanaryLayer weighted traffic splitting (plain HTTP or TLS backends)
-src/circuit_breaker/    — CircuitBreaker, RetryLayer
+src/circuit_breaker/    — CircuitBreaker, RedisCircuitBreaker (persistent), RetryLayer
 src/client_hint/        — Client Hints header parsing
 src/compression/        — gzip compression applied in Server::process
 src/config_reload/      — hot-reload logic; ConfigSnapshot

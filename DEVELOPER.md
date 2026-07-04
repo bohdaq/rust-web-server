@@ -146,7 +146,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `UdpProxy` | `udp_proxy` | Standalone UDP proxy (request-reply model). Forwards each datagram to a backend and returns the reply to the original client. |
 | `WsProxy` | `ws_proxy` | Standalone WebSocket proxy. `ws://` plain TCP (two-thread relay), `wss://` TLS (single-thread polling relay; `http-client` or `http2` feature). Port defaults to 80/443. `WsProxy::new()` treats all backends as always live; `WsProxy::with_live_backends(all, Arc<RwLock<Vec<String>>>)` takes a caller-managed live list for health-check-aware round-robin — `503` if it's empty. `[ws_proxy.health_check]` in `rws.config.toml` wires this up automatically for the config-driven proxy. |
 | `WeightedBackend` / `CanaryLayer` | `canary` | Weighted traffic-splitting proxy middleware; each backend has a `weight` — distribution is proportional. Backends are contacted over plain HTTP/1.1, or TLS when the URL uses `https://`/`h2s://`/`grpcs://` (requires the `http-client` or `http2` feature). Useful for canary releases and A/B testing. |
-| `CircuitBreaker` | `circuit_breaker` | Per-backend circuit breaker (Closed→Open→HalfOpen state machine). `global()` returns a process-wide singleton. Configurable failure threshold and recovery window. |
+| `CircuitBreaker` | `circuit_breaker` | Per-backend circuit breaker (Closed→Open→HalfOpen state machine). `global()` returns a process-wide singleton. Configurable failure threshold and recovery window. State lives in an in-process `HashMap` — reset on restart. |
+| `RedisCircuitBreaker` | `circuit_breaker` | Same state machine and method names as `CircuitBreaker`, backed by Redis (hand-rolled RESP client, no feature gate) instead of an in-process map — survives a restart and is shared across every `rws` instance pointed at the same Redis server. Every method returns `Result` (network I/O); `from_env()` reads `RWS_REDIS_HOST/PORT/PASSWORD` + `RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD/RECOVERY_SECS`. |
 | `RetryLayer` | `circuit_breaker` | Middleware that retries requests on configurable status codes (default: 502, 503, 504) up to `max_retries` times. |
 | `BackendPool` / `DiscoverySource` | `service_discovery` | Dynamic backend pool updated by a background thread. Sources: `Static`, `EnvPrefix` (env vars), `File` (one host:port per line), `Dns` (A-record lookup). |
 | `IngressRule` / `KubernetesIngressWatcher` / `IngressRouter` | `ingress` | Kubernetes Ingress watcher: polls the K8s API, parses Ingress rules, and routes requests to the correct upstream service. `IngressRouter` implements `Application`. |
@@ -2249,6 +2250,26 @@ let app = App::new()
     .wrap(ReverseProxy::new(["backend-1:8080", "backend-2:8080"]))
     .wrap(RetryLayer::new().max_retries(2));
 ```
+
+**Persistent circuit breaker (survives a restart)** — `CircuitBreaker`'s state lives in an in-process `HashMap`, so a restart or rolling deploy resets every backend to `Closed`; a backend that just tripped the breaker looks healthy again immediately and can cascade the same failures before anything notices. `RedisCircuitBreaker` has the identical method names and state machine, backed by Redis instead:
+
+```rust
+use rust_web_server::circuit_breaker::RedisCircuitBreaker;
+
+let cb = RedisCircuitBreaker::new("127.0.0.1:6379", None, 5, 30); // same params as CircuitBreaker::new
+// or: let cb = RedisCircuitBreaker::from_env();
+
+// Every method is a Redis round trip, so each one returns Result:
+if cb.record_failure("backend-1:8080").is_ok() {
+    match cb.is_available("backend-1:8080") {
+        Ok(true) => { /* send request */ }
+        Ok(false) => { /* short-circuit — 503, don't contact the backend */ }
+        Err(_) => { /* Redis unreachable — decide fail-open vs fail-closed yourself */ }
+    }
+}
+```
+
+Bonus beyond restart survival: since the state lives in Redis rather than in the struct, every `rws` instance pointed at the same Redis server shares one circuit per backend — a failure recorded on one instance opens the circuit on all of them, not just the one that saw the failure. Uses the same hand-rolled RESP client as `RedisRateLimiter`/`RedisSessionStore` (no new Cargo dependency, no feature gate); each backend's whole state (`state|failures|opened_at`) lives in one Redis string key, read via `GET`/written via `SET` rather than a hash — deliberately not atomic across concurrent instances racing on the same backend (unlike `RedisRateLimiter`'s `INCR`), since a circuit breaker is a self-healing heuristic where an occasional lost update has no real consequence, not a hard resource boundary.
 
 ---
 
