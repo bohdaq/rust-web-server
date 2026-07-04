@@ -17,6 +17,26 @@ A dependency-minimal Rust web platform: HTTP/1.1, HTTP/2, and HTTP/3 server, rev
 
 ---
 
+## Why rws
+
+- **No third-party HTTP stack.** HTTP parsing, JSON, CORS, MIME, range requests, WebSocket, SSE, and routing are all implemented from scratch in this one crate — instead of pinning Axum + Tower + Hyper + a proxy crate + a JWT crate + a base64 crate and keeping their versions compatible.
+- **One `Middleware` trait, not ten Tower layers.** Auth, rate limiting, caching, tracing, rewriting, and the reverse proxy itself all implement the same `handle(request, connection, next)` signature — one pattern to learn, one pattern for an AI assistant to generate correctly.
+- **The gateway is in the binary.** Reverse proxy, TCP/UDP/WebSocket proxying, health checks, circuit breakers, and canary routing ship in the same crate as the app framework — no separate Traefik/Nginx process to run in front of it for common cases.
+- **SemVer since v1.** Frequent releases (currently v17) are additive; breaking changes only land on major version bumps. See [releases](https://github.com/bohdaq/rust-web-server/releases) for the changelog.
+
+## Contents
+
+- [Quick start — library](#quick-start--library)
+- [Quick start — static file server](#quick-start--static-file-server)
+- [Quick start — config-driven proxy](#quick-start--config-driven-proxy)
+- [Building apps with AI](#building-apps-with-ai)
+- [What's in the box](#whats-in-the-box)
+- [Optional features](#optional-features)
+- [Build from source](#build-from-source)
+- [Further reading](#further-reading)
+
+---
+
 ## Quick start — library
 
 ```toml
@@ -157,7 +177,8 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 
 ## What's in the box
 
-### Protocol & transport
+<details>
+<summary><strong>Protocol & transport</strong></summary>
 
 - HTTP/3 over QUIC (UDP) + HTTP/2 + HTTP/1.1 on the same port via ALPN
 - TLS via [rustls](https://github.com/rustls/rustls) — aws-lc-rs crypto, no OpenSSL
@@ -168,7 +189,10 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Server-Sent Events — `Sse` builder with correct headers; ideal for AI token streaming
 - Outbound HTTP client — `Client` (sync) and `AsyncClient` (async, `http2` feature); HTTPS via rustls
 
-### Routing & app building
+</details>
+
+<details>
+<summary><strong>Routing & app building</strong></summary>
 
 - `routes!` macro + `App::with_state(S)` — typed shared state (`Arc<S>`) across handlers
 - `Router` with `:param` / `*wildcard` path matching; `PathParams::get("name")`
@@ -188,7 +212,10 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Per-route timeouts — `with_timeout`/`with_timeout_state`/`with_timeout_async` wrap a handler with its own deadline; `TimeoutLayer` + config-driven proxy's `timeout_ms`
 - Request ID middleware — `RequestIdLayer` injects/echoes `X-Request-Id` on every request and response; `RequestId` extractor to read it
 
-### Proxy & gateway
+</details>
+
+<details>
+<summary><strong>Proxy & gateway</strong></summary>
 
 - Config-driven proxy — `rws.config.toml` with `[[route]]` / `[[upstream]]`; per-route middleware including bearer/JWT/Basic auth (`auth` feature for JWT/Basic — no Rust code needed)
 - Reverse proxy middleware — `ReverseProxy`; round-robin; `502` when all backends fail; built-in `ConnPool` reuses keep-alive TCP streams; SSE, chunked AI streams, and large downloads are streamed without buffering via `Response::stream_pipe`
@@ -202,7 +229,10 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Service discovery — `Static`, `EnvPrefix`, `File`, `Dns` sources; background refresh thread
 - Kubernetes Ingress — `KubernetesIngressWatcher` polls K8s API; routes to cluster services
 
-### Security
+</details>
+
+<details>
+<summary><strong>Security</strong></summary>
 
 - Per-IP rate limiting — sliding-window `RateLimiter` + `RateLimitLayer`; hot-reloadable
 - Distributed rate limiting — `RedisRateLimiter`, a fixed-window limiter backed by a Redis server (hand-rolled RESP client), for a shared budget across multiple `rws` instances behind a load balancer
@@ -217,7 +247,10 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Webhook signature verification — `verify_webhook_signature` for GitHub (`X-Hub-Signature-256`), Shopify (`X-Shopify-Hmac-Sha256`), and Stripe (`Stripe-Signature`, with replay-window tolerance) (`webhook` feature)
 - Request / response rewriting — `RewriteLayer` rewrites headers, URI, status, body bytes; `.request_uri_regex_rewrite()` for nginx-style regex URI rewrites with capture-group expansion (`rewrite-regex` feature)
 
-### Observability & ops
+</details>
+
+<details>
+<summary><strong>Observability & ops</strong></summary>
 
 - Prometheus metrics — `GET /metrics`; `MetricsLayer` adds per-route counters + histograms
 - OpenTelemetry tracing — `OtelLayer`; W3C `traceparent`; stdout or OTLP (Jaeger, Tempo); nested child spans via `otel::span`/`otel::client_span`
@@ -229,14 +262,20 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Kubernetes-ready — `/healthz`, `/readyz`, `/metrics`; `0.0.0.0` default bind; Dockerfile included
 - Compression — automatic gzip for text types; chunked streaming for files > 8 MB
 
-### AI & MCP
+</details>
+
+<details>
+<summary><strong>AI & MCP</strong></summary>
 
 - MCP server — `McpServer` serves tools, resources, and prompts over MCP Streamable HTTP (`POST /mcp`); bearer token auth; connects to Claude, Cursor, and other MCP clients
 - 8 built-in rws tools — `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`
 - SSE streaming — `Sse` builder makes forwarding AI token streams to the browser trivial
 - Response caching — `CacheLayer` TTL cache; vary-by-header; `Cache-Control` opt-out
 
-### Database / ORM
+</details>
+
+<details>
+<summary><strong>Database / ORM</strong></summary>
 
 - `#[derive(Model)]` — maps structs to tables; async `Repository<T, i64>` for zero-boilerplate CRUD (all methods `.await`)
 - `QueryBuilder<T>` — `.where_eq()`, `.order_by()`, `.limit()`, `.fetch_all().await`, `.count().await`
@@ -247,13 +286,18 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Backed by `sqlx` — async-native driver; `DbPool` is a cheap-to-clone `Arc`-wrapped `sqlx::Pool`
 - In-memory SQLite — `DbPool::memory().await` for isolated per-test databases
 
-### File / object storage
+</details>
+
+<details>
+<summary><strong>File / object storage</strong></summary>
 
 - `Storage` trait — `put`/`get`/`delete`/`url`; write handler code once, swap backends
 - `LocalStorage` — stores files on local disk; `storage-local` feature, no new deps
 - `S3Storage` — AWS S3, Cloudflare R2, MinIO via AWS Signature V4 over the outbound HTTP client; no AWS SDK; `storage-s3` feature
 - Workload identity — EKS IRSA, ECS task roles, EC2 IMDSv2 auto-detected when static keys aren't set; no static keys required in cloud deployments
 - `AzureBlobStorage` — Azure Blob Storage via Shared Key HMAC signing over the outbound HTTP client, or auto-detected Managed Identity (App Service/Container Apps, VM/AKS IMDS); no Azure SDK; `storage-azure` feature
+
+</details>
 
 ---
 
