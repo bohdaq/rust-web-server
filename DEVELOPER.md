@@ -128,13 +128,15 @@ The crate exposes its core types so you can compose them in your own server or t
 | `ConfigSnapshot` | `config_reload` | Point-in-time snapshot of all hot-reloadable config values. Read with `config_reload::current()`. |
 | `config_reload::reload` | `config_reload` | Re-reads `rws.config.toml` and applies CORS, rate-limit, log-format changes live. Triggered by SIGHUP or `POST /admin/config/reload`. |
 | `get_max_body_size` | `entry_point` | Reads `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (default `0`, unlimited). `Server::process`, `process_h1_tls`, `h2_handler`, and `h3_handler` all check a request's declared `Content-Length` (or accumulated body, for H2/H3) against this before buffering it; requests over the limit get `413 Payload Too Large` and the connection is closed. |
-| `OtelLayer` | `otel` | Middleware that creates HTTP server spans, propagates W3C `traceparent`, and exports to stdout or OTLP HTTP. Call `otel::setup()` or `otel::setup_from_env()` at startup. |
+| `OtelLayer` | `otel` | Middleware that creates the HTTP server root span, propagates W3C `traceparent`, and exports to stdout or OTLP HTTP. Call `otel::setup()` or `otel::setup_from_env()` at startup. Nest child spans under it with `otel::span`/`otel::client_span`. |
+| `Span` / `otel::span` / `otel::client_span` | `otel` | `Span` is an RAII child span — create one with `otel::span(name)` (Internal) or `otel::client_span(name)` (Client), nested under whatever span is currently active (or a fresh trace if none). `.set_attribute(key, value)`, `.set_error()`/`.record_error(msg)`, and drop (or `.end()`) to record it. |
+| `SpanKind` / `AttributeValue` | `otel` | `SpanKind`: `Internal`/`Server`/`Client` (OTLP numbering). `AttributeValue`: `String`/`Int`/`Float`/`Bool`, with `From` impls for ergonomic `set_attribute("key", 42)`. |
 | `TracingConfig` / `ExporterConfig` | `otel` | Configure the tracing subsystem: service name, exporter backend, sample rate, batch size. |
-| `otel::setup` / `otel::setup_from_env` | `otel` | Initialize the global tracer. Call once before the server starts. `setup_from_env` reads `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_TRACES_SAMPLER_ARG`. |
+| `otel::setup` / `otel::setup_from_env` / `otel::setup_with_exporter` | `otel` | Initialize the global tracer. Call once before the server starts. `setup_from_env` reads `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_TRACES_SAMPLER_ARG`. `setup_with_exporter` takes any `Box<dyn Exporter>` directly (e.g. `CapturingExporter`, for tests) instead of only `ExporterConfig`'s three built-in choices. |
 | `otel::shutdown` / `otel::flush` | `otel` | Flush buffered spans to the exporter. Call `shutdown()` before process exit to avoid span loss. |
-| `otel::current_traceparent` | `otel` | Returns the W3C `traceparent` for the span active on the current thread. Used by `ReverseProxy` for automatic context propagation. |
+| `otel::current_traceparent` | `otel` | Returns the W3C `traceparent` for the innermost span active on the current thread (root or child). Use to propagate trace context into outbound calls. |
 | `TraceContext` | `otel` | Parsed W3C `traceparent` value. `TraceContext::parse(header)` / `ctx.as_header(span_id)`. |
-| `SpanData` | `otel` | A completed span ready for export. Contains trace/span/parent IDs, timing, HTTP attributes, and OTel status code. |
+| `SpanData` | `otel` | A completed span ready for export. Contains trace/span/parent IDs, timing, `kind`, HTTP attributes, generic `attributes`, and OTel status code. |
 | `StdoutExporter` / `OtlpHttpExporter` | `otel` | Built-in exporters. `OtlpHttpExporter::new(endpoint, service_name, service_version)` posts OTLP JSON. |
 | `H2ReverseProxy` | `proxy` | HTTP/2 upstream reverse proxy middleware. `h2://` plain TCP, `h2s://`/`https://` TLS with ALPN `h2` (port defaults to 443). Requires `http2` feature. |
 | `GrpcProxy` | `proxy` | gRPC reverse proxy middleware — filters on `Content-Type: application/grpc*` and forwards over HTTP/2. `grpc://` plain, `grpcs://`/`https://` TLS. Requires `http2` feature. |
@@ -1584,9 +1586,33 @@ rust_web_server::otel::shutdown();
 |------|--------|
 | Read `traceparent` | Parses W3C Trace Context from request header; starts new root span if absent |
 | Create span | New `span_id`; shares `trace_id` with upstream if continuing a trace |
-| Thread-local context | `current_traceparent()` returns the active `traceparent` on the current thread; used by `ReverseProxy` to propagate context to backends |
+| Thread-local context | `current_traceparent()` returns the innermost active span's `traceparent` (root or nested child) on the current thread; propagate this into outbound calls |
 | Record span | On response: records `http.method`, `http.target`, `http.status_code`; status code 2 (Error) for 5xx |
 | Export | Batch flushed to exporter when `batch_size` reached or on `shutdown()` |
+
+**Child spans:**
+
+Nest work under the request's root span (or under another child span) with `otel::span`/`otel::client_span` — every span so created shares the enclosing span's `trace_id`, and its `parent_span_id` is the enclosing span's `span_id`. Drop the span (or call `.end()`) to record it; both do exactly the same thing.
+
+```rust
+use rust_web_server::otel;
+
+fn get_user(id: u64) -> Result<String, String> {
+    let span = otel::span("db.query");
+    span.set_attribute("db.statement", "SELECT * FROM users WHERE id = ?");
+    span.set_attribute("db.user_id", id as i64);
+
+    let result = run_query(id);
+    if result.is_err() {
+        span.record_error("query failed");
+    }
+    result
+    // `span` drops here — recorded as a child of whatever span was active
+    // when `get_user` was called (typically the request's root span).
+}
+```
+
+Use `otel::client_span("upstream.call")` (kind `Client` instead of `Internal`) for outbound calls to another service — e.g. before forwarding a request through a proxy or calling another API with `http_client::Client`, propagating `otel::current_traceparent()` into the outbound request's headers.
 
 **Exporters:**
 
@@ -1623,6 +1649,8 @@ fn my_test() {
     assert_eq!(200, res.status());
 }
 ```
+
+Child-span nesting logic (parent/child ID relationships, sampling inheritance, attribute/status recording) is tested independently of the global tracer in `src/otel/tests.rs`, using `Span`'s public getters and a crate-private `finish()` helper — see that file for the pattern if you need to test your own span-producing code.
 
 ---
 

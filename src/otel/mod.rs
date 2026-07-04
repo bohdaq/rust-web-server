@@ -54,7 +54,7 @@
 #[cfg(test)]
 mod tests;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -155,42 +155,59 @@ fn parse_hex8(s: &str) -> Option<[u8; 8]> {
     Some(out)
 }
 
-// ── thread-local active span ──────────────────────────────────────────────────
+// ── span kind / attributes ───────────────────────────────────────────────────
 
-/// Compact span context stored in thread-local for downstream propagation.
-#[derive(Copy, Clone)]
-struct ActiveSpan {
-    trace_id: [u8; 16],
-    span_id: [u8; 8],
-    sampled: bool,
+/// OTLP `SpanKind`. Numbering matches the OTLP spec (`INTERNAL`=1, `SERVER`=2,
+/// `CLIENT`=3) so the numeric value can be cast directly with `as i32` when
+/// building OTLP JSON. `PRODUCER`/`CONSUMER` are intentionally not exposed —
+/// nothing in this crate does message-queue instrumentation yet.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub enum SpanKind {
+    /// Internal work with no remote counterpart — DB query, cache lookup,
+    /// business logic. The default for [`span`].
+    #[default]
+    Internal = 1,
+    /// The span created by [`OtelLayer`] for an incoming HTTP request.
+    Server = 2,
+    /// An outbound call to another service. The kind for [`client_span`].
+    Client = 3,
 }
 
-thread_local! {
-    static ACTIVE: Cell<Option<ActiveSpan>> = Cell::new(None);
+/// A span attribute value — matches OTLP `AnyValue`'s basic variants.
+#[derive(Clone, Debug, PartialEq)]
+pub enum AttributeValue {
+    String(String),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
 }
 
-/// Return the W3C `traceparent` value for the span currently being processed
-/// on this thread. Returns `None` when no `OtelLayer` span is active.
-///
-/// Used by [`crate::proxy::ReverseProxy`] to propagate trace context to
-/// upstream services.
-pub fn current_traceparent() -> Option<String> {
-    ACTIVE.with(|cell| {
-        cell.get().map(|s| {
-            format!(
-                "00-{}-{}-{:02x}",
-                hex16(&s.trace_id),
-                hex8(&s.span_id),
-                s.sampled as u8,
-            )
-        })
-    })
+impl From<&str> for AttributeValue {
+    fn from(s: &str) -> Self { AttributeValue::String(s.to_string()) }
+}
+impl From<String> for AttributeValue {
+    fn from(s: String) -> Self { AttributeValue::String(s) }
+}
+impl From<i64> for AttributeValue {
+    fn from(v: i64) -> Self { AttributeValue::Int(v) }
+}
+impl From<i32> for AttributeValue {
+    fn from(v: i32) -> Self { AttributeValue::Int(v as i64) }
+}
+impl From<u32> for AttributeValue {
+    fn from(v: u32) -> Self { AttributeValue::Int(v as i64) }
+}
+impl From<f64> for AttributeValue {
+    fn from(v: f64) -> Self { AttributeValue::Float(v) }
+}
+impl From<bool> for AttributeValue {
+    fn from(v: bool) -> Self { AttributeValue::Bool(v) }
 }
 
 // ── span data ─────────────────────────────────────────────────────────────────
 
 /// A completed span ready for export.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SpanData {
     pub trace_id: [u8; 16],
     pub span_id: [u8; 8],
@@ -199,11 +216,18 @@ pub struct SpanData {
     pub name: String,
     pub start_ns: u64,
     pub end_ns: u64,
+    /// Empty for a non-HTTP span (e.g. a `db.query` child span) — exporters
+    /// omit the `http.*` attributes entirely in that case.
     pub http_method: String,
     pub http_target: String,
     pub http_status: i16,
     /// 0=Unset, 1=Ok, 2=Error
     pub status_code: u8,
+    pub kind: SpanKind,
+    /// Extra key/value attributes beyond the first-class `http.*` fields —
+    /// e.g. `db.statement`, `cache.key`, or any custom attribute set via
+    /// [`Span::set_attribute`].
+    pub attributes: Vec<(String, AttributeValue)>,
 }
 
 impl SpanData {
@@ -226,6 +250,246 @@ fn strip_query(uri: &str) -> &str {
     }
 }
 
+// ── thread-local span stack ─────────────────────────────────────────────────
+
+/// Compact span context stored on the thread-local stack for downstream
+/// propagation and parent/child nesting.
+#[derive(Copy, Clone)]
+struct ActiveSpanCtx {
+    trace_id: [u8; 16],
+    span_id: [u8; 8],
+    sampled: bool,
+}
+
+thread_local! {
+    /// One entry per currently-open [`Span`] on this thread, innermost last.
+    /// A single-slot cell can't represent nesting (span A active, starts
+    /// span B, B is now "current", B ends, A is "current" again) — this
+    /// stack is what makes multiple nested spans per request possible.
+    static ACTIVE_STACK: RefCell<Vec<ActiveSpanCtx>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Return the W3C `traceparent` value for the innermost span currently being
+/// processed on this thread (the deepest active [`Span`], not necessarily the
+/// request root). Returns `None` when no span is active.
+///
+/// Use this to propagate trace context into outbound calls made from within
+/// a handler or a child span.
+pub fn current_traceparent() -> Option<String> {
+    ACTIVE_STACK.with(|stack| {
+        stack.borrow().last().map(|s| {
+            format!(
+                "00-{}-{}-{:02x}",
+                hex16(&s.trace_id),
+                hex8(&s.span_id),
+                s.sampled as u8,
+            )
+        })
+    })
+}
+
+// ── Span ─────────────────────────────────────────────────────────────────────
+
+/// A single open span. Create one with [`span`] or [`client_span`] (or
+/// [`Span::new`] for full control over [`SpanKind`]); it becomes the
+/// "current" span on this thread until it's dropped (or [`Span::end`] is
+/// called explicitly, which is equivalent).
+///
+/// Nesting: creating a `Span` while another is already active makes the new
+/// one its child — the child inherits the parent's `trace_id` and sampling
+/// decision, and `parent_span_id()` is the parent's `span_id()`. Dropping the
+/// child makes the parent "current" again.
+///
+/// Not `Send`: a `Span` must be dropped on the thread that created it, since
+/// dropping pops a thread-local stack — moving one to another thread and
+/// dropping it there would corrupt that thread's stack.
+///
+/// # Example
+///
+/// ```rust
+/// use rust_web_server::otel;
+///
+/// let span = otel::span("db.query");
+/// span.set_attribute("db.statement", "SELECT 1");
+/// // ... do the work ...
+/// span.end(); // or just let it drop at the end of scope
+/// ```
+pub struct Span {
+    trace_id: [u8; 16],
+    span_id: [u8; 8],
+    parent_span_id: Option<[u8; 8]>,
+    sampled: bool,
+    kind: SpanKind,
+    name: String,
+    start_ns: u64,
+    attributes: RefCell<Vec<(String, AttributeValue)>>,
+    status_code: Cell<u8>,
+    http_method: RefCell<Option<String>>,
+    http_target: RefCell<Option<String>>,
+    http_status: Cell<Option<i16>>,
+    // Makes `Span` `!Send` (a `Rc` is never `Send`) without requiring
+    // unstable negative impls. See the "Not `Send`" note above.
+    _not_send: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+
+fn new_span(name: &str, kind: SpanKind, incoming: Option<TraceContext>) -> Span {
+    let (trace_id, parent_span_id, sampled) = ACTIVE_STACK.with(|stack| {
+        let stack = stack.borrow();
+        if let Some(top) = stack.last() {
+            // Nested child: inherit the trace and the parent's sampling
+            // decision — resampling independently per child would produce
+            // broken/partial traces whenever a child's own coin-flip
+            // disagreed with its parent's.
+            (top.trace_id, Some(top.span_id), top.sampled)
+        } else {
+            // Root-ish: no active parent on this thread, so make a fresh
+            // sampling decision, exactly like `OtelLayer` always has.
+            let sampled = tracer().map(|t| t.should_sample()).unwrap_or(false);
+            match incoming {
+                Some(ctx) => (ctx.trace_id, Some(ctx.parent_span_id), sampled),
+                None => (new_trace_id(), None, sampled),
+            }
+        }
+    });
+    let span_id = new_span_id();
+    ACTIVE_STACK.with(|stack| stack.borrow_mut().push(ActiveSpanCtx { trace_id, span_id, sampled }));
+
+    Span {
+        trace_id,
+        span_id,
+        parent_span_id,
+        sampled,
+        kind,
+        name: name.to_string(),
+        start_ns: now_ns(),
+        attributes: RefCell::new(Vec::new()),
+        status_code: Cell::new(0),
+        http_method: RefCell::new(None),
+        http_target: RefCell::new(None),
+        http_status: Cell::new(None),
+        _not_send: std::marker::PhantomData,
+    }
+}
+
+impl Span {
+    /// Start a new span with an explicit [`SpanKind`]. Prefer [`span`] or
+    /// [`client_span`] for the common cases.
+    pub fn new(name: &str, kind: SpanKind) -> Span {
+        new_span(name, kind, None)
+    }
+
+    /// Used only by [`OtelLayer`] to start the request's root span, honoring
+    /// an incoming W3C `traceparent` header if present.
+    pub(crate) fn start_root(name: &str, kind: SpanKind, incoming: Option<TraceContext>) -> Span {
+        new_span(name, kind, incoming)
+    }
+
+    /// Attach a key/value attribute. Repeated keys are appended, not
+    /// deduplicated — matching this module's existing "loosely OTLP" style.
+    pub fn set_attribute(&self, key: &str, value: impl Into<AttributeValue>) {
+        self.attributes.borrow_mut().push((key.to_string(), value.into()));
+    }
+
+    /// Mark this span as failed (OTLP `Status.code = 2`, Error).
+    pub fn set_error(&self) {
+        self.status_code.set(2);
+    }
+
+    /// Mark this span as failed and attach an `error.message` attribute.
+    pub fn record_error(&self, message: &str) {
+        self.set_error();
+        self.set_attribute("error.message", message);
+    }
+
+    pub fn trace_id(&self) -> [u8; 16] {
+        self.trace_id
+    }
+
+    pub fn span_id(&self) -> [u8; 8] {
+        self.span_id
+    }
+
+    pub fn parent_span_id(&self) -> Option<[u8; 8]> {
+        self.parent_span_id
+    }
+
+    /// End the span now. Equivalent to letting it drop at the end of scope —
+    /// both run the exact same recording logic — but useful when you want
+    /// the span's duration to stop before other work continues in the same
+    /// scope.
+    pub fn end(self) {}
+
+    pub(crate) fn set_http(&self, method: &str, target: &str) {
+        *self.http_method.borrow_mut() = Some(method.to_string());
+        *self.http_target.borrow_mut() = Some(target.to_string());
+    }
+
+    /// Also marks the span as an error when `status >= 500`.
+    pub(crate) fn set_http_status(&self, status: i16) {
+        self.http_status.set(Some(status));
+        if status >= 500 {
+            self.set_error();
+        }
+    }
+
+    fn finish(&mut self, end_ns: u64) -> SpanData {
+        SpanData {
+            trace_id: self.trace_id,
+            span_id: self.span_id,
+            parent_span_id: self.parent_span_id,
+            name: std::mem::take(&mut self.name),
+            start_ns: self.start_ns,
+            end_ns,
+            http_method: self.http_method.get_mut().take().unwrap_or_default(),
+            http_target: self.http_target.get_mut().take().unwrap_or_default(),
+            http_status: self.http_status.get().unwrap_or(0),
+            status_code: self.status_code.get(),
+            kind: self.kind,
+            attributes: std::mem::take(self.attributes.get_mut()),
+        }
+    }
+}
+
+impl Drop for Span {
+    fn drop(&mut self) {
+        ACTIVE_STACK.with(|stack| {
+            let mut stack = stack.borrow_mut();
+            // Pop this span and (defensively) anything still above it, in
+            // case a descendant was somehow leaked without being dropped.
+            if let Some(pos) = stack.iter().rposition(|c| c.span_id == self.span_id) {
+                stack.truncate(pos);
+            }
+        });
+
+        if !self.sampled {
+            return;
+        }
+        let Some(t) = tracer() else { return };
+        let end_ns = now_ns();
+        t.record(self.finish(end_ns));
+    }
+}
+
+/// Start a new [`SpanKind::Internal`] child span nested under the currently
+/// active span (or a fresh trace if none is active). Use for internal work
+/// like a database query or cache lookup.
+///
+/// ```rust
+/// use rust_web_server::otel;
+///
+/// let span = otel::span("db.query");
+/// span.set_attribute("db.statement", "SELECT 1");
+/// ```
+pub fn span(name: &str) -> Span {
+    Span::new(name, SpanKind::Internal)
+}
+
+/// Start a new [`SpanKind::Client`] child span for an outbound call to
+/// another service (an HTTP request, a gRPC call, ...).
+pub fn client_span(name: &str) -> Span {
+    Span::new(name, SpanKind::Client)
+}
+
 // ── exporter ──────────────────────────────────────────────────────────────────
 
 /// Destination for completed spans.
@@ -234,30 +498,60 @@ pub trait Exporter: Send + Sync {
     fn shutdown(&self) {}
 }
 
+/// Renders one [`AttributeValue`] as an OTLP `AnyValue` JSON object.
+/// `Int` is string-encoded per the OTLP JSON mapping for `int64`.
+fn attr_value_json(v: &AttributeValue) -> String {
+    match v {
+        AttributeValue::String(s) => format!("{{\"stringValue\":\"{s}\"}}"),
+        AttributeValue::Int(i) => format!("{{\"intValue\":\"{i}\"}}"),
+        AttributeValue::Float(f) => format!("{{\"doubleValue\":{f}}}"),
+        AttributeValue::Bool(b) => format!("{{\"boolValue\":{b}}}"),
+    }
+}
+
+/// Renders one `(key, value)` pair as an OTLP `KeyValue` JSON object.
+fn attr_json(key: &str, value: &AttributeValue) -> String {
+    format!("{{\"key\":\"{key}\",\"value\":{}}}", attr_value_json(value))
+}
+
 /// Print one JSON line per span to stdout. Useful for development and for
 /// piping into `jq` or a log aggregator.
 pub struct StdoutExporter;
 
+impl StdoutExporter {
+    fn format_span(span: &SpanData) -> String {
+        let http_attrs = if span.http_method.is_empty() {
+            String::new()
+        } else {
+            format!(
+                ",\"httpMethod\":\"{}\",\"httpTarget\":\"{}\",\"httpStatus\":{}",
+                span.http_method, span.http_target, span.http_status,
+            )
+        };
+        let extra_attrs: String = span.attributes.iter()
+            .map(|(k, v)| format!(",\"{k}\":{}", attr_value_json(v)))
+            .collect();
+        format!(
+            "{{\"traceId\":\"{}\",\"spanId\":\"{}\",\"parentSpanId\":{},\
+             \"name\":\"{}\",\"kind\":{},\"startNs\":{},\"durationMs\":{:.3}{http_attrs}{extra_attrs}}}",
+            hex16(&span.trace_id),
+            hex8(&span.span_id),
+            span.parent_span_id
+                .as_ref()
+                .map(|p| format!("\"{}\"", hex8(p)))
+                .unwrap_or_else(|| "null".to_string()),
+            span.name,
+            span.kind as i32,
+            span.start_ns,
+            span.duration_ms(),
+        )
+    }
+}
+
 impl Exporter for StdoutExporter {
     fn export(&self, spans: &[SpanData]) {
         for span in spans {
-            println!(
-                "{{\"traceId\":\"{}\",\"spanId\":\"{}\",\"parentSpanId\":{},\
-                 \"name\":\"{}\",\"startNs\":{},\"durationMs\":{:.3},\
-                 \"httpMethod\":\"{}\",\"httpTarget\":\"{}\",\"httpStatus\":{}}}",
-                hex16(&span.trace_id),
-                hex8(&span.span_id),
-                span.parent_span_id
-                    .as_ref()
-                    .map(|p| format!("\"{}\"", hex8(p)))
-                    .unwrap_or_else(|| "null".to_string()),
-                span.name,
-                span.start_ns,
-                span.duration_ms(),
-                span.http_method,
-                span.http_target,
-                span.http_status,
-            );
+            println!("{}", Self::format_span(span));
         }
     }
 }
@@ -302,26 +596,30 @@ impl OtlpHttpExporter {
                 .map(|p| format!(",\"parentSpanId\":\"{}\"", hex8(p)))
                 .unwrap_or_default();
             let status_msg = if s.status_code == 2 { "Error" } else { "Unset" };
+
+            let mut attrs: Vec<String> = Vec::new();
+            if !s.http_method.is_empty() {
+                attrs.push(format!("{{\"key\":\"http.method\",\"value\":{{\"stringValue\":\"{}\"}} }}", s.http_method));
+                attrs.push(format!("{{\"key\":\"http.target\",\"value\":{{\"stringValue\":\"{}\"}} }}", s.http_target));
+                attrs.push(format!("{{\"key\":\"http.status_code\",\"value\":{{\"intValue\":\"{}\"}} }}", s.http_status));
+            }
+            attrs.extend(s.attributes.iter().map(|(k, v)| attr_json(k, v)));
+
             format!(
                 "{{\"traceId\":\"{trace}\",\"spanId\":\"{span}\"{parent},\
-                 \"name\":\"{name}\",\"kind\":2,\
+                 \"name\":\"{name}\",\"kind\":{kind},\
                  \"startTimeUnixNano\":\"{start}\",\"endTimeUnixNano\":\"{end}\",\
-                 \"attributes\":[\
-                   {{\"key\":\"http.method\",\"value\":{{\"stringValue\":\"{method}\"}} }},\
-                   {{\"key\":\"http.target\",\"value\":{{\"stringValue\":\"{target}\"}} }},\
-                   {{\"key\":\"http.status_code\",\"value\":{{\"intValue\":{status}}} }}\
-                 ],\
+                 \"attributes\":[{attrs}],\
                  \"status\":{{\"code\":{scode},\"message\":\"{smsg}\"}} }}",
-                trace  = hex16(&s.trace_id),
-                span   = hex8(&s.span_id),
-                name   = s.name,
-                start  = s.start_ns,
-                end    = s.end_ns,
-                method = s.http_method,
-                target = s.http_target,
-                status = s.http_status,
-                scode  = s.status_code,
-                smsg   = status_msg,
+                trace = hex16(&s.trace_id),
+                span  = hex8(&s.span_id),
+                name  = s.name,
+                kind  = s.kind as i32,
+                start = s.start_ns,
+                end   = s.end_ns,
+                attrs = attrs.join(","),
+                scode = s.status_code,
+                smsg  = status_msg,
             )
         }).collect();
 
@@ -474,6 +772,16 @@ pub fn setup(config: TracingConfig) {
         )),
         ExporterConfig::Discard => Box::new(DiscardExporter),
     };
+    setup_with_exporter(config, exporter);
+}
+
+/// Like [`setup`], but takes the exporter directly instead of building one
+/// from [`TracingConfig::exporter`]. Lets you wire in any [`Exporter`] —
+/// including [`CapturingExporter`] — through the same code path production
+/// code uses, rather than only [`ExporterConfig`]'s three built-in choices.
+///
+/// Calling this (or [`setup`]) more than once is a no-op (the first call wins).
+pub fn setup_with_exporter(config: TracingConfig, exporter: Box<dyn Exporter>) {
     let _ = TRACER.set(GlobalTracer {
         exporter,
         batch: Mutex::new(Vec::new()),
@@ -547,54 +855,30 @@ impl Middleware for OtelLayer {
         connection: &ConnectionInfo,
         next: &dyn Application,
     ) -> Result<Response, String> {
-        let Some(t) = tracer() else {
+        if tracer().is_none() {
             return next.execute(request, connection);
-        };
+        }
 
-        let sampled = t.should_sample();
-
-        // Extract or create trace context.
+        // Extract an existing trace context from the request, if present.
         let incoming = request.headers.iter()
             .find(|h| h.name.eq_ignore_ascii_case("traceparent"))
             .and_then(|h| TraceContext::parse(&h.value));
 
-        let trace_id = incoming.map(|c| c.trace_id).unwrap_or_else(new_trace_id);
-        let parent_span_id = incoming.map(|c| c.parent_span_id);
-        let span_id = new_span_id();
+        let path = strip_query(&request.request_uri).to_string();
+        let root = Span::start_root(&format!("{} {}", request.method, path), SpanKind::Server, incoming);
+        root.set_http(&request.method, &request.request_uri);
 
-        // Publish active span for downstream propagation.
-        ACTIVE.with(|cell| {
-            cell.set(Some(ActiveSpan { trace_id, span_id, sampled }));
-        });
-
-        let start_ns = now_ns();
         let result = next.execute(request, connection);
-        let end_ns = now_ns();
 
-        // Clear active span.
-        ACTIVE.with(|cell| cell.set(None));
-
-        if sampled {
-            let status = match &result {
-                Ok(r) => r.status_code,
-                Err(_) => 500,
-            };
-            let path = strip_query(&request.request_uri).to_string();
-            t.record(SpanData {
-                trace_id,
-                span_id,
-                parent_span_id,
-                name: format!("{} {}", request.method, path),
-                start_ns,
-                end_ns,
-                http_method: request.method.clone(),
-                http_target: request.request_uri.clone(),
-                http_status: status,
-                status_code: if status >= 500 { 2 } else { 0 },
-            });
-        }
+        let status = match &result {
+            Ok(r) => r.status_code,
+            Err(_) => 500,
+        };
+        root.set_http_status(status);
 
         result
+        // `root` drops here: pops the thread-local stack and records the
+        // span (if sampled) — the exact same path a child `Span` follows.
     }
 }
 
@@ -607,14 +891,23 @@ impl Exporter for DiscardExporter {
 
 // ── collect spans in tests ────────────────────────────────────────────────────
 
-/// Captures spans in memory instead of exporting them. Use in unit tests.
+/// Captures spans in memory instead of exporting them. Use in unit tests via
+/// [`setup_with_exporter`] to prove that a span was actually recorded, not
+/// just that its getters return the right values.
 ///
-/// ```rust
-/// use rust_web_server::otel::{CapturingExporter, SpanData};
-/// use std::sync::{Arc, Mutex};
+/// ```rust,no_run
+/// use rust_web_server::otel::{self, CapturingExporter, TracingConfig, ExporterConfig};
+/// use std::sync::Arc;
 ///
-/// let captured: Arc<Mutex<Vec<SpanData>>> = Arc::new(Mutex::new(Vec::new()));
-/// // (CapturingExporter is constructed internally by the test helpers)
+/// let captured = Arc::new(CapturingExporter::new());
+/// otel::setup_with_exporter(
+///     TracingConfig { exporter: ExporterConfig::Discard, ..Default::default() },
+///     Box::new(captured.clone()),
+/// );
+///
+/// otel::span("db.query").end();
+/// otel::flush();
+/// assert_eq!(1, captured.take().len());
 /// ```
 pub struct CapturingExporter {
     pub spans: Mutex<Vec<SpanData>>,
@@ -635,6 +928,16 @@ impl Default for CapturingExporter {
 }
 
 impl Exporter for CapturingExporter {
+    fn export(&self, spans: &[SpanData]) {
+        self.spans.lock().unwrap().extend_from_slice(spans);
+    }
+}
+
+/// Lets a shared, externally-held `Arc<CapturingExporter>` be handed to
+/// [`setup_with_exporter`] (which takes ownership of a `Box<dyn Exporter>`)
+/// while the caller keeps its own handle to call [`CapturingExporter::take`]
+/// afterward.
+impl Exporter for std::sync::Arc<CapturingExporter> {
     fn export(&self, spans: &[SpanData]) {
         self.spans.lock().unwrap().extend_from_slice(spans);
     }

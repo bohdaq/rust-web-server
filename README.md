@@ -219,7 +219,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 ### Observability & ops
 
 - Prometheus metrics — `GET /metrics`; `MetricsLayer` adds per-route counters + histograms
-- OpenTelemetry tracing — `OtelLayer`; W3C `traceparent`; stdout or OTLP (Jaeger, Tempo)
+- OpenTelemetry tracing — `OtelLayer`; W3C `traceparent`; stdout or OTLP (Jaeger, Tempo); nested child spans via `otel::span`/`otel::client_span`
 - Access log — Combined Log Format or `RWS_CONFIG_LOG_FORMAT=json`
 - Hot config reload — `SIGHUP` or `POST /admin/config/reload`; no restart required
 - Graceful shutdown — SIGTERM drains connections; `/readyz` returns `503` during drain

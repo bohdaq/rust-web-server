@@ -3,10 +3,11 @@ use std::sync::Once;
 use crate::app::App;
 use crate::core::New;
 use crate::otel::{
-    ExporterConfig, OtelLayer, TraceContext, TracingConfig,
-    current_traceparent, new_span_id, new_trace_id, setup,
+    client_span, current_traceparent, new_span_id, new_trace_id, setup, span, AttributeValue,
+    ExporterConfig, OtelLayer, Span, SpanKind, TraceContext, TracingConfig,
 };
 use crate::test_client::TestClient;
+use super::ActiveSpanCtx;
 
 // Initialize tracer once for all tests that go through OtelLayer.
 // We use Discard so tests don't pollute stdout.
@@ -120,7 +121,7 @@ fn as_header_propagates_sampled_flag() {
 #[test]
 fn current_traceparent_is_none_outside_span() {
     // On a fresh thread there's no active span — must return None.
-    let result = std::thread::spawn(|| current_traceparent()).join().unwrap();
+    let result = std::thread::spawn(current_traceparent).join().unwrap();
     assert!(result.is_none());
 }
 
@@ -200,6 +201,7 @@ fn otlp_build_body_contains_service_name() {
         http_target: "/api/users".to_string(),
         http_status: 200,
         status_code: 0,
+        ..Default::default()
     };
     let body = exp.build_body(&[span]);
     assert!(body.contains("my-svc"), "body must contain service name");
@@ -226,6 +228,7 @@ fn otlp_build_body_includes_parent_span_id_when_present() {
         http_target: "/orders".to_string(),
         http_status: 201,
         status_code: 0,
+        ..Default::default()
     };
     let body = exp.build_body(&[span]);
     assert!(body.contains("parentSpanId"), "body must contain parentSpanId when parent is set");
@@ -247,6 +250,7 @@ fn otlp_build_body_no_parent_span_id_when_root() {
         http_target: "/".to_string(),
         http_status: 200,
         status_code: 0,
+        ..Default::default()
     };
     let body = exp.build_body(&[span]);
     assert!(!body.contains("parentSpanId"), "root span must not have parentSpanId key");
@@ -268,6 +272,7 @@ fn otlp_build_body_is_valid_json_structure() {
         http_target: "/".to_string(),
         http_status: 200,
         status_code: 0,
+        ..Default::default()
     };
     let body = exp.build_body(&[span]);
     // Basic JSON structure check
@@ -295,6 +300,7 @@ fn otlp_build_body_error_span_has_status_code_2() {
         http_target: "/boom".to_string(),
         http_status: 500,
         status_code: 2,
+        ..Default::default()
     };
     let body = exp.build_body(&[span]);
     assert!(body.contains("\"code\":2"), "error span must have status code 2");
@@ -327,4 +333,274 @@ fn setup_from_env_second_call_is_noop() {
         batch_size: 1,
     });
     // Original config still in effect — no panic = pass.
+}
+
+// ── multi-span nesting ────────────────────────────────────────────────────────
+//
+// These run on a freshly spawned thread so `ACTIVE_STACK` starts empty,
+// exactly like `current_traceparent_is_none_outside_span` above — avoids any
+// interference from other tests' spans on a pooled/shared test thread.
+//
+// Attribute/status/kind assertions go through the crate-private
+// `finish` helper (reachable here since `tests` is a child module of
+// `otel`) rather than a true end-to-end capture through the global `TRACER`
+// singleton: `TRACER` is a process-wide `OnceLock` and many tests in this
+// file already race to be the first to call `setup(...)` via `init_tracer()`
+// — a second, different `setup_with_exporter(...)` call in a test here would
+// not reliably win that race, making a genuine "did the exporter receive it"
+// assertion flaky. Testing the recorded `SpanData` directly is deterministic
+// and covers the same logic.
+
+#[test]
+fn nested_span_parent_id_is_outer_span_id() {
+    std::thread::spawn(|| {
+        let outer = span("outer");
+        let inner = span("inner");
+        assert_eq!(Some(outer.span_id()), inner.parent_span_id());
+        assert_eq!(outer.trace_id(), inner.trace_id());
+    })
+    .join()
+    .unwrap();
+}
+
+#[test]
+fn three_levels_deep_nesting_chains_correctly() {
+    std::thread::spawn(|| {
+        let a = span("a");
+        let b = span("b");
+        let c = span("c");
+        assert_eq!(Some(a.span_id()), b.parent_span_id());
+        assert_eq!(Some(b.span_id()), c.parent_span_id());
+        assert_eq!(a.trace_id(), c.trace_id());
+    })
+    .join()
+    .unwrap();
+}
+
+#[test]
+fn span_drop_restores_parent_as_current() {
+    std::thread::spawn(|| {
+        let outer = span("outer");
+        {
+            let _inner = span("inner");
+            assert!(current_traceparent().unwrap().contains(&hex8_of(_inner.span_id())));
+        }
+        // Inner dropped — outer is current again.
+        assert!(current_traceparent().unwrap().contains(&hex8_of(outer.span_id())));
+        drop(outer);
+        assert!(current_traceparent().is_none());
+    })
+    .join()
+    .unwrap();
+}
+
+#[test]
+fn explicit_end_behaves_same_as_drop() {
+    std::thread::spawn(|| {
+        let outer = span("outer");
+        let inner = span("inner");
+        inner.end();
+        assert!(current_traceparent().unwrap().contains(&hex8_of(outer.span_id())));
+    })
+    .join()
+    .unwrap();
+}
+
+#[test]
+fn span_with_no_active_parent_has_no_parent_id() {
+    std::thread::spawn(|| {
+        let root = span("root");
+        assert!(root.parent_span_id().is_none());
+    })
+    .join()
+    .unwrap();
+}
+
+fn hex8_of(id: [u8; 8]) -> String {
+    id.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+// ── sampling inheritance ─────────────────────────────────────────────────────
+
+#[test]
+fn child_span_inherits_parents_unsampled_state() {
+    std::thread::spawn(|| {
+        // Manually push a "parent" context with sampled=false — sidesteps
+        // the global TRACER singleton entirely (see rationale above).
+        super::ACTIVE_STACK.with(|stack| {
+            stack.borrow_mut().push(ActiveSpanCtx { trace_id: [1u8; 16], span_id: [2u8; 8], sampled: false });
+        });
+        let child = span("child");
+        assert!(!child.sampled, "child must inherit the parent's unsampled state, not resample independently");
+    })
+    .join()
+    .unwrap();
+}
+
+#[test]
+fn child_span_inherits_parents_sampled_state() {
+    std::thread::spawn(|| {
+        super::ACTIVE_STACK.with(|stack| {
+            stack.borrow_mut().push(ActiveSpanCtx { trace_id: [1u8; 16], span_id: [2u8; 8], sampled: true });
+        });
+        let child = span("child");
+        assert!(child.sampled);
+    })
+    .join()
+    .unwrap();
+}
+
+// ── Span mutation → SpanData ─────────────────────────────────────────────────
+
+#[test]
+fn set_attribute_appears_in_span_data() {
+    let mut s = Span::new("db.query", SpanKind::Internal);
+    s.set_attribute("db.statement", "SELECT 1");
+    s.set_attribute("db.rows", 3i64);
+    let data = s.finish(0);
+    assert_eq!(
+        vec![
+            ("db.statement".to_string(), AttributeValue::String("SELECT 1".to_string())),
+            ("db.rows".to_string(), AttributeValue::Int(3)),
+        ],
+        data.attributes
+    );
+}
+
+#[test]
+fn set_error_sets_status_code_2() {
+    let mut s = Span::new("work", SpanKind::Internal);
+    s.set_error();
+    assert_eq!(2, s.finish(0).status_code);
+}
+
+#[test]
+fn record_error_sets_status_and_message_attribute() {
+    let mut s = Span::new("work", SpanKind::Internal);
+    s.record_error("boom");
+    let data = s.finish(0);
+    assert_eq!(2, data.status_code);
+    assert_eq!(Some(&AttributeValue::String("boom".to_string())), data.attributes.iter().find(|(k, _)| k == "error.message").map(|(_, v)| v));
+}
+
+#[test]
+fn finish_carries_kind() {
+    let mut s = Span::new("upstream.call", SpanKind::Client);
+    assert_eq!(SpanKind::Client, s.finish(0).kind);
+}
+
+#[test]
+fn client_span_helper_uses_client_kind() {
+    let mut s = client_span("upstream.call");
+    assert_eq!(SpanKind::Client, s.finish(0).kind);
+}
+
+#[test]
+fn span_helper_uses_internal_kind() {
+    let mut s = span("db.query");
+    assert_eq!(SpanKind::Internal, s.finish(0).kind);
+}
+
+// ── exporter rendering: kind + attributes ───────────────────────────────────
+
+#[test]
+fn otlp_build_body_renders_client_kind() {
+    use crate::otel::OtlpHttpExporter;
+    let exp = OtlpHttpExporter::new("http://localhost:4318", "svc", "1.0");
+    let span_data = crate::otel::SpanData {
+        trace_id: new_trace_id(),
+        span_id: new_span_id(),
+        name: "upstream.call".to_string(),
+        kind: SpanKind::Client,
+        ..Default::default()
+    };
+    let body = exp.build_body(&[span_data]);
+    assert!(body.contains("\"kind\":3"), "Client kind must render as OTLP kind 3");
+}
+
+#[test]
+fn otlp_build_body_renders_internal_kind() {
+    use crate::otel::OtlpHttpExporter;
+    let exp = OtlpHttpExporter::new("http://localhost:4318", "svc", "1.0");
+    let span_data = crate::otel::SpanData {
+        trace_id: new_trace_id(),
+        span_id: new_span_id(),
+        name: "db.query".to_string(),
+        kind: SpanKind::Internal,
+        ..Default::default()
+    };
+    let body = exp.build_body(&[span_data]);
+    assert!(body.contains("\"kind\":1"), "Internal kind must render as OTLP kind 1");
+}
+
+#[test]
+fn otlp_build_body_renders_generic_attributes() {
+    use crate::otel::OtlpHttpExporter;
+    let exp = OtlpHttpExporter::new("http://localhost:4318", "svc", "1.0");
+    let span_data = crate::otel::SpanData {
+        trace_id: new_trace_id(),
+        span_id: new_span_id(),
+        name: "db.query".to_string(),
+        attributes: vec![
+            ("db.statement".to_string(), AttributeValue::String("SELECT 1".to_string())),
+            ("db.rows".to_string(), AttributeValue::Int(3)),
+            ("db.cached".to_string(), AttributeValue::Bool(false)),
+            ("db.duration_ratio".to_string(), AttributeValue::Float(0.5)),
+        ],
+        ..Default::default()
+    };
+    let body = exp.build_body(&[span_data]);
+    assert!(body.contains("\"key\":\"db.statement\""));
+    assert!(body.contains("\"intValue\":\"3\""), "int64 attributes are string-encoded per OTLP JSON mapping");
+    assert!(body.contains("\"boolValue\":false"));
+    assert!(body.contains("\"doubleValue\":0.5"));
+}
+
+#[test]
+fn otlp_build_body_omits_http_attributes_when_http_method_empty() {
+    use crate::otel::OtlpHttpExporter;
+    let exp = OtlpHttpExporter::new("http://localhost:4318", "svc", "1.0");
+    let span_data = crate::otel::SpanData {
+        trace_id: new_trace_id(),
+        span_id: new_span_id(),
+        name: "db.query".to_string(),
+        attributes: vec![("db.statement".to_string(), AttributeValue::String("SELECT 1".to_string()))],
+        ..Default::default()
+    };
+    let body = exp.build_body(&[span_data]);
+    assert!(!body.contains("http.method"), "non-HTTP span must not emit http.* attributes");
+    assert!(body.contains("db.statement"));
+}
+
+#[test]
+fn stdout_format_span_includes_kind_and_attributes() {
+    use crate::otel::StdoutExporter;
+    let span_data = crate::otel::SpanData {
+        trace_id: new_trace_id(),
+        span_id: new_span_id(),
+        name: "db.query".to_string(),
+        kind: SpanKind::Internal,
+        attributes: vec![("db.statement".to_string(), AttributeValue::String("SELECT 1".to_string()))],
+        ..Default::default()
+    };
+    let line = StdoutExporter::format_span(&span_data);
+    assert!(line.contains("\"kind\":1"));
+    assert!(line.contains("db.statement"));
+    assert!(!line.contains("httpMethod"), "non-HTTP span must not emit http fields");
+}
+
+// ── setup_with_exporter ──────────────────────────────────────────────────────
+
+#[test]
+fn setup_with_exporter_is_callable_and_does_not_panic() {
+    // Like `setup_from_env_second_call_is_noop`: TRACER is a process-wide
+    // OnceLock already claimed by another test's `setup(...)` call by the
+    // time this runs (in practice), so this only proves the function is a
+    // safe, harmless no-op after the first `setup`/`setup_with_exporter`
+    // call anywhere in the process — not that this specific exporter wins.
+    init_tracer();
+    crate::otel::setup_with_exporter(
+        TracingConfig { exporter: ExporterConfig::Discard, ..Default::default() },
+        Box::new(crate::otel::CapturingExporter::new()),
+    );
 }
