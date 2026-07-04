@@ -379,7 +379,7 @@ impl McpServer {
         }
 
         let result: Result<String, (i32, String)> = match method.as_str() {
-            "initialize"     => self.do_initialize(),
+            "initialize"     => self.do_initialize(body),
             "ping"           => Ok("{}".to_string()),
             "tools/list"     => self.do_tools_list(),
             "tools/call"     => self.do_tools_call(body),
@@ -407,12 +407,43 @@ impl McpServer {
 
     // ── method handlers ───────────────────────────────────────────────────────
 
-    fn do_initialize(&self) -> Result<String, (i32, String)> {
+    /// Handle `initialize`. Per spec, the server must inspect the client's
+    /// requested `protocolVersion` and respond with the version it actually
+    /// supports — allowing the client to abort the session if incompatible —
+    /// rather than blindly echoing `PROTOCOL_VERSION` regardless of what was
+    /// asked for.
+    ///
+    /// This server implements exactly one protocol version, so "negotiation"
+    /// here means: if the client asked for that same version, confirm it;
+    /// otherwise tell the client the version we actually speak (older *or*
+    /// newer than what was requested), which is always the lower of the two
+    /// — version strings are `YYYY-MM-DD` dates, so a plain string comparison
+    /// already orders them correctly with no date parsing needed.
+    fn do_initialize(&self, body: &str) -> Result<String, (i32, String)> {
+        let params = json_rpc::extract_raw(body, "params");
+
+        let client_version = params.as_deref().and_then(|p| json_rpc::extract_str(p, "protocolVersion"));
+
+        // Log the caller's identity if it sent one — there's no session
+        // storage yet to carry it beyond this request (see MCP_TODO.md TODO-2
+        // for that), so a log line is as far as "store clientInfo" reaches today.
+        if let Some(client_info) = params.as_deref().and_then(|p| json_rpc::extract_raw(p, "clientInfo")) {
+            let name = json_rpc::extract_str(&client_info, "name").unwrap_or_else(|| "unknown".to_string());
+            let version = json_rpc::extract_str(&client_info, "version").unwrap_or_else(|| "unknown".to_string());
+            eprintln!("[mcp] initialize from client {name} v{version}");
+        }
+
+        let negotiated_version: &str = match client_version.as_deref() {
+            Some(v) if v < PROTOCOL_VERSION => v,
+            _ => PROTOCOL_VERSION,
+        };
+
         let caps = format!(
             r#"{{"tools":{{"listChanged":false}},"resources":{{"subscribe":false,"listChanged":false}},"prompts":{{"listChanged":false}}}}"#
         );
         Ok(format!(
-            r#"{{"protocolVersion":"{PROTOCOL_VERSION}","capabilities":{caps},"serverInfo":{{"name":"{}","version":"{}"}}}}"#,
+            r#"{{"protocolVersion":"{}","capabilities":{caps},"serverInfo":{{"name":"{}","version":"{}"}}}}"#,
+            json_escape(negotiated_version),
             json_escape(&self.server_name),
             json_escape(&self.server_version),
         ))

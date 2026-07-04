@@ -1001,6 +1001,13 @@ let app = App::new().mcp("my-server", "1.0.0")
 // list_static_files, reload_config.
 ```
 
+`initialize` negotiates the protocol version: it inspects the client's `params.protocolVersion` and
+responds with the lower of that and the server's own version (`YYYY-MM-DD` date strings compare
+correctly as plain strings), instead of always echoing back its own version regardless of what was
+asked for. A client requesting a newer version than this server implements is told the version it
+actually speaks; an older-version request is honored as sent. Missing `protocolVersion`/`params`
+falls back to the server's version. `params.clientInfo` is logged to stderr if present.
+
 ---
 
 ## Standalone proxies

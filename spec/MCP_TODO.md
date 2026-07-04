@@ -11,22 +11,30 @@ Baseline covered: `initialize`, `tools/*`, `resources/*`, `prompts/*`, static Be
 
 ## Priority 1 — Correctness and ergonomics (do first)
 
-### TODO-1: Protocol version negotiation
+### ✅ TODO-1: Protocol version negotiation — Done (v17.75.0)
 
-`initialize` always returns `"protocolVersion":"2024-11-05"` regardless of what the client sends.
-The spec requires the server to inspect `params.protocolVersion` and respond with the version it
-actually supports, allowing the client to abort if incompatible.
+`initialize` used to always return `"protocolVersion":"2024-11-05"` regardless of what the client
+sent. `do_initialize` now takes `body: &str`, extracts `params.protocolVersion` via
+`json_rpc::extract_raw(body, "params")` + `json_rpc::extract_str(&params, "protocolVersion")`
+(mirroring the same params-extraction pattern `do_tools_call`/`do_resources_read` already used),
+and returns the lower of the client's and the server's `PROTOCOL_VERSION` — version strings are
+`YYYY-MM-DD` dates, so a plain `&str` comparison (`v < PROTOCOL_VERSION`) already orders them
+correctly with no date parsing needed. A client asking for a newer version than this server
+implements is told the version it actually speaks (so it can abort if that's incompatible for it);
+an older-version request is honored as sent. Missing `protocolVersion`/`params` falls back to the
+server's own version rather than erroring `initialize` out — before this change `initialize` could
+never fail, and that stays true. `params.clientInfo` (`name`/`version`), if sent, is logged to
+stderr (`[mcp] initialize from client {name} v{version}`) — "store for logging" only ever meant
+logging within that one request, since `McpServer`/`execute()` are fully stateless with no session
+storage to carry it further (that's TODO-2's job, not this one's). The client-supplied version
+string is `json_escape`d before being embedded back in the response JSON, same as `serverInfo`'s
+fields already were — it's attacker-controlled input once decoded out of the incoming JSON by
+`extract_str`, so it needs the same escaping on the way back out.
 
-Current code ignores `params` entirely:
-```rust
-fn do_initialize(&self) -> Result<String, (i32, String)> {
-    // ignores clientInfo and protocolVersion from body
-```
-
-**Fix:** extract `params.protocolVersion` and `params.clientInfo` via `json_rpc::extract_str`.
-Store `clientInfo` for logging. Return the lower of client's and server's version.
-
-**Effort:** tiny — two `json_rpc::extract_str` calls in `do_initialize`.
+5 new tests in `src/mcp/tests.rs`: negotiating down for a newer client version, honoring an older
+client version, echoing back a matching version, defaulting to the server version when
+`protocolVersion` is absent, and defaulting when `params` is missing entirely (no error). The
+existing `initialize_returns_protocol_version` test needed no changes.
 
 ---
 
@@ -460,7 +468,7 @@ In `execute()` the async variant uses `tokio::task::block_in_place` to bridge th
 
 ```
 Phase 1 — Quick wins (no new dependencies, mostly additive)
-  TODO-1  protocol version negotiation     (tiny)
+  TODO-1  protocol version negotiation     (tiny)              ✅ done (v17.75.0)
   TODO-2  McpContext in tool handlers      (small)
   TODO-3  tool annotations 2025-03-26      (tiny)
   TODO-4  image + embedded content types   (small)
@@ -490,7 +498,7 @@ Phase 3 — Enterprise + advanced
 
 | # | Enhancement | Spec | Priority | Effort | Dependency |
 |---|-------------|------|----------|--------|------------|
-| 1 | Protocol version negotiation | 2024-11-05 | **P1** | Tiny | — |
+| 1 | Protocol version negotiation | 2024-11-05 | **P1** | Tiny | ✅ Done (v17.75.0) |
 | 2 | `McpContext` in tool handlers | Ergonomics | **P1** | Small | — |
 | 3 | Tool annotations | 2025-03-26 | **P1** | Tiny | — |
 | 4 | `image` + `embedded` content | 2024-11-05 | **P1** | Small | — |

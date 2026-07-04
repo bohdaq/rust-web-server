@@ -1,5 +1,5 @@
 use super::json_rpc;
-use super::{extract_arg, json_escape, McpContent, McpServer, PromptArgDef, PromptMessage};
+use super::{extract_arg, json_escape, McpContent, McpServer, PromptArgDef, PromptMessage, PROTOCOL_VERSION};
 use crate::app::App;
 use crate::core::New;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
@@ -191,6 +191,68 @@ fn initialize_returns_protocol_version() {
     assert!(body.contains("2024-11-05"), "wrong version: {body}");
     assert!(body.contains("\"serverInfo\""), "missing serverInfo: {body}");
     assert!(body.contains("test-srv"), "missing server name: {body}");
+}
+
+#[test]
+fn initialize_negotiates_down_to_server_version_for_a_newer_client() {
+    // Client asks for a version newer than this server implements — the
+    // server must not just echo it back; it can only ever speak the version
+    // it actually implements, which is the lower of the two here.
+    let srv = make_server();
+    let resp = srv.handle_request(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2025-06-18","clientInfo":{"name":"test","version":"1"}}}"#,
+    );
+    assert_eq!(resp.status_code, 200);
+    let body = body_of(&resp);
+    assert!(
+        body.contains(&format!("\"protocolVersion\":\"{PROTOCOL_VERSION}\"")),
+        "should negotiate down to the server's own version: {body}"
+    );
+}
+
+#[test]
+fn initialize_honors_an_older_client_version() {
+    // Client asks for a version older than the server's — "lower of the two"
+    // means the server confirms it'll speak the client's (older) version,
+    // rather than insisting on its own newer one.
+    let srv = make_server();
+    let resp = srv.handle_request(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2023-01-01","clientInfo":{"name":"test","version":"1"}}}"#,
+    );
+    assert_eq!(resp.status_code, 200);
+    let body = body_of(&resp);
+    assert!(body.contains("\"protocolVersion\":\"2023-01-01\""), "should honor the older client version: {body}");
+}
+
+#[test]
+fn initialize_matching_client_version_is_echoed() {
+    let srv = make_server();
+    let resp = srv.handle_request(&format!(
+        r#"{{"jsonrpc":"2.0","method":"initialize","id":1,"params":{{"protocolVersion":"{PROTOCOL_VERSION}"}}}}"#
+    ));
+    assert_eq!(resp.status_code, 200);
+    let body = body_of(&resp);
+    assert!(body.contains(&format!("\"protocolVersion\":\"{PROTOCOL_VERSION}\"")));
+}
+
+#[test]
+fn initialize_without_protocol_version_defaults_to_server_version() {
+    let srv = make_server();
+    let resp = srv.handle_request(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"clientInfo":{"name":"test","version":"1"}}}"#,
+    );
+    assert_eq!(resp.status_code, 200);
+    let body = body_of(&resp);
+    assert!(body.contains(&format!("\"protocolVersion\":\"{PROTOCOL_VERSION}\"")));
+}
+
+#[test]
+fn initialize_without_params_at_all_does_not_error() {
+    let srv = make_server();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#);
+    assert_eq!(resp.status_code, 200);
+    let body = body_of(&resp);
+    assert!(body.contains(&format!("\"protocolVersion\":\"{PROTOCOL_VERSION}\"")));
 }
 
 // ── notifications ─────────────────────────────────────────────────────────────

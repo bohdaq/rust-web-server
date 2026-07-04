@@ -1880,6 +1880,8 @@ Use `.at("/custom/path")` to override the default `/mcp` endpoint. The bundled `
 
 **Supported MCP methods:** `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, `prompts/get`, `notifications/initialized`.
 
+**Protocol version negotiation:** `initialize` inspects the client's requested `params.protocolVersion` and responds with the lower of that and the server's own version (version strings are `YYYY-MM-DD` dates, so a plain string comparison already orders them correctly) — rather than always echoing back the server's version regardless of what the client asked for. A client requesting a newer version than this server implements gets told the version it actually speaks, so the client can decide whether to proceed or abort; a client requesting an older version is honored as-is. Missing or absent `protocolVersion`/`params` falls back to the server's own version rather than erroring `initialize` out. `params.clientInfo` (if sent) is logged to stderr — there's no session storage yet to carry it further than that one log line.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

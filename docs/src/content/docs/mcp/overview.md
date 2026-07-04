@@ -3,7 +3,7 @@ title: MCP Server Overview
 description: Expose tools, resources, and prompts to AI agents via the Model Context Protocol over HTTP.
 ---
 
-The Model Context Protocol (MCP) is a JSON-RPC 2.0 standard that lets AI agents (Claude Desktop, Cursor, custom agents) call server-defined **tools**, read **resources**, and retrieve **prompt templates** over plain HTTP. `rust-web-server` ships a first-class `McpServer` that implements the MCP 2024-11-05 specification with no external dependencies.
+The Model Context Protocol (MCP) is a JSON-RPC 2.0 standard that lets AI agents (Claude Desktop, Cursor, custom agents) call server-defined **tools**, read **resources**, and retrieve **prompt templates** over plain HTTP. `rust-web-server` ships a first-class `McpServer` that implements the MCP 2024-11-05 specification with no external dependencies, and negotiates that version down for clients that ask for something different — see [Protocol version negotiation](#protocol-version-negotiation) below.
 
 ## Creating an MCP server
 
@@ -80,6 +80,22 @@ All JSON-RPC 2.0 messages travel over `POST /mcp`. The endpoint handles the full
 `OPTIONS /mcp` is also handled for CORS preflight. All other methods return `405 Method Not Allowed`.
 
 Override the default path with `.at("/custom-path")` if needed.
+
+## Protocol version negotiation
+
+`initialize` inspects the client's requested `params.protocolVersion` and responds with the lower of that and the server's own version, rather than always claiming its own regardless of what the client asked for:
+
+```json
+// Client requests a newer version than this server implements:
+{"method": "initialize", "params": {"protocolVersion": "2025-06-18", "clientInfo": {"name": "my-client", "version": "1.0"}}}
+
+// Server responds with the version it actually speaks — not "2025-06-18":
+{"result": {"protocolVersion": "2024-11-05", "capabilities": {...}, "serverInfo": {...}}}
+```
+
+Version strings are `YYYY-MM-DD` dates, so a plain string comparison already orders them correctly — no date parsing needed. A client requesting an *older* version than the server's is honored as sent (the server confirms it'll speak that version) rather than being overridden. If `protocolVersion` or `params` is missing entirely, `initialize` doesn't error — it falls back to the server's own version, same as before this negotiation existed.
+
+`params.clientInfo` (if the client sends it) is logged to stderr at `initialize` time; there's no session storage yet to make it available to tool handlers later in the connection.
 
 ## Built-in rws tools
 
