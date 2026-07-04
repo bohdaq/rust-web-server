@@ -1,48 +1,68 @@
 //! Async connection pool — `DbPool` and `DbTransaction`.
 //!
-//! Backed by `sqlx`. The concrete database type is selected by feature flag:
-//! - `model-sqlite`   → `sqlx::Sqlite`
-//! - `model-postgres` → `sqlx::Postgres`
-//! - `model-mysql`    → `sqlx::MySql`
+//! Backed by `sqlx`. `model-sqlite`, `model-postgres`, and `model-mysql` are
+//! not mutually exclusive: each compiled-in feature adds a variant to the
+//! `DbPool`/`DbTransaction` enums below, so a single binary can hold pools to
+//! more than one backend at once. Which variant a given `DbPool` is depends
+//! on the [`Backend`] passed via [`DbConfig::backend`].
 
 use std::future::Future;
 
+use super::backend::Backend;
 use super::connection::DbConfig;
 use super::migration;
 use super::{DbError, Model, ModelRow, MigrationStatus, Value};
-
-// ── Backend type alias ────────────────────────────────────────────────────────
-
-#[cfg(feature = "model-sqlite")]
-type Db = sqlx::Sqlite;
-
-#[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
-type Db = sqlx::Postgres;
-
-#[cfg(all(
-    feature = "model-mysql",
-    not(feature = "model-sqlite"),
-    not(feature = "model-postgres")
-))]
-type Db = sqlx::MySql;
 
 // ── DbPool ────────────────────────────────────────────────────────────────────
 
 /// An async connection pool backed by sqlx.
 ///
-/// Cheap to clone — the inner pool is reference-counted.
+/// Cheap to clone — the inner pool is reference-counted. Which variant a
+/// `DbPool` is depends on the [`Backend`] it was created with; see the module
+/// docs for running more than one backend in the same binary.
 #[derive(Clone, Debug)]
-pub struct DbPool(pub(crate) sqlx::Pool<Db>);
+pub enum DbPool {
+    #[cfg(feature = "model-sqlite")]
+    Sqlite(sqlx::Pool<sqlx::Sqlite>),
+    #[cfg(feature = "model-postgres")]
+    Postgres(sqlx::Pool<sqlx::Postgres>),
+    #[cfg(feature = "model-mysql")]
+    MySql(sqlx::Pool<sqlx::MySql>),
+}
 
 impl DbPool {
-    /// Create a new pool with the given configuration.
+    /// Create a new pool for `config.backend`, with the given configuration.
     pub async fn new(config: DbConfig) -> Result<Self, DbError> {
-        let pool = sqlx::pool::PoolOptions::<Db>::new()
-            .max_connections(config.pool_size)
-            .connect(&config.to_url())
-            .await
-            .map_err(|e| DbError::new(e.to_string()))?;
-        Ok(DbPool(pool))
+        let url = config.to_url();
+        match config.backend {
+            #[cfg(feature = "model-sqlite")]
+            Backend::Sqlite => {
+                let pool = sqlx::pool::PoolOptions::<sqlx::Sqlite>::new()
+                    .max_connections(config.pool_size)
+                    .connect(&url)
+                    .await
+                    .map_err(|e| DbError::new(e.to_string()))?;
+                Ok(DbPool::Sqlite(pool))
+            }
+            #[cfg(feature = "model-postgres")]
+            Backend::Postgres => {
+                let pool = sqlx::pool::PoolOptions::<sqlx::Postgres>::new()
+                    .max_connections(config.pool_size)
+                    .connect(&url)
+                    .await
+                    .map_err(|e| DbError::new(e.to_string()))?;
+                Ok(DbPool::Postgres(pool))
+            }
+            #[cfg(feature = "model-mysql")]
+            Backend::MySql => {
+                let pool = sqlx::pool::PoolOptions::<sqlx::MySql>::new()
+                    .max_connections(config.pool_size)
+                    .connect(&url)
+                    .await
+                    .map_err(|e| DbError::new(e.to_string()))?;
+                Ok(DbPool::MySql(pool))
+            }
+        }
     }
 
     /// Create a pool using [`DbConfig::from_env`].
@@ -71,12 +91,24 @@ impl DbPool {
     /// ```
     #[cfg(feature = "model-sqlite")]
     pub async fn memory() -> Result<Self, DbError> {
-        let pool = sqlx::pool::PoolOptions::<Db>::new()
+        let pool = sqlx::pool::PoolOptions::<sqlx::Sqlite>::new()
             .max_connections(1)
             .connect("sqlite::memory:")
             .await
             .map_err(|e| DbError::new(e.to_string()))?;
-        Ok(DbPool(pool))
+        Ok(DbPool::Sqlite(pool))
+    }
+
+    /// Which backend this pool talks to.
+    pub fn backend(&self) -> Backend {
+        match self {
+            #[cfg(feature = "model-sqlite")]
+            DbPool::Sqlite(_) => Backend::Sqlite,
+            #[cfg(feature = "model-postgres")]
+            DbPool::Postgres(_) => Backend::Postgres,
+            #[cfg(feature = "model-mysql")]
+            DbPool::MySql(_) => Backend::MySql,
+        }
     }
 
     // ── Core async SQL operations ─────────────────────────────────────────────
@@ -85,13 +117,26 @@ impl DbPool {
     ///
     /// Returns the number of rows affected.
     pub async fn execute(&self, sql: &str, params: &[Value]) -> Result<u64, DbError> {
-        let result = pool_execute_impl(&self.0, sql, params).await?;
-        Ok(result)
+        match self {
+            #[cfg(feature = "model-sqlite")]
+            DbPool::Sqlite(pool) => sqlite_pool_execute(pool, sql, params).await,
+            #[cfg(feature = "model-postgres")]
+            DbPool::Postgres(pool) => pg_pool_execute(pool, sql, params).await,
+            #[cfg(feature = "model-mysql")]
+            DbPool::MySql(pool) => mysql_pool_execute(pool, sql, params).await,
+        }
     }
 
     /// Execute a SQL query and return untyped rows.
     pub async fn query_rows(&self, sql: &str, params: &[Value]) -> Result<Vec<ModelRow>, DbError> {
-        pool_query_rows_impl(&self.0, sql, params).await
+        match self {
+            #[cfg(feature = "model-sqlite")]
+            DbPool::Sqlite(pool) => sqlite_pool_query_rows(pool, sql, params).await,
+            #[cfg(feature = "model-postgres")]
+            DbPool::Postgres(pool) => pg_pool_query_rows(pool, sql, params).await,
+            #[cfg(feature = "model-mysql")]
+            DbPool::MySql(pool) => mysql_pool_query_rows(pool, sql, params).await,
+        }
     }
 
     /// Execute a SQL query and deserialise results into `T: Model`.
@@ -105,13 +150,47 @@ impl DbPool {
         self.query_rows(sql, params).await
     }
 
+    /// Insert-then-fetch-generated-id, dispatched per backend: SQLite uses
+    /// `last_insert_rowid()`, PostgreSQL appends `RETURNING`, MySQL uses
+    /// `last_insert_id()`. Used by the repository's INSERT logic.
+    pub(crate) async fn insert_returning_id(
+        &self,
+        insert_sql: &str,
+        params: &[Value],
+        _pk_col: &str,
+    ) -> Result<i64, DbError> {
+        match self {
+            #[cfg(feature = "model-sqlite")]
+            DbPool::Sqlite(pool) => sqlite_last_insert_id(pool, insert_sql, params).await,
+            #[cfg(feature = "model-postgres")]
+            DbPool::Postgres(pool) => pg_insert_returning(pool, insert_sql, params, _pk_col).await,
+            #[cfg(feature = "model-mysql")]
+            DbPool::MySql(pool) => mysql_last_insert_id(pool, insert_sql, params).await,
+        }
+    }
+
     // ── Transactions ──────────────────────────────────────────────────────────
 
     /// Begin a transaction. Call [`DbTransaction::commit`] to commit or let it
     /// drop to automatically roll back.
     pub async fn begin(&self) -> Result<DbTransaction, DbError> {
-        let tx = self.0.begin().await.map_err(|e| DbError::new(e.to_string()))?;
-        Ok(DbTransaction(tx))
+        match self {
+            #[cfg(feature = "model-sqlite")]
+            DbPool::Sqlite(pool) => {
+                let tx = pool.begin().await.map_err(|e| DbError::new(e.to_string()))?;
+                Ok(DbTransaction::Sqlite(tx))
+            }
+            #[cfg(feature = "model-postgres")]
+            DbPool::Postgres(pool) => {
+                let tx = pool.begin().await.map_err(|e| DbError::new(e.to_string()))?;
+                Ok(DbTransaction::Postgres(tx))
+            }
+            #[cfg(feature = "model-mysql")]
+            DbPool::MySql(pool) => {
+                let tx = pool.begin().await.map_err(|e| DbError::new(e.to_string()))?;
+                Ok(DbTransaction::MySql(tx))
+            }
+        }
     }
 
     /// Run a closure in a transaction.
@@ -186,17 +265,38 @@ impl DbPool {
 ///
 /// Created with [`DbPool::begin`].  Calling [`commit`][DbTransaction::commit]
 /// commits the transaction; dropping without committing rolls it back.
-pub struct DbTransaction(pub(crate) sqlx::Transaction<'static, Db>);
+pub enum DbTransaction {
+    #[cfg(feature = "model-sqlite")]
+    Sqlite(sqlx::Transaction<'static, sqlx::Sqlite>),
+    #[cfg(feature = "model-postgres")]
+    Postgres(sqlx::Transaction<'static, sqlx::Postgres>),
+    #[cfg(feature = "model-mysql")]
+    MySql(sqlx::Transaction<'static, sqlx::MySql>),
+}
 
 impl DbTransaction {
     /// Execute a SQL statement inside this transaction.
     pub async fn execute(&mut self, sql: &str, params: &[Value]) -> Result<u64, DbError> {
-        tx_execute_impl(&mut self.0, sql, params).await
+        match self {
+            #[cfg(feature = "model-sqlite")]
+            DbTransaction::Sqlite(tx) => sqlite_tx_execute(tx, sql, params).await,
+            #[cfg(feature = "model-postgres")]
+            DbTransaction::Postgres(tx) => pg_tx_execute(tx, sql, params).await,
+            #[cfg(feature = "model-mysql")]
+            DbTransaction::MySql(tx) => mysql_tx_execute(tx, sql, params).await,
+        }
     }
 
     /// Execute a SQL query inside this transaction, returning untyped rows.
     pub async fn query_rows(&mut self, sql: &str, params: &[Value]) -> Result<Vec<ModelRow>, DbError> {
-        tx_query_rows_impl(&mut self.0, sql, params).await
+        match self {
+            #[cfg(feature = "model-sqlite")]
+            DbTransaction::Sqlite(tx) => sqlite_tx_query_rows(tx, sql, params).await,
+            #[cfg(feature = "model-postgres")]
+            DbTransaction::Postgres(tx) => pg_tx_query_rows(tx, sql, params).await,
+            #[cfg(feature = "model-mysql")]
+            DbTransaction::MySql(tx) => mysql_tx_query_rows(tx, sql, params).await,
+        }
     }
 
     /// Execute a SQL query inside this transaction and deserialise into `T: Model`.
@@ -207,20 +307,34 @@ impl DbTransaction {
 
     /// Commit this transaction.
     pub async fn commit(self) -> Result<(), DbError> {
-        self.0.commit().await.map_err(|e| DbError::new(e.to_string()))
+        match self {
+            #[cfg(feature = "model-sqlite")]
+            DbTransaction::Sqlite(tx) => tx.commit().await.map_err(|e| DbError::new(e.to_string())),
+            #[cfg(feature = "model-postgres")]
+            DbTransaction::Postgres(tx) => tx.commit().await.map_err(|e| DbError::new(e.to_string())),
+            #[cfg(feature = "model-mysql")]
+            DbTransaction::MySql(tx) => tx.commit().await.map_err(|e| DbError::new(e.to_string())),
+        }
     }
 
     /// Roll back this transaction explicitly (also happens on drop).
     pub async fn rollback(self) -> Result<(), DbError> {
-        self.0.rollback().await.map_err(|e| DbError::new(e.to_string()))
+        match self {
+            #[cfg(feature = "model-sqlite")]
+            DbTransaction::Sqlite(tx) => tx.rollback().await.map_err(|e| DbError::new(e.to_string())),
+            #[cfg(feature = "model-postgres")]
+            DbTransaction::Postgres(tx) => tx.rollback().await.map_err(|e| DbError::new(e.to_string())),
+            #[cfg(feature = "model-mysql")]
+            DbTransaction::MySql(tx) => tx.rollback().await.map_err(|e| DbError::new(e.to_string())),
+        }
     }
 }
 
 // ── Internal helpers (SQLite) ─────────────────────────────────────────────────
 
 #[cfg(feature = "model-sqlite")]
-async fn pool_execute_impl(
-    pool: &sqlx::Pool<Db>,
+async fn sqlite_pool_execute(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
     sql: &str,
     params: &[Value],
 ) -> Result<u64, DbError> {
@@ -234,8 +348,8 @@ async fn pool_execute_impl(
 }
 
 #[cfg(feature = "model-sqlite")]
-async fn pool_query_rows_impl(
-    pool: &sqlx::Pool<Db>,
+async fn sqlite_pool_query_rows(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
     sql: &str,
     params: &[Value],
 ) -> Result<Vec<ModelRow>, DbError> {
@@ -249,8 +363,8 @@ async fn pool_query_rows_impl(
 }
 
 #[cfg(feature = "model-sqlite")]
-async fn tx_execute_impl(
-    tx: &mut sqlx::Transaction<'static, Db>,
+async fn sqlite_tx_execute(
+    tx: &mut sqlx::Transaction<'static, sqlx::Sqlite>,
     sql: &str,
     params: &[Value],
 ) -> Result<u64, DbError> {
@@ -264,8 +378,8 @@ async fn tx_execute_impl(
 }
 
 #[cfg(feature = "model-sqlite")]
-async fn tx_query_rows_impl(
-    tx: &mut sqlx::Transaction<'static, Db>,
+async fn sqlite_tx_query_rows(
+    tx: &mut sqlx::Transaction<'static, sqlx::Sqlite>,
     sql: &str,
     params: &[Value],
 ) -> Result<Vec<ModelRow>, DbError> {
@@ -298,7 +412,7 @@ fn bind_sqlite_args(
 }
 
 #[cfg(feature = "model-sqlite")]
-pub(crate) fn sqlite_row_to_model_row(
+fn sqlite_row_to_model_row(
     row: sqlx::sqlite::SqliteRow,
 ) -> Result<ModelRow, DbError> {
     use sqlx::{Column, Row, TypeInfo};
@@ -351,11 +465,11 @@ pub(crate) fn sqlite_row_to_model_row(
     Ok(ModelRow::new(cols))
 }
 
-/// Return the last inserted row ID from a SQLite query result.
-/// Used by the repository's INSERT logic.
+/// Insert then return the last inserted row ID from SQLite's
+/// `last_insert_rowid()`. Used by the repository's INSERT logic.
 #[cfg(feature = "model-sqlite")]
-pub(crate) async fn sqlite_last_insert_id(
-    pool: &sqlx::Pool<Db>,
+async fn sqlite_last_insert_id(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
     sql: &str,
     params: &[Value],
 ) -> Result<i64, DbError> {
@@ -368,30 +482,14 @@ pub(crate) async fn sqlite_last_insert_id(
     Ok(r.last_insert_rowid())
 }
 
-#[cfg(feature = "model-sqlite")]
-pub(crate) async fn sqlite_tx_last_insert_id(
-    tx: &mut sqlx::Transaction<'static, Db>,
-    sql: &str,
-    params: &[Value],
-) -> Result<i64, DbError> {
-    let mut args = sqlx::sqlite::SqliteArguments::default();
-    bind_sqlite_args(&mut args, params)?;
-    let r = sqlx::query_with(sql, args)
-        .execute(&mut **tx)
-        .await
-        .map_err(|e| DbError::new(e.to_string()))?;
-    Ok(r.last_insert_rowid())
-}
-
 // ── Internal helpers (PostgreSQL) ─────────────────────────────────────────────
 
-#[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
-async fn pool_execute_impl(
-    pool: &sqlx::Pool<Db>,
+#[cfg(feature = "model-postgres")]
+async fn pg_pool_execute(
+    pool: &sqlx::Pool<sqlx::Postgres>,
     sql: &str,
     params: &[Value],
 ) -> Result<u64, DbError> {
-    use sqlx::Arguments;
     let mut args = sqlx::postgres::PgArguments::default();
     bind_pg_args(&mut args, params)?;
     let r = sqlx::query_with(sql, args)
@@ -401,13 +499,12 @@ async fn pool_execute_impl(
     Ok(r.rows_affected())
 }
 
-#[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
-async fn pool_query_rows_impl(
-    pool: &sqlx::Pool<Db>,
+#[cfg(feature = "model-postgres")]
+async fn pg_pool_query_rows(
+    pool: &sqlx::Pool<sqlx::Postgres>,
     sql: &str,
     params: &[Value],
 ) -> Result<Vec<ModelRow>, DbError> {
-    use sqlx::Arguments;
     let mut args = sqlx::postgres::PgArguments::default();
     bind_pg_args(&mut args, params)?;
     let rows = sqlx::query_with(sql, args)
@@ -417,13 +514,12 @@ async fn pool_query_rows_impl(
     rows.into_iter().map(pg_row_to_model_row).collect()
 }
 
-#[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
-async fn tx_execute_impl(
-    tx: &mut sqlx::Transaction<'static, Db>,
+#[cfg(feature = "model-postgres")]
+async fn pg_tx_execute(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
     sql: &str,
     params: &[Value],
 ) -> Result<u64, DbError> {
-    use sqlx::Arguments;
     let mut args = sqlx::postgres::PgArguments::default();
     bind_pg_args(&mut args, params)?;
     let r = sqlx::query_with(sql, args)
@@ -433,13 +529,12 @@ async fn tx_execute_impl(
     Ok(r.rows_affected())
 }
 
-#[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
-async fn tx_query_rows_impl(
-    tx: &mut sqlx::Transaction<'static, Db>,
+#[cfg(feature = "model-postgres")]
+async fn pg_tx_query_rows(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
     sql: &str,
     params: &[Value],
 ) -> Result<Vec<ModelRow>, DbError> {
-    use sqlx::Arguments;
     let mut args = sqlx::postgres::PgArguments::default();
     bind_pg_args(&mut args, params)?;
     let rows = sqlx::query_with(sql, args)
@@ -449,7 +544,7 @@ async fn tx_query_rows_impl(
     rows.into_iter().map(pg_row_to_model_row).collect()
 }
 
-#[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
+#[cfg(feature = "model-postgres")]
 fn bind_pg_args(
     args: &mut sqlx::postgres::PgArguments,
     params: &[Value],
@@ -468,7 +563,7 @@ fn bind_pg_args(
     Ok(())
 }
 
-#[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
+#[cfg(feature = "model-postgres")]
 fn pg_row_to_model_row(row: sqlx::postgres::PgRow) -> Result<ModelRow, DbError> {
     use sqlx::{Column, Row, TypeInfo};
     let mut cols: Vec<(String, Value)> = Vec::with_capacity(row.columns().len());
@@ -498,14 +593,13 @@ fn pg_row_to_model_row(row: sqlx::postgres::PgRow) -> Result<ModelRow, DbError> 
 }
 
 /// Execute an INSERT and return the RETURNING id (PostgreSQL).
-#[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
-pub(crate) async fn pg_insert_returning(
-    pool: &sqlx::Pool<Db>,
+#[cfg(feature = "model-postgres")]
+async fn pg_insert_returning(
+    pool: &sqlx::Pool<sqlx::Postgres>,
     sql: &str,
     params: &[Value],
     pk_col: &str,
 ) -> Result<i64, DbError> {
-    use sqlx::Arguments;
     let mut args = sqlx::postgres::PgArguments::default();
     bind_pg_args(&mut args, params)?;
     let returning_sql = format!("{} RETURNING {}", sql, pk_col);
@@ -518,39 +612,14 @@ pub(crate) async fn pg_insert_returning(
     Ok(id)
 }
 
-#[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
-pub(crate) async fn pg_tx_insert_returning(
-    tx: &mut sqlx::Transaction<'static, Db>,
-    sql: &str,
-    params: &[Value],
-    pk_col: &str,
-) -> Result<i64, DbError> {
-    use sqlx::Arguments;
-    let mut args = sqlx::postgres::PgArguments::default();
-    bind_pg_args(&mut args, params)?;
-    let returning_sql = format!("{} RETURNING {}", sql, pk_col);
-    let row = sqlx::query_with(&returning_sql, args)
-        .fetch_one(&mut **tx)
-        .await
-        .map_err(|e| DbError::new(e.to_string()))?;
-    use sqlx::Row;
-    let id: i64 = row.try_get(pk_col).map_err(|e| DbError::new(e.to_string()))?;
-    Ok(id)
-}
-
 // ── Internal helpers (MySQL) ──────────────────────────────────────────────────
 
-#[cfg(all(
-    feature = "model-mysql",
-    not(feature = "model-sqlite"),
-    not(feature = "model-postgres")
-))]
-async fn pool_execute_impl(
-    pool: &sqlx::Pool<Db>,
+#[cfg(feature = "model-mysql")]
+async fn mysql_pool_execute(
+    pool: &sqlx::Pool<sqlx::MySql>,
     sql: &str,
     params: &[Value],
 ) -> Result<u64, DbError> {
-    use sqlx::Arguments;
     let mut args = sqlx::mysql::MySqlArguments::default();
     bind_mysql_args(&mut args, params)?;
     let r = sqlx::query_with(sql, args)
@@ -560,17 +629,12 @@ async fn pool_execute_impl(
     Ok(r.rows_affected())
 }
 
-#[cfg(all(
-    feature = "model-mysql",
-    not(feature = "model-sqlite"),
-    not(feature = "model-postgres")
-))]
-async fn pool_query_rows_impl(
-    pool: &sqlx::Pool<Db>,
+#[cfg(feature = "model-mysql")]
+async fn mysql_pool_query_rows(
+    pool: &sqlx::Pool<sqlx::MySql>,
     sql: &str,
     params: &[Value],
 ) -> Result<Vec<ModelRow>, DbError> {
-    use sqlx::Arguments;
     let mut args = sqlx::mysql::MySqlArguments::default();
     bind_mysql_args(&mut args, params)?;
     let rows = sqlx::query_with(sql, args)
@@ -580,17 +644,12 @@ async fn pool_query_rows_impl(
     rows.into_iter().map(mysql_row_to_model_row).collect()
 }
 
-#[cfg(all(
-    feature = "model-mysql",
-    not(feature = "model-sqlite"),
-    not(feature = "model-postgres")
-))]
-async fn tx_execute_impl(
-    tx: &mut sqlx::Transaction<'static, Db>,
+#[cfg(feature = "model-mysql")]
+async fn mysql_tx_execute(
+    tx: &mut sqlx::Transaction<'static, sqlx::MySql>,
     sql: &str,
     params: &[Value],
 ) -> Result<u64, DbError> {
-    use sqlx::Arguments;
     let mut args = sqlx::mysql::MySqlArguments::default();
     bind_mysql_args(&mut args, params)?;
     let r = sqlx::query_with(sql, args)
@@ -600,17 +659,12 @@ async fn tx_execute_impl(
     Ok(r.rows_affected())
 }
 
-#[cfg(all(
-    feature = "model-mysql",
-    not(feature = "model-sqlite"),
-    not(feature = "model-postgres")
-))]
-async fn tx_query_rows_impl(
-    tx: &mut sqlx::Transaction<'static, Db>,
+#[cfg(feature = "model-mysql")]
+async fn mysql_tx_query_rows(
+    tx: &mut sqlx::Transaction<'static, sqlx::MySql>,
     sql: &str,
     params: &[Value],
 ) -> Result<Vec<ModelRow>, DbError> {
-    use sqlx::Arguments;
     let mut args = sqlx::mysql::MySqlArguments::default();
     bind_mysql_args(&mut args, params)?;
     let rows = sqlx::query_with(sql, args)
@@ -620,11 +674,7 @@ async fn tx_query_rows_impl(
     rows.into_iter().map(mysql_row_to_model_row).collect()
 }
 
-#[cfg(all(
-    feature = "model-mysql",
-    not(feature = "model-sqlite"),
-    not(feature = "model-postgres")
-))]
+#[cfg(feature = "model-mysql")]
 fn bind_mysql_args(
     args: &mut sqlx::mysql::MySqlArguments,
     params: &[Value],
@@ -643,11 +693,7 @@ fn bind_mysql_args(
     Ok(())
 }
 
-#[cfg(all(
-    feature = "model-mysql",
-    not(feature = "model-sqlite"),
-    not(feature = "model-postgres")
-))]
+#[cfg(feature = "model-mysql")]
 fn mysql_row_to_model_row(row: sqlx::mysql::MySqlRow) -> Result<ModelRow, DbError> {
     use sqlx::{Column, Row, TypeInfo};
     let mut cols: Vec<(String, Value)> = Vec::with_capacity(row.columns().len());
@@ -684,41 +730,18 @@ fn mysql_row_to_model_row(row: sqlx::mysql::MySqlRow) -> Result<ModelRow, DbErro
     Ok(ModelRow::new(cols))
 }
 
-#[cfg(all(
-    feature = "model-mysql",
-    not(feature = "model-sqlite"),
-    not(feature = "model-postgres")
-))]
-pub(crate) async fn mysql_last_insert_id(
-    pool: &sqlx::Pool<Db>,
+/// Insert then return the last inserted row ID from MySQL's `last_insert_id()`.
+/// Used by the repository's INSERT logic.
+#[cfg(feature = "model-mysql")]
+async fn mysql_last_insert_id(
+    pool: &sqlx::Pool<sqlx::MySql>,
     sql: &str,
     params: &[Value],
 ) -> Result<i64, DbError> {
-    use sqlx::Arguments;
     let mut args = sqlx::mysql::MySqlArguments::default();
     bind_mysql_args(&mut args, params)?;
     let r = sqlx::query_with(sql, args)
         .execute(pool)
-        .await
-        .map_err(|e| DbError::new(e.to_string()))?;
-    Ok(r.last_insert_id() as i64)
-}
-
-#[cfg(all(
-    feature = "model-mysql",
-    not(feature = "model-sqlite"),
-    not(feature = "model-postgres")
-))]
-pub(crate) async fn mysql_tx_last_insert_id(
-    tx: &mut sqlx::Transaction<'static, Db>,
-    sql: &str,
-    params: &[Value],
-) -> Result<i64, DbError> {
-    use sqlx::Arguments;
-    let mut args = sqlx::mysql::MySqlArguments::default();
-    bind_mysql_args(&mut args, params)?;
-    let r = sqlx::query_with(sql, args)
-        .execute(&mut **tx)
         .await
         .map_err(|e| DbError::new(e.to_string()))?;
     Ok(r.last_insert_id() as i64)

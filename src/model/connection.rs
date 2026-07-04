@@ -1,6 +1,6 @@
 //! Database connection configuration.
 
-use super::DbError;
+use super::{Backend, DbError};
 
 /// Database connection configuration.
 ///
@@ -20,6 +20,12 @@ pub struct DbConfig {
     pub database: String,
     /// Maximum number of connections in the pool.
     pub pool_size: u32,
+    /// Which compiled-in backend this config connects to.
+    ///
+    /// Only needs to be set explicitly when more than one `model-*` feature
+    /// is compiled into the binary — see [`Backend`]. When only one is
+    /// compiled in, [`DbConfig::from_env`] infers it automatically.
+    pub backend: Backend,
 }
 
 impl DbConfig {
@@ -27,6 +33,7 @@ impl DbConfig {
     ///
     /// | Variable | Default |
     /// |---|---|
+    /// | `RWS_DB_BACKEND` | Inferred if exactly one `model-*` feature is compiled in; **required** otherwise |
     /// | `RWS_DB_HOST` | `localhost` |
     /// | `RWS_DB_PORT` | `5432` |
     /// | `RWS_DB_USER` | _(empty)_ |
@@ -34,6 +41,15 @@ impl DbConfig {
     /// | `RWS_DB_NAME` | **(required)** |
     /// | `RWS_DB_POOL_SIZE` | `10` |
     pub fn from_env() -> Result<Self, DbError> {
+        let backend = match std::env::var("RWS_DB_BACKEND") {
+            Ok(s) => Backend::parse(&s)?,
+            Err(_) => Backend::unambiguous_default().ok_or_else(|| {
+                DbError::new(
+                    "RWS_DB_BACKEND must be set to \"sqlite\", \"postgres\", or \"mysql\" \
+                     when more than one model-* feature is compiled in",
+                )
+            })?,
+        };
         let host = std::env::var("RWS_DB_HOST").unwrap_or_else(|_| "localhost".into());
         let port = std::env::var("RWS_DB_PORT")
             .unwrap_or_else(|_| "5432".into())
@@ -48,25 +64,24 @@ impl DbConfig {
             .parse::<u32>()
             .map_err(|e| DbError::new(format!("RWS_DB_POOL_SIZE: {}", e)))?;
 
-        Ok(DbConfig { host, port, user, password, database, pool_size })
+        Ok(DbConfig { host, port, user, password, database, pool_size, backend })
     }
 
     /// Connection URL suitable for passing to sqlx.
-    #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
     pub(crate) fn to_url(&self) -> String {
-        #[cfg(feature = "model-sqlite")]
-        return format!("sqlite:{}", self.database);
-
-        #[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
-        return format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.user, self.password, self.host, self.port, self.database
-        );
-
-        #[cfg(all(feature = "model-mysql", not(feature = "model-sqlite"), not(feature = "model-postgres")))]
-        return format!(
-            "mysql://{}:{}@{}:{}/{}",
-            self.user, self.password, self.host, self.port, self.database
-        );
+        match self.backend {
+            #[cfg(feature = "model-sqlite")]
+            Backend::Sqlite => format!("sqlite:{}", self.database),
+            #[cfg(feature = "model-postgres")]
+            Backend::Postgres => format!(
+                "postgres://{}:{}@{}:{}/{}",
+                self.user, self.password, self.host, self.port, self.database
+            ),
+            #[cfg(feature = "model-mysql")]
+            Backend::MySql => format!(
+                "mysql://{}:{}@{}:{}/{}",
+                self.user, self.password, self.host, self.port, self.database
+            ),
+        }
     }
 }

@@ -2,6 +2,7 @@
 
 use std::marker::PhantomData;
 
+use super::backend::Backend;
 use super::pool::DbPool;
 use super::repository::{extract_count, placeholder};
 use super::{DbError, Model, ToColumn, Value};
@@ -127,8 +128,9 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
 
     /// Execute `SELECT * FROM table WHERE … ORDER BY … LIMIT … OFFSET …`.
     pub async fn fetch_all(self) -> Result<Vec<T>, DbError> {
+        let backend = self.pool.backend();
         let (sql, params) = build_select::<T>(
-            self.filters, self.order, self.limit, self.offset, "*",
+            self.filters, self.order, self.limit, self.offset, "*", backend,
         );
         let rows = self.pool.query_rows(&sql, &params).await?;
         rows.iter().map(|r| T::from_row(r)).collect()
@@ -136,8 +138,9 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
 
     /// Execute `SELECT * … LIMIT 1` and return the first result.
     pub async fn fetch_one(self) -> Result<Option<T>, DbError> {
+        let backend = self.pool.backend();
         let (sql, params) = build_select::<T>(
-            self.filters, self.order, Some(1), self.offset, "*",
+            self.filters, self.order, Some(1), self.offset, "*", backend,
         );
         let rows = self.pool.query_rows(&sql, &params).await?;
         match rows.into_iter().next() {
@@ -148,8 +151,9 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
 
     /// Execute `SELECT COUNT(*) FROM table WHERE …`.
     pub async fn count(self) -> Result<i64, DbError> {
+        let backend = self.pool.backend();
         let (sql, params) = build_select::<T>(
-            self.filters, self.order, self.limit, self.offset, "COUNT(*)",
+            self.filters, self.order, self.limit, self.offset, "COUNT(*)", backend,
         );
         let rows = self.pool.query_rows(&sql, &params).await?;
         extract_count(rows)
@@ -157,7 +161,8 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
 
     /// Execute `DELETE FROM table WHERE …`.
     pub async fn delete(self) -> Result<(), DbError> {
-        let (where_clause, params, _) = build_where(self.filters, 0);
+        let backend = self.pool.backend();
+        let (where_clause, params, _) = build_where(self.filters, 0, backend);
         let sql = format!("DELETE FROM {}{}", T::table_name(), where_clause);
         self.pool.execute(&sql, &params).await?;
         Ok(())
@@ -165,9 +170,10 @@ impl<'a, T: Model> QueryBuilder<'a, T> {
 
     /// Execute `UPDATE table SET col = ? WHERE …`.
     pub async fn update(self, col: &str, val: impl ToColumn) -> Result<(), DbError> {
-        let set_ph = placeholder(1);
+        let backend = self.pool.backend();
+        let set_ph = placeholder(backend, 1);
         let set_val = val.to_column();
-        let (where_clause, mut where_params, _) = build_where(self.filters, 1);
+        let (where_clause, mut where_params, _) = build_where(self.filters, 1, backend);
         let mut params = vec![set_val];
         params.append(&mut where_params);
         let sql = format!(
@@ -255,8 +261,9 @@ fn build_select<T: Model>(
     limit: Option<u64>,
     offset: Option<u64>,
     projection: &str,
+    backend: Backend,
 ) -> (String, Vec<Value>) {
-    let (where_clause, params, _) = build_where(filters, 0);
+    let (where_clause, params, _) = build_where(filters, 0, backend);
     let mut sql = format!("SELECT {} FROM {}{}", projection, T::table_name(), where_clause);
     if let Some((col, ord)) = order {
         sql.push_str(&format!(" ORDER BY {} {}", col, ord.as_sql()));
@@ -274,6 +281,7 @@ fn build_select<T: Model>(
 pub(crate) fn build_where(
     filters: Vec<(String, Vec<Value>)>,
     start_idx: usize,
+    backend: Backend,
 ) -> (String, Vec<Value>, usize) {
     let mut all_params: Vec<Value> = Vec::new();
     let mut conditions: Vec<String> = Vec::new();
@@ -283,12 +291,12 @@ pub(crate) fn build_where(
         for param in params {
             idx += 1;
             if fragment.contains("__placeholder__") {
-                fragment = fragment.replacen("__placeholder__", &placeholder(idx), 1);
+                fragment = fragment.replacen("__placeholder__", &placeholder(backend, idx), 1);
             } else {
-                #[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
-                {
-                    fragment = fragment.replacen("?", &placeholder(idx), 1);
-                }
+                // A raw fragment written with a literal `?` (e.g. from
+                // `.filter("age >= ?", ...)`) — no-op on backends that
+                // already use `?`, rewrites it to `$N` on PostgreSQL.
+                fragment = fragment.replacen("?", &placeholder(backend, idx), 1);
             }
             all_params.push(param);
         }

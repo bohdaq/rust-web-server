@@ -8,7 +8,8 @@
 #[cfg(all(test, feature = "model-sqlite"))]
 mod model_tests {
     use crate::model::{
-        CursorPage, DbPool, HasMany, Model, ModelRow, Order, Page, QueryBuilder, Repository, Value,
+        Backend, CursorPage, DbConfig, DbPool, HasMany, Model, ModelRow, Order, Page, QueryBuilder,
+        Repository, Value,
     };
     use crate::model::repository::ModelRepository;
 
@@ -540,6 +541,80 @@ mod model_tests {
         pool_b.execute("CREATE TABLE t (x INTEGER)", &[]).await.unwrap();
         let rows = pool_b.query_rows("SELECT x FROM t", &[]).await.unwrap();
         assert!(rows.is_empty(), "pool_b should be a separate empty database");
+    }
+
+    // ── Backend / multiple-DB-backends-per-binary ─────────────────────────────
+    //
+    // This test binary only compiles the `model-sqlite` feature, so it can't
+    // exercise a real Postgres or MySQL pool. What it can (and does) verify:
+    // `Backend` selection logic, and that `DbPool`/`DbConfig` correctly report
+    // and honor which backend they're talking to — the actual multi-backend
+    // dispatch in pool.rs/repository.rs/query.rs is exercised implicitly by
+    // every other test in this file running against the `Backend::Sqlite`
+    // code path. A combined build (`--features model-sqlite,model-postgres,model-mysql`)
+    // is checked separately (compiles cleanly, proving the three backends can
+    // coexist in one binary) but isn't part of the normal test run since it
+    // needs no live Postgres/MySQL server to just compile.
+
+    #[tokio::test]
+    async fn test_18_pool_backend_reports_sqlite_for_memory_pool() {
+        let pool = DbPool::memory().await.unwrap();
+        assert_eq!(Backend::Sqlite, pool.backend());
+    }
+
+    #[test]
+    fn test_19_backend_parse_accepts_compiled_in_name_case_insensitively() {
+        assert_eq!(Backend::Sqlite, Backend::parse("sqlite").unwrap());
+        assert_eq!(Backend::Sqlite, Backend::parse("SQLite").unwrap());
+    }
+
+    #[test]
+    fn test_20_backend_parse_rejects_unknown_or_not_compiled_in_name() {
+        let err = Backend::parse("postgres").expect_err("model-postgres isn't compiled into this test binary");
+        assert!(err.to_string().contains("postgres"));
+        assert!(err.to_string().contains("sqlite"), "error should list what IS compiled in");
+    }
+
+    // test_21/22/23 all read and write RWS_DB_BACKEND/RWS_DB_NAME — hold the
+    // shared env-var lock (see CLAUDE.md) so they can't interleave with each
+    // other under `cargo test`'s default parallelism.
+
+    #[test]
+    fn test_21_dbconfig_from_env_infers_sqlite_when_unambiguous() {
+        let _g = crate::test_env::lock();
+        std::env::remove_var("RWS_DB_BACKEND");
+        std::env::set_var("RWS_DB_NAME", ":memory:");
+
+        let config = DbConfig::from_env().expect("exactly one model-* feature is compiled in");
+        assert_eq!(Backend::Sqlite, config.backend);
+
+        std::env::remove_var("RWS_DB_NAME");
+    }
+
+    #[test]
+    fn test_22_dbconfig_from_env_respects_explicit_backend_override() {
+        let _g = crate::test_env::lock();
+        std::env::set_var("RWS_DB_BACKEND", "sqlite");
+        std::env::set_var("RWS_DB_NAME", ":memory:");
+
+        let config = DbConfig::from_env().expect("explicit sqlite backend is compiled in");
+        assert_eq!(Backend::Sqlite, config.backend);
+
+        std::env::remove_var("RWS_DB_BACKEND");
+        std::env::remove_var("RWS_DB_NAME");
+    }
+
+    #[test]
+    fn test_23_dbconfig_from_env_errors_on_not_compiled_in_backend() {
+        let _g = crate::test_env::lock();
+        std::env::set_var("RWS_DB_BACKEND", "mysql");
+        std::env::set_var("RWS_DB_NAME", ":memory:");
+
+        let err = DbConfig::from_env().expect_err("model-mysql isn't compiled into this test binary");
+        assert!(err.to_string().contains("mysql"));
+
+        std::env::remove_var("RWS_DB_BACKEND");
+        std::env::remove_var("RWS_DB_NAME");
     }
 
     fn tempdir_path() -> String {

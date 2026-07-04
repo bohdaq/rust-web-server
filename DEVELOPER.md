@@ -160,8 +160,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware proxying with a per-`[[upstream]]` `strategy`: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), or `least_connections` (routes to the live backend with fewest in-flight requests). `ConfigDrivenApp::with_config(ServerConfig)` pins its fallback `App` (unmatched requests — healthz/readyz/metrics/static/404) to explicit settings instead of reading `RWS_CONFIG_*` env vars per request. |
 | `StaticAdapter` | `proxy_config` | Action handler for `type = "static"` routes in `rws.config.toml`. Serves files from a configured `root` directory (independent of the process working directory), trying each `index` entry in order for directory requests; rejects any request path with a `..` segment (before or after percent-decoding) with `403`, missing files with `404`. |
 | `Container` | `di` | Type-keyed dependency injection container. `register::<T>(service)` stores concrete types; `provide::<dyn Trait>(Arc::new(...))` stores trait objects; both keyed by `TypeId`. Named services via `register_named` / `provide_named` / `get_named`. Pass the container directly as `AppWithState`/`AsyncAppWithState`'s state (`App::with_state(container)`) — **not** `container.into_arc()`, which double-wraps in `Arc` since `with_state` already wraps `S` internally. `into_arc()` is for sharing one container across multiple hand-built `Application`s outside of `with_state`. |
-| `DbPool` / `DbTransaction` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`; implies `http2`) | Async connection pool backed by `sqlx`. `DbPool::new(DbConfig).await` or `DbPool::from_env().await`. All SQL operations are `async fn`: `execute`, `query_rows`, `query::<T>`, `begin`, `transaction(closure)`, `migrate`, `migration_status`, `rollback_last`, `rollback`. **SQLite in-memory shortcut:** `DbPool::memory().await` creates a single-connection pool backed by `":memory:"` — each call is an isolated empty database, ideal for tests. Cheap to clone (Arc-wrapped). |
-| `DbConfig` | `model` | Database configuration. `DbConfig::from_env()` reads `RWS_DB_*` env vars; construct manually with `DbConfig { host, port, user, password, database, pool_size }`. |
+| `DbPool` / `DbTransaction` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`; implies `http2`) | Async connection pool backed by `sqlx`. An enum with one variant per compiled-in backend — `model-sqlite`, `model-postgres`, and `model-mysql` are **not** mutually exclusive, so a single binary can hold a `DbPool` to each at once (see `Backend`). `DbPool::new(DbConfig).await` or `DbPool::from_env().await`. All SQL operations are `async fn`: `execute`, `query_rows`, `query::<T>`, `begin`, `transaction(closure)`, `migrate`, `migration_status`, `rollback_last`, `rollback`, `backend()`. **SQLite in-memory shortcut:** `DbPool::memory().await` creates a single-connection pool backed by `":memory:"` — each call is an isolated empty database, ideal for tests. Cheap to clone (Arc-wrapped). |
+| `Backend` | `model` | Which compiled-in database backend a `DbPool`/`DbConfig` uses — `Backend::Sqlite`/`Postgres`/`MySql`, gated to whichever `model-*` features are actually compiled in (matching on it is exhaustive with no wildcard needed). `Backend::parse("sqlite" \| "postgres"/"postgresql" \| "mysql")` (case-insensitive). Only needs picking explicitly when more than one `model-*` feature is compiled in; `DbConfig::from_env()` infers it automatically otherwise. |
+| `DbConfig` | `model` | Database configuration. `DbConfig::from_env()` reads `RWS_DB_BACKEND` (required only if more than one `model-*` feature is compiled in) plus `RWS_DB_*` env vars; construct manually with `DbConfig { host, port, user, password, database, pool_size, backend }`. |
 | `ModelRepository<T, i64>` | `model` | Async JPA-style CRUD: `find_by_id`, `find_all`, `save` (INSERT when pk==0, UPDATE otherwise), `save_all`, `delete_by_id`, `delete_all_by_id`, `count`, `exists_by_id` — all `async fn`. Obtain via `T::repository(&pool)` when using `#[derive(Model)]`. |
 | `QueryBuilder<T>` | `model` | Async fluent SQL builder: `where_eq`, `filter`, `order_by`, `limit`, `offset`, then `fetch_all`, `fetch_one`, `count`, `update`, `delete`, `paginate`, `paginate_after` (all `.await`). Obtain via `T::query(&pool)` when using `#[derive(Model)]`. |
 | `Page<T>` | `pagination` (re-exported from `model`) | Offset-paginated result: `items`, `page`, `per_page`, `total_items`, `total_pages`, plus `has_next`/`has_prev`/`next_page`/`prev_page`, `.map(f)`, and `.link_header(base_url)` (RFC 8288 `Link` header with `rel="first"/"prev"/"next"/"last"`). Returned by `QueryBuilder::paginate(page, per_page)`; not tied to the model layer — construct directly with `Page::new(items, page, per_page, total_items)`. |
@@ -2847,7 +2848,7 @@ pub struct User {
 Open a connection pool and run migrations (all async; requires a tokio runtime — implied by any `model-*` feature):
 
 ```rust
-use rust_web_server::model::{DbConfig, DbPool};
+use rust_web_server::model::{Backend, DbConfig, DbPool};
 
 let pool = DbPool::new(DbConfig {
     host:      "localhost".into(),
@@ -2856,10 +2857,37 @@ let pool = DbPool::new(DbConfig {
     password:  "secret".into(),
     database:  "myapp.db".into(),   // file path for SQLite
     pool_size: 5,
+    backend:   Backend::Sqlite,     // only needs to be set explicitly with >1 model-* feature compiled in
 }).await?;
 
 pool.migrate("migrations/").await?;
 ```
+
+**Multiple backends in one binary:** `model-sqlite`, `model-postgres`, and `model-mysql` can all be enabled at once — each gets its own `DbPool` variant, so e.g. a hot-path SQLite pool and an analytics-tier Postgres pool can coexist in one process:
+
+```toml
+rust-web-server = { version = "17", features = ["macros", "model-sqlite", "model-postgres"] }
+```
+
+```rust
+use rust_web_server::model::{Backend, DbConfig, DbPool};
+
+let hot = DbPool::new(DbConfig {
+    backend: Backend::Sqlite,
+    database: "hot.db".into(),
+    host: String::new(), port: 0, user: String::new(), password: String::new(),
+    pool_size: 5,
+}).await?;
+
+let analytics = DbPool::new(DbConfig {
+    backend: Backend::Postgres,
+    host: "analytics-db.internal".into(), port: 5432,
+    user: "app".into(), password: "secret".into(), database: "analytics".into(),
+    pool_size: 10,
+}).await?;
+```
+
+With only one `model-*` feature compiled in, `DbConfig::from_env()` infers `backend` automatically and `RWS_DB_BACKEND` doesn't need to be set. With more than one compiled in, set `RWS_DB_BACKEND` (`"sqlite"` / `"postgres"` / `"mysql"`) so `from_env()` knows which pool this particular `DbConfig` is for — `DbConfig::from_env()` returns `Err` if it's ambiguous.
 
 Roll back migrations by pairing an up file with a `.down.sql` file of the same stem (e.g. `0001_x.sql` / `0001_x.down.sql`):
 

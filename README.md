@@ -243,7 +243,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Pagination — `.paginate(page, per_page)` → `Page<T>` (with `total_pages`) or `.paginate_after(cursor, per_page)` → `CursorPage<T>` (keyset, for large tables); both build an RFC 8288 `Link` response header
 - Migrations — `pool.migrate("migrations/").await` runs `*.sql` files in lexicographic order, idempotent; `pool.rollback_last()` / `pool.rollback(dir, n)` undo them via companion `.down.sql` files
 - Relations — `HasMany<T>`, `HasOne<O>`, `BelongsTo<O>`; explicit async load, no hidden N+1
-- Backends — SQLite (`model-sqlite`), PostgreSQL (`model-postgres`), MySQL (`model-mysql`); all imply `http2` (tokio runtime)
+- Backends — SQLite (`model-sqlite`), PostgreSQL (`model-postgres`), MySQL (`model-mysql`); all imply `http2` (tokio runtime); not mutually exclusive — enable more than one to hold a `DbPool` to each backend in the same binary (`Backend` selects which)
 - Backed by `sqlx` — async-native driver; `DbPool` is a cheap-to-clone `Arc`-wrapped `sqlx::Pool`
 - In-memory SQLite — `DbPool::memory().await` for isolated per-test databases
 
@@ -268,9 +268,9 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 | `macros` | `#[get]`, `#[post]`, …, `#[derive(FromRequest)]`, `#[derive(Validate)]`, `#[derive(Config)]` |
 | `acme` | Automatic TLS via Let's Encrypt (ACME RFC 8555); implies `http2` |
 | `tera` | Tera HTML template engine (Jinja2/Django syntax) |
-| `model-sqlite` | Async ORM backed by SQLite (via `sqlx`); implies `http2` |
-| `model-postgres` | Async ORM backed by PostgreSQL (via `sqlx`); implies `http2` |
-| `model-mysql` | Async ORM backed by MySQL (via `sqlx`); implies `http2` |
+| `model-sqlite` | Async ORM backed by SQLite (via `sqlx`); implies `http2`. Combinable with the other two `model-*` features — see `Backend` |
+| `model-postgres` | Async ORM backed by PostgreSQL (via `sqlx`); implies `http2`. Combinable with the other two `model-*` features — see `Backend` |
+| `model-mysql` | Async ORM backed by MySQL (via `sqlx`); implies `http2`. Combinable with the other two `model-*` features — see `Backend` |
 | `crypto` | Argon2id password hashing + CSPRNG token generation; `signed_cookie`/`verify_signed_cookie` (HMAC-SHA256) and `encrypted_cookie`/`decrypt_cookie` (AES-256-GCM) in `cookie` |
 | `csrf` | Double-submit cookie CSRF protection |
 | `sso` | OAuth2/OIDC SSO — `OidcAuth` middleware, RS256/ES256 JWT via JWKS, PKCE, provider presets (Google · Microsoft · GitHub · Okta · Auth0 · Keycloak) |

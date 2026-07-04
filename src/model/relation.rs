@@ -35,7 +35,7 @@ impl<T: Model> HasMany<T> {
     pub async fn load(&self, pool: &DbPool) -> Result<Vec<T>, DbError> {
         let sql = format!(
             "SELECT * FROM {} WHERE {} = {}",
-            T::table_name(), self.fk_col, placeholder(1),
+            T::table_name(), self.fk_col, placeholder(pool.backend(), 1),
         );
         let rows = pool.query_rows(&sql, &[self.owner_pk.clone()]).await?;
         rows.iter().map(|r| T::from_row(r)).collect()
@@ -63,7 +63,7 @@ impl<O: Model> HasOne<O> {
     pub async fn load(&self, pool: &DbPool) -> Result<Option<O>, DbError> {
         let sql = format!(
             "SELECT * FROM {} WHERE {} = {} LIMIT 1",
-            O::table_name(), self.fk_col, placeholder(1),
+            O::table_name(), self.fk_col, placeholder(pool.backend(), 1),
         );
         let rows = pool.query_rows(&sql, &[self.owner_pk.clone()]).await?;
         match rows.into_iter().next() {
@@ -93,7 +93,7 @@ impl<O: Model> BelongsTo<O> {
     pub async fn load(&self, pool: &DbPool) -> Result<Option<O>, DbError> {
         let sql = format!(
             "SELECT * FROM {} WHERE {} = {} LIMIT 1",
-            O::table_name(), O::primary_key_name(), placeholder(1),
+            O::table_name(), O::primary_key_name(), placeholder(pool.backend(), 1),
         );
         let rows = pool.query_rows(&sql, &[self.fk_value.clone()]).await?;
         match rows.into_iter().next() {

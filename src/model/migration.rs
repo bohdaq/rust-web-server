@@ -151,8 +151,8 @@ pub async fn run_migrations(pool: &DbPool, dir: &str) -> Result<(), DbError> {
         let ts = now_timestamp();
         let insert_sql = format!(
             "INSERT INTO _schema_migrations (version, applied_at) VALUES ({}, {})",
-            super::repository::placeholder(1),
-            super::repository::placeholder(2),
+            super::repository::placeholder(pool.backend(), 1),
+            super::repository::placeholder(pool.backend(), 2),
         );
 
         let mut tx = pool.begin().await?;
@@ -213,7 +213,7 @@ pub async fn rollback_last(pool: &DbPool, dir: &str) -> Result<Option<String>, D
     let statements: Vec<&str> = down_sql.split(';').map(str::trim).filter(|s| !s.is_empty()).collect();
     let delete_sql = format!(
         "DELETE FROM _schema_migrations WHERE version = {}",
-        super::repository::placeholder(1),
+        super::repository::placeholder(pool.backend(), 1),
     );
 
     let mut tx = pool.begin().await?;

@@ -246,9 +246,9 @@ let mcp = App::new().mcp("my-server", "1.0.0")
 | `macros` | `#[get]`, `#[derive(FromRequest)]`, `#[derive(Validate)]`, `#[derive(Config)]`, `routes!` | `rws-macros` |
 | `acme` | Automatic TLS via Let's Encrypt (implies `http2`) | `rcgen`, `aws-lc-rs` |
 | `tera` | Tera HTML template engine (Jinja2/Django syntax) | `tera`, `serde`, `serde_json` |
-| `model-sqlite` | Async ORM backed by SQLite (implies `http2`) | `sqlx` |
-| `model-postgres` | Async ORM backed by PostgreSQL (implies `http2`) | `sqlx` |
-| `model-mysql` | Async ORM backed by MySQL (implies `http2`) | `sqlx` |
+| `model-sqlite` | Async ORM backed by SQLite (implies `http2`); combinable with the other two `model-*` features (see `Backend`) | `sqlx` |
+| `model-postgres` | Async ORM backed by PostgreSQL (implies `http2`); combinable with the other two `model-*` features (see `Backend`) | `sqlx` |
+| `model-mysql` | Async ORM backed by MySQL (implies `http2`); combinable with the other two `model-*` features (see `Backend`) | `sqlx` |
 | `crypto` | `hash_password`/`verify_password` (Argon2id), `generate_token` (CSPRNG), `signed_cookie`/`verify_signed_cookie` (HMAC-SHA256), `encrypted_cookie`/`decrypt_cookie` (AES-256-GCM) | `argon2`, `rand_core`, `hmac`, `sha2`, `aes-gcm` |
 | `csrf` | `CsrfLayer` + `CsrfToken` — double-submit cookie CSRF protection | `rand_core` |
 | `sso` | `OidcAuth` middleware, PKCE, RS256/ES256 JWT via JWKS, provider presets | `rsa`, `p256`, `sha2`, `serde`, `serde_json` |
@@ -705,7 +705,7 @@ Follows redirects automatically. GET-downgrade on 301/302/303; method-preserve o
 
 ## Model layer / ORM (src/model/, requires `model-sqlite` / `model-postgres` / `model-mysql`)
 
-All model features imply `http2` (tokio runtime). The driver is `sqlx`; `DbPool` wraps `sqlx::Pool` and is cheap to clone.
+All model features imply `http2` (tokio runtime). The driver is `sqlx`; `DbPool` wraps `sqlx::Pool` and is cheap to clone. The three `model-*` features are **not** mutually exclusive — enable more than one to hold a `DbPool` to each backend in the same binary; `Backend` (`Sqlite`/`Postgres`/`MySql`, one variant per compiled-in feature) selects which one a given `DbPool`/`DbConfig` talks to.
 
 ```rust
 use rust_web_server::model::{DbPool, DbConfig};
@@ -762,7 +762,16 @@ let link = page.link_header("https://api.example.com/users", "cursor"); // Curso
 // Page::link_header(base_url) instead builds rel="first"/"prev"/"next"/"last"
 ```
 
-`DbConfig::from_env()` reads `RWS_DB_HOST`, `RWS_DB_PORT`, `RWS_DB_USER`, `RWS_DB_PASSWORD`, `RWS_DB_DATABASE`, `RWS_DB_POOL_SIZE`.
+`DbConfig::from_env()` reads `RWS_DB_HOST`, `RWS_DB_PORT`, `RWS_DB_USER`, `RWS_DB_PASSWORD`, `RWS_DB_NAME`, `RWS_DB_POOL_SIZE`, plus `RWS_DB_BACKEND` ("sqlite"/"postgres"/"mysql") — inferred automatically if only one `model-*` feature is compiled in, **required** if more than one is (errors otherwise).
+
+**Multiple backends in one binary** (e.g. `features = ["model-sqlite", "model-postgres"]`):
+
+```rust
+use rust_web_server::model::{Backend, DbConfig, DbPool};
+
+let hot = DbPool::new(DbConfig { backend: Backend::Sqlite, database: "hot.db".into(), pool_size: 5, host: String::new(), port: 0, user: String::new(), password: String::new() }).await?;
+let analytics = DbPool::new(DbConfig { backend: Backend::Postgres, host: "db.internal".into(), port: 5432, user: "app".into(), password: "secret".into(), database: "analytics".into(), pool_size: 10 }).await?;
+```
 
 `Page<T>`/`CursorPage<T>` live in `src/pagination/mod.rs` — no feature gate, no dependency on the model layer; construct one directly with `Page::new(items, page, per_page, total_items)` if your data source isn't `QueryBuilder`.
 
@@ -1382,7 +1391,7 @@ src/mcp/                — McpServer (MCP Streamable HTTP)
 src/metrics/            — Prometheus metrics, MetricsLayer
 src/middleware/         — Middleware trait, WithMiddleware, RateLimitLayer
 src/mime_type/          — MIME type constants and detection
-src/model/              — Async ORM (sqlx): DbPool, DbTransaction, Model, Repository, QueryBuilder
+src/model/              — Async ORM (sqlx): DbPool, DbTransaction, Backend, Model, Repository, QueryBuilder
 src/null/               — NullApplication (returns 404 for everything)
 src/openapi/            — OpenApiConfig, build_spec, swagger_ui_html (openapi feature)
 src/otel/               — OtelLayer, Span (nested child spans via span()/client_span()), setup, span export

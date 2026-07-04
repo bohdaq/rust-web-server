@@ -8,7 +8,9 @@
 //! - Async migration runner
 //! - Relationship helpers (`HasMany`, `HasOne`, `BelongsTo`)
 //!
-//! Enable one backend feature:
+//! Enable one or more backend features — `model-sqlite`, `model-postgres`,
+//! and `model-mysql` are not mutually exclusive, so a single binary can hold
+//! pools to more than one backend at once (see [`Backend`]):
 //!
 //! ```toml
 //! # SQLite
@@ -17,8 +19,11 @@
 //! rust-web-server = { features = ["model-postgres"] }
 //! # MySQL
 //! rust-web-server = { features = ["model-mysql"] }
+//! # Or more than one at once
+//! rust-web-server = { features = ["model-sqlite", "model-postgres"] }
 //! ```
 
+pub mod backend;
 pub mod connection;
 pub mod migration;
 pub mod pool;
@@ -28,6 +33,7 @@ pub mod repository;
 #[cfg(test)]
 mod tests;
 
+pub use backend::Backend;
 pub use connection::DbConfig;
 pub use migration::MigrationStatus;
 pub use pool::{DbPool, DbTransaction};

@@ -2,6 +2,7 @@
 
 use std::marker::PhantomData;
 
+use super::backend::Backend;
 use super::pool::DbPool;
 use super::{DbError, Model, Value};
 
@@ -41,7 +42,7 @@ impl<'a, T: Model> Repository<T, i64> for ModelRepository<'a, T, i64> {
             "SELECT * FROM {} WHERE {} = {}",
             T::table_name(),
             T::primary_key_name(),
-            placeholder(1),
+            placeholder(self.pool.backend(), 1),
         );
         let rows = self.pool.query_rows(&sql, &[Value::Int(id)]).await?;
         match rows.into_iter().next() {
@@ -79,7 +80,7 @@ impl<'a, T: Model> Repository<T, i64> for ModelRepository<'a, T, i64> {
             "DELETE FROM {} WHERE {} = {}",
             T::table_name(),
             T::primary_key_name(),
-            placeholder(1),
+            placeholder(self.pool.backend(), 1),
         );
         self.pool.execute(&sql, &[Value::Int(id)]).await?;
         Ok(())
@@ -105,24 +106,28 @@ impl<'a, T: Model> Repository<T, i64> for ModelRepository<'a, T, i64> {
 
 // ── Placeholder helpers ───────────────────────────────────────────────────────
 
-/// Return the DB-appropriate placeholder for position `pos` (1-indexed).
-/// SQLite and MySQL use `?`, PostgreSQL uses `$1`, `$2`, …
-pub(crate) fn placeholder(_pos: usize) -> String {
-    #[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
-    return format!("${}", _pos);
-
-    #[allow(unreachable_code)]
-    "?".to_string()
+/// Return the DB-appropriate placeholder for position `pos` (1-indexed) on
+/// `backend`. SQLite and MySQL use `?`, PostgreSQL uses `$1`, `$2`, …
+pub(crate) fn placeholder(backend: Backend, _pos: usize) -> String {
+    match backend {
+        #[cfg(feature = "model-sqlite")]
+        Backend::Sqlite => "?".to_string(),
+        #[cfg(feature = "model-postgres")]
+        Backend::Postgres => format!("${}", _pos),
+        #[cfg(feature = "model-mysql")]
+        Backend::MySql => "?".to_string(),
+    }
 }
 
 /// Build a comma-separated list of placeholders.
-pub(crate) fn placeholders(count: usize) -> String {
-    (1..=count).map(placeholder).collect::<Vec<_>>().join(", ")
+pub(crate) fn placeholders(backend: Backend, count: usize) -> String {
+    (1..=count).map(|i| placeholder(backend, i)).collect::<Vec<_>>().join(", ")
 }
 
 // ── Insert / Update helpers ───────────────────────────────────────────────────
 
 pub(crate) async fn insert_entity<T: Model>(pool: &DbPool, entity: &T) -> Result<T, DbError> {
+    let backend = pool.backend();
     let values = entity.to_values();
 
     let insert_vals: Vec<(&'static str, Value)> = if T::primary_key_auto_increment() {
@@ -133,7 +138,7 @@ pub(crate) async fn insert_entity<T: Model>(pool: &DbPool, entity: &T) -> Result
 
     let cols: Vec<&str> = insert_vals.iter().map(|(c, _)| *c).collect();
     let params: Vec<Value> = insert_vals.into_iter().map(|(_, v)| v).collect();
-    let ph = (1..=cols.len()).map(placeholder).collect::<Vec<_>>().join(", ");
+    let ph = placeholders(backend, cols.len());
     let col_list = cols.join(", ");
 
     let insert_sql = format!(
@@ -141,59 +146,19 @@ pub(crate) async fn insert_entity<T: Model>(pool: &DbPool, entity: &T) -> Result
         T::table_name(), col_list, ph
     );
 
-    // PostgreSQL: use RETURNING
-    #[cfg(all(feature = "model-postgres", not(feature = "model-sqlite")))]
-    {
-        let new_id = super::pool::pg_insert_returning(
-            &pool.0, &insert_sql, &params, T::primary_key_name(),
-        ).await?;
-        let select_sql = format!(
-            "SELECT * FROM {} WHERE {} = {}",
-            T::table_name(), T::primary_key_name(), placeholder(1),
-        );
-        let rows = pool.query_rows(&select_sql, &[Value::Int(new_id)]).await?;
-        return rows.into_iter().next()
-            .ok_or_else(|| DbError::new("inserted row not found"))
-            .and_then(|r| T::from_row(&r));
-    }
-
-    // SQLite: use last_insert_rowid
-    #[cfg(feature = "model-sqlite")]
-    {
-        let new_id = super::pool::sqlite_last_insert_id(&pool.0, &insert_sql, &params).await?;
-        let select_sql = format!(
-            "SELECT * FROM {} WHERE {} = {}",
-            T::table_name(), T::primary_key_name(), placeholder(1),
-        );
-        let rows = pool.query_rows(&select_sql, &[Value::Int(new_id)]).await?;
-        return rows.into_iter().next()
-            .ok_or_else(|| DbError::new("inserted row not found"))
-            .and_then(|r| T::from_row(&r));
-    }
-
-    // MySQL: use last_insert_id
-    #[cfg(all(
-        feature = "model-mysql",
-        not(feature = "model-sqlite"),
-        not(feature = "model-postgres")
-    ))]
-    {
-        let new_id = super::pool::mysql_last_insert_id(&pool.0, &insert_sql, &params).await?;
-        let select_sql = format!(
-            "SELECT * FROM {} WHERE {} = {}",
-            T::table_name(), T::primary_key_name(), placeholder(1),
-        );
-        let rows = pool.query_rows(&select_sql, &[Value::Int(new_id)]).await?;
-        return rows.into_iter().next()
-            .ok_or_else(|| DbError::new("inserted row not found"))
-            .and_then(|r| T::from_row(&r));
-    }
-
-    #[allow(unreachable_code)]
-    Err(DbError::new("no database feature enabled"))
+    let new_id = pool.insert_returning_id(&insert_sql, &params, T::primary_key_name()).await?;
+    let select_sql = format!(
+        "SELECT * FROM {} WHERE {} = {}",
+        T::table_name(), T::primary_key_name(), placeholder(backend, 1),
+    );
+    let rows = pool.query_rows(&select_sql, &[Value::Int(new_id)]).await?;
+    rows.into_iter().next()
+        .ok_or_else(|| DbError::new("inserted row not found"))
+        .and_then(|r| T::from_row(&r))
 }
 
 pub(crate) async fn update_entity<T: Model>(pool: &DbPool, entity: &T) -> Result<T, DbError> {
+    let backend = pool.backend();
     let values = entity.to_values();
     let set_pairs: Vec<(&str, Value)> = values
         .into_iter()
@@ -203,11 +168,11 @@ pub(crate) async fn update_entity<T: Model>(pool: &DbPool, entity: &T) -> Result
     let set_clause: String = set_pairs
         .iter()
         .enumerate()
-        .map(|(i, (col, _))| format!("{} = {}", col, placeholder(i + 1)))
+        .map(|(i, (col, _))| format!("{} = {}", col, placeholder(backend, i + 1)))
         .collect::<Vec<_>>()
         .join(", ");
 
-    let pk_placeholder = placeholder(set_pairs.len() + 1);
+    let pk_placeholder = placeholder(backend, set_pairs.len() + 1);
     let sql = format!(
         "UPDATE {} SET {} WHERE {} = {}",
         T::table_name(), set_clause, T::primary_key_name(), pk_placeholder,
@@ -223,7 +188,7 @@ pub(crate) async fn update_entity<T: Model>(pool: &DbPool, entity: &T) -> Result
     };
     let select_sql = format!(
         "SELECT * FROM {} WHERE {} = {}",
-        T::table_name(), T::primary_key_name(), placeholder(1),
+        T::table_name(), T::primary_key_name(), placeholder(backend, 1),
     );
     let rows = pool.query_rows(&select_sql, &[Value::Int(pk_id)]).await?;
     rows.into_iter().next()
