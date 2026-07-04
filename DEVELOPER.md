@@ -158,7 +158,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `AzureBlobStorage` / `AzureBlobConfig` | `storage` (requires `storage-azure` feature) | `Storage` implementation for Azure Blob Storage via the outbound HTTP client — no Azure SDK. Signs every request with the Shared Key HMAC-SHA256 scheme (`hmac` + `sha2`). `AzureBlobStorage::from_env()` reads `RWS_AZURE_ACCOUNT/CONTAINER/ENDPOINT`; credentials come from `RWS_AZURE_ACCOUNT_KEY` if set, else auto-detected Managed Identity (App Service/Container Apps identity endpoint, or VM/AKS IMDS as a last resort; `RWS_AZURE_CREDENTIAL_SOURCE` forces a specific source). |
 | `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. `.reload()` (or the global `template::reload()`) re-reads templates from disk without a restart — wired into `config_reload::reload()`'s `SIGHUP` hook automatically. |
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
-| `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware proxying with a per-`[[upstream]]` `strategy`: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), or `least_connections` (routes to the live backend with fewest in-flight requests). `ConfigDrivenApp::with_config(ServerConfig)` pins its fallback `App` (unmatched requests — healthz/readyz/metrics/static/404) to explicit settings instead of reading `RWS_CONFIG_*` env vars per request. |
+| `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `PerRouteMaxBodySize`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware proxying with a per-`[[upstream]]` `strategy`: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), or `least_connections` (routes to the live backend with fewest in-flight requests). `ConfigDrivenApp::with_config(ServerConfig)` pins its fallback `App` (unmatched requests — healthz/readyz/metrics/static/404) to explicit settings instead of reading `RWS_CONFIG_*` env vars per request. |
 | `StaticAdapter` | `proxy_config` | Action handler for `type = "static"` routes in `rws.config.toml`. Serves files from a configured `root` directory (independent of the process working directory), trying each `index` entry in order for directory requests; rejects any request path with a `..` segment (before or after percent-decoding) with `403`, missing files with `404`. |
 | `Container` | `di` | Type-keyed dependency injection container. `register::<T>(service)` stores concrete types; `provide::<dyn Trait>(Arc::new(...))` stores trait objects; both keyed by `TypeId`. Named services via `register_named` / `provide_named` / `get_named`. Pass the container directly as `AppWithState`/`AsyncAppWithState`'s state (`App::with_state(container)`) — **not** `container.into_arc()`, which double-wraps in `Arc` since `with_state` already wraps `S` internally. `into_arc()` is for sharing one container across multiple hand-built `Application`s outside of `with_state`. |
 | `DbPool` / `DbTransaction` | `model` (requires `model-sqlite`, `model-postgres`, or `model-mysql`; implies `http2`) | Async connection pool backed by `sqlx`. An enum with one variant per compiled-in backend — `model-sqlite`, `model-postgres`, and `model-mysql` are **not** mutually exclusive, so a single binary can hold a `DbPool` to each at once (see `Backend`). `DbPool::new(DbConfig).await` or `DbPool::from_env().await`. All SQL operations are `async fn`: `execute`, `query_rows`, `query::<T>`, `begin`, `transaction(closure)`, `migrate`, `migration_status`, `rollback_last`, `rollback`, `backend()`. **SQLite in-memory shortcut:** `DbPool::memory().await` creates a single-connection pool backed by `":memory:"` — each call is an isolated empty database, ideal for tests. Cheap to clone (Arc-wrapped). |
@@ -2695,6 +2695,7 @@ resolved path that doesn't exist returns `404`.
 | `rewrite.request[]` | `[{ type = "header_set", name = "X-Real-IP", value = "$client_ip" }]` |
 | `rewrite.response[]` | `[{ type = "header_remove", name = "Server" }]` |
 | `timeout_ms` | `500` — flat key directly under `[route.middleware]`, not a sub-table. Bounds this route's *total* time (including its other middleware); `0`/absent means no timeout. |
+| `max_body_size` | `65536` — flat key (bytes), same convention as `timeout_ms`. Rejects this route's request with `413` if the body is bigger; `0`/absent means no route-specific limit. A stricter *addition* on top of the global `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` — see Use Case #74. |
 
 **L4 proxies (separate listeners, spawned from config)**
 
@@ -3987,8 +3988,10 @@ fn my_handler() {
 }
 ```
 
-:::note[Why there's no per-route limit]
-Route matching (`Router`, `AppWithState`, the config-driven proxy's `RouteMatcher`) only runs *after* `Request` is fully built — by which point the body has already been read. A per-route cap that's actually enforced *before* buffering would require resolving the route from the request line and headers alone, ahead of reading the body, which is a larger restructuring of the read pipeline across all three protocols. `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` is a single global limit that protects total server memory regardless of which route a request eventually matches; a handler that needs a *stricter* per-route limit can check `request.body.len()` itself and return `AppError::UnprocessableEntity` (or similar) once inside its own logic — the memory for that one request is already spent by then, but no more requests can exceed the global ceiling.
+:::note[Why a per-route limit can't run *before* buffering]
+Route matching (`Router`, `AppWithState`, the config-driven proxy's `RouteMatcher`) only runs *after* `Request` is fully built — by which point the body has already been read. A per-route cap that's actually enforced *before* buffering would require resolving the route from the request line and headers alone, ahead of reading the body, which is a larger restructuring of the read pipeline across all three protocols. `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` is a single global limit that protects total server memory regardless of which route a request eventually matches — that part doesn't change.
+
+What *is* available: the config-driven proxy's `[route.middleware] max_body_size` (see Use Case #75) rejects a specific route's request with `413` if its body is bigger than that route's own limit — checked right after the route is matched, so it can be stricter than the global ceiling for one route without lowering it everywhere. It runs after the body is already buffered (same constraint as above — it can't undo the memory already spent for that one request), so it's a defense for that route's own logic/upstream, not an additional memory-exhaustion protection. A handler outside the config-driven proxy (a plain `Router`/`AppWithState` route) can get the same effect by checking `request.body.len()` itself and returning `AppError::PayloadTooLarge` (or similar).
 :::
 
 ---
@@ -4072,3 +4075,36 @@ If the declared `Content-Length` exceeds `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (se
 ```
 
 Scope: this applies to HTTP/1.1 only (`Server::process` and `process_h1_tls`), where the server reads headers and body off one raw byte stream and could otherwise block waiting for a body the client is itself waiting to be told to send. HTTP/2 (`h2_handler`) and HTTP/3 (`h3_handler`) read the body asynchronously as separate `DATA` frames after the headers frame, so that particular deadlock risk doesn't exist there, and 100-continue isn't implemented for them.
+
+### 75. Per-route max body size (config-driven proxy)
+
+`RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (Use Case #72) is one global ceiling for every route. `[route.middleware] max_body_size` adds a *route-specific*, stricter cap on top of it — e.g. keep a small JSON API route capped at 64 KiB even though a separate upload route needs the global limit set much higher:
+
+```toml
+[[route]]
+name = "json-api"
+
+  [route.match]
+  path = "/api/*"
+
+  [route.action]
+  type     = "proxy"
+  upstream = "api-backends"
+
+  [route.middleware]
+  max_body_size = 65536   # 413 if this route's body exceeds 64 KiB
+```
+
+`0` or omitting the key both mean "no route-specific limit" (same convention as `timeout_ms`) — the global limit still applies either way.
+
+```rust
+// What the client sees when it exceeds the route's limit:
+// HTTP/1.1 413 Payload Too Large
+// Content-Type: text/plain
+//
+// request body of 100000 bytes exceeds this route's 65536-byte limit
+```
+
+This is implemented as `PerRouteMaxBodySize`, a `Middleware` returning `AppError::PayloadTooLarge`, wrapped as the outermost layer by `apply_middleware()` — outside even `timeout_ms`, since it's a cheap, synchronous length check that shouldn't pay for `TimeoutLayer`'s background-thread machinery on a request that's about to be rejected anyway.
+
+**Important:** this check runs *after* the request (including its body) has already been fully read and `RouteMatcher` has resolved which route it belongs to — route resolution needs the complete `Request` to run at all. It cannot prevent the memory for an oversized body from being spent, the same limitation `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`'s own docs describe for *any* per-route check (see Use Case #72's note). Use it to protect this route's own logic or upstream backend from a body that's within the global limit but still too big for this specific route — not as a substitute for the global memory-exhaustion protection.

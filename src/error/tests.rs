@@ -44,6 +44,14 @@ fn too_many_requests_maps_to_429() {
 }
 
 #[test]
+fn payload_too_large_maps_to_413() {
+    let r = AppError::PayloadTooLarge("body exceeds 1048576 bytes".to_string()).into_response();
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n413_payload_too_large.status_code, r.status_code);
+    let body = String::from_utf8(r.content_range_list[0].body.clone()).unwrap();
+    assert!(body.contains("1048576"));
+}
+
+#[test]
 fn internal_maps_to_500() {
     let r = AppError::Internal("db crash".to_string()).into_response();
     assert_eq!(*STATUS_CODE_REASON_PHRASE.n500_internal_server_error.status_code, r.status_code);

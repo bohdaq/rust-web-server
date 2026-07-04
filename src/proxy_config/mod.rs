@@ -136,6 +136,22 @@ pub struct MiddlewareConfig {
     /// gets `504 Gateway Timeout` instead of waiting further. See
     /// `crate::timeout` for the underlying mechanism and its limitations.
     pub timeout_ms: Option<u64>,
+    /// `max_body_size` — reject this route's request with `413 Payload Too
+    /// Large` if its body exceeds this many bytes.
+    ///
+    /// This is a *route-specific* ceiling on top of the global, process-wide
+    /// `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (see `crate::entry_point::get_max_body_size`)
+    /// — e.g. a small JSON API route can be capped stricter than a
+    /// file-upload route without lowering the global limit for everyone.
+    /// It is **not** a substitute for the global limit: by the time any
+    /// route-level middleware runs, `Request` (including its body) has
+    /// already been fully read off the socket — route matching itself
+    /// requires the complete request, so a per-route check can only run
+    /// after that memory is already spent, not before. The global limit is
+    /// what protects total server memory from an oversized upload;
+    /// `max_body_size` protects only this route's own logic/upstream from
+    /// an oversized-but-still-within-the-global-limit body.
+    pub max_body_size: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -528,7 +544,18 @@ fn parse_middleware_config(
         ms => Some(ms),
     };
 
-    MiddlewareConfig { rate_limit, cache, auth, rewrite_request, rewrite_response, ip_allow, ip_deny, timeout_ms }
+    // Same flat-scalar convention as timeout_ms — 0/absent means "no
+    // route-specific limit" (the global RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
+    // still applies regardless).
+    let max_body_size = match get_u64(map, mw_sec, "max_body_size", 0) {
+        0 => None,
+        n => Some(n),
+    };
+
+    MiddlewareConfig {
+        rate_limit, cache, auth, rewrite_request, rewrite_response, ip_allow, ip_deny,
+        timeout_ms, max_body_size,
+    }
 }
 
 /// Collect `[[{mw_sec}.rewrite.{direction}]]` entries.
@@ -1212,6 +1239,43 @@ impl crate::middleware::Middleware for PerRouteRateLimit {
             next.execute(request, conn)
         } else {
             Ok(AppError::TooManyRequests.into_response())
+        }
+    }
+}
+
+// ── PerRouteMaxBodySize ───────────────────────────────────────────────────────
+
+/// A route-specific request body size limit, from `[route.middleware]
+/// max_body_size`.
+///
+/// Rejects with `413 Payload Too Large` if `request.body` is bigger than the
+/// configured ceiling. This runs *after* the request has already been fully
+/// read off the socket — route middleware only ever sees an already-built
+/// `Request` — so, unlike the global `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`
+/// (checked against the declared `Content-Length` before any of an
+/// oversized body is buffered), this can't prevent the memory from being
+/// spent for a single oversized request. What it protects is this route's
+/// own downstream logic/upstream backend from a body that's within the
+/// global limit but still too big for this specific route.
+pub(crate) struct PerRouteMaxBodySize(pub(crate) u64);
+
+impl crate::middleware::Middleware for PerRouteMaxBodySize {
+    fn handle(
+        &self,
+        request: &Request,
+        conn: &ConnectionInfo,
+        next: &dyn Application,
+    ) -> Result<Response, String> {
+        use crate::error::{AppError, IntoResponse};
+        if request.body.len() as u64 > self.0 {
+            Ok(AppError::PayloadTooLarge(format!(
+                "request body of {} bytes exceeds this route's {}-byte limit",
+                request.body.len(),
+                self.0,
+            ))
+            .into_response())
+        } else {
+            next.execute(request, conn)
         }
     }
 }

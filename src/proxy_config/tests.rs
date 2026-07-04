@@ -1680,3 +1680,122 @@ upstream = "backend"
     let resp = app.execute(&make_request("GET", "/x"), &conn).unwrap();
     assert_eq!(200, resp.status_code);
 }
+
+// ── max_body_size middleware ────────────────────────────────────────────────
+
+#[test]
+fn max_body_size_absent_by_default() {
+    let cfg = ProxyConfig::from_str(
+        r#"
+[[route]]
+name = "ping"
+
+[route.match]
+path = "/ping"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "pong"
+content_type = "text/plain"
+"#,
+    );
+    assert_eq!(None, cfg.routes[0].middleware.max_body_size);
+}
+
+#[test]
+fn from_str_parses_max_body_size() {
+    let cfg = ProxyConfig::from_str(
+        r#"
+[[route]]
+name = "upload"
+
+[route.match]
+path = "/upload"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "ok"
+
+[route.middleware]
+max_body_size = 1024
+"#,
+    );
+    assert_eq!(Some(1024), cfg.routes[0].middleware.max_body_size);
+}
+
+fn respond_route_with_max_body_size(max_body_size: u64) -> ProxyConfig {
+    ProxyConfig::from_str(&format!(
+        r#"
+[[route]]
+name = "upload"
+
+[route.match]
+path = "/*"
+
+[route.action]
+type = "respond"
+
+[route.action.respond]
+status = 200
+body = "ok"
+
+[route.middleware]
+max_body_size = {max_body_size}
+"#
+    ))
+}
+
+fn request_with_body(body: &[u8]) -> Request {
+    Request {
+        method: "POST".to_string(),
+        request_uri: "/upload".to_string(),
+        http_version: "HTTP/1.1".to_string(),
+        headers: vec![],
+        body: body.to_vec(),
+    }
+}
+
+#[test]
+fn max_body_size_rejects_oversized_body_with_413() {
+    let cfg = respond_route_with_max_body_size(10);
+    let (app, _handles) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+
+    let resp = app.execute(&request_with_body(&[b'x'; 11]), &conn).unwrap();
+    assert_eq!(413, resp.status_code);
+    let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+    assert!(body.contains("11"), "message should mention the actual body size: {}", body);
+    assert!(body.contains("10"), "message should mention the configured limit: {}", body);
+}
+
+#[test]
+fn max_body_size_allows_body_within_limit() {
+    let cfg = respond_route_with_max_body_size(10);
+    let (app, _handles) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+
+    let resp = app.execute(&request_with_body(&[b'x'; 10]), &conn).unwrap();
+    assert_eq!(200, resp.status_code, "body exactly at the limit must be allowed");
+
+    let resp_empty = app.execute(&request_with_body(&[]), &conn).unwrap();
+    assert_eq!(200, resp_empty.status_code);
+}
+
+#[test]
+fn max_body_size_zero_means_unset_not_zero_byte_limit() {
+    // Same convention as timeout_ms: 0/absent both mean "no route-specific
+    // limit configured" — NOT "reject every request with a non-empty body".
+    let cfg = respond_route_with_max_body_size(0);
+    assert_eq!(None, cfg.routes[0].middleware.max_body_size);
+
+    let (app, _handles) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    let resp = app.execute(&request_with_body(&[b'x'; 5000]), &conn).unwrap();
+    assert_eq!(200, resp.status_code);
+}

@@ -248,12 +248,12 @@ deny  = ["1.2.3.4"]                         # denylist
 
 ```toml
 [[route.middleware.rewrite.request]]
-type  = "set_header"
+type  = "header_set"
 name  = "X-Real-IP"
 value = "client"
 
 [[route.middleware.rewrite.request]]
-type   = "strip_prefix"
+type   = "uri_strip_prefix"
 prefix = "/internal"
 ```
 
@@ -261,15 +261,33 @@ prefix = "/internal"
 
 ```toml
 [[route.middleware.rewrite.response]]
-type  = "set_header"
+type  = "header_set"
 name  = "Cache-Control"
 value = "no-store"
 
 [[route.middleware.rewrite.response]]
-type   = "replace_body"
-from   = "staging.internal"
-to     = "example.com"
+type = "body_replace"
+from = "staging.internal"
+to   = "example.com"
 ```
+
+#### Per-route timeout
+
+```toml
+[route.middleware]
+timeout_ms = 5000   # 504 if this route (including its other middleware) doesn't respond within 5s
+```
+
+`0`/absent means no route-specific timeout. Bounds this route's *total* time — every other middleware layer runs inside it. See [Timeouts](/features/timeouts/) for the underlying mechanism and its one honest limitation (a synchronous handler that ignores its deadline keeps running in the background; only the client's wait is bounded).
+
+#### Per-route max body size
+
+```toml
+[route.middleware]
+max_body_size = 65536   # 413 if this route's request body exceeds 64 KiB
+```
+
+`0`/absent means no route-specific limit. This is a *stricter, additional* cap on top of the global `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (see [Forms & Uploads](/building-apps/forms-uploads/#size-limits)) — not a substitute for it. It's checked after this route has already been matched, which means the body was necessarily already read in full to build the `Request` that route matching itself required; use it to keep one route (e.g. a small JSON API) stricter than the global ceiling a separate upload route needs, not as protection against unbounded memory use — the global limit is what already provides that, for every route.
 
 ## L4 proxy sections
 

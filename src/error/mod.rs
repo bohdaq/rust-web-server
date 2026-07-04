@@ -59,6 +59,8 @@ pub enum AppError {
     UnprocessableEntity(String),
     /// 429 Too Many Requests — client has exceeded the rate limit.
     TooManyRequests,
+    /// 413 Payload Too Large — the request body exceeds a configured limit.
+    PayloadTooLarge(String),
     /// 500 Internal Server Error — unexpected server-side failure.
     Internal(String),
 }
@@ -73,6 +75,7 @@ impl IntoResponse for AppError {
             AppError::Conflict(msg)             => (STATUS_CODE_REASON_PHRASE.n409_conflict, msg.as_str()),
             AppError::UnprocessableEntity(msg)  => (STATUS_CODE_REASON_PHRASE.n422_unprocessable_entity, msg.as_str()),
             AppError::TooManyRequests           => (STATUS_CODE_REASON_PHRASE.n429_too_many_requests, "Too Many Requests"),
+            AppError::PayloadTooLarge(msg)       => (STATUS_CODE_REASON_PHRASE.n413_payload_too_large, msg.as_str()),
             AppError::Internal(msg)             => (STATUS_CODE_REASON_PHRASE.n500_internal_server_error, msg.as_str()),
         };
 

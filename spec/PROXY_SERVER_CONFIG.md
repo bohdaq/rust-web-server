@@ -104,8 +104,9 @@ name = "api-proxy"
     upstream_scheme    = "http"     # "http" | "https" | "h2"
 
   [route.middleware]
-  rate_limit = { max_requests = 500, window_secs = 60 }
-  auth       = { type = "jwt", secret_env = "JWT_SECRET" }
+  rate_limit    = { max_requests = 500, window_secs = 60 }
+  auth          = { type = "jwt", secret_env = "JWT_SECRET" }
+  max_body_size = 1048576   # 413 if this route's request body exceeds 1 MiB
 
     [[route.middleware.rewrite.request]]
     type  = "header_set"
@@ -323,6 +324,23 @@ All middleware keys under `[route.middleware]` are optional. Absent keys inherit
 | `rewrite.response[]` | array of rules | Transform the response before returning |
 | `ip_filter.allow` | array of CIDR strings | Allowlist; 403 for non-matching IPs |
 | `ip_filter.deny` | array of CIDR strings | Denylist; 403 for matching IPs |
+| `timeout_ms` | integer | 504 if the route (including every other middleware layer) doesn't respond within this many milliseconds |
+| `max_body_size` | integer (bytes) | 413 if this route's request body exceeds this many bytes — a route-specific ceiling on top of the global `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`, checked after the body is already fully read (see "Max body size vs. the global limit" below) |
+
+### Max body size vs. the global limit
+
+`RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (an environment variable, applying process-wide to every route) is checked against the declared `Content-Length` *before* any of an oversized body is read off the socket — it's what actually bounds server memory. `[route.middleware] max_body_size` is a *different, additional* check: it can only run after `RouteMatcher` has already resolved which route a request belongs to, which requires the complete `Request` — body included — to already exist. So a per-route limit can't prevent the memory from being spent for that one request; it exists to let one route be *stricter* than the global ceiling (e.g. a small JSON API route capped at 64 KiB even though the global limit is 50 MiB for a separate upload route), not to replace the global protection. Set both: the global var for the memory ceiling every route must respect, `max_body_size` on individual routes that need a tighter cap than that.
+
+```toml
+[[route]]
+name = "json-api"
+
+  [route.match]
+  path = "/api/*"
+
+  [route.middleware]
+  max_body_size = 65536    # 64 KiB — stricter than whatever the global limit is
+```
 
 ---
 

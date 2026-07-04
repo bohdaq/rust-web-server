@@ -8,7 +8,7 @@ use crate::middleware::WithMiddleware;
 use crate::proxy_config::{
     ActionConfig, AuthConfig, CompiledRoute, ConfigDrivenApp, DynamicProxy, MiddlewareConfig,
     ProxyConfig, RedirectAdapter, RespondAdapter, RouteMatcher, StaticAdapter, arc_app,
-    BearerAuthMiddleware, PerRouteRateLimit,
+    BearerAuthMiddleware, PerRouteMaxBodySize, PerRouteRateLimit,
 };
 
 /// Build a `ConfigDrivenApp` from `rws.config.toml` and spawn L4/WS proxy
@@ -193,13 +193,19 @@ pub fn build(config: ProxyConfig) -> (ConfigDrivenApp, Vec<std::thread::JoinHand
     (ConfigDrivenApp::new(compiled), handles)
 }
 
-/// Wrap `handler` with the middleware layers described by `mw`.
-/// Layers are applied innermost → outermost in the order:
-///   1. IP filter (outermost — rejects early)
-///   2. Rate limit
+/// Wrap `handler` with the middleware layers described by `mw`, innermost
+/// (closest to the handler) to outermost (runs first, on every request):
+///
+///   1. Cache (innermost)
+///   2. Rewrite (request + response rules combined)
 ///   3. Auth
-///   4. Rewrite (request + response rules combined)
-///   5. Cache (innermost middleware — closest to handler)
+///   4. Rate limit
+///   5. IP filter
+///   6. Timeout — bounds this route's total time, including every layer above
+///   7. Max body size (outermost) — a fast, non-blocking length check, so a
+///      request this route will reject outright doesn't pay for a timeout
+///      wrapper (which runs its target on a background thread) or engage
+///      any other layer at all
 fn apply_middleware(
     handler: Arc<dyn crate::application::Application + Send + Sync>,
     mw: &MiddlewareConfig,
@@ -299,13 +305,21 @@ fn apply_middleware(
         app = arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(filter));
     }
 
-    // ── Timeout (outermost — bounds this route's total time, including every
-    // other middleware above) ───────────────────────────────────────────────
+    // ── Timeout (bounds this route's total time, including every other
+    // middleware above) ─────────────────────────────────────────────────────
     if let Some(timeout_ms) = mw.timeout_ms {
         app = arc_app(crate::timeout::TimeoutLayer::from_arc(
             app,
             std::time::Duration::from_millis(timeout_ms),
         ));
+    }
+
+    // ── Max body size (outermost — see PerRouteMaxBodySize's docs for why
+    // this is not a substitute for RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES) ──────
+    if let Some(max_body_size) = mw.max_body_size {
+        app = arc_app(
+            WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(PerRouteMaxBodySize(max_body_size)),
+        );
     }
 
     app

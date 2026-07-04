@@ -935,7 +935,7 @@ strategy = "least_connections"  # "round_robin" (default) | "random" | "ip_hash"
 ```
 
 Route action types: `proxy`, `grpc`, `static`, `redirect`, `respond`, `mcp`.
-Per-route middleware: `rate_limit`, `cache`, `auth`, `ip_allow`/`ip_deny`, `rewrite`, `timeout_ms`.
+Per-route middleware: `rate_limit`, `cache`, `auth`, `ip_allow`/`ip_deny`, `rewrite`, `timeout_ms`, `max_body_size`.
 Upstream load-balancing strategies: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), `least_connections`.
 
 `auth` types (`[route.middleware.auth]`):
@@ -1261,6 +1261,21 @@ return `504 Gateway Timeout` as soon as the deadline passes, but a handler that 
 keeps running to completion in the background — this bounds the client's wait time, not the handler's
 resource usage. Only `with_timeout_async` gets genuine cancellation (dropping a suspended `Future`
 actually stops it).
+
+## Per-route max body size (config-driven proxy)
+
+```toml
+[route.middleware]
+max_body_size = 65536   # 413 if this route's request body exceeds 64 KiB
+```
+
+`0`/absent means no route-specific limit (same convention as `timeout_ms`). This is a *stricter,
+additional* cap on top of the global `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` — not a substitute for it.
+It's checked by `PerRouteMaxBodySize` after `RouteMatcher` has already resolved the route, which
+means the body has necessarily already been fully read (route matching requires the complete
+`Request`); it protects this route's own logic/upstream from a body that's within the global limit
+but too big for this specific route, not server memory from an unbounded upload — that's what the
+global env var is for.
 
 ---
 
