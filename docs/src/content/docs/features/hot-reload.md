@@ -1,6 +1,6 @@
 ---
 title: Hot Config Reload
-description: Update CORS rules, rate limits, log format, and TLS certificates without restarting the server.
+description: Update CORS rules, rate limits, log format, TLS certificates, and Tera templates without restarting the server.
 ---
 
 ## Triggering a reload
@@ -19,7 +19,7 @@ kill -HUP $(pidof rws)
 curl -X POST http://localhost:8080/admin/config/reload
 ```
 
-Both re-parse `rws.config.toml`, update process environment variables, apply the new rate-limit thresholds to the live `RateLimiter`, and publish a new `ConfigSnapshot` atomically. On `http2`/`http3` builds, `SIGHUP` also rebuilds the `TlsAcceptor` with fresh certificates for every virtual host.
+Both re-parse `rws.config.toml`, update process environment variables, apply the new rate-limit thresholds to the live `RateLimiter`, and publish a new `ConfigSnapshot` atomically. On `http2`/`http3` builds, `SIGHUP` also rebuilds the `TlsAcceptor` with fresh certificates for every virtual host. If the `tera` feature is enabled and `template::init()` was called, both also re-glob Tera templates from disk — see [Templates: hot reload](/building-apps/templates/#hot-reload).
 
 ## What reloads without restart
 
@@ -31,6 +31,7 @@ Both re-parse `rws.config.toml`, update process environment variables, apply the
 | Log format (`combined` / `json`) | `RWS_CONFIG_LOG_FORMAT` |
 | Request allocation size | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
 | TLS certificates (http2+ builds) | `RWS_CONFIG_TLS_CERT_FILE`, `RWS_CONFIG_TLS_KEY_FILE` |
+| Tera templates (`tera` feature) | re-read from the directory passed to `template::init()` — see [Templates: hot reload](/building-apps/templates/#hot-reload) |
 
 ## What requires a restart
 

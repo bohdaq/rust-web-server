@@ -155,7 +155,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Storage` / `LocalStorage` | `storage` (requires `storage-local` feature) | File storage abstraction. `Storage` trait: `put(key, data, content_type) -> Result<String, StorageError>`, `get(key)`, `delete(key)`, `url(key)` (no I/O). `LocalStorage::new(root)` stores objects as files under `root`; rejects `..` path segments; `.with_base_url(prefix)` makes `url()` return an HTTP path instead of a filesystem path. |
 | `S3Storage` / `S3Config` | `storage` (requires `storage-s3` feature) | `Storage` implementation for S3-compatible object storage (AWS S3, Cloudflare R2, MinIO) via the outbound HTTP client — no AWS SDK. Signs every request with AWS Signature Version 4 (`hmac` + `sha2`, already-in-tree crates). `S3Storage::from_env()` reads `RWS_S3_BUCKET/REGION/ENDPOINT`; credentials come from `RWS_S3_ACCESS_KEY`/`SECRET_KEY` if both are set, else auto-detected EKS IRSA / ECS task role / EC2 IMDSv2 workload identity (`RWS_S3_CREDENTIAL_SOURCE` forces a specific source). Uses path-style addressing (`{endpoint}/{bucket}/{key}`) for compatibility with custom endpoints. |
 | `AzureBlobStorage` / `AzureBlobConfig` | `storage` (requires `storage-azure` feature) | `Storage` implementation for Azure Blob Storage via the outbound HTTP client — no Azure SDK. Signs every request with the Shared Key HMAC-SHA256 scheme (`hmac` + `sha2`). `AzureBlobStorage::from_env()` reads `RWS_AZURE_ACCOUNT/CONTAINER/ENDPOINT`; credentials come from `RWS_AZURE_ACCOUNT_KEY` if set, else auto-detected Managed Identity (App Service/Container Apps identity endpoint, or VM/AKS IMDS as a last resort; `RWS_AZURE_CREDENTIAL_SOURCE` forces a specific source). |
-| `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. |
+| `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. `.reload()` (or the global `template::reload()`) re-reads templates from disk without a restart — wired into `config_reload::reload()`'s `SIGHUP` hook automatically. |
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
 | `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware proxying with a per-`[[upstream]]` `strategy`: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), or `least_connections` (routes to the live backend with fewest in-flight requests). `ConfigDrivenApp::with_config(ServerConfig)` pins its fallback `App` (unmatched requests — healthz/readyz/metrics/static/404) to explicit settings instead of reading `RWS_CONFIG_*` env vars per request. |
 | `StaticAdapter` | `proxy_config` | Action handler for `type = "static"` routes in `rws.config.toml`. Serves files from a configured `root` directory (independent of the process working directory), trying each `index` entry in order for directory requests; rejects any request path with a `..` segment (before or after percent-decoding) with `403`, missing files with `404`. |
@@ -2465,6 +2465,22 @@ Template:
   <li>{{ p.name }} — ${{ p.price }}</li>
 {% endfor %}
 ```
+
+**Hot reload**
+
+Edit a template file and reload it without restarting the server:
+
+```rust
+use rust_web_server::template;
+
+template::init("templates").unwrap();
+// ... edit templates/index.html on disk ...
+template::reload().unwrap();
+```
+
+`template::reload()` is also wired into the same `SIGHUP` hook as CORS/rate-limit/TLS-cert hot reload (`config_reload::reload()`), so `kill -HUP $(pidof rws)` picks up edited templates too — no need to call `template::reload()` yourself unless you want a different trigger (e.g. a file-watcher, or your own admin endpoint). It's a no-op if `template::init()` was never called, so enabling the `tera` feature without using templates doesn't make `SIGHUP` error.
+
+Reload re-globs the whole template directory (picking up new and removed files, not just edited content) and only replaces the live template set if every file still parses — a syntax error part-way through an edit fails the reload with `Err` and leaves the previous, working templates in place rather than serving a half-broken set.
 
 **Configuration**
 

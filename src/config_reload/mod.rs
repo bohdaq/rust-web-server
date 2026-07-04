@@ -22,6 +22,7 @@
 //! | Log format | `RWS_CONFIG_LOG_FORMAT` |
 //! | Request allocation size | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
 //! | Max body size | `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` |
+//! | Tera templates (`tera` feature, if `template::init()` was called) | re-read from disk — see [`crate::template`] |
 //!
 //! # What is NOT hot-reloadable (requires restart)
 //!
@@ -152,6 +153,11 @@ pub fn reload() {
 
     // Publish the new snapshot atomically.
     *global().write().unwrap() = snapshot.clone();
+
+    // Re-glob Tera templates from disk, if the `tera` feature is enabled and
+    // `template::init()` was actually called — a no-op otherwise.
+    #[cfg(feature = "tera")]
+    crate::template::reload_if_initialized();
 
     println!(
         "Config reloaded — cors_allow_all={} rate_limit={}/{} log_format={}",

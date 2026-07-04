@@ -180,7 +180,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Cookie jar — `CookieJar` parses; `SetCookie` builder writes all RFC 6265 attributes
 - Sessions — `SessionStore` in-memory TTL sessions; `DbSessionStore` persistent sessions backed by the model layer (survives restarts, multi-instance); `RedisSessionStore` Redis-backed sessions with automatic TTL expiry; cookie helpers included
 - JSON — `Json<T>` extractor + responder via `serde_json` (`serde` feature)
-- HTML templates — Tera engine (Jinja2 syntax); `template::render()` one-liner (`tera` feature)
+- HTML templates — Tera engine (Jinja2 syntax); `template::render()` one-liner; `template::reload()` hot-reloads edited templates from disk without a restart, wired into the same `SIGHUP` hook as CORS/rate-limit/TLS reload (`tera` feature)
 - Dependency injection — `Container` keyed by `TypeId`; concrete types and `dyn Trait`
 - In-process test client — `TestClient::new(app)` dispatches without a TCP socket
 - Per-instance typed config — `ServerConfig` struct; `App::with_config(config)`, `AppWithState::with_config`, `AsyncAppWithState::with_config`, and `ConfigDrivenApp::with_config` all pin an app to explicit settings for parallel-safe integration tests without env-var writes

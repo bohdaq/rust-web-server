@@ -1,6 +1,6 @@
 ---
 title: HTML Templates
-description: Render HTML responses with the Tera template engine via the tera feature flag.
+description: Render HTML responses with the Tera template engine via the tera feature flag, with hot reload for edited templates.
 ---
 
 `rust-web-server` integrates the [Tera](https://keats.github.io/tera/) template engine — a Jinja2-compatible HTML templating system with variables, control flow, filters, and inheritance.
@@ -238,6 +238,30 @@ let response = engine.response("hello.html", &ctx).unwrap();
 
 `TeraEngine::from_glob(pattern)` accepts any glob pattern Tera accepts, e.g. `"templates/**/*.html"`.
 
-:::note[Hot reload]
-The template engine is initialised once at startup via `OnceLock` and does not hot-reload. During development, restart the server to pick up template changes. A `SIGHUP` signal reloads configuration but not templates.
-:::
+## Hot reload
+
+Edit a template file and reload it without restarting the server:
+
+```rust
+use rust_web_server::template;
+
+template::init("templates").unwrap();
+// ... edit templates/index.html on disk ...
+template::reload().unwrap();
+```
+
+`template::reload()`:
+
+- **Re-globs the whole directory** — it picks up edited content in existing files *and* newly added or removed files matching the original pattern, not just a diff of what changed.
+- **Is atomic.** It builds the full replacement set of templates before swapping it in. If one edited file has a syntax error (or an `{% extends %}`/`{% import %}` chain no longer resolves), `reload()` returns `Err` and the previously-loaded templates keep serving — a bad edit can't leave the live server with a half-broken template set.
+- **Is wired into `SIGHUP` automatically.** [`config_reload::reload()`](/features/hot-reload/) calls it for you (as a no-op if `template::init()` was never called), so `kill -HUP $(pidof rws)` picks up edited templates alongside CORS/rate-limit/TLS-cert changes. Call `template::reload()` directly only if you want a different trigger — a file-watcher thread, or your own admin endpoint.
+
+The equivalent method exists on a standalone `TeraEngine` too — `engine.reload()` — for the multi-directory case described above. It requires the engine to have been built from a glob (`from_dir`/`from_glob`/`init`); an engine built with `TeraEngine::from_raw` has no directory to re-read and `reload()` returns `Err` for it.
+
+```rust
+use rust_web_server::template::TeraEngine;
+
+let mut engine = TeraEngine::from_dir("templates").unwrap();
+// ... edit a template file ...
+engine.reload().unwrap();
+```

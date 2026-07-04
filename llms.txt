@@ -1293,6 +1293,8 @@ ctx.insert("name", "Alice");
 let response = template::render("index.html", &ctx);
 ```
 
+Hot reload without restarting: `template::reload()` re-globs the template directory (edited content, added/removed files); on a syntax error it returns `Err` and keeps the previous templates serving rather than a half-broken set. Wired automatically into `config_reload::reload()`'s `SIGHUP` hook — a no-op if `template::init()` was never called.
+
 ---
 
 ## Virtual hosting / SNI routing
@@ -1425,7 +1427,7 @@ src/storage/            — Storage, LocalStorage, S3Storage, AzureBlobStorage (
                           Identity credentials (App Service/Container Apps / VM/AKS IMDS)
 src/symbol/             — ASCII/byte constants
 src/tcp_proxy/          — TcpProxy (L4)
-src/template/           — TeraEngine, global init/render (tera feature)
+src/template/           — TeraEngine, global init/render/reload (tera feature)
 src/test_client/        — TestClient
 src/thread_pool/        — ThreadPool (http1 feature)
 src/timeout/            — with_timeout, with_timeout_state, with_timeout_async, TimeoutLayer
