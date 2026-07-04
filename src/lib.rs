@@ -60,6 +60,7 @@ pub mod async_state;
 #[cfg(feature = "http2")]
 pub(crate) mod async_bridge;
 pub mod session;
+pub(crate) mod redis_protocol;
 pub mod sse;
 pub mod compression;
 pub mod cookie;

@@ -90,6 +90,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `TestClient` | `test_client` | In-process HTTP test client — no TCP socket required |
 | `FromRequest` / `Body` / `BodyText` / `Query` / `RequestHeaders` / `RequestId` | `extract` | Typed request extractors — parse body, query params, headers, or the request-id header, returning a ready error on failure (`RequestId` never fails; empty string if unset) |
 | `RateLimiter` | `rate_limit` | Per-IP sliding-window rate limiter; `global()` reads config from env vars |
+| `RedisRateLimiter` | `rate_limit` | Distributed fixed-window rate limiter backed by a Redis server via a hand-rolled RESP client; shares one counter across every `rws` instance. `from_env()` reads `RWS_REDIS_HOST/PORT/PASSWORD` + `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS/WINDOW_SECS`. |
 | `WebSocket` / `Frame` | `websocket` | RFC 6455 WebSocket handshake, frame read/write; SHA-1 and base64 built in |
 | `AppWithState<S>` | `state` | State-aware application with built-in dynamic routing; state shared via `Arc<S>`. Use `App::with_state(S)` as the entry point. `.with_config(ServerConfig)` pins the fallback `App` (for requests none of this app's routes match) to explicit CORS/CSP settings instead of reading `RWS_CONFIG_*` env vars per request — mirrors `App::with_config`. |
 | `Middleware` / `WithMiddleware` | `middleware` | Composable middleware pipeline wrapping any `Application`. Use `App::new().wrap(layer)` or `AppWithState::wrap(layer)`. |
@@ -649,6 +650,32 @@ Configure limits at startup:
 RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS=200   # requests per window (default 1000)
 RWS_CONFIG_RATE_LIMIT_WINDOW_SECS=60    # window length in seconds (default 60)
 ```
+
+---
+
+### 18b. Distributed rate limiting across multiple instances (RedisRateLimiter)
+
+`RateLimiter` tracks state in process memory: run two `rws` instances behind a load balancer and each enforces its own budget independently, so the effective limit doubles (or worse) as replicas scale out. `RedisRateLimiter` fixes this by keying the counter on a shared Redis server — every instance increments the same key, so the limit holds cluster-wide.
+
+```rust
+use rust_web_server::rate_limit::RedisRateLimiter;
+use rust_web_server::error::{AppError, IntoResponse};
+use rust_web_server::response::Response;
+
+let limiter = RedisRateLimiter::new("127.0.0.1:6379", None, 100, 60); // 100 req / 60s, shared across instances
+
+fn check_rate_limit(limiter: &RedisRateLimiter, ip: &str) -> Option<Response> {
+    match limiter.check(ip) {
+        Ok(true) => None,                                      // allowed
+        Ok(false) => Some(AppError::TooManyRequests.into_response()), // budget exhausted
+        Err(_) => None,                                         // Redis unreachable — fail open (or fail closed, your call)
+    }
+}
+```
+
+`RedisRateLimiter::from_env()` builds one from `RWS_REDIS_HOST` (default `127.0.0.1`), `RWS_REDIS_PORT` (default `6379`), `RWS_REDIS_PASSWORD` (optional), `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS` (default `1000`), `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS` (default `60`).
+
+Unlike `RateLimiter`'s sliding-window deque, `RedisRateLimiter` uses a fixed-window counter (`INCR` on a Redis key with a TTL) — the standard distributed rate-limiting pattern, since Redis guarantees `INCR` is atomic across every concurrent caller regardless of which `rws` instance issued it. The tradeoff: a client can burst up to `2x max_requests` across a window boundary. `check` returns `Err` (instead of silently choosing fail-open/fail-closed) when Redis is unreachable, so callers decide the tradeoff themselves.
 
 ---
 
