@@ -1300,18 +1300,46 @@ let server = McpServer::new("my-server", "1.0")
 async tool handler support exists yet (TODO-17), so there's nothing to `.await` on anyway; a
 thread-pool worker is tied up for up to `timeout`, same tradeoff `with_timeout` already accepts.
 `McpServer` mints a request id, registers a oneshot `mpsc::Sender` for it in
-`pending_sampling: Arc<Mutex<HashMap<String, mpsc::Sender<Result<String,String>>>>>`, sends the
+`pending_replies: Arc<Mutex<HashMap<String, mpsc::Sender<Result<String,String>>>>>`, sends the
 request via `send_sse_to_sessions`, and blocks on the matching receiver. The client's reply is a
 JSON-RPC *response* (no `method`) — `handle_request_with_context`/`handle_batch` check a
-method-less body with a recognized `id` against `pending_sampling` before falling back to the old
+method-less body with a recognized `id` against `pending_replies` before falling back to the old
 "Missing method" error. Fails fast if the client's `initialize` never declared
-`capabilities.sampling` (a new `StoredClientInfo.supports_sampling`, since sampling is a *client*
+`capabilities.sampling` (a `StoredClientInfo.supports_sampling`, since sampling is a *client*
 capability, not server-advertised), if there's no session id, or if `ctx` has no live server;
-times out if the client never answers.
+times out if the client never answers. `sample()` and `list_roots()` below both wrap the same
+shared `send_and_wait` mechanism — only the method/params sent and the `result` parsing differ.
 
 Verified end-to-end with a real server: a `tools/call` invoking `ctx.sample(...)` blocked, the
 `sampling/createMessage` request appeared on the session's SSE stream, and posting a response with
 the matching id unblocked the original call with the sampled content.
+
+**`roots/list` + `notifications/roots/list_changed`** — a client advertises which filesystem roots
+it has access to, so file-system-aware tools stay within them. `ctx.list_roots(timeout)`:
+
+```rust
+use rust_web_server::mcp::McpServer;
+use std::time::Duration;
+
+let server = McpServer::new("my-server", "1.0")
+    .tool_with_context("list_workspace_files", "List client workspace files", "{}", |ctx, _args| {
+        let roots = ctx.list_roots(Duration::from_secs(10))?;
+        let names: Vec<String> = roots.iter().map(|r| r.uri.clone()).collect();
+        Ok(rust_web_server::mcp::McpContent::text(names.join(", ")))
+    });
+```
+
+Unlike `sample()`, results are **cached per session** — `StoredClientInfo.roots: Option<Vec<McpRoot>>`
+(`None` = never fetched or invalidated). Only the first `list_roots()` call in a session sends
+anything; later calls return the cache. `notifications/roots/list_changed` (special-cased ahead of
+the generic notification branch, like `notifications/cancelled`) clears that session's cache via
+`invalidate_roots_cache`, keyed by the notification's own `Mcp-Session-Id` (it carries no params —
+just "this connection's cache is stale"). Fails fast the same way `sample()` does (translated to
+roots); times out if the client never answers a live request.
+
+Verified end-to-end with a real server: an initial `list_roots()` round-tripped and cached; a
+second call returned instantly with no new SSE frame; `notifications/roots/list_changed` followed
+by a third call produced a fresh `roots/list` request that resolved to newly-provided roots.
 
 ---
 

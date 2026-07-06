@@ -1997,7 +1997,7 @@ fn sample_full_round_trip_via_sse_and_post_response() {
 
     assert_eq!(call_resp.status(), 200);
     assert!(call_resp.body_text().contains('4'), "expected the sampled response text: {}", call_resp.body_text());
-    assert!(srv_for_responder.pending_sampling.lock().unwrap().is_empty(), "pending_sampling entry should be cleaned up after delivery");
+    assert!(srv_for_responder.pending_replies.lock().unwrap().is_empty(), "pending_replies entry should be cleaned up after delivery");
 }
 
 #[test]
@@ -2034,5 +2034,154 @@ fn sample_error_response_is_surfaced_to_the_caller() {
     responder.join().unwrap();
 
     assert!(call_resp.body_text().contains("user declined the sampling request"), "unexpected body: {}", call_resp.body_text());
+}
+
+// ── roots/list and notifications/roots/list_changed ───────────────────────────
+
+fn make_roots_server() -> McpServer {
+    McpServer::new("test-srv", "0.1").tool_with_context("get_roots", "Get workspace roots", "{}", |ctx, _args| {
+        match ctx.list_roots(Duration::from_millis(500)) {
+            Ok(roots) => Ok(McpContent::text(roots.iter().map(|r| r.uri.clone()).collect::<Vec<_>>().join(","))),
+            Err(e) => Ok(McpContent::text(e)),
+        }
+    })
+}
+
+#[test]
+fn list_roots_fails_fast_without_roots_capability_declared() {
+    let client = TestClient::new(make_roots_server());
+    let init_resp = client.post("/mcp").body_text(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#, // no capabilities.roots
+    ).send();
+    let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
+
+    let call_resp = client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_roots","arguments":{}}}"#)
+        .send();
+    assert!(call_resp.body_text().contains("did not declare roots support"), "unexpected body: {}", call_resp.body_text());
+}
+
+#[test]
+fn list_roots_fails_without_a_session_id_even_with_roots_declared() {
+    let srv = make_roots_server();
+    let ctx = McpContext { roots_supported: true, ..Default::default() };
+    let resp = srv.handle_request_with_context(
+        r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"get_roots","arguments":{}}}"#,
+        ctx,
+    );
+    let body = body_of(&resp);
+    assert!(body.contains("requires a session"), "expected a session-id error: {body}");
+}
+
+#[test]
+fn list_roots_times_out_when_the_client_never_responds() {
+    let client = TestClient::new(make_roots_server());
+    let init_resp = client.post("/mcp").body_text(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"roots":{}}}}"#,
+    ).send();
+    let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
+    // Deliberately no GET /mcp SSE connection opened — nobody could ever respond.
+
+    let call_resp = client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_roots","arguments":{}}}"#)
+        .send();
+    assert!(call_resp.body_text().contains("timed out"), "unexpected body: {}", call_resp.body_text());
+}
+
+#[test]
+fn list_roots_full_round_trip_and_caches_within_the_session() {
+    let srv_for_responder = make_roots_server();
+    let client = TestClient::new(srv_for_responder.clone());
+
+    let init_resp = client.post("/mcp").body_text(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"roots":{}}}}"#,
+    ).send();
+    let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
+
+    let mut sse_resp = srv_for_responder.start_sse_stream(&get_request_with_session(Some(&session_id)));
+    let mut reader = sse_resp.stream_pipe.take().unwrap();
+
+    // The responder only needs to answer once — the second tools/call
+    // below should be served from cache with no further SSE request.
+    let responder_srv = srv_for_responder.clone();
+    let responder = std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        let n = reader.read(&mut buf).unwrap();
+        let text = String::from_utf8_lossy(&buf[..n]).into_owned();
+        let json_line = text.trim().trim_start_matches("data:").trim();
+        assert!(json_line.contains(r#""method":"roots/list""#), "unexpected SSE frame: {json_line}");
+        let id = json_rpc::extract_id(json_line).expect("outbound roots/list request should carry an id");
+        let response_body = format!(
+            r#"{{"jsonrpc":"2.0","id":{id},"result":{{"roots":[{{"uri":"file:///workspace","name":"Workspace"}}]}}}}"#
+        );
+        responder_srv.handle_request(&response_body);
+    });
+
+    let first_call = client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_roots","arguments":{}}}"#)
+        .send();
+    responder.join().unwrap();
+    assert!(first_call.body_text().contains("file:///workspace"), "unexpected first call body: {}", first_call.body_text());
+
+    let second_call = client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":3,"params":{"name":"get_roots","arguments":{}}}"#)
+        .send();
+    assert!(second_call.body_text().contains("file:///workspace"), "expected the cached result: {}", second_call.body_text());
+}
+
+#[test]
+fn roots_list_changed_notification_invalidates_the_cache() {
+    let srv_for_responder = make_roots_server();
+    let client = TestClient::new(srv_for_responder.clone());
+
+    let init_resp = client.post("/mcp").body_text(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"roots":{}}}}"#,
+    ).send();
+    let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
+
+    let mut sse_resp = srv_for_responder.start_sse_stream(&get_request_with_session(Some(&session_id)));
+    let mut reader = sse_resp.stream_pipe.take().unwrap();
+
+    // Answers exactly two roots/list requests — one for the first
+    // tools/call, one for the second (post-invalidation) tools/call. If
+    // invalidation didn't work, the second tools/call would be served from
+    // cache and this thread would hang forever waiting on its second read.
+    let responder_srv = srv_for_responder.clone();
+    let responder = std::thread::spawn(move || {
+        for _ in 0..2 {
+            let mut buf = [0u8; 4096];
+            let n = reader.read(&mut buf).unwrap();
+            let text = String::from_utf8_lossy(&buf[..n]).into_owned();
+            let json_line = text.trim().trim_start_matches("data:").trim();
+            let id = json_rpc::extract_id(json_line).expect("expected a roots/list request");
+            let response_body = format!(
+                r#"{{"jsonrpc":"2.0","id":{id},"result":{{"roots":[{{"uri":"file:///workspace","name":"Workspace"}}]}}}}"#
+            );
+            responder_srv.handle_request(&response_body);
+        }
+    });
+
+    let first_call = client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_roots","arguments":{}}}"#)
+        .send();
+    assert!(first_call.body_text().contains("file:///workspace"), "unexpected first call body: {}", first_call.body_text());
+
+    client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_text(r#"{"jsonrpc":"2.0","method":"notifications/roots/list_changed"}"#)
+        .send();
+
+    let second_call = client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":3,"params":{"name":"get_roots","arguments":{}}}"#)
+        .send();
+
+    responder.join().unwrap();
+    assert!(second_call.body_text().contains("file:///workspace"), "unexpected second call body: {}", second_call.body_text());
 }
 

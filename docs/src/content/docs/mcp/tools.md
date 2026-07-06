@@ -189,6 +189,37 @@ let mcp = McpServer::new("my-server", "1.0")
 
 Otherwise, it fails with a timeout error if the client doesn't respond in time — including if the client simply has no [`GET /mcp` SSE connection](/mcp/overview/#sse-streaming-transport) open for that session at all, since there's no separate "not connected" signal.
 
+## Filesystem roots
+
+A client can advertise which filesystem roots (workspace directories, mounted volumes) it has access to, so a file-system-aware tool knows to stay within them rather than assuming access to the whole filesystem. `ctx.list_roots(timeout)` asks the connected client for its roots, built on the exact same request/response mechanism as [`ctx.sample()`](#server-side-sampling) — a server-initiated `roots/list` request over SSE, answered by the client's `POST /mcp`:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+use std::time::Duration;
+
+let mcp = McpServer::new("my-server", "1.0")
+    .tool_with_context(
+        "list_workspace_files",
+        "List files in the client's workspace",
+        r#"{"type":"object"}"#,
+        |ctx, _args| {
+            let roots = ctx.list_roots(Duration::from_secs(10))?;
+            let names: Vec<String> = roots.iter().map(|r| r.uri.clone()).collect();
+            Ok(McpContent::text(names.join(", ")))
+        },
+    );
+```
+
+Each `McpRoot` has a `uri` (typically a `file://` URI, per spec) and an optional human-readable `name`.
+
+Unlike `ctx.sample()`, the result is **cached per session**: the first `list_roots()` call after `initialize` does a live round trip; every later call in the same session returns the cached list without sending anything, so a handler can call it on every invocation without worrying about spamming the client. The cache is invalidated when the client sends `notifications/roots/list_changed` — the next `list_roots()` call after that does a fresh round trip.
+
+:::caution[Same blocking caveat as `ctx.sample()`]
+`ctx.list_roots()` also blocks the calling thread rather than being `async fn`, for the same reason `ctx.sample()` does — see the caution above.
+:::
+
+`ctx.list_roots()` fails fast, before sending anything, under the same conditions as `ctx.sample()` (translated to roots): the client's `initialize` call never declared `capabilities.roots`, this request has no session id, or `ctx` has no live server behind it. Otherwise it fails with a timeout error if the client doesn't respond to a live request in time.
+
 ## Tool annotations
 
 The MCP 2025-03-26 spec adds **annotations** — behavioral hints that clients like Claude Desktop use to decide whether to warn or ask for confirmation before calling a tool (e.g. skip confirmation for a read-only tool, warn before a destructive one). Register them with `.tool_annotated()`, which takes the same arguments as `.tool()` plus a `ToolAnnotations` value:

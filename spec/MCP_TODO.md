@@ -783,21 +783,64 @@ paths) rather than the request-sending half, which was a short hop from TODO-14'
 
 ---
 
-### TODO-16: `roots/list` and `notifications/roots/list_changed`
+### ✅ TODO-16: `roots/list` and `notifications/roots/list_changed` — Done (v17.89.0)
 
-Clients can advertise filesystem roots to the server so the server knows which directories the
-client has access to. Useful for file-system-aware tools that should only operate within the
-client's workspace.
+`ctx.list_roots(timeout)` asks the connected client which filesystem roots it has access to,
+returning `Vec<McpRoot>` (`{ uri: String, name: Option<String> }`, matching this entry's own sketch
+of the shape). `notifications/roots/list_changed` invalidates a per-session cache so the next call
+re-fetches.
 
-**Store received roots in `McpContext` (TODO-2):**
-```rust
-pub roots: Vec<McpRoot>,  // { uri: String, name: Option<String> }
-```
+**Not stored directly on `McpContext` as `pub roots: Vec<McpRoot>`**, unlike the entry's own sketch
+— `McpContext` is rebuilt fresh for every request (from headers, in `context_for`), so a field on it
+has no way to persist a fetched-once value across a session's multiple requests the way this
+entry's caching intent (implied by "re-request... on list_changed", which only makes sense against
+something that was cached) requires. Roots are cached instead in the existing per-session
+`StoredClientInfo` (alongside `client_name`/`client_version`/`supports_sampling`) as a new
+`roots: Option<Vec<McpRoot>>` field — `None` meaning "never fetched, or invalidated." `ctx.list_roots()`
+is the accessor: cache hit returns immediately with nothing sent; cache miss does a live round trip
+and populates it.
 
-**On `notifications/roots/list_changed`:** re-request `roots/list` from the client (requires
-sampling-style bidirectional call — needs TODO-15).
+**"Requires sampling-style bidirectional call — needs TODO-15" was exactly right, and TODO-15 is
+now done** — so this entry's "partial implementation" fallback wasn't needed. Rather than
+duplicating TODO-15's request/response plumbing a second time, `McpContext::sample`'s internals were
+extracted into a shared private `send_and_wait(method, params_json, timeout)` (mint a request id,
+register a reply channel in what was `pending_sampling` and is now more accurately named
+`pending_replies: Arc<Mutex<HashMap<String, mpsc::Sender<Result<String,String>>>>>` since it's no
+longer sampling-specific, send via `send_sse_to_sessions`, block, clean up). `sample()` and the new
+`list_roots()` are now both thin callers of it, differing only in the method/params sent and how
+each parses its own `result` shape (`parse_sampling_response` vs. the new `parse_roots_response`).
 
-**Effort:** medium (depends on TODO-15 for full implementation; partial read from context is small).
+**`notifications/roots/list_changed` needed a session-id-only correlation**, unlike
+`notifications/cancelled` (which keys off a `requestId` in its own params) — the spec's
+`list_changed` notification carries no params at all; it's purely "the connection that sent this
+has stale roots." `handle_request_with_context`/`handle_batch` both special-case it (ahead of the
+generic notification-swallowing branch, same position as the `cancelled` check) and call a new
+`invalidate_roots_cache(&ctx.session_id)`, which clears that session's `StoredClientInfo.roots`
+back to `None`.
+
+**`roots` capability support-check mirrors `sampling`'s exactly**: a new
+`StoredClientInfo.supports_roots` bool, set from `params.capabilities.roots`'s presence at
+`initialize` time (client-declared, like sampling, not server-advertised), gates `list_roots()`
+failing fast before ever sending a request to a client that never said it could answer one.
+
+**Verified end-to-end against a real running server**, exercising the full lifecycle in one
+session: `initialize` declaring `capabilities.roots` → `GET /mcp` → a `tools/call` invoking
+`ctx.list_roots(...)`, which round-tripped over SSE and returned the client's roots → a second
+`tools/call` returned instantly from cache (no new SSE frame) → `notifications/roots/list_changed`
+→ a third `tools/call` produced a *new* `roots/list` request with a fresh id, resolving to
+newly-provided roots — confirming both the cache and its invalidation actually work, not just that
+a single round trip does.
+
+5 new tests in `src/mcp/tests.rs`: fails fast without a declared `roots` capability; fails fast
+without a session id even when declared; times out when nobody answers; a full round trip that also
+proves caching (a second `tools/call` needs no responder interaction at all to succeed); and
+`notifications/roots/list_changed` invalidation (a responder thread answering exactly two
+sequential `roots/list` requests — the test would hang, not merely fail, if invalidation didn't
+work, since the responder would block forever on a second request that never arrives).
+
+**Effort:** ended up smaller than "medium" once TODO-15's plumbing existed to extract and reuse —
+the actual new surface area was `McpRoot`, the cache field, and the notification correlation, not a
+second bidirectional-request implementation.
 
 ---
 
@@ -849,7 +892,7 @@ Phase 3 — Enterprise + advanced
   TODO-14 resources/subscribe             (medium, needs TODO-7 + TODO-9)      ✅ done (v17.87.0)
   TODO-17 async tool handlers             (medium, http2 only)
   TODO-15 sampling/createMessage          (large)               ✅ done (v17.88.0)
-  TODO-16 roots/list                      (medium, needs TODO-15)
+  TODO-16 roots/list                      (medium, needs TODO-15)             ✅ done (v17.89.0)
 ```
 
 ---
@@ -874,4 +917,4 @@ Phase 3 — Enterprise + advanced
 | 14 | `resources/subscribe` | 2024-11-05 | **P3** | Medium | ✅ Done (v17.87.0) |
 | 17 | Async tool handlers | Ergonomics | **P3** | Medium | `http2` feature |
 | 15 | `sampling/createMessage` | 2024-11-05 | **P3** | Large | ✅ Done (v17.88.0) |
-| 16 | `roots/list` | 2024-11-05 | **P3** | Medium | #15 |
+| 16 | `roots/list` | 2024-11-05 | **P3** | Medium | ✅ Done (v17.89.0) |

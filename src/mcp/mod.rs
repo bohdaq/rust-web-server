@@ -273,10 +273,19 @@ pub struct McpContext {
     /// sending a request the client never said it could answer.
     sampling_supported: bool,
     /// Shared handle to the owning [`McpServer`]'s in-flight
-    /// `sampling/createMessage` registry, used by [`Self::sample`]. Not
+    /// server-initiated-request registry (`sampling/createMessage`,
+    /// `roots/list`), used by [`Self::sample`]/[`Self::list_roots`]. Not
     /// `pub` — see `sse_clients` for the same "plumbing, not context data"
     /// reasoning; `None` under the same conditions.
-    pending_sampling: Option<Arc<Mutex<HashMap<String, mpsc::Sender<Result<String, String>>>>>>,
+    pending_replies: Option<Arc<Mutex<HashMap<String, mpsc::Sender<Result<String, String>>>>>>,
+    /// Whether this session's `initialize` call declared
+    /// `params.capabilities.roots`, checked by [`Self::list_roots`] before
+    /// sending a request the client never said it could answer.
+    roots_supported: bool,
+    /// Shared handle to the owning [`McpServer`]'s session registry, used
+    /// by [`Self::list_roots`] to read/write this session's cached roots
+    /// list. Not `pub` — plumbing, not context data.
+    sessions: Option<Arc<Mutex<HashMap<String, StoredClientInfo>>>>,
 }
 
 impl McpContext {
@@ -405,16 +414,6 @@ impl McpContext {
         if !self.sampling_supported {
             return Err("the connected client did not declare sampling support in its initialize capabilities".to_string());
         }
-        let session_id = self.session_id.clone()
-            .ok_or_else(|| "sampling requires a session (Mcp-Session-Id)".to_string())?;
-        let sse_clients = self.sse_clients.as_ref()
-            .ok_or_else(|| "sampling requires a live server (this context has none)".to_string())?;
-        let pending = self.pending_sampling.as_ref()
-            .ok_or_else(|| "sampling requires a live server (this context has none)".to_string())?;
-
-        let request_id = format!("\"{}\"", crate::request_id::generate_request_id());
-        let (tx, rx) = mpsc::channel::<Result<String, String>>();
-        pending.lock().unwrap().insert(request_id.clone(), tx);
 
         let messages_json: Vec<String> = request.messages.iter().map(|m| m.to_json()).collect();
         let system_prompt_field = match &request.system_prompt {
@@ -425,9 +424,89 @@ impl McpContext {
             r#"{{"messages":[{}],"maxTokens":{}{system_prompt_field}}}"#,
             messages_json.join(","), request.max_tokens,
         );
-        let rpc = format!(
-            r#"{{"jsonrpc":"2.0","id":{request_id},"method":"sampling/createMessage","params":{params}}}"#
-        );
+
+        let result_json = self.send_and_wait("sampling/createMessage", Some(&params), timeout)?;
+        parse_sampling_response(&result_json)
+    }
+
+    /// Ask the connected client which filesystem roots (workspace
+    /// directories, mounted volumes, ...) it has access to — useful for a
+    /// file-system-aware tool that should only operate within the client's
+    /// declared workspace rather than the whole filesystem.
+    ///
+    /// Like [`Self::sample`], this reverses the usual request direction (a
+    /// server-initiated `roots/list` request over SSE, answered by the
+    /// client's own `POST /mcp`) and blocks the calling thread for up to
+    /// `timeout` — see `sample`'s docs for why blocking is deliberate here.
+    ///
+    /// The result is cached per session: the first call after `initialize`
+    /// (or after the client sends `notifications/roots/list_changed`, which
+    /// invalidates the cache) does a live round trip; later calls in the
+    /// same session return the cached list without sending anything. A tool
+    /// handler can call this on every invocation without worrying about
+    /// spamming the client with redundant `roots/list` requests.
+    ///
+    /// Fails fast, before sending anything, under the same conditions as
+    /// [`Self::sample`] (translated to roots): the client never declared
+    /// `capabilities.roots`, this request has no session id, or `ctx` has
+    /// no live server behind it.
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::mcp::McpServer;
+    /// use std::time::Duration;
+    ///
+    /// let server = McpServer::new("my-server", "1.0")
+    ///     .tool_with_context("list_workspace_files", "List files in the client's workspace", "{}", |ctx, _args| {
+    ///         let roots = ctx.list_roots(Duration::from_secs(10))?;
+    ///         let names: Vec<String> = roots.iter().map(|r| r.uri.clone()).collect();
+    ///         Ok(rust_web_server::mcp::McpContent::text(names.join(", ")))
+    ///     });
+    /// ```
+    pub fn list_roots(&self, timeout: Duration) -> Result<Vec<McpRoot>, String> {
+        if !self.roots_supported {
+            return Err("the connected client did not declare roots support in its initialize capabilities".to_string());
+        }
+
+        if let (Some(session_id), Some(sessions)) = (&self.session_id, &self.sessions) {
+            if let Some(cached) = sessions.lock().unwrap().get(session_id).and_then(|info| info.roots.clone()) {
+                return Ok(cached);
+            }
+        }
+
+        let result_json = self.send_and_wait("roots/list", None, timeout)?;
+        let roots = parse_roots_response(&result_json)?;
+
+        if let (Some(session_id), Some(sessions)) = (&self.session_id, &self.sessions) {
+            if let Some(info) = sessions.lock().unwrap().get_mut(session_id) {
+                info.roots = Some(roots.clone());
+            }
+        }
+
+        Ok(roots)
+    }
+
+    /// Send a JSON-RPC request to the client for this context's session and
+    /// block for the reply — the shared send-and-correlate mechanic behind
+    /// [`Self::sample`] and [`Self::list_roots`]. Returns the raw `result`
+    /// JSON string (not yet parsed into either method's own response type)
+    /// on success.
+    fn send_and_wait(&self, method: &str, params_json: Option<&str>, timeout: Duration) -> Result<String, String> {
+        let session_id = self.session_id.clone()
+            .ok_or_else(|| format!("{method} requires a session (Mcp-Session-Id)"))?;
+        let sse_clients = self.sse_clients.as_ref()
+            .ok_or_else(|| format!("{method} requires a live server (this context has none)"))?;
+        let pending = self.pending_replies.as_ref()
+            .ok_or_else(|| format!("{method} requires a live server (this context has none)"))?;
+
+        let request_id = format!("\"{}\"", crate::request_id::generate_request_id());
+        let (tx, rx) = mpsc::channel::<Result<String, String>>();
+        pending.lock().unwrap().insert(request_id.clone(), tx);
+
+        let params_field = match params_json {
+            Some(p) => format!(r#","params":{p}"#),
+            None => String::new(),
+        };
+        let rpc = format!(r#"{{"jsonrpc":"2.0","id":{request_id},"method":"{method}"{params_field}}}"#);
 
         send_sse_to_sessions(sse_clients, &[session_id], &rpc);
 
@@ -435,9 +514,9 @@ impl McpContext {
         pending.lock().unwrap().remove(&request_id);
 
         match outcome {
-            Ok(Ok(result_json)) => parse_sampling_response(&result_json),
+            Ok(Ok(result_json)) => Ok(result_json),
             Ok(Err(e)) => Err(e),
-            Err(_) => Err("sampling/createMessage timed out waiting for the client's response".to_string()),
+            Err(_) => Err(format!("{method} timed out waiting for the client's response")),
         }
     }
 }
@@ -489,10 +568,34 @@ fn parse_sampling_response(result_json: &str) -> Result<SamplingResponse, String
     Ok(SamplingResponse { role, content, model, stop_reason })
 }
 
+/// One filesystem root a client has access to, returned by
+/// [`McpContext::list_roots`] — a workspace directory, a mounted volume,
+/// or similar. `uri` is typically a `file://` URI per spec.
+#[derive(Debug, Clone)]
+pub struct McpRoot {
+    pub uri: String,
+    /// A human-readable label for the root, if the client provided one.
+    pub name: Option<String>,
+}
+
+/// Parse a `roots/list` response's `result` object (already extracted from
+/// the enclosing JSON-RPC envelope) into a `Vec<McpRoot>`.
+fn parse_roots_response(result_json: &str) -> Result<Vec<McpRoot>, String> {
+    let roots_array = json_rpc::extract_raw(result_json, "roots")
+        .ok_or_else(|| "roots/list response missing roots".to_string())?;
+    let roots = json_rpc::split_array_elements(&roots_array).iter().map(|elem| {
+        McpRoot {
+            uri: json_rpc::extract_str(elem, "uri").unwrap_or_default(),
+            name: json_rpc::extract_str(elem, "name"),
+        }
+    }).collect();
+    Ok(roots)
+}
+
 /// `clientInfo` recorded for one session at `initialize` time, looked up by
 /// `Mcp-Session-Id` for later requests in the same session. See
 /// `McpServer`'s `sessions` field doc comment for the unbounded-growth caveat.
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 struct StoredClientInfo {
     name: Option<String>,
     version: Option<String>,
@@ -503,6 +606,15 @@ struct StoredClientInfo {
     /// sending a `sampling/createMessage` request that the client would
     /// have no idea how to answer.
     supports_sampling: bool,
+    /// Whether this session's `initialize` call declared `params.capabilities.roots`,
+    /// checked by [`McpContext::list_roots`] the same way `supports_sampling` gates `sample`.
+    supports_roots: bool,
+    /// Cached result of this session's last `roots/list` round trip, read
+    /// and written by [`McpContext::list_roots`]. `None` means "never
+    /// fetched, or invalidated" — set back to `None` when this session
+    /// sends `notifications/roots/list_changed`, so the next `list_roots`
+    /// call does a fresh round trip instead of serving stale data.
+    roots: Option<Vec<McpRoot>>,
 }
 
 // ── ToolAnnotations ───────────────────────────────────────────────────────────
@@ -763,7 +875,7 @@ pub struct McpServer {
     /// sampling reply (via [`Self::try_deliver_sampling_response`]) rather
     /// than an invalid request. See [`McpContext::sample`] for the
     /// send-and-block side.
-    pending_sampling: Arc<Mutex<HashMap<String, mpsc::Sender<Result<String, String>>>>>,
+    pending_replies: Arc<Mutex<HashMap<String, mpsc::Sender<Result<String, String>>>>>,
 }
 
 /// One `GET /mcp` SSE client: its outbound channel plus the
@@ -814,7 +926,7 @@ impl McpServer {
             min_log_level: Arc::new(Mutex::new(LogLevel::Debug)),
             cancellations: Arc::new(Mutex::new(HashMap::new())),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
-            pending_sampling: Arc::new(Mutex::new(HashMap::new())),
+            pending_replies: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -1433,6 +1545,11 @@ impl McpServer {
             return no_content();
         }
 
+        if method == "notifications/roots/list_changed" {
+            self.invalidate_roots_cache(&ctx.session_id);
+            return no_content();
+        }
+
         // Notifications have no `id` — acknowledge with 202 and no body.
         if method == "notifications/initialized" || (id.is_none() && method != "ping") {
             return no_content();
@@ -1498,6 +1615,11 @@ impl McpServer {
 
             if method == "notifications/cancelled" {
                 self.handle_cancellation(elem);
+                continue;
+            }
+
+            if method == "notifications/roots/list_changed" {
+                self.invalidate_roots_cache(&ctx.session_id);
                 continue;
             }
 
@@ -1595,15 +1717,30 @@ impl McpServer {
         }
     }
 
+    /// Handle `notifications/roots/list_changed`: clear this session's
+    /// cached `roots/list` result (if any), so the next
+    /// [`McpContext::list_roots`] call in this session does a fresh round
+    /// trip instead of serving stale data. Correlated purely by this
+    /// request's own `Mcp-Session-Id` (`session_id`) — unlike
+    /// `notifications/cancelled`, this notification carries no params of
+    /// its own to key off of; it's about "your cache for *this connection*
+    /// is stale," not any other request.
+    fn invalidate_roots_cache(&self, session_id: &Option<String>) {
+        let Some(sid) = session_id else { return };
+        if let Some(info) = self.sessions.lock().unwrap().get_mut(sid) {
+            info.roots = None;
+        }
+    }
+
     /// If `body` is a JSON-RPC *response* (no `method`, by definition — see
     /// [`Self::handle_request_with_context`]) to a `sampling/createMessage`
     /// request this server sent and is still waiting on (`id` found in
-    /// `pending_sampling`), deliver it to the blocked [`McpContext::sample`]
+    /// `pending_replies`), deliver it to the blocked [`McpContext::sample`]
     /// call and return `true`. Returns `false` for any `id` this server
     /// isn't tracking — the caller still needs to treat that as a genuine
     /// malformed/unrecognized message.
     fn try_deliver_sampling_response(&self, id: &str, body: &str) -> bool {
-        let sender = match self.pending_sampling.lock().unwrap().remove(id) {
+        let sender = match self.pending_replies.lock().unwrap().remove(id) {
             Some(s) => s,
             None => return false,
         };
@@ -1652,9 +1789,12 @@ impl McpServer {
             ),
             None => (None, None),
         };
-        let supports_sampling = params.as_deref()
-            .and_then(|p| json_rpc::extract_raw(p, "capabilities"))
-            .and_then(|c| json_rpc::extract_raw(&c, "sampling"))
+        let capabilities = params.as_deref().and_then(|p| json_rpc::extract_raw(p, "capabilities"));
+        let supports_sampling = capabilities.as_deref()
+            .and_then(|c| json_rpc::extract_raw(c, "sampling"))
+            .is_some();
+        let supports_roots = capabilities.as_deref()
+            .and_then(|c| json_rpc::extract_raw(c, "roots"))
             .is_some();
 
         eprintln!(
@@ -1667,7 +1807,7 @@ impl McpServer {
         self.sessions
             .lock()
             .unwrap()
-            .insert(session_id.clone(), StoredClientInfo { name, version, supports_sampling });
+            .insert(session_id.clone(), StoredClientInfo { name, version, supports_sampling, supports_roots, roots: None });
 
         response.headers.push(Header {
             name: "Mcp-Session-Id".to_string(),
@@ -1995,12 +2135,12 @@ impl McpServer {
             .get_header("Mcp-Session-Id".to_string())
             .map(|h| h.value.clone());
 
-        let (client_name, client_version, sampling_supported) = match &session_id {
+        let (client_name, client_version, sampling_supported, roots_supported) = match &session_id {
             Some(sid) => match self.sessions.lock().unwrap().get(sid) {
-                Some(info) => (info.name.clone(), info.version.clone(), info.supports_sampling),
-                None => (None, None, false),
+                Some(info) => (info.name.clone(), info.version.clone(), info.supports_sampling, info.supports_roots),
+                None => (None, None, false, false),
             },
-            None => (None, None, false),
+            None => (None, None, false, false),
         };
 
         McpContext {
@@ -2012,7 +2152,9 @@ impl McpServer {
             sse_clients: Some(self.sse_clients.clone()),
             cancellation: None,
             sampling_supported,
-            pending_sampling: Some(self.pending_sampling.clone()),
+            pending_replies: Some(self.pending_replies.clone()),
+            roots_supported,
+            sessions: Some(self.sessions.clone()),
         }
     }
 }
