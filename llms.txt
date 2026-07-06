@@ -1077,6 +1077,28 @@ ships in this crate. `embedded(uri, text, mime_type)` is for a resource included
 response, distinct from a client fetching it separately via `resources/read`. Both work anywhere an
 `McpContent` is expected (tool results, prompt messages).
 
+**JSON-RPC batch requests** — `POST /mcp` with a top-level JSON array instead of a single object
+dispatches each element through the same method table as a standalone request, then joins the
+non-notification results into one `[...]` array:
+
+```json
+// Request:
+[{"jsonrpc":"2.0","method":"tools/list","id":1},
+ {"jsonrpc":"2.0","method":"ping","id":2}]
+
+// Response — one entry per element, order preserved:
+[{"jsonrpc":"2.0","result":{"tools":[...]},"id":1},
+ {"jsonrpc":"2.0","result":{},"id":2}]
+```
+
+Each element's success/error is independent — one erroring doesn't fail the batch or its siblings.
+Elements with no `id` (notifications) contribute no entry, same as a standalone notification gets no
+response body; an all-notification batch returns `202 Accepted` with no body. An empty array (`[]`)
+is invalid per the JSON-RPC spec, so it gets back one `Invalid Request` error object, not `[]`. A
+successful `initialize` inside a batch still mints a session and attaches `Mcp-Session-Id` to the
+overall response (only the first `initialize` in a batch is honored for this, since one HTTP
+response carries only one session id).
+
 ---
 
 ## Standalone proxies

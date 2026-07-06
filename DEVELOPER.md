@@ -1943,6 +1943,23 @@ let server = McpServer::new("my-server", "1.0")
 
 `McpContent::image(data, mime_type)` serializes to `{"type":"image","data":"<b64>","mimeType":"..."}` — `data` is the caller's own base64-encoded string; this crate doesn't ship a base64 encoder (no third-party deps), so bring your own or write one. `McpContent::embedded(uri, text, mime_type)` serializes to `{"type":"resource","resource":{"uri":"...","mimeType":"...","text":"..."}}` — for a resource included directly in a tool's response, as opposed to one a client fetches separately via `resources/read`. Both work anywhere an `McpContent` is expected (tool results, prompt messages) since `to_content_json()` now branches on the value's `kind` instead of always emitting the `"text"` shape.
 
+**JSON-RPC batch requests:** a client may `POST /mcp` with a top-level JSON array instead of a single object — `[{"jsonrpc":"2.0","method":"tools/list","id":1},{"jsonrpc":"2.0","method":"ping","id":2}]` — to send several JSON-RPC calls in one HTTP round trip. `handle_request_with_context` detects a leading `[` and dispatches each element through the same method table a standalone request uses, then joins the non-notification results into one `[...]` response array:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let server = McpServer::new("my-server", "1.0")
+    .tool("ping", "Liveness check", "{}", |_args| Ok(McpContent::text("pong")));
+
+let resp = server.handle_request(r#"[
+    {"jsonrpc":"2.0","method":"tools/list","id":1},
+    {"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ping","arguments":{}}}
+]"#);
+// resp's body is a JSON array with one entry per non-notification element, in order.
+```
+
+Each element's own success/error is preserved independently — one element erroring (e.g. an unknown method) doesn't fail the batch or the other elements. Elements with no `id` (notifications) contribute no entry to the response array, exactly like a standalone notification gets no response body; a batch made up entirely of notifications returns `202 Accepted` with an empty body, same as one standalone notification would. An empty array (`[]`) is itself invalid per the JSON-RPC spec, so it gets back one `Invalid Request` error object rather than an empty `[]`. If a batch includes a successful `initialize`, the *first* one mints a session and attaches `Mcp-Session-Id` to the overall response — sending more than one `initialize` in a single batch is unusual and only the first is honored for session purposes, since one HTTP response can only carry one session id.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

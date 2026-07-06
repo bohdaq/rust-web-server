@@ -81,6 +81,28 @@ All JSON-RPC 2.0 messages travel over `POST /mcp`. The endpoint handles the full
 
 Override the default path with `.at("/custom-path")` if needed.
 
+## Batch requests
+
+`POST /mcp` also accepts a top-level JSON array instead of a single object — a JSON-RPC 2.0 batch request, letting a client send several calls in one HTTP round trip:
+
+```json
+// Request:
+[{"jsonrpc":"2.0","method":"tools/list","id":1},
+ {"jsonrpc":"2.0","method":"ping","id":2}]
+
+// Response — one entry per element, in order:
+[{"jsonrpc":"2.0","result":{"tools":[...]},"id":1},
+ {"jsonrpc":"2.0","result":{},"id":2}]
+```
+
+Each element is dispatched through the same method table as a standalone request, and each one's success or error is independent — one element failing (e.g. an unknown method) doesn't affect the others or fail the batch as a whole.
+
+Elements with no `id` (notifications) contribute no entry to the response array, exactly like a standalone notification produces no response body. A batch made up entirely of notifications returns `202 Accepted` with an empty body. An empty array (`[]`) is itself invalid per the JSON-RPC spec — it gets back a single `Invalid Request` error object rather than an empty `[]`.
+
+:::note[initialize inside a batch]
+If a batch includes a successful `initialize`, the *first* one mints a session and attaches `Mcp-Session-Id` to the overall response, same as a standalone `initialize` would. Sending more than one `initialize` in a single batch is unusual and only the first is honored for session purposes — one HTTP response can only carry one session id.
+:::
+
 ## Protocol version negotiation
 
 `initialize` inspects the client's requested `params.protocolVersion` and responds with the lower of that and the server's own version, rather than always claiming its own regardless of what the client asked for:

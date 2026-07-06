@@ -273,6 +273,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Per-request tool context — `.tool_with_context(...)` gives a tool handler an `McpContext` (caller's `clientInfo`, `Mcp-Session-Id`) tracked across a session from `initialize` to later `tools/call`s
 - Tool annotations (MCP 2025-03-26) — `.tool_annotated(...)` attaches `ToolAnnotations` (`readOnlyHint`/`destructiveHint`/`idempotentHint`/`openWorldHint`) to a tool, surfaced in `tools/list` so clients like Claude Desktop can decide whether to warn or ask for confirmation before calling it
 - Image and embedded-resource content — `McpContent::image(data, mime_type)` and `McpContent::embedded(uri, text, mime_type)` cover the MCP spec's `image` and `resource` content types alongside the original `text`/`json`
+- JSON-RPC batch requests — `POST /mcp` with a top-level JSON array dispatches each element independently and returns one combined `[...]` response array, per element success/error preserved, notifications omitted
 - 8 built-in rws tools — `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`
 - SSE streaming — `Sse` builder makes forwarding AI token streams to the browser trivial
 - Response caching — `CacheLayer` TTL cache; vary-by-header; `Cache-Control` opt-out

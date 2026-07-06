@@ -615,6 +615,11 @@ impl McpServer {
     /// header back on subsequent requests so later `tools/call`s in the same
     /// session can look their `clientInfo` back up.
     pub fn handle_request_with_context(&self, body: &str, ctx: McpContext) -> Response {
+        let trimmed = body.trim_start();
+        if trimmed.starts_with('[') {
+            return self.handle_batch(trimmed, ctx);
+        }
+
         let method = match json_rpc::extract_str(body, "method") {
             Some(m) => m,
             None => return rpc_error(None, json_rpc::INVALID_REQUEST, "Missing method"),
@@ -627,7 +632,94 @@ impl McpServer {
             return no_content();
         }
 
-        let result: Result<String, (i32, String)> = match method.as_str() {
+        let result = self.dispatch(&method, body, ctx);
+        let id_str = id.as_deref().unwrap_or("null");
+        let is_ok = result.is_ok();
+
+        let mut response = json_response(&Self::format_result(id_str, &result));
+
+        if method == "initialize" && is_ok {
+            self.start_session(body, &mut response);
+        }
+
+        response
+    }
+
+    /// Process a JSON-RPC 2.0 batch request — a top-level JSON array of
+    /// request objects sent in a single `POST /mcp` body, per the JSON-RPC
+    /// batch spec that MCP inherits. Each element is dispatched exactly as
+    /// [`Self::handle_request_with_context`] would dispatch it standalone;
+    /// notifications (no `id`) contribute no entry to the response array,
+    /// same as they'd get no response body outside a batch.
+    ///
+    /// An empty array (`[]`) is itself an invalid request per the JSON-RPC
+    /// spec, so it gets one `Invalid Request` error object back rather than
+    /// an empty array. A batch made up entirely of notifications produces no
+    /// response body at all (`202 Accepted`), matching a single notification.
+    ///
+    /// If the batch contains a successful `initialize` call, the *first* one
+    /// mints a session and attaches `Mcp-Session-Id` to the overall response,
+    /// same as a standalone `initialize` would — sending more than one
+    /// `initialize` in a batch is unusual and only the first is honored for
+    /// session purposes, since one HTTP response can only carry one session id.
+    fn handle_batch(&self, array_body: &str, ctx: McpContext) -> Response {
+        let elements = json_rpc::split_array_elements(array_body);
+        if elements.is_empty() {
+            return rpc_error(None, json_rpc::INVALID_REQUEST, "Invalid Request");
+        }
+
+        let mut parts: Vec<String> = Vec::new();
+        let mut session_init_body: Option<String> = None;
+
+        for elem in &elements {
+            let method = match json_rpc::extract_str(elem, "method") {
+                Some(m) => m,
+                None => {
+                    parts.push(Self::format_result(
+                        "null",
+                        &Err((json_rpc::INVALID_REQUEST, "Missing method".to_string())),
+                    ));
+                    continue;
+                }
+            };
+
+            let id = json_rpc::extract_id(elem);
+
+            if method == "notifications/initialized" || (id.is_none() && method != "ping") {
+                continue;
+            }
+
+            let result = self.dispatch(&method, elem, ctx.clone());
+            let id_str = id.as_deref().unwrap_or("null");
+            let is_ok = result.is_ok();
+
+            if method == "initialize" && is_ok && session_init_body.is_none() {
+                session_init_body = Some(elem.clone());
+            }
+
+            parts.push(Self::format_result(id_str, &result));
+        }
+
+        if parts.is_empty() {
+            // Every element was a notification — no response body, same as a
+            // single standalone notification.
+            return no_content();
+        }
+
+        let mut response = json_response(&format!("[{}]", parts.join(",")));
+        if let Some(init_body) = session_init_body {
+            self.start_session(&init_body, &mut response);
+        }
+        response
+    }
+
+    /// Dispatch one already-parsed JSON-RPC `method` against `body` (the raw
+    /// single-object message, whether it arrived standalone or as one element
+    /// of a batch) and return the JSON-RPC `result` payload or an error.
+    /// Shared by [`Self::handle_request_with_context`] and [`Self::handle_batch`]
+    /// so the method table exists in exactly one place.
+    fn dispatch(&self, method: &str, body: &str, ctx: McpContext) -> Result<String, (i32, String)> {
+        match method {
             "initialize"     => self.do_initialize(body),
             "ping"           => Ok("{}".to_string()),
             "tools/list"     => self.do_tools_list(),
@@ -637,28 +729,24 @@ impl McpServer {
             "prompts/list"   => self.do_prompts_list(),
             "prompts/get"    => self.do_prompts_get(body),
             _                => Err((json_rpc::METHOD_NOT_FOUND, format!("Unknown method: {method}"))),
-        };
-
-        let id_str = id.as_deref().unwrap_or("null");
-        let is_ok = result.is_ok();
-
-        let mut response = match result {
-            Ok(result_json) => json_response(&format!(
-                r#"{{"jsonrpc":"2.0","result":{result_json},"id":{id_str}}}"#
-            )),
-            Err((code, msg)) => {
-                let escaped = json_escape(&msg);
-                json_response(&format!(
-                    r#"{{"jsonrpc":"2.0","error":{{"code":{code},"message":"{escaped}"}},"id":{id_str}}}"#
-                ))
-            }
-        };
-
-        if method == "initialize" && is_ok {
-            self.start_session(body, &mut response);
         }
+    }
 
-        response
+    /// Render one JSON-RPC 2.0 response object — `{"jsonrpc":"2.0","result":...,"id":...}`
+    /// or the `error` shape — from a dispatch result and its request's `id` (already
+    /// rendered as a raw JSON token, e.g. `"1"`, `"\"abc\""`, or `"null"`).
+    fn format_result(id_str: &str, result: &Result<String, (i32, String)>) -> String {
+        match result {
+            Ok(result_json) => format!(
+                r#"{{"jsonrpc":"2.0","result":{result_json},"id":{id_str}}}"#
+            ),
+            Err((code, msg)) => {
+                let escaped = json_escape(msg);
+                format!(
+                    r#"{{"jsonrpc":"2.0","error":{{"code":{code},"message":"{escaped}"}},"id":{id_str}}}"#
+                )
+            }
+        }
     }
 
     /// Mint a new session id, record `body`'s `params.clientInfo` under it

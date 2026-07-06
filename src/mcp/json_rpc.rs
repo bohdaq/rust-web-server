@@ -115,6 +115,52 @@ fn bracket_extract(s: &str, open: char, close: char) -> Option<String> {
     None
 }
 
+/// Split a top-level JSON array `[e1,e2,...]` into its raw element strings,
+/// tracking brace/bracket depth and string content so a comma inside a nested
+/// object/array or a quoted string doesn't split at the wrong point. `json`
+/// must already be trimmed to start with `[`; a malformed or empty (`[]`)
+/// array yields an empty `Vec`.
+pub fn split_array_elements(json: &str) -> Vec<String> {
+    let inner = json
+        .strip_prefix('[')
+        .and_then(|s| s.trim_end().strip_suffix(']'))
+        .unwrap_or("");
+
+    let mut elements = Vec::new();
+    let mut depth = 0usize;
+    let mut in_str = false;
+    let mut prev_escape = false;
+    let mut start = 0usize;
+
+    for (i, ch) in inner.char_indices() {
+        if prev_escape { prev_escape = false; continue; }
+        if in_str {
+            if ch == '\\' { prev_escape = true; }
+            else if ch == '"' { in_str = false; }
+            continue;
+        }
+        match ch {
+            '"' => in_str = true,
+            '{' | '[' => depth += 1,
+            '}' | ']' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                let elem = inner[start..i].trim();
+                if !elem.is_empty() {
+                    elements.push(elem.to_string());
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let last = inner[start..].trim();
+    if !last.is_empty() {
+        elements.push(last.to_string());
+    }
+
+    elements
+}
+
 /// Return the raw `id` JSON value, or `None` if the `id` key is absent.
 ///
 /// `None` → notification (no response needed).

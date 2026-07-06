@@ -90,6 +90,35 @@ fn extract_id_null_returns_null_string() {
     assert_eq!(json_rpc::extract_id(j).as_deref(), Some("null"));
 }
 
+// ── json_rpc::split_array_elements ────────────────────────────────────────────
+
+#[test]
+fn split_array_elements_simple() {
+    let elems = json_rpc::split_array_elements(r#"[{"a":1},{"b":2}]"#);
+    assert_eq!(elems, vec![r#"{"a":1}"#, r#"{"b":2}"#]);
+}
+
+#[test]
+fn split_array_elements_ignores_commas_inside_nested_objects_and_strings() {
+    let elems = json_rpc::split_array_elements(
+        r#"[{"method":"tools/call","params":{"a":1,"b":2}},{"text":"a, b, c"}]"#,
+    );
+    assert_eq!(elems.len(), 2, "expected exactly 2 top-level elements: {elems:?}");
+    assert!(elems[0].contains(r#""a":1,"b":2"#));
+    assert!(elems[1].contains("a, b, c"));
+}
+
+#[test]
+fn split_array_elements_empty_array_returns_empty_vec() {
+    assert!(json_rpc::split_array_elements("[]").is_empty());
+}
+
+#[test]
+fn split_array_elements_single_element() {
+    let elems = json_rpc::split_array_elements(r#"[{"jsonrpc":"2.0","method":"ping","id":1}]"#);
+    assert_eq!(elems, vec![r#"{"jsonrpc":"2.0","method":"ping","id":1}"#]);
+}
+
 // ── json_escape ───────────────────────────────────────────────────────────────
 
 #[test]
@@ -613,6 +642,74 @@ fn missing_method_field_returns_invalid_request() {
     let resp = srv.handle_request(r#"{"jsonrpc":"2.0","id":1}"#);
     let body = body_of(&resp);
     assert!(body.contains("-32600"), "expected INVALID_REQUEST code: {body}");
+}
+
+// ── batch requests ────────────────────────────────────────────────────────────
+
+#[test]
+fn batch_dispatches_each_element_and_wraps_results_in_an_array() {
+    let srv = make_server();
+    let req = r#"[{"jsonrpc":"2.0","method":"tools/list","id":1},
+                  {"jsonrpc":"2.0","method":"ping","id":2}]"#;
+    let resp = srv.handle_request(req);
+    assert_eq!(resp.status_code, 200);
+    let body = body_of(&resp);
+    assert!(body.starts_with('['), "expected a JSON array response: {body}");
+    assert!(body.contains(r#""id":1"#), "missing response for id 1: {body}");
+    assert!(body.contains(r#""id":2"#), "missing response for id 2: {body}");
+    assert!(body.contains("\"echo\""), "tools/list result missing from batch: {body}");
+}
+
+#[test]
+fn batch_preserves_per_element_success_and_error_results() {
+    let srv = make_server();
+    let req = r#"[{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"echo","arguments":{"text":"hi"}}},
+                  {"jsonrpc":"2.0","method":"no/such/method","id":2}]"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert!(body.contains("\"isError\":false"), "expected the echo call to succeed: {body}");
+    assert!(body.contains("-32601"), "expected METHOD_NOT_FOUND for the second element: {body}");
+}
+
+#[test]
+fn batch_omits_notifications_from_the_response_array() {
+    let srv = make_server();
+    // Only the first element has an id; the second is a notification.
+    let req = r#"[{"jsonrpc":"2.0","method":"ping","id":1},
+                  {"jsonrpc":"2.0","method":"notifications/initialized"}]"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert!(body.contains(r#""id":1"#), "expected a response entry for the ping: {body}");
+    // Only one entry in the array — the notification contributed nothing.
+    assert_eq!(body.matches("\"jsonrpc\"").count(), 1, "notification leaked an entry: {body}");
+}
+
+#[test]
+fn batch_of_only_notifications_returns_202_with_no_body() {
+    let srv = make_server();
+    let req = r#"[{"jsonrpc":"2.0","method":"notifications/initialized"}]"#;
+    let resp = srv.handle_request(req);
+    assert_eq!(resp.status_code, 202);
+    assert!(body_of(&resp).is_empty());
+}
+
+#[test]
+fn empty_batch_array_returns_a_single_invalid_request_error() {
+    let srv = make_server();
+    let resp = srv.handle_request("[]");
+    let body = body_of(&resp);
+    assert!(!body.starts_with('['), "empty batch should not produce an array response: {body}");
+    assert!(body.contains("-32600"), "expected INVALID_REQUEST code: {body}");
+}
+
+#[test]
+fn batch_initialize_establishes_a_session_via_mcp_session_id_header() {
+    let srv = make_server();
+    let req = r#"[{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"batch-client","version":"1"}}},
+                  {"jsonrpc":"2.0","method":"ping","id":2}]"#;
+    let resp = srv.handle_request(req);
+    let session_header = resp.headers.iter().find(|h| h.name == "Mcp-Session-Id");
+    assert!(session_header.is_some(), "expected Mcp-Session-Id header on a batch containing initialize");
 }
 
 // ── Application impl (via TestClient) ─────────────────────────────────────────

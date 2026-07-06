@@ -234,6 +234,8 @@ Call `.with_host("example.com")` before registering routes to restrict a `Router
 
 `McpContent::image(data, mime_type)` and `McpContent::embedded(uri, text, mime_type)` cover the MCP spec's `image` and `resource` content variants alongside the original `text`/`json`; `to_content_json()` branches on `McpContent::kind` (`"text"` / `"image"` / `"resource"`) to pick the right JSON shape. `image` expects an already-base64-encoded string — no base64 crate is a dependency of this project. `resources/read`'s response format is untouched (hand-built, doesn't go through `to_content_json()`), so a resource handler still can't return image content that way.
 
+`handle_request_with_context` detects a top-level JSON array (`body.trim_start().starts_with('[')`) and hands off to `handle_batch`, supporting JSON-RPC 2.0 batch requests — several calls dispatched from one `POST /mcp` body, joined into one `[...]` response array. `json_rpc::split_array_elements` does the array splitting (depth/string-tracking, like `bracket_extract`); the per-method dispatch table and JSON-RPC response rendering are factored into private `dispatch()`/`format_result()` helpers shared by both the single-request and batch code paths. Notifications in a batch contribute no response entry; an all-notification batch returns `202` with no body; an empty array (`[]`) returns one `Invalid Request` error rather than `[]`; a successful `initialize` inside a batch still mints a session and sets `Mcp-Session-Id` (only the first `initialize` in a batch counts, since one response carries one session id).
+
 ### Test client
 
 `src/test_client/mod.rs` provides `TestClient<A>` — dispatches requests directly through an `Application` without opening a TCP socket. Use it in unit and integration tests:

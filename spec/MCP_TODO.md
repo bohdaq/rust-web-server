@@ -161,30 +161,51 @@ correctly.
 
 ---
 
-### TODO-5: JSON-RPC batch requests
+### ✅ TODO-5: JSON-RPC batch requests — Done (v17.79.0)
 
-JSON-RPC 2.0 (and MCP) allows an array of request objects in a single POST:
-```json
-[{"jsonrpc":"2.0","method":"tools/list","id":1},
- {"jsonrpc":"2.0","method":"prompts/list","id":2}]
-```
+`handle_request_with_context` now checks `body.trim_start().starts_with('[')` before doing
+anything else and, if so, hands off to a new `handle_batch`, exactly this entry's own sketch.
 
-Current `handle_request` always parses the body as a single object. An array body silently
-falls through to `METHOD_NOT_FOUND` because `"method"` extraction returns `None`.
+**Splitting the array** needed one new hand-rolled parser, since this crate has no JSON
+library: `json_rpc::split_array_elements(json: &str) -> Vec<String>` walks the array tracking
+brace/bracket depth and string content (reusing the same escape/quote-tracking approach as the
+existing `bracket_extract`), splitting on top-level commas only — a comma inside a nested
+`params` object or inside a quoted string doesn't split the array in the wrong place.
 
-**Fix in `handle_request`:**
-```rust
-let trimmed = body.trim_start();
-if trimmed.starts_with('[') {
-    return self.handle_batch(body);
-}
-```
+**Dispatch table de-duplicated rather than copy-pasted**: the entry's own sketch implied
+`handle_batch` would need the same `match method.as_str() { ... }` block that
+`handle_request_with_context` already had. Instead of duplicating it, that block moved into a
+new private `fn dispatch(&self, method: &str, body: &str, ctx: McpContext) -> Result<String,
+(i32, String)>` called by both; likewise the `{"jsonrpc":"2.0","result":...}`/`error` rendering
+moved into `fn format_result(id_str, &result) -> String`, also shared. Neither
+`handle_request_with_context`'s nor `handle_batch`'s externally-visible behavior changed as a
+result — this was a pure extract-method refactor alongside the new feature.
 
-`handle_batch` splits the array, dispatches each element, collects results, and wraps them in
-a `[...]` response array. Notifications in the batch (no `id`) still return no entry in the
-array.
+**Edge cases handled, matching JSON-RPC 2.0's own spec examples**, not just this entry's happy
+path:
+- Notifications (no `id`) in a batch contribute no entry to the response array — same as this
+  entry said.
+- A batch consisting *entirely* of notifications returns `202 Accepted` with no body, matching
+  what a single standalone notification gets (not an empty `[]`, which nothing in JSON-RPC 2.0
+  asks for and no client expects).
+- An empty array (`[]`) is itself an invalid request per the JSON-RPC 2.0 spec's own test
+  vectors — returns one `{"error":{"code":-32600,...}}` object, not `[]`.
+- A successful `initialize` inside a batch still mints a session and attaches
+  `Mcp-Session-Id` to the overall response, via the existing `start_session` — only the *first*
+  `initialize` in a batch is honored this way, since one HTTP response carries exactly one
+  session id and sending multiple `initialize`s in one batch has no sensible session semantics
+  anyway. Not something the entry's text anticipated, but left silently unhandled would have
+  meant batched `initialize` silently failing to establish a session at all.
 
-**Effort:** small — one branch + `handle_batch` function.
+10 new tests: 4 unit tests for `split_array_elements` (simple split, commas inside nested
+objects/strings correctly ignored, empty array, single element) in `src/mcp/tests.rs`'s
+`json_rpc` section, plus 6 `handle_batch` behavior tests (mixed-method batch dispatches and
+wraps correctly, per-element success/error preserved independently, notifications omitted from
+the response array, all-notification batch returns 202 with no body, empty array returns one
+Invalid Request error, `initialize` inside a batch still sets `Mcp-Session-Id`).
+
+**Effort:** small, as estimated — one branch, one array-splitting helper, and an extract-method
+refactor of the existing dispatch table rather than a duplicate copy of it.
 
 ---
 
@@ -512,7 +533,7 @@ Phase 1 — Quick wins (no new dependencies, mostly additive)
   TODO-2  McpContext in tool handlers      (small)              ✅ done (v17.76.0)
   TODO-3  tool annotations 2025-03-26      (tiny)              ✅ done (v17.77.0)
   TODO-4  image + embedded content types   (small)              ✅ done (v17.78.0)
-  TODO-5  JSON-RPC batch requests          (small)
+  TODO-5  JSON-RPC batch requests          (small)              ✅ done (v17.79.0)
   TODO-6  list pagination                  (small)
   TODO-11 completions/complete             (small)
 
@@ -542,7 +563,7 @@ Phase 3 — Enterprise + advanced
 | 2 | `McpContext` in tool handlers | Ergonomics | **P1** | Small | ✅ Done (v17.76.0) |
 | 3 | Tool annotations | 2025-03-26 | **P1** | Tiny | ✅ Done (v17.77.0) |
 | 4 | `image` + `embedded` content | 2024-11-05 | **P1** | Small | ✅ Done (v17.78.0) |
-| 5 | JSON-RPC batch | JSON-RPC 2.0 | **P1** | Small | — |
+| 5 | JSON-RPC batch | JSON-RPC 2.0 | **P1** | Small | ✅ Done (v17.79.0) |
 | 6 | List pagination | 2024-11-05 | **P1** | Small | — |
 | 11 | `completions/complete` | 2024-11-05 | **P1** | Small | — |
 | 7 | SSE transport (`GET /mcp`) | Streamable HTTP | **P2** | Medium | — |
