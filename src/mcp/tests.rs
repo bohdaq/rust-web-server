@@ -1,7 +1,7 @@
 use super::json_rpc;
 use super::{
-    decode_cursor, encode_cursor, extract_arg, json_escape, McpContent, McpServer, PromptArgDef,
-    PromptMessage, ToolAnnotations, PROTOCOL_VERSION,
+    decode_cursor, encode_cursor, extract_arg, json_escape, LogLevel, McpContent, McpServer,
+    PromptArgDef, PromptMessage, ToolAnnotations, PROTOCOL_VERSION,
 };
 use crate::app::App;
 use crate::core::New;
@@ -136,6 +136,37 @@ fn cursor_round_trips_through_encode_and_decode() {
 fn decode_cursor_rejects_garbage() {
     assert!(decode_cursor("not valid base64 at all!!").is_none());
     assert!(decode_cursor("").is_none());
+}
+
+// ── LogLevel ───────────────────────────────────────────────────────────────────
+
+#[test]
+fn log_level_parse_round_trips_with_as_str() {
+    let levels = [
+        LogLevel::Debug, LogLevel::Info, LogLevel::Notice, LogLevel::Warning,
+        LogLevel::Error, LogLevel::Critical, LogLevel::Alert, LogLevel::Emergency,
+    ];
+    for level in levels {
+        assert_eq!(LogLevel::parse(level.as_str()), Some(level));
+    }
+}
+
+#[test]
+fn log_level_parse_rejects_unknown_strings() {
+    assert!(LogLevel::parse("verbose").is_none());
+    assert!(LogLevel::parse("").is_none());
+    assert!(LogLevel::parse("INFO").is_none()); // case-sensitive, per spec's lowercase names
+}
+
+#[test]
+fn log_level_orders_from_debug_to_emergency() {
+    assert!(LogLevel::Debug < LogLevel::Info);
+    assert!(LogLevel::Info < LogLevel::Notice);
+    assert!(LogLevel::Notice < LogLevel::Warning);
+    assert!(LogLevel::Warning < LogLevel::Error);
+    assert!(LogLevel::Error < LogLevel::Critical);
+    assert!(LogLevel::Critical < LogLevel::Alert);
+    assert!(LogLevel::Alert < LogLevel::Emergency);
 }
 
 // ── json_escape ───────────────────────────────────────────────────────────────
@@ -1114,5 +1145,113 @@ fn disconnected_client_is_pruned_on_the_next_notify() {
     srv.notify("ping", None); // sweeps dead senders
 
     assert_eq!(srv.sse_clients.lock().unwrap().len(), 0);
+}
+
+// ── logging/setLevel and notifications/message ────────────────────────────────
+
+#[test]
+fn initialize_omits_logging_capability_by_default() {
+    let srv = make_server();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#);
+    let body = body_of(&resp);
+    assert!(!body.contains("\"logging\""), "logging capability should be absent by default: {body}");
+}
+
+#[test]
+fn initialize_advertises_logging_capability_when_enabled() {
+    let srv = McpServer::new("test-srv", "0.1").logging_enabled();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#);
+    let body = body_of(&resp);
+    assert!(body.contains(r#""logging":{}"#), "expected an advertised logging capability: {body}");
+}
+
+#[test]
+fn set_log_level_with_valid_level_succeeds() {
+    let srv = make_server();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"logging/setLevel","id":1,"params":{"level":"warning"}}"#);
+    let body = body_of(&resp);
+    assert!(body.contains("\"result\""), "expected a successful result: {body}");
+    assert!(!body.contains("\"error\""), "did not expect an error: {body}");
+}
+
+#[test]
+fn set_log_level_missing_level_returns_invalid_params() {
+    let srv = make_server();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"logging/setLevel","id":1,"params":{}}"#);
+    let body = body_of(&resp);
+    assert!(body.contains("-32602"), "expected INVALID_PARAMS: {body}");
+}
+
+#[test]
+fn set_log_level_unknown_level_returns_invalid_params() {
+    let srv = make_server();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"logging/setLevel","id":1,"params":{"level":"verbose"}}"#);
+    let body = body_of(&resp);
+    assert!(body.contains("-32602"), "expected INVALID_PARAMS: {body}");
+}
+
+#[test]
+fn log_delivers_a_notifications_message_frame_with_level_logger_and_data() {
+    let srv = make_server();
+    let mut resp = srv.start_sse_stream();
+    let mut reader = resp.stream_pipe.take().unwrap();
+
+    srv.log(LogLevel::Error, Some("database"), r#"{"detail":"connection pool exhausted"}"#);
+
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    let text = String::from_utf8_lossy(&buf[..n]).into_owned();
+    assert!(text.contains(r#""method":"notifications/message""#), "wrong method: {text}");
+    assert!(text.contains(r#""level":"error""#), "missing level: {text}");
+    assert!(text.contains(r#""logger":"database""#), "missing logger: {text}");
+    assert!(text.contains(r#""data":{"detail":"connection pool exhausted"}"#), "missing data: {text}");
+}
+
+#[test]
+fn log_without_logger_omits_the_logger_field() {
+    let srv = make_server();
+    let mut resp = srv.start_sse_stream();
+    let mut reader = resp.stream_pipe.take().unwrap();
+
+    srv.log(LogLevel::Info, None, r#""hello""#);
+
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    let text = String::from_utf8_lossy(&buf[..n]);
+    assert!(!text.contains("\"logger\""), "did not expect a logger field: {text}");
+}
+
+#[test]
+fn log_is_delivered_by_default_at_every_level() {
+    // No logging/setLevel call yet — the default (LogLevel::Debug) filters nothing.
+    let srv = make_server();
+    let mut resp = srv.start_sse_stream();
+    let mut reader = resp.stream_pipe.take().unwrap();
+
+    srv.log(LogLevel::Debug, None, r#""a debug message""#);
+
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    assert!(n > 0, "expected the debug-level message to be delivered by default");
+}
+
+#[test]
+fn log_below_the_set_level_is_filtered_out_and_never_queued() {
+    let srv = make_server();
+    srv.handle_request(r#"{"jsonrpc":"2.0","method":"logging/setLevel","id":1,"params":{"level":"warning"}}"#);
+
+    let mut resp = srv.start_sse_stream();
+    let mut reader = resp.stream_pipe.take().unwrap();
+
+    srv.log(LogLevel::Info, None, r#""should be filtered out""#);  // below "warning" — never queued
+    srv.log(LogLevel::Error, None, r#""should be delivered""#);    // at/above "warning" — queued
+
+    // If the filtered call had been queued, this first read would return it
+    // instead of the allowed one.
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    let text = String::from_utf8_lossy(&buf[..n]);
+    assert!(!text.contains("should be filtered out"), "filtered message leaked through: {text}");
+    assert!(text.contains("should be delivered"), "expected the allowed message: {text}");
 }
 

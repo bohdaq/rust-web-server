@@ -316,28 +316,61 @@ hard part.
 
 ---
 
-### TODO-8: `logging/setLevel` and `notifications/message`
+### ✅ TODO-8: `logging/setLevel` and `notifications/message` — Done (v17.82.0)
 
-The spec lets clients request a minimum log level and receive server log messages as SSE
-notifications. Useful during development: the MCP client shows server diagnostics inline.
+Added `LogLevel` (the spec's eight RFC 5424 severities: `Debug`, `Info`, `Notice`, `Warning`,
+`Error`, `Critical`, `Alert`, `Emergency`), `handle_request`/`dispatch`'s new
+`"logging/setLevel" => self.do_set_log_level(body)` arm exactly as sketched, `min_log_level:
+Arc<Mutex<LogLevel>>` on `McpServer` (matching the entry's own field sketch, just without the
+`Arc<Mutex<_>>` needing its own comment since the pattern is already established by `sessions` and
+`sse_clients`), and `.logging_enabled()` exactly as sketched — an opt-in builder that adds
+`"logging":{}` to `initialize`'s advertised `capabilities`.
 
-**Depends on:** TODO-7 (SSE channel for push).
+**`LogLevel`'s ordering is free, not hand-rolled:** deriving `PartialOrd`/`Ord` on the enum gives
+correct severity comparisons (`Debug < Info < ... < Emergency`) directly from declaration order —
+no manual rank/priority numbers to keep in sync with the variant list.
 
-**New method in `handle_request`:**
-```
-"logging/setLevel" => self.do_set_log_level(body)
-```
+**No `mcp_log!` macro** — the entry's own text used one as a hypothetical example
+(`mcp_log!(server, "info", "msg")`), but a `macro_rules!` adds surface area (import path,
+crate-level `#[macro_export]` visibility rules) for no real benefit over a plain method that's
+just as terse: `server.log(LogLevel::Info, Some("logger-name"), r#""msg""#)`. Every other MCP
+feature so far (`.tool()`, `.notify()`, `.tool_annotated()`, ...) is a builder/method, not a macro,
+so `.log()` matches the rest of the API's shape rather than introducing the crate's first macro
+for this one case.
 
-Store `min_level: Arc<Mutex<LogLevel>>`. When the server calls `mcp_log!(server, "info", "msg")`,
-check the level, format as `notifications/message`, and push over the SSE channel.
+**Filtering reuses `.notify()` rather than duplicating the broadcast logic:** `.log()` builds the
+`notifications/message` params JSON (`{"level":"...","logger":"...","data":...}`, `logger` omitted
+when not given) and — only if `level >= *min_log_level.lock().unwrap()` — calls
+`self.notify("notifications/message", Some(&params))`. This means `.log()` automatically inherits
+every property `.notify()` (TODO-7) already has: never blocks the calling thread, drops a client
+whose buffer fills up, HTTP/1.1-only scope. No separate code path to keep in sync.
 
-**Builder:**
-```rust
-let server = McpServer::new(...)
-    .logging_enabled()  // advertises logging capability in initialize
-```
+**`.logging_enabled()` only changes what's advertised, not what works:** `.log()` and
+`logging/setLevel` both function whether or not `.logging_enabled()` was ever called — this entry's
+own text frames it as "advertises ... capability," not "enables," and treating it as a hard gate
+would mean a server that forgot to call the builder couldn't be debugged via a manual `.log()` call
+even though nothing else needs it. A spec-honest client just wouldn't send `logging/setLevel` in
+the first place without seeing the capability, so pairing the two remains the expected usage without
+requiring it in code.
 
-**Effort:** small once TODO-7 is done.
+**Default minimum level is `LogLevel::Debug`** (the least restrictive) rather than something more
+conservative like `Info` or `Warning` — chosen so nothing is silently dropped unless a client
+explicitly asks for less noise via `logging/setLevel`; a server that never receives that call
+behaves as if every `.log()` call is delivered.
+
+15 new tests in `src/mcp/tests.rs`: `LogLevel::parse`/`as_str` round-trip for all 8 levels,
+rejecting unrecognized/wrong-case strings, and the full `Debug < ... < Emergency` ordering chain;
+`initialize` omits `"logging"` by default and includes `"logging":{}` after `.logging_enabled()`;
+`logging/setLevel` succeeds for a valid level and returns `INVALID_PARAMS` for a missing or
+unrecognized one; and (reading from `start_sse_stream()`'s `stream_pipe`, same pattern as TODO-7's
+tests) `.log()` delivers the correct `notifications/message` shape with `level`/`logger`/`data`,
+omits `logger` when not given, is delivered by default at every level before any `setLevel` call,
+and — the key regression guard — a message below a client-set minimum level is never queued at all
+(proven by sending a filtered call followed by an allowed one and confirming only the allowed one is
+read back, rather than just checking a boolean flag).
+
+**Effort:** small, as estimated, now that TODO-7 exists — one enum, one field, one dispatch arm, one
+builder, and one method that's mostly a thin filter in front of the already-built `.notify()`.
 
 ---
 
@@ -575,7 +608,7 @@ Phase 1 — Quick wins (no new dependencies, mostly additive)
 
 Phase 2 — Streaming foundation (enables all notification features)
   TODO-7  GET /mcp SSE channel            (medium — unblocks 8, 9, 10, 14, 15, 16)   ✅ done (v17.81.0)
-  TODO-8  logging/setLevel + notifications (small, needs TODO-7)
+  TODO-8  logging/setLevel + notifications (small, needs TODO-7)              ✅ done (v17.82.0)
   TODO-9  dynamic registration             (medium, needs TODO-7)
   TODO-10 notifications/progress           (small, needs TODO-7 + TODO-2)
 
@@ -603,7 +636,7 @@ Phase 3 — Enterprise + advanced
 | 6 | List pagination | 2024-11-05 | **P1** | Small | ✅ Done (v17.80.0) |
 | 11 | `completions/complete` | 2024-11-05 | **P1** | Small | — |
 | 7 | SSE transport (`GET /mcp`) | Streamable HTTP | **P2** | Medium | ✅ Done (v17.81.0) |
-| 8 | `logging/setLevel` | 2024-11-05 | **P2** | Small | #7 |
+| 8 | `logging/setLevel` | 2024-11-05 | **P2** | Small | ✅ Done (v17.82.0) |
 | 9 | Dynamic registration + `listChanged` | 2024-11-05 | **P2** | Medium | #7 |
 | 10 | `notifications/progress` | 2024-11-05 | **P2** | Small | #7 + #2 |
 | 12 | Request cancellation | 2024-11-05 | **P3** | Medium | `http2` async |

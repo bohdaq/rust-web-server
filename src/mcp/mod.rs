@@ -321,6 +321,66 @@ impl ToolAnnotations {
     }
 }
 
+// ── LogLevel ──────────────────────────────────────────────────────────────────
+
+/// RFC 5424 syslog severity levels, as used by the MCP `logging/setLevel`
+/// request and `notifications/message` log entries — ordered from most to
+/// least verbose so `level < min_level` comparisons work directly (this
+/// relies on declaration order matching severity order; don't reorder the
+/// variants).
+///
+/// ```rust
+/// use rust_web_server::mcp::LogLevel;
+///
+/// assert!(LogLevel::Debug < LogLevel::Warning);
+/// assert!(LogLevel::Emergency > LogLevel::Error);
+/// assert_eq!(LogLevel::parse("warning"), Some(LogLevel::Warning));
+/// assert_eq!(LogLevel::Warning.as_str(), "warning");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum LogLevel {
+    Debug,
+    Info,
+    Notice,
+    Warning,
+    Error,
+    Critical,
+    Alert,
+    Emergency,
+}
+
+impl LogLevel {
+    /// Parse the MCP spec's lowercase level name. Returns `None` for
+    /// anything that isn't one of the eight recognized levels.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "debug"     => Some(LogLevel::Debug),
+            "info"      => Some(LogLevel::Info),
+            "notice"    => Some(LogLevel::Notice),
+            "warning"   => Some(LogLevel::Warning),
+            "error"     => Some(LogLevel::Error),
+            "critical"  => Some(LogLevel::Critical),
+            "alert"     => Some(LogLevel::Alert),
+            "emergency" => Some(LogLevel::Emergency),
+            _           => None,
+        }
+    }
+
+    /// The MCP spec's lowercase level name, e.g. `"warning"`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LogLevel::Debug     => "debug",
+            LogLevel::Info      => "info",
+            LogLevel::Notice    => "notice",
+            LogLevel::Warning   => "warning",
+            LogLevel::Error     => "error",
+            LogLevel::Critical  => "critical",
+            LogLevel::Alert     => "alert",
+            LogLevel::Emergency => "emergency",
+        }
+    }
+}
+
 // ── internal handler registrations ───────────────────────────────────────────
 
 type ToolFn     = Arc<dyn Fn(McpContext, &str) -> Result<McpContent, String>    + Send + Sync>;
@@ -395,6 +455,17 @@ pub struct McpServer {
     /// underlying `Receiver` closing. A server that never calls `notify`
     /// after clients disconnect will accumulate dead entries here.
     sse_clients: Arc<Mutex<Vec<SseSender>>>,
+    /// Whether `initialize`'s advertised `capabilities` includes `"logging":{}`.
+    /// Set via [`Self::logging_enabled`]. This only controls what's
+    /// advertised — [`Self::log`] works regardless, same as [`Self::notify`]
+    /// does; a spec-honest client just wouldn't call `logging/setLevel` in
+    /// the first place if the capability was never advertised.
+    logging_enabled: bool,
+    /// The minimum [`LogLevel`] that [`Self::log`] will actually push,
+    /// settable at runtime by a client's `logging/setLevel` request. Starts
+    /// at [`LogLevel::Debug`] (the least restrictive level, i.e. nothing is
+    /// filtered) until a client requests otherwise.
+    min_log_level: Arc<Mutex<LogLevel>>,
 }
 
 /// One `GET /mcp` SSE client's outbound channel. Bounded so a slow or stuck
@@ -423,6 +494,8 @@ impl McpServer {
             page_size: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             sse_clients: Arc::new(Mutex::new(Vec::new())),
+            logging_enabled: false,
+            min_log_level: Arc::new(Mutex::new(LogLevel::Debug)),
         }
     }
 
@@ -505,6 +578,68 @@ impl McpServer {
         });
         response.stream_pipe = Some(Box::new(SseChannelReader::new(rx)));
         response
+    }
+
+    /// Advertise the `logging` capability (`"logging":{}`) in `initialize`'s
+    /// response, so clients know they can call `logging/setLevel` and expect
+    /// `notifications/message` log entries over the `GET /mcp` SSE stream.
+    ///
+    /// This only changes what's *advertised* — [`Self::log`] pushes log
+    /// entries regardless of whether this was called, same as [`Self::notify`]
+    /// works unconditionally. A spec-honest client simply wouldn't send
+    /// `logging/setLevel` in the first place without seeing the capability.
+    ///
+    /// ```rust
+    /// use rust_web_server::mcp::McpServer;
+    ///
+    /// let server = McpServer::new("my-server", "1.0").logging_enabled();
+    /// ```
+    pub fn logging_enabled(mut self) -> Self {
+        self.logging_enabled = true;
+        self
+    }
+
+    /// Push a `notifications/message` log entry to every client connected to
+    /// the `GET /mcp` SSE stream, if `level` is at or above the level most
+    /// recently set via a client's `logging/setLevel` request (or
+    /// [`LogLevel::Debug`] — i.e. every level — if none has been set yet).
+    ///
+    /// `data_json` must already be a valid JSON value (the spec allows any
+    /// type here, not just an object — a plain string is fine) — it's
+    /// spliced in verbatim, not escaped or re-serialized. `logger`, if
+    /// given, identifies the log's source (e.g. a module or subsystem name)
+    /// and is escaped automatically.
+    ///
+    /// ```rust
+    /// use rust_web_server::mcp::{LogLevel, McpServer};
+    ///
+    /// let server = McpServer::new("my-server", "1.0").logging_enabled();
+    /// server.log(LogLevel::Warning, Some("database"), r#""connection pool exhausted""#);
+    /// ```
+    pub fn log(&self, level: LogLevel, logger: Option<&str>, data_json: &str) {
+        if level < *self.min_log_level.lock().unwrap() {
+            return;
+        }
+        let logger_field = match logger {
+            Some(l) => format!(r#","logger":"{}""#, json_escape(l)),
+            None => String::new(),
+        };
+        let params = format!(r#"{{"level":"{}"{logger_field},"data":{data_json}}}"#, level.as_str());
+        self.notify("notifications/message", Some(&params));
+    }
+
+    /// Handle `logging/setLevel`: store the requested minimum level so
+    /// subsequent [`Self::log`] calls filter against it. Returns
+    /// `INVALID_PARAMS` for a missing or unrecognized `params.level`.
+    fn do_set_log_level(&self, body: &str) -> Result<String, (i32, String)> {
+        let params = json_rpc::extract_raw(body, "params")
+            .ok_or((json_rpc::INVALID_PARAMS, "Missing params".to_string()))?;
+        let level_str = json_rpc::extract_str(&params, "level")
+            .ok_or((json_rpc::INVALID_PARAMS, "Missing level".to_string()))?;
+        let level = LogLevel::parse(&level_str)
+            .ok_or_else(|| (json_rpc::INVALID_PARAMS, format!("Unknown log level: {level_str}")))?;
+        *self.min_log_level.lock().unwrap() = level;
+        Ok("{}".to_string())
     }
 
     /// Require a bearer token on every request to the MCP endpoint.
@@ -871,6 +1006,7 @@ impl McpServer {
             "resources/read" => self.do_resources_read(body),
             "prompts/list"   => self.do_prompts_list(body),
             "prompts/get"    => self.do_prompts_get(body),
+            "logging/setLevel" => self.do_set_log_level(body),
             _                => Err((json_rpc::METHOD_NOT_FOUND, format!("Unknown method: {method}"))),
         }
     }
@@ -954,8 +1090,9 @@ impl McpServer {
             _ => PROTOCOL_VERSION,
         };
 
+        let logging_cap = if self.logging_enabled { r#","logging":{}"# } else { "" };
         let caps = format!(
-            r#"{{"tools":{{"listChanged":false}},"resources":{{"subscribe":false,"listChanged":false}},"prompts":{{"listChanged":false}}}}"#
+            r#"{{"tools":{{"listChanged":false}},"resources":{{"subscribe":false,"listChanged":false}},"prompts":{{"listChanged":false}}{logging_cap}}}"#
         );
         Ok(format!(
             r#"{{"protocolVersion":"{}","capabilities":{caps},"serverInfo":{{"name":"{}","version":"{}"}}}}"#,

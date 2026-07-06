@@ -2001,6 +2001,21 @@ Idle connections get a `: keep-alive` SSE comment every 15 seconds — both to s
 
 Scoped to the plain HTTP/1.1 path only (`Server::run`/`Server::process`), matching `Response::stream_pipe`'s existing scope generally — the HTTP/2 (`h2_handler`) and HTTP/3 (`h3_handler`) handlers don't drive `stream_pipe` for any response yet, not just this one. `TestClient` also doesn't drive `stream_pipe` (it inspects the `Response` directly without running the real write loop), so testing the actual channel plumbing calls the crate-internal `start_sse_stream()` directly alongside the public `.notify()`, reading from the returned `stream_pipe` reader in-process rather than going through `TestClient`.
 
+**`logging/setLevel` and `notifications/message`:** built directly on the SSE channel above — the spec lets a client request a minimum log level and receive server log messages pushed as `notifications/message` events. `.logging_enabled()` advertises the `logging` capability (`"logging":{}`) in `initialize`; `.log(level, logger, data_json)` pushes a log entry to every connected SSE client, filtered by whatever level the client last set via `logging/setLevel`:
+
+```rust
+use rust_web_server::mcp::{LogLevel, McpServer};
+
+let server = McpServer::new("my-server", "1.0").logging_enabled();
+
+// Elsewhere in your code:
+server.log(LogLevel::Warning, Some("database"), r#""connection pool exhausted""#);
+```
+
+`LogLevel` is the MCP spec's eight RFC 5424 syslog severities (`Debug` through `Emergency`, in that order — `PartialOrd`/`Ord` are derived from declaration order, so `level < min_level` comparisons just work). `.log()` only pushes if `level` is at or above the level most recently set by `logging/setLevel`; before any client calls it, the default is `LogLevel::Debug` — the least restrictive level, so nothing is filtered until a client asks for less noise. `logger` (optional) identifies the log's source (a module or subsystem name) and is escaped automatically; `data_json` is spliced in verbatim as any valid JSON value (an object, a string, whatever the spec allows), not escaped or re-serialized.
+
+`.log()` reuses `.notify()` internally (same backpressure and disconnect handling), so it inherits everything from the SSE section above — never blocks, drops a client whose buffer is full, HTTP/1.1 only. `.logging_enabled()` only changes what's *advertised*: `.log()` and `logging/setLevel` both work whether or not it was called, exactly like `.notify()` itself needs no opt-in — a spec-honest client simply wouldn't send `logging/setLevel` in the first place without seeing the capability advertised.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

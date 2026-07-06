@@ -1141,6 +1141,22 @@ buffer fills up (32 unread frames) is dropped the same way — `.notify()` never
 reader. HTTP/1.1 only — same scope as `stream_pipe` generally, since `h2_handler`/`h3_handler` don't
 drive it for any response yet.
 
+**`logging/setLevel` + `notifications/message`** — built on `.notify()` above. `.logging_enabled()`
+advertises the `logging` capability in `initialize`; `.log(level, logger, data_json)` pushes a log
+entry to every SSE-connected client, filtered by the level a client last set via `logging/setLevel`:
+
+```rust
+use rust_web_server::mcp::{LogLevel, McpServer};
+
+let server = McpServer::new("my-server", "1.0").logging_enabled();
+server.log(LogLevel::Warning, Some("database"), r#""connection pool exhausted""#);
+```
+
+`LogLevel` is the MCP spec's eight RFC 5424 severities, `Debug` through `Emergency` in declared
+(and therefore `Ord`) order. Default minimum level (before any `logging/setLevel` call) is `Debug` —
+nothing filtered. `.log()` inherits `.notify()`'s backpressure/disconnect handling; `.logging_enabled()`
+only changes what's advertised, `.log()`/`logging/setLevel` work either way.
+
 ---
 
 ## Standalone proxies

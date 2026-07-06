@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.81.0"
+version = "17.82.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
@@ -8,7 +8,7 @@ description = "A dependency-minimal Rust web platform: HTTP/1.1, HTTP/2, and HTT
 edition = "2021"
 rust-version = "1.75"
 license = "MIT"
-keywords = ["http", "web-server", "http3", "reverse-proxy", "framework"]
+keywords = ["http", "web-server", "http3", "reverse-proxy", "mcp"]
 categories = ["network-programming", "web-programming::http-server"]
 
 [lib]

@@ -161,6 +161,37 @@ data: {"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info"
 The SSE channel is only wired up for the plain HTTP/1.1 path (`Server::run`/`Server::process`). This matches the scope of `Response::stream_pipe` generally (the mechanism this feature is built on) — the HTTP/2 and HTTP/3 handlers don't drive `stream_pipe` for any response yet, not just this one.
 :::
 
+## Logging
+
+The spec lets a client request a minimum log level and receive server log messages pushed as `notifications/message` events over the SSE stream — useful during development, since an MCP client like Claude Desktop can show server diagnostics inline instead of you tailing a separate log file.
+
+Call `.logging_enabled()` when building the server to advertise the `logging` capability in `initialize`, then call `.log(level, logger, data_json)` from anywhere in your code to push an entry:
+
+```rust
+use rust_web_server::mcp::{LogLevel, McpServer};
+
+let server = McpServer::new("my-server", "1.0").logging_enabled();
+
+// Elsewhere in your code, e.g. inside a tool handler or a background thread:
+server.log(LogLevel::Warning, Some("database"), r#""connection pool exhausted""#);
+```
+
+`LogLevel` is the MCP spec's eight RFC 5424 syslog severities, from most to least severe: `Debug`, `Info`, `Notice`, `Warning`, `Error`, `Critical`, `Alert`, `Emergency`. A connected client can narrow which levels it wants delivered by calling `logging/setLevel`:
+
+```json
+{"method":"logging/setLevel","params":{"level":"warning"}}
+```
+
+After that call, only `.log()` calls at `Warning` or more severe are pushed to that client — `Debug`, `Info`, and `Notice` calls are silently filtered. Before any client calls `logging/setLevel`, the default minimum is `Debug` — the least restrictive level, so nothing is filtered until a client asks for less noise.
+
+`logger` (optional) identifies the log's source — a module name, a subsystem, whatever's meaningful in your app — and appears as the `logger` field on the pushed notification. `data_json` must already be valid JSON (an object, a string, a number — the spec allows any type) and is spliced in verbatim.
+
+:::note[`.logging_enabled()` doesn't gate functionality]
+Calling `.logging_enabled()` only changes what's *advertised* in `initialize`'s `capabilities` — `.log()` and `logging/setLevel` both work whether or not it was called. A spec-honest client simply wouldn't send `logging/setLevel` in the first place without seeing the capability advertised, so pairing them is expected but not enforced.
+:::
+
+`.log()` is built directly on [`.notify()`](#sse-streaming-transport) and inherits its behavior: it never blocks the calling thread, and a client whose event buffer fills up is dropped from the broadcast list exactly like a disconnected one.
+
 ## Protocol version negotiation
 
 `initialize` inspects the client's requested `params.protocolVersion` and responds with the lower of that and the server's own version, rather than always claiming its own regardless of what the client asked for:
