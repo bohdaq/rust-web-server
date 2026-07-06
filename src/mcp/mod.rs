@@ -93,7 +93,7 @@ mod tests;
 
 use std::collections::HashMap;
 use std::sync::mpsc::{self, SyncSender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use crate::app::App;
@@ -425,9 +425,13 @@ pub struct McpServer {
     server_name: String,
     server_version: String,
     path: String,
-    tools: Vec<ToolDef>,
-    resources: Vec<ResourceDef>,
-    prompts: Vec<PromptDef>,
+    /// `Arc<RwLock<_>>` (not a plain `Vec`) so a running server's tool list
+    /// can be mutated at runtime — see [`Self::register_tool`]/[`Self::remove_tool`]
+    /// — and every clone of this `McpServer` (each connection thread gets
+    /// one) sees the same live list.
+    tools: Arc<RwLock<Vec<ToolDef>>>,
+    resources: Arc<RwLock<Vec<ResourceDef>>>,
+    prompts: Arc<RwLock<Vec<PromptDef>>>,
     fallback: Option<Arc<dyn Application + Send + Sync>>,
     auth_token: Option<String>,
     /// Max items per page for `tools/list`/`resources/list`/`prompts/list`,
@@ -486,9 +490,9 @@ impl McpServer {
             server_name: name.into(),
             server_version: version.into(),
             path: "/mcp".to_string(),
-            tools: vec![],
-            resources: vec![],
-            prompts: vec![],
+            tools: Arc::new(RwLock::new(Vec::new())),
+            resources: Arc::new(RwLock::new(Vec::new())),
+            prompts: Arc::new(RwLock::new(Vec::new())),
             fallback: None,
             auth_token: None,
             page_size: None,
@@ -642,6 +646,134 @@ impl McpServer {
         Ok("{}".to_string())
     }
 
+    // ── dynamic registration ──────────────────────────────────────────────────
+    //
+    // Unlike `.tool()`/`.resource()`/`.prompt()` (consuming builders, called
+    // before the server starts serving requests), these take `&self` and can
+    // be called at any time from any thread holding a clone of this
+    // `McpServer` — e.g. after discovering a plugin, connecting to a
+    // database, or reacting to a hot-reloaded config file. Every clone
+    // shares the same underlying `Arc<RwLock<Vec<_>>>`, so a mutation made
+    // through one clone is immediately visible to every other clone,
+    // including the ones handling concurrent requests on other threads.
+    //
+    // Each registration/removal pushes the corresponding
+    // `notifications/{tools,resources,prompts}/list_changed` event (no
+    // params, per spec) to every `GET /mcp` SSE client via `.notify()`.
+
+    /// Register a callable tool at runtime, exactly like [`Self::tool`] but
+    /// without needing to own the server (and usable after it's already
+    /// serving requests). Pushes `notifications/tools/list_changed`.
+    ///
+    /// ```rust
+    /// use rust_web_server::mcp::{McpContent, McpServer};
+    ///
+    /// let server = McpServer::new("my-server", "1.0");
+    ///
+    /// // Later, from any thread holding a clone of `server`:
+    /// server.register_tool("refresh_cache", "Reload the in-memory cache", "{}", |_args| {
+    ///     Ok(McpContent::text("cache refreshed"))
+    /// });
+    /// let existed = server.remove_tool("refresh_cache");
+    /// assert!(existed);
+    /// ```
+    pub fn register_tool<F>(&self, name: &str, description: &str, input_schema: &str, handler: F)
+    where
+        F: Fn(&str) -> Result<McpContent, String> + Send + Sync + 'static,
+    {
+        self.tools.write().unwrap().push(ToolDef {
+            name: name.to_string(),
+            description: description.to_string(),
+            input_schema: input_schema.to_string(),
+            annotations: None,
+            handler: Arc::new(move |_ctx: McpContext, args: &str| handler(args)),
+        });
+        self.notify("notifications/tools/list_changed", None);
+    }
+
+    /// Remove a previously-registered tool by name. Returns `true` if a tool
+    /// with that name existed and was removed. Pushes
+    /// `notifications/tools/list_changed` only when something was actually
+    /// removed.
+    pub fn remove_tool(&self, name: &str) -> bool {
+        let removed = {
+            let mut tools = self.tools.write().unwrap();
+            let before = tools.len();
+            tools.retain(|t| t.name != name);
+            tools.len() != before
+        };
+        if removed {
+            self.notify("notifications/tools/list_changed", None);
+        }
+        removed
+    }
+
+    /// Register a readable resource at runtime, exactly like [`Self::resource`].
+    /// Pushes `notifications/resources/list_changed`.
+    pub fn register_resource<F>(&self, uri_template: &str, name: &str, description: &str, handler: F)
+    where
+        F: Fn(&str) -> Result<McpContent, String> + Send + Sync + 'static,
+    {
+        self.resources.write().unwrap().push(ResourceDef {
+            uri_template: uri_template.to_string(),
+            name: name.to_string(),
+            description: description.to_string(),
+            handler: Arc::new(handler),
+        });
+        self.notify("notifications/resources/list_changed", None);
+    }
+
+    /// Remove a previously-registered resource by its exact `uri_template`
+    /// (the same string passed to [`Self::register_resource`]/[`Self::resource`],
+    /// not a concrete URI). Returns `true` if it existed. Pushes
+    /// `notifications/resources/list_changed` only when something was removed.
+    pub fn remove_resource(&self, uri_template: &str) -> bool {
+        let removed = {
+            let mut resources = self.resources.write().unwrap();
+            let before = resources.len();
+            resources.retain(|r| r.uri_template != uri_template);
+            resources.len() != before
+        };
+        if removed {
+            self.notify("notifications/resources/list_changed", None);
+        }
+        removed
+    }
+
+    /// Register a prompt template at runtime, exactly like [`Self::prompt`]
+    /// (no argument definitions — use [`Self::remove_prompt`] +
+    /// [`Self::register_prompt`] if you need to change a prompt's arguments
+    /// later; there is no dynamic equivalent of [`Self::prompt_with_args`]).
+    /// Pushes `notifications/prompts/list_changed`.
+    pub fn register_prompt<F>(&self, name: &str, description: &str, handler: F)
+    where
+        F: Fn(&str) -> Result<Vec<PromptMessage>, String> + Send + Sync + 'static,
+    {
+        self.prompts.write().unwrap().push(PromptDef {
+            name: name.to_string(),
+            description: description.to_string(),
+            arguments: vec![],
+            handler: Arc::new(handler),
+        });
+        self.notify("notifications/prompts/list_changed", None);
+    }
+
+    /// Remove a previously-registered prompt by name. Returns `true` if it
+    /// existed. Pushes `notifications/prompts/list_changed` only when
+    /// something was removed.
+    pub fn remove_prompt(&self, name: &str) -> bool {
+        let removed = {
+            let mut prompts = self.prompts.write().unwrap();
+            let before = prompts.len();
+            prompts.retain(|p| p.name != name);
+            prompts.len() != before
+        };
+        if removed {
+            self.notify("notifications/prompts/list_changed", None);
+        }
+        removed
+    }
+
     /// Require a bearer token on every request to the MCP endpoint.
     ///
     /// The client must send `Authorization: Bearer <token>`. Requests with a
@@ -718,11 +850,11 @@ impl McpServer {
     ///
     /// Use [`Self::tool_with_context`] instead if the handler needs the
     /// caller's identity, session, or headers.
-    pub fn tool<F>(mut self, name: &str, description: &str, input_schema: &str, handler: F) -> Self
+    pub fn tool<F>(self, name: &str, description: &str, input_schema: &str, handler: F) -> Self
     where
         F: Fn(&str) -> Result<McpContent, String> + Send + Sync + 'static,
     {
-        self.tools.push(ToolDef {
+        self.tools.write().unwrap().push(ToolDef {
             name: name.to_string(),
             description: description.to_string(),
             input_schema: input_schema.to_string(),
@@ -758,7 +890,7 @@ impl McpServer {
     ///     );
     /// ```
     pub fn tool_annotated<F>(
-        mut self,
+        self,
         name: &str,
         description: &str,
         input_schema: &str,
@@ -768,7 +900,7 @@ impl McpServer {
     where
         F: Fn(&str) -> Result<McpContent, String> + Send + Sync + 'static,
     {
-        self.tools.push(ToolDef {
+        self.tools.write().unwrap().push(ToolDef {
             name: name.to_string(),
             description: description.to_string(),
             input_schema: input_schema.to_string(),
@@ -799,11 +931,11 @@ impl McpServer {
     ///         },
     ///     );
     /// ```
-    pub fn tool_with_context<F>(mut self, name: &str, description: &str, input_schema: &str, handler: F) -> Self
+    pub fn tool_with_context<F>(self, name: &str, description: &str, input_schema: &str, handler: F) -> Self
     where
         F: Fn(McpContext, &str) -> Result<McpContent, String> + Send + Sync + 'static,
     {
-        self.tools.push(ToolDef {
+        self.tools.write().unwrap().push(ToolDef {
             name: name.to_string(),
             description: description.to_string(),
             input_schema: input_schema.to_string(),
@@ -817,11 +949,11 @@ impl McpServer {
     ///
     /// `uri_template` uses `{param}` placeholders, e.g. `"user://{id}"`.
     /// The handler receives the full concrete URI string.
-    pub fn resource<F>(mut self, uri_template: &str, name: &str, description: &str, handler: F) -> Self
+    pub fn resource<F>(self, uri_template: &str, name: &str, description: &str, handler: F) -> Self
     where
         F: Fn(&str) -> Result<McpContent, String> + Send + Sync + 'static,
     {
-        self.resources.push(ResourceDef {
+        self.resources.write().unwrap().push(ResourceDef {
             uri_template: uri_template.to_string(),
             name: name.to_string(),
             description: description.to_string(),
@@ -834,11 +966,11 @@ impl McpServer {
     ///
     /// The handler receives the raw `arguments` JSON string and returns a
     /// list of [`PromptMessage`] values.
-    pub fn prompt<F>(mut self, name: &str, description: &str, handler: F) -> Self
+    pub fn prompt<F>(self, name: &str, description: &str, handler: F) -> Self
     where
         F: Fn(&str) -> Result<Vec<PromptMessage>, String> + Send + Sync + 'static,
     {
-        self.prompts.push(PromptDef {
+        self.prompts.write().unwrap().push(PromptDef {
             name: name.to_string(),
             description: description.to_string(),
             arguments: vec![],
@@ -849,7 +981,7 @@ impl McpServer {
 
     /// Register a prompt template with explicit argument definitions.
     pub fn prompt_with_args<F>(
-        mut self,
+        self,
         name: &str,
         description: &str,
         args: Vec<PromptArgDef>,
@@ -858,7 +990,7 @@ impl McpServer {
     where
         F: Fn(&str) -> Result<Vec<PromptMessage>, String> + Send + Sync + 'static,
     {
-        self.prompts.push(PromptDef {
+        self.prompts.write().unwrap().push(PromptDef {
             name: name.to_string(),
             description: description.to_string(),
             arguments: args,
@@ -1091,8 +1223,13 @@ impl McpServer {
         };
 
         let logging_cap = if self.logging_enabled { r#","logging":{}"# } else { "" };
+        // listChanged is always true: register_tool/remove_tool (and the resource/prompt
+        // equivalents) are always available, unlike logging which is opt-in via
+        // .logging_enabled(). resources.subscribe stays false — resources/subscribe and
+        // resources/unsubscribe aren't implemented (that's MCP_TODO.md's TODO-14), so
+        // advertising it would let a client call a method that doesn't exist.
         let caps = format!(
-            r#"{{"tools":{{"listChanged":false}},"resources":{{"subscribe":false,"listChanged":false}},"prompts":{{"listChanged":false}}{logging_cap}}}"#
+            r#"{{"tools":{{"listChanged":true}},"resources":{{"subscribe":false,"listChanged":true}},"prompts":{{"listChanged":true}}{logging_cap}}}"#
         );
         Ok(format!(
             r#"{{"protocolVersion":"{}","capabilities":{caps},"serverInfo":{{"name":"{}","version":"{}"}}}}"#,
@@ -1103,7 +1240,7 @@ impl McpServer {
     }
 
     fn do_tools_list(&self, body: &str) -> Result<String, (i32, String)> {
-        let items: Vec<String> = self.tools.iter().map(|t| {
+        let items: Vec<String> = self.tools.read().unwrap().iter().map(|t| {
             let annotations = match t.annotations {
                 Some(a) => format!(r#","annotations":{}"#, a.to_json()),
                 None => String::new(),
@@ -1128,10 +1265,12 @@ impl McpServer {
         let args = json_rpc::extract_raw(&params, "arguments")
             .unwrap_or_else(|| "{}".to_string());
 
-        let tool = self.tools.iter().find(|t| t.name == name)
-            .ok_or_else(|| (json_rpc::INVALID_PARAMS, format!("Unknown tool: {name}")))?;
+        let handler = {
+            let tools = self.tools.read().unwrap();
+            tools.iter().find(|t| t.name == name).map(|t| t.handler.clone())
+        }.ok_or_else(|| (json_rpc::INVALID_PARAMS, format!("Unknown tool: {name}")))?;
 
-        match (tool.handler)(ctx, &args) {
+        match handler(ctx, &args) {
             Ok(c) => Ok(format!(
                 r#"{{"content":[{}],"isError":false}}"#,
                 c.to_content_json(),
@@ -1146,7 +1285,7 @@ impl McpServer {
     }
 
     fn do_resources_list(&self, body: &str) -> Result<String, (i32, String)> {
-        let items: Vec<String> = self.resources.iter().map(|r| {
+        let items: Vec<String> = self.resources.read().unwrap().iter().map(|r| {
             format!(
                 r#"{{"uri":"{}","name":"{}","description":"{}","mimeType":"text/plain"}}"#,
                 json_escape(&r.uri_template),
@@ -1164,10 +1303,12 @@ impl McpServer {
         let uri = json_rpc::extract_str(&params, "uri")
             .ok_or((json_rpc::INVALID_PARAMS, "Missing uri".to_string()))?;
 
-        let resource = self.resources.iter().find(|r| uri_matches(&r.uri_template, &uri))
-            .ok_or_else(|| (json_rpc::INVALID_PARAMS, format!("Resource not found: {uri}")))?;
+        let handler = {
+            let resources = self.resources.read().unwrap();
+            resources.iter().find(|r| uri_matches(&r.uri_template, &uri)).map(|r| r.handler.clone())
+        }.ok_or_else(|| (json_rpc::INVALID_PARAMS, format!("Resource not found: {uri}")))?;
 
-        match (resource.handler)(&uri) {
+        match handler(&uri) {
             Ok(c) => {
                 let text_esc = json_escape(&c.text);
                 let uri_esc  = json_escape(&uri);
@@ -1181,7 +1322,7 @@ impl McpServer {
     }
 
     fn do_prompts_list(&self, body: &str) -> Result<String, (i32, String)> {
-        let items: Vec<String> = self.prompts.iter().map(|p| {
+        let items: Vec<String> = self.prompts.read().unwrap().iter().map(|p| {
             let arg_defs: Vec<String> = p.arguments.iter().map(|a| {
                 format!(
                     r#"{{"name":"{}","description":"{}","required":{}}}"#,
@@ -1240,15 +1381,17 @@ impl McpServer {
         let args = json_rpc::extract_raw(&params, "arguments")
             .unwrap_or_else(|| "{}".to_string());
 
-        let prompt = self.prompts.iter().find(|p| p.name == name)
-            .ok_or_else(|| (json_rpc::INVALID_PARAMS, format!("Unknown prompt: {name}")))?;
+        let (description, handler) = {
+            let prompts = self.prompts.read().unwrap();
+            prompts.iter().find(|p| p.name == name).map(|p| (p.description.clone(), p.handler.clone()))
+        }.ok_or_else(|| (json_rpc::INVALID_PARAMS, format!("Unknown prompt: {name}")))?;
 
-        match (prompt.handler)(&args) {
+        match handler(&args) {
             Ok(msgs) => {
                 let msg_jsons: Vec<String> = msgs.iter().map(|m| m.to_json()).collect();
                 Ok(format!(
                     r#"{{"description":"{}","messages":[{}]}}"#,
-                    json_escape(&prompt.description),
+                    json_escape(&description),
                     msg_jsons.join(","),
                 ))
             }

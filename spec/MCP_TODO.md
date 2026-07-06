@@ -374,30 +374,73 @@ builder, and one method that's mostly a thin filter in front of the already-buil
 
 ---
 
-### TODO-9: Dynamic tool/resource/prompt registration + `listChanged`
+### ✅ TODO-9: Dynamic tool/resource/prompt registration + `listChanged` — Done (v17.83.0)
 
-Currently tools are in `Arc<Vec<ToolDef>>` — immutable after build. There is no way to add or
-remove a tool at runtime (e.g. after discovering a plugin, connecting to a DB, or hot-reloading
-config).
+Changed `tools`/`resources`/`prompts` storage from a plain `Vec<T>` (the entry's premise said
+`Arc<Vec<ToolDef>>`, but it was actually an un-shared plain `Vec` before this — either way,
+immutable after construction) to `Arc<RwLock<Vec<T>>>` exactly as sketched, for all three
+collections, not just tools.
 
-**Change storage to `Arc<RwLock<Vec<ToolDef>>>`.**
+**No separate `McpHandle` type** — the entry's own sketch (`build_with_handle()` returning a
+`(server, handle)` pair) would introduce a second public type whose only job is holding the same
+`Arc<RwLock<_>>>` fields `McpServer` already has. Since `McpServer` is `#[derive(Clone)]` and every
+clone now shares the same underlying tools/resources/prompts storage (same pattern already
+established by `sessions` and `sse_clients`), a clone of the server *is* a handle — there's nothing
+a separate `McpHandle` would add. Implemented `register_tool`/`remove_tool`,
+`register_resource`/`remove_resource`, and `register_prompt`/`remove_prompt` as plain `&self`
+methods directly on `McpServer` instead:
 
-**Add a `McpHandle` returned from `.build()` (or exposed via `.handle()`):**
 ```rust
-let (server, handle) = McpServer::new(...).tool(...).build_with_handle();
-
-// Later, from any thread:
-handle.register_tool("new_tool", desc, schema, handler);
-handle.remove_tool("old_tool");
-// Automatically pushes notifications/tools/list_changed over SSE (needs TODO-7)
+server.register_tool("new_tool", desc, schema, handler);  // &self, not consuming
+let existed: bool = server.remove_tool("old_tool");
 ```
 
-Update `do_initialize` capabilities:
-```json
-{"tools":{"listChanged":true},"resources":{"listChanged":true,"subscribe":true},...}
-```
+Each pushes/removes exactly like the consuming `.tool()`/`.resource()`/`.prompt()` builders
+internally (same `ToolDef`/`ResourceDef`/`PromptDef` construction), just through a `.write().unwrap()`
+instead of a bare `.push()` on an owned `Vec`. `remove_*` uses `Vec::retain` and returns whether
+anything was actually removed (`before.len() != after.len()`), so callers can distinguish "removed"
+from "wasn't there."
 
-**Effort:** medium — `RwLock` swap, `McpHandle` type, `listChanged` notification dispatch.
+**Handler invocation no longer holds the lock for the call's duration:** `do_tools_call`,
+`do_resources_read`, and `do_prompts_get` used to `find()` inside a borrow of the `Vec` and call the
+handler while still holding that borrow. With `RwLock`, doing the same would hold a read guard for
+however long the handler takes to run — blocking any concurrent `register_*`/`remove_*` (which needs
+the write lock) until the handler returns, including a slow one. Instead, each of those three now
+clones the matched entry's `Arc<dyn Fn...>` handler (and, for prompts, the `description` string it
+also needs) out from under a short-lived read guard, drops the guard, and only then calls the
+handler — so a long-running tool call never stalls a registration change on another thread.
+
+**`listChanged` notifications, matching TODO-7's `.notify()` exactly:** every successful
+registration/removal pushes `notifications/tools/list_changed` (or the `resources`/`prompts`
+equivalent), no `params` — per spec, these carry none. A `remove_*` call that finds nothing pushes
+nothing, since nothing changed.
+
+**Capabilities updated with one deliberate correction to the entry's own sketch:** the entry's JSON
+example showed `"resources":{"listChanged":true,"subscribe":true}` — but `resources/subscribe`/
+`resources/unsubscribe` (TODO-14) aren't implemented in this dispatch table. Advertising
+`subscribe:true` would tell a client it can call a method that returns `METHOD_NOT_FOUND`. Set
+`listChanged:true` for all three (tools, resources, prompts) as intended, but left
+`resources.subscribe` at `false` until TODO-14 actually exists. Unlike the opt-in `.logging_enabled()`
+(TODO-8), `listChanged:true` is unconditional — dynamic registration is always available on every
+`McpServer`, nothing to opt into.
+
+**Scope, stated plainly:** only the plain registration shapes have dynamic equivalents —
+`register_tool`/`register_prompt` match `.tool()`/`.prompt()`, not `.tool_with_context()`,
+`.tool_annotated()`, or `.prompt_with_args()`. Changing a dynamically-added tool's annotations or a
+prompt's argument definitions means removing and re-registering under the same name.
+
+10 new tests in `src/mcp/tests.rs`: `initialize` advertises `listChanged:true` for all three and
+keeps `resources.subscribe:false`; `register_tool` makes a tool immediately callable via
+`tools/call` and pushes `notifications/tools/list_changed` (asserting no `params` field);
+`remove_tool` returns `true`/removes correctly and returns `false`/pushes nothing when the name
+doesn't exist (proven the same way as TODO-8's level-filtering test — a marker notification sent
+right after confirms nothing was queued by the no-op); matching register/remove tests for resources
+and prompts; and a dedicated test proving registration through one `McpServer` clone is visible
+through another — the actual point of the `Arc<RwLock<_>>>` change.
+
+**Effort:** medium, as estimated — though skewed toward the `RwLock` migration and the
+handler-invocation lock-scoping fix (both touching every existing list/call/read/get method) rather
+than the registration methods themselves, which are mechanically similar to the existing builders.
 
 ---
 
@@ -609,7 +652,7 @@ Phase 1 — Quick wins (no new dependencies, mostly additive)
 Phase 2 — Streaming foundation (enables all notification features)
   TODO-7  GET /mcp SSE channel            (medium — unblocks 8, 9, 10, 14, 15, 16)   ✅ done (v17.81.0)
   TODO-8  logging/setLevel + notifications (small, needs TODO-7)              ✅ done (v17.82.0)
-  TODO-9  dynamic registration             (medium, needs TODO-7)
+  TODO-9  dynamic registration             (medium, needs TODO-7)             ✅ done (v17.83.0)
   TODO-10 notifications/progress           (small, needs TODO-7 + TODO-2)
 
 Phase 3 — Enterprise + advanced
@@ -637,7 +680,7 @@ Phase 3 — Enterprise + advanced
 | 11 | `completions/complete` | 2024-11-05 | **P1** | Small | — |
 | 7 | SSE transport (`GET /mcp`) | Streamable HTTP | **P2** | Medium | ✅ Done (v17.81.0) |
 | 8 | `logging/setLevel` | 2024-11-05 | **P2** | Small | ✅ Done (v17.82.0) |
-| 9 | Dynamic registration + `listChanged` | 2024-11-05 | **P2** | Medium | #7 |
+| 9 | Dynamic registration + `listChanged` | 2024-11-05 | **P2** | Medium | ✅ Done (v17.83.0) |
 | 10 | `notifications/progress` | 2024-11-05 | **P2** | Small | #7 + #2 |
 | 12 | Request cancellation | 2024-11-05 | **P3** | Medium | `http2` async |
 | 13 | OAuth 2.0 auth | 2025-03-26 | **P3** | Small | `sso` feature |

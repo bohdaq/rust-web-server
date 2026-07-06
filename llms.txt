@@ -1157,6 +1157,31 @@ server.log(LogLevel::Warning, Some("database"), r#""connection pool exhausted""#
 nothing filtered. `.log()` inherits `.notify()`'s backpressure/disconnect handling; `.logging_enabled()`
 only changes what's advertised, `.log()`/`logging/setLevel` work either way.
 
+**Dynamic tool/resource/prompt registration + `listChanged`** — `.register_tool(...)`,
+`.register_resource(...)`, `.register_prompt(...)` (and matching `.remove_tool(name)`,
+`.remove_resource(uri_template)`, `.remove_prompt(name)`, each returning `bool`) take `&self`
+instead of consuming the server, so they work from any thread holding a clone, at any time:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let server = McpServer::new("my-server", "1.0");
+server.register_tool("refresh_cache", "Reload the cache", "{}", |_args| {
+    Ok(McpContent::text("cache refreshed"))
+});
+let existed = server.remove_tool("refresh_cache"); // -> true
+```
+
+Backed by `Arc<RwLock<Vec<_>>>` (not a plain `Vec`) so every clone of `McpServer` shares one live
+list. `do_tools_call`/`do_resources_read`/`do_prompts_get` clone the matched handler's `Arc` out of
+a short read-lock before invoking it, so a slow handler never blocks a concurrent registration. Each
+registration/removal that actually changes something pushes
+`notifications/tools/list_changed`/`.../resources/list_changed`/`.../prompts/list_changed` (no
+`params`) over SSE via `.notify()`; a no-op removal pushes nothing. `initialize` now advertises
+`"listChanged":true` for all three unconditionally (`resources.subscribe` stays `false` — that's
+TODO-14, not implemented). No dynamic equivalent of `.tool_with_context()`/`.tool_annotated()`/
+`.prompt_with_args()` — remove and re-register under the same name to change those.
+
 ---
 
 ## Standalone proxies

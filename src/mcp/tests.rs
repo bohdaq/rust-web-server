@@ -1255,3 +1255,133 @@ fn log_below_the_set_level_is_filtered_out_and_never_queued() {
     assert!(text.contains("should be delivered"), "expected the allowed message: {text}");
 }
 
+// ── dynamic registration + listChanged ────────────────────────────────────────
+
+#[test]
+fn initialize_advertises_list_changed_true_for_tools_resources_prompts() {
+    let srv = make_server();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#);
+    let body = body_of(&resp);
+    assert!(body.contains(r#""tools":{"listChanged":true}"#), "expected tools.listChanged: {body}");
+    assert!(body.contains(r#""prompts":{"listChanged":true}"#), "expected prompts.listChanged: {body}");
+    assert!(body.contains(r#""subscribe":false,"listChanged":true"#), "expected resources caps: {body}");
+}
+
+#[test]
+fn register_tool_makes_it_immediately_callable() {
+    let srv = make_server();
+    srv.register_tool("late_tool", "Registered at runtime", "{}", |_| Ok(McpContent::text("hi from late_tool")));
+
+    let list_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
+    assert!(body_of(&list_resp).contains("\"late_tool\""), "new tool missing from tools/list");
+
+    let call_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"late_tool","arguments":{}}}"#);
+    assert!(body_of(&call_resp).contains("hi from late_tool"), "new tool did not run");
+}
+
+#[test]
+fn register_tool_pushes_tools_list_changed_notification() {
+    let srv = make_server();
+    let mut resp = srv.start_sse_stream();
+    let mut reader = resp.stream_pipe.take().unwrap();
+
+    srv.register_tool("late_tool", "Registered at runtime", "{}", |_| Ok(McpContent::text("ok")));
+
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    let text = String::from_utf8_lossy(&buf[..n]);
+    assert!(text.contains(r#""method":"notifications/tools/list_changed""#), "missing notification: {text}");
+    assert!(!text.contains("\"params\""), "list_changed notifications carry no params: {text}");
+}
+
+#[test]
+fn remove_tool_returns_true_and_removes_it() {
+    let srv = make_server(); // registers "echo" and "fail"
+    assert!(srv.remove_tool("echo"));
+
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
+    let body = body_of(&resp);
+    assert!(!body.contains("\"echo\""), "echo should have been removed: {body}");
+    assert!(body.contains("\"fail\""), "fail should be unaffected: {body}");
+}
+
+#[test]
+fn remove_tool_returns_false_when_not_found_and_sends_no_notification() {
+    let srv = make_server();
+    let mut resp = srv.start_sse_stream();
+    let mut reader = resp.stream_pipe.take().unwrap();
+
+    assert!(!srv.remove_tool("does_not_exist"));
+
+    // If the no-op removal had (incorrectly) pushed a notification, this
+    // would be the first frame the reader sees instead of the marker below.
+    srv.notify("marker", None);
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    let text = String::from_utf8_lossy(&buf[..n]);
+    assert!(text.contains(r#""method":"marker""#), "expected only the marker notification: {text}");
+}
+
+#[test]
+fn register_resource_makes_it_immediately_readable() {
+    let srv = make_server();
+    srv.register_resource("late://{id}", "Late Resource", "Registered at runtime", |uri| {
+        Ok(McpContent::text(format!("late content for {uri}")))
+    });
+
+    let list_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"resources/list","id":1}"#);
+    assert!(body_of(&list_resp).contains("late://{id}"), "new resource missing from resources/list");
+
+    let read_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"resources/read","id":2,"params":{"uri":"late://42"}}"#);
+    assert!(body_of(&read_resp).contains("late content for late://42"), "new resource did not run");
+}
+
+#[test]
+fn remove_resource_by_uri_template_removes_it() {
+    let srv = make_server(); // registers "docs://{topic}"
+    assert!(srv.remove_resource("docs://{topic}"));
+    assert!(!srv.remove_resource("docs://{topic}"), "second removal should find nothing");
+
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"resources/list","id":1}"#);
+    assert!(!body_of(&resp).contains("docs://{topic}"));
+}
+
+#[test]
+fn register_prompt_makes_it_immediately_usable() {
+    let srv = make_server();
+    srv.register_prompt("late_prompt", "Registered at runtime", |_args| {
+        Ok(vec![PromptMessage::user("hello from late_prompt")])
+    });
+
+    let list_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"prompts/list","id":1}"#);
+    assert!(body_of(&list_resp).contains("\"late_prompt\""), "new prompt missing from prompts/list");
+
+    let get_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"prompts/get","id":2,"params":{"name":"late_prompt","arguments":{}}}"#);
+    assert!(body_of(&get_resp).contains("hello from late_prompt"), "new prompt did not run");
+}
+
+#[test]
+fn remove_prompt_removes_it() {
+    let srv = make_server(); // registers "summarize" and "translate"
+    assert!(srv.remove_prompt("summarize"));
+
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"prompts/list","id":1}"#);
+    let body = body_of(&resp);
+    assert!(!body.contains("\"summarize\""), "summarize should have been removed: {body}");
+    assert!(body.contains("\"translate\""), "translate should be unaffected: {body}");
+}
+
+#[test]
+fn dynamic_registration_is_visible_across_clones() {
+    // Arc<RwLock<_>> storage means every clone shares the same live list —
+    // this is the whole point of dynamic registration working from any
+    // thread holding a clone of the server.
+    let srv = McpServer::new("srv", "1.0");
+    let clone_of_srv = srv.clone();
+
+    clone_of_srv.register_tool("from_clone", "Registered via a clone", "{}", |_| Ok(McpContent::text("ok")));
+
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
+    assert!(body_of(&resp).contains("\"from_clone\""), "tool registered via a clone should be visible on the original");
+}
+

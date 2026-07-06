@@ -2016,6 +2016,26 @@ server.log(LogLevel::Warning, Some("database"), r#""connection pool exhausted""#
 
 `.log()` reuses `.notify()` internally (same backpressure and disconnect handling), so it inherits everything from the SSE section above — never blocks, drops a client whose buffer is full, HTTP/1.1 only. `.logging_enabled()` only changes what's *advertised*: `.log()` and `logging/setLevel` both work whether or not it was called, exactly like `.notify()` itself needs no opt-in — a spec-honest client simply wouldn't send `logging/setLevel` in the first place without seeing the capability advertised.
 
+**Dynamic tool/resource/prompt registration + `listChanged`:** `.tool()`/`.resource()`/`.prompt()` are consuming builders — called once, before the server starts serving requests. `.register_tool(...)`/`.register_resource(...)`/`.register_prompt(...)` and their `.remove_*(...)` counterparts take `&self` instead, so they can be called at any time from any thread holding a clone of the server — after discovering a plugin, connecting to a database, or reacting to a hot-reloaded config file:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let server = McpServer::new("my-server", "1.0");
+
+// Later, from any thread holding a clone of `server`:
+server.register_tool("refresh_cache", "Reload the in-memory cache", "{}", |_args| {
+    Ok(McpContent::text("cache refreshed"))
+});
+let existed = server.remove_tool("refresh_cache"); // -> true
+```
+
+This works because `tools`/`resources`/`prompts` are stored as `Arc<RwLock<Vec<_>>>` rather than a plain `Vec` — every clone of `McpServer` (each connection thread gets one) shares the same live list, so a mutation through one clone is immediately visible to every other clone, including ones currently handling requests. `do_tools_call`/`do_resources_read`/`do_prompts_get` clone the matched handler's `Arc` out from under a short-lived read-lock guard before invoking it, rather than holding the lock for the (potentially slow) duration of the handler call — so a long-running tool invocation never blocks a concurrent `register_tool`/`remove_tool` from another thread.
+
+Each registration or removal that actually changes something pushes the corresponding `notifications/tools/list_changed` / `notifications/resources/list_changed` / `notifications/prompts/list_changed` event (no `params`, per spec) to every `GET /mcp` SSE client via `.notify()` — a no-op removal (name not found) pushes nothing. `initialize`'s capabilities now advertise `"listChanged":true` for all three unconditionally (dynamic registration is always available, not opt-in like logging); `resources.subscribe` stays `false` since `resources/subscribe`/`resources/unsubscribe` aren't implemented (MCP_TODO.md's TODO-14) — advertising it would let a client call a method that doesn't exist.
+
+There is no dynamic equivalent of `.tool_with_context()`, `.tool_annotated()`, or `.prompt_with_args()` — `register_tool`/`register_prompt` only cover the plain shapes, matching `.tool()`/`.prompt()`. Removing and re-registering under the same name is the way to change a dynamically-added tool's annotations or a prompt's argument definitions later.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

@@ -192,6 +192,41 @@ Calling `.logging_enabled()` only changes what's *advertised* in `initialize`'s 
 
 `.log()` is built directly on [`.notify()`](#sse-streaming-transport) and inherits its behavior: it never blocks the calling thread, and a client whose event buffer fills up is dropped from the broadcast list exactly like a disconnected one.
 
+## Dynamic registration
+
+`.tool()`, `.resource()`, and `.prompt()` are consuming builders — call them once while constructing the server, before it starts serving requests. For tools/resources/prompts that only become known later (a plugin discovered at startup, a database connection, a hot-reloaded config file), use the `&self` equivalents instead, callable at any time from any thread holding a clone of the server:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let server = McpServer::new("my-server", "1.0");
+
+// Later, from any thread holding a clone of `server`:
+server.register_tool("refresh_cache", "Reload the in-memory cache", "{}", |_args| {
+    Ok(McpContent::text("cache refreshed"))
+});
+
+let existed = server.remove_tool("refresh_cache"); // -> true
+```
+
+The matching pairs are `.register_tool(...)`/`.remove_tool(name)`, `.register_resource(...)`/`.remove_resource(uri_template)`, and `.register_prompt(...)`/`.remove_prompt(name)` — each `remove_*` returns `bool` (whether something was actually found and removed).
+
+This works because tools/resources/prompts are stored behind `Arc<RwLock<Vec<_>>>` rather than a plain list, so every clone of `McpServer` — each connection gets one — shares the same live data. A tool handler is looked up and its `Arc` cloned out from under a brief read-lock before being called, so a slow-running tool never blocks a concurrent registration on another thread.
+
+Every registration or removal that actually changes something pushes the corresponding notification to every `GET /mcp` SSE client:
+
+```json
+{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
+```
+
+(Similarly `notifications/resources/list_changed` and `notifications/prompts/list_changed` — none of these carry a `params` field, per spec.) A removal that finds nothing (an unknown name) pushes no notification.
+
+`initialize` now advertises `"listChanged":true` for tools, resources, and prompts unconditionally — dynamic registration is always available, unlike logging which needs `.logging_enabled()`. `resources.subscribe` stays `false`: `resources/subscribe`/`resources/unsubscribe` aren't implemented yet.
+
+:::note[No dynamic equivalent for every builder variant]
+`.register_tool()` and `.register_prompt()` only cover the plain shapes — matching `.tool()` and `.prompt()`. There's no dynamic equivalent of `.tool_with_context()`, `.tool_annotated()`, or `.prompt_with_args()`. To change a dynamically-added tool's annotations or a prompt's argument definitions, remove it and register it again under the same name.
+:::
+
 ## Protocol version negotiation
 
 `initialize` inspects the client's requested `params.protocolVersion` and responds with the lower of that and the server's own version, rather than always claiming its own regardless of what the client asked for:
