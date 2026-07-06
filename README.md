@@ -275,6 +275,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Image and embedded-resource content — `McpContent::image(data, mime_type)` and `McpContent::embedded(uri, text, mime_type)` cover the MCP spec's `image` and `resource` content types alongside the original `text`/`json`
 - JSON-RPC batch requests — `POST /mcp` with a top-level JSON array dispatches each element independently and returns one combined `[...]` response array, per element success/error preserved, notifications omitted
 - Pagination for list methods — `.page_size(n)` caps `tools/list`/`resources/list`/`prompts/list` to `n` items per response with an opaque `nextCursor`/`params.cursor` for the next page; unset means every item comes back in one response
+- SSE streaming transport (`GET /mcp`) — a long-lived `text/event-stream` connection for server → client push; `.notify(method, params)` broadcasts a JSON-RPC notification to every connected client from anywhere in your code (HTTP/1.1 only)
 - 8 built-in rws tools — `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`
 - SSE streaming — `Sse` builder makes forwarding AI token streams to the browser trivial
 - Response caching — `CacheLayer` TTL cache; vary-by-header; `Cache-Control` opt-out

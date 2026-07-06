@@ -252,50 +252,67 @@ pagination helper applied to three list handlers.
 
 ## Priority 2 — Spec completeness (medium effort)
 
-### TODO-7: SSE streaming transport (`GET /mcp`)
+### ✅ TODO-7: SSE streaming transport (`GET /mcp`) — Done (v17.81.0)
 
-The MCP Streamable HTTP spec defines a second transport on the same path:
-- `POST /mcp` — client → server requests (implemented)
-- `GET /mcp` — server → client SSE stream for push notifications (**missing**)
+`GET /mcp` now returns a `text/event-stream` response that stays open indefinitely, and
+`McpServer::notify(method, params_json)` broadcasts a JSON-RPC notification (no `id`, per spec —
+fire-and-forget) to every connected client, framed as an SSE `data:` event.
 
-Without the GET SSE channel, **all three** `listChanged` / `subscribe` capabilities must
-remain `false`. This blocks:
-- `notifications/tools/list_changed` (TODO-9)
-- `notifications/resources/updated` + `notifications/resources/list_changed`
-- `notifications/progress` for long-running tools (TODO-10)
-- `notifications/message` log stream (TODO-8)
+**Actual leverage point turned out better than the entry's own sketch anticipated**: the entry
+proposed a bespoke "streaming SSE response that reads from `rx`," implying new response-writing
+machinery. That machinery already existed — `Response::stream_pipe: Option<Box<dyn Read + Send>>`,
+added for reverse-proxy passthrough streaming, and `Server::pipe_stream` (unmodified by this work)
+already reads from any `Read` source and forwards chunks with `Transfer-Encoding: chunked`, flushing
+each one immediately. So instead of new server-side write-loop code, this only needed a `Read`
+adapter over the channel: `SseChannelReader` wraps an `mpsc::Receiver<Vec<u8>>` and blocks in
+`read()` until either a frame arrives, the sender side disconnects (clean EOF, `Ok(0)`), or
+`SSE_KEEPALIVE_INTERVAL` (15s) elapses with nothing to send (writes a `: keep-alive` comment
+instead). `GET /mcp` creates an `mpsc::sync_channel(32)` pair, stores the sender in a new
+`sse_clients: Arc<Mutex<Vec<SyncSender<Vec<u8>>>>>` field, and returns a `Response` with
+`stream_pipe` set to a boxed `SseChannelReader` over the receiver — matching this entry's own
+"Leverage point" note almost exactly, just one layer lower (a `Read` impl, not a new response kind).
 
-**Design:**
-```rust
-// Internal broadcast bus
-type SseSender = std::sync::mpsc::SyncSender<String>;
+**Deliberate deviation from the sketch's `notify_all`:** the sketch's `tx.send(...)` on a
+`SyncSender` blocks the calling thread if that one client's bounded buffer is full — meaning a
+single slow SSE reader could stall every future `notify()` call from any thread. Implemented with
+`try_send` instead (never blocks); a client whose buffer is full is retained/dropped by the exact
+same `Vec::retain` sweep as a genuinely disconnected one — indistinguishable from the caller's
+perspective, and consistent with "one bad client can't affect anyone else."
 
-struct McpServer {
-    // ... existing fields ...
-    sse_clients: Arc<Mutex<Vec<SseSender>>>,
-}
-```
+**No separate "keep-alive heartbeat thread"** as the entry's effort estimate assumed: folding the
+keep-alive into `SseChannelReader::read`'s `recv_timeout` achieves the same effect (periodic writes
+to idle connections) without spawning and managing an extra thread per server instance.
 
-In `execute()`, when `request.method == "GET"` and path matches:
-1. Create a `(tx, rx)` pair.
-2. Push `tx` into `sse_clients`.
-3. Return a streaming SSE response that reads from `rx` until the channel closes.
+**Scope, stated plainly:** this only wires up the transport itself — the channel, the `GET`
+endpoint, and the generic `.notify()` broadcast primitive other TODOs will build on
+(`notifications/tools/list_changed` for TODO-9, `notifications/message` for TODO-8,
+`notifications/progress` for TODO-10, etc. all still need their own triggering logic, not
+implemented here). Also scoped to the plain HTTP/1.1 path only, matching `Response::stream_pipe`'s
+existing scope — `h2_handler`/`h3_handler` don't drive `stream_pipe` for *any* response yet, a
+pre-existing limitation this work didn't touch. Dead `sse_clients` entries (client disconnected, but
+`notify()` never called since) are only pruned lazily on the next `notify()`, not proactively — the
+same kind of "no eviction without a triggering event" tradeoff already documented for the session
+map in TODO-2.
 
-Push a notification from anywhere:
-```rust
-fn notify_all(&self, event: &str) {
-    let json = format!(r#"{{"jsonrpc":"2.0","method":"{}"}}"#, event);
-    let mut clients = self.sse_clients.lock().unwrap();
-    clients.retain(|tx| tx.send(format!("data: {json}\n\n")).is_ok());
-}
-```
+**Verified against a real socket, not just unit tests:** `TestClient` bypasses `Server::pipe_stream`
+entirely (it inspects the returned `Response` directly), so it can't exercise the actual streaming
+write loop. Beyond the unit tests below, this was manually verified end-to-end with a real running
+server and `curl -N`: a live SSE connection received periodic `.notify()` pushes as they were sent,
+two concurrent connections both received the same broadcast, and response headers
+(`Content-Type: text/event-stream`, chunked transfer encoding) were confirmed on the wire.
 
-**Leverage point:** `src/sse/mod.rs` already produces correct `text/event-stream` headers
-and framing. The internal plumbing here uses a raw MPSC channel rather than the `Sse` builder
-(which assembles a finished response body) — a lightweight equivalent that writes frames
-incrementally is needed. This is the largest single item in this list.
+12 new tests in `src/mcp/tests.rs`: `GET /mcp` via `Application`/`TestClient` returns `200` with
+`Content-Type: text/event-stream` (superseding the old `application_returns_405_for_get_on_mcp_path`
+test, renamed/repurposed since `GET` is no longer a 405); a new regression test that `DELETE /mcp`
+(an actually-unsupported method) still gets `405`; the bearer-auth guard covers `GET` too; and
+(calling the private `start_sse_stream`/`notify` directly, reading from the `stream_pipe` reader
+in-process) headers/reader presence, a delivered frame's `method`+`params` shape, `params` omitted
+when not given, broadcast to multiple simultaneous clients, a full-buffer client getting dropped,
+and a disconnected client getting pruned on the next `notify()`.
 
-**Effort:** medium — new GET handler, MPSC broadcast bus, keep-alive heartbeat thread.
+**Effort:** medium, as estimated — though the actual work skewed toward "adapt an existing
+mechanism" rather than "build new streaming infrastructure," since `stream_pipe` already did the
+hard part.
 
 ---
 
@@ -557,7 +574,7 @@ Phase 1 — Quick wins (no new dependencies, mostly additive)
   TODO-11 completions/complete             (small)
 
 Phase 2 — Streaming foundation (enables all notification features)
-  TODO-7  GET /mcp SSE channel            (medium — unblocks 8, 9, 10, 14, 15, 16)
+  TODO-7  GET /mcp SSE channel            (medium — unblocks 8, 9, 10, 14, 15, 16)   ✅ done (v17.81.0)
   TODO-8  logging/setLevel + notifications (small, needs TODO-7)
   TODO-9  dynamic registration             (medium, needs TODO-7)
   TODO-10 notifications/progress           (small, needs TODO-7 + TODO-2)
@@ -585,7 +602,7 @@ Phase 3 — Enterprise + advanced
 | 5 | JSON-RPC batch | JSON-RPC 2.0 | **P1** | Small | ✅ Done (v17.79.0) |
 | 6 | List pagination | 2024-11-05 | **P1** | Small | ✅ Done (v17.80.0) |
 | 11 | `completions/complete` | 2024-11-05 | **P1** | Small | — |
-| 7 | SSE transport (`GET /mcp`) | Streamable HTTP | **P2** | Medium | — |
+| 7 | SSE transport (`GET /mcp`) | Streamable HTTP | **P2** | Medium | ✅ Done (v17.81.0) |
 | 8 | `logging/setLevel` | 2024-11-05 | **P2** | Small | #7 |
 | 9 | Dynamic registration + `listChanged` | 2024-11-05 | **P2** | Medium | #7 |
 | 10 | `notifications/progress` | 2024-11-05 | **P2** | Small | #7 + #2 |

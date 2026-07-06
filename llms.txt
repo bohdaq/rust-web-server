@@ -1120,6 +1120,27 @@ unchanged from before pagination existed. The cursor is base64 of a decimal offs
 be treated as opaque; a malformed/tampered cursor gets `INVALID_PARAMS` (`-32602`), and an offset
 past the end returns an empty page with no `nextCursor` rather than erroring.
 
+**SSE streaming transport (`GET /mcp`)** — a second transport alongside `POST /mcp`: `GET /mcp`
+returns a `text/event-stream` response that stays open indefinitely for server → client push.
+`.notify(method, params_json)` broadcasts a JSON-RPC notification to every connected client from
+anywhere in your code:
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("my-server", "1.0");
+server.notify("notifications/message", Some(r#"{"level":"info","data":"job finished"}"#));
+```
+
+Built on the existing `Response::stream_pipe` mechanism (already used for reverse-proxy passthrough
+streaming), not a new response type: `GET /mcp` registers a bounded `mpsc::sync_channel(32)` sender,
+returns a `Response` whose `stream_pipe` reads from that channel, and `Server::pipe_stream` (already
+written, unmodified) drives it like any other streamed response. Idle connections get a `:
+keep-alive` comment every 15s (also how a disconnected client gets detected/pruned); a client whose
+buffer fills up (32 unread frames) is dropped the same way — `.notify()` never blocks on a slow
+reader. HTTP/1.1 only — same scope as `stream_pipe` generally, since `h2_handler`/`h3_handler` don't
+drive it for any response yet.
+
 ---
 
 ## Standalone proxies

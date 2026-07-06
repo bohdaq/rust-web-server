@@ -838,10 +838,20 @@ fn application_dispatches_post_to_mcp_endpoint() {
 }
 
 #[test]
-fn application_returns_405_for_get_on_mcp_path() {
+fn application_opens_sse_stream_for_get_on_mcp_path() {
     let srv = make_server();
     let client = TestClient::new(srv);
     let resp = client.get("/mcp").send();
+    assert_eq!(resp.status(), 200);
+    let content_type = resp.headers().iter().find(|h| h.name.eq_ignore_ascii_case("content-type"));
+    assert_eq!(content_type.map(|h| h.value.as_str()), Some("text/event-stream"));
+}
+
+#[test]
+fn application_returns_405_for_delete_on_mcp_path() {
+    let srv = make_server();
+    let client = TestClient::new(srv);
+    let resp = client.delete("/mcp").send();
     assert_eq!(resp.status(), 405);
 }
 
@@ -974,6 +984,13 @@ fn auth_options_preflight_also_requires_token() {
 }
 
 #[test]
+fn auth_protects_the_get_sse_endpoint_too() {
+    let client = TestClient::new(make_protected_server());
+    let resp = client.get("/mcp").send();
+    assert_eq!(resp.status(), 401);
+}
+
+#[test]
 fn auth_non_mcp_path_not_affected() {
     // Auth only guards /mcp — other paths go to the fallback App unchanged.
     let client = TestClient::new(make_protected_server());
@@ -1005,3 +1022,97 @@ fn no_auth_configured_allows_all() {
         .send();
     assert_eq!(resp.status(), 200);
 }
+
+// ── SSE streaming (GET /mcp) ───────────────────────────────────────────────────
+//
+// `TestClient` dispatches through `Application::execute` but never drives
+// `Response::stream_pipe` (that's `Server::pipe_stream`'s job, which only runs
+// in the real HTTP/1.1 accept loop) — so these tests call the private
+// `start_sse_stream`/`notify` methods directly and read from the returned
+// `stream_pipe` reader in-process to exercise the actual channel plumbing.
+
+use std::io::Read as _;
+
+#[test]
+fn start_sse_stream_returns_event_stream_headers_and_a_reader() {
+    let srv = make_server();
+    let resp = srv.start_sse_stream();
+    assert_eq!(resp.status_code, 200);
+    let content_type = resp.headers.iter().find(|h| h.name == "Content-Type").map(|h| h.value.as_str());
+    assert_eq!(content_type, Some("text/event-stream"));
+    assert!(resp.stream_pipe.is_some());
+}
+
+#[test]
+fn notify_delivers_a_frame_with_method_and_params_to_a_connected_client() {
+    let srv = make_server();
+    let mut resp = srv.start_sse_stream();
+    let mut reader = resp.stream_pipe.take().unwrap();
+
+    srv.notify("notifications/message", Some(r#"{"level":"info","data":"hi"}"#));
+
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    let text = String::from_utf8_lossy(&buf[..n]).into_owned();
+    assert!(text.starts_with("data: "), "expected an SSE data frame: {text}");
+    assert!(text.contains(r#""method":"notifications/message""#), "missing method: {text}");
+    assert!(text.contains(r#""params":{"level":"info","data":"hi"}"#), "missing params: {text}");
+    assert!(text.ends_with("\n\n"), "expected a trailing blank line: {text:?}");
+}
+
+#[test]
+fn notify_without_params_omits_the_params_field() {
+    let srv = make_server();
+    let mut resp = srv.start_sse_stream();
+    let mut reader = resp.stream_pipe.take().unwrap();
+
+    srv.notify("ping", None);
+
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    let text = String::from_utf8_lossy(&buf[..n]);
+    assert!(!text.contains("\"params\""), "did not expect a params field: {text}");
+}
+
+#[test]
+fn notify_reaches_every_connected_client() {
+    let srv = make_server();
+    let mut resp1 = srv.start_sse_stream();
+    let mut resp2 = srv.start_sse_stream();
+    let mut r1 = resp1.stream_pipe.take().unwrap();
+    let mut r2 = resp2.stream_pipe.take().unwrap();
+
+    srv.notify("ping", None);
+
+    let mut buf = [0u8; 4096];
+    assert!(r1.read(&mut buf).unwrap() > 0, "client 1 got nothing");
+    assert!(r2.read(&mut buf).unwrap() > 0, "client 2 got nothing");
+}
+
+#[test]
+fn notify_drops_a_client_whose_buffer_fills_up() {
+    let srv = make_server();
+    let resp = srv.start_sse_stream();
+    // Keep the reader (and thus the receiving end) alive but never read from
+    // it, so its bounded channel fills up rather than reporting disconnected.
+    let _reader = resp.stream_pipe;
+
+    for _ in 0..=super::SSE_CHANNEL_CAPACITY {
+        srv.notify("ping", None);
+    }
+
+    assert_eq!(srv.sse_clients.lock().unwrap().len(), 0, "overflowed client should have been dropped");
+}
+
+#[test]
+fn disconnected_client_is_pruned_on_the_next_notify() {
+    let srv = make_server();
+    let resp = srv.start_sse_stream();
+    assert_eq!(srv.sse_clients.lock().unwrap().len(), 1);
+
+    drop(resp); // drops stream_pipe -> drops the Receiver -> sender becomes disconnected
+    srv.notify("ping", None); // sweeps dead senders
+
+    assert_eq!(srv.sse_clients.lock().unwrap().len(), 0);
+}
+

@@ -1984,6 +1984,23 @@ A response with more items remaining includes `"nextCursor"`, an opaque string t
 
 Without calling `.page_size(...)`, every list method returns every registered item in one response and never emits `nextCursor` — the same behavior as before pagination existed. The cursor is just base64 of a decimal offset (e.g. `"NTA="` decodes to `"50"`), but it's meant to be treated as opaque — a malformed or tampered cursor gets a JSON-RPC `INVALID_PARAMS` (`-32602`) error rather than silently defaulting to offset `0`. An offset past the end of the list returns an empty page with no `nextCursor`, rather than erroring.
 
+**SSE streaming transport (`GET /mcp`):** the MCP Streamable HTTP spec defines a second transport alongside `POST /mcp` — a client that sends `GET /mcp` instead gets back a `text/event-stream` response that stays open indefinitely, for server → client push. Call `.notify(method, params_json)` from anywhere (a background thread, another request's handler) to push a JSON-RPC notification to every currently-connected SSE client:
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("my-server", "1.0");
+
+// Elsewhere — a background job, a webhook handler, another tool's handler:
+server.notify("notifications/message", Some(r#"{"level":"info","data":"job finished"}"#));
+```
+
+Implementation leverages the existing `Response::stream_pipe` mechanism (already used for reverse-proxy passthrough streaming) rather than introducing a new response variant: `GET /mcp` registers a bounded `mpsc::sync_channel(32)` sender in `sse_clients: Arc<Mutex<Vec<SyncSender<Vec<u8>>>>>` and returns a `Response` whose `stream_pipe` is a small adapter (`SseChannelReader`) implementing `Read` over the channel's receiver — `Server::pipe_stream` (unmodified) drives it exactly like any other streamed response. `.notify()` renders one JSON-RPC notification (`{"jsonrpc":"2.0","method":"...","params":...}`, no `id` — per spec, notifications get no response) as an SSE `data:` frame and pushes it to every connected client's sender with `try_send`, never blocking the calling thread.
+
+Idle connections get a `: keep-alive` SSE comment every 15 seconds — both to stop intermediate proxies from timing out a silent connection, and because it forces a write attempt that surfaces a disconnected client on its next check. A client whose buffer fills up (32 pending unread frames) is dropped from the broadcast list exactly like a disconnected one — `.notify()` cannot be made to block or fail because one SSE client stopped reading.
+
+Scoped to the plain HTTP/1.1 path only (`Server::run`/`Server::process`), matching `Response::stream_pipe`'s existing scope generally — the HTTP/2 (`h2_handler`) and HTTP/3 (`h3_handler`) handlers don't drive `stream_pipe` for any response yet, not just this one. `TestClient` also doesn't drive `stream_pipe` (it inspects the `Response` directly without running the real write loop), so testing the actual channel plumbing calls the crate-internal `start_sse_stream()` directly alongside the public `.notify()`, reading from the returned `stream_pipe` reader in-process rather than going through `TestClient`.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

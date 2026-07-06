@@ -50,6 +50,38 @@
 //! All JSON-RPC messages are sent as `POST /mcp` (override with [`.at()`](McpServer::at)).
 //! The server implements the [MCP 2024-11-05 specification](https://spec.modelcontextprotocol.io).
 //!
+//! `GET /mcp` opens a Server-Sent Events stream for server → client push —
+//! see [`McpServer::notify`] and the module docs' SSE section below.
+//!
+//! # SSE streaming transport
+//!
+//! A client that sends `GET /mcp` (instead of `POST`) gets back a
+//! `text/event-stream` response that stays open indefinitely. Call
+//! [`McpServer::notify`] from anywhere (a background thread, another request's
+//! handler, ...) to push a JSON-RPC notification to every currently-connected
+//! SSE client:
+//!
+//! ```rust,no_run
+//! use rust_web_server::mcp::McpServer;
+//!
+//! let server = McpServer::new("my-server", "1.0");
+//! // Elsewhere, e.g. after some background job finishes:
+//! server.notify("notifications/message", Some(r#"{"level":"info","data":"job done"}"#));
+//! ```
+//!
+//! Idle connections receive a `: keep-alive` SSE comment every 15 seconds so
+//! intermediate proxies don't time them out; this doubles as the mechanism
+//! that detects a client has disconnected (the next write attempt fails and
+//! the connection is dropped). A client whose event buffer fills up (32
+//! pending frames, unconsumed) is treated the same as a disconnected one and
+//! dropped from the broadcast list — [`McpServer::notify`] never blocks the
+//! calling thread waiting on a slow reader.
+//!
+//! This transport is only wired up for the plain HTTP/1.1 path
+//! (`Server::run`/`Server::process`) — same scope as `Response::stream_pipe`
+//! generally, which the HTTP/2 (`h2_handler`) and HTTP/3 (`h3_handler`)
+//! handlers don't yet support for *any* response, not just this one.
+//!
 //! # Environment variables
 //!
 //! None — configure the server programmatically via the builder.
@@ -60,7 +92,9 @@ mod json_rpc;
 mod tests;
 
 use std::collections::HashMap;
+use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::app::App;
 use crate::application::Application;
@@ -351,7 +385,28 @@ pub struct McpServer {
     /// churning through unbounded distinct clients would leak memory here
     /// with no built-in reaping mechanism.
     sessions: Arc<Mutex<HashMap<String, StoredClientInfo>>>,
+    /// Senders for every currently-connected `GET /mcp` SSE client, pushed to
+    /// by [`Self::notify`]. `Arc<Mutex<_>>` so every clone of this `McpServer`
+    /// broadcasts to the same set of listeners.
+    ///
+    /// Entries for clients that disconnected (or whose buffer filled up) are
+    /// only pruned lazily, the next time [`Self::notify`] is called and its
+    /// `try_send` fails — not proactively, since nothing else observes the
+    /// underlying `Receiver` closing. A server that never calls `notify`
+    /// after clients disconnect will accumulate dead entries here.
+    sse_clients: Arc<Mutex<Vec<SseSender>>>,
 }
+
+/// One `GET /mcp` SSE client's outbound channel. Bounded so a slow or stuck
+/// client can't grow memory without limit; [`McpServer::notify`] uses
+/// `try_send` (never blocks) and drops any client whose buffer is full.
+type SseSender = SyncSender<Vec<u8>>;
+
+/// Max buffered-but-unread SSE frames per client before it's treated as dead.
+const SSE_CHANNEL_CAPACITY: usize = 32;
+
+/// How often an idle SSE connection gets a `: keep-alive` comment.
+const SSE_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(15);
 
 impl McpServer {
     /// Create a new `McpServer`.  The default MCP endpoint is `POST /mcp`.
@@ -367,6 +422,7 @@ impl McpServer {
             auth_token: None,
             page_size: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            sse_clients: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -388,6 +444,67 @@ impl McpServer {
     pub fn page_size(mut self, n: usize) -> Self {
         self.page_size = Some(n.max(1));
         self
+    }
+
+    /// Push a JSON-RPC notification (no `id` — fire-and-forget, per the
+    /// spec) to every client currently connected to the `GET /mcp` SSE
+    /// stream, framed as an SSE `data:` event.
+    ///
+    /// `params_json`, if given, must already be a valid JSON value (usually
+    /// an object) — it's spliced in verbatim, not escaped or re-serialized.
+    ///
+    /// Never blocks: a client whose event buffer is full (not reading fast
+    /// enough) is treated the same as a disconnected one and dropped from
+    /// the broadcast list, same as `notify` would drop it anyway.
+    ///
+    /// ```rust
+    /// use rust_web_server::mcp::McpServer;
+    ///
+    /// let server = McpServer::new("my-server", "1.0");
+    /// server.notify("notifications/message", Some(r#"{"level":"info","data":"hello"}"#));
+    /// ```
+    pub fn notify(&self, method: &str, params_json: Option<&str>) {
+        let params_field = match params_json {
+            Some(p) => format!(r#","params":{p}"#),
+            None => String::new(),
+        };
+        let json = format!(r#"{{"jsonrpc":"2.0","method":"{}"{}}}"#, json_escape(method), params_field);
+        self.broadcast_sse(&json);
+    }
+
+    /// Send a raw pre-built JSON-RPC message to every connected SSE client,
+    /// pruning any whose channel is full or disconnected.
+    fn broadcast_sse(&self, json: &str) {
+        let frame = format!("data: {json}\n\n").into_bytes();
+        let mut clients = self.sse_clients.lock().unwrap();
+        clients.retain(|tx| tx.try_send(frame.clone()).is_ok());
+    }
+
+    /// Handle `GET /mcp`: register a new SSE client and return a
+    /// `text/event-stream` response that streams from its channel until the
+    /// connection closes. See the module docs' SSE section for the wire
+    /// details (keep-alive interval, backpressure behavior).
+    fn start_sse_stream(&self) -> Response {
+        let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(SSE_CHANNEL_CAPACITY);
+        self.sse_clients.lock().unwrap().push(tx);
+
+        let mut response = Response::new();
+        response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        response.headers.push(Header {
+            name: Header::_CONTENT_TYPE.to_string(),
+            value: "text/event-stream".to_string(),
+        });
+        response.headers.push(Header {
+            name: Header::_CACHE_CONTROL.to_string(),
+            value: "no-cache".to_string(),
+        });
+        response.headers.push(Header {
+            name: "X-Accel-Buffering".to_string(),
+            value: "no".to_string(),
+        });
+        response.stream_pipe = Some(Box::new(SseChannelReader::new(rx)));
+        response
     }
 
     /// Require a bearer token on every request to the MCP endpoint.
@@ -1022,6 +1139,51 @@ impl McpServer {
     }
 }
 
+// ── SSE channel reader ────────────────────────────────────────────────────────
+
+/// Adapts an `mpsc::Receiver<Vec<u8>>` of pre-framed SSE bytes into a
+/// blocking [`std::io::Read`], so `Server::pipe_stream` (already written for
+/// proxy passthrough streaming) can drive a `GET /mcp` SSE connection with no
+/// changes to the server's write loop.
+///
+/// Blocks in [`Self::read`] until either a frame arrives, the sender side is
+/// dropped (all `McpServer` clones gone — EOF, closing the connection), or
+/// [`SSE_KEEPALIVE_INTERVAL`] elapses with nothing to send (writes a `:
+/// keep-alive` comment instead, both to satisfy proxies that time out
+/// silent connections and to surface a dead peer on the next write attempt).
+struct SseChannelReader {
+    rx: mpsc::Receiver<Vec<u8>>,
+    leftover: Vec<u8>,
+}
+
+impl SseChannelReader {
+    fn new(rx: mpsc::Receiver<Vec<u8>>) -> Self {
+        SseChannelReader { rx, leftover: Vec::new() }
+    }
+}
+
+impl std::io::Read for SseChannelReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.leftover.is_empty() {
+            loop {
+                match self.rx.recv_timeout(SSE_KEEPALIVE_INTERVAL) {
+                    Ok(frame) => { self.leftover = frame; break; }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        self.leftover = b": keep-alive\n\n".to_vec();
+                        break;
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(0),
+                }
+            }
+        }
+
+        let n = self.leftover.len().min(buf.len());
+        buf[..n].copy_from_slice(&self.leftover[..n]);
+        self.leftover.drain(..n);
+        Ok(n)
+    }
+}
+
 // ── Application ───────────────────────────────────────────────────────────────
 
 impl Application for McpServer {
@@ -1045,6 +1207,7 @@ impl Application for McpServer {
                     let ctx = self.context_for(request);
                     self.handle_request_with_context(body, ctx)
                 }
+                "GET" => self.start_sse_stream(),
                 "OPTIONS" => {
                     // CORS preflight for browser-based MCP clients
                     let mut r = Response::new();
@@ -1052,7 +1215,7 @@ impl Application for McpServer {
                     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
                     r.headers.push(Header {
                         name: "Allow".to_string(),
-                        value: "POST, OPTIONS".to_string(),
+                        value: "GET, POST, OPTIONS".to_string(),
                     });
                     r
                 }
@@ -1062,10 +1225,10 @@ impl Application for McpServer {
                     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n405_method_not_allowed.reason_phrase.to_string();
                     r.headers.push(Header {
                         name: "Allow".to_string(),
-                        value: "POST, OPTIONS".to_string(),
+                        value: "GET, POST, OPTIONS".to_string(),
                     });
                     r.content_range_list = vec![Range::get_content_range(
-                        b"MCP endpoint only accepts POST".to_vec(),
+                        b"MCP endpoint only accepts GET (SSE) or POST".to_vec(),
                         MimeType::TEXT_PLAIN.to_string(),
                     )];
                     r

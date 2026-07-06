@@ -77,7 +77,7 @@ All JSON-RPC 2.0 messages travel over `POST /mcp`. The endpoint handles the full
 | `prompts/list`       | List all registered prompt templates         |
 | `prompts/get`        | Retrieve a rendered prompt by name           |
 
-`OPTIONS /mcp` is also handled for CORS preflight. All other methods return `405 Method Not Allowed`.
+`OPTIONS /mcp` is handled for CORS preflight, and `GET /mcp` opens an SSE stream for server → client push — see [SSE streaming transport](#sse-streaming-transport) below. All other HTTP methods return `405 Method Not Allowed`.
 
 Override the default path with `.at("/custom-path")` if needed.
 
@@ -129,6 +129,36 @@ Claude Desktop and other MCP clients already send `cursor` back automatically on
 
 :::note[The cursor is opaque]
 The cursor is base64 of a decimal offset, but treat it as an opaque token — don't construct or parse it yourself. A malformed or tampered cursor gets a JSON-RPC `INVALID_PARAMS` (`-32602`) error rather than silently resetting to the first page. An offset past the end of the list returns an empty page with no `nextCursor`, not an error.
+:::
+
+## SSE streaming transport
+
+The MCP Streamable HTTP spec defines a second transport alongside `POST /mcp`: a client that sends `GET /mcp` instead gets back a `text/event-stream` response that stays open indefinitely, for server → client push (log messages, progress updates, list-changed notifications, and anything else you want to push proactively).
+
+Call `.notify(method, params_json)` from anywhere in your code — a background thread, a webhook handler, another tool's own handler — to push a JSON-RPC notification to every client currently connected to the SSE stream:
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("my-server", "1.0");
+
+// Elsewhere, e.g. after a background job finishes:
+server.notify("notifications/message", Some(r#"{"level":"info","data":"job finished"}"#));
+```
+
+`params_json`, if given, must already be valid JSON (usually an object) — it's spliced into the notification verbatim, not escaped or re-serialized. `method` alone (no `id`) matches how the JSON-RPC spec defines a notification: fire-and-forget, no response expected.
+
+```json
+// What a connected client sees on the SSE stream after the call above:
+data: {"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info","data":"job finished"}}
+```
+
+:::note[Backpressure and disconnection]
+`.notify()` never blocks the calling thread. Each connected client has a bounded 32-frame buffer; a client that isn't reading fast enough (buffer full) is dropped from the broadcast list exactly like a disconnected one — one slow or stuck client can never stall notifications to everyone else. Idle connections receive a `: keep-alive` SSE comment every 15 seconds, both so intermediate proxies don't time out a silent connection and because it forces a write attempt that reveals a dead peer.
+:::
+
+:::caution[HTTP/1.1 only]
+The SSE channel is only wired up for the plain HTTP/1.1 path (`Server::run`/`Server::process`). This matches the scope of `Response::stream_pipe` generally (the mechanism this feature is built on) — the HTTP/2 and HTTP/3 handlers don't drive `stream_pipe` for any response yet, not just this one.
 :::
 
 ## Protocol version negotiation
