@@ -2116,6 +2116,36 @@ Unlike the flat broadcast every other notification in this server uses (`.notify
 
 Verified end-to-end against a real running server: `initialize` → read back `Mcp-Session-Id` → `GET /mcp` with that header → `resources/subscribe` with the same header → `.notify_resource_updated(...)` from a background thread — the subscribed session's SSE stream received the update, while a second SSE connection with a different, never-subscribed session id received nothing.
 
+**`sampling/createMessage` — server-side sampling:** the most unusual MCP feature — it reverses the normal request direction. The *server* asks the connected client to run LLM inference, sending a JSON-RPC request over the `GET /mcp` SSE stream; the client answers with its own `POST /mcp` carrying a JSON-RPC response. Call `ctx.sample(request, timeout)` from a `.tool_with_context()` handler:
+
+```rust
+use rust_web_server::mcp::{McpServer, PromptMessage, SamplingRequest};
+use std::time::Duration;
+
+let server = McpServer::new("my-server", "1.0")
+    .tool_with_context("ask_llm", "Ask the connected client's model a question", "{}", |ctx, _args| {
+        let response = ctx.sample(
+            SamplingRequest {
+                messages: vec![PromptMessage::user("What is 2+2?")],
+                max_tokens: 100,
+                system_prompt: None,
+            },
+            Duration::from_secs(30),
+        )?;
+        Ok(response.content)
+    });
+```
+
+`SamplingRequest.messages` reuses `PromptMessage` rather than introducing a near-identical `SamplingMessage` type — the spec's sampling message shape (`{"role":...,"content":{"type":"text",...}}`) is exactly what `PromptMessage` already models, right down to its `::user()`/`::assistant()` constructors.
+
+`ctx.sample()` **blocks the calling thread** — it is not `async fn`. This is deliberate, not a stopgap: tool handlers in this crate are plain synchronous closures (no async tool handler support exists yet — MCP_TODO.md's TODO-17), so there's no `.await` point to suspend at even if this were async. The calling thread parks on an internal channel for up to `timeout`; on a thread-pool server this ties up one worker for that long, the same tradeoff `timeout::with_timeout` already accepts for bounding a slow handler's *caller* from the other direction.
+
+Mechanically, this is the first place a response needs to be routed back to a specific in-flight call rather than just broadcast or session-targeted like every prior notification. `McpServer` mints a fresh request id, registers an `mpsc::Sender<Result<String, String>>` for it in a new `pending_sampling: Arc<Mutex<HashMap<String, mpsc::Sender<...>>>>` map, sends the `sampling/createMessage` request to the caller's session via the existing `send_sse_to_sessions` (from `resources/subscribe`), and blocks on the matching receiver. The client's eventual `POST /mcp` reply is a JSON-RPC *response* — no `method` field, by definition — so `handle_request_with_context`/`handle_batch` now check a method-less body with a recognized `id` against `pending_sampling` (via `try_deliver_sampling_response`) before falling back to the old "Missing method" `INVALID_REQUEST` error; a matching id delivers the response through the channel and unblocks `sample()`, a non-matching one still gets rejected as invalid, exactly as before this existed.
+
+`ctx.sample()` fails fast, before sending anything, if: the client's `initialize` call never declared `params.capabilities.sampling` (checked via a new `StoredClientInfo.supports_sampling` bool, since sampling is a *client* capability the spec has the client declare, not something the server advertises); there's no session id to address the request to; or `ctx` has no live server behind it. It fails with a timeout error if the client never responds — including if it has no `GET /mcp` SSE connection open for that session at all, since there's no separate "not connected" signal from `send_sse_to_sessions`.
+
+Verified end-to-end against a real running server, since this bidirectional flow isn't something unit tests alone can fully exercise (though a real spawned-thread test covers the actual channel mechanics — see `src/mcp/tests.rs`): `initialize` declaring `capabilities.sampling` → `GET /mcp` with the returned session id → a `tools/call` that invoked `ctx.sample(...)` and blocked → read the `sampling/createMessage` request off the SSE stream → `POST` a response with the same id → the original `tools/call` unblocked and returned the sampled content.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

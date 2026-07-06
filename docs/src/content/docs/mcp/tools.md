@@ -146,6 +146,49 @@ Rust cannot forcibly interrupt a running synchronous closure — there is no mec
 
 Only `.tool_with_context()` handlers can check cancellation — a plain `.tool()` handler never receives `McpContext`. `is_cancelled()` is always safe to call: it returns `false` if the client never sent a cancellation, if this wasn't a `tools/call` (the only method cancellation applies to), or if `ctx` has no live server behind it.
 
+## Server-side sampling
+
+Most MCP traffic flows client → server. `sampling/createMessage` reverses that: the *server* asks the connected client to run LLM inference, and the client answers. This is useful for agent-to-agent or meta-agent patterns — a tool that needs its own LLM call to decide what to do next, using whatever model the client already has configured, rather than the server managing its own API key and provider.
+
+Call `ctx.sample(request, timeout)` from a `.tool_with_context()` handler:
+
+```rust
+use rust_web_server::mcp::{McpServer, PromptMessage, SamplingRequest};
+use std::time::Duration;
+
+let mcp = McpServer::new("my-server", "1.0")
+    .tool_with_context(
+        "ask_llm",
+        "Ask the connected client's model a question",
+        r#"{"type":"object"}"#,
+        |ctx, _args| {
+            let response = ctx.sample(
+                SamplingRequest {
+                    messages: vec![PromptMessage::user("What is 2+2?")],
+                    max_tokens: 100,
+                    system_prompt: None,
+                },
+                Duration::from_secs(30),
+            )?;
+            Ok(response.content)
+        },
+    );
+```
+
+`SamplingRequest.messages` reuses [`PromptMessage`](/mcp/prompts/#promptmessage) rather than a near-identical `SamplingMessage` type — the spec's sampling message shape (`{"role":...,"content":{"type":"text",...}}`) is exactly what `PromptMessage` already models, including its `::user()`/`::assistant()` constructors. `SamplingResponse` (what `ctx.sample()` returns on success) has `role`, `content` (an `McpContent`), `model` (which model the client actually used), and `stop_reason`.
+
+:::caution[This blocks the calling thread]
+`ctx.sample()` is not `async fn` — it blocks synchronously until the client responds or `timeout` elapses. This is deliberate: tool handlers in this crate are plain synchronous closures, with no async tool handler support to `.await` inside of yet. On a thread-pool server this ties up one worker thread for up to `timeout` — the same tradeoff per-route timeouts (`with_timeout`) already accept from the other direction.
+:::
+
+`ctx.sample()` fails fast, before sending anything, if:
+
+- The client's `initialize` call never declared `capabilities.sampling` — sampling is a *client* capability the spec has the client declare (not something a server advertises), so a client that never said it could handle sampling requests won't get one sent to it.
+- This request has no session id (`Mcp-Session-Id`) — there'd be no way to address the request to a specific client connection.
+- `ctx` has no live server behind it (e.g. a context built by hand via `handle_request_with_context` in a test, rather than a real request through `execute()`).
+
+Otherwise, it fails with a timeout error if the client doesn't respond in time — including if the client simply has no [`GET /mcp` SSE connection](/mcp/overview/#sse-streaming-transport) open for that session at all, since there's no separate "not connected" signal.
+
 ## Tool annotations
 
 The MCP 2025-03-26 spec adds **annotations** — behavioral hints that clients like Claude Desktop use to decide whether to warn or ask for confirmation before calling a tool (e.g. skip confirmation for a read-only tool, warn before a destructive one). Register them with `.tool_annotated()`, which takes the same arguments as `.tool()` plus a `ToolAnnotations` value:

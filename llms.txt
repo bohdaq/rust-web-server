@@ -1277,6 +1277,42 @@ Verified end-to-end with a real server: `initialize` → `GET /mcp` with the ret
 `resources/subscribe` → `.notify_resource_updated(...)` from another thread reached the subscribed
 session's SSE stream; a second SSE connection with a different, unsubscribed session id got nothing.
 
+**`sampling/createMessage` (server-side sampling)** — reverses the usual direction: the *server*
+asks the client to run inference, over SSE, and the client answers via its own `POST /mcp`.
+`ctx.sample(request, timeout)` in a `.tool_with_context()` handler sends the request and blocks:
+
+```rust
+use rust_web_server::mcp::{McpServer, PromptMessage, SamplingRequest};
+use std::time::Duration;
+
+let server = McpServer::new("my-server", "1.0")
+    .tool_with_context("ask_llm", "Ask the connected client's model", "{}", |ctx, _args| {
+        let response = ctx.sample(
+            SamplingRequest { messages: vec![PromptMessage::user("2+2?")], max_tokens: 100, system_prompt: None },
+            Duration::from_secs(30),
+        )?;
+        Ok(response.content)
+    });
+```
+
+`SamplingRequest.messages` reuses `PromptMessage` (identical wire shape) instead of a near-duplicate
+`SamplingMessage` type. `ctx.sample()` blocks the calling thread rather than being `async fn` — no
+async tool handler support exists yet (TODO-17), so there's nothing to `.await` on anyway; a
+thread-pool worker is tied up for up to `timeout`, same tradeoff `with_timeout` already accepts.
+`McpServer` mints a request id, registers a oneshot `mpsc::Sender` for it in
+`pending_sampling: Arc<Mutex<HashMap<String, mpsc::Sender<Result<String,String>>>>>`, sends the
+request via `send_sse_to_sessions`, and blocks on the matching receiver. The client's reply is a
+JSON-RPC *response* (no `method`) — `handle_request_with_context`/`handle_batch` check a
+method-less body with a recognized `id` against `pending_sampling` before falling back to the old
+"Missing method" error. Fails fast if the client's `initialize` never declared
+`capabilities.sampling` (a new `StoredClientInfo.supports_sampling`, since sampling is a *client*
+capability, not server-advertised), if there's no session id, or if `ctx` has no live server;
+times out if the client never answers.
+
+Verified end-to-end with a real server: a `tools/call` invoking `ctx.sample(...)` blocked, the
+`sampling/createMessage` request appeared on the session's SSE stream, and posting a response with
+the matching id unblocked the original call with the sampled content.
+
 ---
 
 ## Standalone proxies

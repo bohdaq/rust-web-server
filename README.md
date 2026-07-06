@@ -282,6 +282,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - `completion/complete` — `.completion(ref_type, ref_name, handler)` registers an argument-autocomplete provider for a tool or prompt, so clients like Cursor and VS Code can offer suggestions while the user types
 - Request cancellation — `ctx.is_cancelled()` in a `.tool_with_context(...)` handler cooperatively checks whether the client sent `notifications/cancelled` for this call, so a long-running handler can stop early between its own steps
 - `resources/subscribe` / `resources/unsubscribe` — `.notify_resource_updated(uri)` pushes `notifications/resources/updated` over SSE to just the sessions subscribed to that URI, for live-updating resource panels (e.g. Claude Desktop watching a config file)
+- `sampling/createMessage` (server-side sampling) — `ctx.sample(request, timeout)` in a `.tool_with_context(...)` handler asks the connected client to run LLM inference and blocks for its answer, reversing the usual request direction
 - 8 built-in rws tools — `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`
 - SSE streaming — `Sse` builder makes forwarding AI token streams to the browser trivial
 - Response caching — `CacheLayer` TTL cache; vary-by-header; `Cache-Control` opt-out

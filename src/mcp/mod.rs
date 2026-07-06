@@ -268,6 +268,15 @@ pub struct McpContext {
     /// `pub` — see that method. `None` for anything other than a live
     /// `tools/call` dispatched through [`McpServer::execute`]/`handle_request_with_context`.
     cancellation: Option<Arc<std::sync::atomic::AtomicBool>>,
+    /// Whether this session's `initialize` call declared
+    /// `params.capabilities.sampling`, checked by [`Self::sample`] before
+    /// sending a request the client never said it could answer.
+    sampling_supported: bool,
+    /// Shared handle to the owning [`McpServer`]'s in-flight
+    /// `sampling/createMessage` registry, used by [`Self::sample`]. Not
+    /// `pub` — see `sse_clients` for the same "plumbing, not context data"
+    /// reasoning; `None` under the same conditions.
+    pending_sampling: Option<Arc<Mutex<HashMap<String, mpsc::Sender<Result<String, String>>>>>>,
 }
 
 impl McpContext {
@@ -349,6 +358,135 @@ impl McpContext {
     pub fn is_cancelled(&self) -> bool {
         self.cancellation.as_ref().is_some_and(|c| c.load(std::sync::atomic::Ordering::Relaxed))
     }
+
+    /// Ask the connected client to run LLM inference ("sampling") and block
+    /// until it replies or `timeout` elapses — the server-initiated half of
+    /// `sampling/createMessage`. This reverses the usual request direction:
+    /// the server sends a JSON-RPC *request* to the client over the `GET
+    /// /mcp` SSE stream, and the client answers with its own `POST /mcp`
+    /// carrying a JSON-RPC *response* (no `method`) that
+    /// [`McpServer::handle_request_with_context`] recognizes and routes
+    /// back here instead of treating it as an invalid request.
+    ///
+    /// Blocking (not `async fn`) is deliberate: tool handlers in this crate
+    /// are plain synchronous closures — there is no async tool handler
+    /// support yet (MCP_TODO.md's TODO-17) for this to `.await` inside of.
+    /// The calling thread parks on the response channel for up to
+    /// `timeout`; on a thread-pool server this ties up one worker for that
+    /// long, same tradeoff `crate::timeout::with_timeout` already accepts
+    /// for bounding a slow handler's *caller*.
+    ///
+    /// Fails fast, before sending anything, if: the client's `initialize`
+    /// call never declared `capabilities.sampling` (it wouldn't know what
+    /// to do with the request); this request has no session id (nothing to
+    /// address the request to); or `ctx` has no live server behind it.
+    /// Otherwise fails with a timeout error if the client never responds —
+    /// including if it simply has no `GET /mcp` SSE connection open for
+    /// this session, since there's no separate "not connected" signal.
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::mcp::{McpServer, PromptMessage, SamplingRequest};
+    /// use std::time::Duration;
+    ///
+    /// let server = McpServer::new("my-server", "1.0")
+    ///     .tool_with_context("ask_llm", "Ask the connected client's model a question", "{}", |ctx, _args| {
+    ///         let response = ctx.sample(
+    ///             SamplingRequest {
+    ///                 messages: vec![PromptMessage::user("What is 2+2?")],
+    ///                 max_tokens: 100,
+    ///                 system_prompt: None,
+    ///             },
+    ///             Duration::from_secs(30),
+    ///         )?;
+    ///         Ok(response.content)
+    ///     });
+    /// ```
+    pub fn sample(&self, request: SamplingRequest, timeout: Duration) -> Result<SamplingResponse, String> {
+        if !self.sampling_supported {
+            return Err("the connected client did not declare sampling support in its initialize capabilities".to_string());
+        }
+        let session_id = self.session_id.clone()
+            .ok_or_else(|| "sampling requires a session (Mcp-Session-Id)".to_string())?;
+        let sse_clients = self.sse_clients.as_ref()
+            .ok_or_else(|| "sampling requires a live server (this context has none)".to_string())?;
+        let pending = self.pending_sampling.as_ref()
+            .ok_or_else(|| "sampling requires a live server (this context has none)".to_string())?;
+
+        let request_id = format!("\"{}\"", crate::request_id::generate_request_id());
+        let (tx, rx) = mpsc::channel::<Result<String, String>>();
+        pending.lock().unwrap().insert(request_id.clone(), tx);
+
+        let messages_json: Vec<String> = request.messages.iter().map(|m| m.to_json()).collect();
+        let system_prompt_field = match &request.system_prompt {
+            Some(s) => format!(r#","systemPrompt":"{}""#, json_escape(s)),
+            None => String::new(),
+        };
+        let params = format!(
+            r#"{{"messages":[{}],"maxTokens":{}{system_prompt_field}}}"#,
+            messages_json.join(","), request.max_tokens,
+        );
+        let rpc = format!(
+            r#"{{"jsonrpc":"2.0","id":{request_id},"method":"sampling/createMessage","params":{params}}}"#
+        );
+
+        send_sse_to_sessions(sse_clients, &[session_id], &rpc);
+
+        let outcome = rx.recv_timeout(timeout);
+        pending.lock().unwrap().remove(&request_id);
+
+        match outcome {
+            Ok(Ok(result_json)) => parse_sampling_response(&result_json),
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err("sampling/createMessage timed out waiting for the client's response".to_string()),
+        }
+    }
+}
+
+/// A request to ask the connected MCP client to run LLM inference
+/// ("sampling") — build one and pass it to [`McpContext::sample`].
+///
+/// `messages` reuses [`PromptMessage`] rather than introducing a near-identical
+/// type — the spec's sampling message shape (`{"role":...,"content":{"type":"text",...}}`)
+/// is exactly what `PromptMessage` already models.
+pub struct SamplingRequest {
+    pub messages: Vec<PromptMessage>,
+    pub max_tokens: u32,
+    /// An optional system prompt to steer the client's model, per the
+    /// spec's `params.systemPrompt`.
+    pub system_prompt: Option<String>,
+}
+
+/// The client's answer to a [`SamplingRequest`], returned by
+/// [`McpContext::sample`].
+pub struct SamplingResponse {
+    /// Almost always `"assistant"`, per spec.
+    pub role: String,
+    pub content: McpContent,
+    /// The model the client actually used to generate this response, e.g.
+    /// `"claude-3-sonnet-20240307"`.
+    pub model: String,
+    /// Why the model stopped, e.g. `"endTurn"`, `"maxTokens"`, `"stopSequence"`.
+    /// `None` if the client didn't report one.
+    pub stop_reason: Option<String>,
+}
+
+/// Parse a `sampling/createMessage` response's `result` object (already
+/// extracted from the enclosing JSON-RPC envelope) into a [`SamplingResponse`].
+fn parse_sampling_response(result_json: &str) -> Result<SamplingResponse, String> {
+    let role = json_rpc::extract_str(result_json, "role").unwrap_or_else(|| "assistant".to_string());
+    let content_json = json_rpc::extract_raw(result_json, "content")
+        .ok_or_else(|| "sampling response missing content".to_string())?;
+    let kind = json_rpc::extract_str(&content_json, "type").unwrap_or_else(|| "text".to_string());
+    let content = match kind.as_str() {
+        "image" => McpContent::image(
+            json_rpc::extract_str(&content_json, "data").unwrap_or_default(),
+            json_rpc::extract_str(&content_json, "mimeType").unwrap_or_default(),
+        ),
+        _ => McpContent::text(json_rpc::extract_str(&content_json, "text").unwrap_or_default()),
+    };
+    let model = json_rpc::extract_str(result_json, "model").unwrap_or_default();
+    let stop_reason = json_rpc::extract_str(result_json, "stopReason");
+    Ok(SamplingResponse { role, content, model, stop_reason })
 }
 
 /// `clientInfo` recorded for one session at `initialize` time, looked up by
@@ -358,6 +496,13 @@ impl McpContext {
 struct StoredClientInfo {
     name: Option<String>,
     version: Option<String>,
+    /// Whether this session's `initialize` call declared `params.capabilities.sampling`
+    /// (spec: the client, not the server, declares sampling support — the
+    /// presence of the key is what matters, not its contents, which are
+    /// normally an empty object). Checked by [`McpContext::sample`] before
+    /// sending a `sampling/createMessage` request that the client would
+    /// have no idea how to answer.
+    supports_sampling: bool,
 }
 
 // ── ToolAnnotations ───────────────────────────────────────────────────────────
@@ -610,6 +755,15 @@ pub struct McpServer {
     /// harmless stale session id behind, same "no proactive eviction"
     /// tradeoff already documented for `sessions`.
     subscriptions: Arc<Mutex<HashMap<String, Vec<String>>>>,
+    /// In-flight `sampling/createMessage` requests this server has sent to
+    /// a client, keyed by the raw (already-quoted) request id token this
+    /// server minted. A JSON-RPC *response* has no `method` field, so
+    /// [`Self::handle_request_with_context`]/[`Self::handle_batch`]
+    /// special-case a method-less body with a recognized `id` as a
+    /// sampling reply (via [`Self::try_deliver_sampling_response`]) rather
+    /// than an invalid request. See [`McpContext::sample`] for the
+    /// send-and-block side.
+    pending_sampling: Arc<Mutex<HashMap<String, mpsc::Sender<Result<String, String>>>>>,
 }
 
 /// One `GET /mcp` SSE client: its outbound channel plus the
@@ -660,6 +814,7 @@ impl McpServer {
             min_log_level: Arc::new(Mutex::new(LogLevel::Debug)),
             cancellations: Arc::new(Mutex::new(HashMap::new())),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
+            pending_sampling: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -1256,12 +1411,22 @@ impl McpServer {
             return self.handle_batch(trimmed, ctx);
         }
 
+        let id = json_rpc::extract_id(body);
+
         let method = match json_rpc::extract_str(body, "method") {
             Some(m) => m,
-            None => return rpc_error(None, json_rpc::INVALID_REQUEST, "Missing method"),
+            None => {
+                // No `method` — either malformed, or a JSON-RPC *response*
+                // to a sampling/createMessage request this server sent
+                // earlier (responses never carry `method`).
+                if let Some(id) = &id {
+                    if self.try_deliver_sampling_response(id, body) {
+                        return no_content();
+                    }
+                }
+                return rpc_error(None, json_rpc::INVALID_REQUEST, "Missing method");
+            }
         };
-
-        let id = json_rpc::extract_id(body);
 
         if method == "notifications/cancelled" {
             self.handle_cancellation(body);
@@ -1313,9 +1478,16 @@ impl McpServer {
         let mut session_init_body: Option<String> = None;
 
         for elem in &elements {
+            let id = json_rpc::extract_id(elem);
+
             let method = match json_rpc::extract_str(elem, "method") {
                 Some(m) => m,
                 None => {
+                    if let Some(id) = &id {
+                        if self.try_deliver_sampling_response(id, elem) {
+                            continue; // delivered; no response entry, same as any notification
+                        }
+                    }
                     parts.push(Self::format_result(
                         "null",
                         &Err((json_rpc::INVALID_REQUEST, "Missing method".to_string())),
@@ -1323,8 +1495,6 @@ impl McpServer {
                     continue;
                 }
             };
-
-            let id = json_rpc::extract_id(elem);
 
             if method == "notifications/cancelled" {
                 self.handle_cancellation(elem);
@@ -1425,6 +1595,31 @@ impl McpServer {
         }
     }
 
+    /// If `body` is a JSON-RPC *response* (no `method`, by definition — see
+    /// [`Self::handle_request_with_context`]) to a `sampling/createMessage`
+    /// request this server sent and is still waiting on (`id` found in
+    /// `pending_sampling`), deliver it to the blocked [`McpContext::sample`]
+    /// call and return `true`. Returns `false` for any `id` this server
+    /// isn't tracking — the caller still needs to treat that as a genuine
+    /// malformed/unrecognized message.
+    fn try_deliver_sampling_response(&self, id: &str, body: &str) -> bool {
+        let sender = match self.pending_sampling.lock().unwrap().remove(id) {
+            Some(s) => s,
+            None => return false,
+        };
+        let payload = match json_rpc::extract_raw(body, "result") {
+            Some(result) => Ok(result),
+            None => {
+                let message = json_rpc::extract_raw(body, "error")
+                    .and_then(|e| json_rpc::extract_str(&e, "message"))
+                    .unwrap_or_else(|| "sampling/createMessage request failed".to_string());
+                Err(message)
+            }
+        };
+        let _ = sender.send(payload); // the waiter may have already timed out and dropped rx
+        true
+    }
+
     /// Render one JSON-RPC 2.0 response object — `{"jsonrpc":"2.0","result":...,"id":...}`
     /// or the `error` shape — from a dispatch result and its request's `id` (already
     /// rendered as a raw JSON token, e.g. `"1"`, `"\"abc\""`, or `"null"`).
@@ -1448,8 +1643,8 @@ impl McpServer {
     /// [`Self::handle_request_with_context`], right after a successful
     /// `initialize`.
     fn start_session(&self, body: &str, response: &mut Response) {
-        let client_info = json_rpc::extract_raw(body, "params")
-            .and_then(|p| json_rpc::extract_raw(&p, "clientInfo"));
+        let params = json_rpc::extract_raw(body, "params");
+        let client_info = params.as_deref().and_then(|p| json_rpc::extract_raw(p, "clientInfo"));
         let (name, version) = match &client_info {
             Some(info) => (
                 json_rpc::extract_str(info, "name"),
@@ -1457,6 +1652,10 @@ impl McpServer {
             ),
             None => (None, None),
         };
+        let supports_sampling = params.as_deref()
+            .and_then(|p| json_rpc::extract_raw(p, "capabilities"))
+            .and_then(|c| json_rpc::extract_raw(&c, "sampling"))
+            .is_some();
 
         eprintln!(
             "[mcp] initialize from client {} v{}",
@@ -1468,7 +1667,7 @@ impl McpServer {
         self.sessions
             .lock()
             .unwrap()
-            .insert(session_id.clone(), StoredClientInfo { name, version });
+            .insert(session_id.clone(), StoredClientInfo { name, version, supports_sampling });
 
         response.headers.push(Header {
             name: "Mcp-Session-Id".to_string(),
@@ -1796,12 +1995,12 @@ impl McpServer {
             .get_header("Mcp-Session-Id".to_string())
             .map(|h| h.value.clone());
 
-        let (client_name, client_version) = match &session_id {
+        let (client_name, client_version, sampling_supported) = match &session_id {
             Some(sid) => match self.sessions.lock().unwrap().get(sid) {
-                Some(info) => (info.name.clone(), info.version.clone()),
-                None => (None, None),
+                Some(info) => (info.name.clone(), info.version.clone(), info.supports_sampling),
+                None => (None, None, false),
             },
-            None => (None, None),
+            None => (None, None, false),
         };
 
         McpContext {
@@ -1812,6 +2011,8 @@ impl McpServer {
             progress_token: None,
             sse_clients: Some(self.sse_clients.clone()),
             cancellation: None,
+            sampling_supported,
+            pending_sampling: Some(self.pending_sampling.clone()),
         }
     }
 }

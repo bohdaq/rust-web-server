@@ -711,24 +711,75 @@ right key (session id) was identified.
 
 ---
 
-### TODO-15: `sampling/createMessage` — server-side sampling
+### ✅ TODO-15: `sampling/createMessage` — server-side sampling — Done (v17.88.0)
 
-The spec allows the MCP server to ask the client to run inference ("sampling"). This reverses
-the normal flow: the server sends a `sampling/createMessage` request over the SSE channel and
-the client responds via POST.
+`ctx.sample(request, timeout)` (a `.tool_with_context()`-only method, matching this entry's own
+`server_handle.sample(...)` sketch in spirit) sends a `sampling/createMessage` request over the
+`GET /mcp` SSE channel (TODO-7) and blocks until the client's `POST /mcp` reply arrives or `timeout`
+elapses.
 
-```rust
-let response = server_handle.sample(SamplingRequest {
-    messages: vec![SamplingMessage::user("What is 2+2?")],
-    max_tokens: 100,
-    model_preferences: None,
-}).await?;
-```
+**Blocking, not `async fn`, deliberately** — the entry's own sketch used `.await`, but this entry's
+"Depends on: TODO-7 and async execution" was never fully buildable: async tool handlers (TODO-17)
+still don't exist in this crate, so there is no `.await` point inside a tool handler to suspend at
+even if `sample()` itself were async. A synchronous, thread-parking implementation sidesteps that
+missing dependency entirely — the calling thread blocks on an `mpsc::Receiver` for up to `timeout`,
+tying up one worker on a thread-pool server, the same tradeoff `timeout::with_timeout` already
+accepts (there, bounding a slow handler's *caller*; here, bounding this handler's own wait).
 
-This is the most unusual MCP feature — only needed for agent-to-agent or meta-agent patterns.
-**Depends on:** TODO-7 and async execution.
+**No `SamplingMessage` type** — the entry's sketch used one, but `PromptMessage` (existing, from
+TODO-2 era prompt support) already models the exact same wire shape
+(`{"role":...,"content":{"type":"text",...}}`), constructors included. `SamplingRequest.messages:
+Vec<PromptMessage>` reuses it directly rather than introducing a duplicate type for an identical
+shape. `SamplingRequest` itself covers `messages`/`max_tokens`/`system_prompt` — the spec's other
+optional fields (`modelPreferences`, `stopSequences`, `metadata`, `includeContext`, `temperature`)
+are out of scope here, an explicit, deliberate scope narrowing rather than an oversight, given this
+entry's own "Effort: large" framing already anticipated trimming somewhere.
 
-**Effort:** large (bidirectional request/response over SSE).
+**The actual novel piece wasn't sending the request — it was routing the reply back.** Every prior
+MCP feature in this server only ever needed to recognize incoming *requests* (things with a
+`method`). A `sampling/createMessage` reply is a JSON-RPC *response* — no `method` field, by
+definition — arriving as an ordinary `POST /mcp` body that looks, to the rest of this dispatch
+table, exactly like a malformed request. `McpServer` gained `pending_sampling: Arc<Mutex<HashMap<String,
+mpsc::Sender<Result<String, String>>>>>`, keyed by a freshly minted (and pre-quoted, spec allows
+`string | number`) request id; `sample()` registers a sender there, sends the request via the
+existing `send_sse_to_sessions` (TODO-14's targeted-delivery primitive — sampling requests go to
+exactly the session that asked for them, same as resource updates), and blocks on the matching
+receiver. `handle_request_with_context`/`handle_batch` both now check a method-less body with a
+recognized `id` against `pending_sampling` (`try_deliver_sampling_response`) *before* falling back
+to the pre-existing "Missing method" `INVALID_REQUEST` error — an unrecognized method-less body
+still gets that same error, unchanged from before this feature existed.
+
+**Fails fast, spec-aware, before ever sending anything:** a new `StoredClientInfo.supports_sampling`
+bool (checked from `params.capabilities.sampling` at `initialize` time, alongside the existing
+`clientInfo` extraction) reflects that sampling is a *client*-declared capability per spec — the
+server doesn't advertise it in its own `initialize` response the way `logging`/`completions` are
+server-declared, since it's the client, not the server, doing the answering. `sample()` returns an
+immediate error (no request sent, no wait) if the connecting client never declared it, if there's no
+session id to address a request to, or if `ctx` has no live server behind it. Only a genuine
+non-answer (client connected, capable, but silent) surfaces as the `recv_timeout` error — including
+the case where the client never even opened a `GET /mcp` SSE connection for that session, since
+`send_sse_to_sessions` has no separate "nobody's listening" signal to report back.
+
+**Verified end-to-end against a real running server** (this bidirectional flow, even more than
+TODO-7/TODO-14, isn't something unit tests alone prove — though a real spawned-thread unit test
+does cover the actual channel mechanics): `initialize` declaring `capabilities.sampling` → `GET
+/mcp` with the returned session id → a `tools/call` invoking `ctx.sample(...)`, which blocked → the
+`sampling/createMessage` request appeared on that session's SSE stream with a fresh id → a `POST`
+carrying `{"id":<same id>,"result":{...}}` unblocked the original call, which returned the sampled
+content end to end.
+
+5 new tests in `src/mcp/tests.rs`: fails fast without a declared sampling capability; fails fast
+without a session id even when sampling is otherwise declared; times out (short timeout, ~50ms) when
+nobody ever responds; the full round trip (a spawned thread plays the client — reads the outbound
+request off the real SSE reader, extracts its id, posts the matching response — while the main
+thread's `tools/call` blocks in `ctx.sample()` until that arrives), also confirming `pending_sampling`
+is cleaned up afterward; and an error response (`{"error":{"message":...}}` instead of `{"result":...}`)
+surfaces that message as `sample()`'s `Err`.
+
+**Effort:** large, as estimated, though the actual size came almost entirely from the
+request/response correlation (`pending_sampling`, the method-less-body detection in both dispatch
+paths) rather than the request-sending half, which was a short hop from TODO-14's existing
+`send_sse_to_sessions`.
 
 ---
 
@@ -797,7 +848,7 @@ Phase 3 — Enterprise + advanced
   TODO-13 OAuth 2.0 (2025-03-26)         (small — JwksCache already exists)
   TODO-14 resources/subscribe             (medium, needs TODO-7 + TODO-9)      ✅ done (v17.87.0)
   TODO-17 async tool handlers             (medium, http2 only)
-  TODO-15 sampling/createMessage          (large)
+  TODO-15 sampling/createMessage          (large)               ✅ done (v17.88.0)
   TODO-16 roots/list                      (medium, needs TODO-15)
 ```
 
@@ -822,5 +873,5 @@ Phase 3 — Enterprise + advanced
 | 13 | OAuth 2.0 auth | 2025-03-26 | **P3** | Small | `sso` feature |
 | 14 | `resources/subscribe` | 2024-11-05 | **P3** | Medium | ✅ Done (v17.87.0) |
 | 17 | Async tool handlers | Ergonomics | **P3** | Medium | `http2` feature |
-| 15 | `sampling/createMessage` | 2024-11-05 | **P3** | Large | #7 |
+| 15 | `sampling/createMessage` | 2024-11-05 | **P3** | Large | ✅ Done (v17.88.0) |
 | 16 | `roots/list` | 2024-11-05 | **P3** | Medium | #15 |

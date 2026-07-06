@@ -1,7 +1,7 @@
 use super::json_rpc;
 use super::{
     decode_cursor, encode_cursor, extract_arg, json_escape, LogLevel, McpContent, McpContext,
-    McpServer, PromptArgDef, PromptMessage, ToolAnnotations, PROTOCOL_VERSION,
+    McpServer, PromptArgDef, PromptMessage, SamplingRequest, ToolAnnotations, PROTOCOL_VERSION,
 };
 use crate::app::App;
 use crate::core::New;
@@ -9,6 +9,7 @@ use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::test_client::TestClient;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 // ── json_rpc::extract_str ─────────────────────────────────────────────────────
 
@@ -1892,5 +1893,146 @@ fn initialize_advertises_resources_subscribe_true() {
     let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#);
     let body = body_of(&resp);
     assert!(body.contains(r#""resources":{"subscribe":true,"listChanged":true}"#), "expected resources.subscribe true: {body}");
+}
+
+// ── sampling/createMessage ─────────────────────────────────────────────────────
+
+fn make_sampling_server() -> McpServer {
+    McpServer::new("test-srv", "0.1").tool_with_context("ask", "Ask the client's model", "{}", |ctx, _args| {
+        match ctx.sample(
+            SamplingRequest {
+                messages: vec![PromptMessage::user("2+2?")],
+                max_tokens: 50,
+                system_prompt: None,
+            },
+            Duration::from_millis(500),
+        ) {
+            Ok(response) => Ok(response.content),
+            Err(e) => Ok(McpContent::text(e)),
+        }
+    })
+}
+
+#[test]
+fn sample_fails_fast_without_sampling_capability_declared() {
+    let client = TestClient::new(make_sampling_server());
+    let init_resp = client.post("/mcp").body_text(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#, // no capabilities.sampling
+    ).send();
+    let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
+
+    let call_resp = client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
+        .send();
+    assert!(call_resp.body_text().contains("did not declare sampling support"), "unexpected body: {}", call_resp.body_text());
+}
+
+#[test]
+fn sample_fails_without_a_session_id_even_with_sampling_declared() {
+    let srv = make_sampling_server();
+    let ctx = McpContext { sampling_supported: true, ..Default::default() };
+    let resp = srv.handle_request_with_context(
+        r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"ask","arguments":{}}}"#,
+        ctx,
+    );
+    let body = body_of(&resp);
+    assert!(body.contains("requires a session"), "expected a session-id error: {body}");
+}
+
+#[test]
+fn sample_times_out_when_the_client_never_responds() {
+    let client = TestClient::new(make_sampling_server());
+    let init_resp = client.post("/mcp").body_text(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"sampling":{}}}}"#,
+    ).send();
+    let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
+    // Deliberately no GET /mcp SSE connection opened — nobody could ever respond.
+
+    let call_resp = client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
+        .send();
+    assert!(call_resp.body_text().contains("timed out"), "unexpected body: {}", call_resp.body_text());
+}
+
+#[test]
+fn sample_full_round_trip_via_sse_and_post_response() {
+    let srv_for_responder = make_sampling_server();
+    let client = TestClient::new(srv_for_responder.clone());
+
+    let init_resp = client.post("/mcp").body_text(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"sampling":{}}}}"#,
+    ).send();
+    let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
+
+    // Open the GET /mcp SSE stream for this session directly on the shared
+    // server (TestClient never drives Response::stream_pipe).
+    let mut sse_resp = srv_for_responder.start_sse_stream(&get_request_with_session(Some(&session_id)));
+    let mut reader = sse_resp.stream_pipe.take().unwrap();
+
+    // A separate thread plays the client: block reading the outbound
+    // sampling/createMessage request off the SSE stream, extract its id,
+    // and POST a response back with that same id.
+    let responder_srv = srv_for_responder.clone();
+    let responder = std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        let n = reader.read(&mut buf).unwrap();
+        let text = String::from_utf8_lossy(&buf[..n]).into_owned();
+        let json_line = text.trim().trim_start_matches("data:").trim();
+        assert!(json_line.contains(r#""method":"sampling/createMessage""#), "unexpected SSE frame: {json_line}");
+        let id = json_rpc::extract_id(json_line).expect("outbound sampling request should carry an id");
+        let response_body = format!(
+            r#"{{"jsonrpc":"2.0","id":{id},"result":{{"role":"assistant","content":{{"type":"text","text":"4"}},"model":"test-model","stopReason":"endTurn"}}}}"#
+        );
+        responder_srv.handle_request(&response_body);
+    });
+
+    let call_resp = client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
+        .send();
+
+    responder.join().unwrap();
+
+    assert_eq!(call_resp.status(), 200);
+    assert!(call_resp.body_text().contains('4'), "expected the sampled response text: {}", call_resp.body_text());
+    assert!(srv_for_responder.pending_sampling.lock().unwrap().is_empty(), "pending_sampling entry should be cleaned up after delivery");
+}
+
+#[test]
+fn sample_error_response_is_surfaced_to_the_caller() {
+    let srv_for_responder = make_sampling_server();
+    let client = TestClient::new(srv_for_responder.clone());
+
+    let init_resp = client.post("/mcp").body_text(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"sampling":{}}}}"#,
+    ).send();
+    let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
+
+    let mut sse_resp = srv_for_responder.start_sse_stream(&get_request_with_session(Some(&session_id)));
+    let mut reader = sse_resp.stream_pipe.take().unwrap();
+
+    let responder_srv = srv_for_responder.clone();
+    let responder = std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        let n = reader.read(&mut buf).unwrap();
+        let text = String::from_utf8_lossy(&buf[..n]).into_owned();
+        let json_line = text.trim().trim_start_matches("data:").trim();
+        let id = json_rpc::extract_id(json_line).expect("outbound sampling request should carry an id");
+        let response_body = format!(
+            r#"{{"jsonrpc":"2.0","id":{id},"error":{{"code":-1,"message":"user declined the sampling request"}}}}"#
+        );
+        responder_srv.handle_request(&response_body);
+    });
+
+    let call_resp = client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
+        .send();
+
+    responder.join().unwrap();
+
+    assert!(call_resp.body_text().contains("user declined the sampling request"), "unexpected body: {}", call_resp.body_text());
 }
 
