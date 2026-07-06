@@ -2078,6 +2078,27 @@ let server = McpServer::new("my-server", "1.0")
 
 There's no dynamic (`&self`) equivalent of `.completion()` — unlike `register_tool`/`register_resource`/`register_prompt`, completion providers are only registered via the consuming builder at construction time.
 
+**Request cancellation (`notifications/cancelled`):** a client can send this to ask the server to abort a long-running `tools/call`. `.tool_with_context()` handlers can check `ctx.is_cancelled()` between steps of their own work and return early:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let server = McpServer::new("my-server", "1.0")
+    .tool_with_context("process_batch", "Process many items", "{}", |ctx, _args| {
+        for i in 0..1_000_000 {
+            if ctx.is_cancelled() {
+                return Err("cancelled by client".to_string());
+            }
+            // ... process item i ...
+        }
+        Ok(McpContent::text("done"))
+    });
+```
+
+This is **cooperative** cancellation, not preemptive — Rust cannot forcibly interrupt a running synchronous closure (the same limitation `timeout::with_timeout` already documents elsewhere in this crate). A handler that never checks `is_cancelled()` runs to completion regardless, exactly as before this existed; only a handler that voluntarily polls the flag between its own steps actually stops early. This deliberately differs from the original design sketch, which assumed `tokio_util::sync::CancellationToken` and an async-only implementation gated on TODO-17 (async tool handlers) — that feature doesn't exist in this crate yet, and pulling in a new dependency for a capability with no consumer would be premature. The `AtomicBool`-based approach implemented here needs no new dependency and works identically on `http1` and `http2` builds, unlike the sketch's async-only design.
+
+Mechanically: `McpServer` keeps `cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>`, keyed by a `tools/call` request's raw `id` token. `dispatch_with_cancellation` (wrapping `dispatch` in both the single-request and batch code paths) registers a fresh flag just before calling a `tools/call` handler and removes it again once dispatch returns — regardless of whether the handler ever checked it, so this map never accumulates stale entries the way `sessions`/`sse_clients` can. `notifications/cancelled` is special-cased before the generic "notification → 202, no processing" branch: it reads `params.requestId` (stored/matched as a raw JSON token, same as `progress_token`, since the spec allows `string | number`) and flips the matching flag if the target request is still in flight; an unknown or already-finished request id is silently ignored, not an error.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

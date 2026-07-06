@@ -1227,6 +1227,31 @@ with `hasMore:true`/untruncated `total`, per spec guidance. `initialize` adverti
 `"completions":{}` automatically once any `.completion()` is registered — no separate opt-in flag.
 No dynamic (`&self`) equivalent — completions are builder-only, registered before serving requests.
 
+**Request cancellation (`notifications/cancelled`)** — `ctx.is_cancelled()` in a
+`.tool_with_context()` handler cooperatively checks whether the client asked to cancel this call:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let server = McpServer::new("my-server", "1.0")
+    .tool_with_context("process_batch", "Process many items", "{}", |ctx, _args| {
+        for i in 0..1_000_000 {
+            if ctx.is_cancelled() { return Err("cancelled by client".to_string()); }
+            // ... process item i ...
+        }
+        Ok(McpContent::text("done"))
+    });
+```
+
+Cooperative, not preemptive — Rust can't forcibly interrupt a running sync closure (same limitation
+`timeout::with_timeout` documents). A handler that never checks `is_cancelled()` runs to completion
+regardless. Deliberately implemented as an `AtomicBool` flag rather than the original design's
+`tokio_util::sync::CancellationToken` (async-only, gated on TODO-17's async tool handlers, which
+don't exist yet) — no new dependency, works identically on `http1` and `http2`.
+`cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>` keys a flag by the `tools/call`
+request's raw `id`; `notifications/cancelled` flips the matching flag via `params.requestId` (raw
+JSON token, `string | number` like `progressToken`). Unknown/finished request id: silent no-op.
+
 ---
 
 ## Standalone proxies

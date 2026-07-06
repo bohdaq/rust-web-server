@@ -263,6 +263,11 @@ pub struct McpContext {
     /// `report_progress` silently no-ops — there's no live server to
     /// broadcast through.
     sse_clients: Option<Arc<Mutex<Vec<SseSender>>>>,
+    /// Shared flag flipped by a `notifications/cancelled` referencing this
+    /// `tools/call`'s request id, checked by [`Self::is_cancelled`]. Not
+    /// `pub` — see that method. `None` for anything other than a live
+    /// `tools/call` dispatched through [`McpServer::execute`]/`handle_request_with_context`.
+    cancellation: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 
 impl McpContext {
@@ -310,6 +315,39 @@ impl McpContext {
         );
         let json = render_notification("notifications/progress", Some(&params));
         broadcast_sse_to(sse_clients, &json);
+    }
+
+    /// `true` if the client sent `notifications/cancelled` referencing this
+    /// `tools/call`'s request id.
+    ///
+    /// Rust cannot forcibly interrupt a running synchronous closure — same
+    /// limitation [`crate::timeout::with_timeout`] documents — so this is
+    /// *cooperative* cancellation: nothing happens automatically. A handler
+    /// that does its own iterative work (processing a batch of items, say)
+    /// can check this between steps and return early; a handler that never
+    /// checks it runs to completion regardless, exactly as before this
+    /// existed.
+    ///
+    /// Always `false` if the client never sent a cancellation, if this
+    /// wasn't dispatched as a `tools/call` (the only method cancellation
+    /// applies to), or if `ctx` was built without a live server behind it.
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::mcp::{McpContent, McpServer};
+    ///
+    /// let server = McpServer::new("my-server", "1.0")
+    ///     .tool_with_context("process_batch", "Process many items", "{}", |ctx, _args| {
+    ///         for i in 0..1_000_000 {
+    ///             if ctx.is_cancelled() {
+    ///                 return Err("cancelled by client".to_string());
+    ///             }
+    ///             // ... process item i ...
+    ///         }
+    ///         Ok(McpContent::text("done"))
+    ///     });
+    /// ```
+    pub fn is_cancelled(&self) -> bool {
+        self.cancellation.as_ref().is_some_and(|c| c.load(std::sync::atomic::Ordering::Relaxed))
     }
 }
 
@@ -551,6 +589,15 @@ pub struct McpServer {
     /// at [`LogLevel::Debug`] (the least restrictive level, i.e. nothing is
     /// filtered) until a client requests otherwise.
     min_log_level: Arc<Mutex<LogLevel>>,
+    /// In-flight `tools/call` cancellation flags, keyed by the request's raw
+    /// `id` JSON token. Populated just before dispatching a `tools/call` and
+    /// removed again once it returns (success, error, or the flag was never
+    /// checked) — unlike `sessions`/`sse_clients`, this map's entries are
+    /// always short-lived by construction, not merely "not evicted."
+    /// `notifications/cancelled` looks up `params.requestId` here and flips
+    /// the flag; see [`McpContext::is_cancelled`] for how (and whether) a
+    /// handler ever observes it.
+    cancellations: Arc<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
 }
 
 /// One `GET /mcp` SSE client's outbound channel. Bounded so a slow or stuck
@@ -588,6 +635,7 @@ impl McpServer {
             sse_clients: Arc::new(Mutex::new(Vec::new())),
             logging_enabled: false,
             min_log_level: Arc::new(Mutex::new(LogLevel::Debug)),
+            cancellations: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -1152,12 +1200,17 @@ impl McpServer {
 
         let id = json_rpc::extract_id(body);
 
+        if method == "notifications/cancelled" {
+            self.handle_cancellation(body);
+            return no_content();
+        }
+
         // Notifications have no `id` — acknowledge with 202 and no body.
         if method == "notifications/initialized" || (id.is_none() && method != "ping") {
             return no_content();
         }
 
-        let result = self.dispatch(&method, body, ctx);
+        let result = self.dispatch_with_cancellation(&method, body, ctx, &id);
         let id_str = id.as_deref().unwrap_or("null");
         let is_ok = result.is_ok();
 
@@ -1210,11 +1263,16 @@ impl McpServer {
 
             let id = json_rpc::extract_id(elem);
 
+            if method == "notifications/cancelled" {
+                self.handle_cancellation(elem);
+                continue;
+            }
+
             if method == "notifications/initialized" || (id.is_none() && method != "ping") {
                 continue;
             }
 
-            let result = self.dispatch(&method, elem, ctx.clone());
+            let result = self.dispatch_with_cancellation(&method, elem, ctx.clone(), &id);
             let id_str = id.as_deref().unwrap_or("null");
             let is_ok = result.is_ok();
 
@@ -1256,6 +1314,49 @@ impl McpServer {
             "logging/setLevel" => self.do_set_log_level(body),
             "completion/complete" => self.do_completion(body),
             _                => Err((json_rpc::METHOD_NOT_FOUND, format!("Unknown method: {method}"))),
+        }
+    }
+
+    /// Wraps [`Self::dispatch`] for one request, additionally registering a
+    /// cancellation flag for `tools/call` (keyed by `id`, guaranteed `Some`
+    /// for `tools/call` — a notification-shaped `tools/call` with no `id`
+    /// never reaches this far, see the notification checks in
+    /// [`Self::handle_request_with_context`]/[`Self::handle_batch`]) so a
+    /// later `notifications/cancelled` referencing this exact request can
+    /// flip it. The entry is removed again once dispatch returns, whether
+    /// the handler checked the flag or not — this map never accumulates
+    /// stale entries the way `sessions`/`sse_clients` can.
+    fn dispatch_with_cancellation(
+        &self,
+        method: &str,
+        body: &str,
+        ctx: McpContext,
+        id: &Option<String>,
+    ) -> Result<String, (i32, String)> {
+        let Some(id_str) = (method == "tools/call").then_some(id.as_ref()).flatten() else {
+            return self.dispatch(method, body, ctx);
+        };
+
+        let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.cancellations.lock().unwrap().insert(id_str.clone(), flag.clone());
+        let ctx = McpContext { cancellation: Some(flag), ..ctx };
+        let result = self.dispatch(method, body, ctx);
+        self.cancellations.lock().unwrap().remove(id_str);
+        result
+    }
+
+    /// Handle `notifications/cancelled`: look up `params.requestId` (the
+    /// spec allows `string | number`, so this is matched as a raw JSON
+    /// token, the same way [`McpContext::progress_token`] is) in
+    /// `cancellations` and flip its flag if the request is still in flight.
+    /// Silently does nothing for an unknown/already-finished request id —
+    /// the target call may simply have already completed naturally, which
+    /// isn't an error.
+    fn handle_cancellation(&self, body: &str) {
+        let Some(params) = json_rpc::extract_raw(body, "params") else { return };
+        let Some(request_id) = json_rpc::extract_raw(&params, "requestId") else { return };
+        if let Some(flag) = self.cancellations.lock().unwrap().get(&request_id) {
+            flag.store(true, std::sync::atomic::Ordering::Relaxed);
         }
     }
 
@@ -1597,6 +1698,7 @@ impl McpServer {
             auth_claims: None,
             progress_token: None,
             sse_clients: Some(self.sse_clients.clone()),
+            cancellation: None,
         }
     }
 }

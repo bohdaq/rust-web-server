@@ -554,23 +554,61 @@ the entry's own sketch.
 
 ---
 
-### TODO-12: Request cancellation (`notifications/cancelled`)
+### ✅ TODO-12: Request cancellation (`notifications/cancelled`) — Done (v17.86.0)
 
-The spec allows a client to send `notifications/cancelled` to abort a long-running `tools/call`.
-Currently the server never reads this — the tool runs to completion regardless.
+Implemented as **cooperative cancellation via a plain `Arc<AtomicBool>` flag**, working uniformly on
+both `http1` and `http2` builds — not the bifurcated design this entry sketched (sync builds "log
+and ignore," async builds get a real `tokio_util::sync::CancellationToken`).
 
-**For `http1` builds (synchronous):** not fixable without thread interruption; log and ignore.
+**Why the async-only half of the sketch wasn't built:** it depends on async tool handlers, which
+don't exist in this crate yet (that's TODO-17, still open — every tool handler today, in every
+build configuration, is a plain synchronous `Fn(...)`). Building `CancellationToken` plumbing for a
+feature with zero consumers, and pulling in `tokio_util` as a new dependency to do it, would be
+speculative work with nothing to actually exercise it. The entry's sync-side fallback ("not fixable
+without thread interruption; log and ignore") undersold what's actually possible without async: a
+synchronous handler that structures its own work as a loop (processing N items, say) can
+voluntarily check a shared flag between iterations and return early — ordinary cooperative
+cancellation, the same pattern `report_progress` (TODO-10) already established for progress
+updates between a handler's own steps. That doesn't need `tokio_util`, async, or a bifurcated
+implementation — so it's what got built, for every build configuration, instead of "log and ignore."
 
-**For `http2` async builds:**
-```rust
-// In McpContext (TODO-2):
-pub cancellation: CancellationToken,  // tokio_util::sync::CancellationToken
-```
+**Mechanics:** `McpServer` gained `cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>`,
+keyed by a `tools/call` request's raw `id` JSON token (same "store the raw token, not a decoded
+value" approach as `progress_token`/`requestId`, since ids can be `string | number`). A new private
+`dispatch_with_cancellation` wraps `dispatch` in both `handle_request_with_context` and
+`handle_batch`: for `method == "tools/call"` (the only method this applies to — the id is guaranteed
+`Some` there, since a notification-shaped `tools/call` with no id never reaches dispatch at all) it
+registers a fresh flag, attaches it to a modified `McpContext`, calls through to `dispatch`, then
+removes the entry — regardless of whether the handler ever checked the flag. This map can never
+accumulate stale entries the way `sessions`/`sse_clients` can, since every insert has a
+matching remove on the same call stack.
 
-The `notifications/cancelled` handler finds the in-flight request by `id` and calls
-`token.cancel()`. Async tool handlers check `token.is_cancelled()` between steps.
+`notifications/cancelled` is special-cased in both `handle_request_with_context` and
+`handle_batch`, ahead of the generic "notification → 202, no processing" branch that would otherwise
+silently swallow it (this notification carries no `id` of its own — it's fire-and-forget, referencing
+a *different* request's id via `params.requestId`). `handle_cancellation` reads `requestId` (again as
+a raw token) and flips the matching flag if the target request is still in flight; an unknown or
+already-finished request id is silently ignored, not an error — the target call may simply have
+completed naturally before the cancellation arrived.
 
-**Effort:** medium (async only, requires CancellationToken tracking map).
+**`McpContext::is_cancelled(&self) -> bool`** is the handler-facing surface: reads the attached flag
+(private `cancellation: Option<Arc<AtomicBool>>` field, same "plumbing, not `pub`" treatment as
+`sse_clients`), defaulting to `false` for anything other than a live `tools/call` context. Always
+safe to call, matching the "never needs a capability check first" convention `report_progress` and
+`notify` already established.
+
+6 new tests in `src/mcp/tests.rs`: `is_cancelled()` defaults to `false` without any cancellation; a
+handler observes `is_cancelled() == true` after a simulated mid-call cancellation (a single-threaded
+test can't send a real concurrent notification, so the handler holds a clone of the server sharing
+the same `cancellations` map and sends the cancellation to itself, targeting its own request id —
+proving the actual registration/lookup/flip mechanism, not just the getter); a string request id
+matches the same way a numeric one does; an unknown request id is a silent no-op; a completed call's
+cancellation entry is removed (no leak); and a `notifications/cancelled` batch element produces no
+response entry, like any other notification.
+
+**Effort:** ended up smaller than the "medium" estimate, once scoped to what's actually buildable
+today — no new dependency, no async, and the map-based flag-tracking mechanics turned out to be a
+close structural match for `sessions`'s existing `Arc<Mutex<HashMap<...>>>` pattern.
 
 ---
 
@@ -710,7 +748,7 @@ Phase 2 — Streaming foundation (enables all notification features)
 
 Phase 3 — Enterprise + advanced
   TODO-11 completions/complete            (small, can go in Phase 1)          ✅ done (v17.85.0)
-  TODO-12 request cancellation            (medium, http2 only)
+  TODO-12 request cancellation            (medium, http2 only)               ✅ done (v17.86.0, sync cooperative flag — no http2 dependency needed)
   TODO-13 OAuth 2.0 (2025-03-26)         (small — JwksCache already exists)
   TODO-14 resources/subscribe             (medium, needs TODO-7 + TODO-9)
   TODO-17 async tool handlers             (medium, http2 only)
@@ -735,7 +773,7 @@ Phase 3 — Enterprise + advanced
 | 8 | `logging/setLevel` | 2024-11-05 | **P2** | Small | ✅ Done (v17.82.0) |
 | 9 | Dynamic registration + `listChanged` | 2024-11-05 | **P2** | Medium | ✅ Done (v17.83.0) |
 | 10 | `notifications/progress` | 2024-11-05 | **P2** | Small | ✅ Done (v17.84.0) |
-| 12 | Request cancellation | 2024-11-05 | **P3** | Medium | `http2` async |
+| 12 | Request cancellation | 2024-11-05 | **P3** | Medium | ✅ Done (v17.86.0) |
 | 13 | OAuth 2.0 auth | 2025-03-26 | **P3** | Small | `sso` feature |
 | 14 | `resources/subscribe` | 2024-11-05 | **P3** | Medium | #7 + #9 |
 | 17 | Async tool handlers | Ergonomics | **P3** | Medium | `http2` feature |

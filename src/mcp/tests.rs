@@ -7,6 +7,8 @@ use crate::app::App;
 use crate::core::New;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::test_client::TestClient;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 // ── json_rpc::extract_str ─────────────────────────────────────────────────────
 
@@ -1635,5 +1637,87 @@ fn initialize_advertises_completions_capability_once_one_is_registered() {
     let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#);
     let body = body_of(&resp);
     assert!(body.contains(r#""completions":{}"#), "expected an advertised completions capability: {body}");
+}
+
+// ── notifications/cancelled ────────────────────────────────────────────────────
+
+#[test]
+fn is_cancelled_defaults_to_false_without_a_cancellation_notification() {
+    let srv = McpServer::new("test-srv", "0.1").tool_with_context("job", "Do work", "{}", |ctx, _args| {
+        Ok(McpContent::text(if ctx.is_cancelled() { "cancelled" } else { "not cancelled" }))
+    });
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"job","arguments":{}}}"#);
+    assert!(body_of(&resp).contains("not cancelled"));
+}
+
+#[test]
+fn tool_handler_observes_a_cancellation_sent_mid_call() {
+    // A single-threaded test can't send notifications/cancelled concurrently
+    // from another connection, so the handler simulates it: it holds a
+    // clone of the server (sharing the same `cancellations` map) and sends
+    // the cancellation to itself, targeting its own request id, then checks
+    // whether is_cancelled() picked it up.
+    let observed = Arc::new(AtomicBool::new(false));
+    let observed_in_handler = observed.clone();
+
+    let srv = McpServer::new("test-srv", "0.1");
+    let srv_for_handler = srv.clone();
+    let srv = srv.tool_with_context("cancellable_job", "Checks for cancellation", "{}", move |ctx, _args| {
+        srv_for_handler.handle_request(
+            r#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":42}}"#,
+        );
+        observed_in_handler.store(ctx.is_cancelled(), Ordering::Relaxed);
+        Ok(McpContent::text("done"))
+    });
+
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":42,"params":{"name":"cancellable_job","arguments":{}}}"#);
+    assert_eq!(resp.status_code, 200);
+    assert!(observed.load(Ordering::Relaxed), "handler should have observed is_cancelled() == true");
+}
+
+#[test]
+fn cancellation_matches_a_string_request_id_too() {
+    let observed = Arc::new(AtomicBool::new(false));
+    let observed_in_handler = observed.clone();
+
+    let srv = McpServer::new("test-srv", "0.1");
+    let srv_for_handler = srv.clone();
+    let srv = srv.tool_with_context("job", "Checks for cancellation", "{}", move |ctx, _args| {
+        srv_for_handler.handle_request(
+            r#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":"req-abc"}}"#,
+        );
+        observed_in_handler.store(ctx.is_cancelled(), Ordering::Relaxed);
+        Ok(McpContent::text("done"))
+    });
+
+    srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":"req-abc","params":{"name":"job","arguments":{}}}"#);
+    assert!(observed.load(Ordering::Relaxed), "a string requestId should match a string id the same way a number does");
+}
+
+#[test]
+fn notifications_cancelled_for_an_unknown_request_id_is_a_silent_no_op() {
+    let srv = make_server();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":999}}"#);
+    assert_eq!(resp.status_code, 202);
+    assert!(body_of(&resp).is_empty());
+}
+
+#[test]
+fn cancellation_entry_is_removed_after_the_call_completes() {
+    let srv = McpServer::new("test-srv", "0.1").tool_with_context("job", "Do work", "{}", |_ctx, _args| {
+        Ok(McpContent::text("done"))
+    });
+    srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":7,"params":{"name":"job","arguments":{}}}"#);
+    assert!(srv.cancellations.lock().unwrap().is_empty(), "cancellation flag should be cleaned up once the call finishes");
+}
+
+#[test]
+fn cancellation_notification_in_a_batch_produces_no_response_entry() {
+    let srv = make_server();
+    let req = r#"[{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}},
+                  {"jsonrpc":"2.0","method":"ping","id":2}]"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert_eq!(body.matches("\"jsonrpc\"").count(), 1, "only the ping should produce a response entry: {body}");
 }
 

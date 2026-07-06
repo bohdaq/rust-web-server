@@ -116,6 +116,36 @@ let mcp = McpServer::new("my-server", "1.0")
 `report_progress` silently does nothing if the client didn't ask for progress updates (`ctx.progress_token` is `None`) or if `ctx` wasn't built through a live server (e.g. `handle_request()`'s empty default context, rather than `execute()` — see the note above about calling `handle_request()` directly). A handler never needs to check whether progress reporting is actually possible before calling it.
 :::
 
+## Cancellation
+
+A client can send `notifications/cancelled` to ask the server to abort a long-running `tools/call`. `.tool_with_context()` handlers can check `ctx.is_cancelled()` between steps of their own work and stop early:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let mcp = McpServer::new("my-server", "1.0")
+    .tool_with_context(
+        "process_batch",
+        "Process a large batch of records",
+        r#"{"type":"object"}"#,
+        |ctx, _args| {
+            for i in 0..1_000_000 {
+                if ctx.is_cancelled() {
+                    return Err("cancelled by client".to_string());
+                }
+                // ... process item i ...
+            }
+            Ok(McpContent::text("done"))
+        },
+    );
+```
+
+:::caution[Cooperative, not preemptive]
+Rust cannot forcibly interrupt a running synchronous closure — there is no mechanism to stop a handler mid-step unless the handler itself checks `is_cancelled()` and chooses to return early. A handler that never calls it runs to completion regardless of any `notifications/cancelled` the client sends, exactly as if this feature didn't exist. This is the same limitation `with_timeout`/`with_timeout_state` document for per-route timeouts — Rust's synchronous execution model has no forced-preemption primitive to build on.
+:::
+
+Only `.tool_with_context()` handlers can check cancellation — a plain `.tool()` handler never receives `McpContext`. `is_cancelled()` is always safe to call: it returns `false` if the client never sent a cancellation, if this wasn't a `tools/call` (the only method cancellation applies to), or if `ctx` has no live server behind it.
+
 ## Tool annotations
 
 The MCP 2025-03-26 spec adds **annotations** — behavioral hints that clients like Claude Desktop use to decide whether to warn or ask for confirmation before calling a tool (e.g. skip confirmation for a read-only tool, warn before a destructive one). Register them with `.tool_annotated()`, which takes the same arguments as `.tool()` plus a `ToolAnnotations` value:
