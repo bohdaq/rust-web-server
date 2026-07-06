@@ -103,6 +103,34 @@ Elements with no `id` (notifications) contribute no entry to the response array,
 If a batch includes a successful `initialize`, the *first* one mints a session and attaches `Mcp-Session-Id` to the overall response, same as a standalone `initialize` would. Sending more than one `initialize` in a single batch is unusual and only the first is honored for session purposes — one HTTP response can only carry one session id.
 :::
 
+## Pagination
+
+`tools/list`, `resources/list`, and `prompts/list` return every registered item in one response by default. For a server with a lot of tools or resources, call `.page_size(n)` when building the server to cap each response to `n` items and enable cursor-based pagination:
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("my-server", "1.0").page_size(50);
+```
+
+A response with more items remaining includes `"nextCursor"` — an opaque string the client echoes back as `params.cursor` on its next call to get the next page:
+
+```json
+// First call — no cursor:
+{"method":"tools/list","params":{}}
+// → {"result":{"tools":[...50 items...],"nextCursor":"NTA="}}
+
+// Next call — cursor from the previous response:
+{"method":"tools/list","params":{"cursor":"NTA="}}
+// → {"result":{"tools":[...remaining items...]}}  — no nextCursor once exhausted
+```
+
+Claude Desktop and other MCP clients already send `cursor` back automatically once a `nextCursor` appears in a response — no extra client-side wiring is needed.
+
+:::note[The cursor is opaque]
+The cursor is base64 of a decimal offset, but treat it as an opaque token — don't construct or parse it yourself. A malformed or tampered cursor gets a JSON-RPC `INVALID_PARAMS` (`-32602`) error rather than silently resetting to the first page. An offset past the end of the list returns an empty page with no `nextCursor`, not an error.
+:::
+
 ## Protocol version negotiation
 
 `initialize` inspects the client's requested `params.protocolVersion` and responds with the lower of that and the server's own version, rather than always claiming its own regardless of what the client asked for:

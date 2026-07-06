@@ -1,5 +1,8 @@
 use super::json_rpc;
-use super::{extract_arg, json_escape, McpContent, McpServer, PromptArgDef, PromptMessage, ToolAnnotations, PROTOCOL_VERSION};
+use super::{
+    decode_cursor, encode_cursor, extract_arg, json_escape, McpContent, McpServer, PromptArgDef,
+    PromptMessage, ToolAnnotations, PROTOCOL_VERSION,
+};
 use crate::app::App;
 use crate::core::New;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
@@ -117,6 +120,22 @@ fn split_array_elements_empty_array_returns_empty_vec() {
 fn split_array_elements_single_element() {
     let elems = json_rpc::split_array_elements(r#"[{"jsonrpc":"2.0","method":"ping","id":1}]"#);
     assert_eq!(elems, vec![r#"{"jsonrpc":"2.0","method":"ping","id":1}"#]);
+}
+
+// ── pagination cursor encode/decode ───────────────────────────────────────────
+
+#[test]
+fn cursor_round_trips_through_encode_and_decode() {
+    for offset in [0usize, 1, 50, 12345, usize::MAX] {
+        let cursor = encode_cursor(offset);
+        assert_eq!(decode_cursor(&cursor), Some(offset), "round trip failed for {offset}");
+    }
+}
+
+#[test]
+fn decode_cursor_rejects_garbage() {
+    assert!(decode_cursor("not valid base64 at all!!").is_none());
+    assert!(decode_cursor("").is_none());
 }
 
 // ── json_escape ───────────────────────────────────────────────────────────────
@@ -479,6 +498,96 @@ fn tools_list_annotated_tool_with_all_hints_none_emits_empty_object() {
     let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
     let body = body_of(&resp);
     assert!(body.contains("\"annotations\":{}"), "expected empty annotations object: {body}");
+}
+
+// ── pagination ────────────────────────────────────────────────────────────────
+
+fn make_paged_tools_server() -> McpServer {
+    McpServer::new("test-srv", "0.1")
+        .tool("t1", "Tool 1", "{}", |_| Ok(McpContent::text("1")))
+        .tool("t2", "Tool 2", "{}", |_| Ok(McpContent::text("2")))
+        .tool("t3", "Tool 3", "{}", |_| Ok(McpContent::text("3")))
+        .page_size(2)
+}
+
+#[test]
+fn tools_list_first_page_returns_page_size_items_and_next_cursor() {
+    let srv = make_paged_tools_server();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
+    let body = body_of(&resp);
+    assert!(body.contains("\"t1\""), "missing t1: {body}");
+    assert!(body.contains("\"t2\""), "missing t2: {body}");
+    assert!(!body.contains("\"t3\""), "t3 should not be on the first page: {body}");
+    assert!(body.contains("\"nextCursor\""), "expected nextCursor on a partial page: {body}");
+}
+
+#[test]
+fn tools_list_second_page_via_cursor_returns_remainder_with_no_next_cursor() {
+    let srv = make_paged_tools_server();
+    let first = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
+    let first_body = body_of(&first);
+    let cursor = first_body
+        .split("\"nextCursor\":\"").nth(1).unwrap()
+        .split('"').next().unwrap()
+        .to_string();
+
+    let req = format!(r#"{{"jsonrpc":"2.0","method":"tools/list","id":2,"params":{{"cursor":"{cursor}"}}}}"#);
+    let resp = srv.handle_request(&req);
+    let body = body_of(&resp);
+    assert!(body.contains("\"t3\""), "missing t3 on the second page: {body}");
+    assert!(!body.contains("\"t1\""), "t1 should not repeat on the second page: {body}");
+    assert!(!body.contains("\"nextCursor\""), "expected no nextCursor on the last page: {body}");
+}
+
+#[test]
+fn tools_list_invalid_cursor_returns_invalid_params_error() {
+    let srv = make_paged_tools_server();
+    let req = r#"{"jsonrpc":"2.0","method":"tools/list","id":1,"params":{"cursor":"not valid base64!!"}}"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert!(body.contains("\"error\""), "expected a JSON-RPC error for an invalid cursor: {body}");
+    assert!(body.contains("-32602"), "expected INVALID_PARAMS code: {body}");
+}
+
+#[test]
+fn tools_list_cursor_past_the_end_returns_an_empty_page() {
+    let srv = make_paged_tools_server();
+    let far_cursor = super::encode_cursor(100); // well past the 3 registered tools
+    let req = format!(r#"{{"jsonrpc":"2.0","method":"tools/list","id":1,"params":{{"cursor":"{far_cursor}"}}}}"#);
+    let resp = srv.handle_request(&req);
+    let body = body_of(&resp);
+    assert!(body.contains("\"tools\":[]"), "expected an empty page past the end: {body}");
+    assert!(!body.contains("\"nextCursor\""), "should not offer a nextCursor past the end: {body}");
+}
+
+#[test]
+fn tools_list_without_page_size_is_unpaginated_and_has_no_next_cursor() {
+    let srv = make_server();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
+    let body = body_of(&resp);
+    assert!(!body.contains("\"nextCursor\""), "should not paginate without page_size: {body}");
+}
+
+#[test]
+fn resources_list_paginates_when_page_size_set() {
+    let srv = McpServer::new("test-srv", "0.1")
+        .resource("docs://a", "A", "Doc A", |uri| Ok(McpContent::text(format!("a:{uri}"))))
+        .resource("docs://b", "B", "Doc B", |uri| Ok(McpContent::text(format!("b:{uri}"))))
+        .page_size(1);
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"resources/list","id":1}"#);
+    let body = body_of(&resp);
+    assert!(body.contains("\"nextCursor\""), "expected nextCursor on a partial resources page: {body}");
+}
+
+#[test]
+fn prompts_list_paginates_when_page_size_set() {
+    let srv = McpServer::new("test-srv", "0.1")
+        .prompt("p1", "Prompt 1", |_| Ok(vec![PromptMessage::user("hi")]))
+        .prompt("p2", "Prompt 2", |_| Ok(vec![PromptMessage::user("hi")]))
+        .page_size(1);
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"prompts/list","id":1}"#);
+    let body = body_of(&resp);
+    assert!(body.contains("\"nextCursor\""), "expected nextCursor on a partial prompts page: {body}");
 }
 
 // ── tools/call ────────────────────────────────────────────────────────────────

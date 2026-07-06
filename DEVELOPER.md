@@ -1960,6 +1960,30 @@ let resp = server.handle_request(r#"[
 
 Each element's own success/error is preserved independently — one element erroring (e.g. an unknown method) doesn't fail the batch or the other elements. Elements with no `id` (notifications) contribute no entry to the response array, exactly like a standalone notification gets no response body; a batch made up entirely of notifications returns `202 Accepted` with an empty body, same as one standalone notification would. An empty array (`[]`) is itself invalid per the JSON-RPC spec, so it gets back one `Invalid Request` error object rather than an empty `[]`. If a batch includes a successful `initialize`, the *first* one mints a session and attaches `Mcp-Session-Id` to the overall response — sending more than one `initialize` in a single batch is unusual and only the first is honored for session purposes, since one HTTP response can only carry one session id.
 
+**Pagination for list methods:** `.page_size(n)` caps `tools/list`, `resources/list`, and `prompts/list` to at most `n` items per response, enabling cursor-based pagination:
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("my-server", "1.0")
+    .page_size(50);
+    // .tool(...) x200 — only 50 come back per tools/list call
+```
+
+A response with more items remaining includes `"nextCursor"`, an opaque string the client echoes back as `params.cursor` on its next call:
+
+```json
+// First call — no cursor:
+{"method":"tools/list","params":{}}
+// → {"result":{"tools":[...50 items...],"nextCursor":"NTA="}}
+
+// Next call — cursor from the previous response:
+{"method":"tools/list","params":{"cursor":"NTA="}}
+// → {"result":{"tools":[...remaining items...]}}  (no nextCursor once exhausted)
+```
+
+Without calling `.page_size(...)`, every list method returns every registered item in one response and never emits `nextCursor` — the same behavior as before pagination existed. The cursor is just base64 of a decimal offset (e.g. `"NTA="` decodes to `"50"`), but it's meant to be treated as opaque — a malformed or tampered cursor gets a JSON-RPC `INVALID_PARAMS` (`-32602`) error rather than silently defaulting to offset `0`. An offset past the end of the list returns an empty page with no `nextCursor`, rather than erroring.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

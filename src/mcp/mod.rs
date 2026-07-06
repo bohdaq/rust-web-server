@@ -336,6 +336,11 @@ pub struct McpServer {
     prompts: Vec<PromptDef>,
     fallback: Option<Arc<dyn Application + Send + Sync>>,
     auth_token: Option<String>,
+    /// Max items per page for `tools/list`/`resources/list`/`prompts/list`,
+    /// set via [`Self::page_size`]. `None` (the default) means no pagination
+    /// — every item comes back in one response, same as before pagination
+    /// existed.
+    page_size: Option<usize>,
     /// `clientInfo` recorded per `Mcp-Session-Id`, minted at `initialize` time.
     /// `Arc<Mutex<_>>` so every clone of this `McpServer` shares one map.
     ///
@@ -360,8 +365,29 @@ impl McpServer {
             prompts: vec![],
             fallback: None,
             auth_token: None,
+            page_size: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Cap `tools/list`, `resources/list`, and `prompts/list` to at most `n`
+    /// items per response, enabling cursor-based pagination: a response with
+    /// more items remaining includes `"nextCursor"`, an opaque string the
+    /// client echoes back as `params.cursor` on its next call to get the next
+    /// page. `n` is clamped to a minimum of `1`.
+    ///
+    /// Without calling this, every registered tool/resource/prompt is
+    /// returned in a single response — the default, and the only behavior
+    /// before pagination existed.
+    ///
+    /// ```rust
+    /// use rust_web_server::mcp::McpServer;
+    ///
+    /// let server = McpServer::new("my-server", "1.0").page_size(50);
+    /// ```
+    pub fn page_size(mut self, n: usize) -> Self {
+        self.page_size = Some(n.max(1));
+        self
     }
 
     /// Require a bearer token on every request to the MCP endpoint.
@@ -722,11 +748,11 @@ impl McpServer {
         match method {
             "initialize"     => self.do_initialize(body),
             "ping"           => Ok("{}".to_string()),
-            "tools/list"     => self.do_tools_list(),
+            "tools/list"     => self.do_tools_list(body),
             "tools/call"     => self.do_tools_call(body, ctx),
-            "resources/list" => self.do_resources_list(),
+            "resources/list" => self.do_resources_list(body),
             "resources/read" => self.do_resources_read(body),
-            "prompts/list"   => self.do_prompts_list(),
+            "prompts/list"   => self.do_prompts_list(body),
             "prompts/get"    => self.do_prompts_get(body),
             _                => Err((json_rpc::METHOD_NOT_FOUND, format!("Unknown method: {method}"))),
         }
@@ -822,7 +848,7 @@ impl McpServer {
         ))
     }
 
-    fn do_tools_list(&self) -> Result<String, (i32, String)> {
+    fn do_tools_list(&self, body: &str) -> Result<String, (i32, String)> {
         let items: Vec<String> = self.tools.iter().map(|t| {
             let annotations = match t.annotations {
                 Some(a) => format!(r#","annotations":{}"#, a.to_json()),
@@ -836,7 +862,8 @@ impl McpServer {
                 annotations,
             )
         }).collect();
-        Ok(format!(r#"{{"tools":[{}]}}"#, items.join(",")))
+        let (page, next_cursor) = self.paginate(&items, body)?;
+        Ok(format!(r#"{{"tools":[{}]{}}}"#, page.join(","), next_cursor_json(&next_cursor)))
     }
 
     fn do_tools_call(&self, body: &str, ctx: McpContext) -> Result<String, (i32, String)> {
@@ -864,7 +891,7 @@ impl McpServer {
         }
     }
 
-    fn do_resources_list(&self) -> Result<String, (i32, String)> {
+    fn do_resources_list(&self, body: &str) -> Result<String, (i32, String)> {
         let items: Vec<String> = self.resources.iter().map(|r| {
             format!(
                 r#"{{"uri":"{}","name":"{}","description":"{}","mimeType":"text/plain"}}"#,
@@ -873,7 +900,8 @@ impl McpServer {
                 json_escape(&r.description),
             )
         }).collect();
-        Ok(format!(r#"{{"resources":[{}]}}"#, items.join(",")))
+        let (page, next_cursor) = self.paginate(&items, body)?;
+        Ok(format!(r#"{{"resources":[{}]{}}}"#, page.join(","), next_cursor_json(&next_cursor)))
     }
 
     fn do_resources_read(&self, body: &str) -> Result<String, (i32, String)> {
@@ -898,7 +926,7 @@ impl McpServer {
         }
     }
 
-    fn do_prompts_list(&self) -> Result<String, (i32, String)> {
+    fn do_prompts_list(&self, body: &str) -> Result<String, (i32, String)> {
         let items: Vec<String> = self.prompts.iter().map(|p| {
             let arg_defs: Vec<String> = p.arguments.iter().map(|a| {
                 format!(
@@ -915,7 +943,39 @@ impl McpServer {
                 arg_defs.join(","),
             )
         }).collect();
-        Ok(format!(r#"{{"prompts":[{}]}}"#, items.join(",")))
+        let (page, next_cursor) = self.paginate(&items, body)?;
+        Ok(format!(r#"{{"prompts":[{}]{}}}"#, page.join(","), next_cursor_json(&next_cursor)))
+    }
+
+    /// Slice `items` (already-rendered JSON object strings for one
+    /// `*/list` response) according to [`Self::page_size`] and this
+    /// request's `params.cursor`, returning the page and — if more items
+    /// remain — the opaque `nextCursor` to embed in the response.
+    ///
+    /// Without a configured `page_size`, always returns every item and no
+    /// cursor, i.e. pagination is fully opt-in.
+    fn paginate<'a>(&self, items: &'a [String], body: &str) -> Result<(&'a [String], Option<String>), (i32, String)> {
+        let page_size = match self.page_size {
+            Some(n) => n,
+            None => return Ok((items, None)),
+        };
+
+        let cursor = json_rpc::extract_raw(body, "params")
+            .and_then(|p| json_rpc::extract_str(&p, "cursor"));
+
+        let offset = match cursor {
+            Some(c) => decode_cursor(&c)
+                .ok_or((json_rpc::INVALID_PARAMS, "Invalid cursor".to_string()))?,
+            None => 0,
+        };
+
+        if offset >= items.len() {
+            return Ok((&[], None));
+        }
+
+        let end = (offset + page_size).min(items.len());
+        let next_cursor = if end < items.len() { Some(encode_cursor(end)) } else { None };
+        Ok((&items[offset..end], next_cursor))
     }
 
     fn do_prompts_get(&self, body: &str) -> Result<String, (i32, String)> {
@@ -1091,6 +1151,78 @@ pub(crate) fn json_escape(s: &str) -> String {
         }
     }
     out
+}
+
+// ── pagination cursors ─────────────────────────────────────────────────────────
+
+/// Render `,"nextCursor":"..."` for a `*/list` response, or `""` if there's
+/// no next page — spliced directly after the closing `]` of the items array.
+fn next_cursor_json(next_cursor: &Option<String>) -> String {
+    match next_cursor {
+        Some(c) => format!(r#","nextCursor":"{}""#, json_escape(c)),
+        None => String::new(),
+    }
+}
+
+/// Encode a `tools/list`/`resources/list`/`prompts/list` offset as the
+/// opaque `nextCursor`/`params.cursor` string the MCP spec expects — just
+/// base64 of the decimal offset, e.g. `50` → `"NTA="`. Callers only ever
+/// treat this as opaque; the encoding is a private implementation detail of
+/// this module, not a client-facing contract.
+fn encode_cursor(offset: usize) -> String {
+    base64_encode(offset.to_string().as_bytes())
+}
+
+/// Decode a cursor produced by [`encode_cursor`]. Returns `None` for
+/// anything that isn't valid base64 of a decimal `usize` — a malformed or
+/// tampered cursor, not a crash.
+fn decode_cursor(cursor: &str) -> Option<usize> {
+    String::from_utf8(base64_decode(cursor)?).ok()?.parse().ok()
+}
+
+const BASE64_TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn base64_encode(data: &[u8]) -> String {
+    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = chunk.get(1).copied().unwrap_or(0) as u32;
+        let b2 = chunk.get(2).copied().unwrap_or(0) as u32;
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(BASE64_TABLE[((n >> 18) & 0x3F) as usize] as char);
+        out.push(BASE64_TABLE[((n >> 12) & 0x3F) as usize] as char);
+        out.push(if chunk.len() > 1 { BASE64_TABLE[((n >> 6) & 0x3F) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 2 { BASE64_TABLE[(n & 0x3F) as usize] as char } else { '=' });
+    }
+    out
+}
+
+fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    fn sextet(c: u8) -> Option<u32> {
+        match c {
+            b'A'..=b'Z' => Some((c - b'A') as u32),
+            b'a'..=b'z' => Some((c - b'a' + 26) as u32),
+            b'0'..=b'9' => Some((c - b'0' + 52) as u32),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+
+    let trimmed = s.trim_end_matches('=');
+    let bytes = trimmed.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len() * 3 / 4 + 3);
+    for chunk in bytes.chunks(4) {
+        if chunk.len() == 1 {
+            return None; // not a valid base64 length
+        }
+        let vals: Vec<u32> = chunk.iter().map(|&b| sextet(b)).collect::<Option<Vec<_>>>()?;
+        let n = vals.iter().enumerate().fold(0u32, |acc, (i, &v)| acc | (v << (18 - 6 * i)));
+        out.push(((n >> 16) & 0xFF) as u8);
+        if vals.len() > 2 { out.push(((n >> 8) & 0xFF) as u8); }
+        if vals.len() > 3 { out.push((n & 0xFF) as u8); }
+    }
+    Some(out)
 }
 
 fn uri_matches(template: &str, uri: &str) -> bool {

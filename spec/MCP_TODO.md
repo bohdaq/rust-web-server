@@ -209,25 +209,44 @@ refactor of the existing dispatch table rather than a duplicate copy of it.
 
 ---
 
-### TODO-6: Pagination for list methods
+### ✅ TODO-6: Pagination for list methods — Done (v17.80.0)
 
-`tools/list`, `resources/list`, `prompts/list` return all items unconditionally. The spec
-supports cursor-based pagination via `params.cursor` → response `nextCursor`.
+Added `McpServer::page_size(n)` (clamps `n` to a minimum of `1`) storing `page_size: Option<usize>`
+on the server — `None` by default, meaning every list method returns every item in one response
+and never emits `nextCursor`, exactly the behavior before this existed.
 
-For servers with many tools or resources, clients must page. Claude Desktop already sends
-`cursor` on subsequent list calls.
+**Cursor implementation**, matching this entry's own sketch of "opaque base64 offset": since this
+crate has no base64 dependency (any feature), added small private `base64_encode`/`base64_decode`
+free functions in `src/mcp/mod.rs` (RFC 4648 standard alphabet, `=` padding) plus `encode_cursor`/
+`decode_cursor` wrappers that base64-encode/decode the offset's decimal string. This duplicates the
+shape of `websocket::base64_encode` (used for `Sec-WebSocket-Accept`) rather than sharing it —
+consistent with this codebase's existing pattern of each module keeping its own small, focused
+encoding helpers (`webhook`, `auth`, `storage::azure_signature`, `acme::crypto` each do the same)
+rather than introducing a shared crate-wide base64 module for a handful of call sites.
 
-**Add to `McpServer`:**
-```rust
-pub fn page_size(mut self, n: usize) -> Self { ... }
-```
+**Shared `paginate` helper**, not a copy-pasted slice-and-cursor block in three places: `do_tools_list`,
+`do_resources_list`, `do_prompts_list` each render their full `Vec<String>` of item JSON blobs as
+before, then call one `fn paginate(&self, items: &[String], body: &str) -> Result<(&[String],
+Option<String>), (i32,String)>` that reads `params.cursor` (if `page_size` is set), decodes it to an
+offset, slices, and returns the page plus an optional `nextCursor`. A shared `next_cursor_json()`
+renders the `,"nextCursor":"..."` suffix (or `""`) spliced after each response's closing `]`.
 
-**In `do_tools_list`:**
-- Read `params.cursor` (an opaque base64 offset)
-- Slice `self.tools[offset..offset+page_size]`
-- If more items remain, set `"nextCursor": "<offset+page_size as base64>"`
+**Edge cases**, beyond the entry's happy-path sketch:
+- An invalid/tampered cursor (not valid base64, or valid base64 that isn't a decimal `usize`)
+  returns a JSON-RPC `INVALID_PARAMS` (`-32602`) error rather than silently falling back to offset
+  `0` — a client debugging its own cursor-handling bug gets a clear signal instead of a confusing
+  restart-from-page-1.
+- An offset at or past the end of the list returns an empty page with no `nextCursor`, not an
+  error — the well-defined "you've reached the end" case, distinct from a malformed cursor.
 
-**Effort:** small — cursor = base64(usize offset), three list handlers updated.
+11 new tests in `src/mcp/tests.rs`: `encode_cursor`/`decode_cursor` round-trip for several offsets
+including `0` and `usize::MAX`, `decode_cursor` rejecting garbage input, first-page/second-page/
+invalid-cursor/past-the-end behavior for `tools/list` against a 3-tool `page_size(2)` server, a
+regression guard that `tools/list` stays fully unpaginated (no `nextCursor`) when `page_size` isn't
+set, and one pagination test each for `resources/list` and `prompts/list`.
+
+**Effort:** small, as estimated — one field, one builder, one base64 helper pair, one shared
+pagination helper applied to three list handlers.
 
 ---
 
@@ -534,7 +553,7 @@ Phase 1 — Quick wins (no new dependencies, mostly additive)
   TODO-3  tool annotations 2025-03-26      (tiny)              ✅ done (v17.77.0)
   TODO-4  image + embedded content types   (small)              ✅ done (v17.78.0)
   TODO-5  JSON-RPC batch requests          (small)              ✅ done (v17.79.0)
-  TODO-6  list pagination                  (small)
+  TODO-6  list pagination                  (small)              ✅ done (v17.80.0)
   TODO-11 completions/complete             (small)
 
 Phase 2 — Streaming foundation (enables all notification features)
@@ -564,7 +583,7 @@ Phase 3 — Enterprise + advanced
 | 3 | Tool annotations | 2025-03-26 | **P1** | Tiny | ✅ Done (v17.77.0) |
 | 4 | `image` + `embedded` content | 2024-11-05 | **P1** | Small | ✅ Done (v17.78.0) |
 | 5 | JSON-RPC batch | JSON-RPC 2.0 | **P1** | Small | ✅ Done (v17.79.0) |
-| 6 | List pagination | 2024-11-05 | **P1** | Small | — |
+| 6 | List pagination | 2024-11-05 | **P1** | Small | ✅ Done (v17.80.0) |
 | 11 | `completions/complete` | 2024-11-05 | **P1** | Small | — |
 | 7 | SSE transport (`GET /mcp`) | Streamable HTTP | **P2** | Medium | — |
 | 8 | `logging/setLevel` | 2024-11-05 | **P2** | Small | #7 |
