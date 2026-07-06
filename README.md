@@ -80,7 +80,7 @@ $ curl http://localhost:7878/hello
 Hello, world!
 ```
 
-See [DEVELOPER](DEVELOPER.md) for 59 use-case examples covering JSON, auth, WebSocket, SSE, middleware, ORM, MCP, and more.
+See [DEVELOPER](DEVELOPER.md) for 75 use-case examples covering JSON, auth, WebSocket, SSE, middleware, ORM, MCP, and more.
 
 ---
 
@@ -369,7 +369,7 @@ Binary is at `target/release/rws`. MSRV is 1.75.
 ## Further reading
 
 - [CONFIGURE](CONFIGURE.md) — all configuration options (env vars, config file, CLI flags)
-- [DEVELOPER](DEVELOPER.md) — building blocks reference and 72 use-case examples
+- [DEVELOPER](DEVELOPER.md) — building blocks reference and 75 use-case examples
 - [FAQ](FAQ.md) — common problems and solutions
 - [spec/PROXY_SERVER_CONFIG.md](spec/PROXY_SERVER_CONFIG.md) — annotated proxy config reference
 - [spec/AI_ADOPTION.md](spec/AI_ADOPTION.md) — AI adoption strategy
