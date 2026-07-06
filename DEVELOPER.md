@@ -1925,6 +1925,24 @@ let server = McpServer::new("my-server", "1.0")
 
 `ToolAnnotations` has four `Option<bool>` fields — `read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint` — all defaulting to `None` (no hint given). Only fields that are `Some` are serialized, using the spec's camelCase key names (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`), into a `tools/list` entry's `annotations` object; a plain `.tool()`/`.tool_with_context()` tool has no `annotations` key at all. These are hints only — nothing in `McpServer` enforces or verifies them against what a handler actually does. There's currently no builder combining annotations with per-request context (`.tool_annotated()`'s handler is `Fn(&str) -> ...`, not `Fn(McpContext, &str) -> ...`); use `.tool_with_context()` instead if you need `McpContext` and don't need annotations.
 
+**Image and embedded-resource content types:** `McpContent` used to only serialize `{"type":"text",...}`. Two more constructors cover the rest of the spec's content variants:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let server = McpServer::new("my-server", "1.0")
+    .tool("screenshot", "Capture the current screen", "{}", |_args| {
+        let png_bytes: Vec<u8> = capture_screen();
+        let b64 = base64_encode(&png_bytes); // bring your own base64 encoder
+        Ok(McpContent::image(b64, "image/png"))
+    })
+    .tool("readme", "Return the project README inline", "{}", |_args| {
+        Ok(McpContent::embedded("docs://readme", "# My Project\n...", "text/markdown"))
+    });
+```
+
+`McpContent::image(data, mime_type)` serializes to `{"type":"image","data":"<b64>","mimeType":"..."}` — `data` is the caller's own base64-encoded string; this crate doesn't ship a base64 encoder (no third-party deps), so bring your own or write one. `McpContent::embedded(uri, text, mime_type)` serializes to `{"type":"resource","resource":{"uri":"...","mimeType":"...","text":"..."}}` — for a resource included directly in a tool's response, as opposed to one a client fetches separately via `resources/read`. Both work anywhere an `McpContent` is expected (tool results, prompt messages) since `to_content_json()` now branches on the value's `kind` instead of always emitting the `"text"` shape.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

@@ -78,32 +78,63 @@ const PROTOCOL_VERSION: &str = "2024-11-05";
 
 /// Content returned by tool and resource handlers.
 ///
-/// Create with [`McpContent::text`] (plain text or JSON strings) or
-/// [`McpContent::json`] (marks MIME type as `application/json`).
+/// Create with [`McpContent::text`] (plain text or JSON strings),
+/// [`McpContent::json`] (marks MIME type as `application/json`),
+/// [`McpContent::image`] (base64-encoded binary image data), or
+/// [`McpContent::embedded`] (a resource embedded inline in a tool response).
 #[derive(Clone, Debug)]
 pub struct McpContent {
-    /// Always `"text"` in the current MCP spec.
+    /// `"text"`, `"image"`, or `"resource"`.
     pub kind: &'static str,
-    /// The content string.
+    /// The content string — text for `"text"`, base64 data for `"image"`,
+    /// or the embedded resource's text for `"resource"`.
     pub text: String,
-    /// Optional MIME type override (default `"text/plain"`).
+    /// Optional MIME type override (default `"text/plain"` for `"text"`;
+    /// required in practice for `"image"`/`"resource"`, set by their
+    /// constructors).
     pub mime_type: Option<String>,
+    /// The resource URI — only set (and only serialized) for `"resource"`.
+    pub uri: Option<String>,
 }
 
 impl McpContent {
     /// Plain-text content.
     pub fn text(s: impl Into<String>) -> Self {
-        McpContent { kind: "text", text: s.into(), mime_type: None }
+        McpContent { kind: "text", text: s.into(), mime_type: None, uri: None }
     }
 
     /// JSON content — sets `mimeType` to `application/json`.
     pub fn json(s: impl Into<String>) -> Self {
-        McpContent { kind: "text", text: s.into(), mime_type: Some("application/json".to_string()) }
+        McpContent { kind: "text", text: s.into(), mime_type: Some("application/json".to_string()), uri: None }
+    }
+
+    /// Image content (screenshot, chart, generated art) — `data` is base64-encoded
+    /// binary and `mime_type` is e.g. `"image/png"`.
+    pub fn image(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
+        McpContent { kind: "image", text: data.into(), mime_type: Some(mime_type.into()), uri: None }
+    }
+
+    /// A resource embedded inline in a tool response, as opposed to one a
+    /// client fetches separately via `resources/read`.
+    pub fn embedded(uri: impl Into<String>, text: impl Into<String>, mime_type: impl Into<String>) -> Self {
+        McpContent { kind: "resource", text: text.into(), mime_type: Some(mime_type.into()), uri: Some(uri.into()) }
     }
 
     fn to_content_json(&self) -> String {
-        let escaped = json_escape(&self.text);
-        format!(r#"{{"type":"{}","text":"{}"}}"#, self.kind, escaped)
+        match self.kind {
+            "image" => format!(
+                r#"{{"type":"image","data":"{}","mimeType":"{}"}}"#,
+                json_escape(&self.text),
+                json_escape(self.mime_type.as_deref().unwrap_or("application/octet-stream")),
+            ),
+            "resource" => format!(
+                r#"{{"type":"resource","resource":{{"uri":"{}","mimeType":"{}","text":"{}"}}}}"#,
+                json_escape(self.uri.as_deref().unwrap_or("")),
+                json_escape(self.mime_type.as_deref().unwrap_or("text/plain")),
+                json_escape(&self.text),
+            ),
+            _ => format!(r#"{{"type":"text","text":"{}"}}"#, json_escape(&self.text)),
+        }
     }
 
     fn mime(&self) -> &str {

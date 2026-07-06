@@ -1060,6 +1060,23 @@ have no `annotations` key at all. Hints only — the server doesn't enforce them
 behavior. No builder combines annotations with `McpContext`; `.tool_annotated()`'s handler is
 `Fn(&str) -> ...`, same shape as `.tool()`.
 
+**Image and embedded-resource content** — `McpContent` gained two constructors beyond `text`/`json`:
+
+```rust
+use rust_web_server::mcp::McpContent;
+
+McpContent::image(base64_data, "image/png");
+// → {"type":"image","data":"<b64>","mimeType":"image/png"}
+
+McpContent::embedded("docs://readme", "# My Project\n...", "text/markdown");
+// → {"type":"resource","resource":{"uri":"docs://readme","mimeType":"text/markdown","text":"..."}}
+```
+
+`image(data, mime_type)` expects `data` already base64-encoded by the caller — no base64 encoder
+ships in this crate. `embedded(uri, text, mime_type)` is for a resource included directly in a tool's
+response, distinct from a client fetching it separately via `resources/read`. Both work anywhere an
+`McpContent` is expected (tool results, prompt messages).
+
 ---
 
 ## Standalone proxies

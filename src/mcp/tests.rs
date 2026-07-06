@@ -485,6 +485,40 @@ fn tools_call_unknown_tool_returns_error() {
     assert!(body.contains("no_such_tool") || body.contains("Unknown tool"), "should mention tool: {body}");
 }
 
+#[test]
+fn tools_call_image_content_serializes_data_and_mime_type() {
+    let srv = McpServer::new("test-srv", "0.1").tool(
+        "screenshot",
+        "Return a screenshot",
+        r#"{"type":"object"}"#,
+        |_args| Ok(McpContent::image("QUJD", "image/png")),
+    );
+    let req = r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"screenshot","arguments":{}}}"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert!(body.contains(r#""type":"image""#), "missing image type: {body}");
+    assert!(body.contains(r#""data":"QUJD""#), "missing base64 data: {body}");
+    assert!(body.contains(r#""mimeType":"image/png""#), "missing mimeType: {body}");
+    assert!(!body.contains("\"text\":"), "image content should not have a text field: {body}");
+}
+
+#[test]
+fn tools_call_embedded_resource_serializes_uri_mime_type_and_text() {
+    let srv = McpServer::new("test-srv", "0.1").tool(
+        "fetch_doc",
+        "Return an embedded doc",
+        r#"{"type":"object"}"#,
+        |_args| Ok(McpContent::embedded("docs://readme", "hello docs", "text/markdown")),
+    );
+    let req = r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"fetch_doc","arguments":{}}}"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert!(body.contains(r#""type":"resource""#), "missing resource type: {body}");
+    assert!(body.contains(r#""uri":"docs://readme""#), "missing uri: {body}");
+    assert!(body.contains(r#""mimeType":"text/markdown""#), "missing mimeType: {body}");
+    assert!(body.contains(r#""text":"hello docs""#), "missing embedded text: {body}");
+}
+
 // ── resources/list ────────────────────────────────────────────────────────────
 
 #[test]

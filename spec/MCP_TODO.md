@@ -129,23 +129,35 @@ a regression guard that existing plain `.tool()`-registered tools have no `annot
 
 ---
 
-### TODO-4: `image` and `embedded_resource` content types
+### ✅ TODO-4: `image` and `embedded_resource` content types — Done (v17.78.0)
 
-`McpContent` only serializes `{"type":"text",...}`. The spec defines two more:
+Added `McpContent::image(data, mime_type)` and `McpContent::embedded(uri, text, mime_type)`,
+matching this entry's sketch (both constructors are generic over `impl Into<String>` for every
+string arg, not just the `data`/`text` positions, for consistency with `::text`/`::json`).
 
-```rust
-// Image from a tool (screenshot, chart, generated art):
-McpContent::image(base64_data: impl Into<String>, mime_type: &str) -> Self
-// → {"type":"image","data":"<b64>","mimeType":"image/png"}
+`McpContent` gained a fifth field, `uri: Option<String>` (only set — and only serialized — for the
+`"resource"` kind); `kind` now takes one of `"text"`, `"image"`, `"resource"`. `to_content_json()`
+branches on `kind`: `"image"` renders `{"type":"image","data":"...","mimeType":"..."}`, `"resource"`
+renders `{"type":"resource","resource":{"uri":"...","mimeType":"...","text":"..."}}`, and everything
+else (i.e. `"text"`) keeps the original `{"type":"text","text":"..."}` shape. Both new variants flow
+through the same `to_content_json()` call site already used by `tools/call` results and
+`prompts/get` messages, so no dispatch code needed touching.
 
-// Embedded resource inside a tool response:
-McpContent::embedded(uri: &str, text: impl Into<String>, mime_type: &str) -> Self
-// → {"type":"resource","resource":{"uri":"...","mimeType":"...","text":"..."}}
-```
+**Scope note:** `resources/read`'s response format wasn't touched — it already builds its own
+fixed `{"contents":[{"uri":...,"mimeType":...,"text":...}]}` shape by hand rather than going through
+`to_content_json()`, so a resource handler still can't return image content from `resources/read`
+directly. Out of scope here since the entry only asked about tool-response content types.
 
-Update `to_content_json()` to branch on `kind`.
+This crate has no third-party dependencies (no base64 crate), so `McpContent::image` takes an
+already-base64-encoded string rather than encoding raw bytes itself — documented on the constructor
+and in DEVELOPER.md/docs rather than silently expecting callers to guess.
 
-**Effort:** small — extend the enum-like `kind` field and update `to_content_json`.
+2 new tests in `src/mcp/tests.rs`: a tool returning `McpContent::image(...)` serializes `type`,
+`data`, and `mimeType` correctly in a `tools/call` response (and omits the `text` field entirely);
+a tool returning `McpContent::embedded(...)` serializes `type`, `uri`, `mimeType`, and `text`
+correctly.
+
+**Effort:** small, as estimated — one new field, two constructors, one branch in `to_content_json`.
 
 ---
 
@@ -499,7 +511,7 @@ Phase 1 — Quick wins (no new dependencies, mostly additive)
   TODO-1  protocol version negotiation     (tiny)              ✅ done (v17.75.0)
   TODO-2  McpContext in tool handlers      (small)              ✅ done (v17.76.0)
   TODO-3  tool annotations 2025-03-26      (tiny)              ✅ done (v17.77.0)
-  TODO-4  image + embedded content types   (small)
+  TODO-4  image + embedded content types   (small)              ✅ done (v17.78.0)
   TODO-5  JSON-RPC batch requests          (small)
   TODO-6  list pagination                  (small)
   TODO-11 completions/complete             (small)
@@ -529,7 +541,7 @@ Phase 3 — Enterprise + advanced
 | 1 | Protocol version negotiation | 2024-11-05 | **P1** | Tiny | ✅ Done (v17.75.0) |
 | 2 | `McpContext` in tool handlers | Ergonomics | **P1** | Small | ✅ Done (v17.76.0) |
 | 3 | Tool annotations | 2025-03-26 | **P1** | Tiny | ✅ Done (v17.77.0) |
-| 4 | `image` + `embedded` content | 2024-11-05 | **P1** | Small | — |
+| 4 | `image` + `embedded` content | 2024-11-05 | **P1** | Small | ✅ Done (v17.78.0) |
 | 5 | JSON-RPC batch | JSON-RPC 2.0 | **P1** | Small | — |
 | 6 | List pagination | 2024-11-05 | **P1** | Small | — |
 | 11 | `completions/complete` | 2024-11-05 | **P1** | Small | — |

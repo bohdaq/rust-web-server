@@ -143,11 +143,20 @@ McpContent::text("Operation completed successfully");
 
 // JSON — sets mimeType to application/json
 McpContent::json(r#"{"count": 42, "items": ["a", "b"]}"#);
+
+// Image — data is base64-encoded binary, mime_type e.g. "image/png"
+McpContent::image(base64_encoded_png, "image/png");
+
+// Embedded resource — a resource included directly in the tool's response,
+// as opposed to one the client fetches separately via resources/read
+McpContent::embedded("docs://readme", "# My Project\n...", "text/markdown");
 ```
 
-:::note[Images]
-The MCP spec supports image content with base64 encoding. The current `McpContent` API covers text and JSON. For binary image responses, encode to base64, wrap as JSON, and return `McpContent::json(...)` with the base64 string and MIME type as fields.
-:::
+`McpContent::image(data, mime_type)` serializes to `{"type":"image","data":"<b64>","mimeType":"..."}`. This crate has no third-party dependencies, so it doesn't ship a base64 encoder — `data` must already be base64-encoded by the caller before it's passed in.
+
+`McpContent::embedded(uri, text, mime_type)` serializes to `{"type":"resource","resource":{"uri":"...","mimeType":"...","text":"..."}}`.
+
+All four variants work anywhere an `McpContent` is expected — tool results (`tools/call`) and prompt messages (`prompts/get`) alike.
 
 ## Extracting arguments
 

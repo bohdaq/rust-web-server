@@ -232,6 +232,8 @@ Call `.with_host("example.com")` before registering routes to restrict a `Router
 
 `.tool_annotated(name, description, schema, annotations, handler)` (MCP 2025-03-26) attaches a `ToolAnnotations` value (`read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint`, all `Option<bool>`) to a tool — hints, not enforced — serialized as an `annotations` object with camelCase keys (`readOnlyHint`, etc.) in `tools/list` only for tools that have them; its handler is the plain `Fn(&str) -> ...` shape like `.tool()`, not the context-aware shape, so there is no single builder combining annotations with `McpContext`.
 
+`McpContent::image(data, mime_type)` and `McpContent::embedded(uri, text, mime_type)` cover the MCP spec's `image` and `resource` content variants alongside the original `text`/`json`; `to_content_json()` branches on `McpContent::kind` (`"text"` / `"image"` / `"resource"`) to pick the right JSON shape. `image` expects an already-base64-encoded string — no base64 crate is a dependency of this project. `resources/read`'s response format is untouched (hand-built, doesn't go through `to_content_json()`), so a resource handler still can't return image content that way.
+
 ### Test client
 
 `src/test_client/mod.rs` provides `TestClient<A>` — dispatches requests directly through an `Application` without opening a TCP socket. Use it in unit and integration tests:
