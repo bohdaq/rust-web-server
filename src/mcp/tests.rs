@@ -1385,3 +1385,127 @@ fn dynamic_registration_is_visible_across_clones() {
     assert!(body_of(&resp).contains("\"from_clone\""), "tool registered via a clone should be visible on the original");
 }
 
+// ── notifications/progress ────────────────────────────────────────────────────
+
+fn make_progress_server() -> McpServer {
+    McpServer::new("test-srv", "0.1").tool_with_context(
+        "long_job",
+        "Do something slow",
+        r#"{"type":"object"}"#,
+        |ctx, _args| {
+            ctx.report_progress(0.0, Some(100.0), Some("starting"));
+            ctx.report_progress(100.0, Some(100.0), Some("done"));
+            Ok(McpContent::text("finished"))
+        },
+    )
+}
+
+#[test]
+fn tools_call_with_progress_token_delivers_progress_notifications_over_sse() {
+    let srv = make_progress_server();
+    let mut sse_resp = srv.start_sse_stream();
+    let mut reader = sse_resp.stream_pipe.take().unwrap();
+
+    let client = TestClient::new(srv.clone());
+    let call_resp = client
+        .post("/mcp")
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"long_job","arguments":{},"_meta":{"progressToken":"abc123"}}}"#)
+        .send();
+    assert_eq!(call_resp.status(), 200);
+    assert!(call_resp.body_text().contains("finished"));
+
+    let mut buf = [0u8; 4096];
+    let n1 = reader.read(&mut buf).unwrap();
+    let first = String::from_utf8_lossy(&buf[..n1]).into_owned();
+    assert!(first.contains(r#""method":"notifications/progress""#), "missing method: {first}");
+    assert!(first.contains(r#""progressToken":"abc123""#), "missing token: {first}");
+    assert!(first.contains(r#""progress":0"#), "missing first progress value: {first}");
+    assert!(first.contains(r#""total":100"#), "missing total: {first}");
+    assert!(first.contains(r#""message":"starting""#), "missing message: {first}");
+
+    let n2 = reader.read(&mut buf).unwrap();
+    let second = String::from_utf8_lossy(&buf[..n2]).into_owned();
+    assert!(second.contains(r#""progress":100"#), "missing second progress value: {second}");
+    assert!(second.contains(r#""message":"done""#), "missing second message: {second}");
+}
+
+#[test]
+fn tools_call_without_progress_token_reports_nothing() {
+    let srv = make_progress_server();
+    let mut sse_resp = srv.start_sse_stream();
+    let mut reader = sse_resp.stream_pipe.take().unwrap();
+
+    let client = TestClient::new(srv.clone());
+    client
+        .post("/mcp")
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"long_job","arguments":{}}}"#)
+        .send();
+
+    // If report_progress had (incorrectly) queued anything without a
+    // progressToken, this marker would not be the first frame read back.
+    srv.notify("marker", None);
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    let text = String::from_utf8_lossy(&buf[..n]);
+    assert!(text.contains(r#""method":"marker""#), "expected only the marker notification: {text}");
+}
+
+#[test]
+fn report_progress_is_a_safe_no_op_without_a_live_server_context() {
+    // handle_request() builds ctx via McpContext::default() (no sse_clients),
+    // even though this request's params._meta.progressToken is present.
+    let srv = make_progress_server();
+    let resp = srv.handle_request(
+        r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"long_job","arguments":{},"_meta":{"progressToken":"abc"}}}"#,
+    );
+    assert_eq!(resp.status_code, 200);
+    let body = body_of(&resp);
+    assert!(body.contains("finished"), "tool should still complete normally: {body}");
+}
+
+#[test]
+fn progress_token_numeric_type_round_trips_unquoted() {
+    let srv = make_progress_server();
+    let mut sse_resp = srv.start_sse_stream();
+    let mut reader = sse_resp.stream_pipe.take().unwrap();
+
+    let client = TestClient::new(srv.clone());
+    client
+        .post("/mcp")
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"long_job","arguments":{},"_meta":{"progressToken":42}}}"#)
+        .send();
+
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    let text = String::from_utf8_lossy(&buf[..n]);
+    assert!(text.contains(r#""progressToken":42"#), "expected the numeric token unquoted: {text}");
+}
+
+#[test]
+fn report_progress_omits_total_and_message_when_not_given() {
+    let srv = McpServer::new("test-srv", "0.1").tool_with_context(
+        "minimal_job",
+        "Report bare progress",
+        r#"{"type":"object"}"#,
+        |ctx, _args| {
+            ctx.report_progress(50.0, None, None);
+            Ok(McpContent::text("ok"))
+        },
+    );
+    let mut sse_resp = srv.start_sse_stream();
+    let mut reader = sse_resp.stream_pipe.take().unwrap();
+
+    let client = TestClient::new(srv.clone());
+    client
+        .post("/mcp")
+        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"minimal_job","arguments":{},"_meta":{"progressToken":"t1"}}}"#)
+        .send();
+
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    let text = String::from_utf8_lossy(&buf[..n]);
+    assert!(text.contains(r#""progress":50"#), "missing progress: {text}");
+    assert!(!text.contains("\"total\""), "did not expect a total field: {text}");
+    assert!(!text.contains("\"message\""), "did not expect a message field: {text}");
+}
+

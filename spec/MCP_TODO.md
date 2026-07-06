@@ -444,31 +444,59 @@ than the registration methods themselves, which are mechanically similar to the 
 
 ---
 
-### TODO-10: `notifications/progress` for long-running tools
+### ✅ TODO-10: `notifications/progress` for long-running tools — Done (v17.84.0)
 
-When a client includes `_meta.progressToken` in a `tools/call` request, the server should
-send periodic `notifications/progress` events over the SSE channel as the tool runs.
+`do_tools_call` now extracts `params._meta.progressToken` and attaches it to the `McpContext` passed
+to the handler; `McpContext::report_progress(progress, total, message)` pushes a
+`notifications/progress` event over the `GET /mcp` SSE channel (TODO-7) for that token.
 
-**Depends on:** TODO-7 (SSE channel).
+**Extraction wasn't the literal one-liner the entry sketched** — `json_rpc::extract_str(&params,
+"_meta.progressToken")` isn't valid against this crate's hand-rolled JSON helpers, which only do
+flat single-key lookups (no dotted-path support, and no JSON library to add one). Implemented as two
+nested lookups instead: `json_rpc::extract_raw(&params, "_meta")` then `extract_raw(&meta,
+"progressToken")` — using `extract_raw` rather than `extract_str` on the *token* deliberately, since
+the spec allows `progressToken` to be a `string | number` and `extract_str` only handles quoted
+string values. The raw JSON token (already correctly quoted if it's a string, or bare if a number)
+is stored as-is in `McpContext::progress_token` and spliced back verbatim by `report_progress` — no
+decode/re-encode round trip that could get one type right and the other wrong.
 
-**In `do_tools_call`:**
-```rust
-let progress_token = json_rpc::extract_str(&params, "_meta.progressToken");
-// pass to handler via McpContext (TODO-2)
-```
+**`report_progress` doesn't take the token as a parameter**, unlike the entry's own sketched
+signature (`ctx.report_progress(token, 0.0, 100.0, ...)`). The token is already sitting on `ctx`
+(that's the whole point of routing it through `McpContext`) — requiring a handler to also pass it
+back in on every call is redundant and a real footgun: nothing stops a handler from typoing or
+copy-pasting the wrong token from a different call. Implemented signature: `ctx.report_progress(progress:
+f64, total: Option<f64>, message: Option<&str>)` — reads `self.progress_token` internally and
+silently no-ops if it's `None` (client didn't ask for updates), so a handler never needs to branch on
+whether reporting is possible before calling it.
 
-**In tool handlers:**
-```rust
-|ctx: McpContext, args: &str| {
-    if let Some(token) = &ctx.progress_token {
-        ctx.report_progress(token, 0.0, 100.0, Some("starting".into()));
-    }
-    // ... do work ...
-    Ok(McpContent::text("done"))
-}
-```
+**`McpContext` gained a private `sse_clients: Option<Arc<Mutex<Vec<SyncSender<Vec<u8>>>>>>`** field
+(not `pub` — it's plumbing, not context data a handler reads) alongside the new `pub progress_token:
+Option<String>`. `context_for()` (called for every request, any method) now sets `sse_clients` to a
+clone of the server's broadcast list unconditionally; `do_tools_call` is the only place that ever
+sets `progress_token` to `Some`, since `_meta.progressToken` is specific to that one method. A
+context built by hand (`McpContext { ..Default::default() }`, e.g. via
+`handle_request_with_context` in a test) has `sse_clients: None`, so `report_progress` silently
+no-ops there too — consistent with how `client_name`/`session_id` already behave empty in that path.
 
-**Effort:** small once TODO-7 is done (TODO-2 already is).
+**Shared plumbing, not a duplicate broadcast path:** extracted `McpServer::notify`'s two responsibilities
+into free functions — `render_notification(method, params_json) -> String` (the
+`{"jsonrpc":"2.0","method":...,"params":...}` shape) and `broadcast_sse_to(clients: &Arc<Mutex<Vec<SseSender>>>,
+json: &str)` (the `try_send`-and-prune loop, previously `McpServer::broadcast_sse`, now taking the
+list explicitly instead of `&self`). `McpServer::notify` and `McpContext::report_progress` both call
+these same two functions — `report_progress` couldn't call `.notify()` directly (that needs `&McpServer`,
+which `McpContext` doesn't have and shouldn't need), but the actual rendering/broadcasting logic isn't
+duplicated.
+
+5 new tests: `report_progress` delivers two sequential progress frames with correct
+`progressToken`/`progress`/`total`/`message` fields, in order; no frame is queued when the request
+had no `progressToken` (proven the same marker-notification way as prior TODOs' "nothing was
+queued" tests); `report_progress` is a safe no-op when called through `handle_request()`'s live-server-less
+context even though the request itself included a `progressToken`; a numeric `progressToken` (not a
+string) round-trips unquoted; `total`/`message` are omitted from the frame when not given.
+
+**Effort:** small, as estimated, now that TODO-7 (SSE) and TODO-2 (`McpContext`) both exist — the
+actual work was almost entirely in getting the nested-object extraction and the shared
+render/broadcast refactor right, not new broadcast infrastructure.
 
 ---
 
@@ -653,7 +681,7 @@ Phase 2 — Streaming foundation (enables all notification features)
   TODO-7  GET /mcp SSE channel            (medium — unblocks 8, 9, 10, 14, 15, 16)   ✅ done (v17.81.0)
   TODO-8  logging/setLevel + notifications (small, needs TODO-7)              ✅ done (v17.82.0)
   TODO-9  dynamic registration             (medium, needs TODO-7)             ✅ done (v17.83.0)
-  TODO-10 notifications/progress           (small, needs TODO-7 + TODO-2)
+  TODO-10 notifications/progress           (small, needs TODO-7 + TODO-2)      ✅ done (v17.84.0)
 
 Phase 3 — Enterprise + advanced
   TODO-11 completions/complete            (small, can go in Phase 1)
@@ -681,7 +709,7 @@ Phase 3 — Enterprise + advanced
 | 7 | SSE transport (`GET /mcp`) | Streamable HTTP | **P2** | Medium | ✅ Done (v17.81.0) |
 | 8 | `logging/setLevel` | 2024-11-05 | **P2** | Small | ✅ Done (v17.82.0) |
 | 9 | Dynamic registration + `listChanged` | 2024-11-05 | **P2** | Medium | ✅ Done (v17.83.0) |
-| 10 | `notifications/progress` | 2024-11-05 | **P2** | Small | #7 + #2 |
+| 10 | `notifications/progress` | 2024-11-05 | **P2** | Small | ✅ Done (v17.84.0) |
 | 12 | Request cancellation | 2024-11-05 | **P3** | Medium | `http2` async |
 | 13 | OAuth 2.0 auth | 2025-03-26 | **P3** | Small | `sso` feature |
 | 14 | `resources/subscribe` | 2024-11-05 | **P3** | Medium | #7 + #9 |

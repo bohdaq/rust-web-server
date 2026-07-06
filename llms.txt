@@ -1182,6 +1182,28 @@ registration/removal that actually changes something pushes
 TODO-14, not implemented). No dynamic equivalent of `.tool_with_context()`/`.tool_annotated()`/
 `.prompt_with_args()` — remove and re-register under the same name to change those.
 
+**`notifications/progress`** — if a `tools/call` request includes `params._meta.progressToken`,
+`McpContext::report_progress(progress, total, message)` pushes a `notifications/progress` event
+over SSE for that token (`.tool_with_context()` only, since a plain `.tool()` handler never sees
+`McpContext`):
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let server = McpServer::new("my-server", "1.0")
+    .tool_with_context("long_job", "Do something slow", "{}", |ctx, _args| {
+        ctx.report_progress(0.0, Some(100.0), Some("starting"));
+        ctx.report_progress(100.0, Some(100.0), Some("done"));
+        Ok(McpContent::text("done"))
+    });
+```
+
+Always safe to call — no-ops if the client sent no `progressToken`, or if `ctx` has no live server
+behind it (e.g. `handle_request()`'s default empty context rather than `execute()`).
+`progress_token` stores the raw JSON form (spec allows `string | number`), so it round-trips
+correctly either way. Shares `render_notification`/`broadcast_sse_to` internally with `.notify()` —
+`McpContext` just holds a clone of the broadcast list, not a whole `McpServer`.
+
 ---
 
 ## Standalone proxies

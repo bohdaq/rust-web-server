@@ -248,6 +248,69 @@ pub struct McpContext {
     /// this crate yet — reserved for a future JWT-auth integration
     /// (MCP_TODO.md TODO-11/TODO-13); always `None` today.
     pub auth_claims: Option<String>,
+    /// The raw JSON value of `params._meta.progressToken` from the
+    /// triggering `tools/call` request, if the client sent one — a spec
+    /// `string | number`, so this is stored pre-rendered (already correctly
+    /// quoted if it's a string) rather than decoded, and spliced back
+    /// verbatim by [`Self::report_progress`]. `None` for anything other than
+    /// a `tools/call` whose caller asked for progress updates.
+    pub progress_token: Option<String>,
+    /// Shared handle back to the owning [`McpServer`]'s SSE broadcast list,
+    /// used by [`Self::report_progress`]. Not `pub` — this is plumbing, not
+    /// part of the context data a handler reads. `None` for a context built
+    /// by hand (e.g. via [`McpServer::handle_request_with_context`] in a
+    /// test) rather than through [`McpServer::execute`], in which case
+    /// `report_progress` silently no-ops — there's no live server to
+    /// broadcast through.
+    sse_clients: Option<Arc<Mutex<Vec<SseSender>>>>,
+}
+
+impl McpContext {
+    /// Push a `notifications/progress` event over the SSE channel for this
+    /// request's `progressToken`, if the client asked for progress updates
+    /// (`params._meta.progressToken` on the triggering `tools/call`) and
+    /// this context was built through a live [`McpServer`] (via `execute()`,
+    /// not a bare `McpContext { .. }` — see the `sse_clients` field doc).
+    ///
+    /// Silently does nothing in either case — a handler doesn't need to
+    /// branch on whether progress reporting is actually wired up before
+    /// calling this; it's always safe to call.
+    ///
+    /// `total` and `message` are both optional, matching the spec's
+    /// `notifications/progress` shape: `{"progressToken":...,"progress":...,
+    /// "total":...,"message":"..."}` (with `total`/`message` omitted when not
+    /// given here).
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::mcp::{McpContent, McpServer};
+    ///
+    /// let server = McpServer::new("my-server", "1.0")
+    ///     .tool_with_context("long_job", "Do something slow", "{}", |ctx, _args| {
+    ///         ctx.report_progress(0.0, Some(100.0), Some("starting"));
+    ///         // ... do work ...
+    ///         ctx.report_progress(100.0, Some(100.0), Some("done"));
+    ///         Ok(McpContent::text("done"))
+    ///     });
+    /// ```
+    pub fn report_progress(&self, progress: f64, total: Option<f64>, message: Option<&str>) {
+        let (Some(token), Some(sse_clients)) = (&self.progress_token, &self.sse_clients) else {
+            return;
+        };
+
+        let total_field = match total {
+            Some(t) => format!(r#","total":{t}"#),
+            None => String::new(),
+        };
+        let message_field = match message {
+            Some(m) => format!(r#","message":"{}""#, json_escape(m)),
+            None => String::new(),
+        };
+        let params = format!(
+            r#"{{"progressToken":{token},"progress":{progress}{total_field}{message_field}}}"#
+        );
+        let json = render_notification("notifications/progress", Some(&params));
+        broadcast_sse_to(sse_clients, &json);
+    }
 }
 
 /// `clientInfo` recorded for one session at `initialize` time, looked up by
@@ -541,20 +604,8 @@ impl McpServer {
     /// server.notify("notifications/message", Some(r#"{"level":"info","data":"hello"}"#));
     /// ```
     pub fn notify(&self, method: &str, params_json: Option<&str>) {
-        let params_field = match params_json {
-            Some(p) => format!(r#","params":{p}"#),
-            None => String::new(),
-        };
-        let json = format!(r#"{{"jsonrpc":"2.0","method":"{}"{}}}"#, json_escape(method), params_field);
-        self.broadcast_sse(&json);
-    }
-
-    /// Send a raw pre-built JSON-RPC message to every connected SSE client,
-    /// pruning any whose channel is full or disconnected.
-    fn broadcast_sse(&self, json: &str) {
-        let frame = format!("data: {json}\n\n").into_bytes();
-        let mut clients = self.sse_clients.lock().unwrap();
-        clients.retain(|tx| tx.try_send(frame.clone()).is_ok());
+        let json = render_notification(method, params_json);
+        broadcast_sse_to(&self.sse_clients, &json);
     }
 
     /// Handle `GET /mcp`: register a new SSE client and return a
@@ -1265,6 +1316,12 @@ impl McpServer {
         let args = json_rpc::extract_raw(&params, "arguments")
             .unwrap_or_else(|| "{}".to_string());
 
+        // `_meta.progressToken` (string or number, per spec) — stored raw so
+        // `McpContext::report_progress` can splice it back verbatim.
+        let progress_token = json_rpc::extract_raw(&params, "_meta")
+            .and_then(|meta| json_rpc::extract_raw(&meta, "progressToken"));
+        let ctx = McpContext { progress_token, ..ctx };
+
         let handler = {
             let tools = self.tools.read().unwrap();
             tools.iter().find(|t| t.name == name).map(|t| t.handler.clone())
@@ -1415,8 +1472,36 @@ impl McpServer {
             None => (None, None),
         };
 
-        McpContext { client_name, client_version, session_id, auth_claims: None }
+        McpContext {
+            client_name,
+            client_version,
+            session_id,
+            auth_claims: None,
+            progress_token: None,
+            sse_clients: Some(self.sse_clients.clone()),
+        }
     }
+}
+
+/// Render one JSON-RPC 2.0 notification (no `id` — fire-and-forget, per
+/// spec) as an SSE `data:`-ready message body. Shared by [`McpServer::notify`]
+/// and [`McpContext::report_progress`].
+fn render_notification(method: &str, params_json: Option<&str>) -> String {
+    let params_field = match params_json {
+        Some(p) => format!(r#","params":{p}"#),
+        None => String::new(),
+    };
+    format!(r#"{{"jsonrpc":"2.0","method":"{}"{}}}"#, json_escape(method), params_field)
+}
+
+/// Send a raw pre-built JSON-RPC message to every client in `clients`,
+/// pruning any whose channel is full or disconnected. Shared by
+/// [`McpServer::notify`] and [`McpContext::report_progress`] — the latter
+/// only has a clone of the broadcast list, not a whole `McpServer`.
+fn broadcast_sse_to(clients: &Arc<Mutex<Vec<SseSender>>>, json: &str) {
+    let frame = format!("data: {json}\n\n").into_bytes();
+    let mut clients = clients.lock().unwrap();
+    clients.retain(|tx| tx.try_send(frame.clone()).is_ok());
 }
 
 // ── SSE channel reader ────────────────────────────────────────────────────────

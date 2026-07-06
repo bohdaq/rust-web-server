@@ -2036,6 +2036,24 @@ Each registration or removal that actually changes something pushes the correspo
 
 There is no dynamic equivalent of `.tool_with_context()`, `.tool_annotated()`, or `.prompt_with_args()` — `register_tool`/`register_prompt` only cover the plain shapes, matching `.tool()`/`.prompt()`. Removing and re-registering under the same name is the way to change a dynamically-added tool's annotations or a prompt's argument definitions later.
 
+**`notifications/progress` for long-running tools:** if a `tools/call` request includes `params._meta.progressToken`, `McpContext::report_progress(progress, total, message)` pushes a `notifications/progress` event over the `GET /mcp` SSE stream for that token — only available to `.tool_with_context()` handlers, since a plain `.tool()` handler never sees `McpContext`:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let server = McpServer::new("my-server", "1.0")
+    .tool_with_context("long_job", "Do something slow", "{}", |ctx, _args| {
+        ctx.report_progress(0.0, Some(100.0), Some("starting"));
+        // ... do work ...
+        ctx.report_progress(100.0, Some(100.0), Some("done"));
+        Ok(McpContent::text("done"))
+    });
+```
+
+`report_progress` is always safe to call — it silently does nothing if the client didn't send a `progressToken` (`ctx.progress_token` is `None`) or if `ctx` was built without a live server behind it (e.g. via `handle_request()`'s empty default context rather than `execute()`); a handler doesn't need to branch on whether progress reporting is actually wired up. `progress_token` stores the token's raw JSON form rather than a decoded string — the spec allows `progressToken` to be a string *or* a number, so the raw form round-trips correctly either way without the module needing to track which type it was.
+
+Internally, `.notify()` and `report_progress` share the same rendering (`render_notification`) and broadcast (`broadcast_sse_to`) free functions — `McpContext` only holds a clone of the `Arc<Mutex<Vec<SyncSender<Vec<u8>>>>>` broadcast list (not a whole `McpServer`), set once in `context_for()` for every request regardless of method, alongside `client_name`/`session_id`/etc.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

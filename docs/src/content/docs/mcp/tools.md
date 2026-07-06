@@ -68,6 +68,7 @@ let mcp = McpServer::new("my-server", "1.0")
 | `client_version` | `Option<String>` | This session's `initialize` call's `params.clientInfo.version` |
 | `session_id` | `Option<String>` | The `Mcp-Session-Id` header on this request |
 | `auth_claims` | `Option<String>` | Reserved for a future JWT-auth integration — always `None` today |
+| `progress_token` | `Option<String>` | `params._meta.progressToken` from this `tools/call` request, if the client sent one — see [Progress reporting](#progress-reporting) |
 
 ### How the session gets established
 
@@ -84,6 +85,35 @@ You don't need to do anything to opt into this — it's automatic for any server
 
 :::caution[Session storage has no eviction]
 Recorded sessions accumulate for the life of the process — nothing removes an entry, since the MCP Streamable HTTP transport has no session-termination signal to key cleanup off of. Fine for a modest, roughly-stable set of long-lived AI-agent clients; not recommended as-is for a public-internet-facing server serving unbounded distinct clients.
+:::
+
+## Progress reporting
+
+If a client includes `params._meta.progressToken` on a `tools/call` request, it's asking for periodic progress updates while the tool runs. `.tool_with_context()` handlers can send them with `ctx.report_progress(progress, total, message)`, which pushes a `notifications/progress` event over the [`GET /mcp` SSE stream](/mcp/overview/#sse-streaming-transport):
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let mcp = McpServer::new("my-server", "1.0")
+    .tool_with_context(
+        "process_batch",
+        "Process a large batch of records",
+        r#"{"type":"object"}"#,
+        |ctx, _args| {
+            ctx.report_progress(0.0, Some(100.0), Some("starting"));
+            // ... do the first half of the work ...
+            ctx.report_progress(50.0, Some(100.0), Some("halfway"));
+            // ... finish the work ...
+            ctx.report_progress(100.0, Some(100.0), Some("done"));
+            Ok(McpContent::text("batch processed"))
+        },
+    );
+```
+
+`total` and `message` are both optional (`None` omits them from the pushed event). Only `.tool_with_context()` handlers can report progress — a plain `.tool()` handler never receives `McpContext` at all, so it has no `progress_token` to report against.
+
+:::note[Always safe to call]
+`report_progress` silently does nothing if the client didn't ask for progress updates (`ctx.progress_token` is `None`) or if `ctx` wasn't built through a live server (e.g. `handle_request()`'s empty default context, rather than `execute()` — see the note above about calling `handle_request()` directly). A handler never needs to check whether progress reporting is actually possible before calling it.
 :::
 
 ## Tool annotations
