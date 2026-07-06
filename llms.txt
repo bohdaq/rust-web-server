@@ -1204,6 +1204,29 @@ behind it (e.g. `handle_request()`'s default empty context rather than `execute(
 correctly either way. Shares `render_notification`/`broadcast_sse_to` internally with `.notify()` —
 `McpContext` just holds a clone of the broadcast list, not a whole `McpServer`.
 
+**`completion/complete`** — `.completion(ref_type, ref_name, handler)` registers an
+argument-autocomplete provider for a tool or prompt argument, for clients like Cursor/VS Code:
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("my-server", "1.0")
+    .completion("tool", "deploy", |arg_name, partial| {
+        match arg_name {
+            "region" => Ok(vec!["us-east-1", "eu-west-1"].into_iter()
+                .filter(|r| r.starts_with(partial)).map(String::from).collect()),
+            _ => Ok(vec![]),
+        }
+    });
+```
+
+`ref_type` is `"tool"`/`"prompt"`, matched against the request's `ref.type` (`"ref/tool"`/
+`"ref/prompt"` on the wire) with the `"ref/"` prefix stripped. No match (unknown ref/name or
+argument) returns empty `values`, not an error. More than 100 values from a handler are truncated
+with `hasMore:true`/untruncated `total`, per spec guidance. `initialize` advertises
+`"completions":{}` automatically once any `.completion()` is registered — no separate opt-in flag.
+No dynamic (`&self`) equivalent — completions are builder-only, registered before serving requests.
+
 ---
 
 ## Standalone proxies

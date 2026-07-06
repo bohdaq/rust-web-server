@@ -1509,3 +1509,131 @@ fn report_progress_omits_total_and_message_when_not_given() {
     assert!(!text.contains("\"message\""), "did not expect a message field: {text}");
 }
 
+// ── completion/complete ────────────────────────────────────────────────────────
+
+fn make_completion_server() -> McpServer {
+    McpServer::new("test-srv", "0.1").completion("tool", "deploy", |arg_name, partial| {
+        match arg_name {
+            "region" => Ok(vec!["us-east-1", "eu-west-1", "ap-southeast-1"]
+                .into_iter()
+                .filter(|r| r.starts_with(partial))
+                .map(String::from)
+                .collect()),
+            _ => Ok(vec![]),
+        }
+    })
+}
+
+#[test]
+fn completion_returns_matching_values_for_a_registered_tool_argument() {
+    let srv = make_completion_server();
+    let req = r#"{"jsonrpc":"2.0","method":"completion/complete","id":1,"params":{"ref":{"type":"ref/tool","name":"deploy"},"argument":{"name":"region","value":"us"}}}"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert!(body.contains(r#""values":["us-east-1"]"#), "expected filtered values: {body}");
+    assert!(body.contains(r#""hasMore":false"#), "expected hasMore false: {body}");
+    assert!(body.contains(r#""total":1"#), "expected total 1: {body}");
+}
+
+#[test]
+fn completion_argument_without_value_defaults_to_empty_partial() {
+    let srv = make_completion_server();
+    let req = r#"{"jsonrpc":"2.0","method":"completion/complete","id":1,"params":{"ref":{"type":"ref/tool","name":"deploy"},"argument":{"name":"region"}}}"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert!(body.contains("us-east-1") && body.contains("eu-west-1") && body.contains("ap-southeast-1"), "expected all three regions with an empty partial: {body}");
+    assert!(body.contains(r#""total":3"#));
+}
+
+#[test]
+fn completion_for_unregistered_ref_returns_empty_values_not_an_error() {
+    let srv = make_completion_server();
+    let req = r#"{"jsonrpc":"2.0","method":"completion/complete","id":1,"params":{"ref":{"type":"ref/tool","name":"no_such_tool"},"argument":{"name":"region","value":"us"}}}"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert!(!body.contains("\"error\""), "should not be a JSON-RPC error: {body}");
+    assert!(body.contains(r#""values":[]"#), "expected empty values: {body}");
+    assert!(body.contains(r#""total":0"#));
+}
+
+#[test]
+fn completion_for_unregistered_argument_name_returns_empty_values() {
+    let srv = make_completion_server();
+    let req = r#"{"jsonrpc":"2.0","method":"completion/complete","id":1,"params":{"ref":{"type":"ref/tool","name":"deploy"},"argument":{"name":"unrelated_arg","value":""}}}"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert!(body.contains(r#""values":[]"#), "expected empty values: {body}");
+}
+
+#[test]
+fn completion_handler_error_returns_invalid_params() {
+    let srv = McpServer::new("test-srv", "0.1").completion("tool", "broken", |_arg, _partial| {
+        Err("completion source unavailable".to_string())
+    });
+    let req = r#"{"jsonrpc":"2.0","method":"completion/complete","id":1,"params":{"ref":{"type":"ref/tool","name":"broken"},"argument":{"name":"anything","value":""}}}"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert!(body.contains("-32602"), "expected INVALID_PARAMS: {body}");
+    assert!(body.contains("completion source unavailable"), "expected the handler's error message: {body}");
+}
+
+#[test]
+fn completion_missing_ref_returns_invalid_params() {
+    let srv = make_completion_server();
+    let req = r#"{"jsonrpc":"2.0","method":"completion/complete","id":1,"params":{"argument":{"name":"region","value":"us"}}}"#;
+    let resp = srv.handle_request(req);
+    assert!(body_of(&resp).contains("-32602"));
+}
+
+#[test]
+fn completion_missing_argument_returns_invalid_params() {
+    let srv = make_completion_server();
+    let req = r#"{"jsonrpc":"2.0","method":"completion/complete","id":1,"params":{"ref":{"type":"ref/tool","name":"deploy"}}}"#;
+    let resp = srv.handle_request(req);
+    assert!(body_of(&resp).contains("-32602"));
+}
+
+#[test]
+fn completion_supports_prompt_ref_type() {
+    let srv = McpServer::new("test-srv", "0.1").completion("prompt", "summarize", |arg_name, _partial| {
+        match arg_name {
+            "language" => Ok(vec!["english".to_string(), "spanish".to_string()]),
+            _ => Ok(vec![]),
+        }
+    });
+    let req = r#"{"jsonrpc":"2.0","method":"completion/complete","id":1,"params":{"ref":{"type":"ref/prompt","name":"summarize"},"argument":{"name":"language","value":""}}}"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert!(body.contains("english") && body.contains("spanish"), "expected both languages: {body}");
+}
+
+#[test]
+fn completion_truncates_to_100_values_and_reports_has_more() {
+    let srv = McpServer::new("test-srv", "0.1").completion("tool", "big", |_arg, _partial| {
+        Ok((0..150).map(|i| format!("value{i}")).collect())
+    });
+    let req = r#"{"jsonrpc":"2.0","method":"completion/complete","id":1,"params":{"ref":{"type":"ref/tool","name":"big"},"argument":{"name":"x","value":""}}}"#;
+    let resp = srv.handle_request(req);
+    let body = body_of(&resp);
+    assert!(body.contains(r#""hasMore":true"#), "expected hasMore true: {body}");
+    assert!(body.contains(r#""total":150"#), "expected total 150: {body}");
+    assert!(!body.contains("value100"), "expected only the first 100 values: {body}");
+    assert!(body.contains("value99"), "expected value99 (the 100th) to be included: {body}");
+}
+
+#[test]
+fn initialize_omits_completions_capability_by_default() {
+    let srv = make_server(); // registers no completions
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#);
+    let body = body_of(&resp);
+    assert!(!body.contains("\"completions\""), "completions capability should be absent by default: {body}");
+}
+
+#[test]
+fn initialize_advertises_completions_capability_once_one_is_registered() {
+    let srv = make_completion_server();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#);
+    let body = body_of(&resp);
+    assert!(body.contains(r#""completions":{}"#), "expected an advertised completions capability: {body}");
+}
+

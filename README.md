@@ -279,6 +279,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - `logging/setLevel` + `notifications/message` — `.logging_enabled()` advertises the logging capability; `.log(level, logger, data)` pushes RFC 5424-leveled log entries over the SSE stream, filtered by whatever minimum level the client last requested
 - Dynamic tool/resource/prompt registration — `.register_tool(...)`/`.register_resource(...)`/`.register_prompt(...)` and matching `.remove_*(...)` methods add or remove entries at runtime from any thread, pushing `notifications/{tools,resources,prompts}/list_changed` over SSE
 - `notifications/progress` — `ctx.report_progress(progress, total, message)` in a `.tool_with_context(...)` handler pushes progress updates over SSE for a `tools/call` that included `params._meta.progressToken`
+- `completion/complete` — `.completion(ref_type, ref_name, handler)` registers an argument-autocomplete provider for a tool or prompt, so clients like Cursor and VS Code can offer suggestions while the user types
 - 8 built-in rws tools — `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`
 - SSE streaming — `Sse` builder makes forwarding AI token streams to the browser trivial
 - Response caching — `CacheLayer` TTL cache; vary-by-header; `Cache-Control` opt-out

@@ -2054,6 +2054,30 @@ let server = McpServer::new("my-server", "1.0")
 
 Internally, `.notify()` and `report_progress` share the same rendering (`render_notification`) and broadcast (`broadcast_sse_to`) free functions — `McpContext` only holds a clone of the `Arc<Mutex<Vec<SyncSender<Vec<u8>>>>>` broadcast list (not a whole `McpServer`), set once in `context_for()` for every request regardless of method, alongside `client_name`/`session_id`/etc.
 
+**`completion/complete` — argument autocompletion:** clients like Cursor and VS Code call this to offer autocomplete while the user fills in a tool or prompt argument. Register a provider with `.completion(ref_type, ref_name, handler)`:
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("my-server", "1.0")
+    .completion("tool", "deploy", |arg_name, partial| {
+        match arg_name {
+            "region" => Ok(vec!["us-east-1", "eu-west-1", "ap-southeast-1"]
+                .into_iter()
+                .filter(|r| r.starts_with(partial))
+                .map(String::from)
+                .collect()),
+            _ => Ok(vec![]),
+        }
+    });
+```
+
+`ref_type` is `"tool"` or `"prompt"` — matched against the request's `ref.type` (`"ref/tool"`/`"ref/prompt"` on the wire) with the `"ref/"` prefix stripped; `ref_name` is the tool/prompt name. The handler gets the argument's name and whatever partial value the user has typed, and returns candidate strings. A `completion/complete` request with no matching registration (unknown ref/name, or an argument name the handler doesn't recognize) gets back an empty `values` array rather than an error — completion is a best-effort hint, not a required capability per tool/prompt. A handler returning more than 100 values gets truncated to 100, with `hasMore:true` and the untruncated `total` reported, per the spec's guidance against huge completion lists.
+
+`initialize` advertises `"completions":{}` automatically once at least one `.completion()` has been registered — there's no separate opt-in flag like `.logging_enabled()`, since a server with zero completions registered would just return empty results for everything anyway.
+
+There's no dynamic (`&self`) equivalent of `.completion()` — unlike `register_tool`/`register_resource`/`register_prompt`, completion providers are only registered via the consuming builder at construction time.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

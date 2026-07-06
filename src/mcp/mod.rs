@@ -449,6 +449,8 @@ impl LogLevel {
 type ToolFn     = Arc<dyn Fn(McpContext, &str) -> Result<McpContent, String>    + Send + Sync>;
 type ResourceFn = Arc<dyn Fn(&str) -> Result<McpContent, String>    + Send + Sync>;
 type PromptFn   = Arc<dyn Fn(&str) -> Result<Vec<PromptMessage>, String> + Send + Sync>;
+/// `Fn(argument_name, partial_value) -> candidate completion strings`.
+type CompletionFn = Arc<dyn Fn(&str, &str) -> Result<Vec<String>, String> + Send + Sync>;
 
 #[derive(Clone)]
 struct ToolDef {
@@ -475,6 +477,18 @@ struct PromptDef {
     handler: PromptFn,
 }
 
+/// One `.completion()` registration — completion candidates for a single
+/// named argument of a single tool or prompt. `ref_type` is the short form
+/// passed to `.completion()` (e.g. `"tool"`, `"prompt"`), matched against the
+/// request's `ref.type` (e.g. `"ref/tool"`) with the `"ref/"` prefix
+/// stripped, not the raw wire value.
+#[derive(Clone)]
+struct CompletionDef {
+    ref_type: String,
+    ref_name: String,
+    handler: CompletionFn,
+}
+
 // ── McpServer ─────────────────────────────────────────────────────────────────
 
 /// An HTTP server that implements the MCP 2024-11-05 protocol.
@@ -495,6 +509,10 @@ pub struct McpServer {
     tools: Arc<RwLock<Vec<ToolDef>>>,
     resources: Arc<RwLock<Vec<ResourceDef>>>,
     prompts: Arc<RwLock<Vec<PromptDef>>>,
+    /// Argument completion providers registered via [`Self::completion`].
+    /// `initialize` advertises the `completions` capability iff this is
+    /// non-empty at that moment.
+    completions: Arc<RwLock<Vec<CompletionDef>>>,
     fallback: Option<Arc<dyn Application + Send + Sync>>,
     auth_token: Option<String>,
     /// Max items per page for `tools/list`/`resources/list`/`prompts/list`,
@@ -546,6 +564,12 @@ const SSE_CHANNEL_CAPACITY: usize = 32;
 /// How often an idle SSE connection gets a `: keep-alive` comment.
 const SSE_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(15);
 
+/// Max `completion/complete` values returned in one response, per spec
+/// guidance that servers SHOULD NOT return more than 100. A handler
+/// returning more has the rest reported via `hasMore`/`total` rather than
+/// silently included.
+const MAX_COMPLETION_VALUES: usize = 100;
+
 impl McpServer {
     /// Create a new `McpServer`.  The default MCP endpoint is `POST /mcp`.
     pub fn new(name: impl Into<String>, version: impl Into<String>) -> Self {
@@ -556,6 +580,7 @@ impl McpServer {
             tools: Arc::new(RwLock::new(Vec::new())),
             resources: Arc::new(RwLock::new(Vec::new())),
             prompts: Arc::new(RwLock::new(Vec::new())),
+            completions: Arc::new(RwLock::new(Vec::new())),
             fallback: None,
             auth_token: None,
             page_size: None,
@@ -1050,6 +1075,45 @@ impl McpServer {
         self
     }
 
+    /// Register an argument-completion provider for one named argument of a
+    /// tool or prompt, so clients like Cursor and VS Code can offer
+    /// autocomplete while the user fills in that argument.
+    ///
+    /// `ref_type` is `"tool"` or `"prompt"` — matched against the incoming
+    /// `completion/complete` request's `ref.type` (`"ref/tool"`/`"ref/prompt"`
+    /// on the wire) with the `"ref/"` prefix stripped. `ref_name` is the
+    /// tool or prompt name this applies to. The handler receives the
+    /// argument's name and whatever partial value the user has typed so
+    /// far, and returns candidate completion strings (or an error, mapped
+    /// to a JSON-RPC `INVALID_PARAMS` response).
+    ///
+    /// `initialize` advertises the `completions` capability automatically
+    /// once at least one `.completion()` has been registered — there's no
+    /// separate opt-in flag to remember.
+    ///
+    /// ```rust
+    /// use rust_web_server::mcp::McpServer;
+    ///
+    /// let server = McpServer::new("my-server", "1.0")
+    ///     .completion("tool", "deploy", |arg_name, _partial| {
+    ///         match arg_name {
+    ///             "region" => Ok(vec!["us-east-1".to_string(), "eu-west-1".to_string()]),
+    ///             _ => Ok(vec![]),
+    ///         }
+    ///     });
+    /// ```
+    pub fn completion<F>(self, ref_type: &str, ref_name: &str, handler: F) -> Self
+    where
+        F: Fn(&str, &str) -> Result<Vec<String>, String> + Send + Sync + 'static,
+    {
+        self.completions.write().unwrap().push(CompletionDef {
+            ref_type: ref_type.to_string(),
+            ref_name: ref_name.to_string(),
+            handler: Arc::new(handler),
+        });
+        self
+    }
+
     // ── request dispatch ──────────────────────────────────────────────────────
 
     /// Process a raw JSON-RPC body and return an HTTP response.
@@ -1190,6 +1254,7 @@ impl McpServer {
             "prompts/list"   => self.do_prompts_list(body),
             "prompts/get"    => self.do_prompts_get(body),
             "logging/setLevel" => self.do_set_log_level(body),
+            "completion/complete" => self.do_completion(body),
             _                => Err((json_rpc::METHOD_NOT_FOUND, format!("Unknown method: {method}"))),
         }
     }
@@ -1274,13 +1339,17 @@ impl McpServer {
         };
 
         let logging_cap = if self.logging_enabled { r#","logging":{}"# } else { "" };
+        // completions is advertised iff at least one .completion() has been registered —
+        // no separate opt-in flag needed, unlike logging: if nothing was registered,
+        // completion/complete would just return empty results for everything anyway.
+        let completions_cap = if self.completions.read().unwrap().is_empty() { "" } else { r#","completions":{}"# };
         // listChanged is always true: register_tool/remove_tool (and the resource/prompt
         // equivalents) are always available, unlike logging which is opt-in via
         // .logging_enabled(). resources.subscribe stays false — resources/subscribe and
         // resources/unsubscribe aren't implemented (that's MCP_TODO.md's TODO-14), so
         // advertising it would let a client call a method that doesn't exist.
         let caps = format!(
-            r#"{{"tools":{{"listChanged":true}},"resources":{{"subscribe":false,"listChanged":true}},"prompts":{{"listChanged":true}}{logging_cap}}}"#
+            r#"{{"tools":{{"listChanged":true}},"resources":{{"subscribe":false,"listChanged":true}},"prompts":{{"listChanged":true}}{logging_cap}{completions_cap}}}"#
         );
         Ok(format!(
             r#"{{"protocolVersion":"{}","capabilities":{caps},"serverInfo":{{"name":"{}","version":"{}"}}}}"#,
@@ -1454,6 +1523,55 @@ impl McpServer {
             }
             Err(e) => Err((json_rpc::INVALID_PARAMS, e)),
         }
+    }
+
+    /// Handle `completion/complete`: look up the registered
+    /// [`CompletionDef`] matching `params.ref.type`/`params.ref.name`, call
+    /// its handler with `params.argument.name`/`params.argument.value`, and
+    /// render the spec's `{"completion":{"values":[...],"hasMore":...,
+    /// "total":...}}` shape. No registered provider for the given ref/name
+    /// (or an unrecognized `ref.type` not stripped of `"ref/"`) returns an
+    /// empty `values` list rather than an error — matching the spec's own
+    /// framing of completion as a best-effort hint, not a required capability
+    /// per tool/prompt.
+    fn do_completion(&self, body: &str) -> Result<String, (i32, String)> {
+        let params = json_rpc::extract_raw(body, "params")
+            .ok_or((json_rpc::INVALID_PARAMS, "Missing params".to_string()))?;
+        let reference = json_rpc::extract_raw(&params, "ref")
+            .ok_or((json_rpc::INVALID_PARAMS, "Missing ref".to_string()))?;
+        let ref_type_raw = json_rpc::extract_str(&reference, "type")
+            .ok_or((json_rpc::INVALID_PARAMS, "Missing ref.type".to_string()))?;
+        let ref_type = ref_type_raw.strip_prefix("ref/").unwrap_or(&ref_type_raw);
+        let ref_name = json_rpc::extract_str(&reference, "name")
+            .ok_or((json_rpc::INVALID_PARAMS, "Missing ref.name".to_string()))?;
+
+        let argument = json_rpc::extract_raw(&params, "argument")
+            .ok_or((json_rpc::INVALID_PARAMS, "Missing argument".to_string()))?;
+        let arg_name = json_rpc::extract_str(&argument, "name")
+            .ok_or((json_rpc::INVALID_PARAMS, "Missing argument.name".to_string()))?;
+        let partial = json_rpc::extract_str(&argument, "value").unwrap_or_default();
+
+        let handler = {
+            let completions = self.completions.read().unwrap();
+            completions.iter()
+                .find(|c| c.ref_type == ref_type && c.ref_name == ref_name)
+                .map(|c| c.handler.clone())
+        };
+
+        let values = match handler {
+            Some(h) => h(&arg_name, &partial).map_err(|e| (json_rpc::INVALID_PARAMS, e))?,
+            None => vec![],
+        };
+
+        let total = values.len();
+        let has_more = total > MAX_COMPLETION_VALUES;
+        let page = if has_more { &values[..MAX_COMPLETION_VALUES] } else { &values[..] };
+        let values_json: Vec<String> = page.iter().map(|v| format!(r#""{}""#, json_escape(v))).collect();
+
+        Ok(format!(
+            r#"{{"completion":{{"values":[{}],"hasMore":{has_more},"total":{total}}}}}"#,
+            values_json.join(","),
+        ))
     }
 
     /// Build the [`McpContext`] for an incoming request: the `Mcp-Session-Id`

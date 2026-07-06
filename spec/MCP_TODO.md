@@ -500,32 +500,57 @@ render/broadcast refactor right, not new broadcast infrastructure.
 
 ---
 
-### TODO-11: `completions/complete` — argument autocompletion
+### ✅ TODO-11: `completions/complete` — argument autocompletion — Done (v17.85.0)
 
-Clients like Cursor and VS Code use `completions/complete` to offer autocomplete when the user
-fills in tool or prompt arguments. Without it, argument fields are plain text boxes.
+Added `.completion(ref_type, ref_name, handler)` (a consuming builder, matching `.tool()`/
+`.resource()`/`.prompt()`'s shape), a new `completions: Arc<RwLock<Vec<CompletionDef>>>` field, and
+`dispatch`'s `"completion/complete" => self.do_completion(body)` arm — the real wire method name is
+singular (`completion/complete`), matching the entry's own "Dispatch" code block exactly, even
+though this entry's *heading* says the plural "completions/complete" (informal phrasing, not the
+literal method).
 
-**New builder method:**
-```rust
-.completion("tool", "tool_name", |arg_name, partial| {
-    match arg_name {
-        "region" => Ok(vec!["us-east-1", "eu-west-1", "ap-southeast-1"]),
-        _        => Ok(vec![]),
-    }
-})
-```
+**`ref_type` handles the mismatch between the entry's ergonomic builder signature and the wire
+format**: `.completion("tool", "tool_name", ...)` takes the short form, but a real `completion/complete`
+request's `ref.type` is `"ref/tool"`/`"ref/prompt"` (the actual MCP spec only defines `ref/prompt`
+and `ref/resource`; `ref/tool` is this server's own extension, since tools are first-class here and
+the entry's own example explicitly asks for tool completion). `do_completion` strips a leading
+`"ref/"` from the incoming `ref.type` before matching against what was registered, so the builder
+call stays exactly as terse as the entry's own example while still handling the real wire shape.
 
-**Dispatch:**
-```
-"completion/complete" => self.do_completion(body)
-```
+**No match returns empty values, not an error** — an unregistered `ref`/name combination, or an
+argument name a handler doesn't recognize, gets back `{"values":[],"hasMore":false,"total":0}`
+rather than `INVALID_PARAMS`. Completion is a best-effort UI hint per the spec, not a required
+capability every tool/prompt/argument must support; treating "no completions configured for this"
+as an error would make partial completion coverage across a server's tools impossible without
+handlers having to explicitly enumerate every argument they don't want to complete.
 
-The response format:
-```json
-{"completion":{"values":["us-east-1","eu-west-1"],"hasMore":false,"total":2}}
-```
+**Response format extended slightly beyond the entry's own sketch**, matching the actual spec more
+closely: a handler returning more than `MAX_COMPLETION_VALUES` (100, per the spec's guidance against
+huge completion lists) has the response truncated to the first 100 with `hasMore:true` and the
+untruncated `total` — the entry's sketch showed a fixed two-value example with `hasMore:false`
+already, but didn't address what happens for a handler that returns many candidates.
 
-**Effort:** small — one new handler, one new builder method, one new internal vec.
+**`completions` capability is auto-advertised, no separate opt-in flag** — unlike `.logging_enabled()`
+(TODO-8), `initialize` checks `!self.completions.read().unwrap().is_empty()` at request time rather
+than requiring a `.completions_enabled()` the entry didn't ask for and callers would have to
+remember to pair with `.completion(...)`. A server with zero registered completions doesn't
+advertise the capability; one with at least one always does.
+
+**No dynamic (`&self`) equivalent** — unlike TODO-9's `register_tool`/`register_resource`/
+`register_prompt`, completion providers are builder-only (registered before serving requests).
+Out of scope here; nothing in this entry asked for it, and extending TODO-9's pattern to a fourth
+collection wasn't requested.
+
+11 new tests in `src/mcp/tests.rs`: matching values filtered by partial input, an omitted
+`argument.value` defaulting to an empty partial, unregistered ref/argument-name each returning empty
+values (not an error), a handler's `Err` mapping to `INVALID_PARAMS` with the handler's own message,
+missing `ref`/`argument` each returning `INVALID_PARAMS`, `ref/prompt` support (not just
+`ref/tool`), truncation to 100 values with correct `hasMore`/`total`, and `initialize` advertising
+`"completions":{}` only once a completion is registered (absent by default).
+
+**Effort:** small, as estimated — one builder, one dispatch arm, one handler, one new collection;
+the `ref/` prefix handling and truncation were the only wrinkles beyond a direct implementation of
+the entry's own sketch.
 
 ---
 
@@ -675,7 +700,7 @@ Phase 1 — Quick wins (no new dependencies, mostly additive)
   TODO-4  image + embedded content types   (small)              ✅ done (v17.78.0)
   TODO-5  JSON-RPC batch requests          (small)              ✅ done (v17.79.0)
   TODO-6  list pagination                  (small)              ✅ done (v17.80.0)
-  TODO-11 completions/complete             (small)
+  TODO-11 completions/complete             (small)              ✅ done (v17.85.0)
 
 Phase 2 — Streaming foundation (enables all notification features)
   TODO-7  GET /mcp SSE channel            (medium — unblocks 8, 9, 10, 14, 15, 16)   ✅ done (v17.81.0)
@@ -684,7 +709,7 @@ Phase 2 — Streaming foundation (enables all notification features)
   TODO-10 notifications/progress           (small, needs TODO-7 + TODO-2)      ✅ done (v17.84.0)
 
 Phase 3 — Enterprise + advanced
-  TODO-11 completions/complete            (small, can go in Phase 1)
+  TODO-11 completions/complete            (small, can go in Phase 1)          ✅ done (v17.85.0)
   TODO-12 request cancellation            (medium, http2 only)
   TODO-13 OAuth 2.0 (2025-03-26)         (small — JwksCache already exists)
   TODO-14 resources/subscribe             (medium, needs TODO-7 + TODO-9)
@@ -705,7 +730,7 @@ Phase 3 — Enterprise + advanced
 | 4 | `image` + `embedded` content | 2024-11-05 | **P1** | Small | ✅ Done (v17.78.0) |
 | 5 | JSON-RPC batch | JSON-RPC 2.0 | **P1** | Small | ✅ Done (v17.79.0) |
 | 6 | List pagination | 2024-11-05 | **P1** | Small | ✅ Done (v17.80.0) |
-| 11 | `completions/complete` | 2024-11-05 | **P1** | Small | — |
+| 11 | `completions/complete` | 2024-11-05 | **P1** | Small | ✅ Done (v17.85.0) |
 | 7 | SSE transport (`GET /mcp`) | Streamable HTTP | **P2** | Medium | ✅ Done (v17.81.0) |
 | 8 | `logging/setLevel` | 2024-11-05 | **P2** | Small | ✅ Done (v17.82.0) |
 | 9 | Dynamic registration + `listChanged` | 2024-11-05 | **P2** | Medium | ✅ Done (v17.83.0) |

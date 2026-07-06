@@ -227,6 +227,44 @@ Every registration or removal that actually changes something pushes the corresp
 `.register_tool()` and `.register_prompt()` only cover the plain shapes — matching `.tool()` and `.prompt()`. There's no dynamic equivalent of `.tool_with_context()`, `.tool_annotated()`, or `.prompt_with_args()`. To change a dynamically-added tool's annotations or a prompt's argument definitions, remove it and register it again under the same name.
 :::
 
+## Argument autocompletion
+
+Clients like Cursor and VS Code call `completion/complete` to offer autocomplete suggestions while the user fills in a tool or prompt argument, instead of leaving it a plain text box. Register a provider with `.completion(ref_type, ref_name, handler)`:
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("my-server", "1.0")
+    .completion("tool", "deploy", |arg_name, partial| {
+        match arg_name {
+            "region" => Ok(vec!["us-east-1", "eu-west-1", "ap-southeast-1"]
+                .into_iter()
+                .filter(|r| r.starts_with(partial))
+                .map(String::from)
+                .collect()),
+            _ => Ok(vec![]),
+        }
+    });
+```
+
+`ref_type` is `"tool"` or `"prompt"` — matched against the request's `ref.type` (`"ref/tool"`/`"ref/prompt"` on the wire) with the `"ref/"` prefix stripped. `ref_name` is the tool or prompt name this applies to. The handler receives the argument's name and whatever partial value the user has typed so far, and returns candidate completion strings.
+
+A `completion/complete` request with no matching registration — an unrecognized `ref`/name, or an argument name the handler doesn't branch on — gets back an empty `values` array rather than an error; completion is a best-effort hint, not something every tool or prompt is required to support.
+
+```json
+{"completion":{"values":["us-east-1"],"hasMore":false,"total":1}}
+```
+
+:::note[Large result sets]
+A handler returning more than 100 values gets truncated to the first 100, with `hasMore:true` and the untruncated `total` reported — matching the spec's guidance that servers shouldn't return huge completion lists in one response.
+:::
+
+:::note[`initialize` advertises this automatically]
+`"completions":{}` appears in `initialize`'s capabilities as soon as at least one `.completion()` has been registered — there's no separate opt-in flag to call, unlike `.logging_enabled()`. A server with no completions registered simply doesn't advertise the capability, since `completion/complete` would just return empty results for everything anyway.
+:::
+
+There's no dynamic (`&self`) equivalent of `.completion()` — unlike tools/resources/prompts, completion providers are registered only via the consuming builder, before the server starts serving requests.
+
 ## Protocol version negotiation
 
 `initialize` inspects the client's requested `params.protocolVersion` and responds with the lower of that and the server's own version, rather than always claiming its own regardless of what the client asked for:
