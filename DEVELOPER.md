@@ -2099,6 +2099,23 @@ This is **cooperative** cancellation, not preemptive — Rust cannot forcibly in
 
 Mechanically: `McpServer` keeps `cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>`, keyed by a `tools/call` request's raw `id` token. `dispatch_with_cancellation` (wrapping `dispatch` in both the single-request and batch code paths) registers a fresh flag just before calling a `tools/call` handler and removes it again once dispatch returns — regardless of whether the handler ever checked it, so this map never accumulates stale entries the way `sessions`/`sse_clients` can. `notifications/cancelled` is special-cased before the generic "notification → 202, no processing" branch: it reads `params.requestId` (stored/matched as a raw JSON token, same as `progress_token`, since the spec allows `string | number`) and flips the matching flag if the target request is still in flight; an unknown or already-finished request id is silently ignored, not an error.
 
+**`resources/subscribe` and `resources/unsubscribe`:** a client subscribes to a specific resource URI and gets `notifications/resources/updated` pushed over SSE whenever it changes — the mechanism behind live-updating resource panels (e.g. Claude Desktop watching a config file). Call `.notify_resource_updated(uri)` from wherever your application actually changes the underlying data:
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("my-server", "1.0");
+
+// Elsewhere, e.g. after reloading a watched config file:
+server.notify_resource_updated("config://main");
+```
+
+Unlike the flat broadcast every other notification in this server uses (`.notify()`, `.log()`, `list_changed`), this one is genuinely targeted: only sessions that called `resources/subscribe` for that exact URI receive the update, not every connected SSE client. That requires knowing *which* `GET /mcp` SSE connection belongs to *which* session — something nothing before this needed, since broadcast notifications don't care. `start_sse_stream` now reads the `Mcp-Session-Id` header off the `GET` request and tags the new `SseClient { session_id, sender }` with it (the flat `Vec<SseSender>` `sse_clients` field became `Vec<SseClient>`); `subscriptions: Arc<Mutex<HashMap<String, Vec<String>>>>` maps a resource URI to the session ids subscribed to it. `notify_resource_updated` looks up the subscribed session ids and calls a new `send_sse_to_sessions` (a sibling of `broadcast_sse_to` that filters by `session_id` instead of sending to everyone).
+
+`resources/subscribe`/`resources/unsubscribe` both require an `Mcp-Session-Id` header — without one there's no way to later match the subscription to a specific SSE connection, so a client that never sent the header gets `INVALID_PARAMS` rather than a subscription that can never fire. `resources/unsubscribe` prunes a URI's entry from `subscriptions` entirely once its subscriber list is empty, rather than leaving an empty `Vec` behind. A client that disconnects its SSE stream without calling `resources/unsubscribe` first leaves a harmless stale session id in `subscriptions` — the same "no proactive eviction" tradeoff already accepted for `sessions`. `initialize`'s `resources` capability now advertises `subscribe:true` unconditionally (previously `false`, since this didn't exist yet) alongside the already-unconditional `listChanged:true`.
+
+Verified end-to-end against a real running server: `initialize` → read back `Mcp-Session-Id` → `GET /mcp` with that header → `resources/subscribe` with the same header → `.notify_resource_updated(...)` from a background thread — the subscribed session's SSE stream received the update, while a second SSE connection with a different, never-subscribed session id received nothing.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

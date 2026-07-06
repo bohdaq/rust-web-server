@@ -1252,6 +1252,31 @@ don't exist yet) — no new dependency, works identically on `http1` and `http2`
 request's raw `id`; `notifications/cancelled` flips the matching flag via `params.requestId` (raw
 JSON token, `string | number` like `progressToken`). Unknown/finished request id: silent no-op.
 
+**`resources/subscribe` + `resources/unsubscribe`** — `.notify_resource_updated(uri)` pushes
+`notifications/resources/updated` over SSE, targeted at only the sessions subscribed to that URI
+(unlike every other notification here, which broadcasts to all connected SSE clients):
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("my-server", "1.0");
+server.notify_resource_updated("config://main"); // after the underlying data actually changes
+```
+
+Targeting requires knowing which `GET /mcp` SSE connection belongs to which session —
+`start_sse_stream` now reads `Mcp-Session-Id` off the GET request and tags the client
+(`SseClient { session_id, sender }`, replacing the old flat `Vec<SseSender>`);
+`subscriptions: Arc<Mutex<HashMap<String, Vec<String>>>>` maps a URI to subscribed session ids;
+`send_sse_to_sessions` (a session-filtered sibling of `broadcast_sse_to`) does the targeted push.
+`resources/subscribe`/`resources/unsubscribe` both require `Mcp-Session-Id` — `INVALID_PARAMS`
+without one, since there'd be no way to route the eventual update. `resources/unsubscribe` prunes a
+URI's entry once its subscriber list is empty. `initialize`'s `resources` capability now advertises
+`subscribe:true` unconditionally (was `false`).
+
+Verified end-to-end with a real server: `initialize` → `GET /mcp` with the returned session id →
+`resources/subscribe` → `.notify_resource_updated(...)` from another thread reached the subscribed
+session's SSE stream; a second SSE connection with a different, unsubscribed session id got nothing.
+
 ---
 
 ## Standalone proxies

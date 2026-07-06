@@ -262,7 +262,7 @@ pub struct McpContext {
     /// test) rather than through [`McpServer::execute`], in which case
     /// `report_progress` silently no-ops — there's no live server to
     /// broadcast through.
-    sse_clients: Option<Arc<Mutex<Vec<SseSender>>>>,
+    sse_clients: Option<Arc<Mutex<Vec<SseClient>>>>,
     /// Shared flag flipped by a `notifications/cancelled` referencing this
     /// `tools/call`'s request id, checked by [`Self::is_cancelled`]. Not
     /// `pub` — see that method. `None` for anything other than a live
@@ -577,7 +577,7 @@ pub struct McpServer {
     /// `try_send` fails — not proactively, since nothing else observes the
     /// underlying `Receiver` closing. A server that never calls `notify`
     /// after clients disconnect will accumulate dead entries here.
-    sse_clients: Arc<Mutex<Vec<SseSender>>>,
+    sse_clients: Arc<Mutex<Vec<SseClient>>>,
     /// Whether `initialize`'s advertised `capabilities` includes `"logging":{}`.
     /// Set via [`Self::logging_enabled`]. This only controls what's
     /// advertised — [`Self::log`] works regardless, same as [`Self::notify`]
@@ -598,6 +598,29 @@ pub struct McpServer {
     /// the flag; see [`McpContext::is_cancelled`] for how (and whether) a
     /// handler ever observes it.
     cancellations: Arc<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
+    /// Resource URI -> session ids subscribed to it via
+    /// `resources/subscribe`, consulted by [`Self::notify_resource_updated`].
+    /// A session id is only meaningful if the client also opened `GET /mcp`
+    /// with the same `Mcp-Session-Id` header (see [`SseClient`]) — a session
+    /// that only ever calls `resources/subscribe` over POST with no matching
+    /// SSE connection is subscribed in name only, since there's no channel
+    /// to push the update over. Entries are removed by explicit
+    /// `resources/unsubscribe` calls (URIs with zero subscribers are pruned
+    /// entirely); a session that disconnects without unsubscribing leaves a
+    /// harmless stale session id behind, same "no proactive eviction"
+    /// tradeoff already documented for `sessions`.
+    subscriptions: Arc<Mutex<HashMap<String, Vec<String>>>>,
+}
+
+/// One `GET /mcp` SSE client: its outbound channel plus the
+/// `Mcp-Session-Id` it connected with, if any. Broadcast notifications
+/// (`.notify()`, `.log()`, `list_changed`) go to every client regardless of
+/// `session_id`; [`McpServer::notify_resource_updated`] targets only
+/// clients whose `session_id` is subscribed to the changed URI.
+#[derive(Debug)]
+struct SseClient {
+    session_id: Option<String>,
+    sender: SseSender,
 }
 
 /// One `GET /mcp` SSE client's outbound channel. Bounded so a slow or stuck
@@ -636,6 +659,7 @@ impl McpServer {
             logging_enabled: false,
             min_log_level: Arc::new(Mutex::new(LogLevel::Debug)),
             cancellations: Arc::new(Mutex::new(HashMap::new())),
+            subscriptions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -681,13 +705,52 @@ impl McpServer {
         broadcast_sse_to(&self.sse_clients, &json);
     }
 
+    /// Push `notifications/resources/updated` for `uri` to every session
+    /// that called `resources/subscribe` for it — the mechanism behind
+    /// live-updating resource panels (e.g. Claude Desktop watching a
+    /// config file or a dashboard resource for changes). Call this from
+    /// wherever your application actually changes the underlying data a
+    /// resource represents (a file watcher, a webhook handler, a database
+    /// trigger poll, ...).
+    ///
+    /// A no-op if nobody has subscribed to `uri` — including if every
+    /// subscriber's `GET /mcp` SSE connection has since disconnected
+    /// (pruned the same way [`Self::notify`] prunes dead broadcast clients,
+    /// but the `subscriptions` bookkeeping for `uri` itself is untouched
+    /// either way; only [`Self::do_resource_unsubscribe`] removes that).
+    ///
+    /// ```rust
+    /// use rust_web_server::mcp::McpServer;
+    ///
+    /// let server = McpServer::new("my-server", "1.0");
+    /// // Elsewhere, e.g. after reloading a watched config file:
+    /// server.notify_resource_updated("config://main");
+    /// ```
+    pub fn notify_resource_updated(&self, uri: &str) {
+        let session_ids = match self.subscriptions.lock().unwrap().get(uri) {
+            Some(ids) if !ids.is_empty() => ids.clone(),
+            _ => return,
+        };
+        let params = format!(r#"{{"uri":"{}"}}"#, json_escape(uri));
+        let json = render_notification("notifications/resources/updated", Some(&params));
+        send_sse_to_sessions(&self.sse_clients, &session_ids, &json);
+    }
+
     /// Handle `GET /mcp`: register a new SSE client and return a
     /// `text/event-stream` response that streams from its channel until the
     /// connection closes. See the module docs' SSE section for the wire
     /// details (keep-alive interval, backpressure behavior).
-    fn start_sse_stream(&self) -> Response {
+    ///
+    /// Tags the client with this request's `Mcp-Session-Id` header, if
+    /// present, so [`Self::notify_resource_updated`] can route
+    /// `notifications/resources/updated` to just the sessions that
+    /// subscribed via `resources/subscribe` — a client that connects
+    /// without the header can still receive broadcasts (`.notify()`,
+    /// `.log()`, `list_changed`) but can never be a subscription target.
+    fn start_sse_stream(&self, request: &Request) -> Response {
+        let session_id = request.get_header("Mcp-Session-Id".to_string()).map(|h| h.value.clone());
         let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(SSE_CHANNEL_CAPACITY);
-        self.sse_clients.lock().unwrap().push(tx);
+        self.sse_clients.lock().unwrap().push(SseClient { session_id, sender: tx });
 
         let mut response = Response::new();
         response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
@@ -1309,6 +1372,8 @@ impl McpServer {
             "tools/call"     => self.do_tools_call(body, ctx),
             "resources/list" => self.do_resources_list(body),
             "resources/read" => self.do_resources_read(body),
+            "resources/subscribe"   => self.do_resource_subscribe(body, ctx.session_id),
+            "resources/unsubscribe" => self.do_resource_unsubscribe(body, ctx.session_id),
             "prompts/list"   => self.do_prompts_list(body),
             "prompts/get"    => self.do_prompts_get(body),
             "logging/setLevel" => self.do_set_log_level(body),
@@ -1446,11 +1511,10 @@ impl McpServer {
         let completions_cap = if self.completions.read().unwrap().is_empty() { "" } else { r#","completions":{}"# };
         // listChanged is always true: register_tool/remove_tool (and the resource/prompt
         // equivalents) are always available, unlike logging which is opt-in via
-        // .logging_enabled(). resources.subscribe stays false — resources/subscribe and
-        // resources/unsubscribe aren't implemented (that's MCP_TODO.md's TODO-14), so
-        // advertising it would let a client call a method that doesn't exist.
+        // .logging_enabled(). resources.subscribe is also always true now that
+        // resources/subscribe and resources/unsubscribe are implemented (MCP_TODO.md's TODO-14).
         let caps = format!(
-            r#"{{"tools":{{"listChanged":true}},"resources":{{"subscribe":false,"listChanged":true}},"prompts":{{"listChanged":true}}{logging_cap}{completions_cap}}}"#
+            r#"{{"tools":{{"listChanged":true}},"resources":{{"subscribe":true,"listChanged":true}},"prompts":{{"listChanged":true}}{logging_cap}{completions_cap}}}"#
         );
         Ok(format!(
             r#"{{"protocolVersion":"{}","capabilities":{caps},"serverInfo":{{"name":"{}","version":"{}"}}}}"#,
@@ -1546,6 +1610,55 @@ impl McpServer {
             }
             Err(e) => Err((json_rpc::INVALID_PARAMS, e)),
         }
+    }
+
+    /// Handle `resources/subscribe`: record that `session_id` (this
+    /// request's `Mcp-Session-Id`) wants `notifications/resources/updated`
+    /// pushed whenever [`Self::notify_resource_updated`] is called for
+    /// `params.uri`. Requires a session id — without one there's no way to
+    /// later match this subscription to a specific `GET /mcp` SSE
+    /// connection, so a client that never sent `Mcp-Session-Id` gets
+    /// `INVALID_PARAMS` rather than a subscription that can never fire.
+    fn do_resource_subscribe(&self, body: &str, session_id: Option<String>) -> Result<String, (i32, String)> {
+        let params = json_rpc::extract_raw(body, "params")
+            .ok_or((json_rpc::INVALID_PARAMS, "Missing params".to_string()))?;
+        let uri = json_rpc::extract_str(&params, "uri")
+            .ok_or((json_rpc::INVALID_PARAMS, "Missing uri".to_string()))?;
+        let session_id = session_id.ok_or((
+            json_rpc::INVALID_PARAMS,
+            "resources/subscribe requires an Mcp-Session-Id header (call initialize first)".to_string(),
+        ))?;
+
+        let mut subs = self.subscriptions.lock().unwrap();
+        let subscribers = subs.entry(uri).or_default();
+        if !subscribers.contains(&session_id) {
+            subscribers.push(session_id);
+        }
+        Ok("{}".to_string())
+    }
+
+    /// Handle `resources/unsubscribe`: the inverse of
+    /// [`Self::do_resource_subscribe`]. Removing the last subscriber for a
+    /// URI drops the URI's entry entirely rather than leaving an empty
+    /// `Vec` behind.
+    fn do_resource_unsubscribe(&self, body: &str, session_id: Option<String>) -> Result<String, (i32, String)> {
+        let params = json_rpc::extract_raw(body, "params")
+            .ok_or((json_rpc::INVALID_PARAMS, "Missing params".to_string()))?;
+        let uri = json_rpc::extract_str(&params, "uri")
+            .ok_or((json_rpc::INVALID_PARAMS, "Missing uri".to_string()))?;
+        let session_id = session_id.ok_or((
+            json_rpc::INVALID_PARAMS,
+            "resources/unsubscribe requires an Mcp-Session-Id header".to_string(),
+        ))?;
+
+        let mut subs = self.subscriptions.lock().unwrap();
+        if let Some(subscribers) = subs.get_mut(&uri) {
+            subscribers.retain(|s| s != &session_id);
+            if subscribers.is_empty() {
+                subs.remove(&uri);
+            }
+        }
+        Ok("{}".to_string())
     }
 
     fn do_prompts_list(&self, body: &str) -> Result<String, (i32, String)> {
@@ -1718,10 +1831,29 @@ fn render_notification(method: &str, params_json: Option<&str>) -> String {
 /// pruning any whose channel is full or disconnected. Shared by
 /// [`McpServer::notify`] and [`McpContext::report_progress`] — the latter
 /// only has a clone of the broadcast list, not a whole `McpServer`.
-fn broadcast_sse_to(clients: &Arc<Mutex<Vec<SseSender>>>, json: &str) {
+fn broadcast_sse_to(clients: &Arc<Mutex<Vec<SseClient>>>, json: &str) {
     let frame = format!("data: {json}\n\n").into_bytes();
     let mut clients = clients.lock().unwrap();
-    clients.retain(|tx| tx.try_send(frame.clone()).is_ok());
+    clients.retain(|c| c.sender.try_send(frame.clone()).is_ok());
+}
+
+/// Send a raw pre-built JSON-RPC message only to clients whose `session_id`
+/// is in `session_ids`, pruning any of *those* whose channel is full or
+/// disconnected. A client with no `session_id`, or one not in
+/// `session_ids`, is left untouched (kept, not sent to) — this is a
+/// targeted send for [`McpServer::notify_resource_updated`], not a
+/// broadcast like [`broadcast_sse_to`].
+fn send_sse_to_sessions(clients: &Arc<Mutex<Vec<SseClient>>>, session_ids: &[String], json: &str) {
+    let frame = format!("data: {json}\n\n").into_bytes();
+    let mut clients = clients.lock().unwrap();
+    clients.retain(|c| {
+        let is_target = c.session_id.as_deref().is_some_and(|sid| session_ids.iter().any(|s| s == sid));
+        if is_target {
+            c.sender.try_send(frame.clone()).is_ok()
+        } else {
+            true
+        }
+    });
 }
 
 // ── SSE channel reader ────────────────────────────────────────────────────────
@@ -1792,7 +1924,7 @@ impl Application for McpServer {
                     let ctx = self.context_for(request);
                     self.handle_request_with_context(body, ctx)
                 }
-                "GET" => self.start_sse_stream(),
+                "GET" => self.start_sse_stream(request),
                 "OPTIONS" => {
                     // CORS preflight for browser-based MCP clients
                     let mut r = Response::new();

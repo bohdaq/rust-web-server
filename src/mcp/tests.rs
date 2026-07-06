@@ -1,7 +1,7 @@
 use super::json_rpc;
 use super::{
-    decode_cursor, encode_cursor, extract_arg, json_escape, LogLevel, McpContent, McpServer,
-    PromptArgDef, PromptMessage, ToolAnnotations, PROTOCOL_VERSION,
+    decode_cursor, encode_cursor, extract_arg, json_escape, LogLevel, McpContent, McpContext,
+    McpServer, PromptArgDef, PromptMessage, ToolAnnotations, PROTOCOL_VERSION,
 };
 use crate::app::App;
 use crate::core::New;
@@ -1066,10 +1066,28 @@ fn no_auth_configured_allows_all() {
 
 use std::io::Read as _;
 
+fn get_request() -> crate::request::Request {
+    get_request_with_session(None)
+}
+
+fn get_request_with_session(session_id: Option<&str>) -> crate::request::Request {
+    let headers = match session_id {
+        Some(sid) => vec![crate::header::Header { name: "Mcp-Session-Id".to_string(), value: sid.to_string() }],
+        None => vec![],
+    };
+    crate::request::Request {
+        method: "GET".to_string(),
+        request_uri: "/mcp".to_string(),
+        http_version: crate::http::VERSION.http_1_1.to_string(),
+        headers,
+        body: vec![],
+    }
+}
+
 #[test]
 fn start_sse_stream_returns_event_stream_headers_and_a_reader() {
     let srv = make_server();
-    let resp = srv.start_sse_stream();
+    let resp = srv.start_sse_stream(&get_request());
     assert_eq!(resp.status_code, 200);
     let content_type = resp.headers.iter().find(|h| h.name == "Content-Type").map(|h| h.value.as_str());
     assert_eq!(content_type, Some("text/event-stream"));
@@ -1079,7 +1097,7 @@ fn start_sse_stream_returns_event_stream_headers_and_a_reader() {
 #[test]
 fn notify_delivers_a_frame_with_method_and_params_to_a_connected_client() {
     let srv = make_server();
-    let mut resp = srv.start_sse_stream();
+    let mut resp = srv.start_sse_stream(&get_request());
     let mut reader = resp.stream_pipe.take().unwrap();
 
     srv.notify("notifications/message", Some(r#"{"level":"info","data":"hi"}"#));
@@ -1096,7 +1114,7 @@ fn notify_delivers_a_frame_with_method_and_params_to_a_connected_client() {
 #[test]
 fn notify_without_params_omits_the_params_field() {
     let srv = make_server();
-    let mut resp = srv.start_sse_stream();
+    let mut resp = srv.start_sse_stream(&get_request());
     let mut reader = resp.stream_pipe.take().unwrap();
 
     srv.notify("ping", None);
@@ -1110,8 +1128,8 @@ fn notify_without_params_omits_the_params_field() {
 #[test]
 fn notify_reaches_every_connected_client() {
     let srv = make_server();
-    let mut resp1 = srv.start_sse_stream();
-    let mut resp2 = srv.start_sse_stream();
+    let mut resp1 = srv.start_sse_stream(&get_request());
+    let mut resp2 = srv.start_sse_stream(&get_request());
     let mut r1 = resp1.stream_pipe.take().unwrap();
     let mut r2 = resp2.stream_pipe.take().unwrap();
 
@@ -1125,7 +1143,7 @@ fn notify_reaches_every_connected_client() {
 #[test]
 fn notify_drops_a_client_whose_buffer_fills_up() {
     let srv = make_server();
-    let resp = srv.start_sse_stream();
+    let resp = srv.start_sse_stream(&get_request());
     // Keep the reader (and thus the receiving end) alive but never read from
     // it, so its bounded channel fills up rather than reporting disconnected.
     let _reader = resp.stream_pipe;
@@ -1140,7 +1158,7 @@ fn notify_drops_a_client_whose_buffer_fills_up() {
 #[test]
 fn disconnected_client_is_pruned_on_the_next_notify() {
     let srv = make_server();
-    let resp = srv.start_sse_stream();
+    let resp = srv.start_sse_stream(&get_request());
     assert_eq!(srv.sse_clients.lock().unwrap().len(), 1);
 
     drop(resp); // drops stream_pipe -> drops the Receiver -> sender becomes disconnected
@@ -1195,7 +1213,7 @@ fn set_log_level_unknown_level_returns_invalid_params() {
 #[test]
 fn log_delivers_a_notifications_message_frame_with_level_logger_and_data() {
     let srv = make_server();
-    let mut resp = srv.start_sse_stream();
+    let mut resp = srv.start_sse_stream(&get_request());
     let mut reader = resp.stream_pipe.take().unwrap();
 
     srv.log(LogLevel::Error, Some("database"), r#"{"detail":"connection pool exhausted"}"#);
@@ -1212,7 +1230,7 @@ fn log_delivers_a_notifications_message_frame_with_level_logger_and_data() {
 #[test]
 fn log_without_logger_omits_the_logger_field() {
     let srv = make_server();
-    let mut resp = srv.start_sse_stream();
+    let mut resp = srv.start_sse_stream(&get_request());
     let mut reader = resp.stream_pipe.take().unwrap();
 
     srv.log(LogLevel::Info, None, r#""hello""#);
@@ -1227,7 +1245,7 @@ fn log_without_logger_omits_the_logger_field() {
 fn log_is_delivered_by_default_at_every_level() {
     // No logging/setLevel call yet — the default (LogLevel::Debug) filters nothing.
     let srv = make_server();
-    let mut resp = srv.start_sse_stream();
+    let mut resp = srv.start_sse_stream(&get_request());
     let mut reader = resp.stream_pipe.take().unwrap();
 
     srv.log(LogLevel::Debug, None, r#""a debug message""#);
@@ -1242,7 +1260,7 @@ fn log_below_the_set_level_is_filtered_out_and_never_queued() {
     let srv = make_server();
     srv.handle_request(r#"{"jsonrpc":"2.0","method":"logging/setLevel","id":1,"params":{"level":"warning"}}"#);
 
-    let mut resp = srv.start_sse_stream();
+    let mut resp = srv.start_sse_stream(&get_request());
     let mut reader = resp.stream_pipe.take().unwrap();
 
     srv.log(LogLevel::Info, None, r#""should be filtered out""#);  // below "warning" — never queued
@@ -1266,7 +1284,7 @@ fn initialize_advertises_list_changed_true_for_tools_resources_prompts() {
     let body = body_of(&resp);
     assert!(body.contains(r#""tools":{"listChanged":true}"#), "expected tools.listChanged: {body}");
     assert!(body.contains(r#""prompts":{"listChanged":true}"#), "expected prompts.listChanged: {body}");
-    assert!(body.contains(r#""subscribe":false,"listChanged":true"#), "expected resources caps: {body}");
+    assert!(body.contains(r#""subscribe":true,"listChanged":true"#), "expected resources caps: {body}");
 }
 
 #[test]
@@ -1284,7 +1302,7 @@ fn register_tool_makes_it_immediately_callable() {
 #[test]
 fn register_tool_pushes_tools_list_changed_notification() {
     let srv = make_server();
-    let mut resp = srv.start_sse_stream();
+    let mut resp = srv.start_sse_stream(&get_request());
     let mut reader = resp.stream_pipe.take().unwrap();
 
     srv.register_tool("late_tool", "Registered at runtime", "{}", |_| Ok(McpContent::text("ok")));
@@ -1310,7 +1328,7 @@ fn remove_tool_returns_true_and_removes_it() {
 #[test]
 fn remove_tool_returns_false_when_not_found_and_sends_no_notification() {
     let srv = make_server();
-    let mut resp = srv.start_sse_stream();
+    let mut resp = srv.start_sse_stream(&get_request());
     let mut reader = resp.stream_pipe.take().unwrap();
 
     assert!(!srv.remove_tool("does_not_exist"));
@@ -1405,7 +1423,7 @@ fn make_progress_server() -> McpServer {
 #[test]
 fn tools_call_with_progress_token_delivers_progress_notifications_over_sse() {
     let srv = make_progress_server();
-    let mut sse_resp = srv.start_sse_stream();
+    let mut sse_resp = srv.start_sse_stream(&get_request());
     let mut reader = sse_resp.stream_pipe.take().unwrap();
 
     let client = TestClient::new(srv.clone());
@@ -1434,7 +1452,7 @@ fn tools_call_with_progress_token_delivers_progress_notifications_over_sse() {
 #[test]
 fn tools_call_without_progress_token_reports_nothing() {
     let srv = make_progress_server();
-    let mut sse_resp = srv.start_sse_stream();
+    let mut sse_resp = srv.start_sse_stream(&get_request());
     let mut reader = sse_resp.stream_pipe.take().unwrap();
 
     let client = TestClient::new(srv.clone());
@@ -1468,7 +1486,7 @@ fn report_progress_is_a_safe_no_op_without_a_live_server_context() {
 #[test]
 fn progress_token_numeric_type_round_trips_unquoted() {
     let srv = make_progress_server();
-    let mut sse_resp = srv.start_sse_stream();
+    let mut sse_resp = srv.start_sse_stream(&get_request());
     let mut reader = sse_resp.stream_pipe.take().unwrap();
 
     let client = TestClient::new(srv.clone());
@@ -1494,7 +1512,7 @@ fn report_progress_omits_total_and_message_when_not_given() {
             Ok(McpContent::text("ok"))
         },
     );
-    let mut sse_resp = srv.start_sse_stream();
+    let mut sse_resp = srv.start_sse_stream(&get_request());
     let mut reader = sse_resp.stream_pipe.take().unwrap();
 
     let client = TestClient::new(srv.clone());
@@ -1719,5 +1737,160 @@ fn cancellation_notification_in_a_batch_produces_no_response_entry() {
     let resp = srv.handle_request(req);
     let body = body_of(&resp);
     assert_eq!(body.matches("\"jsonrpc\"").count(), 1, "only the ping should produce a response entry: {body}");
+}
+
+// ── resources/subscribe and resources/unsubscribe ─────────────────────────────
+
+fn ctx_with_session(session_id: &str) -> McpContext {
+    McpContext { session_id: Some(session_id.to_string()), ..Default::default() }
+}
+
+#[test]
+fn subscribe_with_a_session_id_succeeds() {
+    let srv = make_server();
+    let resp = srv.handle_request_with_context(
+        r#"{"jsonrpc":"2.0","method":"resources/subscribe","id":1,"params":{"uri":"config://main"}}"#,
+        ctx_with_session("session-1"),
+    );
+    let body = body_of(&resp);
+    assert!(body.contains("\"result\""), "expected success: {body}");
+    assert!(!body.contains("\"error\""), "did not expect an error: {body}");
+}
+
+#[test]
+fn subscribe_without_a_session_id_returns_invalid_params() {
+    let srv = make_server();
+    let resp = srv.handle_request(
+        r#"{"jsonrpc":"2.0","method":"resources/subscribe","id":1,"params":{"uri":"config://main"}}"#,
+    );
+    assert!(body_of(&resp).contains("-32602"));
+}
+
+#[test]
+fn subscribe_missing_uri_returns_invalid_params() {
+    let srv = make_server();
+    let resp = srv.handle_request_with_context(
+        r#"{"jsonrpc":"2.0","method":"resources/subscribe","id":1,"params":{}}"#,
+        ctx_with_session("session-1"),
+    );
+    assert!(body_of(&resp).contains("-32602"));
+}
+
+#[test]
+fn unsubscribe_without_a_session_id_returns_invalid_params() {
+    let srv = make_server();
+    let resp = srv.handle_request(
+        r#"{"jsonrpc":"2.0","method":"resources/unsubscribe","id":1,"params":{"uri":"config://main"}}"#,
+    );
+    assert!(body_of(&resp).contains("-32602"));
+}
+
+#[test]
+fn notify_resource_updated_delivers_to_the_subscribed_session() {
+    let srv = make_server();
+
+    // Open the SSE connection first, tagged with this session id.
+    let mut sse_resp = srv.start_sse_stream(&get_request_with_session(Some("session-1")));
+    let mut reader = sse_resp.stream_pipe.take().unwrap();
+
+    srv.handle_request_with_context(
+        r#"{"jsonrpc":"2.0","method":"resources/subscribe","id":1,"params":{"uri":"config://main"}}"#,
+        ctx_with_session("session-1"),
+    );
+
+    srv.notify_resource_updated("config://main");
+
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    let text = String::from_utf8_lossy(&buf[..n]);
+    assert!(text.contains(r#""method":"notifications/resources/updated""#), "missing method: {text}");
+    assert!(text.contains(r#""uri":"config://main""#), "missing uri: {text}");
+}
+
+#[test]
+fn notify_resource_updated_does_not_reach_an_unsubscribed_session() {
+    let srv = make_server();
+
+    // session-1 subscribes; session-2 connects via SSE but never subscribes.
+    let mut sub_resp = srv.start_sse_stream(&get_request_with_session(Some("session-1")));
+    let mut sub_reader = sub_resp.stream_pipe.take().unwrap();
+    let mut other_resp = srv.start_sse_stream(&get_request_with_session(Some("session-2")));
+    let mut other_reader = other_resp.stream_pipe.take().unwrap();
+
+    srv.handle_request_with_context(
+        r#"{"jsonrpc":"2.0","method":"resources/subscribe","id":1,"params":{"uri":"config://main"}}"#,
+        ctx_with_session("session-1"),
+    );
+
+    srv.notify_resource_updated("config://main");
+
+    // The subscriber gets it...
+    let mut buf = [0u8; 4096];
+    let n = sub_reader.read(&mut buf).unwrap();
+    assert!(String::from_utf8_lossy(&buf[..n]).contains("notifications/resources/updated"));
+
+    // ...but session-2 (connected, not subscribed) doesn't. Prove it by
+    // sending a marker broadcast next and confirming that's the first thing
+    // session-2's reader sees.
+    srv.notify("marker", None);
+    let n2 = other_reader.read(&mut buf).unwrap();
+    let text2 = String::from_utf8_lossy(&buf[..n2]);
+    assert!(text2.contains(r#""method":"marker""#), "expected only the marker notification: {text2}");
+}
+
+#[test]
+fn notify_resource_updated_for_an_unsubscribed_uri_is_a_no_op() {
+    let srv = make_server();
+    // Should not panic even though nobody has ever subscribed to anything.
+    srv.notify_resource_updated("config://nobody-subscribed");
+}
+
+#[test]
+fn unsubscribe_stops_further_notifications() {
+    let srv = make_server();
+    let mut sse_resp = srv.start_sse_stream(&get_request_with_session(Some("session-1")));
+    let mut reader = sse_resp.stream_pipe.take().unwrap();
+
+    srv.handle_request_with_context(
+        r#"{"jsonrpc":"2.0","method":"resources/subscribe","id":1,"params":{"uri":"config://main"}}"#,
+        ctx_with_session("session-1"),
+    );
+    srv.handle_request_with_context(
+        r#"{"jsonrpc":"2.0","method":"resources/unsubscribe","id":2,"params":{"uri":"config://main"}}"#,
+        ctx_with_session("session-1"),
+    );
+
+    srv.notify_resource_updated("config://main");
+
+    // Nothing should have been queued for the now-unsubscribed session;
+    // prove it the same way as other "nothing queued" tests: a marker sent
+    // next should be the first (and only) thing read back.
+    srv.notify("marker", None);
+    let mut buf = [0u8; 4096];
+    let n = reader.read(&mut buf).unwrap();
+    let text = String::from_utf8_lossy(&buf[..n]);
+    assert!(text.contains(r#""method":"marker""#), "expected only the marker notification: {text}");
+}
+
+#[test]
+fn unsubscribe_removes_the_uri_entry_entirely_once_empty() {
+    let srv = make_server();
+    srv.handle_request_with_context(
+        r#"{"jsonrpc":"2.0","method":"resources/subscribe","id":1,"params":{"uri":"config://main"}}"#,
+        ctx_with_session("session-1"),
+    );
+    srv.handle_request_with_context(
+        r#"{"jsonrpc":"2.0","method":"resources/unsubscribe","id":2,"params":{"uri":"config://main"}}"#,
+        ctx_with_session("session-1"),
+    );
+    assert!(srv.subscriptions.lock().unwrap().is_empty(), "expected the URI entry to be pruned once its subscriber list is empty");
+}
+
+#[test]
+fn initialize_advertises_resources_subscribe_true() {
+    let srv = make_server();
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#);
+    let body = body_of(&resp);
+    assert!(body.contains(r#""resources":{"subscribe":true,"listChanged":true}"#), "expected resources.subscribe true: {body}");
 }
 

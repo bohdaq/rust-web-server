@@ -638,31 +638,76 @@ Also serve `GET /.well-known/oauth-authorization-server` with the metadata docum
 
 ---
 
-### TODO-14: `resources/subscribe` and `resources/unsubscribe`
+### ✅ TODO-14: `resources/subscribe` and `resources/unsubscribe` — Done (v17.87.0)
 
-Clients can subscribe to a specific resource URI and receive `notifications/resources/updated`
-when it changes. Used for live-updating resource panels in Claude Desktop.
+Added `.notify_resource_updated(uri)` (a `&self` method directly on `McpServer`, not a separate
+`handle.` type — same reasoning as TODO-9's `register_tool`/etc.: a cloned `McpServer` already
+shares the storage a handle would need) and `dispatch`'s `"resources/subscribe"`/
+`"resources/unsubscribe"` arms, exactly matching this entry's own method names.
 
-**Depends on:** TODO-7 (SSE channel) and TODO-9 (dynamic registration).
+**Subscription store ended up keyed by session id, not by raw `SseSender`, unlike the entry's own
+sketch** (`Arc<RwLock<HashMap<String, Vec<SseSender>>>>`). The entry's sketch would work if a
+subscription were created *from* the same connection that later receives the push, but
+`resources/subscribe` arrives as a `POST /mcp` request (its own request/response cycle, no
+persistent connection) while pushes go out over a *separate* `GET /mcp` SSE connection — there's no
+`SseSender` available at the moment `resources/subscribe` is processed to even put in that map. The
+actual missing piece was correlating "this `POST resources/subscribe` call" with "that already-open
+(or not-yet-open) `GET /mcp` SSE connection," which only `Mcp-Session-Id` can do (the same header
+`.tool_with_context()`'s session tracking, from TODO-2, already established as this server's
+session-continuity mechanism). So `subscriptions: Arc<Mutex<HashMap<String, Vec<String>>>>` stores
+session ids, not senders; `start_sse_stream` gained a new step reading `Mcp-Session-Id` off the
+`GET` request and tagging the connection with it via a new `SseClient { session_id, sender }`
+struct, replacing the previously-untagged flat `Vec<SseSender>` (`sse_clients` field). This is also
+why `do_resource_subscribe`/`do_resource_unsubscribe` need `ctx.session_id`, not just `body` — this
+entry's own "New methods" sketch already anticipated needing `session_id` as a parameter, just via
+`handle_request`'s signature rather than routed through `McpContext`.
 
-**Add subscription store:**
-```rust
-subscriptions: Arc<RwLock<HashMap<String, Vec<SseSender>>>>
-// key: resource URI, value: list of SSE channels subscribed to it
-```
+**Genuinely targeted, unlike every other notification in this module:** `.notify()`, `.log()`, and
+`list_changed` all broadcast to *every* connected SSE client via `broadcast_sse_to` — that was an
+acceptable, honestly-documented simplification when TODO-7 was built (nothing else needed
+per-session routing yet). `notify_resource_updated` is the first notification that must reach only
+specific subscribers, so it uses a new `send_sse_to_sessions` (a `session_id`-filtering sibling of
+`broadcast_sse_to`, added alongside it) instead.
 
-**New methods in `handle_request`:**
-```
-"resources/subscribe"   => self.do_resource_subscribe(body, session_id)
-"resources/unsubscribe" => self.do_resource_unsubscribe(body, session_id)
-```
+**Requires `Mcp-Session-Id`, by design, not an oversight:** `resources/subscribe`/
+`resources/unsubscribe` both return `INVALID_PARAMS` for a request with no session id — a
+subscription created with no way to later correlate it to an SSE connection could never actually
+fire, so accepting it silently would be worse than rejecting it outright. `resources/unsubscribe`
+prunes a URI's `subscriptions` entry entirely once its subscriber list empties, rather than
+leaving a stale empty `Vec` around.
 
-**API for resource owners to signal changes:**
-```rust
-handle.notify_resource_updated("config://main");
-```
+**Capabilities:** `initialize`'s `resources` capability now advertises `"subscribe":true`
+unconditionally (previously `false`, since this didn't exist) — matching how `listChanged` became
+unconditional in TODO-9, not opt-in like `.logging_enabled()`, since the methods are always
+available on every `McpServer`.
 
-**Effort:** medium (depends on TODO-7 and TODO-9).
+**Known limitation, stated plainly:** a session's SSE connection disconnecting doesn't proactively
+clean up its entries in `subscriptions` — the same "no eviction without an explicit call" tradeoff
+already accepted for `sessions` in TODO-2. A stale session id just sits harmlessly in a URI's
+subscriber list (there's no live `SseClient` for it anymore, so `send_sse_to_sessions` simply never
+finds a matching connection to send to) until an explicit `resources/unsubscribe`.
+
+**Verified end-to-end against a real running server** (this feature's session/SSE-connection
+correlation isn't something unit tests alone can fully exercise, similar to TODO-7): `initialize` →
+read back `Mcp-Session-Id` → `GET /mcp` with that header → `resources/subscribe` with the same
+header → `.notify_resource_updated(...)` from a background thread on a timer. The subscribed
+session's SSE stream received `notifications/resources/updated`; a second, simultaneously-open SSE
+connection using a different, never-subscribed session id received nothing — confirming the
+targeting actually works, not just that broadcast-to-everyone would have looked the same.
+
+10 new tests in `src/mcp/tests.rs`: subscribe succeeds with a session id and fails
+(`INVALID_PARAMS`) without one or without `uri`; unsubscribe fails without a session id;
+`notify_resource_updated` delivers to a subscribed session's SSE reader with the correct
+`method`/`uri`; it does *not* reach a second, connected-but-unsubscribed session (proven via the
+established "send a marker next, confirm it's the only thing read back" pattern); it's a silent
+no-op for a URI nobody ever subscribed to; unsubscribing stops further delivery; unsubscribing the
+last subscriber prunes the URI's `subscriptions` entry entirely; and `initialize` advertises
+`resources.subscribe:true`.
+
+**Effort:** medium, as estimated — the `Mcp-Session-Id`-based correlation (not anticipated in the
+entry's sketch, which assumed the wrong kind of state to store) was the actual source of the
+effort, not the subscribe/unsubscribe method bodies themselves, which are straightforward once the
+right key (session id) was identified.
 
 ---
 
@@ -750,7 +795,7 @@ Phase 3 — Enterprise + advanced
   TODO-11 completions/complete            (small, can go in Phase 1)          ✅ done (v17.85.0)
   TODO-12 request cancellation            (medium, http2 only)               ✅ done (v17.86.0, sync cooperative flag — no http2 dependency needed)
   TODO-13 OAuth 2.0 (2025-03-26)         (small — JwksCache already exists)
-  TODO-14 resources/subscribe             (medium, needs TODO-7 + TODO-9)
+  TODO-14 resources/subscribe             (medium, needs TODO-7 + TODO-9)      ✅ done (v17.87.0)
   TODO-17 async tool handlers             (medium, http2 only)
   TODO-15 sampling/createMessage          (large)
   TODO-16 roots/list                      (medium, needs TODO-15)
@@ -775,7 +820,7 @@ Phase 3 — Enterprise + advanced
 | 10 | `notifications/progress` | 2024-11-05 | **P2** | Small | ✅ Done (v17.84.0) |
 | 12 | Request cancellation | 2024-11-05 | **P3** | Medium | ✅ Done (v17.86.0) |
 | 13 | OAuth 2.0 auth | 2025-03-26 | **P3** | Small | `sso` feature |
-| 14 | `resources/subscribe` | 2024-11-05 | **P3** | Medium | #7 + #9 |
+| 14 | `resources/subscribe` | 2024-11-05 | **P3** | Medium | ✅ Done (v17.87.0) |
 | 17 | Async tool handlers | Ergonomics | **P3** | Medium | `http2` feature |
 | 15 | `sampling/createMessage` | 2024-11-05 | **P3** | Large | #7 |
 | 16 | `roots/list` | 2024-11-05 | **P3** | Medium | #15 |

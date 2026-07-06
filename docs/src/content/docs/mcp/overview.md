@@ -265,6 +265,39 @@ A handler returning more than 100 values gets truncated to the first 100, with `
 
 There's no dynamic (`&self`) equivalent of `.completion()` — unlike tools/resources/prompts, completion providers are registered only via the consuming builder, before the server starts serving requests.
 
+## Resource subscriptions
+
+A client can subscribe to a specific resource URI and receive `notifications/resources/updated` whenever it changes — the mechanism behind live-updating resource panels in clients like Claude Desktop (watching a config file, a dashboard resource, or anything else that changes outside of a direct `tools/call`).
+
+Call `.notify_resource_updated(uri)` from wherever your application actually changes the underlying data — a file watcher, a webhook handler, a poll loop:
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("my-server", "1.0");
+
+// Elsewhere, e.g. after reloading a watched config file:
+server.notify_resource_updated("config://main");
+```
+
+Unlike every other notification this server pushes (`.notify()`, `.log()`, `list_changed`), which broadcast to every connected `GET /mcp` SSE client, `notify_resource_updated` is **targeted**: only sessions that called `resources/subscribe` for that exact URI receive it. This is why `resources/subscribe` and `resources/unsubscribe` both require an `Mcp-Session-Id` header (from a prior `initialize` call) — without one there's no way to later match a subscription back to a specific `GET /mcp` SSE connection.
+
+```json
+// A client subscribes:
+{"method":"resources/subscribe","params":{"uri":"config://main"}}
+
+// Later, on that same session's GET /mcp SSE stream:
+data: {"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"uri":"config://main"}}
+```
+
+`resources/unsubscribe` removes the subscription; once a URI has zero subscribers, its bookkeeping entry is dropped entirely rather than left as an empty list.
+
+:::caution[A client that disconnects without unsubscribing leaves a stale entry]
+Nothing proactively notices a `GET /mcp` connection closing and removes its subscriptions — the same "no eviction without an explicit call" tradeoff already accepted for session storage elsewhere in this server. The stale session id sits harmlessly in the subscriber list for that URI (it just won't have a live SSE connection to actually deliver to) until an explicit `resources/unsubscribe` removes it.
+:::
+
+`initialize`'s `resources` capability now advertises `"subscribe":true` unconditionally, alongside the already-unconditional `listChanged:true`.
+
 ## Protocol version negotiation
 
 `initialize` inspects the client's requested `params.protocolVersion` and responds with the lower of that and the server's own version, rather than always claiming its own regardless of what the client asked for:
