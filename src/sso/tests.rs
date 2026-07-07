@@ -1,9 +1,9 @@
 //! Unit tests for the SSO module.
 //!
 //! All tests operate on pure in-memory logic — no network calls are made,
-//! except the `exchange_code` tests below, which use an in-process loopback
-//! `TcpListener` as a fake token endpoint (same pattern as
-//! `http_client::tests`) rather than a real IdP.
+//! except the `exchange_code` tests and the `jwks_tests` module below, which
+//! use an in-process loopback `TcpListener` as a fake token/JWKS endpoint
+//! (same pattern as `http_client::tests`) rather than a real IdP.
 
 use super::{
     client::{url_encode, OidcClient},
@@ -361,5 +361,361 @@ fn exchange_code_returns_error_on_non_success_status() {
     match result {
         Err(e) => assert!(e.0.contains("400"), "expected 400 in error, got: {}", e.0),
         Ok(_) => panic!("expected an error for a 400 response"),
+    }
+}
+
+// ── JWKS fetch + RS256/ES256 JWT verification (loopback fake JWKS endpoint) ─────
+
+mod jwks_tests {
+    use super::super::jwks::VerifyOptions;
+    use super::super::pkce::base64url_encode;
+    use super::super::JwksCache;
+    use std::sync::OnceLock;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unix_now() -> u64 {
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+    }
+
+    /// Serve `bodies[i]` to the i-th accepted connection, repeating the last
+    /// entry for any connection beyond the list (JwksCache may fetch twice:
+    /// once on lazy-load, once more on a failed-verification retry).
+    fn jwks_server_sequence(bodies: Vec<String>) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            let mut i = 0usize;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut buf = vec![0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let body = bodies.get(i).or_else(|| bodies.last()).cloned().unwrap_or_default();
+                i += 1;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+        format!("http://127.0.0.1:{}", addr.port())
+    }
+
+    fn jwks_server(jwk_json: &str) -> String {
+        jwks_server_sequence(vec![format!(r#"{{"keys":[{jwk_json}]}}"#)])
+    }
+
+    fn build_jwt(header: &str, payload: &str, sign: impl FnOnce(&[u8]) -> Vec<u8>) -> String {
+        let h = base64url_encode(header.as_bytes());
+        let p = base64url_encode(payload.as_bytes());
+        let message = format!("{h}.{p}");
+        let sig = sign(message.as_bytes());
+        let s = base64url_encode(&sig);
+        format!("{message}.{s}")
+    }
+
+    // ── RSA (RS256) ──────────────────────────────────────────────────────────
+
+    /// RSA key generation is slow (~100ms+); share one 2048-bit key across
+    /// every RS256 test rather than generating a fresh one each time.
+    fn rsa_key() -> &'static rsa::RsaPrivateKey {
+        static KEY: OnceLock<rsa::RsaPrivateKey> = OnceLock::new();
+        KEY.get_or_init(|| rsa::RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap())
+    }
+
+    fn rsa_jwk_json(kid: &str) -> String {
+        use rsa::traits::PublicKeyParts;
+        let pub_key = rsa_key().to_public_key();
+        let n = base64url_encode(&pub_key.n().to_bytes_be());
+        let e = base64url_encode(&pub_key.e().to_bytes_be());
+        format!(r#"{{"kty":"RSA","kid":"{kid}","n":"{n}","e":"{e}"}}"#)
+    }
+
+    fn sign_rs256(message: &[u8]) -> Vec<u8> {
+        use rsa::pkcs1v15::SigningKey;
+        use rsa::signature::{SignatureEncoding, Signer};
+        let signing_key = SigningKey::<sha2::Sha256>::new(rsa_key().clone());
+        signing_key.sign(message).to_bytes().to_vec()
+    }
+
+    #[test]
+    fn verify_jwt_rs256_success() {
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://idp.example.com","aud":"client1","exp":{},"iat":{}}}"#,
+            unix_now() + 3600,
+            unix_now()
+        );
+        let header = r#"{"alg":"RS256","kid":"rsa-key-1"}"#;
+        let token = build_jwt(header, &claims, sign_rs256);
+
+        let jwks_url = jwks_server(&rsa_jwk_json("rsa-key-1"));
+        let cache = JwksCache::new(&jwks_url);
+        let opts = VerifyOptions {
+            audience: "client1",
+            issuer: "https://idp.example.com",
+            leeway_secs: 0,
+        };
+        let claims = cache.verify_jwt(&token, &opts).unwrap();
+        assert_eq!(claims.sub, "user1");
+        assert_eq!(claims.iss, "https://idp.example.com");
+    }
+
+    #[test]
+    fn verify_jwt_rs256_tampered_signature_fails() {
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://idp.example.com","aud":"client1","exp":{},"iat":{}}}"#,
+            unix_now() + 3600,
+            unix_now()
+        );
+        let header = r#"{"alg":"RS256","kid":"rsa-key-1"}"#;
+        let mut token = build_jwt(header, &claims, sign_rs256);
+        // Flip the first character of the signature segment.
+        let sig_start = token.rfind('.').unwrap() + 1;
+        let flipped = if token.as_bytes()[sig_start] == b'A' { 'B' } else { 'A' };
+        token.replace_range(sig_start..sig_start + 1, &flipped.to_string());
+
+        let jwks_url = jwks_server(&rsa_jwk_json("rsa-key-1"));
+        let cache = JwksCache::new(&jwks_url);
+        let opts = VerifyOptions {
+            audience: "client1",
+            issuer: "https://idp.example.com",
+            leeway_secs: 0,
+        };
+        assert!(cache.verify_jwt(&token, &opts).is_err());
+    }
+
+    // ── EC (ES256) ───────────────────────────────────────────────────────────
+
+    fn ec_jwk_json(kid: &str, verifying_key: &p256::ecdsa::VerifyingKey) -> String {
+        let point = verifying_key.to_encoded_point(false);
+        let x = base64url_encode(point.x().unwrap());
+        let y = base64url_encode(point.y().unwrap());
+        format!(r#"{{"kty":"EC","kid":"{kid}","crv":"P-256","x":"{x}","y":"{y}"}}"#)
+    }
+
+    fn sign_es256(signing_key: &p256::ecdsa::SigningKey, message: &[u8]) -> Vec<u8> {
+        use p256::ecdsa::signature::Signer;
+        let sig: p256::ecdsa::Signature = signing_key.sign(message);
+        sig.to_bytes().to_vec()
+    }
+
+    #[test]
+    fn verify_jwt_es256_success() {
+        let signing_key = p256::ecdsa::SigningKey::random(&mut rand_core::OsRng);
+        let claims = format!(
+            r#"{{"sub":"user2","iss":"https://idp.example.com","aud":"client1","exp":{},"iat":{}}}"#,
+            unix_now() + 3600,
+            unix_now()
+        );
+        let header = r#"{"alg":"ES256","kid":"ec-key-1"}"#;
+        let token = build_jwt(header, &claims, |msg| sign_es256(&signing_key, msg));
+
+        let jwks_url = jwks_server(&ec_jwk_json("ec-key-1", signing_key.verifying_key()));
+        let cache = JwksCache::new(&jwks_url);
+        let opts = VerifyOptions {
+            audience: "client1",
+            issuer: "https://idp.example.com",
+            leeway_secs: 0,
+        };
+        let claims = cache.verify_jwt(&token, &opts).unwrap();
+        assert_eq!(claims.sub, "user2");
+    }
+
+    // ── claim validation ─────────────────────────────────────────────────────
+
+    #[test]
+    fn verify_jwt_expired_token_fails() {
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://idp.example.com","aud":"client1","exp":{},"iat":{}}}"#,
+            unix_now() - 3600,
+            unix_now() - 7200
+        );
+        let header = r#"{"alg":"RS256","kid":"rsa-key-1"}"#;
+        let token = build_jwt(header, &claims, sign_rs256);
+
+        let jwks_url = jwks_server(&rsa_jwk_json("rsa-key-1"));
+        let cache = JwksCache::new(&jwks_url);
+        let opts = VerifyOptions {
+            audience: "client1",
+            issuer: "https://idp.example.com",
+            leeway_secs: 0,
+        };
+        let err = cache.verify_jwt(&token, &opts).unwrap_err();
+        assert!(err.0.contains("expired"), "expected expiry error, got: {}", err.0);
+    }
+
+    #[test]
+    fn verify_jwt_iat_in_future_fails() {
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://idp.example.com","aud":"client1","exp":{},"iat":{}}}"#,
+            unix_now() + 7200,
+            unix_now() + 3600
+        );
+        let header = r#"{"alg":"RS256","kid":"rsa-key-1"}"#;
+        let token = build_jwt(header, &claims, sign_rs256);
+
+        let jwks_url = jwks_server(&rsa_jwk_json("rsa-key-1"));
+        let cache = JwksCache::new(&jwks_url);
+        let opts = VerifyOptions {
+            audience: "client1",
+            issuer: "https://idp.example.com",
+            leeway_secs: 0,
+        };
+        let err = cache.verify_jwt(&token, &opts).unwrap_err();
+        assert!(err.0.contains("future"), "expected issued-in-future error, got: {}", err.0);
+    }
+
+    #[test]
+    fn verify_jwt_leeway_permits_small_clock_skew() {
+        // Expired 5 seconds ago, but leeway_secs=30 should still accept it.
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://idp.example.com","aud":"client1","exp":{},"iat":{}}}"#,
+            unix_now() - 5,
+            unix_now() - 100
+        );
+        let header = r#"{"alg":"RS256","kid":"rsa-key-1"}"#;
+        let token = build_jwt(header, &claims, sign_rs256);
+
+        let jwks_url = jwks_server(&rsa_jwk_json("rsa-key-1"));
+        let cache = JwksCache::new(&jwks_url);
+        let opts = VerifyOptions {
+            audience: "client1",
+            issuer: "https://idp.example.com",
+            leeway_secs: 30,
+        };
+        assert!(cache.verify_jwt(&token, &opts).is_ok());
+    }
+
+    #[test]
+    fn verify_jwt_wrong_issuer_fails() {
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://evil.example.com","aud":"client1","exp":{},"iat":{}}}"#,
+            unix_now() + 3600,
+            unix_now()
+        );
+        let header = r#"{"alg":"RS256","kid":"rsa-key-1"}"#;
+        let token = build_jwt(header, &claims, sign_rs256);
+
+        let jwks_url = jwks_server(&rsa_jwk_json("rsa-key-1"));
+        let cache = JwksCache::new(&jwks_url);
+        let opts = VerifyOptions {
+            audience: "client1",
+            issuer: "https://idp.example.com",
+            leeway_secs: 0,
+        };
+        let err = cache.verify_jwt(&token, &opts).unwrap_err();
+        assert!(err.0.contains("issuer"), "expected issuer error, got: {}", err.0);
+    }
+
+    #[test]
+    fn verify_jwt_wrong_audience_fails() {
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://idp.example.com","aud":"someone-else","exp":{},"iat":{}}}"#,
+            unix_now() + 3600,
+            unix_now()
+        );
+        let header = r#"{"alg":"RS256","kid":"rsa-key-1"}"#;
+        let token = build_jwt(header, &claims, sign_rs256);
+
+        let jwks_url = jwks_server(&rsa_jwk_json("rsa-key-1"));
+        let cache = JwksCache::new(&jwks_url);
+        let opts = VerifyOptions {
+            audience: "client1",
+            issuer: "https://idp.example.com",
+            leeway_secs: 0,
+        };
+        let err = cache.verify_jwt(&token, &opts).unwrap_err();
+        assert!(err.0.contains("audience"), "expected audience error, got: {}", err.0);
+    }
+
+    #[test]
+    fn verify_jwt_aud_array_form_matches_one_of_multiple() {
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://idp.example.com","aud":["other-client","client1"],"exp":{},"iat":{}}}"#,
+            unix_now() + 3600,
+            unix_now()
+        );
+        let header = r#"{"alg":"RS256","kid":"rsa-key-1"}"#;
+        let token = build_jwt(header, &claims, sign_rs256);
+
+        let jwks_url = jwks_server(&rsa_jwk_json("rsa-key-1"));
+        let cache = JwksCache::new(&jwks_url);
+        let opts = VerifyOptions {
+            audience: "client1",
+            issuer: "https://idp.example.com",
+            leeway_secs: 0,
+        };
+        let claims = cache.verify_jwt(&token, &opts).unwrap();
+        assert_eq!(claims.aud, vec!["other-client".to_string(), "client1".to_string()]);
+    }
+
+    #[test]
+    fn verify_jwt_unsupported_alg_fails() {
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://idp.example.com","aud":"client1","exp":{},"iat":{}}}"#,
+            unix_now() + 3600,
+            unix_now()
+        );
+        // alg "HS256" is not implemented by try_verify's RS256/ES256 match arms.
+        let header = r#"{"alg":"HS256","kid":"rsa-key-1"}"#;
+        let token = build_jwt(header, &claims, sign_rs256);
+
+        let jwks_url = jwks_server(&rsa_jwk_json("rsa-key-1"));
+        let cache = JwksCache::new(&jwks_url);
+        let opts = VerifyOptions {
+            audience: "client1",
+            issuer: "https://idp.example.com",
+            leeway_secs: 0,
+        };
+        assert!(cache.verify_jwt(&token, &opts).is_err());
+    }
+
+    #[test]
+    fn verify_jwt_malformed_token_wrong_part_count_fails() {
+        let jwks_url = jwks_server(&rsa_jwk_json("rsa-key-1"));
+        let cache = JwksCache::new(&jwks_url);
+        let opts = VerifyOptions {
+            audience: "client1",
+            issuer: "https://idp.example.com",
+            leeway_secs: 0,
+        };
+        let err = cache.verify_jwt("only.two-parts", &opts).unwrap_err();
+        assert!(err.0.contains("3 parts"), "expected part-count error, got: {}", err.0);
+    }
+
+    // ── key rotation ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn verify_jwt_refetches_and_succeeds_after_kid_miss() {
+        // Lazy-load populates the cache with an unrelated key (simulating a
+        // cache from before the IdP rotated its signing key). The incoming
+        // token's kid isn't among those cached keys, so the first
+        // try_verify finds no candidates and fails; JwksCache must refetch
+        // and retry before giving up.
+        let old_signing_key = p256::ecdsa::SigningKey::random(&mut rand_core::OsRng);
+        let old_jwk = ec_jwk_json("old-key", old_signing_key.verifying_key());
+
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://idp.example.com","aud":"client1","exp":{},"iat":{}}}"#,
+            unix_now() + 3600,
+            unix_now()
+        );
+        let header = r#"{"alg":"RS256","kid":"rsa-key-new"}"#;
+        let token = build_jwt(header, &claims, sign_rs256);
+
+        let jwks_url = jwks_server_sequence(vec![
+            format!(r#"{{"keys":[{old_jwk}]}}"#),
+            format!(r#"{{"keys":[{}]}}"#, rsa_jwk_json("rsa-key-new")),
+        ]);
+        let cache = JwksCache::new(&jwks_url);
+        let opts = VerifyOptions {
+            audience: "client1",
+            issuer: "https://idp.example.com",
+            leeway_secs: 0,
+        };
+        let claims = cache.verify_jwt(&token, &opts).unwrap();
+        assert_eq!(claims.sub, "user1");
     }
 }

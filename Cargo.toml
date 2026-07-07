@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.91.0"
+version = "17.92.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"

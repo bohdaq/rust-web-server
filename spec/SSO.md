@@ -99,39 +99,22 @@ plus dogfooding it in the one caller that still hand-rolled form encoding.
 
 ---
 
-### Phase 2 — RS256 / ES256 JWT Verification and JWKS
+### ✅ Phase 2 — RS256 / ES256 JWT Verification and JWKS — Done (v17.92.0)
 
-The existing `JwtLayer` only verifies HS256 (symmetric secret). IdPs
-(Google, Microsoft, Okta) sign tokens with RSA or EC private keys and publish
-the matching public keys at a JWKS endpoint.
+**Already implemented before this phase was explicitly worked, and essentially untested until now.** Like Phase 1, `src/sso/jwks.rs` (`JwksCache`, `OidcClaims`, `VerifyOptions`) predates this task — it was built alongside Phase 4's `OidcAuth` middleware, which already calls `JwksCache::verify_jwt` on every callback. What this phase actually added was **the test suite that proves it's correct**: before this task, `src/sso/tests.rs` had zero tests exercising real RSA/EC signature verification, JWKS parsing, or claim validation — every existing SSO test was pure string/encoding logic (PKCE, `url_encode`, provider presets). 12 new tests in a `jwks_tests` submodule generate real RSA-2048 and P-256 keypairs, sign JWTs with them (`rsa::pkcs1v15::SigningKey`/`p256::ecdsa::SigningKey`), serve the public half as JWKS JSON from a loopback fake HTTP server, and verify: RS256 success, ES256 success, tampered-signature rejection, expiry, `iat`-in-the-future rejection, leeway tolerance, issuer mismatch, audience mismatch, `aud` as a JSON array (matching one of several values), an unsupported `alg`, a malformed (non-3-part) token, and — the one genuinely load-bearing scenario — **that key rotation actually works**: a token signed with a key not yet in the cache still verifies, because a failed `try_verify` triggers exactly one `fetch()` retry before giving up. All 12 passed against the existing implementation with no code changes required, confirming Phase 2's logic was already correct.
 
-```rust
-use rust_web_server::sso::jwks::{JwksCache, JwtVerifier};
+**Naming and shape deviate from the sketch, matching Phase 1's pattern of the
+sketch predating the real implementation's conventions:**
+- No `JwtVerifier` type — `verify_jwt` is a method directly on `JwksCache`. A separate verifier object wrapping a `&JwksCache` reference would only add a lifetime parameter for no behavioral gain, since `JwksCache` already owns everything `verify_jwt` needs.
+- No `.refresh_interval_secs()` background-refresh builder. Key rotation is **reactive**, not scheduled: a failed signature verification triggers exactly one refetch-and-retry (see `verify_jwt_refetches_and_succeeds_after_kid_miss`), which handles the actual failure mode (an IdP rotated its signing key) without a background thread, a shutdown-coordination story, or a staleness window between scheduled refreshes.
+- `OidcClaims` has no `groups: Option<Vec<String>>` or `extra: HashMap<String, serde_json::Value>` fields. This module models only the standard OIDC claims (OpenID Connect Core §5.1); IdP-specific extension claims (Okta/Entra `groups`, etc.) are out of scope, and `extra` would require depositing this hand-rolled JSON parser's leftover key/value pairs into a `serde_json::Value` map — a second JSON representation alongside the parser this module already has, for a field nothing in this codebase currently reads.
+- `nonce` is *not* validated inside `verify_jwt` despite this phase's own step 4 listing it alongside `exp`/`iat`/`aud`/`iss`. `OidcClaims.nonce` is extracted and returned, but the comparison against the session-stored nonce happens one layer up, in `oidc_auth::OidcAuth::callback_handler` (`src/sso/oidc_auth.rs`) — `JwksCache` has no session access and no notion of "the nonce this particular login attempt expects," so it couldn't validate it even in principle. `verify_jwt` validates everything a JWKS cache alone has enough context to check.
 
-// Fetch and cache keys from the IdP JWKS endpoint
-let cache = JwksCache::new("https://www.googleapis.com/oauth2/v3/certs")
-    .refresh_interval_secs(3600);        // background refresh
+**Tests:** 12 new tests in `src/sso/tests.rs::jwks_tests` (listed above); the module's doc comment was updated to note this is the second departure (after `exchange_code`) from the file's otherwise network-free design, using the same loopback-`TcpListener` pattern. `cargo test --features sso` — 46 sso tests pass (34 pre-existing + 12 new).
 
-// Verify a token from a request
-let verifier = JwtVerifier::from_cache(&cache);
-let claims: OidcClaims = verifier.verify(
-    &token,
-    VerifyOptions {
-        audience:  "my-client-id.apps.googleusercontent.com",
-        issuer:    "https://accounts.google.com",
-        leeway_secs: 30,
-    },
-)?;
-println!("{} {}", claims.sub, claims.email.unwrap_or_default());
-```
+**Effort:** small, per this entry's own estimate for what turned out to be a mostly-already-built dependency — the real work was proving correctness with real cryptographic material, not writing new verification logic.
 
-**What JWKS verification does:**
-1. Download `jwks_uri` → parse array of JWK objects (n, e for RSA; x, y for EC)
-2. Match `kid` header from the incoming JWT to the cached key
-3. Reconstruct the public key and verify the JWT signature (RS256 or ES256)
-4. Validate `exp`, `iat`, `aud`, `iss`, `nonce`
-
-**`OidcClaims` struct** (standard claims from OpenID Connect Core §5.1):
+**`OidcClaims` struct** (standard claims from OpenID Connect Core §5.1) — the fields that actually exist:
 
 ```rust
 pub struct OidcClaims {
@@ -148,12 +131,10 @@ pub struct OidcClaims {
     pub family_name:        Option<String>,
     pub picture:            Option<String>,
     pub locale:             Option<String>,
-    pub groups:             Option<Vec<String>>,  // non-standard; Okta / Entra
-    pub extra:              HashMap<String, serde_json::Value>,
 }
 ```
 
-**New module:** `src/sso/jwks.rs`
+**Module:** `src/sso/jwks.rs`
 
 ---
 
@@ -553,7 +534,7 @@ helpers handle persistence.
 | Phase | Feature | Status |
 |-------|---------|--------|
 | 1 | `HttpClient` — outbound TLS HTTP for token / JWKS calls | ✅ Done (v17.91.0) |
-| 2 | JWKS fetch + cache; RS256 / ES256 JWT verification; `OidcClaims` | Pending |
+| 2 | JWKS fetch + cache; RS256 / ES256 JWT verification; `OidcClaims` | ✅ Done (v17.92.0) |
 | 3 | OIDC discovery; `OidcProvider` struct; named presets | Pending |
 | 4 | OAuth 2.0 Authorization Code + PKCE flow; `OidcAuth` middleware | Pending |
 | 5 | Provider presets (Google, Microsoft, GitHub, Okta, Auth0, Keycloak); `from_env()` | Pending |
