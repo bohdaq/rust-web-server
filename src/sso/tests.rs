@@ -1,9 +1,10 @@
 //! Unit tests for the SSO module.
 //!
 //! All tests operate on pure in-memory logic — no network calls are made,
-//! except the `exchange_code` tests and the `jwks_tests` module below, which
-//! use an in-process loopback `TcpListener` as a fake token/JWKS endpoint
-//! (same pattern as `http_client::tests`) rather than a real IdP.
+//! except the `exchange_code` tests and the `jwks_tests`/`discovery_tests`
+//! modules below, which use an in-process loopback `TcpListener` as a fake
+//! token/JWKS/discovery endpoint (same pattern as `http_client::tests`)
+//! rather than a real IdP.
 
 use super::{
     client::{url_encode, OidcClient},
@@ -717,5 +718,120 @@ mod jwks_tests {
         };
         let claims = cache.verify_jwt(&token, &opts).unwrap();
         assert_eq!(claims.sub, "user1");
+    }
+}
+
+// ── OIDC discovery (loopback fake `.well-known/openid-configuration`) ──────────
+
+mod discovery_tests {
+    use super::super::discovery::OidcProvider;
+    use super::start_fake_token_server;
+
+    #[test]
+    fn discover_parses_all_fields() {
+        let base = start_fake_token_server(|req| {
+            let path_ok = req.starts_with("GET /.well-known/openid-configuration ");
+            let body = r#"{
+                "issuer": "https://idp.example.com",
+                "authorization_endpoint": "https://idp.example.com/authorize",
+                "token_endpoint": "https://idp.example.com/token",
+                "jwks_uri": "https://idp.example.com/jwks",
+                "userinfo_endpoint": "https://idp.example.com/userinfo",
+                "end_session_endpoint": "https://idp.example.com/logout"
+            }"#;
+            let status = if path_ok { "200" } else { "404" };
+            format!("HTTP/1.1 {status} OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
+        });
+        let provider = OidcProvider::discover(&base).unwrap();
+        assert_eq!(provider.issuer, "https://idp.example.com");
+        assert_eq!(provider.authorization_endpoint, "https://idp.example.com/authorize");
+        assert_eq!(provider.token_endpoint, "https://idp.example.com/token");
+        assert_eq!(provider.jwks_uri, "https://idp.example.com/jwks");
+        assert_eq!(provider.userinfo_endpoint, Some("https://idp.example.com/userinfo".to_string()));
+        assert_eq!(provider.end_session_endpoint, Some("https://idp.example.com/logout".to_string()));
+    }
+
+    #[test]
+    fn discover_optional_fields_absent_become_none() {
+        let base = start_fake_token_server(|_req| {
+            let body = r#"{
+                "issuer": "https://idp.example.com",
+                "authorization_endpoint": "https://idp.example.com/authorize",
+                "token_endpoint": "https://idp.example.com/token",
+                "jwks_uri": "https://idp.example.com/jwks"
+            }"#;
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
+        });
+        let provider = OidcProvider::discover(&base).unwrap();
+        assert_eq!(provider.userinfo_endpoint, None);
+        assert_eq!(provider.end_session_endpoint, None);
+    }
+
+    #[test]
+    fn discover_strips_trailing_slash_from_issuer_before_building_url() {
+        let base = start_fake_token_server(|req| {
+            // A trailing slash on the issuer must not produce a double
+            // slash before .well-known.
+            let ok = req.starts_with("GET /.well-known/openid-configuration ")
+                && !req.starts_with("GET //.well-known");
+            let body = r#"{
+                "issuer": "https://idp.example.com",
+                "authorization_endpoint": "https://idp.example.com/authorize",
+                "token_endpoint": "https://idp.example.com/token",
+                "jwks_uri": "https://idp.example.com/jwks"
+            }"#;
+            let status = if ok { "200" } else { "400" };
+            format!("HTTP/1.1 {status} OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
+        });
+        let issuer_with_slash = format!("{base}/");
+        let provider = OidcProvider::discover(&issuer_with_slash).unwrap();
+        assert_eq!(provider.token_endpoint, "https://idp.example.com/token");
+    }
+
+    #[test]
+    fn discover_missing_required_field_fails() {
+        let base = start_fake_token_server(|_req| {
+            // No token_endpoint.
+            let body = r#"{
+                "issuer": "https://idp.example.com",
+                "authorization_endpoint": "https://idp.example.com/authorize",
+                "jwks_uri": "https://idp.example.com/jwks"
+            }"#;
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
+        });
+        let err = OidcProvider::discover(&base).unwrap_err();
+        assert!(err.0.contains("token_endpoint"), "expected token_endpoint error, got: {}", err.0);
+    }
+
+    #[test]
+    fn discover_non_success_status_fails() {
+        let base = start_fake_token_server(|_req| {
+            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_string()
+        });
+        let err = OidcProvider::discover(&base).unwrap_err();
+        assert!(err.0.contains("404"), "expected 404 in error, got: {}", err.0);
+    }
+
+    #[test]
+    fn discover_missing_issuer_defaults_to_empty_string() {
+        // `issuer` is the one field parse_discovery_json treats as optional
+        // with a default rather than a hard error.
+        let base = start_fake_token_server(|_req| {
+            let body = r#"{
+                "authorization_endpoint": "https://idp.example.com/authorize",
+                "token_endpoint": "https://idp.example.com/token",
+                "jwks_uri": "https://idp.example.com/jwks"
+            }"#;
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
+        });
+        let provider = OidcProvider::discover(&base).unwrap();
+        assert_eq!(provider.issuer, "");
+    }
+
+    #[test]
+    fn discover_connection_failure_fails() {
+        // Nothing is listening on this port.
+        let err = OidcProvider::discover("http://127.0.0.1:1").unwrap_err();
+        assert!(err.0.contains("discovery fetch failed"), "expected fetch-failed error, got: {}", err.0);
     }
 }

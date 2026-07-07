@@ -138,48 +138,17 @@ pub struct OidcClaims {
 
 ---
 
-### Phase 3 — OIDC Discovery
+### ✅ Phase 3 — OIDC Discovery — Done (v17.93.0)
 
-Every compliant OIDC provider publishes a metadata document at
-`{issuer}/.well-known/openid-configuration`. Fetching it once gives all
-endpoint URLs so they do not need to be hard-coded.
+**Already implemented before this phase was explicitly worked, and — like Phases 1 and 2 — its one network-dependent code path was untested.** `src/sso/discovery.rs`'s six hardcoded presets (`google`, `microsoft`, `github`, `okta`, `auth0`, `keycloak`) already had tests (`{provider}_preset_has_correct_endpoints`, pure in-memory, predating this task). `OidcProvider::discover(issuer)` — the actual `GET {issuer}/.well-known/openid-configuration` fetch + hand-rolled JSON parse — had none.
 
-```rust
-use rust_web_server::sso::discovery::OidcProvider;
+7 new tests in a `discovery_tests` submodule of `src/sso/tests.rs`, using the same loopback-fake-server pattern as the `jwks_tests`/`exchange_code` tests: full-field parse, optional fields (`userinfo_endpoint`/`end_session_endpoint`) absent → `None`, a trailing slash on `issuer` not producing a double slash before `.well-known` (`issuer.trim_end_matches('/')`), a missing required field (`token_endpoint`) surfacing as an error naming that field, a non-2xx HTTP status surfacing the status code, `issuer` itself being the one field the parser treats as optional-with-empty-default rather than a hard error (matching `parse_discovery_json`'s `.unwrap_or_default()` vs. every other field's `.ok_or_else(...)`), and a connection failure (nothing listening) surfacing a `"discovery fetch failed"` error. All 7 passed against the existing implementation with zero source changes required.
 
-// Discover all endpoints from the issuer URL
-let provider = OidcProvider::discover("https://accounts.google.com")?;
+**`OidcProvider` has no `scopes_supported`/`response_types_supported` fields**, unlike this phase's own sketch. Nothing in this codebase reads either — `OidcConfig`'s own `scopes: Vec<String>` (Phase 5) is what actually drives the `scope` parameter sent to the authorization endpoint, populated from a preset default or `.scopes()`/`RWS_OIDC_SCOPES`, never from a discovery document's advertised capabilities. Parsing and storing two more array fields with no consumer would be dead data.
 
-println!("{}", provider.authorization_endpoint);  // https://accounts.google.com/o/oauth2/v2/auth
-println!("{}", provider.token_endpoint);          // https://oauth2.googleapis.com/token
-println!("{}", provider.jwks_uri);               // https://www.googleapis.com/oauth2/v3/certs
-println!("{}", provider.userinfo_endpoint.unwrap());
+**Effort:** small, matching this entry's own estimate — again, a mostly-already-built dependency; the work was proving the network path with a fake server, not writing new discovery logic.
 
-// Or use a named preset — no HTTP call needed for discovery:
-let provider = OidcProvider::google();
-let provider = OidcProvider::microsoft("my-tenant-id");
-let provider = OidcProvider::github();    // OAuth 2.0 only, no OIDC discovery
-let provider = OidcProvider::okta("mycompany.okta.com");
-let provider = OidcProvider::auth0("mycompany.auth0.com");
-let provider = OidcProvider::keycloak("https://keycloak.example.com", "myrealm");
-```
-
-**`OidcProvider` fields:**
-
-```rust
-pub struct OidcProvider {
-    pub issuer:                     String,
-    pub authorization_endpoint:     String,
-    pub token_endpoint:             String,
-    pub jwks_uri:                   String,
-    pub userinfo_endpoint:          Option<String>,
-    pub end_session_endpoint:       Option<String>,   // logout URL
-    pub scopes_supported:           Vec<String>,
-    pub response_types_supported:   Vec<String>,
-}
-```
-
-**New module:** `src/sso/discovery.rs`
+**Module:** `src/sso/discovery.rs`
 
 ---
 
@@ -535,7 +504,7 @@ helpers handle persistence.
 |-------|---------|--------|
 | 1 | `HttpClient` — outbound TLS HTTP for token / JWKS calls | ✅ Done (v17.91.0) |
 | 2 | JWKS fetch + cache; RS256 / ES256 JWT verification; `OidcClaims` | ✅ Done (v17.92.0) |
-| 3 | OIDC discovery; `OidcProvider` struct; named presets | Pending |
+| 3 | OIDC discovery; `OidcProvider` struct; named presets | ✅ Done (v17.93.0) |
 | 4 | OAuth 2.0 Authorization Code + PKCE flow; `OidcAuth` middleware | Pending |
 | 5 | Provider presets (Google, Microsoft, GitHub, Okta, Auth0, Keycloak); `from_env()` | Pending |
 | 6 | OAuth 2.0 Authorization Server; `/oauth/token`; `/.well-known/*` | Pending |
