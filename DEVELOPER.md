@@ -186,6 +186,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `JwksCache` | `sso` | Thread-safe JWKS key cache. Lazy-fetches and auto-rotates on `kid` miss. `verify_jwt(token, opts)` validates RS256 and ES256 JWTs end-to-end (signature + expiry + aud + iss). |
 | `OidcClient` | `sso` | OAuth2 client: `authorization_url(pkce, state, nonce)` builds the IdP redirect URL; `exchange_code(code, verifier)` posts to the token endpoint; `fetch_user_info(token)` calls the UserInfo endpoint. |
 | `PkceVerifier` / `PkceChallenge` | `sso` | RFC 7636 PKCE. `PkceVerifier::new()` generates a 32-byte random code verifier; `.challenge()` returns the S256 `PkceChallenge` to include in the authorization URL. |
+| `AuthServer` / `AuthServerConfig` | `sso-server` | `rws` as its own OAuth 2.0 Authorization Server (Middleware). Intercepts `POST /oauth/token` (`client_credentials`, `authorization_code` + PKCE, `refresh_token` grants), `GET /oauth/authorize`, `GET /.well-known/openid-configuration`, `GET /.well-known/jwks.json`. Signs tokens with HS256 via `auth::build_jwt` (not RSA/EC — see `src/sso/server.rs` docs), so `jwks.json` always returns an empty key set. `/oauth/authorize` trusts an existing app session (configurable key, default `"user_id"`) rather than a built-in login page; redirects to a configurable `login_url` (default `/login`) if absent. |
+| `ClientStore` / `OAuthClient` / `GrantType` | `sso-server` | Registry of OAuth 2.0 clients for `AuthServer`. `ClientStore::new().add(OAuthClient{...}).get(client_id)`. `OAuthClient.client_secret: Option<String>` (`None` = public/PKCE-only client). No `::from_env()` — client secrets belong in code or a secret store. |
 | `Mailer` | `mailer` (requires `mailer` feature; STARTTLS/SMTPS additionally require `http-client` or `http2`) | SMTP mailer. `Mailer::from_env()` reads `RWS_SMTP_HOST/PORT/USER/PASSWORD/FROM/TLS/TIMEOUT_MS`. `mailer.send(&email)` opens a TCP connection, negotiates TLS (STARTTLS or SMTPS), authenticates with `AUTH PLAIN`, and delivers the message. Three TLS modes: `SmtpTls::None` (plain, port 25), `SmtpTls::Starttls` (default, port 587), `SmtpTls::Smtps` (implicit TLS, port 465). |
 | `Email` / `EmailBuilder` | `mailer` | RFC 5322 email builder. `Email::builder().to(addr).subject(s).text(body).html(body).cc(addr).bcc(addr).reply_to(addr).build()`. Validates that at least one `To:` address, a subject, and a body (text or HTML) are provided. Generates `multipart/alternative` when both text and HTML are set. |
 | `SmtpTls` | `mailer` | Enum for SMTP TLS mode: `None`, `Starttls`, `Smtps`. |
@@ -4457,3 +4459,67 @@ name = "json-api"
 This is implemented as `PerRouteMaxBodySize`, a `Middleware` returning `AppError::PayloadTooLarge`, wrapped as the outermost layer by `apply_middleware()` — outside even `timeout_ms`, since it's a cheap, synchronous length check that shouldn't pay for `TimeoutLayer`'s background-thread machinery on a request that's about to be rejected anyway.
 
 **Important:** this check runs *after* the request (including its body) has already been fully read and `RouteMatcher` has resolved which route it belongs to — route resolution needs the complete `Request` to run at all. It cannot prevent the memory for an oversized body from being spent, the same limitation `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`'s own docs describe for *any* per-route check (see Use Case #72's note). Use it to protect this route's own logic or upstream backend from a body that's within the global limit but still too big for this specific route — not as a substitute for the global memory-exhaustion protection.
+
+---
+
+### 76. `rws` as its own OAuth 2.0 Authorization Server
+
+`sso-server` feature (implies `sso` and `auth`). Instead of delegating login to an external IdP (`OidcAuth`, Use Case #58), `AuthServer` lets `rws` issue its own short-lived JWTs to downstream services or single-page apps:
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["sso-server"] }
+```
+
+```rust
+use std::sync::Arc;
+use std::time::Duration;
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::session::SessionStore;
+use rust_web_server::sso::server::{AuthServer, AuthServerConfig};
+use rust_web_server::sso::client_store::{ClientStore, OAuthClient, GrantType};
+
+let auth_server = AuthServer::new(AuthServerConfig {
+    issuer:            "https://myapp.com".into(),
+    signing_secret:    std::env::var("RWS_AUTH_SIGNING_SECRET").unwrap(),
+    access_token_ttl:  Duration::from_secs(3600),
+    refresh_token_ttl: Duration::from_secs(86_400 * 30),
+    clients: ClientStore::new()
+        .add(OAuthClient {
+            client_id:     "spa-frontend".into(),
+            client_secret: None,                 // public client, uses PKCE
+            redirect_uris: vec!["https://spa.example.com/callback".into()],
+            grants:        vec![GrantType::AuthorizationCode],
+            scopes:        vec!["openid".into(), "email".into()],
+        })
+        .add(OAuthClient {
+            client_id:     "backend-service".into(),
+            client_secret: Some("s3cr3t".into()),
+            redirect_uris: vec![],
+            grants:        vec![GrantType::ClientCredentials],
+            scopes:        vec!["api:read".into(), "api:write".into()],
+        }),
+    sessions: Arc::new(SessionStore::new(86_400)),
+});
+
+let app = App::new().wrap(auth_server);
+// Registers: POST /oauth/token, GET /oauth/authorize,
+//            GET /.well-known/openid-configuration, GET /.well-known/jwks.json
+```
+
+A machine-to-machine client fetches a token directly, no browser involved:
+
+```
+POST /oauth/token
+grant_type=client_credentials&client_id=backend-service&client_secret=s3cr3t
+
+→ {"access_token":"eyJ...","token_type":"Bearer","expires_in":3600}
+```
+
+**Two deliberate deviations from a textbook Authorization Server**, both documented at length in `src/sso/server.rs`'s module docs:
+
+1. **Tokens are signed HS256** (via the existing `auth::build_jwt`/`auth::verify_jwt`), not RSA/EC from a PEM private key — this crate has no private-key PEM/DER parser, and HS256 is a fully adequate, already-tested choice when the issuer and every resource server share one secret. `GET /.well-known/jwks.json` therefore always returns `{"keys":[]}` — there's no public key to publish for a symmetric algorithm. Configure resource servers with the same `signing_secret` directly, e.g. `auth::JwtLayer::new(secret)` or `auth::verify_jwt(token, secret)`.
+2. **`/oauth/authorize` has no built-in login page.** It trusts an existing application session: if the browser's session (default cookie-backed, default key `"user_id"`, override with `.subject_session_key()`) already identifies a user, a code is minted immediately; otherwise the browser is redirected to a configurable `login_url` (default `/login`) with `?return_to=<original authorize URL>`. Building that login page — and populating the session after a successful login — is the embedding application's own responsibility, the same boundary `OidcAuth` draws around needing an *external* IdP to already exist.
+
+`ClientStore` has no `::from_env()` — a list of clients with per-client secrets has no natural flat-env-var encoding (unlike `OidcConfig`'s one-client-per-process shape, Use Case #58), so `ClientStore::new().add(...)` is the only registration path; load clients from wherever your application already keeps them (config file, database, secret manager) and build the store at startup.

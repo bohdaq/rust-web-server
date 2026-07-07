@@ -34,6 +34,8 @@
 //! | [`pkce`]        | [`PkceVerifier`], [`PkceChallenge`], base64url         |
 //! | [`client`]      | [`OidcClient`]: auth URL, token exchange, user info    |
 //! | [`oidc_auth`]   | [`OidcAuth`] middleware                                |
+//! | [`server`]      | [`AuthServer`] — `rws` as its own OAuth 2.0 Authorization Server (`sso-server` feature) |
+//! | [`client_store`]| [`ClientStore`] / [`OAuthClient`] — clients registered with [`server::AuthServer`] (`sso-server` feature) |
 
 #[cfg(test)]
 pub(crate) mod tests;
@@ -45,6 +47,11 @@ pub mod jwks;
 pub mod oidc_auth;
 pub mod pkce;
 
+#[cfg(feature = "sso-server")]
+pub mod client_store;
+#[cfg(feature = "sso-server")]
+pub mod server;
+
 // ── public re-exports ─────────────────────────────────────────────────────────
 
 pub use client::{OidcClient, TokenResponse};
@@ -53,6 +60,11 @@ pub use discovery::OidcProvider;
 pub use jwks::{JwksCache, OidcClaims, VerifyOptions};
 pub use oidc_auth::OidcAuth;
 pub use pkce::{PkceChallenge, PkceVerifier};
+
+#[cfg(feature = "sso-server")]
+pub use client_store::{ClientStore, GrantType, OAuthClient};
+#[cfg(feature = "sso-server")]
+pub use server::{AuthServer, AuthServerConfig};
 
 // ── error type ────────────────────────────────────────────────────────────────
 

@@ -18,6 +18,12 @@
 //! so holds `crate::test_env::lock()` for its full duration, the same rule
 //! `CLAUDE.md` documents for `RWS_CONFIG_*` vars, since both are shared
 //! mutable process state under `cargo test`'s parallelism.
+//!
+//! `server_tests` (behind the `sso-server` feature) drives `AuthServer` —
+//! the Phase 6 OAuth 2.0 Authorization Server — the same way
+//! `oidc_auth_tests` drives `OidcAuth`: directly via `Middleware::handle`,
+//! no fake network servers needed since `AuthServer` is entirely
+//! self-contained (no outbound HTTP calls of its own).
 
 use super::{
     client::{url_encode, OidcClient},
@@ -1556,5 +1562,469 @@ mod config_tests {
         assert_eq!(config.post_login_redirect, "/dashboard");
 
         clear_oidc_env();
+    }
+}
+
+// ── AuthServer — OAuth 2.0 Authorization Server (Phase 6, `sso-server` feature) ─
+
+#[cfg(feature = "sso-server")]
+mod server_tests {
+    use super::super::client_store::{ClientStore, GrantType, OAuthClient};
+    use super::super::server::{AuthServer, AuthServerConfig};
+    use crate::application::Application;
+    use crate::core::New;
+    use crate::header::Header;
+    use crate::http::VERSION;
+    use crate::middleware::Middleware;
+    use crate::request::{Request, METHOD};
+    use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+    use crate::server::{Address, ConnectionInfo};
+    use crate::session::SessionStore;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    const SID_COOKIE: &str = "_rws_authz_sid";
+    const SECRET: &str = "test-signing-secret";
+
+    fn conn() -> ConnectionInfo {
+        ConnectionInfo {
+            client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+            server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+            request_size: 16000,
+            sni_hostname: None,
+        }
+    }
+
+    fn get(uri: &str) -> Request {
+        Request {
+            method: METHOD.get.to_string(),
+            request_uri: uri.to_string(),
+            http_version: VERSION.http_1_1.to_string(),
+            headers: vec![],
+            body: vec![],
+        }
+    }
+
+    fn post(uri: &str, body: &str) -> Request {
+        Request {
+            method: METHOD.post.to_string(),
+            request_uri: uri.to_string(),
+            http_version: VERSION.http_1_1.to_string(),
+            headers: vec![],
+            body: body.as_bytes().to_vec(),
+        }
+    }
+
+    fn with_cookie(mut req: Request, name: &str, value: &str) -> Request {
+        req.headers.push(Header { name: "Cookie".to_string(), value: format!("{name}={value}") });
+        req
+    }
+
+    fn header(response: &Response, name: &str) -> Option<String> {
+        response.headers.iter()
+            .find(|h| h.name.eq_ignore_ascii_case(name))
+            .map(|h| h.value.clone())
+    }
+
+    struct OkApp;
+    impl Application for OkApp {
+        fn execute(&self, _: &Request, _: &ConnectionInfo) -> Result<Response, String> {
+            let mut r = Response::new();
+            r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+            r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+            Ok(r)
+        }
+    }
+
+    fn confidential_client() -> OAuthClient {
+        OAuthClient {
+            client_id: "backend-service".into(),
+            client_secret: Some("backend-secret".into()),
+            redirect_uris: vec![],
+            grants: vec![GrantType::ClientCredentials],
+            scopes: vec!["api:read".into(), "api:write".into()],
+        }
+    }
+
+    fn spa_client() -> OAuthClient {
+        OAuthClient {
+            client_id: "spa-frontend".into(),
+            client_secret: None,
+            redirect_uris: vec!["https://spa.example.com/callback".into()],
+            grants: vec![GrantType::AuthorizationCode],
+            scopes: vec!["openid".into(), "email".into()],
+        }
+    }
+
+    fn server_with(clients: ClientStore, sessions: Arc<SessionStore>) -> AuthServer {
+        AuthServer::new(AuthServerConfig {
+            issuer: "https://auth.example.com".into(),
+            signing_secret: SECRET.into(),
+            access_token_ttl: Duration::from_secs(3600),
+            refresh_token_ttl: Duration::from_secs(86_400),
+            clients,
+            sessions,
+        })
+    }
+
+    // ── ClientStore ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn client_store_get_returns_registered_client() {
+        let store = ClientStore::new().add(confidential_client());
+        assert!(store.get("backend-service").is_some());
+    }
+
+    #[test]
+    fn client_store_get_returns_none_for_unknown_client() {
+        let store = ClientStore::new().add(confidential_client());
+        assert!(store.get("does-not-exist").is_none());
+    }
+
+    // ── client_credentials grant ─────────────────────────────────────────────
+
+    #[test]
+    fn client_credentials_success_issues_access_token() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new().add(confidential_client()), sessions);
+        let req = post("/oauth/token", "grant_type=client_credentials&client_id=backend-service&client_secret=backend-secret");
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(200, resp.status_code);
+
+        let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        assert!(body.contains("\"token_type\":\"Bearer\""));
+        assert!(!body.contains("refresh_token"), "client_credentials should not issue a refresh token");
+
+        let token = extract_json_field(&body, "access_token");
+        let claims = crate::auth::verify_jwt(&token, SECRET.as_bytes()).expect("token should verify");
+        assert_eq!(claims.sub.as_deref(), Some("backend-service"));
+        assert!(claims.raw.contains("api:read"));
+    }
+
+    #[test]
+    fn client_credentials_unknown_client_returns_401() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new(), sessions);
+        let req = post("/oauth/token", "grant_type=client_credentials&client_id=nope&client_secret=x");
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(401, resp.status_code);
+    }
+
+    #[test]
+    fn client_credentials_wrong_secret_returns_401() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new().add(confidential_client()), sessions);
+        let req = post("/oauth/token", "grant_type=client_credentials&client_id=backend-service&client_secret=wrong");
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(401, resp.status_code);
+    }
+
+    #[test]
+    fn client_credentials_wrong_grant_returns_400_for_authcode_only_client() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut spa = spa_client();
+        spa.client_secret = Some("spa-secret".into()); // give it a secret just for this check
+        let server = server_with(ClientStore::new().add(spa), sessions);
+        let req = post("/oauth/token", "grant_type=client_credentials&client_id=spa-frontend&client_secret=spa-secret");
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(400, resp.status_code);
+    }
+
+    #[test]
+    fn client_credentials_requested_scope_outside_allowed_returns_400() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new().add(confidential_client()), sessions);
+        let req = post("/oauth/token", "grant_type=client_credentials&client_id=backend-service&client_secret=backend-secret&scope=api:admin");
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(400, resp.status_code);
+    }
+
+    #[test]
+    fn client_credentials_narrower_requested_scope_is_honored() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new().add(confidential_client()), sessions);
+        let req = post("/oauth/token", "grant_type=client_credentials&client_id=backend-service&client_secret=backend-secret&scope=api:read");
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        let token = extract_json_field(&body, "access_token");
+        let claims = crate::auth::verify_jwt(&token, SECRET.as_bytes()).unwrap();
+        assert!(claims.raw.contains("\"scope\":\"api:read\""));
+        assert!(!claims.raw.contains("api:write"));
+    }
+
+    #[test]
+    fn token_endpoint_unsupported_grant_type_returns_400() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new(), sessions);
+        let req = post("/oauth/token", "grant_type=password&username=a&password=b");
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(400, resp.status_code);
+    }
+
+    // ── /oauth/authorize ─────────────────────────────────────────────────────
+
+    #[test]
+    fn authorize_without_session_redirects_to_login() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new().add(spa_client()), sessions);
+        let req = get("/oauth/authorize?response_type=code&client_id=spa-frontend&redirect_uri=https://spa.example.com/callback");
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(302, resp.status_code);
+        assert!(header(&resp, "Location").unwrap().starts_with("/login?return_to="));
+    }
+
+    #[test]
+    fn authorize_with_session_issues_code_and_redirects_to_client() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut session = sessions.create();
+        session.set("user_id", "alice");
+        sessions.save(&session);
+
+        let server = server_with(ClientStore::new().add(spa_client()), sessions);
+        let req = with_cookie(
+            get("/oauth/authorize?response_type=code&client_id=spa-frontend&redirect_uri=https://spa.example.com/callback&state=xyz"),
+            SID_COOKIE,
+            &session.id,
+        );
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(302, resp.status_code);
+        let location = header(&resp, "Location").unwrap();
+        assert!(location.starts_with("https://spa.example.com/callback?code="));
+        assert!(location.contains("&state=xyz"));
+    }
+
+    #[test]
+    fn authorize_unknown_client_returns_400() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new(), sessions);
+        let req = get("/oauth/authorize?response_type=code&client_id=nope&redirect_uri=https://x.example.com/cb");
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(400, resp.status_code);
+    }
+
+    #[test]
+    fn authorize_unregistered_redirect_uri_returns_400() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut session = sessions.create();
+        session.set("user_id", "alice");
+        sessions.save(&session);
+        let server = server_with(ClientStore::new().add(spa_client()), sessions);
+        let req = with_cookie(
+            get("/oauth/authorize?response_type=code&client_id=spa-frontend&redirect_uri=https://evil.example.com/cb"),
+            SID_COOKIE,
+            &session.id,
+        );
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(400, resp.status_code);
+    }
+
+    #[test]
+    fn authorize_client_without_authcode_grant_returns_400() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut session = sessions.create();
+        session.set("user_id", "alice");
+        sessions.save(&session);
+        let server = server_with(ClientStore::new().add(confidential_client()), sessions);
+        let req = with_cookie(
+            get("/oauth/authorize?response_type=code&client_id=backend-service&redirect_uri=https://x.example.com/cb"),
+            SID_COOKIE,
+            &session.id,
+        );
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(400, resp.status_code);
+    }
+
+    #[test]
+    fn authorize_unsupported_code_challenge_method_returns_400() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut session = sessions.create();
+        session.set("user_id", "alice");
+        sessions.save(&session);
+        let server = server_with(ClientStore::new().add(spa_client()), sessions);
+        let req = with_cookie(
+            get("/oauth/authorize?response_type=code&client_id=spa-frontend&redirect_uri=https://spa.example.com/callback&code_challenge=abc&code_challenge_method=plain"),
+            SID_COOKIE,
+            &session.id,
+        );
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(400, resp.status_code);
+    }
+
+    // ── authorization_code grant (full round trip) ───────────────────────────
+
+    fn mint_code(server: &AuthServer, sessions: &Arc<SessionStore>, extra_query: &str) -> String {
+        let mut session = sessions.create();
+        session.set("user_id", "alice");
+        sessions.save(&session);
+        let req = with_cookie(
+            get(&format!(
+                "/oauth/authorize?response_type=code&client_id=spa-frontend&redirect_uri=https://spa.example.com/callback{extra_query}"
+            )),
+            SID_COOKIE,
+            &session.id,
+        );
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        let location = header(&resp, "Location").unwrap();
+        let code_start = location.find("code=").unwrap() + "code=".len();
+        let code_end = location[code_start..].find('&').map(|i| code_start + i).unwrap_or(location.len());
+        location[code_start..code_end].to_string()
+    }
+
+    #[test]
+    fn authorization_code_grant_success_round_trip() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new().add(spa_client()), sessions.clone());
+        let code = mint_code(&server, &sessions, "");
+
+        let body = format!(
+            "grant_type=authorization_code&code={code}&redirect_uri=https://spa.example.com/callback&client_id=spa-frontend"
+        );
+        let resp = server.handle(&post("/oauth/token", &body), &conn(), &OkApp).unwrap();
+        assert_eq!(200, resp.status_code);
+
+        let resp_body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        assert!(resp_body.contains("refresh_token"));
+        assert!(resp_body.contains("id_token"));
+        let access_token = extract_json_field(&resp_body, "access_token");
+        let claims = crate::auth::verify_jwt(&access_token, SECRET.as_bytes()).unwrap();
+        assert_eq!(claims.sub.as_deref(), Some("alice"));
+    }
+
+    #[test]
+    fn authorization_code_grant_reuse_fails() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new().add(spa_client()), sessions.clone());
+        let code = mint_code(&server, &sessions, "");
+        let body = format!(
+            "grant_type=authorization_code&code={code}&redirect_uri=https://spa.example.com/callback&client_id=spa-frontend"
+        );
+        let first = server.handle(&post("/oauth/token", &body), &conn(), &OkApp).unwrap();
+        assert_eq!(200, first.status_code);
+        let second = server.handle(&post("/oauth/token", &body), &conn(), &OkApp).unwrap();
+        assert_eq!(400, second.status_code, "a used code must not be exchangeable a second time");
+    }
+
+    #[test]
+    fn authorization_code_grant_wrong_redirect_uri_fails() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new().add(spa_client()), sessions.clone());
+        let code = mint_code(&server, &sessions, "");
+        let body = format!(
+            "grant_type=authorization_code&code={code}&redirect_uri=https://wrong.example.com/cb&client_id=spa-frontend"
+        );
+        let resp = server.handle(&post("/oauth/token", &body), &conn(), &OkApp).unwrap();
+        assert_eq!(400, resp.status_code);
+    }
+
+    #[test]
+    fn authorization_code_grant_pkce_verifier_mismatch_fails() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new().add(spa_client()), sessions.clone());
+        let code = mint_code(&server, &sessions, "&code_challenge=abc123&code_challenge_method=S256");
+        let body = format!(
+            "grant_type=authorization_code&code={code}&redirect_uri=https://spa.example.com/callback&client_id=spa-frontend&code_verifier=wrong-verifier"
+        );
+        let resp = server.handle(&post("/oauth/token", &body), &conn(), &OkApp).unwrap();
+        assert_eq!(400, resp.status_code);
+    }
+
+    #[test]
+    fn authorization_code_grant_pkce_verifier_success() {
+        use crate::sso::pkce::PkceVerifier;
+        let verifier = PkceVerifier::new();
+        let challenge = verifier.challenge();
+
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new().add(spa_client()), sessions.clone());
+        let code = mint_code(
+            &server,
+            &sessions,
+            &format!("&code_challenge={}&code_challenge_method=S256", challenge.as_str()),
+        );
+        let body = format!(
+            "grant_type=authorization_code&code={code}&redirect_uri=https://spa.example.com/callback&client_id=spa-frontend&code_verifier={}",
+            verifier.as_str()
+        );
+        let resp = server.handle(&post("/oauth/token", &body), &conn(), &OkApp).unwrap();
+        assert_eq!(200, resp.status_code);
+    }
+
+    // ── refresh_token grant ──────────────────────────────────────────────────
+
+    #[test]
+    fn refresh_token_grant_success_issues_new_access_token() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new().add(spa_client()), sessions.clone());
+        let code = mint_code(&server, &sessions, "");
+        let exchange_body = format!(
+            "grant_type=authorization_code&code={code}&redirect_uri=https://spa.example.com/callback&client_id=spa-frontend"
+        );
+        let first = server.handle(&post("/oauth/token", &exchange_body), &conn(), &OkApp).unwrap();
+        let first_body = String::from_utf8(first.content_range_list[0].body.clone()).unwrap();
+        let refresh_token = extract_json_field(&first_body, "refresh_token");
+
+        let refresh_body = format!("grant_type=refresh_token&refresh_token={refresh_token}");
+        let resp = server.handle(&post("/oauth/token", &refresh_body), &conn(), &OkApp).unwrap();
+        assert_eq!(200, resp.status_code);
+        let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        assert!(!body.contains("refresh_token"), "refresh grant response should not include a new refresh token");
+        let access_token = extract_json_field(&body, "access_token");
+        let claims = crate::auth::verify_jwt(&access_token, SECRET.as_bytes()).unwrap();
+        assert_eq!(claims.sub.as_deref(), Some("alice"));
+    }
+
+    #[test]
+    fn refresh_token_grant_unknown_token_fails() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new().add(spa_client()), sessions);
+        let req = post("/oauth/token", "grant_type=refresh_token&refresh_token=does-not-exist");
+        let resp = server.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(400, resp.status_code);
+    }
+
+    // ── discovery / jwks ─────────────────────────────────────────────────────
+
+    #[test]
+    fn discovery_document_has_expected_endpoints() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new(), sessions);
+        let resp = server.handle(&get("/.well-known/openid-configuration"), &conn(), &OkApp).unwrap();
+        assert_eq!(200, resp.status_code);
+        let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        assert!(body.contains("\"issuer\":\"https://auth.example.com\""));
+        assert!(body.contains("/oauth/authorize"));
+        assert!(body.contains("/oauth/token"));
+        assert!(body.contains("/.well-known/jwks.json"));
+    }
+
+    #[test]
+    fn jwks_document_is_an_empty_key_set() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new(), sessions);
+        let resp = server.handle(&get("/.well-known/jwks.json"), &conn(), &OkApp).unwrap();
+        assert_eq!(200, resp.status_code);
+        let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();
+        assert_eq!(body, r#"{"keys":[]}"#);
+    }
+
+    // ── pass-through ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn non_oauth_path_passes_through_to_next_app() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let server = server_with(ClientStore::new(), sessions);
+        let resp = server.handle(&get("/dashboard"), &conn(), &OkApp).unwrap();
+        assert_eq!(200, resp.status_code);
+    }
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    /// Extract a top-level string field's value from a small JSON object —
+    /// good enough for the flat, hand-built response bodies under test.
+    fn extract_json_field(json: &str, key: &str) -> String {
+        let needle = format!("\"{key}\":\"");
+        let start = json.find(&needle).unwrap_or_else(|| panic!("field {key} not found in {json}")) + needle.len();
+        let end = json[start..].find('"').unwrap();
+        json[start..start + end].to_string()
     }
 }

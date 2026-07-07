@@ -1,9 +1,9 @@
 ---
 title: OAuth2 / OIDC SSO
-description: Authorization code flow with PKCE, session management, and RS256/ES256 JWT verification via JWKS.
+description: Authorization code flow with PKCE, session management, RS256/ES256 JWT verification via JWKS, and rws as its own OAuth 2.0 Authorization Server.
 ---
 
-The `sso` feature adds full OAuth 2.0 / OIDC support: authorization-code + PKCE flow, session management, and asymmetric JWT verification via a live JWKS endpoint.
+The `sso` feature adds full OAuth 2.0 / OIDC support: authorization-code + PKCE flow, session management, and asymmetric JWT verification via a live JWKS endpoint. The `sso-server` feature additionally lets `rws` act as its own OAuth 2.0 Authorization Server, issuing tokens instead of delegating to an external IdP.
 
 ```toml
 [dependencies]
@@ -238,3 +238,96 @@ let resp = Client::new()
 `.form()` percent-encodes each pair, joins them with `&`, and sets
 `Content-Type: application/x-www-form-urlencoded` — available on both the
 sync `RequestBuilder` and the async `AsyncRequestBuilder` (`http2` feature).
+
+## `rws` as its own OAuth 2.0 Authorization Server
+
+Everything above covers `rws` as an OAuth 2.0 / OIDC **client**, delegating
+login to an external identity provider. The `sso-server` feature (implies
+`sso` and `auth`) flips the role: `AuthServer` lets `rws` issue its own
+short-lived JWTs to downstream services or single-page apps, instead of
+always delegating to Google/Okta/etc.
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["sso-server"] }
+```
+
+```rust
+use std::sync::Arc;
+use std::time::Duration;
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::session::SessionStore;
+use rust_web_server::sso::server::{AuthServer, AuthServerConfig};
+use rust_web_server::sso::client_store::{ClientStore, OAuthClient, GrantType};
+
+let auth_server = AuthServer::new(AuthServerConfig {
+    issuer:            "https://myapp.com".into(),
+    signing_secret:    std::env::var("RWS_AUTH_SIGNING_SECRET").unwrap(),
+    access_token_ttl:  Duration::from_secs(3600),
+    refresh_token_ttl: Duration::from_secs(86_400 * 30),
+    clients: ClientStore::new()
+        .add(OAuthClient {
+            client_id:     "spa-frontend".into(),
+            client_secret: None, // public client, uses PKCE
+            redirect_uris: vec!["https://spa.example.com/callback".into()],
+            grants:        vec![GrantType::AuthorizationCode],
+            scopes:        vec!["openid".into(), "email".into()],
+        })
+        .add(OAuthClient {
+            client_id:     "backend-service".into(),
+            client_secret: Some("s3cr3t".into()),
+            redirect_uris: vec![],
+            grants:        vec![GrantType::ClientCredentials],
+            scopes:        vec!["api:read".into(), "api:write".into()],
+        }),
+    sessions: Arc::new(SessionStore::new(86_400)),
+});
+
+let app = App::new().wrap(auth_server);
+```
+
+`AuthServer` intercepts four paths and passes everything else through:
+
+| Path | Method | Purpose |
+|---|---|---|
+| `/oauth/token` | `POST` | Issues tokens for the `client_credentials`, `authorization_code` (+ PKCE), and `refresh_token` grants |
+| `/oauth/authorize` | `GET` | Starts the authorization-code flow for an end user |
+| `/.well-known/openid-configuration` | `GET` | Discovery document |
+| `/.well-known/jwks.json` | `GET` | Always `{"keys":[]}` — see below |
+
+A machine-to-machine client calls the token endpoint directly:
+
+```
+POST /oauth/token
+grant_type=client_credentials&client_id=backend-service&client_secret=s3cr3t
+
+→ {"access_token":"eyJ...","token_type":"Bearer","expires_in":3600}
+```
+
+:::caution[Two deviations from a textbook Authorization Server]
+- **Tokens are signed HS256**, not RSA/EC from a PEM private key — this
+  crate has no PEM/DER private-key parser, and HS256 is a fully adequate
+  choice when the issuer and every resource server share one secret.
+  `GET /.well-known/jwks.json` therefore always returns an empty key set —
+  there's no public key to publish for a symmetric algorithm. Configure
+  resource servers with the same `signing_secret` directly, e.g.
+  `auth::JwtLayer::new(secret)` or `auth::verify_jwt(token, secret)`.
+- **`/oauth/authorize` has no built-in login page.** It trusts an existing
+  application session: if the browser's session (default cookie, default
+  key `"user_id"`, override with `.subject_session_key()`) already
+  identifies a user, a code is minted immediately and the browser is
+  redirected straight to `redirect_uri?code=...`; otherwise it's redirected
+  to a configurable `login_url` (default `/login`) with
+  `?return_to=<original authorize URL>`. Building that login page — and
+  populating the session after a successful login — is the embedding
+  application's own responsibility, the same boundary `OidcAuth` draws
+  around needing an *external* IdP to already exist.
+:::
+
+`ClientStore` has no `::from_env()` — a list of clients with per-client
+secrets has no natural flat-env-var encoding (unlike `OidcConfig`'s
+one-client-per-process shape above). `ClientStore::new().add(...)` is the
+only registration path; load clients from wherever your application already
+keeps them (config file, database, secret manager) and build the store once
+at startup.

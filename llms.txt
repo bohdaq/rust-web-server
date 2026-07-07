@@ -252,6 +252,7 @@ let mcp = App::new().mcp("my-server", "1.0.0")
 | `crypto` | `hash_password`/`verify_password` (Argon2id), `generate_token` (CSPRNG), `signed_cookie`/`verify_signed_cookie` (HMAC-SHA256), `encrypted_cookie`/`decrypt_cookie` (AES-256-GCM) | `argon2`, `rand_core`, `hmac`, `sha2`, `aes-gcm` |
 | `csrf` | `CsrfLayer` + `CsrfToken` — double-submit cookie CSRF protection | `rand_core` |
 | `sso` | `OidcAuth` middleware, PKCE, RS256/ES256 JWT via JWKS, provider presets | `rsa`, `p256`, `sha2`, `serde`, `serde_json` |
+| `sso-server` | `AuthServer` — OAuth 2.0 Authorization Server (HS256 token issuer); implies `sso` + `auth` | (none beyond `sso`/`auth`) |
 | `webhook` | `verify_webhook_signature`, `WebhookProvider` (GitHub/Shopify/Stripe HMAC verification) | `hmac`, `sha2` |
 | `rewrite-regex` | `RewriteLayer::request_uri_regex_rewrite` — regex URI rewrite with `$1`/`${name}` capture expansion | `regex` |
 
@@ -625,6 +626,43 @@ let claims = cache.verify_jwt(&id_token, &VerifyOptions {
 // Supports RS256 (RSA) and ES256 (EC P-256). Auto-rotates keys on kid miss.
 ```
 
+### `rws` as its own OAuth 2.0 Authorization Server (`sso-server` feature, implies `sso` + `auth`)
+
+```rust
+use std::sync::Arc;
+use std::time::Duration;
+use rust_web_server::session::SessionStore;
+use rust_web_server::sso::server::{AuthServer, AuthServerConfig};
+use rust_web_server::sso::client_store::{ClientStore, OAuthClient, GrantType};
+
+let auth_server = AuthServer::new(AuthServerConfig {
+    issuer:            "https://myapp.com".into(),
+    signing_secret:    std::env::var("RWS_AUTH_SIGNING_SECRET")?,
+    access_token_ttl:  Duration::from_secs(3600),
+    refresh_token_ttl: Duration::from_secs(86_400 * 30),
+    clients: ClientStore::new().add(OAuthClient {
+        client_id:     "backend-service".into(),
+        client_secret: Some("s3cr3t".into()),
+        redirect_uris: vec![],
+        grants:        vec![GrantType::ClientCredentials],
+        scopes:        vec!["api:read".into()],
+    }),
+    sessions: Arc::new(SessionStore::new(86_400)),
+});
+let app = App::new().wrap(auth_server);
+// Intercepts: POST /oauth/token (client_credentials | authorization_code+PKCE | refresh_token),
+//             GET /oauth/authorize, GET /.well-known/openid-configuration, GET /.well-known/jwks.json
+```
+
+Two deliberate deviations from a textbook Authorization Server (both documented in `src/sso/server.rs`):
+tokens are signed HS256 via the existing `auth::build_jwt`, not an RSA/EC PEM key (this crate has no
+private-key PEM/DER parser) — so `/.well-known/jwks.json` always returns `{"keys":[]}`; configure
+resource servers with the same `signing_secret` directly. And `/oauth/authorize` has no built-in login
+page — it trusts an existing app session (default key `"user_id"`, override with
+`.subject_session_key()`), redirecting to a configurable `login_url` (default `/login`) if absent.
+`ClientStore` is code/builder-registered only (`.add(...)`) — no `::from_env()`, since a list of
+per-client secrets has no clean flat-env-var shape.
+
 ---
 
 ## Email / SMTP (src/mailer/mod.rs, requires `mailer` feature)
@@ -805,6 +843,7 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 | `IpFilter` | `ip_filter` | Allow or deny by IPv4/CIDR; 403 on block |
 | `CsrfLayer` | `csrf` | Double-submit cookie; 403 on mismatch for POST/PUT/PATCH/DELETE |
 | `OidcAuth` | `sso` | OAuth2/OIDC auth; redirects unauthenticated users to `/auth/login` |
+| `AuthServer` | `sso-server` | `rws` as its own OAuth 2.0 Authorization Server; intercepts `/oauth/token`, `/oauth/authorize`, `/.well-known/*`; HS256 tokens |
 | `MetricsLayer` | `metrics` | Per-route Prometheus counters + histograms |
 | `OtelLayer` / `otel::span` / `otel::client_span` | `otel` | W3C traceparent root span + nested child spans; exports to stdout or OTLP |
 | `CacheLayer` | `cache` | In-memory GET response cache; builder `.ttl(secs)` |
@@ -1852,7 +1891,8 @@ src/server/             — Server (bind, accept, process), ConnectionInfo, Addr
 src/service_discovery/  — BackendPool, DiscoverySource variants
 src/session/            — SessionStore, Session, cookie helpers
 src/mailer/             — Mailer, Email, EmailBuilder, SmtpTls, MailerError (mailer feature)
-src/sso/                — OidcAuth, OidcConfig, OidcProvider, JwksCache (sso feature)
+src/sso/                — OidcAuth, OidcConfig, OidcProvider, JwksCache (sso feature);
+                          AuthServer, ClientStore, OAuthClient (sso-server feature)
 src/state/              — AppWithState<S>
 src/storage/            — Storage, LocalStorage, S3Storage, AzureBlobStorage (storage-local /
                           storage-s3 / storage-azure features); aws_credentials — EKS IRSA / ECS /

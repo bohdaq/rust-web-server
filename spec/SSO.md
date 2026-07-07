@@ -323,7 +323,25 @@ let app = App::new().wrap(OidcAuth::new(config, sessions)); // sessions: Arc<Ses
 
 ---
 
-### Phase 6 — OAuth 2.0 Authorization Server (Token Issuer)
+### ✅ Phase 6 — OAuth 2.0 Authorization Server (Token Issuer) — Done (v17.96.0)
+
+**Genuinely new — unlike every phase before it, nothing in `src/sso/` implemented any part of this before this task.** `src/sso/server.rs` (`AuthServer`, `AuthServerConfig`) and `src/sso/client_store.rs` (`ClientStore`, `OAuthClient`, `GrantType`) are new files, gated behind a new `sso-server` Cargo feature (`= ["sso", "auth"]` — the `auth` feature dependency is itself a deviation explained below). `AuthServer` implements `Middleware` exactly like `OidcAuth` (Phase 4) does, but plays the opposite role: intercepting `POST /oauth/token`, `GET /oauth/authorize`, `GET /.well-known/openid-configuration`, and `GET /.well-known/jwks.json`, falling through to the wrapped `Application` for everything else.
+
+**Three deliberate, load-bearing deviations from this entry's own sketch, each made necessary by a real gap in what this crate already has:**
+
+1. **HS256, not an RSA/EC key loaded from PEM.** `signing_key_pem: String` in the sketch's `AuthServerConfig` assumes a PEM parser for private keys — this crate has none (rustls-pemfile handles TLS certs, not generic PKCS8/PKCS1 private-key DER extraction into an `rsa`/`p256` signing key), and `super::jwks::JwksCache` only ever *verifies* RS256/ES256, it never signs. Building a signing-side counterpart plus PEM/DER parsing for a feature that already has a fully adequate, already-tested alternative — this crate's existing `auth::build_jwt`/`auth::verify_jwt` HS256 machinery — would be substantial new security-sensitive surface for no functional gain when the issuer and every resource server are configured with the same shared secret (the actual common case for "rws issues its own tokens"). `AuthServerConfig.signing_secret: String` replaces `signing_key_pem`. The direct, honest consequence: **`GET /.well-known/jwks.json` always returns `{"keys":[]}`** — there is no public key to publish for a symmetric algorithm, stated plainly rather than papered over. This is also why `sso-server = ["sso", "auth"]` needed to newly depend on the `auth` feature (for `hmac`), not just `sso`.
+2. **No login page — an existing application session is trusted instead.** The sketch's `GET /oauth/authorize ... → redirect to login page or IdP, then back with code` assumes a username/password login UI this crate has never had any reason to build (the same class of gap `OidcAuth`, Phase 4, sidesteps by requiring an *external* IdP to already exist — here there is no external IdP to delegate to, so the gap is unavoidable and had to be designed around directly). `AuthServer` reads a configurable session key (default `"user_id"`, `.subject_session_key()`) from the browser's existing session via `crate::session::SessionStore` — the exact mechanism already established for exactly this purpose. Present → mint a code immediately and redirect straight to `redirect_uri`. Absent → redirect to a configurable `login_url` (default `/login`) with `?return_to=<original authorize URL>`, mirroring `OidcAuth`'s own unauthenticated-redirect shape. This is why `AuthServerConfig` gained a required `sessions: Arc<SessionStore>` field the sketch never included — the sketch never explained how `/oauth/authorize` would know if a user is already logged in, a real gap that needed a concrete answer, not an omission to leave unresolved.
+3. **No `ClientStore::from_env()`/`::from_db()`.** Unlike `OidcConfig` (Phase 5, exactly one client's worth of config per process, mapping cleanly to flat env vars), a `ClientStore` is a *list* of clients each with its own secret — there's no clean flat-env-var encoding for an arbitrary-length list of structured records, and client secrets belong in code, a config file, or a real secret store, not `RWS_OAUTH_CLIENT_N_SECRET`-style env var sprawl. `ClientStore::new().add(...)` (the sketch's own builder, unchanged) is the only registration path this phase implements.
+
+**Authorization codes and refresh tokens are opaque random strings** (24 random bytes, hex-encoded) held in `Mutex<HashMap<String, _>>`, not JWTs — codes are single-use (removed from the map the moment they're exchanged, so a replay attempt gets `invalid_grant`) and short-lived (60 seconds, not configurable — matches the narrow window a real redirect round-trip needs). `authorization_code`'s response includes `id_token` alongside `access_token`, but they're **the same signed JWT value** — the sketch lists them as separate fields, but there's no meaningfully different claim set to put in a second token when both describe the same authenticated subject at the same moment, so minting a second, functionally-identical JWT would be pure overhead.
+
+**PKCE** on the `authorization_code` grant reuses `super::pkce::base64url_encode` directly (computing `BASE64URL(SHA256(code_verifier))` inline in `handle_authorization_code` to compare against the stored `code_challenge`) rather than adding a new public "verify an arbitrary caller-supplied verifier" method to `PkceVerifier`/`PkceChallenge` — those types only ever construct from a freshly-generated random verifier (`PkceVerifier::new()`), which isn't the shape needed here (an already-known string arriving over the wire). Only `code_challenge_method=S256` is accepted; a request specifying `plain` is rejected outright, matching every other PKCE-supporting code path already in this crate (`OidcClient::authorization_url` never sends anything but S256 either).
+
+**Scope negotiation:** a token request naming no `scope` gets the client's full registered scope list; naming one gets it back only if every requested scope token is a subset of what the client is registered for, otherwise `invalid_scope` — enforced identically for `client_credentials` and available to `authorization_code`/`refresh_token` via the scope recorded at `/oauth/authorize` time.
+
+**Tests:** 25 new tests in a `server_tests` submodule of `src/sso/tests.rs` (behind `#[cfg(feature = "sso-server")]`), driving `AuthServer::handle` directly (no fake network servers needed — unlike every other phase, `AuthServer` makes no outbound HTTP calls of its own): both `ClientStore::get` paths; `client_credentials` success (including asserting no `refresh_token` is issued), unknown client, wrong secret, wrong grant type, out-of-bounds requested scope, and a narrower-than-full requested scope actually being honored in the issued token; an unsupported `grant_type` at `/oauth/token`; `/oauth/authorize` redirecting to login without a session, issuing a code and redirecting to the client with a session, and rejecting an unknown client, an unregistered `redirect_uri`, a client without the `authorization_code` grant, and `code_challenge_method=plain`; a full `authorization_code` round trip verified by decoding the issued JWT with `auth::verify_jwt` and checking `sub`; code reuse, wrong `redirect_uri`, and both PKCE mismatch and PKCE success; `refresh_token` success (new access token, no new refresh token) and an unknown refresh token failing; the discovery document's endpoint URLs; the JWKS document being exactly `{"keys":[]}`; and an unrelated path passing through to the next `Application` untouched. All 25 passed on essentially the first attempt (one field-name fix, `ContentRange.body` not `.content`) — `cargo test --features sso-server` runs 113 sso tests (88 + 25 new); `cargo test --features sso` (without `sso-server`) is unaffected at 88, confirming the feature gate actually excludes this code.
+
+**Effort:** matches this entry's own "enables `rws` to be the IdP" framing as the largest remaining phase — the first phase in this series with no pre-existing implementation to test, requiring new design decisions (documented above) rather than test-coverage archaeology.
 
 Enables `rws` to be the IdP for downstream services or single-page apps — it
 issues its own short-lived JWTs rather than delegating to an external provider.
@@ -349,17 +367,21 @@ GET  /.well-known/openid-configuration   → discovery document
 GET  /.well-known/jwks.json             → public keys for token verification
 ```
 
-**Configuration:**
+**Configuration** (matches the actual API — `signing_secret` not `signing_key_pem`, a required `sessions` field, and `ClientStore::new().add(...)` rather than `::from_env()`/`::from_db()`; see the deviations above):
 
 ```rust
-use rust_web_server::sso::server::{AuthServer, AuthServerConfig, ClientStore};
+use std::sync::Arc;
+use rust_web_server::session::SessionStore;
+use rust_web_server::sso::server::{AuthServer, AuthServerConfig};
+use rust_web_server::sso::client_store::ClientStore;
 
 let auth_server = AuthServer::new(AuthServerConfig {
     issuer:              "https://myapp.com".into(),
-    signing_key_pem:     env::var("RWS_AUTH_SIGNING_KEY")?,    // RSA or EC private key
+    signing_secret:      env::var("RWS_AUTH_SIGNING_SECRET")?, // HS256 shared secret
     access_token_ttl:    Duration::from_secs(3600),
     refresh_token_ttl:   Duration::from_secs(86400 * 30),
-    clients:             ClientStore::from_env()?,              // or ClientStore::from_db(pool)
+    clients:             ClientStore::new() /* .add(...) per client */,
+    sessions:            Arc::new(SessionStore::new(86_400)),
 });
 
 let app = App::new().wrap(auth_server);
@@ -387,7 +409,7 @@ ClientStore::new()
     })
 ```
 
-**New module:** `src/sso/server.rs`, `src/sso/client_store.rs`
+**Module:** `src/sso/server.rs`, `src/sso/client_store.rs`
 
 ---
 
@@ -467,7 +489,7 @@ src/http_client/
 | Feature | Enables |
 |---|---|
 | `sso` | Phases 1–5 (OIDC client, JWKS, discovery, provider presets). Implies `http2` for TLS. |
-| `sso-server` | Phase 6 (Authorization Server). Implies `sso`. |
+| `sso-server` | Phase 6 (Authorization Server). Implies `sso` and `auth` (reuses `auth::build_jwt`/`verify_jwt` for HS256 token signing — see Phase 6's completion note for why not RSA/EC). |
 | `sso-saml` | Phase 7 (SAML 2.0 SP). Adds `quick-xml`. |
 
 ---
@@ -536,5 +558,5 @@ helpers handle persistence.
 | 3 | OIDC discovery; `OidcProvider` struct; named presets | ✅ Done (v17.93.0) |
 | 4 | OAuth 2.0 Authorization Code + PKCE flow; `OidcAuth` middleware | ✅ Done (v17.94.0) |
 | 5 | Provider presets (Google, Microsoft, GitHub, Okta, Auth0, Keycloak); `from_env()` | ✅ Done (v17.95.0) |
-| 6 | OAuth 2.0 Authorization Server; `/oauth/token`; `/.well-known/*` | Pending |
+| 6 | OAuth 2.0 Authorization Server; `/oauth/token`; `/.well-known/*` | ✅ Done (v17.96.0) |
 | 7 | SAML 2.0 SP; ACS handler; XML signature verification; attribute mapping | Pending |
