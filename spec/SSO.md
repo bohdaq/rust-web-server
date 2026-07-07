@@ -35,10 +35,10 @@ other services). SAML 2.0 is included for enterprise / B2B scenarios.
 
 | Crate | Why |
 |---|---|
-| `rsa` or `p256` | RS256 / ES256 public-key JWT verification |
-| `base64ct` | PKCE `code_challenge` (SHA-256 + base64url) |
-| `sha2` | Already present in `auth` feature; reused for PKCE |
-| `quick-xml` | SAML 2.0 XML parsing (Phase 7 only) |
+| `rsa` and `p256` | RS256 / ES256 public-key JWT verification (both added — not either/or as originally scoped) |
+| ~~`base64ct`~~ | Not added — PKCE `code_challenge` (SHA-256 + base64url) is hand-rolled in `pkce.rs`, matching this crate's base64 elsewhere |
+| `sha2` | Already present in `auth` feature; reused for PKCE and (Phase 7) SAML digest/signature verification |
+| ~~`quick-xml`~~ | Not added — Phase 7's SAML XML parsing is hand-rolled (`src/sso/saml/xml.rs`); see Phase 7's completion note |
 | HTTP client | Token endpoint, JWKS fetch, UserInfo, discovery (new `src/http_client`) |
 
 All new deps are gated behind new Cargo features so existing builds are unaffected.
@@ -413,53 +413,29 @@ ClientStore::new()
 
 ---
 
-### Phase 7 — SAML 2.0 Service Provider
+### ✅ Phase 7 — SAML 2.0 Service Provider — Done (v17.97.0)
 
-Enterprise and B2B SSO (Active Directory Federation Services, Okta SAML,
-Google Workspace SAML). More complex than OIDC: XML-based, signature over XML
-canonicalised form, metadata exchange.
+**Genuinely new, like Phase 6** — nothing in `src/sso/` implemented any part of SAML before this task. Four new files under `src/sso/saml/`, gated behind a new `sso-saml` Cargo feature (`= ["sso"]`).
 
-```rust
-use rust_web_server::sso::saml::{SamlSp, SamlConfig};
+**No `quick-xml` dependency — the single largest deviation from this entry's own sketch.** `src/sso/saml/xml.rs` is a small, purpose-built XML parser instead, consistent with this crate's established, repeated pattern of hand-rolling every text format it parses (JSON, HTTP, form-urlencoded, `.well-known` documents — see every earlier phase in this file) rather than taking a parsing-convenience dependency. It is not a general XML library: it tracks each element's exact byte range in the source document (needed for signature verification, below) and rejects any `<!DOCTYPE>` outright — eliminating the entire XXE (XML External Entity) attack surface by never implementing DTD/entity-resolution machinery at all, rather than needing to carefully disable it in a general-purpose parser.
 
-let app = App::new()
-    .wrap(SamlSp::new(SamlConfig {
-        sp_entity_id:   "https://myapp.com/saml/metadata".into(),
-        sp_acs_url:     "https://myapp.com/saml/acs".into(),        // Assertion Consumer Service
-        idp_metadata:   SamlIdpMetadata::from_url("https://idp.corp.com/metadata")?,
-        // or:
-        idp_metadata:   SamlIdpMetadata::from_file("idp-metadata.xml")?,
-        sign_requests:  false,                // sign AuthnRequests with SP private key
-        sp_private_key: None,
-    }));
+**Signature verification is byte-exact against the transmitted document, not full XML canonicalization (C14N)** — the single most consequential scope decision in this phase, documented at length in `assertion.rs`'s module docs. Correct XML-DSig verification canonicalizes both `SignedInfo` (before checking `SignatureValue`) and the signed element (before checking its `Reference/DigestValue`), so that whitespace/attribute-order reformatting doesn't invalidate a semantically-unchanged signature. Implementing exclusive C14N correctly (namespace inheritance, attribute ordering, comment stripping) is a large, easy-to-get-subtly-wrong undertaking in its own right. This implementation instead computes the `Assertion`'s digest over its own raw byte range with the `Signature` element's raw byte range excised (the enveloped-signature transform, applied to literal bytes), and verifies `SignatureValue` over `SignedInfo`'s raw byte range — no reformatting, no reserialization. The safety argument: this is **fail-closed, not fail-open**. An IdP whose signing process reformats XML between signing and transmission would have *legitimate* logins rejected (a loud, immediate compatibility problem) — never would a *forged* assertion be accepted. No mainstream IdP (Okta, Azure AD, Google Workspace, Keycloak) reformats between signing and transmission in the browser-POST flow this SP implements. Only `RSA-SHA256` is supported (no SHA-1, no EC).
 
-// Automatically registers:
-// GET  /saml/metadata → SP metadata XML (give this URL to the IdP)
-// GET  /saml/login    → redirect to IdP with AuthnRequest
-// POST /saml/acs      → receive and validate SAML Response, establish session
-// GET  /saml/logout   → SP-initiated single logout
-```
+**XML Signature Wrapping (XSW) mitigation is structural, not an afterthought.** A well-documented SAML vulnerability class involves an attacker adding a second, attacker-controlled `Assertion` alongside a legitimately-signed one, hoping a naive verifier checks the signed copy but the application reads attributes from the unsigned one. `parse_and_verify` requires **exactly one** `Assertion` in the response (rejecting zero or more than one outright), requires `Signature` to be a **direct child** of that same `Assertion`, requires `Reference/@URI` to point at that assertion's own `ID`, and reads every claim from that same parsed node — there is never a second search pass that could be pointed at different content than what was verified. `EncryptedAssertion` is rejected outright (with a clear error), not silently ignored — no XML decryption is implemented.
 
-**What SAML assertion validation checks:**
-- XML signature over the `Response` or `Assertion` element
-- `Conditions/NotBefore` and `NotOnOrAfter` time windows
-- `AudienceRestriction` matches SP entity ID
-- `InResponseTo` matches the AuthnRequest ID (prevents replay)
-- `SubjectConfirmation` method is `urn:oasis:names:tc:SAML:2.0:cm:bearer`
+**No X.509 parser — a minimal DER/ASN.1 TLV walker instead.** `src/sso/saml/der.rs` locates an X.509 certificate's `subjectPublicKeyInfo` field by skipping past `tbsCertificate`'s preceding fields (`version`, `serialNumber`, `signature`, `issuer`, `validity`, `subject`) using only their DER tag+length framing, then hands that slice to `rsa::pkcs8::DecodePublicKey` (already a transitive capability of the `rsa` crate this codebase already depends on for JWKS verification) — not a general X.509 parser interpreting extensions, validity dates, or name constraints, none of which this SP needs.
 
-**Attribute mapping** (IdP-specific names → `OidcClaims` shape):
+**`AuthnRequest`s use the HTTP-POST binding (an auto-submitting HTML form), not HTTP-Redirect**, and are **never signed** — two further deviations from the sketch's implicit assumptions. HTTP-Redirect requires DEFLATE-compressing the request; this crate has no general-purpose compression dependency to reuse (the `gzip` support elsewhere in this crate is a hand-rolled *response*-compression encoder, not a DEFLATE library suitable for this). HTTP-POST is an equally spec-compliant binding. `sign_requests`/`sp_private_key` from the sketch don't exist — this crate has no private-key PEM/DER parser (the identical reason `AuthServer`, Phase 6, signs its own tokens HS256 instead of RSA/EC) — and most IdPs (Okta, Azure AD, Google Workspace, Keycloak) accept unsigned `AuthnRequest`s by default; the flow's security rests on the IdP-signed *assertion*, which is fully verified.
 
-```rust
-SamlConfig {
-    // …
-    attribute_map: AttributeMap::new()
-        .map("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", "email")
-        .map("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name", "name")
-        .map("http://schemas.microsoft.com/ws/2008/06/identity/claims/groups", "groups"),
-}
-```
+**Logout is local-only** — `/saml/logout` destroys the SP's own session and redirects home; there is no SP-initiated `LogoutRequest`/`LogoutResponse` exchange with the IdP (true SAML Single Logout). This mirrors `OidcAuth`'s own logout (Phase 4), which draws the identical boundary around OIDC's `end_session_endpoint` — a precedent already established in this same codebase, not a new decision.
 
-**Cargo feature:** `sso-saml` (adds `quick-xml` dep)
+**Attribute mapping produces `SamlClaims { name_id, attributes: HashMap<String,String> }`, not `OidcClaims`.** This entry's own sketch maps SAML attributes "into `OidcClaims` shape" and its own example maps a `groups` attribute — but `OidcClaims` (Phase 2) was deliberately built without a `groups`/`extra` field. Reusing it here would silently drop exactly the attribute the sketch's own example asks to map. SAML's free-form attribute model is a better fit for a plain map than OIDC's fixed claim set anyway.
+
+**`SamlConfig` gained a required `sessions: Arc<SessionStore>` field** the sketch never included, for the same reason `AuthServerConfig` (Phase 6) needed one: `/saml/login`/`/saml/acs` need somewhere to store the pre-login `AuthnRequest` ID (for the `InResponseTo` anti-replay check) and, after success, the established `SamlClaims` — reusing the same `crate::session::SessionStore` mechanism `OidcAuth` and `AuthServer` already use.
+
+**Tests:** 38 new tests in `src/sso/saml/tests.rs` (behind `#[cfg(feature = "sso-saml")]`), using a real, freshly-generated RSA-2048 keypair and hand-built XML/DER documents throughout (no fake network servers needed — like `AuthServer`, `SamlSp` makes no outbound HTTP calls of its own; `SamlIdpMetadata::from_url` is the only network-touching function and isn't itself exercised, since `from_str`/`from_file` cover the parsing logic it shares): the XML parser (nesting, same-name nested tags, both attribute-quote styles, namespace-prefix stripping, entities, CDATA, comments, DOCTYPE rejection, descendant search); the DER walker (round-tripping a real RSA public key through a fake-but-DER-valid X.509 certificate, and rejecting truncated input); IdP metadata parsing (entity ID, preferring an HTTP-POST binding SSO URL, missing-descriptor errors, reading from a real temp file); a full signed-assertion verification suite covering the success path and every rejection path (tampered attribute, tampered `NameID`, wrong signing key, wrong issuer, expired, not-yet-valid, wrong audience, wrong `InResponseTo`, wrong `Recipient`, non-bearer confirmation method, `EncryptedAssertion`, zero assertions, a spliced-in second `Assertion` — the XSW check — and a stripped-signature document); and `SamlSp` middleware tests (unauthenticated redirect, metadata endpoint, login form rendering, ACS success storing claims and redirecting, `AttributeMap` translation, logout, and authenticated pass-through with header injection). All 38 passed with only two small fixes along the way (a raw-string-delimiter collision in test code from `URI="#{...}"` colliding with Rust's `r#"..."#` terminator, and a missing `#[derive(Debug)]` needed for `.unwrap_err()` in tests) — the verification logic itself was correct on the first attempt. `cargo test --features sso-saml` runs 126 sso-namespace tests (88 + 38 new); `cargo test --features sso` (without `sso-saml`) is unaffected at 88, confirming the feature gate excludes this code. Full default/http1/http2 three-way suite unaffected.
+
+**Effort:** large, matching this entry's own estimate ("more complex than OIDC") and exceeding even Phase 6 — this phase required building an XML parser, a DER/ASN.1 reader, and an XML-DSig-adjacent verifier from nothing, none of which any prior phase's infrastructure could be reused for directly (only the RSA/SHA-256 primitives from `jwks.rs`'s verification code carried over).
 
 ---
 
@@ -476,9 +452,11 @@ src/sso/
   server.rs        OAuth 2.0 Authorization Server (Phase 6)
   client_store.rs  OAuthClient registry (Phase 6)
   saml/
-    mod.rs         SamlSp middleware; ACS handler; metadata handler
-    assertion.rs   XML parse + validate SAML Response and Assertion
-    metadata.rs    parse IdP metadata XML; fetch from URL
+    mod.rs         SamlSp middleware; ACS handler; metadata handler; AttributeMap; SamlClaims
+    assertion.rs   verify + validate a signed SAML Response/Assertion (byte-exact, not C14N)
+    metadata.rs    parse IdP metadata XML; from_file() / from_url() / from_str()
+    xml.rs         small hand-rolled XML parser (not quick-xml); tracks byte ranges per node
+    der.rs         minimal DER/ASN.1 walker; extracts subjectPublicKeyInfo from an X.509 cert
 
 src/http_client/
   mod.rs           HttpClient; plain + TLS (rustls); .get() / .post() / .form()
@@ -490,7 +468,7 @@ src/http_client/
 |---|---|
 | `sso` | Phases 1–5 (OIDC client, JWKS, discovery, provider presets). Implies `http2` for TLS. |
 | `sso-server` | Phase 6 (Authorization Server). Implies `sso` and `auth` (reuses `auth::build_jwt`/`verify_jwt` for HS256 token signing — see Phase 6's completion note for why not RSA/EC). |
-| `sso-saml` | Phase 7 (SAML 2.0 SP). Adds `quick-xml`. |
+| `sso-saml` | Phase 7 (SAML 2.0 SP). Implies `sso`. Adds no new dependency — a hand-rolled XML parser is used instead of `quick-xml` (see Phase 7's completion note for why). |
 
 ---
 
@@ -559,4 +537,4 @@ helpers handle persistence.
 | 4 | OAuth 2.0 Authorization Code + PKCE flow; `OidcAuth` middleware | ✅ Done (v17.94.0) |
 | 5 | Provider presets (Google, Microsoft, GitHub, Okta, Auth0, Keycloak); `from_env()` | ✅ Done (v17.95.0) |
 | 6 | OAuth 2.0 Authorization Server; `/oauth/token`; `/.well-known/*` | ✅ Done (v17.96.0) |
-| 7 | SAML 2.0 SP; ACS handler; XML signature verification; attribute mapping | Pending |
+| 7 | SAML 2.0 SP; ACS handler; XML signature verification; attribute mapping | ✅ Done (v17.97.0) |

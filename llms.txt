@@ -253,6 +253,7 @@ let mcp = App::new().mcp("my-server", "1.0.0")
 | `csrf` | `CsrfLayer` + `CsrfToken` — double-submit cookie CSRF protection | `rand_core` |
 | `sso` | `OidcAuth` middleware, PKCE, RS256/ES256 JWT via JWKS, provider presets | `rsa`, `p256`, `sha2`, `serde`, `serde_json` |
 | `sso-server` | `AuthServer` — OAuth 2.0 Authorization Server (HS256 token issuer); implies `sso` + `auth` | (none beyond `sso`/`auth`) |
+| `sso-saml` | `SamlSp` — SAML 2.0 Service Provider, ACS handler, RSA-SHA256 XML signature verification; implies `sso` | (none — hand-rolled XML parser, not quick-xml) |
 | `webhook` | `verify_webhook_signature`, `WebhookProvider` (GitHub/Shopify/Stripe HMAC verification) | `hmac`, `sha2` |
 | `rewrite-regex` | `RewriteLayer::request_uri_regex_rewrite` — regex URI rewrite with `$1`/`${name}` capture expansion | `regex` |
 
@@ -663,6 +664,35 @@ page — it trusts an existing app session (default key `"user_id"`, override wi
 `ClientStore` is code/builder-registered only (`.add(...)`) — no `::from_env()`, since a list of
 per-client secrets has no clean flat-env-var shape.
 
+## SAML 2.0 Service Provider (src/sso/saml/, `sso-saml` feature, implies `sso`)
+
+```rust
+use std::sync::Arc;
+use rust_web_server::session::SessionStore;
+use rust_web_server::sso::saml::{SamlSp, SamlConfig, SamlIdpMetadata, AttributeMap};
+
+let saml_sp = SamlSp::new(SamlConfig {
+    sp_entity_id: "https://myapp.com/saml/metadata".into(),
+    sp_acs_url:   "https://myapp.com/saml/acs".into(),
+    idp_metadata: SamlIdpMetadata::from_file("idp-metadata.xml")?,
+    sessions:     Arc::new(SessionStore::new(86_400)),
+})
+.attribute_map(AttributeMap::new()
+    .map("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", "email"));
+
+let app = App::new().wrap(saml_sp);
+// Intercepts: GET /saml/metadata, GET /saml/login, POST /saml/acs, GET /saml/logout
+```
+
+`/saml/acs` verifies RSA-SHA256 XML signatures, requires exactly one `Assertion` (signature-wrapping
+mitigation), and checks `Conditions`/`AudienceRestriction`/`InResponseTo`/`SubjectConfirmation` per
+spec. Four documented deviations (all in `src/sso/saml/mod.rs`'s module docs): no `quick-xml` dep (a
+small hand-rolled XML parser is used instead, rejecting `<!DOCTYPE>` outright — no XXE surface);
+signature verification is byte-exact against the transmitted document, not full XML C14N (fail-closed,
+not fail-open); `AuthnRequest`s use the HTTP-POST binding, unsigned (no DEFLATE dependency, no
+private-key parser); logout is local-only (no IdP `LogoutRequest`, mirroring `OidcAuth`). `AttributeMap`
+maps into `SamlClaims { name_id, attributes }`, not `OidcClaims` (which has no `groups` field).
+
 ---
 
 ## Email / SMTP (src/mailer/mod.rs, requires `mailer` feature)
@@ -844,6 +874,7 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 | `CsrfLayer` | `csrf` | Double-submit cookie; 403 on mismatch for POST/PUT/PATCH/DELETE |
 | `OidcAuth` | `sso` | OAuth2/OIDC auth; redirects unauthenticated users to `/auth/login` |
 | `AuthServer` | `sso-server` | `rws` as its own OAuth 2.0 Authorization Server; intercepts `/oauth/token`, `/oauth/authorize`, `/.well-known/*`; HS256 tokens |
+| `SamlSp` | `sso-saml` | SAML 2.0 Service Provider; intercepts `/saml/{metadata,login,acs,logout}`; RSA-SHA256 XML signature verification |
 | `MetricsLayer` | `metrics` | Per-route Prometheus counters + histograms |
 | `OtelLayer` / `otel::span` / `otel::client_span` | `otel` | W3C traceparent root span + nested child spans; exports to stdout or OTLP |
 | `CacheLayer` | `cache` | In-memory GET response cache; builder `.ttl(secs)` |
@@ -1892,7 +1923,8 @@ src/service_discovery/  — BackendPool, DiscoverySource variants
 src/session/            — SessionStore, Session, cookie helpers
 src/mailer/             — Mailer, Email, EmailBuilder, SmtpTls, MailerError (mailer feature)
 src/sso/                — OidcAuth, OidcConfig, OidcProvider, JwksCache (sso feature);
-                          AuthServer, ClientStore, OAuthClient (sso-server feature)
+                          AuthServer, ClientStore, OAuthClient (sso-server feature);
+                          saml::{SamlSp, SamlConfig, SamlIdpMetadata, AttributeMap} (sso-saml feature)
 src/state/              — AppWithState<S>
 src/storage/            — Storage, LocalStorage, S3Storage, AzureBlobStorage (storage-local /
                           storage-s3 / storage-azure features); aws_credentials — EKS IRSA / ECS /

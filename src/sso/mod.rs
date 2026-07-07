@@ -36,6 +36,7 @@
 //! | [`oidc_auth`]   | [`OidcAuth`] middleware                                |
 //! | [`server`]      | [`AuthServer`] — `rws` as its own OAuth 2.0 Authorization Server (`sso-server` feature) |
 //! | [`client_store`]| [`ClientStore`] / [`OAuthClient`] — clients registered with [`server::AuthServer`] (`sso-server` feature) |
+//! | [`saml`]        | [`saml::SamlSp`] — SAML 2.0 Service Provider (`sso-saml` feature) |
 
 #[cfg(test)]
 pub(crate) mod tests;
@@ -51,6 +52,9 @@ pub mod pkce;
 pub mod client_store;
 #[cfg(feature = "sso-server")]
 pub mod server;
+
+#[cfg(feature = "sso-saml")]
+pub mod saml;
 
 // ── public re-exports ─────────────────────────────────────────────────────────
 

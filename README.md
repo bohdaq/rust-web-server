@@ -247,6 +247,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Signed and encrypted cookies — `signed_cookie` (HMAC-SHA256, tamper-evident) and `encrypted_cookie` (AES-256-GCM, confidential) (`crypto` feature)
 - OAuth2 / OIDC SSO — authorization-code + PKCE flow; RS256/ES256 JWT via JWKS; `OidcAuth` middleware; presets for Google, Microsoft, GitHub, Okta, Auth0, Keycloak; `from_env()`; `sso` feature
 - OAuth 2.0 Authorization Server — `AuthServer` issues its own HS256 JWTs (`client_credentials`, `authorization_code` + PKCE, `refresh_token` grants); `ClientStore` registers clients; `sso-server` feature
+- SAML 2.0 SSO — `SamlSp` Service Provider middleware; ACS handler; RSA-SHA256 XML signature verification; `AttributeMap` for IdP attribute translation; `sso-saml` feature
 - Webhook signature verification — `verify_webhook_signature` for GitHub (`X-Hub-Signature-256`), Shopify (`X-Shopify-Hmac-Sha256`), and Stripe (`Stripe-Signature`, with replay-window tolerance) (`webhook` feature)
 - Request / response rewriting — `RewriteLayer` rewrites headers, URI, status, body bytes; `.request_uri_regex_rewrite()` for nginx-style regex URI rewrites with capture-group expansion (`rewrite-regex` feature)
 
@@ -337,6 +338,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 | `csrf` | Double-submit cookie CSRF protection |
 | `sso` | OAuth2/OIDC SSO — `OidcAuth` middleware, RS256/ES256 JWT via JWKS, PKCE, provider presets (Google · Microsoft · GitHub · Okta · Auth0 · Keycloak) |
 | `sso-server` | `AuthServer` — `rws` as its own OAuth 2.0 Authorization Server (HS256 token issuer); implies `sso` and `auth` |
+| `sso-saml` | `SamlSp` — SAML 2.0 Service Provider; ACS handler; RSA-SHA256 XML signature verification; implies `sso` |
 | `mailer` | SMTP email — `Mailer::from_env()` + `Email::builder()`; plain, STARTTLS, and SMTPS; multipart text+HTML; AUTH PLAIN; no third-party mail library (STARTTLS/SMTPS additionally require `http-client` or `http2`) |
 | `jobs` | `JobQueue` — in-memory background job queue with retry + exponential backoff. `PersistentJobQueue` (additionally requires a `model-*` feature) persists jobs to survive a crash/restart. |
 | `storage-local` | `LocalStorage` — file storage on local disk; no new deps |

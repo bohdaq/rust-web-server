@@ -188,6 +188,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `PkceVerifier` / `PkceChallenge` | `sso` | RFC 7636 PKCE. `PkceVerifier::new()` generates a 32-byte random code verifier; `.challenge()` returns the S256 `PkceChallenge` to include in the authorization URL. |
 | `AuthServer` / `AuthServerConfig` | `sso-server` | `rws` as its own OAuth 2.0 Authorization Server (Middleware). Intercepts `POST /oauth/token` (`client_credentials`, `authorization_code` + PKCE, `refresh_token` grants), `GET /oauth/authorize`, `GET /.well-known/openid-configuration`, `GET /.well-known/jwks.json`. Signs tokens with HS256 via `auth::build_jwt` (not RSA/EC — see `src/sso/server.rs` docs), so `jwks.json` always returns an empty key set. `/oauth/authorize` trusts an existing app session (configurable key, default `"user_id"`) rather than a built-in login page; redirects to a configurable `login_url` (default `/login`) if absent. |
 | `ClientStore` / `OAuthClient` / `GrantType` | `sso-server` | Registry of OAuth 2.0 clients for `AuthServer`. `ClientStore::new().add(OAuthClient{...}).get(client_id)`. `OAuthClient.client_secret: Option<String>` (`None` = public/PKCE-only client). No `::from_env()` — client secrets belong in code or a secret store. |
+| `SamlSp` / `SamlConfig` | `sso-saml` | SAML 2.0 Service Provider (Middleware). Intercepts `GET /saml/metadata`, `GET /saml/login`, `POST /saml/acs`, `GET /saml/logout`. Verifies `RSA-SHA256` XML signatures byte-exact (not full C14N — see `src/sso/saml/assertion.rs` docs), rejects multi-`Assertion` documents (XSW mitigation) and `EncryptedAssertion`. `AuthnRequest`s use HTTP-POST binding, unsigned. Logout is local-only (no IdP `LogoutRequest`). |
+| `SamlIdpMetadata` | `sso-saml` | Parsed IdP metadata: `entity_id`, `sso_url`, `signing_key: RsaPublicKey`. `::from_file(path)` / `::from_url(url)` / `::from_str(xml)`. |
+| `AttributeMap` / `SamlClaims` | `sso-saml` | `AttributeMap::new().map(saml_attribute_name, field)` translates IdP attribute names into `SamlClaims { name_id, attributes: HashMap<String,String> }` — not `OidcClaims` (no `groups` field to hold the design sketch's own example mapping). `SamlSp::claims(req)`/`::name_id()`/`::attr(req, field)` read the injected claims. |
 | `Mailer` | `mailer` (requires `mailer` feature; STARTTLS/SMTPS additionally require `http-client` or `http2`) | SMTP mailer. `Mailer::from_env()` reads `RWS_SMTP_HOST/PORT/USER/PASSWORD/FROM/TLS/TIMEOUT_MS`. `mailer.send(&email)` opens a TCP connection, negotiates TLS (STARTTLS or SMTPS), authenticates with `AUTH PLAIN`, and delivers the message. Three TLS modes: `SmtpTls::None` (plain, port 25), `SmtpTls::Starttls` (default, port 587), `SmtpTls::Smtps` (implicit TLS, port 465). |
 | `Email` / `EmailBuilder` | `mailer` | RFC 5322 email builder. `Email::builder().to(addr).subject(s).text(body).html(body).cc(addr).bcc(addr).reply_to(addr).build()`. Validates that at least one `To:` address, a subject, and a body (text or HTML) are provided. Generates `multipart/alternative` when both text and HTML are set. |
 | `SmtpTls` | `mailer` | Enum for SMTP TLS mode: `None`, `Starttls`, `Smtps`. |
@@ -4523,3 +4526,53 @@ grant_type=client_credentials&client_id=backend-service&client_secret=s3cr3t
 2. **`/oauth/authorize` has no built-in login page.** It trusts an existing application session: if the browser's session (default cookie-backed, default key `"user_id"`, override with `.subject_session_key()`) already identifies a user, a code is minted immediately; otherwise the browser is redirected to a configurable `login_url` (default `/login`) with `?return_to=<original authorize URL>`. Building that login page — and populating the session after a successful login — is the embedding application's own responsibility, the same boundary `OidcAuth` draws around needing an *external* IdP to already exist.
 
 `ClientStore` has no `::from_env()` — a list of clients with per-client secrets has no natural flat-env-var encoding (unlike `OidcConfig`'s one-client-per-process shape, Use Case #58), so `ClientStore::new().add(...)` is the only registration path; load clients from wherever your application already keeps them (config file, database, secret manager) and build the store at startup.
+
+---
+
+### 77. SAML 2.0 Service Provider
+
+`sso-saml` feature (implies `sso`). Enterprise/B2B SSO for IdPs that only speak SAML (AD FS, Okta SAML, Google Workspace SAML, Keycloak) — the SAML counterpart to `OidcAuth` (Use Case #58):
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["sso-saml"] }
+```
+
+```rust
+use std::sync::Arc;
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::session::SessionStore;
+use rust_web_server::sso::saml::{SamlSp, SamlConfig, SamlIdpMetadata, AttributeMap};
+
+let saml_sp = SamlSp::new(SamlConfig {
+    sp_entity_id: "https://myapp.com/saml/metadata".into(),
+    sp_acs_url:   "https://myapp.com/saml/acs".into(),
+    idp_metadata: SamlIdpMetadata::from_file("idp-metadata.xml")?,
+    sessions:     Arc::new(SessionStore::new(86_400)),
+})
+.attribute_map(
+    AttributeMap::new()
+        .map("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", "email")
+        .map("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name", "name"),
+);
+
+let app = App::new().wrap(saml_sp);
+// Registers: GET /saml/metadata, GET /saml/login, POST /saml/acs, GET /saml/logout
+
+// Inside any protected handler:
+fn dashboard(req: &Request) {
+    let email = rust_web_server::sso::saml::SamlSp::attr(req, "email");
+}
+```
+
+**What `/saml/acs` validates**, on every SAML `Response`: `RSA-SHA256` XML signature over the `Assertion`; exactly one `Assertion` present (rejects zero or multiple — a signature-wrapping-attack mitigation); `Issuer` matches the configured IdP; `Conditions` `NotBefore`/`NotOnOrAfter` (60s leeway); `AudienceRestriction` matches the SP's own entity ID; `InResponseTo` matches the stored `AuthnRequest` ID; `SubjectConfirmation` method is bearer; `SubjectConfirmationData/@Recipient` matches the ACS URL.
+
+**Four deliberate scope decisions**, all documented at length in `src/sso/saml/assertion.rs` and `src/sso/saml/mod.rs`'s module docs (and in `docs/src/content/docs/features/saml.md`):
+
+1. **No `quick-xml` dependency** — a small, purpose-built XML parser is hand-rolled instead (`src/sso/saml/xml.rs`), consistent with this crate's existing philosophy elsewhere (hand-rolled JSON, HTTP, form-urlencoded). It never processes `<!DOCTYPE>` — rejected outright, eliminating XXE by never implementing entity resolution.
+2. **Signature verification is byte-exact, not full XML C14N** — verifies against the literal transmitted bytes rather than a canonicalized form. This is fail-closed, not fail-open: an IdP that reformats XML between signing and transmission would have legitimate logins rejected, never would a forged assertion be accepted. Only `RSA-SHA256` is supported; `EncryptedAssertion` is rejected outright.
+3. **`AuthnRequest`s use the HTTP-POST binding** (an auto-submitting HTML form), not HTTP-Redirect (which needs DEFLATE compression this crate has no dependency for), and are **never signed** — most IdPs accept unsigned requests by default; the flow's security rests on the IdP-signed assertion, fully verified per above.
+4. **Logout is local-only** — `/saml/logout` destroys the SP's own session; no SP-initiated `LogoutRequest`/`LogoutResponse` exchange with the IdP, mirroring `OidcAuth`'s own logout boundary.
+
+**`AttributeMap` maps into `SamlClaims { name_id, attributes: HashMap<String,String> }`, not `OidcClaims`** — `OidcClaims` (Use Case #58) was deliberately built without a `groups` field, and this feature's own attribute-mapping example maps exactly a `groups` attribute; reusing `OidcClaims` here would silently drop it.

@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.96.0"
+version = "17.97.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
@@ -41,6 +41,7 @@ csrf   = ["dep:rand_core"]
 mailer = []  # plain SMTP; STARTTLS/SMTPS additionally requires http-client or http2
 sso    = ["dep:rsa", "dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:serde_json", "http-client"]
 sso-server = ["sso", "auth"]  # AuthServer: rws as its own OAuth 2.0 token issuer; reuses auth's HS256 build_jwt/verify_jwt (see src/sso/server.rs docs for why not RSA/EC)
+sso-saml   = ["sso"]  # SamlSp: SAML 2.0 Service Provider; no new deps — hand-rolled XML parser, not quick-xml (see src/sso/saml/mod.rs docs)
 jobs   = []  # in-memory JobQueue; PersistentJobQueue additionally requires a model-* feature
 storage-local = []  # LocalStorage; no new deps
 storage-s3    = ["dep:hmac", "dep:sha2", "http-client"]  # S3Storage; AWS SigV4 via hmac+sha2, no AWS SDK

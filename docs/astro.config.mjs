@@ -75,6 +75,7 @@ export default defineConfig({
             { label: 'Server-Sent Events',     link: '/features/sse/' },
             { label: 'Auth',                   link: '/features/auth/' },
             { label: 'OAuth2 / OIDC SSO',      link: '/features/sso/' },
+            { label: 'SAML 2.0 SSO',           link: '/features/saml/' },
             { label: 'CSRF Protection',        link: '/features/csrf/' },
             { label: 'Sessions',               link: '/features/sessions/' },
             { label: 'Email / SMTP',           link: '/features/email/' },
