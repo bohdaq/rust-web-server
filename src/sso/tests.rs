@@ -1,16 +1,23 @@
 //! Unit tests for the SSO module.
 //!
 //! All tests operate on pure in-memory logic — no network calls are made,
-//! except the `exchange_code` tests and the `jwks_tests`/`discovery_tests`/
-//! `oidc_auth_tests` modules below, which use an in-process loopback
-//! `TcpListener` as a fake token/JWKS/discovery/userinfo endpoint (same
-//! pattern as `http_client::tests`) rather than a real IdP.
+//! except the `exchange_code` tests and the
+//! `jwks_tests`/`discovery_tests`/`oidc_auth_tests`/`config_tests` modules
+//! below, which use an in-process loopback `TcpListener` as a fake
+//! token/JWKS/discovery/userinfo endpoint (same pattern as
+//! `http_client::tests`) rather than a real IdP.
 //!
 //! `oidc_auth_tests` drives the `OidcAuth` middleware directly via its
 //! `Middleware::handle` method (not through a `TestClient`-wrapped `App`),
 //! matching the convention already established in `auth::tests` for other
 //! middleware — this avoids needing a router just to reach a `Middleware`
 //! that isn't tied to any particular route.
+//!
+//! `config_tests` covers `OidcConfig::from_env`, which reads/writes
+//! process-wide `RWS_OIDC_*` environment variables — every test that does
+//! so holds `crate::test_env::lock()` for its full duration, the same rule
+//! `CLAUDE.md` documents for `RWS_CONFIG_*` vars, since both are shared
+//! mutable process state under `cargo test`'s parallelism.
 
 use super::{
     client::{url_encode, OidcClient},
@@ -218,7 +225,10 @@ fn oidc_config_scopes_builder() {
 
 #[test]
 fn oidc_config_from_env_fails_without_env_vars() {
-    // Ensure env vars are not set (they shouldn't be in test env)
+    // RWS_OIDC_* vars are process-wide state shared with every other
+    // from_env test in `config_tests` below — hold the lock for the whole
+    // test, same rule CLAUDE.md documents for RWS_CONFIG_* vars.
+    let _g = crate::test_env::lock();
     std::env::remove_var("RWS_OIDC_PROVIDER");
     let result = OidcConfig::from_env();
     assert!(result.is_err(), "from_env should fail without RWS_OIDC_PROVIDER");
@@ -1273,5 +1283,278 @@ mod oidc_auth_tests {
         assert_eq!(OidcAuth::sub(&req), None);
         assert_eq!(OidcAuth::email(&req), None);
         assert!(OidcAuth::claims(&req).is_none());
+    }
+}
+
+// ── Provider presets and OidcConfig::from_env (Phase 5) ─────────────────────────
+
+mod config_tests {
+    use super::super::config::OidcConfig;
+    use super::start_fake_token_server;
+
+    // ── OidcConfig-level presets (client_id/secret/redirect_uri plumbing,
+    //    not just the provider endpoints already covered by the top-level
+    //    discovery preset tests) ───────────────────────────────────────────
+
+    #[test]
+    fn oidc_config_microsoft_preset() {
+        let c = OidcConfig::microsoft("contoso-tenant", "id1", "secret1", "https://app.example.com/cb");
+        assert_eq!(c.client_id, "id1");
+        assert_eq!(c.client_secret, "secret1");
+        assert_eq!(c.redirect_uri, "https://app.example.com/cb");
+        assert!(c.provider.issuer.contains("contoso-tenant"));
+        assert!(c.scopes.contains(&"openid".to_string()));
+    }
+
+    #[test]
+    fn oidc_config_okta_preset() {
+        let c = OidcConfig::okta("dev-1.okta.com", "id1", "secret1", "https://app.example.com/cb");
+        assert_eq!(c.client_id, "id1");
+        assert!(c.provider.issuer.contains("dev-1.okta.com"));
+        assert!(c.scopes.contains(&"profile".to_string()));
+    }
+
+    #[test]
+    fn oidc_config_auth0_preset() {
+        let c = OidcConfig::auth0("myapp.us.auth0.com", "id1", "secret1", "https://app.example.com/cb");
+        assert_eq!(c.client_id, "id1");
+        assert!(c.provider.authorization_endpoint.contains("myapp.us.auth0.com"));
+        assert!(c.scopes.contains(&"email".to_string()));
+    }
+
+    #[test]
+    fn oidc_config_keycloak_preset() {
+        let c = OidcConfig::keycloak(
+            "https://keycloak.example.com",
+            "myrealm",
+            "id1",
+            "secret1",
+            "https://app.example.com/cb",
+        );
+        assert_eq!(c.client_id, "id1");
+        assert!(c.provider.issuer.contains("myrealm"));
+    }
+
+    // ── OidcConfig::discover ─────────────────────────────────────────────────
+
+    #[test]
+    fn oidc_config_discover_builds_full_config_from_a_live_document() {
+        let base = start_fake_token_server(|_req| {
+            let body = r#"{
+                "issuer": "https://idp.example.com",
+                "authorization_endpoint": "https://idp.example.com/authorize",
+                "token_endpoint": "https://idp.example.com/token",
+                "jwks_uri": "https://idp.example.com/jwks"
+            }"#;
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
+        });
+        let config = OidcConfig::discover(&base, "id1", "secret1", "https://app.example.com/cb").unwrap();
+        assert_eq!(config.client_id, "id1");
+        assert_eq!(config.provider.token_endpoint, "https://idp.example.com/token");
+        assert!(config.scopes.contains(&"openid".to_string()));
+    }
+
+    #[test]
+    fn oidc_config_discover_propagates_provider_error() {
+        let base = start_fake_token_server(|_req| {
+            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_string()
+        });
+        let result = OidcConfig::discover(&base, "id1", "secret1", "https://app.example.com/cb");
+        assert!(result.is_err());
+    }
+
+    // ── OidcConfig::from_env ─────────────────────────────────────────────────
+    //
+    // RWS_OIDC_* vars are process-wide state. Every test below holds
+    // `crate::test_env::lock()` for its full duration (same rule CLAUDE.md
+    // documents for RWS_CONFIG_* vars) and clears every var it touched
+    // before returning, matching the established cleanup convention used
+    // throughout this codebase's other env-var tests.
+
+    // `OidcConfig` doesn't derive `Debug` (no reason to for a real config
+    // type), so `Result::unwrap_err()` isn't available directly.
+    fn expect_from_env_err() -> super::super::SsoError {
+        match OidcConfig::from_env() {
+            Err(e) => e,
+            Ok(_) => panic!("expected OidcConfig::from_env() to fail"),
+        }
+    }
+
+    fn clear_oidc_env() {
+        for key in [
+            "RWS_OIDC_PROVIDER",
+            "RWS_OIDC_CLIENT_ID",
+            "RWS_OIDC_CLIENT_SECRET",
+            "RWS_OIDC_REDIRECT_URI",
+            "RWS_OIDC_ISSUER",
+            "RWS_OIDC_TENANT_ID",
+            "RWS_OIDC_SCOPES",
+            "RWS_OIDC_POST_LOGIN_REDIRECT",
+        ] {
+            std::env::remove_var(key);
+        }
+    }
+
+    #[test]
+    fn from_env_google_success_with_default_scopes_and_redirect() {
+        let _g = crate::test_env::lock();
+        clear_oidc_env();
+        std::env::set_var("RWS_OIDC_PROVIDER", "google");
+        std::env::set_var("RWS_OIDC_CLIENT_ID", "id1");
+        std::env::set_var("RWS_OIDC_CLIENT_SECRET", "secret1");
+        std::env::set_var("RWS_OIDC_REDIRECT_URI", "https://app.example.com/cb");
+
+        let config = OidcConfig::from_env().unwrap();
+        assert_eq!(config.client_id, "id1");
+        assert_eq!(config.client_secret, "secret1");
+        assert_eq!(config.redirect_uri, "https://app.example.com/cb");
+        assert_eq!(config.provider.issuer, "https://accounts.google.com");
+        assert_eq!(config.scopes, vec!["openid", "email", "profile"]);
+        assert_eq!(config.post_login_redirect, "/");
+
+        clear_oidc_env();
+    }
+
+    #[test]
+    fn from_env_microsoft_requires_tenant_id() {
+        let _g = crate::test_env::lock();
+        clear_oidc_env();
+        std::env::set_var("RWS_OIDC_PROVIDER", "microsoft");
+        std::env::set_var("RWS_OIDC_CLIENT_ID", "id1");
+        std::env::set_var("RWS_OIDC_REDIRECT_URI", "https://app.example.com/cb");
+        // RWS_OIDC_TENANT_ID deliberately not set.
+
+        let err = expect_from_env_err();
+        assert!(err.0.contains("RWS_OIDC_TENANT_ID"), "expected tenant error, got: {}", err.0);
+
+        clear_oidc_env();
+    }
+
+    #[test]
+    fn from_env_microsoft_success_with_tenant_id() {
+        let _g = crate::test_env::lock();
+        clear_oidc_env();
+        std::env::set_var("RWS_OIDC_PROVIDER", "microsoft");
+        std::env::set_var("RWS_OIDC_CLIENT_ID", "id1");
+        std::env::set_var("RWS_OIDC_REDIRECT_URI", "https://app.example.com/cb");
+        std::env::set_var("RWS_OIDC_TENANT_ID", "contoso-tenant");
+
+        let config = OidcConfig::from_env().unwrap();
+        assert!(config.provider.issuer.contains("contoso-tenant"));
+
+        clear_oidc_env();
+    }
+
+    #[test]
+    fn from_env_okta_requires_issuer() {
+        let _g = crate::test_env::lock();
+        clear_oidc_env();
+        std::env::set_var("RWS_OIDC_PROVIDER", "okta");
+        std::env::set_var("RWS_OIDC_CLIENT_ID", "id1");
+        std::env::set_var("RWS_OIDC_REDIRECT_URI", "https://app.example.com/cb");
+        // RWS_OIDC_ISSUER deliberately not set.
+
+        let err = expect_from_env_err();
+        assert!(err.0.contains("RWS_OIDC_ISSUER"), "expected issuer error, got: {}", err.0);
+
+        clear_oidc_env();
+    }
+
+    #[test]
+    fn from_env_custom_provider_discovers_via_issuer() {
+        let base = start_fake_token_server(|_req| {
+            let body = r#"{
+                "issuer": "https://idp.example.com",
+                "authorization_endpoint": "https://idp.example.com/authorize",
+                "token_endpoint": "https://idp.example.com/token",
+                "jwks_uri": "https://idp.example.com/jwks"
+            }"#;
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
+        });
+
+        let _g = crate::test_env::lock();
+        clear_oidc_env();
+        std::env::set_var("RWS_OIDC_PROVIDER", "custom");
+        std::env::set_var("RWS_OIDC_CLIENT_ID", "id1");
+        std::env::set_var("RWS_OIDC_REDIRECT_URI", "https://app.example.com/cb");
+        std::env::set_var("RWS_OIDC_ISSUER", &base);
+
+        let config = OidcConfig::from_env().unwrap();
+        assert_eq!(config.provider.token_endpoint, "https://idp.example.com/token");
+
+        clear_oidc_env();
+    }
+
+    #[test]
+    fn from_env_missing_client_id_fails() {
+        let _g = crate::test_env::lock();
+        clear_oidc_env();
+        std::env::set_var("RWS_OIDC_PROVIDER", "google");
+        std::env::set_var("RWS_OIDC_REDIRECT_URI", "https://app.example.com/cb");
+        // RWS_OIDC_CLIENT_ID deliberately not set.
+
+        let err = expect_from_env_err();
+        assert!(err.0.contains("RWS_OIDC_CLIENT_ID"), "expected client-id error, got: {}", err.0);
+
+        clear_oidc_env();
+    }
+
+    #[test]
+    fn from_env_missing_redirect_uri_fails() {
+        let _g = crate::test_env::lock();
+        clear_oidc_env();
+        std::env::set_var("RWS_OIDC_PROVIDER", "google");
+        std::env::set_var("RWS_OIDC_CLIENT_ID", "id1");
+        // RWS_OIDC_REDIRECT_URI deliberately not set.
+
+        let err = expect_from_env_err();
+        assert!(err.0.contains("RWS_OIDC_REDIRECT_URI"), "expected redirect-uri error, got: {}", err.0);
+
+        clear_oidc_env();
+    }
+
+    #[test]
+    fn from_env_client_secret_defaults_to_empty_when_absent() {
+        let _g = crate::test_env::lock();
+        clear_oidc_env();
+        std::env::set_var("RWS_OIDC_PROVIDER", "google");
+        std::env::set_var("RWS_OIDC_CLIENT_ID", "id1");
+        std::env::set_var("RWS_OIDC_REDIRECT_URI", "https://app.example.com/cb");
+        // RWS_OIDC_CLIENT_SECRET deliberately not set — public/PKCE-only client.
+
+        let config = OidcConfig::from_env().unwrap();
+        assert_eq!(config.client_secret, "");
+
+        clear_oidc_env();
+    }
+
+    #[test]
+    fn from_env_custom_scopes_are_space_split() {
+        let _g = crate::test_env::lock();
+        clear_oidc_env();
+        std::env::set_var("RWS_OIDC_PROVIDER", "google");
+        std::env::set_var("RWS_OIDC_CLIENT_ID", "id1");
+        std::env::set_var("RWS_OIDC_REDIRECT_URI", "https://app.example.com/cb");
+        std::env::set_var("RWS_OIDC_SCOPES", "openid custom_scope another_scope");
+
+        let config = OidcConfig::from_env().unwrap();
+        assert_eq!(config.scopes, vec!["openid", "custom_scope", "another_scope"]);
+
+        clear_oidc_env();
+    }
+
+    #[test]
+    fn from_env_custom_post_login_redirect() {
+        let _g = crate::test_env::lock();
+        clear_oidc_env();
+        std::env::set_var("RWS_OIDC_PROVIDER", "google");
+        std::env::set_var("RWS_OIDC_CLIENT_ID", "id1");
+        std::env::set_var("RWS_OIDC_REDIRECT_URI", "https://app.example.com/cb");
+        std::env::set_var("RWS_OIDC_POST_LOGIN_REDIRECT", "/dashboard");
+
+        let config = OidcConfig::from_env().unwrap();
+        assert_eq!(config.post_login_redirect, "/dashboard");
+
+        clear_oidc_env();
     }
 }

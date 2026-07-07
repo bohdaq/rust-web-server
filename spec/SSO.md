@@ -265,7 +265,15 @@ Both stored in the pre-auth session; `code_verifier` sent in token exchange.
 
 ---
 
-### Phase 5 — Provider Presets and `OidcConfig` Builder
+### ✅ Phase 5 — Provider Presets and `OidcConfig` Builder — Done (v17.95.0)
+
+**Already fully implemented before this phase was explicitly worked** — `src/sso/config.rs`'s six preset constructors, `::discover()`, and `::from_env()` predate this task, same as every phase before it. Unlike Phase 4 (zero tests) this one already had partial coverage: `google`/`github` were tested at the `OidcConfig` level, and all six presets were tested at the underlying `OidcProvider` level (Phase 3's `discovery_tests`) — but `microsoft`/`okta`/`auth0`/`keycloak` had no `OidcConfig`-level test, `OidcConfig::discover()` had no test at all (only the `OidcProvider::discover()` it wraps), and **`from_env()` had exactly one test — a single failure case.** The entire success path, every provider-specific required-variable branch, scope parsing, and the default/override behavior of `post_login_redirect` were unexercised.
+
+16 new tests in a `config_tests` submodule of `src/sso/tests.rs`: `OidcConfig`-level preset tests for the four previously-uncovered providers (asserting `client_id`/`client_secret`/`redirect_uri` are plumbed through correctly, not just the provider endpoints Phase 3 already checked); `OidcConfig::discover()` success (via a loopback fake discovery document) and error-propagation; and a `from_env()` matrix — Google success with every field checked including the default scopes and `post_login_redirect`, Microsoft's `RWS_OIDC_TENANT_ID` requirement (both the missing-var error and the success path), Okta's `RWS_OIDC_ISSUER` requirement, an unrecognized/`custom` provider name discovering via a live (faked) issuer, the two base required vars (`RWS_OIDC_CLIENT_ID`, `RWS_OIDC_REDIRECT_URI`) failing by name when absent, `RWS_OIDC_CLIENT_SECRET` defaulting to empty (the PKCE-only-public-client case), custom space-separated `RWS_OIDC_SCOPES`, and a custom `RWS_OIDC_POST_LOGIN_REDIRECT`. All 16 passed against the existing implementation with zero source changes required — including three repeated runs specifically to check for `RWS_OIDC_*`-env-var races, since these are the first tests in this module to mutate process environment state.
+
+**Every `from_env()` test holds `crate::test_env::lock()` for its full duration and clears every `RWS_OIDC_*` var it touched before returning** — `RWS_OIDC_*` vars aren't named in `CLAUDE.md`'s `RWS_CONFIG_*`-specific lock rule, but they're the same class of problem (process-wide mutable state read by a function under `cargo test`'s parallelism), so this phase applied the identical discipline rather than treating the letter of that rule as the whole of its intent. The pre-existing `oidc_config_from_env_fails_without_env_vars` test (predating this phase) did not hold the lock; it now does.
+
+**Effort:** small, matching this entry's own estimate — once again a mostly-already-built dependency; the work was closing a test-coverage gap in a specific, already-known-risky corner (`from_env()`'s per-provider branching), not writing new preset logic.
 
 Reduce boilerplate for the most common providers. Each preset fills in the
 `OidcProvider` so only `client_id`, `client_secret`, and `redirect_uri` are
@@ -294,23 +302,23 @@ OidcConfig::keycloak("https://keycloak.example.com", "myrealm", client_id, clien
 OidcConfig::discover("https://idp.example.com", client_id, client_secret, redirect_uri)
 ```
 
-**Environment variable convention** (all providers):
+**Environment variable convention** (all providers; verified against `config.rs`'s actual `match` arms, which required correcting this table — `RWS_OIDC_ISSUER` is required for `okta`/`auth0`/`keycloak` too, not just `custom`, and `keycloak` additionally needs `RWS_OIDC_TENANT_ID` for its realm name):
 
 | Variable | Description |
 |---|---|
 | `RWS_OIDC_PROVIDER` | One of: `google`, `microsoft`, `github`, `okta`, `auth0`, `keycloak`, `custom` |
-| `RWS_OIDC_CLIENT_ID` | OAuth 2.0 client ID |
-| `RWS_OIDC_CLIENT_SECRET` | OAuth 2.0 client secret |
-| `RWS_OIDC_REDIRECT_URI` | Callback URL registered at the IdP |
-| `RWS_OIDC_ISSUER` | Required for `custom` provider |
-| `RWS_OIDC_TENANT_ID` | Required for `microsoft` provider |
+| `RWS_OIDC_CLIENT_ID` | OAuth 2.0 client ID (required for all) |
+| `RWS_OIDC_CLIENT_SECRET` | OAuth 2.0 client secret (optional; defaults to empty for public/PKCE-only clients) |
+| `RWS_OIDC_REDIRECT_URI` | Callback URL registered at the IdP (required for all) |
+| `RWS_OIDC_ISSUER` | Required for `okta` (domain), `auth0` (domain), `keycloak` (base URL), and `custom` (issuer URL) |
+| `RWS_OIDC_TENANT_ID` | Required for `microsoft` (tenant) and `keycloak` (realm name) |
 | `RWS_OIDC_SCOPES` | Space-separated; default `openid email profile` |
 | `RWS_OIDC_POST_LOGIN_REDIRECT` | Default `/` |
 
 ```rust
 // Load everything from env
 let config = OidcConfig::from_env()?;
-let app = App::new().wrap(OidcAuth::new(config));
+let app = App::new().wrap(OidcAuth::new(config, sessions)); // sessions: Arc<SessionStore>
 ```
 
 ---
@@ -527,6 +535,6 @@ helpers handle persistence.
 | 2 | JWKS fetch + cache; RS256 / ES256 JWT verification; `OidcClaims` | ✅ Done (v17.92.0) |
 | 3 | OIDC discovery; `OidcProvider` struct; named presets | ✅ Done (v17.93.0) |
 | 4 | OAuth 2.0 Authorization Code + PKCE flow; `OidcAuth` middleware | ✅ Done (v17.94.0) |
-| 5 | Provider presets (Google, Microsoft, GitHub, Okta, Auth0, Keycloak); `from_env()` | Pending |
+| 5 | Provider presets (Google, Microsoft, GitHub, Okta, Auth0, Keycloak); `from_env()` | ✅ Done (v17.95.0) |
 | 6 | OAuth 2.0 Authorization Server; `/oauth/token`; `/.well-known/*` | Pending |
 | 7 | SAML 2.0 SP; ACS handler; XML signature verification; attribute mapping | Pending |
