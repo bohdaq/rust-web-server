@@ -152,10 +152,33 @@ pub struct OidcClaims {
 
 ---
 
-### Phase 4 — OAuth 2.0 Authorization Code + PKCE Flow
+### ✅ Phase 4 — OAuth 2.0 Authorization Code + PKCE Flow — Done (v17.94.0)
 
-The core SSO client flow. Handles the full round-trip: redirect → callback →
-token exchange → session establishment.
+**Already implemented before this phase was explicitly worked, and — unlike Phases 1–3, which were narrow test-coverage gaps — had *zero* tests of any kind.** `src/sso/oidc_auth.rs`'s `OidcAuth` middleware (login/callback/logout interception, state/nonce/PKCE handling, session promotion, claims injection) predates this task in full. It was exercised only indirectly, by the fact that `handle_callback` calls `OidcClient::exchange_code`/`JwksCache::verify_jwt`, which Phases 1–2's tests covered in isolation — the middleware layer gluing them together (path routing, session lifecycle, CSRF/nonce checks, error surfacing) had never been run once.
+
+19 new tests in an `oidc_auth_tests` submodule of `src/sso/tests.rs`, driving `OidcAuth::handle` (the `Middleware` trait method) directly against a real `SessionStore` and, for the callback tests, loopback fake token/JWKS/userinfo servers — the same combination of techniques from `jwks_tests` and `exchange_code`'s tests, now composed together for the first time:
+
+- unauthenticated access redirects to login; excluded paths bypass the check entirely
+- `/auth/login` generates a fresh PKCE verifier + `state` + `nonce` per call, sets a session cookie, and redirects to the provider's authorization endpoint with `code_challenge`/`state` present
+- `return_to` is read from the query string or falls back to `post_login_redirect`
+- `/auth/callback`: no cookie / unknown session / `state` mismatch all return `403`; a provider error (`?error=access_denied`, no `code`) surfaces as `500`; a full success round-trip (real RSA-signed `id_token` verified via a fake JWKS endpoint) stores claims, clears the four pre-auth session keys, and redirects to the saved `return_to`; a `nonce` mismatch on an otherwise-valid `id_token` returns `403`; a GitHub-style provider with no `jwks_uri` falls back to `fetch_user_info` against a fake UserInfo endpoint
+- an authenticated request (session has `_oidc_claims`) passes through to the next `Application` with `X-Rws-Oidc-Claims` injected, verified by asserting on the request a capturing test `Application` actually received
+- `/auth/logout` destroys the session and redirects home, with or without a cookie present
+- `.login_path()`/`.callback_path()`/`.callback_path()`/`.logout_path()` overrides actually change which path is intercepted (the default `/auth/login` reverts to ordinary "redirect to login" handling once overridden)
+- `OidcAuth::claims()`/`::sub()`/`::email()` read the injected header correctly, and return `None` when it's absent
+
+All 19 passed against the existing implementation with zero source changes required. `cargo test --features sso` now runs 72 sso tests (53 + 19 new).
+
+**The core round-trip below matches this phase's own sketch closely, with three real deviations:**
+1. **No standalone `OidcAuth::login_handler`/`::callback_handler`/`::logout_handler` route functions exist**, unlike the "Usage" example's `.get("/auth/login", OidcAuth::login_handler)` wiring. `OidcAuth` intercepts all three paths *inside its own `Middleware::handle`* by comparing the request path against `self.login_path`/`callback_path`/`logout_path` — so `.wrap(OidcAuth::new(config, sessions))` alone is sufficient; registering the three routes yourself would be redundant (and the handler names the sketch references don't exist to register).
+2. **Claims are not stored in "request extensions"** (step 2 of the sketch's per-request description) — this codebase has no such mechanism. `OidcClaims` is serialized to JSON and injected as a real header (`X-Rws-Oidc-Claims`), deserialized back out on demand by `OidcAuth::claims()`. This was an established pattern from before this phase (already documented in `CLAUDE.md`), not a new decision.
+3. **The original URL is carried via a `return_to` query parameter on the redirect to `/auth/login`, not by pre-creating a session** — the unauthenticated-access branch that redirects to login does no session I/O at all; a pre-auth session (with `state`/`nonce`/`pkce`/`return_to`) is only created once `/auth/login` itself is actually hit.
+
+`PkceVerifier::new()` always produces a 43-character verifier (32 random bytes, base64url, no padding) — a fixed length, not the "43–128 char" range this phase's PKCE description allows for (RFC 7636 permits up to 128; nothing in this codebase needs the extra entropy a longer verifier would add over 32 random bytes, already confirmed collision-resistant by `pkce_two_verifiers_are_different` from Phase 2's era).
+
+**Effort:** matches this entry's own "core flow" framing — this was the first Phase where writing tests meant composing multiple already-tested pieces (PKCE, token exchange, JWKS verification, sessions) through a real middleware, rather than testing one function in isolation.
+
+**Module:** `src/sso/oidc_auth.rs` (plus `src/sso/mod.rs`, `src/sso/pkce.rs`, both already covered by earlier phases' tests).
 
 ```
 Browser                      rws                       IdP (Google, etc.)
@@ -188,49 +211,47 @@ Browser                      rws                       IdP (Google, etc.)
   │ ◄───────────────────────── │                            │
 ```
 
-**Usage:**
+**Usage** (matches the actual API — no separate route registration for the
+three auth paths; `OidcAuth` intercepts them itself, see the deviations
+noted above):
 
 ```rust
 use rust_web_server::sso::{OidcAuth, OidcConfig};
 
 let app = App::with_state(my_state)
     .wrap(
-        OidcAuth::new(OidcConfig {
-            provider:      OidcProvider::google(),
-            client_id:     env::var("GOOGLE_CLIENT_ID")?,
-            client_secret: env::var("GOOGLE_CLIENT_SECRET")?,
-            redirect_uri:  "https://myapp.com/auth/callback".into(),
-            scopes:        vec!["openid", "email", "profile"],
-            post_login_redirect: "/dashboard".into(),
-        })
-        .exclude("/healthz")    // paths that bypass auth
-        .exclude("/auth/"),
+        OidcAuth::new(
+            OidcConfig::google(client_id, client_secret, "https://myapp.com/auth/callback")
+                .post_login_redirect("/dashboard"),
+            sessions,
+        )
+        .exclude("/healthz"),   // paths that bypass auth
     )
-    .get("/dashboard", dashboard_handler)
-    .get("/auth/login",    OidcAuth::login_handler)    // built-in
-    .get("/auth/callback", OidcAuth::callback_handler) // built-in
-    .get("/auth/logout",   OidcAuth::logout_handler);  // built-in
+    .get("/dashboard", dashboard_handler);
+    // No .get("/auth/login" | "/auth/callback" | "/auth/logout", ...) —
+    // OidcAuth's Middleware::handle intercepts those three paths itself.
 
 // Access claims inside any handler:
 fn dashboard_handler(req: &Request, _: &PathParams, _: &ConnectionInfo, _: &MyState) -> Response {
-    let claims: &OidcClaims = OidcAuth::claims(req).unwrap();
+    let claims = OidcAuth::claims(req).unwrap(); // Option<OidcClaims>, owned
     // claims.email, claims.name, claims.sub, etc.
 }
 ```
 
 **What `OidcAuth` does per request:**
-1. Is the path excluded? → pass through
-2. Is there a valid session with `oidc_claims` key? → pass through with claims injected into request extensions
-3. No session → store original URL in temporary session → redirect to `/auth/login`
+1. Is the path `/auth/login`, `/auth/callback`, or `/auth/logout`? → handle it directly (see below)
+2. Is the path excluded? → pass through
+3. Is there a valid session with an `_oidc_claims` key? → pass through with claims injected as the `X-Rws-Oidc-Claims` request header (JSON), not "request extensions" (no such mechanism exists in this codebase)
+4. No session → redirect to `/auth/login?return_to=<original-url>` (no session is created at this point — only `/auth/login` itself creates the pre-auth session)
 
-**What `OidcAuth::callback_handler` does:**
+**What handling `/auth/callback` does:**
 1. Validate `state` parameter (matches what was stored to prevent CSRF)
 2. POST to `token_endpoint` with `code`, `redirect_uri`, `code_verifier` (PKCE)
 3. Receive `id_token` + `access_token`
-4. Verify `id_token` via JWKS (Phase 2)
+4. Verify `id_token` via JWKS (Phase 2) — falls back to `fetch_user_info` when the provider has no `jwks_uri` (GitHub)
 5. Verify `nonce` matches stored nonce
-6. Store `OidcClaims` in session
-7. Redirect to original URL (or `post_login_redirect`)
+6. Store `OidcClaims` (as JSON) in session
+7. Redirect to original `return_to` (or `post_login_redirect` if none was captured)
 
 **PKCE implementation:**
 ```
@@ -505,7 +526,7 @@ helpers handle persistence.
 | 1 | `HttpClient` — outbound TLS HTTP for token / JWKS calls | ✅ Done (v17.91.0) |
 | 2 | JWKS fetch + cache; RS256 / ES256 JWT verification; `OidcClaims` | ✅ Done (v17.92.0) |
 | 3 | OIDC discovery; `OidcProvider` struct; named presets | ✅ Done (v17.93.0) |
-| 4 | OAuth 2.0 Authorization Code + PKCE flow; `OidcAuth` middleware | Pending |
+| 4 | OAuth 2.0 Authorization Code + PKCE flow; `OidcAuth` middleware | ✅ Done (v17.94.0) |
 | 5 | Provider presets (Google, Microsoft, GitHub, Okta, Auth0, Keycloak); `from_env()` | Pending |
 | 6 | OAuth 2.0 Authorization Server; `/oauth/token`; `/.well-known/*` | Pending |
 | 7 | SAML 2.0 SP; ACS handler; XML signature verification; attribute mapping | Pending |

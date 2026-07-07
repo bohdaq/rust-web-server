@@ -1,10 +1,16 @@
 //! Unit tests for the SSO module.
 //!
 //! All tests operate on pure in-memory logic — no network calls are made,
-//! except the `exchange_code` tests and the `jwks_tests`/`discovery_tests`
-//! modules below, which use an in-process loopback `TcpListener` as a fake
-//! token/JWKS/discovery endpoint (same pattern as `http_client::tests`)
-//! rather than a real IdP.
+//! except the `exchange_code` tests and the `jwks_tests`/`discovery_tests`/
+//! `oidc_auth_tests` modules below, which use an in-process loopback
+//! `TcpListener` as a fake token/JWKS/discovery/userinfo endpoint (same
+//! pattern as `http_client::tests`) rather than a real IdP.
+//!
+//! `oidc_auth_tests` drives the `OidcAuth` middleware directly via its
+//! `Middleware::handle` method (not through a `TestClient`-wrapped `App`),
+//! matching the convention already established in `auth::tests` for other
+//! middleware — this avoids needing a router just to reach a `Middleware`
+//! that isn't tied to any particular route.
 
 use super::{
     client::{url_encode, OidcClient},
@@ -404,11 +410,11 @@ mod jwks_tests {
         format!("http://127.0.0.1:{}", addr.port())
     }
 
-    fn jwks_server(jwk_json: &str) -> String {
+    pub(super) fn jwks_server(jwk_json: &str) -> String {
         jwks_server_sequence(vec![format!(r#"{{"keys":[{jwk_json}]}}"#)])
     }
 
-    fn build_jwt(header: &str, payload: &str, sign: impl FnOnce(&[u8]) -> Vec<u8>) -> String {
+    pub(super) fn build_jwt(header: &str, payload: &str, sign: impl FnOnce(&[u8]) -> Vec<u8>) -> String {
         let h = base64url_encode(header.as_bytes());
         let p = base64url_encode(payload.as_bytes());
         let message = format!("{h}.{p}");
@@ -426,7 +432,7 @@ mod jwks_tests {
         KEY.get_or_init(|| rsa::RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap())
     }
 
-    fn rsa_jwk_json(kid: &str) -> String {
+    pub(super) fn rsa_jwk_json(kid: &str) -> String {
         use rsa::traits::PublicKeyParts;
         let pub_key = rsa_key().to_public_key();
         let n = base64url_encode(&pub_key.n().to_bytes_be());
@@ -434,7 +440,7 @@ mod jwks_tests {
         format!(r#"{{"kty":"RSA","kid":"{kid}","n":"{n}","e":"{e}"}}"#)
     }
 
-    fn sign_rs256(message: &[u8]) -> Vec<u8> {
+    pub(super) fn sign_rs256(message: &[u8]) -> Vec<u8> {
         use rsa::pkcs1v15::SigningKey;
         use rsa::signature::{SignatureEncoding, Signer};
         let signing_key = SigningKey::<sha2::Sha256>::new(rsa_key().clone());
@@ -833,5 +839,439 @@ mod discovery_tests {
         // Nothing is listening on this port.
         let err = OidcProvider::discover("http://127.0.0.1:1").unwrap_err();
         assert!(err.0.contains("discovery fetch failed"), "expected fetch-failed error, got: {}", err.0);
+    }
+}
+
+// ── OidcAuth middleware — authorization-code + PKCE flow ────────────────────────
+
+mod oidc_auth_tests {
+    use super::super::{OidcAuth, OidcConfig};
+    use super::super::discovery::OidcProvider;
+    use super::{config_with_token_endpoint, jwks_tests, start_fake_token_server};
+    use crate::application::Application;
+    use crate::core::New;
+    use crate::header::Header;
+    use crate::http::VERSION;
+    use crate::middleware::Middleware;
+    use crate::request::{Request, METHOD};
+    use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+    use crate::server::{Address, ConnectionInfo};
+    use crate::session::SessionStore;
+    use std::sync::{Arc, Mutex};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    // Mirrors the private `SESSION_COOKIE` constant in `oidc_auth.rs` — there
+    // is exactly one session cookie this middleware ever sets, so hardcoding
+    // its name here is simpler than round-tripping it through a login call
+    // for every test that needs a pre-populated session.
+    const SID_COOKIE: &str = "_rws_sid";
+
+    fn unix_now() -> u64 {
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+    }
+
+    fn conn() -> ConnectionInfo {
+        ConnectionInfo {
+            client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+            server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+            request_size: 16000,
+            sni_hostname: None,
+        }
+    }
+
+    fn get(uri: &str) -> Request {
+        Request {
+            method: METHOD.get.to_string(),
+            request_uri: uri.to_string(),
+            http_version: VERSION.http_1_1.to_string(),
+            headers: vec![],
+            body: vec![],
+        }
+    }
+
+    fn with_cookie(mut req: Request, name: &str, value: &str) -> Request {
+        req.headers.push(Header { name: "Cookie".to_string(), value: format!("{name}={value}") });
+        req
+    }
+
+    fn header(response: &Response, name: &str) -> Option<String> {
+        response.headers.iter()
+            .find(|h| h.name.eq_ignore_ascii_case(name))
+            .map(|h| h.value.clone())
+    }
+
+    /// An `Application` that always returns 200 OK.
+    struct OkApp;
+    impl Application for OkApp {
+        fn execute(&self, _: &Request, _: &ConnectionInfo) -> Result<Response, String> {
+            let mut r = Response::new();
+            r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+            r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+            Ok(r)
+        }
+    }
+
+    /// An `Application` that records the request it received, for asserting
+    /// on headers injected by the middleware before the request reaches it.
+    struct CapturingApp {
+        captured: Mutex<Option<Request>>,
+    }
+    impl CapturingApp {
+        fn new() -> Self {
+            CapturingApp { captured: Mutex::new(None) }
+        }
+    }
+    impl Application for CapturingApp {
+        fn execute(&self, req: &Request, _: &ConnectionInfo) -> Result<Response, String> {
+            *self.captured.lock().unwrap() = Some(req.clone());
+            let mut r = Response::new();
+            r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+            r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+            Ok(r)
+        }
+    }
+
+    fn google_config() -> OidcConfig {
+        OidcConfig::google("client1", "secret1", "https://app.example.com/cb")
+    }
+
+    // ── unauthenticated access ───────────────────────────────────────────────
+
+    #[test]
+    fn unauthenticated_request_redirects_to_login() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let oidc = OidcAuth::new(google_config(), sessions);
+        let resp = oidc.handle(&get("/dashboard"), &conn(), &OkApp).unwrap();
+        assert_eq!(302, resp.status_code);
+        let location = header(&resp, "Location").unwrap();
+        assert!(location.starts_with("/auth/login?return_to="));
+    }
+
+    #[test]
+    fn excluded_path_bypasses_auth_without_session() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let oidc = OidcAuth::new(google_config(), sessions).exclude("/healthz");
+        let resp = oidc.handle(&get("/healthz"), &conn(), &OkApp).unwrap();
+        assert_eq!(200, resp.status_code);
+    }
+
+    // ── /auth/login ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn login_generates_pkce_state_nonce_and_redirects_to_provider() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let oidc = OidcAuth::new(google_config(), sessions.clone());
+        let resp = oidc.handle(&get("/auth/login"), &conn(), &OkApp).unwrap();
+        assert_eq!(302, resp.status_code);
+        let location = header(&resp, "Location").unwrap();
+        assert!(location.starts_with("https://accounts.google.com/o/oauth2/v2/auth"));
+        assert!(location.contains("code_challenge="), "PKCE challenge should be present for a JWKS-capable provider");
+        assert!(location.contains("state="));
+
+        let (cookie_name, sid) = extract_cookie(&resp);
+        assert_eq!(cookie_name, SID_COOKIE);
+        let session = sessions.load(&sid).expect("session should have been created");
+        assert!(!session.get("_oidc_state").unwrap().is_empty());
+        assert!(!session.get("_oidc_nonce").unwrap().is_empty());
+        assert!(!session.get("_oidc_pkce").unwrap().is_empty());
+    }
+
+    #[test]
+    fn login_two_calls_generate_different_state_and_nonce() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let oidc = OidcAuth::new(google_config(), sessions.clone());
+        let (_, sid1) = extract_cookie(&oidc.handle(&get("/auth/login"), &conn(), &OkApp).unwrap());
+        let (_, sid2) = extract_cookie(&oidc.handle(&get("/auth/login"), &conn(), &OkApp).unwrap());
+        let s1 = sessions.load(&sid1).unwrap();
+        let s2 = sessions.load(&sid2).unwrap();
+        assert_ne!(s1.get("_oidc_state"), s2.get("_oidc_state"));
+        assert_ne!(s1.get("_oidc_nonce"), s2.get("_oidc_nonce"));
+    }
+
+    #[test]
+    fn login_stores_return_to_from_query_param() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let oidc = OidcAuth::new(google_config(), sessions.clone());
+        let resp = oidc.handle(&get("/auth/login?return_to=%2Fdashboard"), &conn(), &OkApp).unwrap();
+        let (_, sid) = extract_cookie(&resp);
+        let session = sessions.load(&sid).unwrap();
+        assert_eq!(session.get("_oidc_return_to"), Some("/dashboard"));
+    }
+
+    #[test]
+    fn login_defaults_return_to_when_absent() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let config = google_config().post_login_redirect("/home");
+        let oidc = OidcAuth::new(config, sessions.clone());
+        let resp = oidc.handle(&get("/auth/login"), &conn(), &OkApp).unwrap();
+        let (_, sid) = extract_cookie(&resp);
+        let session = sessions.load(&sid).unwrap();
+        assert_eq!(session.get("_oidc_return_to"), Some("/home"));
+    }
+
+    fn extract_cookie(response: &Response) -> (String, String) {
+        let set_cookie = header(response, "Set-Cookie").expect("expected a Set-Cookie header");
+        let first = set_cookie.split(';').next().unwrap();
+        let mut parts = first.splitn(2, '=');
+        (parts.next().unwrap().to_string(), parts.next().unwrap_or("").to_string())
+    }
+
+    // ── /auth/callback ───────────────────────────────────────────────────────
+
+    #[test]
+    fn callback_without_cookie_returns_forbidden() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let oidc = OidcAuth::new(google_config(), sessions);
+        let resp = oidc.handle(&get("/auth/callback?code=abc&state=xyz"), &conn(), &OkApp).unwrap();
+        assert_eq!(403, resp.status_code);
+    }
+
+    #[test]
+    fn callback_with_unknown_session_returns_forbidden() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let oidc = OidcAuth::new(google_config(), sessions);
+        let req = with_cookie(get("/auth/callback?code=abc&state=xyz"), SID_COOKIE, "does-not-exist");
+        let resp = oidc.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(403, resp.status_code);
+    }
+
+    #[test]
+    fn callback_state_mismatch_returns_forbidden() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut pre = sessions.create();
+        pre.set("_oidc_state", "expected-state");
+        sessions.save(&pre);
+
+        let oidc = OidcAuth::new(google_config(), sessions);
+        let req = with_cookie(get("/auth/callback?code=abc&state=wrong-state"), SID_COOKIE, &pre.id);
+        let resp = oidc.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(403, resp.status_code);
+    }
+
+    #[test]
+    fn callback_provider_error_surfaces_as_error_response() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut pre = sessions.create();
+        pre.set("_oidc_state", "state1");
+        sessions.save(&pre);
+
+        let oidc = OidcAuth::new(google_config(), sessions);
+        let req = with_cookie(get("/auth/callback?state=state1&error=access_denied"), SID_COOKIE, &pre.id);
+        let resp = oidc.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(500, resp.status_code);
+    }
+
+    fn signed_id_token(nonce: &str, aud: &str, iss: &str) -> String {
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"{iss}","aud":"{aud}","exp":{},"iat":{},"nonce":"{nonce}"}}"#,
+            unix_now() + 3600,
+            unix_now()
+        );
+        let header = r#"{"alg":"RS256","kid":"rsa-key-1"}"#;
+        jwks_tests::build_jwt(header, &claims, jwks_tests::sign_rs256)
+    }
+
+    #[test]
+    fn callback_success_verifies_id_token_and_stores_claims() {
+        let id_token = signed_id_token("nonce1", "my-client-id", "https://idp.example.com");
+        let token_body = format!(
+            r#"{{"access_token":"tok","token_type":"Bearer","id_token":"{id_token}"}}"#
+        );
+        let token_url = start_fake_token_server(move |_req| {
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+                token_body.len(),
+                token_body
+            )
+        });
+        let jwks_url = jwks_tests::jwks_server(&jwks_tests::rsa_jwk_json("rsa-key-1"));
+        let config = config_with_token_endpoint(&token_url, &jwks_url);
+
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut pre = sessions.create();
+        pre.set("_oidc_state", "state1");
+        pre.set("_oidc_nonce", "nonce1");
+        pre.set("_oidc_pkce", "verifier1");
+        pre.set("_oidc_return_to", "/dashboard");
+        sessions.save(&pre);
+
+        let oidc = OidcAuth::new(config, sessions.clone());
+        let req = with_cookie(get("/auth/callback?code=authcode&state=state1"), SID_COOKIE, &pre.id);
+        let resp = oidc.handle(&req, &conn(), &OkApp).unwrap();
+
+        assert_eq!(302, resp.status_code);
+        assert_eq!(header(&resp, "Location"), Some("/dashboard".to_string()));
+
+        let session = sessions.load(&pre.id).unwrap();
+        assert!(session.get("_oidc_claims").unwrap().contains("user1"));
+        assert!(session.get("_oidc_state").is_none());
+        assert!(session.get("_oidc_nonce").is_none());
+        assert!(session.get("_oidc_pkce").is_none());
+        assert!(session.get("_oidc_return_to").is_none());
+    }
+
+    #[test]
+    fn callback_nonce_mismatch_returns_forbidden() {
+        let id_token = signed_id_token("wrong-nonce", "my-client-id", "https://idp.example.com");
+        let token_body = format!(
+            r#"{{"access_token":"tok","token_type":"Bearer","id_token":"{id_token}"}}"#
+        );
+        let token_url = start_fake_token_server(move |_req| {
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+                token_body.len(),
+                token_body
+            )
+        });
+        let jwks_url = jwks_tests::jwks_server(&jwks_tests::rsa_jwk_json("rsa-key-1"));
+        let config = config_with_token_endpoint(&token_url, &jwks_url);
+
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut pre = sessions.create();
+        pre.set("_oidc_state", "state1");
+        pre.set("_oidc_nonce", "expected-nonce");
+        pre.set("_oidc_pkce", "verifier1");
+        sessions.save(&pre);
+
+        let oidc = OidcAuth::new(config, sessions);
+        let req = with_cookie(get("/auth/callback?code=authcode&state=state1"), SID_COOKIE, &pre.id);
+        let resp = oidc.handle(&req, &conn(), &OkApp).unwrap();
+        assert_eq!(403, resp.status_code);
+    }
+
+    #[test]
+    fn callback_falls_back_to_userinfo_when_provider_has_no_jwks() {
+        // GitHub-style: no id_token, so OidcAuth falls back to fetch_user_info.
+        let userinfo_url = start_fake_token_server(|_req| {
+            let body = r#"{"sub":"user2","email":"user2@example.com","name":"User Two"}"#;
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
+        });
+        let token_body = r#"{"access_token":"tok","token_type":"Bearer"}"#.to_string();
+        let token_url = start_fake_token_server(move |_req| {
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+                token_body.len(),
+                token_body
+            )
+        });
+        let config = OidcConfig {
+            provider: OidcProvider {
+                issuer: "https://idp.example.com".into(),
+                authorization_endpoint: "https://idp.example.com/authorize".into(),
+                token_endpoint: token_url,
+                jwks_uri: String::new(),
+                userinfo_endpoint: Some(userinfo_url),
+                end_session_endpoint: None,
+            },
+            client_id: "my-client-id".into(),
+            client_secret: "my-client-secret".into(),
+            redirect_uri: "https://app.example.com/cb".into(),
+            scopes: vec!["read:user".into()],
+            post_login_redirect: "/".into(),
+        };
+
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut pre = sessions.create();
+        pre.set("_oidc_state", "state1");
+        sessions.save(&pre);
+
+        let oidc = OidcAuth::new(config, sessions.clone());
+        let req = with_cookie(get("/auth/callback?code=authcode&state=state1"), SID_COOKIE, &pre.id);
+        let resp = oidc.handle(&req, &conn(), &OkApp).unwrap();
+
+        assert_eq!(302, resp.status_code);
+        let session = sessions.load(&pre.id).unwrap();
+        assert!(session.get("_oidc_claims").unwrap().contains("user2@example.com"));
+    }
+
+    // ── authenticated pass-through ───────────────────────────────────────────
+
+    #[test]
+    fn authenticated_request_injects_claims_header_and_passes_through() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut session = sessions.create();
+        session.set("_oidc_claims", r#"{"sub":"user1","iss":"i","aud":[],"exp":0,"iat":0,"email":"user1@example.com"}"#);
+        sessions.save(&session);
+
+        let oidc = OidcAuth::new(google_config(), sessions);
+        let req = with_cookie(get("/dashboard"), SID_COOKIE, &session.id);
+        let inner = CapturingApp::new();
+        let resp = oidc.handle(&req, &conn(), &inner).unwrap();
+
+        assert_eq!(200, resp.status_code);
+        let captured = inner.captured.lock().unwrap().clone().expect("inner app should have been called");
+        let claims_header = captured.headers.iter()
+            .find(|h| h.name.eq_ignore_ascii_case(super::super::oidc_auth::CLAIMS_HEADER))
+            .expect("claims header should be injected");
+        assert!(claims_header.value.contains("user1@example.com"));
+    }
+
+    // ── /auth/logout ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn logout_destroys_session_and_redirects_home() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let mut session = sessions.create();
+        session.set("_oidc_claims", "{}");
+        sessions.save(&session);
+
+        let oidc = OidcAuth::new(google_config(), sessions.clone());
+        let req = with_cookie(get("/auth/logout"), SID_COOKIE, &session.id);
+        let resp = oidc.handle(&req, &conn(), &OkApp).unwrap();
+
+        assert_eq!(302, resp.status_code);
+        assert_eq!(header(&resp, "Location"), Some("/".to_string()));
+        assert!(sessions.load(&session.id).is_none(), "session should be destroyed");
+    }
+
+    #[test]
+    fn logout_without_cookie_still_redirects_home() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let oidc = OidcAuth::new(google_config(), sessions);
+        let resp = oidc.handle(&get("/auth/logout"), &conn(), &OkApp).unwrap();
+        assert_eq!(302, resp.status_code);
+        assert_eq!(header(&resp, "Location"), Some("/".to_string()));
+    }
+
+    // ── custom paths ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn custom_login_path_overrides_default() {
+        let sessions = Arc::new(SessionStore::new(3600));
+        let oidc = OidcAuth::new(google_config(), sessions).login_path("/custom-login");
+
+        // The default /auth/login is no longer special-cased, so with no
+        // session it falls through to the "redirect to login" branch, which
+        // now points at the *custom* login path.
+        let resp = oidc.handle(&get("/auth/login"), &conn(), &OkApp).unwrap();
+        assert_eq!(302, resp.status_code);
+        assert!(header(&resp, "Location").unwrap().starts_with("/custom-login?return_to="));
+
+        // The custom path itself triggers the real login handler.
+        let resp2 = oidc.handle(&get("/custom-login"), &conn(), &OkApp).unwrap();
+        assert_eq!(302, resp2.status_code);
+        assert!(header(&resp2, "Location").unwrap().starts_with("https://accounts.google.com"));
+    }
+
+    // ── claims accessors ─────────────────────────────────────────────────────
+
+    #[test]
+    fn claims_accessors_read_injected_header() {
+        let mut req = get("/dashboard");
+        req.headers.push(Header {
+            name: super::super::oidc_auth::CLAIMS_HEADER.to_string(),
+            value: r#"{"sub":"user1","iss":"i","aud":[],"exp":0,"iat":0,"email":"user1@example.com"}"#.to_string(),
+        });
+        assert_eq!(OidcAuth::sub(&req), Some("user1".to_string()));
+        assert_eq!(OidcAuth::email(&req), Some("user1@example.com".to_string()));
+        assert!(OidcAuth::claims(&req).is_some());
+    }
+
+    #[test]
+    fn claims_accessors_return_none_without_header() {
+        let req = get("/dashboard");
+        assert_eq!(OidcAuth::sub(&req), None);
+        assert_eq!(OidcAuth::email(&req), None);
+        assert!(OidcAuth::claims(&req).is_none());
     }
 }
