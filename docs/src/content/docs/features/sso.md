@@ -208,3 +208,33 @@ let claims = jwks.verify_jwt(&id_token, &opts)?;
 :::note[GitHub does not issue id_tokens]
 GitHub's OAuth 2.0 implementation does not return an `id_token`. `OidcAuth` detects this and falls back to the UserInfo endpoint to fetch claims.
 :::
+
+## The outbound HTTP client behind it all
+
+Token exchange, JWKS fetch, discovery, and UserInfo calls are all plain
+[`http_client::Client`](/reference/api/) requests — the same synchronous,
+dependency-free HTTP/1.1 + TLS client used everywhere else in `rws`. There is
+no separate "SSO HTTP client"; `sso` just depends on the `http-client`
+feature (implied automatically) for HTTPS support.
+
+The token endpoint expects an `application/x-www-form-urlencoded` body, so
+`OidcClient::exchange_code` uses `Client`'s `.form()` builder method:
+
+```rust
+use rust_web_server::http_client::Client;
+
+let resp = Client::new()
+    .post("https://oauth2.googleapis.com/token")
+    .form(&[
+        ("grant_type", "authorization_code"),
+        ("code", "abc123"),
+        ("redirect_uri", "https://example.com/auth/callback"),
+        ("client_id", "my-client-id"),
+        ("client_secret", "my-client-secret"),
+    ])
+    .send()?;
+```
+
+`.form()` percent-encodes each pair, joins them with `&`, and sets
+`Content-Type: application/x-www-form-urlencoded` — available on both the
+sync `RequestBuilder` and the async `AsyncRequestBuilder` (`http2` feature).

@@ -73,22 +73,21 @@ impl OidcClient {
         code: &str,
         pkce_verifier: &str,
     ) -> Result<TokenResponse, SsoError> {
-        let mut body = format!(
-            "grant_type=authorization_code&code={}&redirect_uri={}&client_id={}&client_secret={}",
-            url_encode(code),
-            url_encode(&self.config.redirect_uri),
-            url_encode(&self.config.client_id),
-            url_encode(&self.config.client_secret),
-        );
+        let mut form: Vec<(&str, &str)> = vec![
+            ("grant_type", "authorization_code"),
+            ("code", code),
+            ("redirect_uri", &self.config.redirect_uri),
+            ("client_id", &self.config.client_id),
+            ("client_secret", &self.config.client_secret),
+        ];
         if !self.config.provider.jwks_uri.is_empty() {
-            body.push_str(&format!("&code_verifier={}", url_encode(pkce_verifier)));
+            form.push(("code_verifier", pkce_verifier));
         }
 
         let resp = Client::new()
             .post(&self.config.provider.token_endpoint)
-            .header("Content-Type", "application/x-www-form-urlencoded")
             .header("Accept", "application/json")
-            .body(body.into_bytes())
+            .form(&form)
             .send()
             .map_err(|e| SsoError(format!("token exchange failed: {e}")))?;
 

@@ -1,9 +1,12 @@
 //! Unit tests for the SSO module.
 //!
-//! All tests operate on pure in-memory logic — no network calls are made.
+//! All tests operate on pure in-memory logic — no network calls are made,
+//! except the `exchange_code` tests below, which use an in-process loopback
+//! `TcpListener` as a fake token endpoint (same pattern as
+//! `http_client::tests`) rather than a real IdP.
 
 use super::{
-    client::url_encode,
+    client::{url_encode, OidcClient},
     config::OidcConfig,
     discovery::OidcProvider,
     jwks::json_str,
@@ -270,4 +273,93 @@ fn json_str_handles_nested_json() {
     let json = r#"{"outer": "val1", "inner": {"outer": "val2"}}"#;
     // Should find the first "outer"
     assert_eq!(json_str(json, "outer"), Some("val1".to_string()));
+}
+
+// ── exchange_code tests (loopback fake token endpoint) ──────────────────────────
+
+fn start_fake_token_server(handler: impl Fn(String) -> String + Send + 'static) -> String {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = vec![0u8; 4096];
+            let n = stream.read(&mut buf).unwrap_or(0);
+            let req = String::from_utf8_lossy(&buf[..n]).to_string();
+            let resp = handler(req);
+            stream.write_all(resp.as_bytes()).ok();
+        }
+    });
+    format!("http://127.0.0.1:{}", addr.port())
+}
+
+fn config_with_token_endpoint(token_endpoint: &str, jwks_uri: &str) -> OidcConfig {
+    OidcConfig {
+        provider: OidcProvider {
+            issuer: "https://idp.example.com".into(),
+            authorization_endpoint: "https://idp.example.com/authorize".into(),
+            token_endpoint: token_endpoint.into(),
+            jwks_uri: jwks_uri.into(),
+            userinfo_endpoint: None,
+            end_session_endpoint: None,
+        },
+        client_id: "my-client-id".into(),
+        client_secret: "my-client-secret".into(),
+        redirect_uri: "https://app.example.com/cb".into(),
+        scopes: vec!["openid".into()],
+        post_login_redirect: "/".into(),
+    }
+}
+
+#[test]
+fn exchange_code_sends_form_encoded_body_and_parses_response() {
+    let base = start_fake_token_server(|req| {
+        let has_ct = req.contains("Content-Type: application/x-www-form-urlencoded");
+        let has_grant = req.contains("grant_type=authorization_code");
+        let has_code = req.contains("code=auth-code-123");
+        let has_client_id = req.contains("client_id=my-client-id");
+        let has_secret = req.contains("client_secret=my-client-secret");
+        let has_verifier = req.contains("code_verifier=verifier-abc");
+        let ok = has_ct && has_grant && has_code && has_client_id && has_secret && has_verifier;
+        let status = if ok { "200" } else { "400" };
+        let body = r#"{"access_token":"tok","token_type":"Bearer","expires_in":3600,"id_token":"jwt"}"#;
+        format!("HTTP/1.1 {status} OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
+    });
+    let config = config_with_token_endpoint(&base, "https://idp.example.com/jwks");
+    let client = OidcClient::new(config);
+    let result = client.exchange_code("auth-code-123", "verifier-abc").unwrap();
+    assert_eq!(result.access_token, "tok");
+    assert_eq!(result.token_type, "Bearer");
+    assert_eq!(result.expires_in, Some(3600));
+    assert_eq!(result.id_token, Some("jwt".to_string()));
+}
+
+#[test]
+fn exchange_code_omits_code_verifier_when_provider_has_no_jwks_uri() {
+    // GitHub-style OAuth-only providers have no jwks_uri and don't support PKCE.
+    let base = start_fake_token_server(|req| {
+        let has_verifier = req.contains("code_verifier");
+        let status = if has_verifier { "400" } else { "200" };
+        let body = r#"{"access_token":"tok","token_type":"Bearer"}"#;
+        format!("HTTP/1.1 {status} OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
+    });
+    let config = config_with_token_endpoint(&base, "");
+    let client = OidcClient::new(config);
+    let result = client.exchange_code("auth-code-123", "verifier-abc").unwrap();
+    assert_eq!(result.access_token, "tok");
+}
+
+#[test]
+fn exchange_code_returns_error_on_non_success_status() {
+    let base = start_fake_token_server(|_req| {
+        let body = r#"{"error":"invalid_grant"}"#;
+        format!("HTTP/1.1 400 Bad Request\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)
+    });
+    let config = config_with_token_endpoint(&base, "https://idp.example.com/jwks");
+    let client = OidcClient::new(config);
+    let result = client.exchange_code("bad-code", "verifier-abc");
+    match result {
+        Err(e) => assert!(e.0.contains("400"), "expected 400 in error, got: {}", e.0),
+        Ok(_) => panic!("expected an error for a 400 response"),
+    }
 }

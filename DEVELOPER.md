@@ -171,7 +171,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `CursorPage<T>` | `pagination` (re-exported from `model`) | Keyset-paginated result: `items`, `next_cursor: Option<String>`, plus `has_next`, `.map(f)`, and `.link_header(base_url, cursor_param)` (single `rel="next"` entry). Returned by `QueryBuilder::paginate_after(cursor, per_page)`, which orders by the primary key ascending and fetches `per_page + 1` rows to detect a next page without a separate `COUNT(*)`. |
 | `#[derive(Model)]` | `model` (requires `macros` + a model feature) | Proc-macro that maps a struct to a DB table. Attributes: `#[table(name = "…")]` struct-level override; `#[primary_key(auto_increment)]`; `#[column(name = "…")]`; `#[ignore]`. Generates `Model` impl plus `T::repository(&pool)` and `T::query(&pool)` helpers. |
 | `HasMany<T>` / `HasOne<T>` / `BelongsTo<O>` | `model` | Async explicit-load relationship helpers. `HasMany::new(owner_pk, fk_col).load(&pool).await` returns `Vec<T>`; no hidden N+1 queries. |
-| `Client` / `RequestBuilder` / `Response` | `http_client` | Synchronous outbound HTTP/1.1 client. `Client::new().get(url).header(k,v).timeout_ms(ms).send()` returns `Response`. Follows redirects automatically. Plain HTTP works in all builds; HTTPS requires `http-client` or `http2` feature. |
+| `Client` / `RequestBuilder` / `Response` | `http_client` | Synchronous outbound HTTP/1.1 client. `Client::new().get(url).header(k,v).timeout_ms(ms).send()` returns `Response`. Follows redirects automatically. `.form(&[(k,v)])` builds an `application/x-www-form-urlencoded` body (OAuth token endpoints, etc.) — also on `AsyncRequestBuilder`. Plain HTTP works in all builds; HTTPS requires `http-client` or `http2` feature. |
 | `AsyncClient` / `AsyncRequestBuilder` | `http_client` (requires `http2` feature) | Async variant of the outbound client. Same builder API with `.send().await`. |
 | `HttpClientError` | `http_client` | Error type returned by the HTTP client; implements `std::error::Error`. |
 | `hash_password` / `verify_password` | `crypto` | Argon2id password hashing and verification. `hash_password(pwd)` returns a PHC string (salt embedded). `verify_password(pwd, hash)` is constant-time. |
@@ -3353,6 +3353,28 @@ let resp = Client::new()
 
 assert!(resp.is_success());
 ```
+
+POST with a form-urlencoded body — the shape OAuth 2.0 token endpoints and
+JWKS-fronting IdPs require (used internally by `sso::client::OidcClient` for
+token exchange):
+
+```rust
+let resp = Client::new()
+    .post("https://oauth2.googleapis.com/token")
+    .form(&[
+        ("grant_type", "authorization_code"),
+        ("code", "abc123"),
+        ("client_id", "my-client-id"),
+        ("client_secret", "my-client-secret"),
+    ])
+    .send()?;
+
+let json = resp.text()?;
+```
+
+`.form()` percent-encodes each key/value pair, joins them with `&`, and sets
+`Content-Type: application/x-www-form-urlencoded` — it exists on both
+`RequestBuilder` and `AsyncRequestBuilder`.
 
 Async variant (requires `http2` feature):
 

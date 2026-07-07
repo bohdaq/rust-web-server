@@ -187,7 +187,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Virtual hosting / SNI — per-domain TLS certs; `Router::with_host()` for per-host routing
 - WebSocket (RFC 6455) — handshake, frame codec, SHA-1 + base64 built in, no extra dep
 - Server-Sent Events — `Sse` builder with correct headers; ideal for AI token streaming
-- Outbound HTTP client — `Client` (sync) and `AsyncClient` (async, `http2` feature); HTTPS via rustls
+- Outbound HTTP client — `Client` (sync) and `AsyncClient` (async, `http2` feature); HTTPS via rustls; `.form(&[(k,v)])` for `application/x-www-form-urlencoded` bodies (OAuth token/JWKS calls, etc.)
 
 </details>
 

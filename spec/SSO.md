@@ -47,35 +47,55 @@ All new deps are gated behind new Cargo features so existing builds are unaffect
 
 ## Phases
 
-### Phase 1 — Outbound HTTP Client
+### ✅ Phase 1 — Outbound HTTP Client — Done
 
-SSO requires making HTTPS calls to IdPs (token exchange, JWKS, discovery).
-`ReverseProxy` already demonstrates `TcpStream`-based HTTP forwarding; this
-phase wraps that into a proper typed client.
+**Already existed before this phase was explicitly worked, under different
+names than this sketch used.** `src/http_client/mod.rs` predates the SSO
+effort — it was built out for `ForwardAuthLayer`, `S3Storage`, and
+`AzureBlobStorage`, all of which needed outbound HTTPS calls before SSO did.
+By the time this phase was picked up, `JwksCache::fetch`, `OidcProvider::discover`,
+and `OidcClient::exchange_code`/`fetch_user_info` were already using it for
+every outbound call this phase describes (JWKS fetch, discovery, token
+exchange, UserInfo) — so the actual gap was small and narrower than the
+sketch above implies.
 
-```rust
-use rust_web_server::http_client::{HttpClient, Response as HttpResponse};
+**Naming deviates from the sketch, deliberately, not by oversight:** the real
+types are `Client`/`RequestBuilder`/`Response` (`src/http_client/mod.rs`), not
+`HttpClient`/`HttpRequest`/`HttpResponse`. That naming predates this SSO spec
+and is already used consistently elsewhere in the crate (`ForwardAuthLayer`,
+storage backends, the docs). Introducing a second, spec-only name via a type
+alias would add indirection with no behavioral benefit, so this phase did not
+rename or alias anything. Likewise there is no separate `HttpRequest` type —
+`RequestBuilder` fills that role — and no `.tls(bool)` toggle: TLS is selected
+automatically from the URL scheme (`https://` vs `http://`), which is strictly
+less to get wrong than a separate opt-in flag, and is what every existing SSO
+call site already relied on. `.json::<T>()` on `Response` already existed
+(gated on the `serde` feature) before this phase, for the same reason.
 
-let client = HttpClient::new()
-    .timeout_ms(5000)
-    .tls(true);                          // requires the http2 feature (rustls)
+**What this phase actually added:** a `.form(&[(&str, &str)]) -> Self`
+builder method on both `RequestBuilder` and `AsyncRequestBuilder`, matching
+this entry's own example usage. Before this, `OidcClient::exchange_code`
+hand-built its `application/x-www-form-urlencoded` body with `format!` +
+its own `url_encode` helper — functionally correct, but exactly the kind of
+boilerplate a typed client should absorb, and the literal shape this entry's
+sketch (`.form(&[...])`) called for. `exchange_code` was refactored to use
+the new `.form()` method; `url_encode` remains in `src/sso/client.rs` for the
+query-string encoding `authorization_url` still needs (a different encoding
+context — `.form()` is body-only).
 
-let resp: HttpResponse = client.get("https://accounts.google.com/.well-known/openid-configuration")
-    .send()?;
+**Tests:** 3 new tests in `src/http_client/tests.rs` (`.form()` sets the
+Content-Type and encodes reserved characters correctly, including an
+empty-pairs edge case) plus 3 new tests in `src/sso/tests.rs` exercising
+`OidcClient::exchange_code` end-to-end against a loopback fake token
+endpoint (success parses `TokenResponse` fields; a provider with no
+`jwks_uri` omits `code_verifier`; a non-2xx response surfaces as an error
+containing the status code) — the first tests in that file to perform any
+I/O, called out explicitly in the module doc comment since the rest of that
+file is deliberately pure/offline.
 
-let resp: HttpResponse = client.post("https://oauth2.googleapis.com/token")
-    .form(&[("code", code), ("grant_type", "authorization_code"), …])
-    .send()?;
-```
-
-**New module:** `src/http_client/mod.rs`
-- `HttpClient` — builder with timeout, TLS, base URL
-- `HttpRequest` — method, path, headers, body
-- `HttpResponse` — status, headers, body bytes
-- `.json::<T>()` — deserialise body (via `serde` feature)
-- Backed by `TcpStream` (plain) or `TlsStream` (rustls, `http2` feature)
-
-**Cargo feature:** `sso` implies `http2` (for TLS to IdP endpoints)
+**Effort:** small, as this entry's own template would estimate for a mostly-
+already-built dependency — the true remaining work was one builder method
+plus dogfooding it in the one caller that still hand-rolled form encoding.
 
 ---
 
@@ -532,7 +552,7 @@ helpers handle persistence.
 
 | Phase | Feature | Status |
 |-------|---------|--------|
-| 1 | `HttpClient` — outbound TLS HTTP for token / JWKS calls | Pending |
+| 1 | `HttpClient` — outbound TLS HTTP for token / JWKS calls | ✅ Done (v17.91.0) |
 | 2 | JWKS fetch + cache; RS256 / ES256 JWT verification; `OidcClaims` | Pending |
 | 3 | OIDC discovery; `OidcProvider` struct; named presets | Pending |
 | 4 | OAuth 2.0 Authorization Code + PKCE flow; `OidcAuth` middleware | Pending |

@@ -62,6 +62,31 @@ use std::time::Duration;
 #[cfg(any(feature = "http-client", feature = "http2"))]
 use std::sync::Arc;
 
+// ── form encoding ─────────────────────────────────────────────────────────────
+
+/// Percent-encode a single `application/x-www-form-urlencoded` value.
+fn form_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
+/// Encode `pairs` as an `application/x-www-form-urlencoded` body.
+fn form_urlencode(pairs: &[(&str, &str)]) -> String {
+    pairs
+        .iter()
+        .map(|(k, v)| format!("{}={}", form_encode(k), form_encode(v)))
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
 // ── Error type ────────────────────────────────────────────────────────────────
 
 /// Error returned by the HTTP client.
@@ -652,6 +677,29 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
+    /// Set an `application/x-www-form-urlencoded` body from key/value pairs
+    /// (also sets `Content-Type: application/x-www-form-urlencoded`).
+    ///
+    /// This is the body shape OAuth 2.0 token endpoints require, e.g.:
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::http_client::Client;
+    ///
+    /// let resp = Client::new()
+    ///     .post("https://oauth2.googleapis.com/token")
+    ///     .form(&[("grant_type", "authorization_code"), ("code", "abc123")])
+    ///     .send()
+    ///     .unwrap();
+    /// ```
+    pub fn form(mut self, pairs: &[(&str, &str)]) -> Self {
+        self.headers.push((
+            "Content-Type".to_string(),
+            "application/x-www-form-urlencoded".to_string(),
+        ));
+        self.body = Some(form_urlencode(pairs).into_bytes());
+        self
+    }
+
     /// Override the timeout for this request.
     pub fn timeout_ms(mut self, ms: u64) -> Self {
         self.timeout_ms = Some(ms);
@@ -981,6 +1029,17 @@ mod async_impl {
                 "application/json".to_string(),
             ));
             self.body = Some(s.as_bytes().to_vec());
+            self
+        }
+
+        /// Set an `application/x-www-form-urlencoded` body from key/value
+        /// pairs (sets `Content-Type: application/x-www-form-urlencoded`).
+        pub fn form(mut self, pairs: &[(&str, &str)]) -> Self {
+            self.headers.push((
+                "Content-Type".to_string(),
+                "application/x-www-form-urlencoded".to_string(),
+            ));
+            self.body = Some(super::form_urlencode(pairs).into_bytes());
             self
         }
 

@@ -281,4 +281,52 @@ mod tests {
         assert_eq!(200, resp.status());
         assert_eq!("deleted", resp.text().unwrap());
     }
+
+    // ── form encoding ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn form_sets_content_type_and_urlencoded_body() {
+        let base = start_fake_server(|req| {
+            let has_ct = req.contains("Content-Type: application/x-www-form-urlencoded");
+            let has_body = req.contains("grant_type=authorization_code&code=abc%20123");
+            let status = if has_ct && has_body { "200" } else { "400" };
+            format!("HTTP/1.1 {status} OK\r\nContent-Length: 2\r\n\r\nok")
+        });
+        let resp = Client::new()
+            .post(&base)
+            .form(&[("grant_type", "authorization_code"), ("code", "abc 123")])
+            .send()
+            .unwrap();
+        assert_eq!(200, resp.status());
+    }
+
+    #[test]
+    fn form_encodes_reserved_characters_in_keys_and_values() {
+        let base = start_fake_server(|req| {
+            let has_body = req.contains("redirect_uri=https%3A%2F%2Fexample.com%2Fcb%3Fx%3D1");
+            let status = if has_body { "200" } else { "400" };
+            format!("HTTP/1.1 {status} OK\r\nContent-Length: 2\r\n\r\nok")
+        });
+        let resp = Client::new()
+            .post(&base)
+            .form(&[("redirect_uri", "https://example.com/cb?x=1")])
+            .send()
+            .unwrap();
+        assert_eq!(200, resp.status());
+    }
+
+    #[test]
+    fn form_empty_pairs_sends_content_type_with_empty_body() {
+        // An empty body never gets a Content-Length header (pre-existing
+        // build_request_bytes behavior, unrelated to .form()) — just confirm
+        // the Content-Type header is still set and nothing sent for the body.
+        let base = start_fake_server(|req| {
+            let has_ct = req.contains("Content-Type: application/x-www-form-urlencoded");
+            let ends_with_headers = req.ends_with("\r\n\r\n");
+            let status = if has_ct && ends_with_headers { "200" } else { "400" };
+            format!("HTTP/1.1 {status} OK\r\nContent-Length: 2\r\n\r\nok")
+        });
+        let resp = Client::new().post(&base).form(&[]).send().unwrap();
+        assert_eq!(200, resp.status());
+    }
 }

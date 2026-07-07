@@ -694,12 +694,20 @@ let resp = Client::new().post("https://api.example.com/charge")
     .body_json(r#"{"amount":1000}"#)
     .send()?;
 
+// Form-urlencoded body (OAuth token / JWKS-fronting IdP calls, etc.):
+let resp = Client::new().post("https://oauth2.googleapis.com/token")
+    .form(&[("grant_type", "authorization_code"), ("code", "abc123")])
+    .send()?;
+
 // Async (requires `http2` feature):
 use rust_web_server::http_client::AsyncClient;
 let resp = AsyncClient::new().get("https://api.example.com").send().await?;
 ```
 
 Follows redirects automatically. GET-downgrade on 301/302/303; method-preserve on 307/308.
+`.form(&[(k,v)])` (on both `RequestBuilder` and `AsyncRequestBuilder`) percent-encodes each pair
+and sets `Content-Type: application/x-www-form-urlencoded` — used internally by
+`sso::client::OidcClient::exchange_code` for the authorization-code token exchange.
 
 ---
 

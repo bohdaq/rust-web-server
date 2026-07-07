@@ -366,11 +366,11 @@ When built with the `http3` feature (which implies `http2`), a second listener s
 `src/http_client/mod.rs` — synchronous outbound HTTP/1.1 client. Always compiled in; no feature flag needed for plain HTTP. HTTPS requires `any(feature = "http-client", feature = "http2")`.
 
 - `Client` — builder-pattern client; `Client::new()` sets `timeout_ms: 30_000` and `max_redirects: 10`. Convenience methods `.get()`, `.post()`, `.put()`, `.patch()`, `.delete()`, `.head()`, `.request(method, url)` each return a `RequestBuilder`.
-- `RequestBuilder` — `.header(k,v)`, `.body(bytes)`, `.body_text(s)` (sets `Content-Type: text/plain`), `.body_json(s)` (sets `Content-Type: application/json`), `.timeout_ms(ms)`, `.send() -> Result<Response, HttpClientError>`. Follows redirects automatically, downgrading to GET on 301/302/303, preserving method on 307/308.
+- `RequestBuilder` — `.header(k,v)`, `.body(bytes)`, `.body_text(s)` (sets `Content-Type: text/plain`), `.body_json(s)` (sets `Content-Type: application/json`), `.form(&[(&str,&str)])` (percent-encodes and joins pairs, sets `Content-Type: application/x-www-form-urlencoded` — the body shape OAuth 2.0 token endpoints require; used by `sso::client::OidcClient::exchange_code`), `.timeout_ms(ms)`, `.send() -> Result<Response, HttpClientError>`. Follows redirects automatically, downgrading to GET on 301/302/303, preserving method on 307/308.
 - `Response` — `.status()`, `.is_success()` (200–299), `.is_redirect()` (301/302/303/307/308), `.header(name)` (case-insensitive lookup), `.bytes()`, `.text()`, `.json::<T>()` (requires `serde` feature).
 - `HttpClientError(String)` — implements `std::error::Error` and `Display`.
 - `ParsedUrl` (private) — splits `scheme://host[:port]/path[?query]` without external URL crate.
 - `tls_connect()` (private, `#[cfg(any(feature = "http-client", feature = "http2"))]`) — wraps a `TcpStream` in `rustls::StreamOwned<ClientConnection, TcpStream>` using `webpki_roots` CA store.
-- `AsyncClient` / `AsyncRequestBuilder` (gated on `#[cfg(feature = "http2")]`) — same API with `async fn send()`, backed by `tokio::net::TcpStream` and `tokio_rustls::TlsConnector`. Timeouts via `tokio::time::timeout`.
+- `AsyncClient` / `AsyncRequestBuilder` (gated on `#[cfg(feature = "http2")]`) — same API including `.form()`, with `async fn send()`, backed by `tokio::net::TcpStream` and `tokio_rustls::TlsConnector`. Timeouts via `tokio::time::timeout`.
 - Body reading strategy: chunked (`Transfer-Encoding: chunked`) → decode via `decode_chunked()`; content-length → read exactly N bytes; otherwise read until EOF.
 
