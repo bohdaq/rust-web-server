@@ -2286,3 +2286,226 @@ mod async_tool_tests {
     }
 }
 
+// ── require_oauth (MCP 2025-03-26 OAuth 2.0 authorization, `sso` feature) ──────
+
+#[cfg(feature = "sso")]
+mod oauth_tests {
+    use super::*;
+    use crate::sso::OidcProvider;
+    use std::sync::OnceLock;
+
+    fn rsa_key() -> &'static rsa::RsaPrivateKey {
+        static KEY: OnceLock<rsa::RsaPrivateKey> = OnceLock::new();
+        KEY.get_or_init(|| rsa::RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap())
+    }
+
+    fn rsa_jwk_json(kid: &str) -> String {
+        use rsa::traits::PublicKeyParts;
+        let pub_key = rsa_key().to_public_key();
+        let n = crate::sso::pkce::base64url_encode(&pub_key.n().to_bytes_be());
+        let e = crate::sso::pkce::base64url_encode(&pub_key.e().to_bytes_be());
+        format!(r#"{{"kty":"RSA","kid":"{kid}","n":"{n}","e":"{e}"}}"#)
+    }
+
+    fn sign_rs256(message: &[u8]) -> Vec<u8> {
+        use rsa::pkcs1v15::SigningKey;
+        use rsa::signature::{SignatureEncoding, Signer};
+        let signing_key = SigningKey::<sha2::Sha256>::new(rsa_key().clone());
+        signing_key.sign(message).to_bytes().to_vec()
+    }
+
+    fn build_jwt(header: &str, payload: &str) -> String {
+        let h = crate::sso::pkce::base64url_encode(header.as_bytes());
+        let p = crate::sso::pkce::base64url_encode(payload.as_bytes());
+        let message = format!("{h}.{p}");
+        let sig = sign_rs256(message.as_bytes());
+        let s = crate::sso::pkce::base64url_encode(&sig);
+        format!("{message}.{s}")
+    }
+
+    /// Serve the same JWKS document to every connection — good enough here
+    /// since `verify_jwt` never needs to refetch for a valid, matching key.
+    fn start_fake_jwks_server(jwk_json: &str) -> String {
+        let body = format!(r#"{{"keys":[{jwk_json}]}}"#);
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut buf = vec![0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let resp = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body);
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+        format!("http://127.0.0.1:{}", addr.port())
+    }
+
+    fn unix_now() -> u64 {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
+    }
+
+    fn test_provider(jwks_url: &str) -> OidcProvider {
+        OidcProvider {
+            issuer: "https://idp.example.com".into(),
+            authorization_endpoint: "https://idp.example.com/authorize".into(),
+            token_endpoint: "https://idp.example.com/token".into(),
+            jwks_uri: jwks_url.to_string(),
+            userinfo_endpoint: None,
+            end_session_endpoint: None,
+        }
+    }
+
+    fn token_with(aud: &str, exp_offset_secs: i64) -> String {
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://idp.example.com","aud":"{aud}","exp":{},"iat":{}}}"#,
+            (unix_now() as i64 + exp_offset_secs).max(0),
+            unix_now(),
+        );
+        build_jwt(r#"{"alg":"RS256","kid":"key1"}"#, &claims)
+    }
+
+    fn oauth_server(jwks_url: &str) -> McpServer {
+        McpServer::new("srv", "1.0")
+            .require_oauth(test_provider(jwks_url), "my-client-id")
+            .tool("ping", "Ping", "{}", |_| Ok(McpContent::text("pong")))
+    }
+
+    #[test]
+    fn valid_bearer_jwt_succeeds() {
+        let jwks_url = start_fake_jwks_server(&rsa_jwk_json("key1"));
+        let client = TestClient::new(oauth_server(&jwks_url));
+        let token = token_with("my-client-id", 3600);
+        let resp = client.post("/mcp")
+            .header("Authorization", &format!("Bearer {token}"))
+            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .send();
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[test]
+    fn missing_bearer_returns_401() {
+        let jwks_url = start_fake_jwks_server(&rsa_jwk_json("key1"));
+        let client = TestClient::new(oauth_server(&jwks_url));
+        let resp = client.post("/mcp")
+            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .send();
+        assert_eq!(resp.status(), 401);
+    }
+
+    #[test]
+    fn wrong_signing_key_returns_401() {
+        let jwks_url = start_fake_jwks_server(&rsa_jwk_json("key1"));
+        let client = TestClient::new(oauth_server(&jwks_url));
+        // Sign with a *different* key than the one published at jwks_url.
+        let other_key = rsa::RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap();
+        let claims = format!(
+            r#"{{"sub":"user1","iss":"https://idp.example.com","aud":"my-client-id","exp":{},"iat":{}}}"#,
+            unix_now() + 3600,
+            unix_now(),
+        );
+        let header = r#"{"alg":"RS256","kid":"key1"}"#;
+        let h = crate::sso::pkce::base64url_encode(header.as_bytes());
+        let p = crate::sso::pkce::base64url_encode(claims.as_bytes());
+        let message = format!("{h}.{p}");
+        use rsa::pkcs1v15::SigningKey;
+        use rsa::signature::{SignatureEncoding, Signer};
+        let signing_key = SigningKey::<sha2::Sha256>::new(other_key);
+        let sig = signing_key.sign(message.as_bytes()).to_bytes().to_vec();
+        let token = format!("{message}.{}", crate::sso::pkce::base64url_encode(&sig));
+
+        let resp = client.post("/mcp")
+            .header("Authorization", &format!("Bearer {token}"))
+            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .send();
+        assert_eq!(resp.status(), 401);
+    }
+
+    #[test]
+    fn wrong_audience_returns_401() {
+        let jwks_url = start_fake_jwks_server(&rsa_jwk_json("key1"));
+        let client = TestClient::new(oauth_server(&jwks_url));
+        let token = token_with("someone-else", 3600);
+        let resp = client.post("/mcp")
+            .header("Authorization", &format!("Bearer {token}"))
+            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .send();
+        assert_eq!(resp.status(), 401);
+    }
+
+    #[test]
+    fn expired_token_returns_401() {
+        let jwks_url = start_fake_jwks_server(&rsa_jwk_json("key1"));
+        let client = TestClient::new(oauth_server(&jwks_url));
+        let token = token_with("my-client-id", -3600);
+        let resp = client.post("/mcp")
+            .header("Authorization", &format!("Bearer {token}"))
+            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .send();
+        assert_eq!(resp.status(), 401);
+    }
+
+    #[test]
+    fn metadata_endpoint_returns_document_when_configured() {
+        let jwks_url = start_fake_jwks_server(&rsa_jwk_json("key1"));
+        let client = TestClient::new(oauth_server(&jwks_url));
+        let resp = client.get("/.well-known/oauth-authorization-server").send();
+        assert_eq!(resp.status(), 200);
+        let body = resp.body_text();
+        assert!(body.contains("\"issuer\":\"https://idp.example.com\""));
+        assert!(body.contains(&jwks_url));
+    }
+
+    #[test]
+    fn metadata_endpoint_falls_through_when_oauth_not_configured() {
+        let srv = McpServer::new("srv", "1.0").tool("ping", "Ping", "{}", |_| Ok(McpContent::text("pong")));
+        let client = TestClient::new(srv);
+        let resp = client.get("/.well-known/oauth-authorization-server").send();
+        assert_ne!(resp.status(), 200);
+    }
+
+    #[test]
+    fn verified_claims_are_injected_into_context() {
+        let jwks_url = start_fake_jwks_server(&rsa_jwk_json("key1"));
+        let srv = McpServer::new("srv", "1.0")
+            .require_oauth(test_provider(&jwks_url), "my-client-id")
+            .tool_with_context("whoami", "Who am I", "{}", |ctx: McpContext, _args: &str| {
+                Ok(McpContent::text(ctx.auth_claims.unwrap_or_default()))
+            });
+        let client = TestClient::new(srv);
+        let token = token_with("my-client-id", 3600);
+        let resp = client.post("/mcp")
+            .header("Authorization", &format!("Bearer {token}"))
+            .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"whoami","arguments":{}}}"#)
+            .send();
+        assert_eq!(resp.status(), 200);
+        assert!(resp.body_text().contains("user1"), "expected claims sub in response: {}", resp.body_text());
+    }
+
+    #[test]
+    fn oauth_takes_precedence_over_require_bearer() {
+        let jwks_url = start_fake_jwks_server(&rsa_jwk_json("key1"));
+        let srv = McpServer::new("srv", "1.0")
+            .require_bearer("static-secret")
+            .require_oauth(test_provider(&jwks_url), "my-client-id")
+            .tool("ping", "Ping", "{}", |_| Ok(McpContent::text("pong")));
+        let client = TestClient::new(srv);
+
+        // The correct *static* token is rejected — OAuth verification runs instead.
+        let resp = client.post("/mcp")
+            .header("Authorization", "Bearer static-secret")
+            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .send();
+        assert_eq!(resp.status(), 401);
+
+        // A valid JWT succeeds.
+        let token = token_with("my-client-id", 3600);
+        let resp = client.post("/mcp")
+            .header("Authorization", &format!("Bearer {token}"))
+            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .send();
+        assert_eq!(resp.status(), 200);
+    }
+}
+

@@ -614,27 +614,21 @@ close structural match for `sessions`'s existing `Arc<Mutex<HashMap<...>>>` patt
 
 ## Priority 3 — Enterprise / advanced (lower urgency)
 
-### TODO-13: OAuth 2.0 Authorization (MCP 2025-03-26)
+### ✅ TODO-13: OAuth 2.0 Authorization (MCP 2025-03-26) — Done (v17.98.0)
 
-The 2025-03-26 spec defines an OAuth 2.0 authorization flow: the server exposes
-`/.well-known/oauth-authorization-server`, requires Bearer tokens from an authorization server,
-and supports PKCE. This enables multi-tenant or enterprise deployments where each user
-authenticates independently.
+**The leverage point held up exactly as scoped** — `sso::jwks::JwksCache` (built for the `sso` feature's OIDC client support, long before this TODO was picked up) does all of the real work here; this TODO only needed to wire it into `McpServer`. `McpServer::require_oauth(provider: sso::OidcProvider, audience: impl Into<String>) -> Self` is the new builder, stored as `Option<Arc<OAuthConfig>>` (`OAuthConfig { jwks: JwksCache, provider: OidcProvider, audience: String }`), both gated `#[cfg(feature = "sso")]` end to end (field, type, builder, verification/metadata logic in `execute()`) — `mcp` itself has no Cargo feature of its own and is always compiled, so `.require_oauth()` only exists to callers who also enable `sso`.
 
-**Leverage point:** `sso::JwksCache` already does RS256/ES256 JWT verification. A new builder:
-```rust
-.require_oauth(
-    jwks_url:  "https://accounts.google.com/.well-known/openid-configuration",
-    audience:  "my-mcp-client-id",
-)
-```
+**One parameter shape deviation from this entry's own sketch, and it's a correction, not a simplification:** the sketch's `.require_oauth(jwks_url: "...well-known/openid-configuration", audience: "...")` names its first parameter `jwks_url` but gives it a **discovery document URL** as an example value — those are two different things (`sso::discovery::OidcProvider::discover(issuer)` fetches the discovery document and extracts `jwks_uri` from it; `JwksCache::new(jwks_uri)` takes the JWKS endpoint directly, e.g. `https://www.googleapis.com/oauth2/v3/certs` for Google, not the discovery URL). Accepting a full `sso::OidcProvider` (a preset like `OidcProvider::google()`, or the result of a live `OidcProvider::discover(issuer)?` call) rather than a bare URL string resolves the ambiguity correctly, reuses this crate's own existing, already-tested discovery infrastructure instead of re-deriving a jwks_uri by hand, and — as a direct side effect — gives `GET /.well-known/oauth-authorization-server` a complete, accurate metadata document (issuer, both endpoints, jwks_uri) for free, rather than only ever knowing a bare jwks_uri and nothing else.
 
-In `execute()`: extract Bearer token → verify with `JwksCache` → inject claims into `McpContext`
-(TODO-2) as `auth_claims`. Return `401` with `WWW-Authenticate: Bearer` on failure.
+**`GET /.well-known/oauth-authorization-server`** is served automatically whenever `.require_oauth()` is configured, checked ahead of the main `self.path` (`/mcp`) match in `execute()` since it's a sibling top-level path, not nested under the MCP endpoint. It is **not a full RFC 8414 document** — this server is a resource server verifying tokens issued elsewhere, not the authorization server itself, so the document only ever carries what `OidcProvider` already knows (`issuer`, `authorization_endpoint`, `token_endpoint`, `jwks_uri`, `response_types_supported: ["code"]`). When OAuth isn't configured, this path isn't special-cased at all — it falls through to the fallback app exactly like any other non-MCP path.
 
-Also serve `GET /.well-known/oauth-authorization-server` with the metadata document.
+**Claims injection matches the sketch exactly:** on a successful verify, `McpContext.auth_claims` (a field that already existed, `None` since `TODO-2`, explicitly reserved in its own doc comment for "TODO-11/TODO-13" — TODO-11 ended up not needing it, so this is the field's first real use) is set to the verified `sso::OidcClaims`, serialized to a JSON string via `serde_json::to_string`. Failure (missing bearer, bad signature, wrong audience/issuer, expired) returns `401` with `WWW-Authenticate: Bearer` — reusing the exact same `unauthorized()` helper `.require_bearer()` already used, so the failure shape is identical between the two mechanisms; only the verification logic feeding into it differs.
 
-**Effort:** small — `JwksCache` already does the hard work.
+**Interaction with `.require_bearer()`, not addressed by the sketch at all:** if a server configures both (an unusual, unsupported combination — pick one), OAuth verification runs and the static token is never checked. This is an explicit tie-break, not an accident: `execute()` checks `self.oauth` first and only falls back to `self.auth_token` in the `else` branch.
+
+**Tests:** 9 new tests in an `oauth_tests` submodule of `src/mcp/tests.rs` (`#[cfg(feature = "sso")]`), using a real RSA-2048 keypair, real signed JWTs, and a loopback fake JWKS server (the same techniques already established in `sso`'s own test suite, duplicated here in a self-contained form rather than shared across modules): a valid token succeeding; a missing bearer, a token signed by the wrong key, a wrong audience, and an expired token all returning `401`; the metadata endpoint returning the expected document when configured and falling through (not `200`) when it isn't; verified claims actually reaching a `.tool_with_context()` handler's `ctx.auth_claims`; and OAuth taking precedence over a simultaneously-configured `.require_bearer()`. All 9 passed on the first attempt. `cargo test --lib --features sso mcp::` runs 169 mcp tests (160 + 9 new); the default/http1/http2 three-way build is unaffected (the whole feature compiles out cleanly without `sso`).
+
+**Effort:** small, exactly as estimated — `JwksCache` genuinely did all the hard verification work; the actual task was builder plumbing, one path-routing addition, and reusing `OidcProvider` instead of a bare URL.
 
 ---
 
@@ -923,7 +917,7 @@ Phase 2 — Streaming foundation (enables all notification features)
 Phase 3 — Enterprise + advanced
   TODO-11 completions/complete            (small, can go in Phase 1)          ✅ done (v17.85.0)
   TODO-12 request cancellation            (medium, http2 only)               ✅ done (v17.86.0, sync cooperative flag — no http2 dependency needed)
-  TODO-13 OAuth 2.0 (2025-03-26)         (small — JwksCache already exists)
+  TODO-13 OAuth 2.0 (2025-03-26)         (small — JwksCache already exists)      ✅ done (v17.98.0)
   TODO-14 resources/subscribe             (medium, needs TODO-7 + TODO-9)      ✅ done (v17.87.0)
   TODO-17 async tool handlers             (medium, http2 only)               ✅ done (v17.90.0)
   TODO-15 sampling/createMessage          (large)               ✅ done (v17.88.0)
@@ -948,7 +942,7 @@ Phase 3 — Enterprise + advanced
 | 9 | Dynamic registration + `listChanged` | 2024-11-05 | **P2** | Medium | ✅ Done (v17.83.0) |
 | 10 | `notifications/progress` | 2024-11-05 | **P2** | Small | ✅ Done (v17.84.0) |
 | 12 | Request cancellation | 2024-11-05 | **P3** | Medium | ✅ Done (v17.86.0) |
-| 13 | OAuth 2.0 auth | 2025-03-26 | **P3** | Small | `sso` feature |
+| 13 | OAuth 2.0 auth | 2025-03-26 | **P3** | Small | ✅ Done (v17.98.0), `sso` feature |
 | 14 | `resources/subscribe` | 2024-11-05 | **P3** | Medium | ✅ Done (v17.87.0) |
 | 17 | Async tool handlers | Ergonomics | **P3** | Medium | ✅ Done (v17.90.0) |
 | 15 | `sampling/createMessage` | 2024-11-05 | **P3** | Large | ✅ Done (v17.88.0) |

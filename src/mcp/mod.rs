@@ -248,9 +248,12 @@ pub struct McpContext {
     /// the server minted and returned in the `initialize` response header
     /// for this session (see the module docs' Sessions section).
     pub session_id: Option<String>,
-    /// Verified JWT claims as a JSON string. Not populated by anything in
-    /// this crate yet — reserved for a future JWT-auth integration
-    /// (MCP_TODO.md TODO-11/TODO-13); always `None` today.
+    /// Verified OAuth 2.0 / OIDC JWT claims as a JSON string (serialized
+    /// [`crate::sso::OidcClaims`]), populated when [`McpServer::require_oauth`]
+    /// (`sso` feature) is configured and this request's bearer token
+    /// verified successfully. `None` if OAuth isn't configured, or for a
+    /// hand-built context (e.g. `handle_request` in tests) that bypassed
+    /// `McpServer::execute`'s auth check entirely.
     pub auth_claims: Option<String>,
     /// The raw JSON value of `params._meta.progressToken` from the
     /// triggering `tools/call` request, if the client sent one — a spec
@@ -596,6 +599,17 @@ fn parse_roots_response(result_json: &str) -> Result<Vec<McpRoot>, String> {
     Ok(roots)
 }
 
+/// Configuration installed by [`McpServer::require_oauth`] (`sso` feature).
+/// Reuses [`crate::sso::jwks::JwksCache`] and [`crate::sso::OidcProvider`]
+/// directly rather than re-implementing JWKS fetch/verify — see
+/// `require_oauth`'s doc comment for the full rationale.
+#[cfg(feature = "sso")]
+struct OAuthConfig {
+    jwks: crate::sso::jwks::JwksCache,
+    provider: crate::sso::OidcProvider,
+    audience: String,
+}
+
 /// `clientInfo` recorded for one session at `initialize` time, looked up by
 /// `Mcp-Session-Id` for later requests in the same session. See
 /// `McpServer`'s `sessions` field doc comment for the unbounded-growth caveat.
@@ -847,6 +861,13 @@ pub struct McpServer {
     completions: Arc<RwLock<Vec<CompletionDef>>>,
     fallback: Option<Arc<dyn Application + Send + Sync>>,
     auth_token: Option<String>,
+    /// Installed by [`Self::require_oauth`] (`sso` feature) — an alternative
+    /// to `auth_token` that verifies a client-supplied OAuth 2.0 / OIDC
+    /// bearer JWT via JWKS instead of comparing against one static shared
+    /// secret. If both are somehow configured, OAuth verification takes
+    /// precedence and `auth_token` is ignored (see [`Self::require_oauth`]).
+    #[cfg(feature = "sso")]
+    oauth: Option<Arc<OAuthConfig>>,
     /// Max items per page for `tools/list`/`resources/list`/`prompts/list`,
     /// set via [`Self::page_size`]. `None` (the default) means no pagination
     /// — every item comes back in one response, same as before pagination
@@ -958,6 +979,8 @@ impl McpServer {
             completions: Arc::new(RwLock::new(Vec::new())),
             fallback: None,
             auth_token: None,
+            #[cfg(feature = "sso")]
+            oauth: None,
             page_size: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             sse_clients: Arc::new(Mutex::new(Vec::new())),
@@ -1325,6 +1348,48 @@ impl McpServer {
     /// ```
     pub fn require_bearer(mut self, token: impl Into<String>) -> Self {
         self.auth_token = Some(token.into());
+        self
+    }
+
+    /// Require an OAuth 2.0 / OIDC bearer JWT — verified against a live
+    /// JWKS endpoint — on every request to the MCP endpoint (MCP
+    /// 2025-03-26's OAuth 2.0 authorization requirement), instead of one
+    /// static shared secret. Requires the `sso` feature.
+    ///
+    /// Reuses [`crate::sso::jwks::JwksCache`] directly — the "leverage
+    /// point" this feature was scoped around — rather than reimplementing
+    /// JWT/JWKS verification. `provider` supplies the issuer, JWKS URI, and
+    /// (for [`Self::execute`]'s `GET /.well-known/oauth-authorization-server`
+    /// response) the authorization/token endpoints; use a preset
+    /// (`OidcProvider::google()`, etc.) or `OidcProvider::discover(issuer)?`.
+    ///
+    /// A request with a missing, malformed, or invalid-signature bearer
+    /// token gets `401` with `WWW-Authenticate: Bearer` before any JSON-RPC
+    /// processing occurs — matching [`Self::require_bearer`]'s behavior. On
+    /// success, the verified claims are available to `.tool_with_context()`
+    /// handlers as JSON via [`McpContext::auth_claims`].
+    ///
+    /// If both this and [`Self::require_bearer`] are configured, OAuth
+    /// verification takes precedence and the static token is never checked
+    /// — configuring both is not a supported combination, just an
+    /// unambiguous tie-break for an unusual configuration.
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::core::New;
+    /// use rust_web_server::sso::OidcProvider;
+    ///
+    /// let app = App::new()
+    ///     .mcp("my-server", "1.0")
+    ///     .require_oauth(OidcProvider::google(), "my-mcp-client-id");
+    /// ```
+    #[cfg(feature = "sso")]
+    pub fn require_oauth(mut self, provider: crate::sso::OidcProvider, audience: impl Into<String>) -> Self {
+        self.oauth = Some(Arc::new(OAuthConfig {
+            jwks: crate::sso::jwks::JwksCache::new(&provider.jwks_uri),
+            provider,
+            audience: audience.into(),
+        }));
         self
     }
 
@@ -2398,8 +2463,51 @@ impl std::io::Read for SseChannelReader {
 
 impl Application for McpServer {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
+        #[cfg(feature = "sso")]
+        if request.request_uri == "/.well-known/oauth-authorization-server" && request.method == "GET" {
+            if let Some(oauth) = &self.oauth {
+                return Ok(oauth_metadata_document(oauth));
+            }
+        }
+
         if request.request_uri == self.path {
-            // Check bearer token before processing any MCP request.
+            #[cfg_attr(not(feature = "sso"), allow(unused_mut))]
+            let mut auth_claims_json: Option<String> = None;
+
+            // OAuth (sso feature) takes precedence over a static bearer
+            // token if both are somehow configured — see require_oauth's
+            // doc comment.
+            #[cfg(feature = "sso")]
+            if let Some(oauth) = &self.oauth {
+                let provided = request.headers.iter()
+                    .find(|h| h.name.eq_ignore_ascii_case("authorization"))
+                    .map(|h| h.value.as_str())
+                    .unwrap_or("");
+                let bearer = provided.strip_prefix("Bearer ").unwrap_or("");
+                if bearer.is_empty() {
+                    return Ok(unauthorized());
+                }
+                let opts = crate::sso::jwks::VerifyOptions {
+                    audience: &oauth.audience,
+                    issuer: &oauth.provider.issuer,
+                    leeway_secs: 60,
+                };
+                match oauth.jwks.verify_jwt(bearer, &opts) {
+                    Ok(claims) => auth_claims_json = serde_json::to_string(&claims).ok(),
+                    Err(_) => return Ok(unauthorized()),
+                }
+            } else if let Some(expected) = &self.auth_token {
+                // Check the static bearer token before processing any MCP request.
+                let provided = request.headers.iter()
+                    .find(|h| h.name.eq_ignore_ascii_case("authorization"))
+                    .map(|h| h.value.as_str())
+                    .unwrap_or("");
+                let bearer = provided.strip_prefix("Bearer ").unwrap_or("");
+                if bearer != expected.as_str() {
+                    return Ok(unauthorized());
+                }
+            }
+            #[cfg(not(feature = "sso"))]
             if let Some(expected) = &self.auth_token {
                 let provided = request.headers.iter()
                     .find(|h| h.name.eq_ignore_ascii_case("authorization"))
@@ -2414,7 +2522,8 @@ impl Application for McpServer {
             return Ok(match request.method.as_str() {
                 "POST" => {
                     let body = std::str::from_utf8(&request.body).unwrap_or("");
-                    let ctx = self.context_for(request);
+                    let mut ctx = self.context_for(request);
+                    ctx.auth_claims = auth_claims_json;
                     self.handle_request_with_context(body, ctx)
                 }
                 "GET" => self.start_sse_stream(request),
@@ -2498,6 +2607,31 @@ fn unauthorized() -> Response {
     r.content_range_list = vec![Range::get_content_range(
         b"Unauthorized".to_vec(),
         MimeType::TEXT_PLAIN.to_string(),
+    )];
+    r
+}
+
+/// `GET /.well-known/oauth-authorization-server` — served whenever
+/// [`McpServer::require_oauth`] is configured, per MCP 2025-03-26's OAuth
+/// 2.0 authorization requirement. Not a full RFC 8414 document (this
+/// server is a resource server, not the authorization server itself) —
+/// just enough for a client to confirm the issuer, JWKS URI, and the
+/// authorization/token endpoints already known from `provider`.
+#[cfg(feature = "sso")]
+fn oauth_metadata_document(oauth: &OAuthConfig) -> Response {
+    let body = format!(
+        r#"{{"issuer":"{}","authorization_endpoint":"{}","token_endpoint":"{}","jwks_uri":"{}","response_types_supported":["code"]}}"#,
+        json_escape(&oauth.provider.issuer),
+        json_escape(&oauth.provider.authorization_endpoint),
+        json_escape(&oauth.provider.token_endpoint),
+        json_escape(&oauth.provider.jwks_uri),
+    );
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r.content_range_list = vec![Range::get_content_range(
+        body.into_bytes(),
+        MimeType::APPLICATION_JSON.to_string(),
     )];
     r
 }

@@ -1107,8 +1107,9 @@ session's `params.clientInfo`, and returns the id via an `Mcp-Session-Id` respon
 echoes it back on later requests so `execute()` can look the `clientInfo` back up and build the
 `McpContext` a `tool_with_context` handler sees. `handle_request()` (bypassing `execute()`, e.g. in
 tests) gives an empty `McpContext` — use `handle_request_with_context(body, ctx)` to supply one.
-`auth_claims` is always `None` today (reserved for a future JWT integration). Session records
-accumulate for the process's lifetime with no eviction.
+`auth_claims` is `None` unless `.require_oauth(...)` (MCP 2025-03-26 OAuth 2.0 authorization, `sso`
+feature — see below) is configured and this request's bearer JWT verified successfully. Session
+records accumulate for the process's lifetime with no eviction.
 
 **Tool annotations (MCP 2025-03-26)** — `.tool_annotated(name, desc, schema, annotations, |args| ...)`
 attaches behavioral hints clients use to decide whether to warn/confirm before calling a tool:
@@ -1444,6 +1445,27 @@ support yet for async tools.
 Verified end-to-end against a real running `http2`/`http3` server (a live tokio runtime driving the
 connection): an async tool awaiting `tokio::time::sleep(...)` took exactly as long as the sleep and
 returned correctly, confirming the future is genuinely polled to completion, not just called.
+
+**OAuth 2.0 authorization (MCP 2025-03-26, `sso` feature)** — `.require_oauth(provider, audience)` is
+an alternative to `.require_bearer(token)`: instead of one static shared secret, it verifies a
+client's bearer JWT against a live JWKS endpoint via `sso::jwks::JwksCache`:
+
+```rust
+use rust_web_server::mcp::McpServer;
+use rust_web_server::sso::OidcProvider;
+
+let server = McpServer::new("my-server", "1.0")
+    .require_oauth(OidcProvider::google(), "my-mcp-client-id");
+```
+
+Same failure shape as `.require_bearer()` — missing/invalid token gets `401` with
+`WWW-Authenticate: Bearer` before any JSON-RPC processing. On success, the verified claims
+(a serialized `sso::OidcClaims`) populate `McpContext.auth_claims`, readable from any
+`.tool_with_context()` handler. `GET /.well-known/oauth-authorization-server` is served
+automatically when `.require_oauth()` is configured (issuer/authorization_endpoint/token_endpoint/
+jwks_uri from the `OidcProvider` — a minimal document, not full RFC 8414); it falls through to the
+fallback app when OAuth isn't configured. If both `.require_bearer()` and `.require_oauth()` are set,
+OAuth wins and the static token is never checked.
 
 ---
 

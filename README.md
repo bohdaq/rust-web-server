@@ -287,6 +287,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - `sampling/createMessage` (server-side sampling) — `ctx.sample(request, timeout)` in a `.tool_with_context(...)` handler asks the connected client to run LLM inference and blocks for its answer, reversing the usual request direction
 - `roots/list` + `notifications/roots/list_changed` — `ctx.list_roots(timeout)` asks the client which filesystem roots it has access to, cached per session until the client signals a change
 - Async tool handlers (`http2` feature) — `.async_tool(...)`/`.register_async_tool(...)` register a tool whose handler is `async fn`, bridged into `tools/call` via the same `block_on_isolated` mechanism as `H2ReverseProxy`/`AsyncAppWithState`
+- OAuth 2.0 authorization (MCP 2025-03-26, `sso` feature) — `.require_oauth(provider, audience)` verifies a client's bearer JWT via a live JWKS endpoint (reusing `sso::JwksCache`) instead of one static shared secret; serves `GET /.well-known/oauth-authorization-server`; verified claims land in `McpContext.auth_claims`
 - 8 built-in rws tools — `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`
 - SSE streaming — `Sse` builder makes forwarding AI token streams to the browser trivial
 - Response caching — `CacheLayer` TTL cache; vary-by-header; `Cache-Control` opt-out

@@ -2191,6 +2191,30 @@ Like `.tool()` (not `.tool_with_context()`), an async tool's handler only receiv
 
 Verified end-to-end against a real running `http2`/`http3`-featured server (the scenario this feature actually targets — a live tokio runtime driving the connection, not just an isolated unit test): a `tools/call` invoking an `.async_tool()` handler that internally called `tokio::time::sleep(...).await` took exactly as long as that sleep and returned the correct result, confirming the handler's future was genuinely polled to completion by `block_on_isolated`'s scoped-thread runtime rather than merely called and immediately dropped.
 
+**OAuth 2.0 authorization (MCP 2025-03-26, `sso` feature):** `.require_oauth(provider: sso::OidcProvider, audience)` is an alternative to `.require_bearer(token)` — instead of comparing against one static shared secret, it verifies a client-supplied `Authorization: Bearer <jwt>` against a live JWKS endpoint, exactly reusing `sso::jwks::JwksCache` (the "leverage point" this feature's own spec entry named) rather than reimplementing JWT/JWKS verification a second time:
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["sso"] }
+```
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::sso::OidcProvider;
+
+let app = App::new()
+    .mcp("my-server", "1.0")
+    .require_oauth(OidcProvider::google(), "my-mcp-client-id");
+// or: .require_oauth(OidcProvider::discover("https://idp.example.com")?, "my-mcp-client-id")
+```
+
+A missing, malformed, or invalid-signature bearer token gets `401` with `WWW-Authenticate: Bearer`, matching `.require_bearer()`'s existing behavior — same failure shape, different verification underneath. On success, the verified claims (a serialized `sso::OidcClaims`) are attached to the request's `McpContext.auth_claims` as a JSON string, readable from any `.tool_with_context()` handler. `GET /.well-known/oauth-authorization-server` is served automatically whenever `.require_oauth()` is configured (a minimal, not-full-RFC-8414 document — `issuer`, `authorization_endpoint`, `token_endpoint`, `jwks_uri`, all sourced from the `OidcProvider` passed in); it's not handled at all (falls through to the fallback app) when OAuth isn't configured.
+
+If both `.require_bearer()` and `.require_oauth()` are configured on the same server, OAuth verification takes precedence and the static token is never checked — not a supported combination to actually use together, just an unambiguous tie-break so the behavior isn't undefined if someone does.
+
+`OidcProvider` (and everything it plugs into — presets, live `::discover()`, `OidcClaims`) is `sso`'s own type, documented in full under `### SSO` — this feature adds no new type of its own beyond `require_oauth` itself and the request-time verification/metadata-serving logic in `McpServer::execute`.
+
 ---
 
 ### 37. Virtual hosting / SNI routing
