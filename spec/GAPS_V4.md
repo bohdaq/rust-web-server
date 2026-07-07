@@ -52,11 +52,15 @@ JWT signing keys, DB credentials, and TLS keys are read from plain env vars or f
 
 **What to add:** a thin `secrets::resolve(value: &str) -> String` abstraction: a config value of the literal form `vault://path#field`, `aws-sm://secret-name`, or `azkv://vault-name/secret-name` is resolved at startup via the corresponding HTTP API (Vault's KV v2 HTTP API, AWS Secrets Manager's `GetSecretValue`, Azure Key Vault's `GET /secrets/{name}`), signed the same way `storage-s3`/`storage-azure` already sign requests; anything not matching one of those prefixes passes through unchanged, so this is additive to every existing `RWS_CONFIG_*`/`RWS_*` env var, not a breaking change.
 
-### 2.3 No shippable Kubernetes manifests or Helm chart
+### ✅ 2.3 No shippable Kubernetes manifests or Helm chart — Done
 
 `docs/deployment/kubernetes.md` and `docs/deployment/kubernetes-ingress.md` contain example YAML in prose, but nothing in the repo itself is a deployable artifact — there is no `k8s/` directory with raw manifests and no `helm/` chart. Anyone adopting rws on K8s today copy-pastes the docs' YAML block and hand-edits it.
 
 **What to add:** a minimal `helm/rws/` chart (`Chart.yaml`, `values.yaml`, `templates/deployment.yaml`, `templates/service.yaml`, `templates/hpa.yaml`) parameterizing image, replica count, resource limits, probe settings, and the `RWS_CONFIG_*` env vars already documented — generated from the same YAML already living in `docs/deployment/kubernetes.md` so the two stay in sync rather than drifting.
+
+**Done as scoped, plus the `PodDisruptionBudget` `docs/deployment/kubernetes.md` also documents** (the gap's own template list named only `deployment.yaml`/`service.yaml`/`hpa.yaml`, but the source-of-truth doc page this chart mirrors has four resources, not three — omitting the PDB template would have left the chart and the doc page it's meant to track out of sync on day one). `helm/rws/` also gained the conventional Helm scaffolding no real chart ships without: `templates/_helpers.tpl` (name/label helpers), `templates/serviceaccount.yaml` (optional, `serviceAccount.create`), `templates/NOTES.txt` (post-install instructions), `.helmignore`, and a chart-level `README.md` documenting every `values.yaml` key.
+
+**Validated as actually-deployable, not just illustrative** — the whole point of this gap entry: `helm lint` passes; `helm template` was rendered under the default values and every toggle combination (`autoscaling.enabled` + `customMetric.enabled`, `serviceAccount.create`, `tls.enabled=false`, `quic.enabled=false`) and each rendering was checked with `kubeconform`, which validates manifests offline against the real Kubernetes OpenAPI schemas (no live cluster needed) — every resource in every combination validated clean. The YAML blocks embedded in `docs/deployment/kubernetes.md` itself were extracted and run through the same `kubeconform` check and are independently valid, confirming the doc page this chart mirrors was already accurate, not merely illustrative.
 
 ### 2.4 No HPA custom-metrics example
 
@@ -74,7 +78,7 @@ JWT signing keys, DB credentials, and TLS keys are read from plain env vars or f
 | 1.4 | Circuit breaker: `ReverseProxy` auto-wiring, HalfOpen cap, metric | K8s middleware | No | Small |
 | 2.1 | `storage-gcs` feature | Cloud provider | GCP | Medium |
 | 2.2 | `secrets::resolve()` (Vault / AWS SM / Azure KV) | Cloud provider | AWS/Azure/Vault | Medium |
-| 2.3 | Helm chart / `k8s/` manifests | Deployment artifact | No | Small |
+| 2.3 | Helm chart / `k8s/` manifests | Deployment artifact | No | ✅ Done |
 | 2.4 | HPA custom-metrics doc example | Docs only | No | Trivial |
 
 ---
@@ -82,7 +86,7 @@ JWT signing keys, DB credentials, and TLS keys are read from plain env vars or f
 ## Suggested implementation order
 
 1. **`storage-gcs`** — closes the last gap in three-cloud object storage parity; follows the exact `storage-s3`/`storage-azure` pattern already established, so it's low-risk and mechanical.
-2. **Helm chart** — smallest effort, immediately unblocks real adoption (nothing to hand-edit), and forces the `docs/deployment/kubernetes.md` YAML to be validated as actually-deployable rather than illustrative.
+2. **Helm chart** — ✅ done. Smallest effort, immediately unblocks real adoption (nothing to hand-edit), and forced the `docs/deployment/kubernetes.md` YAML to be validated as actually-deployable rather than illustrative (see §2.3).
 3. **Ingress watch API + IngressClass filtering** — the two ingress gaps most likely to bite in a real multi-tenant cluster (stale routes under polling; picking up Ingresses meant for a different controller).
 4. **`secrets::resolve()`** — highest effort but closes a recurring enterprise-adoption blocker across all three clouds at once.
 5. **Circuit breaker `ReverseProxy` wiring + metric** — small, and makes the already-implemented breaker actually self-service instead of requiring manual integration.

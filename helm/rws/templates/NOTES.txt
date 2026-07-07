@@ -1,0 +1,36 @@
+rws has been deployed as "{{ include "rws.fullname" . }}" in namespace "{{ .Release.Namespace }}".
+
+Check the rollout status:
+  kubectl rollout status deployment/{{ include "rws.fullname" . }} -n {{ .Release.Namespace }}
+
+{{- if eq .Values.service.type "ClusterIP" }}
+
+The Service is ClusterIP-only. Port-forward to reach it locally:
+  kubectl port-forward svc/{{ include "rws.fullname" . }} -n {{ .Release.Namespace }} 8443:{{ .Values.service.httpsPort }}
+  curl -k https://localhost:8443/healthz
+{{- else if eq .Values.service.type "LoadBalancer" }}
+
+Get the external address (may take a few minutes to provision):
+  kubectl get svc {{ include "rws.fullname" . }} -n {{ .Release.Namespace }} -w
+{{- end }}
+
+{{- if .Values.tls.enabled }}
+
+TLS is enabled. This chart does NOT create the certificate Secret for you —
+"{{ .Values.tls.secretName }}" must already exist in this namespace with
+`tls.crt` and `tls.key` keys, e.g.:
+  kubectl create secret tls {{ .Values.tls.secretName }} \
+    --cert=path/to/tls.crt --key=path/to/tls.key -n {{ .Release.Namespace }}
+{{- end }}
+
+Metrics are exposed at GET /metrics on port {{ .Values.containerPort }} (Prometheus text format).
+{{- if index .Values.podAnnotations "prometheus.io/scrape" }}
+The pod's prometheus.io/scrape annotation lets a standard Prometheus
+installation pick this up with no further configuration.
+{{- end }}
+
+{{- if .Values.autoscaling.enabled }}
+
+Autoscaling is enabled ({{ .Values.autoscaling.minReplicas }}-{{ .Values.autoscaling.maxReplicas }} replicas). The Deployment's `replicas`
+field is omitted so the HorizontalPodAutoscaler is the sole source of truth.
+{{- end }}

@@ -1,0 +1,18 @@
+apiVersion: v2
+name: rws
+description: Deploy rust-web-server (rws) — an HTTP/1.1, HTTP/2, and HTTP/3 web server, reverse proxy, and application framework — on Kubernetes.
+type: application
+version: 0.1.0
+appVersion: "17.98.0"
+home: https://github.com/bohdaq/rust-web-server
+sources:
+  - https://github.com/bohdaq/rust-web-server
+keywords:
+  - rust
+  - web-server
+  - reverse-proxy
+  - http3
+  - quic
+maintainers:
+  - name: Bohdan Tsap
+    url: https://github.com/bohdaq

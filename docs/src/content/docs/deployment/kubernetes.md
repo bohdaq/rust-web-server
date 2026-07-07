@@ -25,6 +25,10 @@ When Kubernetes sends `SIGTERM`, the server:
 
 Set `terminationGracePeriodSeconds` to at least `30` to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
 
+:::tip[Helm chart available]
+The raw manifests below are also packaged as a parameterized Helm chart at [`helm/rws/`](https://github.com/bohdaq/rust-web-server/tree/main/helm/rws) in the repository — `helm install my-rws ./helm/rws` instead of hand-editing this YAML. The chart's templates render the same `Deployment`/`Service`/`PodDisruptionBudget`/`HorizontalPodAutoscaler` resources documented on this page, checked with `helm lint` and validated offline against the real Kubernetes schemas with `kubeconform` (see the chart's own README for the exact commands).
+:::
+
 ## Deployment YAML
 
 ```yaml

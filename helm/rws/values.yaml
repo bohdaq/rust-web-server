@@ -1,0 +1,142 @@
+# Default values for the rws chart.
+# Mirrors the YAML documented at docs/deployment/kubernetes.md — see that
+# page for the semantics behind each field (health probes, graceful
+# shutdown, RWS_CONFIG_* env vars, autoscaling on custom Prometheus metrics).
+
+replicaCount: 3
+
+image:
+  repository: ghcr.io/your-org/rws
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Set to true to have this chart create a ServiceAccount (e.g. for
+  # workload identity / IRSA). When false, `serviceAccount.name` is used
+  # as-is (empty means the namespace's "default" ServiceAccount).
+  create: false
+  annotations: {}
+  name: ""
+
+# Pod-level annotations. The Prometheus scrape annotations are on by
+# default so a standard Prometheus installation picks up GET /metrics
+# with no further configuration — see docs/deployment/observability.md.
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/metrics"
+  prometheus.io/port: "7878"
+
+podLabels: {}
+
+# Give in-flight requests time to complete after SIGTERM before Kubernetes
+# sends SIGKILL — see docs/deployment/kubernetes.md#graceful-shutdown.
+terminationGracePeriodSeconds: 30
+
+containerPort: 7878
+
+# RWS_CONFIG_* environment variables set on the container. Add any other
+# RWS_CONFIG_* var documented in CLAUDE.md / docs/ here as a plain
+# key/value pair — this map is rendered directly into `env:`.
+env:
+  RWS_CONFIG_IP: "0.0.0.0"
+  RWS_CONFIG_PORT: "7878"
+  RWS_CONFIG_THREAD_COUNT: "4"
+  RWS_CONFIG_LOG_FORMAT: "json"
+
+# Additional env vars as a raw {name, value} / {name, valueFrom} list,
+# appended after `env` above — for anything that doesn't fit a plain
+# string value (e.g. a Secret/ConfigMap reference).
+extraEnv: []
+# extraEnv:
+#   - name: RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS
+#     value: "1000"
+#   - name: MCP_TOKEN
+#     valueFrom:
+#       secretKeyRef:
+#         name: rws-mcp-token
+#         key: token
+
+# Whole Secrets/ConfigMaps to import as env vars via envFrom.
+envFrom: []
+
+# TLS is on by default, matching docs/deployment/kubernetes.md — set
+# tls.enabled to false to run plain HTTP/1.1 (e.g. behind a TLS-terminating
+# load balancer or ingress controller).
+tls:
+  enabled: true
+  # Must already exist in the release namespace, containing `tls.crt` and
+  # `tls.key` (e.g. `kubectl create secret tls rws-tls --cert=... --key=...`).
+  secretName: rws-tls
+  certPath: /tls/tls.crt
+  keyPath: /tls/tls.key
+  mountPath: /tls
+
+# rws also serves HTTP/3 over QUIC (UDP) on the same port as HTTP/2 when
+# built with the default `http3` feature. Set to false if your image was
+# built with `--features http2` (no QUIC) or `--features http1` (no TLS).
+quic:
+  enabled: true
+
+service:
+  type: ClusterIP
+  httpsPort: 443
+  quicPort: 443
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+livenessProbe:
+  path: /healthz
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  path: /readyz
+  initialDelaySeconds: 2
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 2
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# HorizontalPodAutoscaler — disabled by default since it manages
+# `replicaCount` itself (enabling it makes the Deployment omit
+# `spec.replicas` so the HPA is the sole source of truth).
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 20
+  # Set to null/0 to omit the CPU metric entirely.
+  targetCPUUtilizationPercentage: 70
+  # Requires the Prometheus Adapter or KEDA's metrics-server so the
+  # named metric is available via the external.metrics.k8s.io API.
+  # Metric name matches what MetricsLayer exposes at GET /metrics.
+  customMetric:
+    enabled: false
+    name: rws_route_requests_total
+    averageValue: "1000"
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Pod-level securityContext (fsGroup, etc.)
+podSecurityContext: {}
+
+# Container-level securityContext (runAsNonRoot, readOnlyRootFilesystem, etc.)
+securityContext: {}

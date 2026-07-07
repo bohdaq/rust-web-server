@@ -1698,6 +1698,8 @@ docker build -t my-registry/rws:latest .
 docker push my-registry/rws:latest
 ```
 
+A parameterized Helm chart is included at `helm/rws/` — install with `helm install my-rws ./helm/rws --set image.repository=my-registry/rws --set image.tag=latest`. Its templates render exactly the `Deployment`/`Service`/`PodDisruptionBudget`/`HorizontalPodAutoscaler` YAML shown below (see `helm/rws/README.md` for the full `values.yaml` reference) — `helm template` output is checked with `helm lint` and validated offline against the real Kubernetes schemas with `kubeconform`, so the chart and this page can't silently drift apart.
+
 ### Health probes
 
 `rws` exposes two endpoints for Kubernetes liveness and readiness probes:
