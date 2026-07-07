@@ -284,6 +284,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - `resources/subscribe` / `resources/unsubscribe` — `.notify_resource_updated(uri)` pushes `notifications/resources/updated` over SSE to just the sessions subscribed to that URI, for live-updating resource panels (e.g. Claude Desktop watching a config file)
 - `sampling/createMessage` (server-side sampling) — `ctx.sample(request, timeout)` in a `.tool_with_context(...)` handler asks the connected client to run LLM inference and blocks for its answer, reversing the usual request direction
 - `roots/list` + `notifications/roots/list_changed` — `ctx.list_roots(timeout)` asks the client which filesystem roots it has access to, cached per session until the client signals a change
+- Async tool handlers (`http2` feature) — `.async_tool(...)`/`.register_async_tool(...)` register a tool whose handler is `async fn`, bridged into `tools/call` via the same `block_on_isolated` mechanism as `H2ReverseProxy`/`AsyncAppWithState`
 - 8 built-in rws tools — `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`
 - SSE streaming — `Sse` builder makes forwarding AI token streams to the browser trivial
 - Response caching — `CacheLayer` TTL cache; vary-by-header; `Cache-Control` opt-out

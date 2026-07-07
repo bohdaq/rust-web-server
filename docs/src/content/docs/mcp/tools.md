@@ -40,6 +40,37 @@ Fn(&str) -> Result<McpContent, String>
 
 The handler receives the raw `arguments` JSON string from the MCP `tools/call` request. On success, return `Ok(McpContent)`. On failure, return `Err(String)` — this is sent back to the AI as `isError: true` (a tool-level error, not a protocol error).
 
+## Async tool handlers
+
+Requires the `http2` feature. A tool whose work is naturally async — an `AsyncClient` HTTP call, an async database query, awaiting another future — doesn't have to block a thread to do it inside a plain synchronous `.tool()` handler. Register it with `.async_tool()` instead:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let mcp = McpServer::new("my-server", "1.0")
+    .async_tool(
+        "call_api",
+        "Call an external API",
+        r#"{"type":"object"}"#,
+        |_args: &str| async move {
+            // let resp = AsyncClient::new().get("https://api.example.com").send().await?;
+            Ok(McpContent::text("response"))
+        },
+    );
+```
+
+The handler signature is `Fn(&str) -> impl Future<Output = Result<McpContent, String>>` — same arguments and return type as a plain `.tool()` handler, just `async`. `.register_async_tool(name, description, schema, handler)` is the dynamic (`&self`) equivalent of `.async_tool()`, usable after the server is already serving requests, the same way [`.register_tool()`](/mcp/overview/#dynamic-registration) is for sync tools. `.remove_tool(name)` removes a tool by name regardless of whether it was registered as sync or async — you don't need to remember which kind it was.
+
+`tools/list` lists sync and async tools together, and `tools/call` dispatches to whichever collection has a matching name — from a client's point of view there is no difference between the two.
+
+:::note[How this bridges into `Application::execute`]
+`Application::execute` (and therefore `tools/call`) is a synchronous trait method. `.async_tool()`'s handler is driven to completion via `crate::async_bridge::block_on_isolated` — the same mechanism `H2ReverseProxy` and `AsyncAppWithState` already use to call async code from sync trait methods — rather than `tokio::task::block_in_place`, which only works on the `multi_thread` tokio scheduler and panics under `current_thread`. `block_on_isolated` works either way: it spawns a scoped thread with its own single-threaded runtime if already inside one, or builds a temporary runtime directly if not.
+:::
+
+:::caution[No context or annotations support yet]
+Like `.tool()` (not `.tool_with_context()`), an async tool's handler only receives `arguments` — there is no `.async_tool_with_context()` or `.async_tool_annotated()` yet.
+:::
+
 ## Per-request context
 
 A plain `.tool()` handler only ever sees `arguments` — it has no way to know which client is calling, what session it's part of, or anything from the request's headers. `.tool_with_context()` registers a tool whose handler additionally receives an `McpContext`:

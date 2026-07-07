@@ -2166,6 +2166,26 @@ Fails fast under the same conditions as `sample()` (translated to roots): the cl
 
 Verified end-to-end against a real running server, the same way as sampling: an initial `list_roots()` call round-tripped correctly and cached; a second call in the same session returned instantly with no new SSE frame; `notifications/roots/list_changed` followed by a third call produced a fresh `roots/list` request with a new id, which resolved to the newly-provided roots.
 
+**Async tool handlers (`http2` feature):** every tool handler up to this point has been a plain synchronous closure — fine for CPU-bound work, but a tool that awaits `AsyncClient`, an async database query, or another future has to block a thread to do it inside a sync handler. `.async_tool(name, description, schema, handler)` registers one whose handler is `Fn(&str) -> impl Future<Output = Result<McpContent, String>>`:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let server = McpServer::new("my-server", "1.0")
+    .async_tool("call_api", "Call an external API", "{}", |_args| async move {
+        // let resp = AsyncClient::new().get("https://api.example.com").send().await?;
+        Ok(McpContent::text("response"))
+    });
+```
+
+`tools/call` bridges into the handler's future via `crate::async_bridge::block_on_isolated` — **not** `tokio::task::block_in_place`, despite that being this feature's own original design sketch. `block_in_place` only works on the `multi_thread` tokio scheduler and panics under `current_thread`; `block_on_isolated` (already used by `H2ReverseProxy` and `AsyncAppWithState::execute` for the identical sync-trait-meets-async-code problem) works under either, by spawning a scoped OS thread with its own single-threaded runtime when already inside one, or building a temporary runtime directly otherwise. Reusing it here means `.async_tool()` didn't need to invent a second bridging mechanism or add any new dependency.
+
+Storage is a **separate** `async_tools: Arc<RwLock<Vec<AsyncToolDef>>>` collection (gated `#[cfg(feature = "http2")]` end to end — the field, the type, the builder, all of it) rather than unifying sync and async tools behind one handler enum in the existing `ToolDef`. `tools/list` merges both collections transparently (a shared `render_tool_list_entry` helper renders either kind identically) and `tools/call` checks `tools` first, then `async_tools` — from the client's perspective there is no distinction between the two kinds. `.register_async_tool(...)` is the dynamic (`&self`, TODO-9-style) equivalent of `.async_tool()`; `.remove_tool(name)` now checks *both* collections, so callers don't need to remember which kind a tool by that name was registered as.
+
+Like `.tool()` (not `.tool_with_context()`), an async tool's handler only receives `arguments` — there is no async equivalent of `tool_with_context` or `tool_annotated` yet; adding one is straightforward if ever needed; it just wasn't asked for here.
+
+Verified end-to-end against a real running `http2`/`http3`-featured server (the scenario this feature actually targets — a live tokio runtime driving the connection, not just an isolated unit test): a `tools/call` invoking an `.async_tool()` handler that internally called `tokio::time::sleep(...).await` took exactly as long as that sleep and returned the correct result, confirming the handler's future was genuinely polled to completion by `block_on_isolated`'s scoped-thread runtime rather than merely called and immediately dropped.
+
 ---
 
 ### 37. Virtual hosting / SNI routing

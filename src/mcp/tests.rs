@@ -2185,3 +2185,104 @@ fn roots_list_changed_notification_invalidates_the_cache() {
     assert!(second_call.body_text().contains("file:///workspace"), "unexpected second call body: {}", second_call.body_text());
 }
 
+// ── async tool handlers (http2 feature) ────────────────────────────────────────
+
+#[cfg(feature = "http2")]
+mod async_tool_tests {
+    use super::*;
+
+    #[test]
+    fn async_tool_appears_in_tools_list_and_is_callable() {
+        let srv = McpServer::new("test-srv", "0.1").async_tool(
+            "compute",
+            "Compute something asynchronously",
+            r#"{"type":"object"}"#,
+            |_args: &str| async move { Ok(McpContent::text("42")) },
+        );
+
+        let list_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
+        assert!(body_of(&list_resp).contains("\"compute\""), "async tool missing from tools/list");
+
+        let call_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"compute","arguments":{}}}"#);
+        let body = body_of(&call_resp);
+        assert!(body.contains("42"), "unexpected call result: {body}");
+        assert!(body.contains("\"isError\":false"), "unexpected call result: {body}");
+    }
+
+    #[test]
+    fn async_tool_error_surfaces_as_is_error_true() {
+        let srv = McpServer::new("test-srv", "0.1").async_tool(
+            "fail_async",
+            "Always errors",
+            r#"{"type":"object"}"#,
+            |_args: &str| async move { Err("async failure".to_string()) },
+        );
+
+        let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"fail_async","arguments":{}}}"#);
+        let body = body_of(&resp);
+        assert!(body.contains("\"isError\":true"), "expected an error result: {body}");
+        assert!(body.contains("async failure"), "missing error message: {body}");
+    }
+
+    #[test]
+    fn register_async_tool_makes_it_immediately_callable_and_pushes_list_changed() {
+        let srv = McpServer::new("test-srv", "0.1");
+        let mut sse_resp = srv.start_sse_stream(&get_request());
+        let mut reader = sse_resp.stream_pipe.take().unwrap();
+
+        srv.register_async_tool(
+            "late_async",
+            "Registered at runtime",
+            r#"{"type":"object"}"#,
+            |_args: &str| async move { Ok(McpContent::text("hi from late_async")) },
+        );
+
+        let mut buf = [0u8; 4096];
+        let n = reader.read(&mut buf).unwrap();
+        let text = String::from_utf8_lossy(&buf[..n]);
+        assert!(text.contains(r#""method":"notifications/tools/list_changed""#), "missing notification: {text}");
+
+        let call_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"late_async","arguments":{}}}"#);
+        assert!(body_of(&call_resp).contains("hi from late_async"), "new async tool did not run");
+    }
+
+    #[test]
+    fn remove_tool_removes_a_dynamically_registered_async_tool() {
+        let srv = McpServer::new("test-srv", "0.1");
+        srv.register_async_tool("temp_async", "Temporary", "{}", |_args: &str| async move { Ok(McpContent::text("ok")) });
+
+        assert!(srv.remove_tool("temp_async"));
+
+        let list_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#);
+        assert!(!body_of(&list_resp).contains("temp_async"), "async tool should have been removed");
+    }
+
+    #[test]
+    fn mixed_sync_and_async_tools_both_appear_and_are_both_callable() {
+        let srv = McpServer::new("test-srv", "0.1")
+            .tool("sync_one", "A sync tool", "{}", |_args| Ok(McpContent::text("from sync")))
+            .async_tool("async_one", "An async tool", "{}", |_args: &str| async move { Ok(McpContent::text("from async")) });
+
+        let list_body = body_of(&srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#));
+        assert!(list_body.contains("\"sync_one\""), "missing sync tool: {list_body}");
+        assert!(list_body.contains("\"async_one\""), "missing async tool: {list_body}");
+
+        let sync_call = body_of(&srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"sync_one","arguments":{}}}"#));
+        assert!(sync_call.contains("from sync"), "unexpected sync call result: {sync_call}");
+
+        let async_call = body_of(&srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":3,"params":{"name":"async_one","arguments":{}}}"#));
+        assert!(async_call.contains("from async"), "unexpected async call result: {async_call}");
+    }
+
+    #[test]
+    fn unknown_tool_name_is_still_an_error_when_only_async_tools_are_registered() {
+        let srv = McpServer::new("test-srv", "0.1").async_tool(
+            "only_async", "desc", "{}", |_args: &str| async move { Ok(McpContent::text("ok")) },
+        );
+        let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"no_such_tool","arguments":{}}}"#);
+        let body = body_of(&resp);
+        assert!(body.contains("\"error\""), "should be a JSON-RPC error: {body}");
+        assert!(body.contains("no_such_tool") || body.contains("Unknown tool"), "should mention the tool: {body}");
+    }
+}
+

@@ -844,26 +844,61 @@ second bidirectional-request implementation.
 
 ---
 
-### TODO-17: Async tool handlers (`http2` feature)
+### ✅ TODO-17: Async tool handlers (`http2` feature) — Done (v17.90.0)
 
-Tool handlers are `Box<dyn Fn(&str) -> Result<McpContent, String> + Send + Sync>` — synchronous.
-A tool that calls `AsyncClient`, queries a database, or waits for an AI response blocks a tokio
-worker thread.
+`.async_tool(name, description, schema, handler)` registers a tool whose handler is
+`Fn(&str) -> impl Future<Output = Result<McpContent, String>>`, matching this entry's own sketch
+almost exactly (its example even used the same `call_api`/`AsyncClient` shape).
 
-**New builder variant (gated on `#[cfg(feature = "http2")]`):**
-```rust
-.async_tool("call_api", desc, schema,
-    |args: &str| async move {
-        let resp = AsyncClient::new().get("https://api.example.com").send().await?;
-        Ok(McpContent::json(resp.text()?))
-    }
-)
-```
+**Bridge is `block_on_isolated`, not `tokio::task::block_in_place`** — the one deliberate deviation
+from this entry's own text. `block_in_place` only works on the `multi_thread` tokio scheduler and
+panics under `current_thread`; this crate already discovered that limitation building
+`H2ReverseProxy`/`AsyncAppWithState::execute` (both documented in `CLAUDE.md` as using
+`crate::async_bridge::block_on_isolated` specifically *because* `block_in_place` "requires
+`multi_thread`") and built `block_on_isolated` to work under either scheduler by spawning a scoped
+OS thread with its own single-threaded runtime when already inside one. Using `block_in_place` here
+as the entry suggested ("same pattern as `H2ReverseProxy::handle`" — which itself does *not* use
+`block_in_place`, contradicting its own parenthetical) would have silently constrained every
+async-tool user to a `multi_thread` runtime with no compile-time signal that they'd done so. Reusing
+the existing bridge instead means no new mechanism and no new dependency.
 
-In `execute()` the async variant uses `tokio::task::block_in_place` to bridge the sync
-`Application::execute` boundary (same pattern as `H2ReverseProxy::handle`).
+**Storage kept separate (`async_tools: Arc<RwLock<Vec<AsyncToolDef>>>`), not unified into `ToolDef`
+via a handler enum** — exactly the entry's own "new `AsyncToolDef` storage" framing. Unifying would
+have meant touching every existing sync-tool code path (`ToolFn`'s call sites, `register_tool`,
+`.tool()`/`.tool_with_context()`/`.tool_annotated()`) to route through a handler enum for a feature
+that's optional and off by default outside `http2`; keeping two parallel, `#[cfg(feature = "http2")]`-gated
+collections is far less invasive. `tools/list` merges both transparently via a new shared
+`render_tool_list_entry` helper (so the two collections render identically, no duplicated
+formatting code); `tools/call` checks `tools` first, then `async_tools` if `http2` is enabled — from
+a client's perspective there is no distinction between the two kinds of tool.
 
-**Effort:** medium — new `AsyncToolDef` storage, `block_in_place` bridge.
+**Went a little beyond the entry's literal ask, for completeness rather than leaving an
+asymmetry:** added `.register_async_tool(...)` (the TODO-9-style dynamic `&self` equivalent of
+`.async_tool()`) and made `.remove_tool(name)` check *both* collections — otherwise sync tools would
+have gotten construction-time *and* dynamic registration/removal while async tools only got
+construction-time, an inconsistency nothing in the entry asked for but that would have been an odd,
+unexplained gap to leave. No async equivalent of `.tool_with_context()`/`.tool_annotated()` was
+added, though — genuinely out of scope, not requested, and adding either is a small, obvious
+follow-up if ever needed (the internal `AsyncToolFn` type deliberately has no unused `McpContext`
+parameter sitting around for a feature that doesn't exist yet).
+
+**Verified end-to-end against a real running `http2`/`http3`-featured server** — the scenario this
+feature actually targets, a live tokio runtime driving the connection, not just an isolated unit
+test: an async tool handler that internally `tokio::time::sleep(...).await`ed took exactly as long
+as that sleep and returned the correct result, confirming `block_on_isolated` genuinely polled the
+future to completion rather than merely calling and dropping it.
+
+6 new tests in `src/mcp/tests.rs` (in a `#[cfg(feature = "http2")] mod async_tool_tests`, matching
+how the rest of the crate's `http2`-gated code is tested): an async tool appears in `tools/list` and
+is callable; an async tool's `Err` surfaces as `isError:true`; `register_async_tool` makes a tool
+immediately callable and pushes `notifications/tools/list_changed`; `remove_tool` removes a
+dynamically-registered async tool; a server with both a sync and an async tool lists and calls both
+correctly; and an unknown tool name is still an error when only async tools are registered (a
+regression guard that the fallback-to-error path still works once a second lookup was added).
+
+**Effort:** medium, as estimated — the actual size was almost entirely in touching `do_tools_list`/
+`do_tools_call`/`remove_tool` to check two collections instead of one, not the bridging mechanism
+itself, which already existed and needed zero changes to reuse.
 
 ---
 
@@ -890,7 +925,7 @@ Phase 3 — Enterprise + advanced
   TODO-12 request cancellation            (medium, http2 only)               ✅ done (v17.86.0, sync cooperative flag — no http2 dependency needed)
   TODO-13 OAuth 2.0 (2025-03-26)         (small — JwksCache already exists)
   TODO-14 resources/subscribe             (medium, needs TODO-7 + TODO-9)      ✅ done (v17.87.0)
-  TODO-17 async tool handlers             (medium, http2 only)
+  TODO-17 async tool handlers             (medium, http2 only)               ✅ done (v17.90.0)
   TODO-15 sampling/createMessage          (large)               ✅ done (v17.88.0)
   TODO-16 roots/list                      (medium, needs TODO-15)             ✅ done (v17.89.0)
 ```
@@ -915,6 +950,6 @@ Phase 3 — Enterprise + advanced
 | 12 | Request cancellation | 2024-11-05 | **P3** | Medium | ✅ Done (v17.86.0) |
 | 13 | OAuth 2.0 auth | 2025-03-26 | **P3** | Small | `sso` feature |
 | 14 | `resources/subscribe` | 2024-11-05 | **P3** | Medium | ✅ Done (v17.87.0) |
-| 17 | Async tool handlers | Ergonomics | **P3** | Medium | `http2` feature |
+| 17 | Async tool handlers | Ergonomics | **P3** | Medium | ✅ Done (v17.90.0) |
 | 15 | `sampling/createMessage` | 2024-11-05 | **P3** | Large | ✅ Done (v17.88.0) |
 | 16 | `roots/list` | 2024-11-05 | **P3** | Medium | ✅ Done (v17.89.0) |

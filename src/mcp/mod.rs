@@ -92,6 +92,10 @@ mod json_rpc;
 mod tests;
 
 use std::collections::HashMap;
+#[cfg(feature = "http2")]
+use std::future::Future;
+#[cfg(feature = "http2")]
+use std::pin::Pin;
 use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
@@ -746,6 +750,15 @@ type ResourceFn = Arc<dyn Fn(&str) -> Result<McpContent, String>    + Send + Syn
 type PromptFn   = Arc<dyn Fn(&str) -> Result<Vec<PromptMessage>, String> + Send + Sync>;
 /// `Fn(argument_name, partial_value) -> candidate completion strings`.
 type CompletionFn = Arc<dyn Fn(&str, &str) -> Result<Vec<String>, String> + Send + Sync>;
+/// An async tool handler, boxed so `AsyncToolDef` can store handlers with
+/// different concrete `Future` types uniformly. The `Future` itself doesn't
+/// need `Send` for [`crate::async_bridge::block_on_isolated`] (which drives
+/// it to completion without ever moving it across a thread boundary), but
+/// it's required here anyway for consistency with [`crate::async_state`]'s
+/// equivalent handler type — the common case in practice, and one less
+/// surprise for anyone switching between the two async handler styles.
+#[cfg(feature = "http2")]
+type AsyncToolFn = Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = Result<McpContent, String>> + Send>> + Send + Sync>;
 
 #[derive(Clone)]
 struct ToolDef {
@@ -754,6 +767,23 @@ struct ToolDef {
     input_schema: String,
     annotations: Option<ToolAnnotations>,
     handler: ToolFn,
+}
+
+/// A tool registered via [`McpServer::async_tool`]/[`McpServer::register_async_tool`]
+/// — stored separately from [`ToolDef`] rather than unifying the two behind
+/// a handler enum, since sync and async tools are otherwise identical and
+/// keeping them apart touches far less of the existing (already
+/// substantial) tool-handling code. `tools/list` and `tools/call` merge
+/// both collections transparently; from the client's perspective there is
+/// no distinction.
+#[cfg(feature = "http2")]
+#[derive(Clone)]
+struct AsyncToolDef {
+    name: String,
+    description: String,
+    input_schema: String,
+    annotations: Option<ToolAnnotations>,
+    handler: AsyncToolFn,
 }
 
 #[derive(Clone)]
@@ -802,6 +832,13 @@ pub struct McpServer {
     /// — and every clone of this `McpServer` (each connection thread gets
     /// one) sees the same live list.
     tools: Arc<RwLock<Vec<ToolDef>>>,
+    /// Tools registered via [`Self::async_tool`]/[`Self::register_async_tool`],
+    /// bridged into synchronous [`Application::execute`] via
+    /// [`crate::async_bridge::block_on_isolated`] at call time. Kept
+    /// separate from `tools` rather than merged into one collection — see
+    /// [`AsyncToolDef`]'s doc comment.
+    #[cfg(feature = "http2")]
+    async_tools: Arc<RwLock<Vec<AsyncToolDef>>>,
     resources: Arc<RwLock<Vec<ResourceDef>>>,
     prompts: Arc<RwLock<Vec<PromptDef>>>,
     /// Argument completion providers registered via [`Self::completion`].
@@ -914,6 +951,8 @@ impl McpServer {
             server_version: version.into(),
             path: "/mcp".to_string(),
             tools: Arc::new(RwLock::new(Vec::new())),
+            #[cfg(feature = "http2")]
+            async_tools: Arc::new(RwLock::new(Vec::new())),
             resources: Arc::new(RwLock::new(Vec::new())),
             prompts: Arc::new(RwLock::new(Vec::new())),
             completions: Arc::new(RwLock::new(Vec::new())),
@@ -1145,17 +1184,49 @@ impl McpServer {
         self.notify("notifications/tools/list_changed", None);
     }
 
-    /// Remove a previously-registered tool by name. Returns `true` if a tool
-    /// with that name existed and was removed. Pushes
-    /// `notifications/tools/list_changed` only when something was actually
-    /// removed.
+    /// Register an `async fn` tool handler at runtime, exactly like
+    /// [`Self::async_tool`] but usable after the server is already serving
+    /// requests. Requires the `http2` feature — see `async_tool`'s docs for
+    /// the async-to-sync bridging details.
+    #[cfg(feature = "http2")]
+    pub fn register_async_tool<F, Fut>(&self, name: &str, description: &str, input_schema: &str, handler: F)
+    where
+        F: Fn(&str) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<McpContent, String>> + Send + 'static,
+    {
+        self.async_tools.write().unwrap().push(AsyncToolDef {
+            name: name.to_string(),
+            description: description.to_string(),
+            input_schema: input_schema.to_string(),
+            annotations: None,
+            handler: Arc::new(move |args: String| Box::pin(handler(&args))),
+        });
+        self.notify("notifications/tools/list_changed", None);
+    }
+
+    /// Remove a previously-registered tool by name — a sync tool registered
+    /// via [`Self::tool`]/[`Self::register_tool`], or (with the `http2`
+    /// feature) an async one via [`Self::async_tool`]/[`Self::register_async_tool`];
+    /// both collections are checked. Returns `true` if a tool with that name
+    /// existed in either and was removed. Pushes `notifications/tools/list_changed`
+    /// only when something was actually removed.
     pub fn remove_tool(&self, name: &str) -> bool {
-        let removed = {
+        #[cfg_attr(not(feature = "http2"), allow(unused_mut))]
+        let mut removed = {
             let mut tools = self.tools.write().unwrap();
             let before = tools.len();
             tools.retain(|t| t.name != name);
             tools.len() != before
         };
+
+        #[cfg(feature = "http2")]
+        {
+            let mut async_tools = self.async_tools.write().unwrap();
+            let before = async_tools.len();
+            async_tools.retain(|t| t.name != name);
+            removed = removed || async_tools.len() != before;
+        }
+
         if removed {
             self.notify("notifications/tools/list_changed", None);
         }
@@ -1314,6 +1385,51 @@ impl McpServer {
             input_schema: input_schema.to_string(),
             annotations: None,
             handler: Arc::new(move |_ctx: McpContext, args: &str| handler(args)),
+        });
+        self
+    }
+
+    /// Register an `async fn` tool handler — for a tool whose work is
+    /// naturally async (an `AsyncClient` HTTP call, an async database
+    /// query, awaiting another future) rather than forcing it through a
+    /// blocking call inside a plain [`Self::tool`] handler.
+    ///
+    /// Requires the `http2` feature (tokio). `tools/call` bridges into the
+    /// handler's future via [`crate::async_bridge::block_on_isolated`] —
+    /// the same mechanism [`crate::proxy::H2ReverseProxy`] and
+    /// [`crate::async_state::AsyncAppWithState`] already use to call async
+    /// code from a synchronous [`Application::execute`] — rather than
+    /// `tokio::task::block_in_place`, which panics outside a `multi_thread`
+    /// runtime; `block_on_isolated` works under any runtime flavor,
+    /// including `current_thread`.
+    ///
+    /// Like [`Self::tool`] (not [`Self::tool_with_context`]), the handler
+    /// only receives `arguments` — there is no async equivalent of
+    /// `tool_with_context` or `tool_annotated` yet.
+    ///
+    /// ```rust,no_run
+    /// # #[cfg(feature = "http2")]
+    /// # {
+    /// use rust_web_server::mcp::{McpContent, McpServer};
+    ///
+    /// let server = McpServer::new("my-server", "1.0")
+    ///     .async_tool("call_api", "Call an external API", "{}", |_args: &str| async move {
+    ///         Ok(McpContent::text("response"))
+    ///     });
+    /// # }
+    /// ```
+    #[cfg(feature = "http2")]
+    pub fn async_tool<F, Fut>(self, name: &str, description: &str, input_schema: &str, handler: F) -> Self
+    where
+        F: Fn(&str) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<McpContent, String>> + Send + 'static,
+    {
+        self.async_tools.write().unwrap().push(AsyncToolDef {
+            name: name.to_string(),
+            description: description.to_string(),
+            input_schema: input_schema.to_string(),
+            annotations: None,
+            handler: Arc::new(move |args: String| Box::pin(handler(&args))),
         });
         self
     }
@@ -1864,21 +1980,31 @@ impl McpServer {
     }
 
     fn do_tools_list(&self, body: &str) -> Result<String, (i32, String)> {
-        let items: Vec<String> = self.tools.read().unwrap().iter().map(|t| {
-            let annotations = match t.annotations {
-                Some(a) => format!(r#","annotations":{}"#, a.to_json()),
-                None => String::new(),
-            };
-            format!(
-                r#"{{"name":"{}","description":"{}","inputSchema":{}{}}}"#,
-                json_escape(&t.name),
-                json_escape(&t.description),
-                t.input_schema,
-                annotations,
-            )
-        }).collect();
+        #[cfg_attr(not(feature = "http2"), allow(unused_mut))]
+        let mut items: Vec<String> = self.tools.read().unwrap().iter()
+            .map(|t| Self::render_tool_list_entry(&t.name, &t.description, &t.input_schema, t.annotations))
+            .collect();
+
+        #[cfg(feature = "http2")]
+        items.extend(self.async_tools.read().unwrap().iter()
+            .map(|t| Self::render_tool_list_entry(&t.name, &t.description, &t.input_schema, t.annotations)));
+
         let (page, next_cursor) = self.paginate(&items, body)?;
         Ok(format!(r#"{{"tools":[{}]{}}}"#, page.join(","), next_cursor_json(&next_cursor)))
+    }
+
+    /// Render one `tools/list` entry — shared by the sync (`tools`) and
+    /// (with the `http2` feature) async (`async_tools`) collections, which
+    /// are otherwise identical from the client's point of view.
+    fn render_tool_list_entry(name: &str, description: &str, input_schema: &str, annotations: Option<ToolAnnotations>) -> String {
+        let annotations_field = match annotations {
+            Some(a) => format!(r#","annotations":{}"#, a.to_json()),
+            None => String::new(),
+        };
+        format!(
+            r#"{{"name":"{}","description":"{}","inputSchema":{}{}}}"#,
+            json_escape(name), json_escape(description), input_schema, annotations_field,
+        )
     }
 
     fn do_tools_call(&self, body: &str, ctx: McpContext) -> Result<String, (i32, String)> {
@@ -1895,21 +2021,45 @@ impl McpServer {
             .and_then(|meta| json_rpc::extract_raw(&meta, "progressToken"));
         let ctx = McpContext { progress_token, ..ctx };
 
-        let handler = {
+        let sync_handler = {
             let tools = self.tools.read().unwrap();
             tools.iter().find(|t| t.name == name).map(|t| t.handler.clone())
-        }.ok_or_else(|| (json_rpc::INVALID_PARAMS, format!("Unknown tool: {name}")))?;
+        };
+        if let Some(handler) = sync_handler {
+            return Ok(Self::format_tool_result(handler(ctx, &args)));
+        }
 
-        match handler(ctx, &args) {
-            Ok(c) => Ok(format!(
+        #[cfg(feature = "http2")]
+        {
+            let async_handler = {
+                let async_tools = self.async_tools.read().unwrap();
+                async_tools.iter().find(|t| t.name == name).map(|t| t.handler.clone())
+            };
+            if let Some(handler) = async_handler {
+                let args_owned = args.clone();
+                let result = crate::async_bridge::block_on_isolated(move || handler(args_owned));
+                return Ok(Self::format_tool_result(result));
+            }
+        }
+
+        Err((json_rpc::INVALID_PARAMS, format!("Unknown tool: {name}")))
+    }
+
+    /// Render a tool handler's result as the spec's `tools/call` shape —
+    /// `{"content":[...],"isError":false}` on success, or `isError:true`
+    /// with the error message as a text content block. Shared by the sync
+    /// and (with `http2`) async `tools/call` dispatch paths.
+    fn format_tool_result(result: Result<McpContent, String>) -> String {
+        match result {
+            Ok(c) => format!(
                 r#"{{"content":[{}],"isError":false}}"#,
                 c.to_content_json(),
-            )),
+            ),
             Err(e) => {
                 let escaped = json_escape(&e);
-                Ok(format!(
+                format!(
                     r#"{{"content":[{{"type":"text","text":"{escaped}"}}],"isError":true}}"#
-                ))
+                )
             }
         }
     }

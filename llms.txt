@@ -1341,6 +1341,32 @@ Verified end-to-end with a real server: an initial `list_roots()` round-tripped 
 second call returned instantly with no new SSE frame; `notifications/roots/list_changed` followed
 by a third call produced a fresh `roots/list` request that resolved to newly-provided roots.
 
+**Async tool handlers (`http2` feature)** — `.async_tool(name, desc, schema, handler)` registers a
+tool whose handler is `async fn`, for work that naturally awaits (an `AsyncClient` call, an async DB
+query) instead of blocking a thread inside a plain `.tool()` handler:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpServer};
+
+let server = McpServer::new("my-server", "1.0")
+    .async_tool("call_api", "Call an external API", "{}", |_args| async move {
+        Ok(McpContent::text("response"))
+    });
+```
+
+`tools/call` bridges into the future via `crate::async_bridge::block_on_isolated` — not
+`tokio::task::block_in_place` (this feature's original design sketch), which panics outside a
+`multi_thread` runtime. `block_on_isolated` (already used by `H2ReverseProxy`/`AsyncAppWithState`)
+works under any runtime flavor. Storage is a separate `async_tools: Arc<RwLock<Vec<AsyncToolDef>>>`
+(not unified into `ToolDef` via a handler enum); `tools/list` merges both collections transparently,
+`tools/call` checks sync tools first then async. `.register_async_tool(...)` is the dynamic
+equivalent; `.remove_tool(name)` now checks both collections. Like `.tool()`, no context/annotations
+support yet for async tools.
+
+Verified end-to-end against a real running `http2`/`http3` server (a live tokio runtime driving the
+connection): an async tool awaiting `tokio::time::sleep(...)` took exactly as long as the sleep and
+returned correctly, confirming the future is genuinely polled to completion, not just called.
+
 ---
 
 ## Standalone proxies
