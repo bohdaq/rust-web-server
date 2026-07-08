@@ -80,7 +80,7 @@ $ curl http://localhost:7878/hello
 Hello, world!
 ```
 
-See [DEVELOPER](DEVELOPER.md) for 75 use-case examples covering JSON, auth, WebSocket, SSE, middleware, ORM, MCP, and more.
+See [DEVELOPER](DEVELOPER.md) for 78 use-case examples covering JSON, auth, WebSocket, SSE, middleware, ORM, MCP, and more.
 
 ---
 
@@ -157,7 +157,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 Three files make that possible — point your AI tool at them before asking it to build something:
 
 - **[llms.txt](llms.txt)** — a flat, LLM-optimized reference: every public type, middleware, and feature flag, with a runnable snippet for nearly every capability in the crate. This is the file to paste into a chat or system prompt, or fetch directly: `https://raw.githubusercontent.com/bohdaq/rust-web-server/main/llms.txt`.
-- **[DEVELOPER.md](DEVELOPER.md)** — 72 numbered, runnable use cases (`## Use Case #N: Title`). Ask your assistant to follow the closest-matching use case instead of inventing a pattern from scratch.
+- **[DEVELOPER.md](DEVELOPER.md)** — 78 numbered, runnable use cases (`## Use Case #N: Title`). Ask your assistant to follow the closest-matching use case instead of inventing a pattern from scratch.
 - **[CLAUDE.md](CLAUDE.md)** — architecture, request lifecycle, and coding conventions. Claude Code reads this automatically when working inside this repo.
 
 **Example prompt:**
@@ -378,7 +378,7 @@ Binary is at `target/release/rws`. MSRV is 1.75.
 ## Further reading
 
 - [CONFIGURE](CONFIGURE.md) — all configuration options (env vars, config file, CLI flags)
-- [DEVELOPER](DEVELOPER.md) — building blocks reference and 75 use-case examples
+- [DEVELOPER](DEVELOPER.md) — building blocks reference and 78 use-case examples
 - [FAQ](FAQ.md) — common problems and solutions
 - [spec/PROXY_SERVER_CONFIG.md](spec/PROXY_SERVER_CONFIG.md) — annotated proxy config reference
 - [spec/AI_ADOPTION.md](spec/AI_ADOPTION.md) — AI adoption strategy

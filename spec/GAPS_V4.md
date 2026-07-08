@@ -8,15 +8,25 @@
 
 ## Part 1 — Kubernetes middleware, remaining items
 
-### 1.1 Ingress controller (`src/ingress/mod.rs`)
+### ✅ 1.1 Ingress controller (`src/ingress/mod.rs`) — Done
 
 Working today: polls `/apis/networking.k8s.io/v1/ingresses`, builds a live route table, routes to `{service}.{namespace}.svc.cluster.local:{port}`.
 
-**What is missing:**
+**What was missing (all four now closed):**
 - TLS to `kubernetes.default.svc` — the watcher talks to the API server over plain HTTP today; needs a rustls client config trusting the in-cluster CA (`/var/run/secrets/kubernetes.io/serviceaccount/ca.crt`).
 - Watch API (`?watch=true`) instead of fixed-interval polling — polling means route changes lag by up to the poll interval and the watcher does needless work on quiet clusters.
 - `pathType: Exact` support — only prefix matching is implemented.
 - IngressClass filtering — the watcher currently picks up every Ingress object cluster-wide regardless of `spec.ingressClassName`, which breaks multi-controller clusters (e.g. rws running alongside nginx-ingress).
+
+**How each was closed, and one bug found along the way:**
+
+1. **TLS**: `KubernetesIngressWatcher::from_service_account()` — previously a stub always returning `Err` — now really connects to `https://kubernetes.default.svc`, gated `#[cfg(any(feature = "http-client", feature = "http2"))]` (`src/ingress/tls.rs`, new). Trusts *only* the CA at `.../ca.crt` (a hand-rolled PEM parser, not `rustls-pemfile`, since that's only available under `http2` and this needs to also work under `http-client` alone — consistent with this crate's established "hand-roll rather than add a dependency" pattern). Finds the API server via `KUBERNETES_SERVICE_HOST`/`KUBERNETES_SERVICE_PORT`, the same mechanism every real Kubernetes client library uses. Validated with a genuine TLS handshake in tests — not just parsed-and-assumed-correct — against a local `rustls`-backed listener presenting a real, `openssl`-generated, CA-signed certificate, including a negative test proving a server signed by an *unrelated* CA is correctly rejected.
+2. **Watch API**: `src/ingress/watch.rs` (new) decodes the `Transfer-Encoding: chunked` watch stream into lines and treats *any* event line as a trigger to re-run the existing full LIST, rather than incrementally applying `ADDED`/`MODIFIED`/`DELETED` deltas to an in-memory cache — a deliberate scope decision (full delta tracking needs `resourceVersion` bookkeeping and correct `410 Gone` handling, meaningfully more surface area to get subtly wrong). Still delivers what this gap asked for: a quiet cluster leaves the watch thread blocked on a read with zero polling cost, and a real change is picked up as soon as the API server sends it, not after up to `poll_interval_secs`. The original interval resync keeps running unchanged alongside it as a safety net.
+3. **`pathType: Exact`**: `IngressRule` gained a `path_type: PathType` field (`Prefix`/`Exact`/`ImplementationSpecific`), parsed from each path entry. Fixing this surfaced a **second, pre-existing bug in `Prefix` matching itself**: it was raw `str::starts_with`, so a rule for `/foo` incorrectly matched `/foobar` — Kubernetes' own `Prefix` semantics are element-wise (path-segment) matching, not a raw byte prefix. Fixed alongside `Exact`, since shipping a spec-correct `Exact` next to a known-non-spec-compliant `Prefix` would have been an odd half-measure.
+4. **IngressClass filtering**: `.ingress_class(name)` builder + `ingress_class: Option<&str>` parameter on `parse_ingress_list` (a signature change to a public function, judged acceptable for a pre-1.0, fast-iterating crate). Unset (default) accepts every class, preserving today's behavior; an Ingress with no `ingressClassName` at all never matches a configured filter.
+5. **Bonus bug fix, found while touching the parser for #4**: `parse_ingress_list`'s namespace extraction searched for `"namespace"` in the text *after* each `"spec"` occurrence — but `metadata` (and the `namespace` field inside it) always comes *before* `spec` in a real Kubernetes object's JSON encoding, so the search never actually found it and silently fell back to the `"default"` placeholder for every real API response, regardless of the Ingress's actual namespace (invisible unless the real namespace happened to also be `"default"`). No existing test caught this because none asserted on `.namespace` for a non-default-namespace fixture. Fixed by searching *backward* from each `"spec"` occurrence instead — matching what the function's own pre-existing (but never-implemented) comment already said the intent was.
+
+Two new modules (`tls.rs`, `watch.rs`), 37 new/updated tests (real TLS handshakes — positive and negative — chunked-stream reassembly, `pathType` boundary semantics, class filtering, and a dedicated regression test for the namespace bug), full three-way build (default/`http1`/`http2`) green, no new Cargo dependency (PEM parsing and base64 decoding are hand-rolled, matching `rustls`/`webpki-roots` already being optional deps behind `http-client`/`http2`).
 
 ### 1.2 Service discovery (`src/service_discovery/mod.rs`)
 
