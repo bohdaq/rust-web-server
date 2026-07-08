@@ -131,6 +131,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `ConfigSnapshot` | `config_reload` | Point-in-time snapshot of all hot-reloadable config values. Read with `config_reload::current()`. |
 | `config_reload::reload` | `config_reload` | Re-reads `rws.config.toml` and applies CORS, rate-limit, log-format changes live. Triggered by SIGHUP or `POST /admin/config/reload`. |
 | `get_max_body_size` | `entry_point` | Reads `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (default `0`, unlimited). `Server::process`, `process_h1_tls`, `h2_handler`, and `h3_handler` all check a request's declared `Content-Length` (or accumulated body, for H2/H3) against this before buffering it; requests over the limit get `413 Payload Too Large` and the connection is closed. |
+| `get_spa_fallback` / `get_spa_fallback_exclude_prefixes` | `entry_point` | Reads `RWS_CONFIG_SPA_FALLBACK` (default unset — disabled) and `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES`. `StaticResourceController` serves the configured file for a `GET`/`HEAD` request matching no real file/directory (a no-`.` last path segment, not under an excluded prefix) instead of `404` — see Use Case #79. |
 | `Server::continue_response` / `expectation_failed_response` | `server` (HTTP/1.1: `Server::process`, `process_h1_tls`) | `Expect: 100-continue` support (RFC 9110 §10.1.1). A request with `Expect: 100-continue` and a `Content-Length` gets an immediate `100 Continue` interim response before the server blocks reading the body — checked *after* the `413` size-limit check, so an oversized body is rejected without ever telling the client to send it. Any other `Expect` value gets `417 Expectation Failed` without reading the body at all. HTTP/2 and HTTP/3 read bodies via async per-frame `DATA` streams rather than one blocking read, so they don't have the read-ahead deadlock this exists to avoid, and don't implement it. |
 | `OtelLayer` | `otel` | Middleware that creates the HTTP server root span, propagates W3C `traceparent`, and exports to stdout or OTLP HTTP. Call `otel::setup()` or `otel::setup_from_env()` at startup. Nest child spans under it with `otel::span`/`otel::client_span`. |
 | `Span` / `otel::span` / `otel::client_span` | `otel` | `Span` is an RAII child span — create one with `otel::span(name)` (Internal) or `otel::client_span(name)` (Client), nested under whatever span is currently active (or a fresh trace if none). `.set_attribute(key, value)`, `.set_error()`/`.record_error(msg)`, and drop (or `.end()`) to record it. |
@@ -4742,3 +4743,38 @@ A directory that *does* have an `index.html` is served exactly as before — thi
 // Drop a file named exactly "rws-directory-listing.css" in the working
 // directory to override the built-in dark/light theme.
 ```
+
+---
+
+### 79. SPA fallback for the static file server
+
+`RWS_CONFIG_SPA_FALLBACK` (unset by default — disabled) serves a configured file for any `GET`/`HEAD` request that matches no real file, directory, or `path.html`, instead of `404` — the standard client-side-router ("SPA") fallback needed for deep links in a React Router / Vue Router / etc. app running under `cargo run`/`rws` with no code changes:
+
+```bash
+# Build your React app, then serve its output directly:
+cd dist && RWS_CONFIG_SPA_FALLBACK=index.html rws
+```
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::test_client::TestClient;
+
+// std::env::set_var("RWS_CONFIG_SPA_FALLBACK", "index.html"); // normally set via the environment
+let client = TestClient::new(App::new());
+
+// /dashboard/settings has no file on disk — served index.html instead of 404
+// so React Router's client-side routing can take over.
+let response = client.get("/dashboard/settings").send();
+assert_eq!(200, response.status());
+```
+
+**Scoped to avoid swallowing real 404s**, via two independent checks, both applied automatically:
+- **Extension heuristic** — only a request whose *last path segment* has no `.` gets the fallback (`/dashboard/settings` qualifies; `/assets/logo.png` — a missed static asset — still 404s). The same heuristic webpack-dev-server's `historyApiFallback`, `sirv`, and `vite preview` use.
+- **`RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES`** — a comma-separated list of path prefixes (e.g. `/api,/healthz`) that never receive the fallback even when it's configured, so a genuinely missing API route still 404s instead of silently becoming a `200` with an HTML body:
+
+```bash
+export RWS_CONFIG_SPA_FALLBACK=index.html
+export RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES=/api
+```
+
+A directory or file that *does* exist is always served as itself — the fallback only ever applies to the previously-404 case, and only when the configured fallback file actually exists on disk (a typo'd `RWS_CONFIG_SPA_FALLBACK` value is a silent no-op, not a broken response). Read fresh on every request (`crate::entry_point::get_spa_fallback`), so it can be changed via `rws.config.toml` + `SIGHUP` without a restart, the same as `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`.

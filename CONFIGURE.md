@@ -145,6 +145,8 @@ ip                     = '0.0.0.0'
 | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE` | `request_allocation_size` | `--request-allocation-size-in-bytes` / `-r` | `16000` | Read buffer size per request |
 | `RWS_CONFIG_CSP` | — | — | `default-src 'self'` | `Content-Security-Policy` header value; set to empty string to disable |
 | `RWS_CONFIG_LOG_FORMAT` | `log_format` | — | `json` | Access log format: `json` (structured JSON for log aggregators) or `combined` (CLF) |
+| `RWS_CONFIG_SPA_FALLBACK` | `spa_fallback` | — | _(none, disabled)_ | Serve this file (e.g. `index.html`) for a `GET`/`HEAD` request that matches no real file/directory instead of `404` — the client-side-router ("SPA") fallback pattern |
+| `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES` | `spa_fallback_exclude_prefixes` | — | _(none)_ | Comma-separated path prefixes (e.g. `/api`) that never receive the SPA fallback |
 
 ## Memory
 

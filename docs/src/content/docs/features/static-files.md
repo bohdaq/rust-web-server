@@ -1,6 +1,6 @@
 ---
-title: Static Files & Directory Listing
-description: How rust-web-server serves files from disk, and the default directory listing page for directories without an index.html.
+title: Static Files, Directory Listing & SPA Fallback
+description: How rust-web-server serves files from disk, the default directory listing page for directories without an index.html, and the opt-in SPA fallback for client-side routers.
 ---
 
 ## Serving files
@@ -61,3 +61,48 @@ echo "body { font-family: monospace; }" > rws-directory-listing.css
 ```
 
 If your own CSP is stricter than the default (via `RWS_CONFIG_CSP`) and excludes `'self'` from `style-src`/`script-src`, add an allowance for it or the listing will render unstyled the same way any other same-origin asset would under that policy.
+
+## SPA fallback
+
+**Opt-in — unset (disabled) by default.** `RWS_CONFIG_SPA_FALLBACK` serves a configured file for any `GET`/`HEAD` request that matches no real file, directory, or `path.html`, instead of `404` — the standard client-side-router ("SPA") fallback a React Router / Vue Router / etc. app needs for deep links to work:
+
+```bash
+# Build your React/Vue/etc. app, then serve its output directly:
+cd dist && RWS_CONFIG_SPA_FALLBACK=index.html rws
+```
+
+```bash
+curl http://localhost:7878/dashboard/settings
+# no file on disk at this path — served index.html instead of 404,
+# so the client-side router can take over and render /dashboard/settings
+```
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::test_client::TestClient;
+
+let client = TestClient::new(App::new());
+let response = client.get("/dashboard/settings").send();
+assert_eq!(200, response.status());
+```
+
+A file or directory that *does* exist is always served as itself — the fallback only ever applies to what was previously a `404`, and only when the configured file actually exists on disk (a typo'd `RWS_CONFIG_SPA_FALLBACK` value is a silent no-op, not a broken response).
+
+### Scoping — avoiding swallowed 404s
+
+A blanket fallback would turn every typo'd URL and missing asset into a `200`, which is worse than the `404` it replaces. Two checks apply automatically:
+
+1. **Extension heuristic** — only a request whose *last path segment* has no `.` gets the fallback. `/dashboard/settings` qualifies (a client-side route); `/assets/logo.png` (a missed static asset) still `404`s. This is the same heuristic webpack-dev-server's `historyApiFallback`, `sirv`, and `vite preview` use.
+2. **`RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES`** — a comma-separated list of path prefixes that never receive the fallback, even when it's configured:
+
+```bash
+export RWS_CONFIG_SPA_FALLBACK=index.html
+export RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES=/api,/healthz
+```
+
+```bash
+curl http://localhost:7878/api/users/999   # 404 — excluded prefix, not rewritten
+curl http://localhost:7878/settings/theme  # 200 — served index.html
+```
+
+Both env vars are read fresh on every request, so they can be changed via `rws.config.toml` + `SIGHUP` without a restart — see [Hot Config Reload](/features/hot-reload/).

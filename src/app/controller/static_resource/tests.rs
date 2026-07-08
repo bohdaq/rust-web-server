@@ -180,6 +180,11 @@ fn file_retrieval() {
 
 #[test]
 fn not_found() {
+    // is_matching's result now depends on RWS_CONFIG_SPA_FALLBACK (unset here,
+    // but the SPA-fallback tests below toggle it) — take the lock so this
+    // never observes a state left mid-flight by one of those.
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
     let path = "/not_found";
 
     let request = Request {
@@ -210,6 +215,8 @@ fn not_found() {
 
 #[test]
 fn malformed() {
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
     let path = "//randomtext";
 
     let request = Request {
@@ -558,4 +565,137 @@ fn directory_listing_has_parent_link_except_at_static_root() {
     );
     assert!(nested_html.contains(".. (parent directory)"));
     assert!(nested_html.contains("href=\"/no_index/\""));
+}
+
+// ── SPA fallback (RWS_CONFIG_SPA_FALLBACK) ────────────────────────────────────
+
+#[test]
+fn path_has_extension_checks_only_the_last_segment() {
+    assert!(!super::path_has_extension("/dashboard/settings"));
+    assert!(!super::path_has_extension("/user.name/settings"), "dot in a non-last segment shouldn't count");
+    assert!(super::path_has_extension("/assets/logo.png"));
+    assert!(super::path_has_extension("/app.js"));
+    assert!(!super::path_has_extension("/"));
+}
+
+fn spa_request(path: &str) -> (Request, ConnectionInfo) {
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: path.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+        sni_hostname: None,
+    };
+    (request, connection_info)
+}
+
+#[test]
+fn spa_fallback_disabled_by_default() {
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+
+    let (request, connection_info) = spa_request("/dashboard/settings");
+    assert!(!StaticResourceController::is_matching(&request, &connection_info));
+}
+
+#[test]
+fn spa_fallback_serves_configured_file_for_unmatched_route() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK", "static/index.html");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES");
+
+    let (request, connection_info) = spa_request("/dashboard/settings");
+    assert!(StaticResourceController::is_matching(&request, &connection_info));
+
+    let response = StaticResourceController::process(&request, Response::new(), &connection_info);
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n200_ok.status_code, response.status_code);
+
+    let expected = FileExt::read_file(FileExt::build_path(&["static", "index.html"]).as_str()).unwrap();
+    let actual = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(expected, actual);
+
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+}
+
+#[test]
+fn spa_fallback_still_serves_a_real_file_directly_when_one_exists() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK", "static/index.html");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES");
+
+    // /static/test.txt is a real file — must be served as itself, not the fallback.
+    let (request, connection_info) = spa_request("/static/test.txt");
+    let response = StaticResourceController::process(&request, Response::new(), &connection_info);
+    let expected = FileExt::read_file(FileExt::build_path(&["static", "test.txt"]).as_str()).unwrap();
+    let actual = response.content_range_list.get(0).unwrap().body.to_vec();
+    assert_eq!(expected, actual);
+
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+}
+
+#[test]
+fn spa_fallback_skips_paths_that_look_like_a_missed_asset() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK", "static/index.html");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES");
+
+    let (request, connection_info) = spa_request("/assets/missing-logo.png");
+    assert!(
+        !StaticResourceController::is_matching(&request, &connection_info),
+        "a path with a file extension should 404, not fall back to index.html"
+    );
+
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+}
+
+#[test]
+fn spa_fallback_respects_exclude_prefixes() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK", "static/index.html");
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES", "/api,/healthz");
+
+    let (request, connection_info) = spa_request("/api/users/999");
+    assert!(
+        !StaticResourceController::is_matching(&request, &connection_info),
+        "an excluded prefix should still 404 rather than fall back"
+    );
+
+    // A path outside the excluded prefixes still gets the fallback.
+    let (request2, connection_info2) = spa_request("/dashboard/settings");
+    assert!(StaticResourceController::is_matching(&request2, &connection_info2));
+
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES");
+}
+
+#[test]
+fn spa_fallback_is_a_noop_when_configured_file_does_not_exist() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK", "static/this-file-does-not-exist.html");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES");
+
+    let (request, connection_info) = spa_request("/dashboard/settings");
+    assert!(!StaticResourceController::is_matching(&request, &connection_info));
+
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+}
+
+#[test]
+fn spa_fallback_does_not_apply_to_the_root_path() {
+    // request_uri == "/" is excluded from StaticResourceController entirely
+    // (IndexController's territory) regardless of SPA fallback config.
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_SPA_FALLBACK", "static/index.html");
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES");
+
+    let (request, connection_info) = spa_request("/");
+    assert!(!StaticResourceController::is_matching(&request, &connection_info));
+
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
 }

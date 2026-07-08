@@ -213,6 +213,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Per-route max body size — config-driven proxy's `[route.middleware] max_body_size` returns `413` for one route's oversized requests, stricter than the global `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`
 - Request ID middleware — `RequestIdLayer` injects/echoes `X-Request-Id` on every request and response; `RequestId` extractor to read it
 - Directory listing — any requested directory without an `index.html` renders a dark/light-adaptive listing page (breadcrumb, parent link, sortable-by-eye table, client-side filter) instead of `404`; default, always on; CSS/JS served same-origin at `/rws-directory-listing.css`/`.js` (CSP-compliant, no inline `<style>`/`<script>`), overridable by dropping a same-named file on disk
+- SPA fallback — `RWS_CONFIG_SPA_FALLBACK=index.html` serves a fallback file for unmatched `GET`/`HEAD` routes instead of `404`, for React Router/Vue Router/etc. deep links; opt-in (unset by default); skips paths that look like a missed asset (a `.` in the last segment) and any `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES`
 
 </details>
 

@@ -64,6 +64,21 @@ impl Config {
     pub const RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: &'static str = "RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES";
     pub const RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES_DEFAULT_VALUE: &'static str = "0";
 
+    /// Serve this file (e.g. `"index.html"`) for a `GET`/`HEAD` request that doesn't
+    /// match any real file/directory, instead of `404` — the standard client-side-router
+    /// ("SPA") fallback pattern needed for deep links in a React Router / Vue Router /
+    /// etc. app. Empty (default) disables it entirely. See
+    /// `crate::app::controller::static_resource` for the matching heuristic (skips
+    /// paths that look like a missed static asset, i.e. the last segment has a `.`).
+    pub const RWS_CONFIG_SPA_FALLBACK: &'static str = "RWS_CONFIG_SPA_FALLBACK";
+    pub const RWS_CONFIG_SPA_FALLBACK_DEFAULT_VALUE: &'static str = "";
+
+    /// Comma-separated path prefixes (e.g. `"/api,/healthz"`) that never receive the
+    /// SPA fallback even when `RWS_CONFIG_SPA_FALLBACK` is set — so a real API `404`
+    /// isn't silently rewritten into a `200`. Empty (default) excludes nothing.
+    pub const RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES: &'static str = "RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES";
+    pub const RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES_DEFAULT_VALUE: &'static str = "";
+
     pub const RWS_CONFIG_TLS_CERT_FILE: &'static str = "RWS_CONFIG_TLS_CERT_FILE";
     pub const RWS_CONFIG_TLS_CERT_FILE_DEFAULT_VALUE: &'static str = "";
 
@@ -367,5 +382,22 @@ pub fn get_max_body_size() -> u64 {
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(0)
+}
+
+/// The configured SPA-fallback file (e.g. `"index.html"`), or `None` if
+/// `RWS_CONFIG_SPA_FALLBACK` is unset/empty (the default — disabled). Read
+/// fresh on every call, so it can be toggled via `rws.config.toml` + `SIGHUP`
+/// without a restart, the same as [`get_max_body_size`].
+pub fn get_spa_fallback() -> Option<String> {
+    env::var(Config::RWS_CONFIG_SPA_FALLBACK).ok().filter(|v| !v.is_empty())
+}
+
+/// Path prefixes that never receive the SPA fallback (`RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES`,
+/// comma-separated), even when the fallback is configured. Empty (default) excludes nothing.
+pub fn get_spa_fallback_exclude_prefixes() -> Vec<String> {
+    env::var(Config::RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES)
+        .ok()
+        .map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+        .unwrap_or_default()
 }
 

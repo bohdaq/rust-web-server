@@ -21,6 +21,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **Graceful shutdown** — `SIGINT` / `SIGTERM` drain in-flight requests before exit; `SERVER_READY` flag cleared on shutdown
 - **Gzip compression** — applied automatically based on `Accept-Encoding`; configurable minimum size
 - **Static file serving** — a directory with no `index.html` renders a dark/light-adaptive directory listing page by default; chunked file streaming for large files; ETag + `Last-Modified` caching headers
+- **SPA fallback** — `RWS_CONFIG_SPA_FALLBACK=index.html` serves a fallback file for unmatched routes instead of `404`, for React Router/Vue Router/etc. deep links; opt-in, scoped by an extension heuristic and `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES`
 - **Thread pool** (http1 only) — hand-rolled `ThreadPool`; connection-per-thread; no tokio — `http1`
 - **Tokio async runtime** — used for `http2` and `http3` builds; `http1` is fully synchronous
 

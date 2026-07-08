@@ -67,21 +67,21 @@ impl Controller for StaticResourceController {
             is_matching_method
         } else {
             // check if file with same name and .html extension exists
-            if static_filepath.ends_with(".html") {
-                return false
+            if !static_filepath.ends_with(".html") {
+                let html_suffix = ".html";
+                let html_file = [&components.path.replace(SYMBOL.slash, &FileExt::get_path_separator()), html_suffix].join(SYMBOL.empty_string);
+                if let Ok(html_static_filepath) = FileExt::get_static_filepath(&html_file) {
+                    if File::open(&html_static_filepath).is_ok() {
+                        return is_matching_method;
+                    }
+                }
             }
 
-            let html_suffix = ".html";
-            let html_file = [&components.path.replace(SYMBOL.slash, &FileExt::get_path_separator()), html_suffix].join(SYMBOL.empty_string);
-            let boxed_static_filepath = FileExt::get_static_filepath(&html_file);
-            if boxed_static_filepath.is_err() {
-                return false
-            }
-
-            let static_filepath = boxed_static_filepath.unwrap();
-            let boxed_file = File::open(&static_filepath);
-
-            boxed_file.is_ok() && is_matching_method
+            // Last resort: the configured SPA fallback file (RWS_CONFIG_SPA_FALLBACK),
+            // for a GET/HEAD request that doesn't look like a missed static asset and
+            // isn't under an excluded prefix. Returns false (unchanged prior behavior)
+            // whenever the fallback isn't configured or doesn't apply.
+            is_matching_method && spa_fallback_url_path(&components.path).is_some()
         }
 
     }
@@ -489,6 +489,26 @@ impl StaticResourceController {
             }
         }
 
+        // Nothing on disk matched — try the configured SPA fallback (a no-op,
+        // returning the untouched empty list, when it's unconfigured or doesn't
+        // apply to this request).
+        if content_range_list.is_empty() {
+            if let Some(fallback_url_path) = spa_fallback_url_path(&components.path) {
+                let mut range_header = &Header {
+                    name: Header::_RANGE.to_string(),
+                    value: "bytes=0-".to_string()
+                };
+
+                let boxed_header = request.get_header(Header::_RANGE.to_string());
+                if boxed_header.is_some() {
+                    range_header = boxed_header.unwrap();
+                }
+
+                if let Ok(list) = Range::get_content_range_list(&fallback_url_path, range_header) {
+                    content_range_list = list;
+                }
+            }
+        }
 
         Ok(content_range_list)
     }
@@ -614,6 +634,49 @@ impl StaticResourceController {
         html.push_str(DIRECTORY_LISTING_TAIL);
 
         html
+    }
+}
+
+/// `true` if the last `/`-separated segment of `path` has a file extension
+/// (contains a `.` after the final `/`) — the standard heuristic (also used
+/// by webpack-dev-server's `historyApiFallback`, `sirv`, `vite preview`)
+/// distinguishing a client-side route (`/dashboard/settings`, no extension)
+/// from a missed static asset (`/logo.png`, has one), so the SPA fallback
+/// doesn't silently swallow the latter's real 404.
+fn path_has_extension(path: &str) -> bool {
+    path.rsplit('/').next().unwrap_or("").contains('.')
+}
+
+/// Resolves the SPA-fallback "URL path" to pass to [`Range::get_content_range_list`]
+/// for a request at `url_path` — e.g. `"/index.html"` for the common
+/// `RWS_CONFIG_SPA_FALLBACK=index.html` case — or `None` if the fallback doesn't
+/// apply: unconfigured, `url_path` is under an excluded prefix
+/// (`RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES`), `url_path` looks like a missed
+/// static asset (see [`path_has_extension`]), or the configured file doesn't
+/// actually exist on disk. Method filtering (GET/HEAD only) is the caller's
+/// responsibility — both call sites already have it via `is_matching_method`.
+fn spa_fallback_url_path(url_path: &str) -> Option<String> {
+    if path_has_extension(url_path) {
+        return None;
+    }
+
+    let fallback_name = crate::entry_point::get_spa_fallback()?;
+
+    let exclude_prefixes = crate::entry_point::get_spa_fallback_exclude_prefixes();
+    if exclude_prefixes.iter().any(|prefix| url_path.starts_with(prefix.as_str())) {
+        return None;
+    }
+
+    let separator = FileExt::get_path_separator();
+    let normalized_name = fallback_name.trim_start_matches('/').replace('/', &separator);
+    let fallback_url_path = format!("{}{}", separator, normalized_name);
+
+    let boxed_fs_path = FileExt::get_static_filepath(&fallback_url_path);
+    let fs_path = boxed_fs_path.ok()?;
+    if File::open(&fs_path).is_ok() {
+        Some(fallback_url_path)
+    } else {
+        None
     }
 }
 

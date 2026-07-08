@@ -252,6 +252,10 @@ fn it_generates_successful_response_with_static_file() {
 
 #[test]
 fn it_generates_not_found_page_for_absent_static_file() {
+    // StaticResourceController::is_matching now depends on RWS_CONFIG_SPA_FALLBACK.
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
@@ -323,6 +327,10 @@ fn it_generates_not_found_page_for_absent_static_file() {
 
 #[test]
 fn it_generates_not_found_page_for_absent_route() {
+    // StaticResourceController::is_matching now depends on RWS_CONFIG_SPA_FALLBACK.
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
@@ -1652,6 +1660,14 @@ fn expect_100_continue_sends_interim_response_then_reads_body() {
 
 #[test]
 fn no_expect_header_never_sends_100_continue() {
+    // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES (via get_max_body_size);
+    // pre-existing gap found while stress-testing an unrelated change — a
+    // neighboring test (expect_100_continue_with_oversized_body_gets_413_not_100_continue)
+    // sets it to "10" under the lock, and without taking the lock here too, this
+    // test could transiently see that value and get 413 instead of 200.
+    let _g = crate::test_env::lock();
+    std::env::remove_var(crate::entry_point::Config::RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES);
+
     let body = vec![b'y'; 20];
     let mut stream = SequentialMockStream::new(vec![raw_post_request(&body)]);
     let captured = std::sync::Arc::new(std::sync::Mutex::new(None));

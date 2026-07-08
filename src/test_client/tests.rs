@@ -22,6 +22,11 @@ fn get_metrics_returns_200() {
 
 #[test]
 fn get_unknown_path_returns_404() {
+    // Goes through App's built-in StaticResourceController, whose is_matching
+    // now depends on RWS_CONFIG_SPA_FALLBACK.
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+
     let res = client().get("/does-not-exist-xyzzy").send();
     assert_eq!(*STATUS_CODE_REASON_PHRASE.n404_not_found.status_code, res.status());
 }
@@ -60,6 +65,9 @@ fn post_with_body_text() {
 
 #[test]
 fn is_success_false_for_4xx() {
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+
     let res = client().get("/does-not-exist-xyzzy").send();
     assert!(!res.is_success());
 }

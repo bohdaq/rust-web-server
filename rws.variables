@@ -31,3 +31,12 @@ export RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES="16000"
 # Build with --features http2 to enable TLS support.
 # export RWS_CONFIG_TLS_CERT_FILE="/path/to/cert.pem"
 # export RWS_CONFIG_TLS_KEY_FILE="/path/to/key.pem"
+
+# Serve this file for a GET/HEAD request that matches no real file/directory,
+# instead of 404 — the client-side-router ("SPA") fallback for React Router /
+# Vue Router / etc. deep links. Disabled (unset) by default.
+# export RWS_CONFIG_SPA_FALLBACK="index.html"
+
+# Comma-separated path prefixes that never receive the SPA fallback above,
+# even when it's configured — e.g. so a real API 404 isn't rewritten into a 200.
+# export RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES="/api,/healthz"

@@ -158,6 +158,11 @@ async fn unmatched_route_falls_through_to_app() {
 
 #[tokio::test]
 async fn unmatched_route_returns_404() {
+    // Falls through to App's built-in StaticResourceController, whose
+    // is_matching now depends on RWS_CONFIG_SPA_FALLBACK.
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+
     let app = AsyncAppWithState::new(())
         .get("/custom", |_, _, _, _| async { ok_text("custom") });
 

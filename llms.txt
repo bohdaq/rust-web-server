@@ -1150,6 +1150,8 @@ RWS_CONFIG_RATE_LIMIT_WINDOW_SECS   default: 60
 RWS_CONFIG_LOG_FORMAT            "combined" (default) | "json"
 RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES   default: 10000 (per-read chunk size; bodies larger than this span multiple reads)
 RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES   default: 0 (unlimited); 413 before buffering when exceeded
+RWS_CONFIG_SPA_FALLBACK          default: unset (disabled); e.g. "index.html" — see "SPA fallback" section
+RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES   default: unset; comma-separated, e.g. "/api,/healthz"
 ```
 
 ### Typed config binding (requires `macros` feature)
@@ -1998,6 +2000,36 @@ compiled-in default (`include_bytes!`) without recompiling.
 
 ---
 
+## SPA fallback (src/app/controller/static_resource/mod.rs)
+
+Opt-in (unset by default). `RWS_CONFIG_SPA_FALLBACK=index.html` serves that file for a `GET`/`HEAD`
+request matching no real file/directory/`path.html`, instead of `404` — the client-side-router ("SPA")
+fallback React Router/Vue Router/etc. deep links need.
+
+```bash
+cd dist && RWS_CONFIG_SPA_FALLBACK=index.html rws
+```
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::test_client::TestClient;
+
+let client = TestClient::new(App::new());
+let response = client.get("/dashboard/settings").send(); // no file on disk
+assert_eq!(200, response.status()); // served index.html instead of 404
+```
+
+Scoped by two checks, both automatic: (1) only a request whose *last path segment* has no `.` gets the
+fallback — `/dashboard/settings` qualifies, `/assets/logo.png` (a missed static asset) still 404s, the
+same heuristic webpack-dev-server's `historyApiFallback`/`sirv`/`vite preview` use; (2)
+`RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES` (comma-separated, e.g. `/api,/healthz`) never gets the
+fallback even when configured, so a real API 404 isn't silently rewritten into a `200`. The fallback
+file must actually exist on disk — a typo'd config value is a silent no-op, not a broken response. Read
+fresh every request (`entry_point::get_spa_fallback`/`get_spa_fallback_exclude_prefixes`), so it takes
+effect via `rws.config.toml` + `SIGHUP` with no restart.
+
+---
+
 ## HTML templates (requires `tera` feature)
 
 ```rust
@@ -2063,6 +2095,7 @@ let www_router = Router::new().with_host("www.example.com").get("/", home_handle
 - `HttpOnly` flag — controllable on all `Set-Cookie` builders
 - XSS: no built-in output escaping — use Tera templates which auto-escape HTML
 - Directory listing — entry names HTML-escaped for display, percent-encoded in `href`s; dotfiles omitted; CSS/JS served as same-origin assets rather than inline blocks so the default CSP needs no relaxation
+- SPA fallback — opt-in only (`RWS_CONFIG_SPA_FALLBACK`, unset by default); scoped by a no-extension-in-last-segment heuristic plus `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES` so a real API `404` isn't silently rewritten into a `200`
 
 ---
 

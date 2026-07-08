@@ -107,6 +107,11 @@ fn unmatched_request_falls_through_to_app() {
 
 #[test]
 fn unmatched_request_returns_404() {
+    // Falls through to App's built-in StaticResourceController, whose
+    // is_matching now depends on RWS_CONFIG_SPA_FALLBACK.
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+
     let app = AppWithState::new(()).get("/custom", |_, _, _, _| ok_text("custom"));
     let resp = app.execute(&get("/does-not-exist-xyz"), &conn()).unwrap();
     assert_eq!(404, resp.status_code);
@@ -258,6 +263,11 @@ fn container_resolution_miss_does_not_panic_the_handler() {
 
 #[test]
 fn with_config_pins_cors_denial_on_fallback_request() {
+    // Falls through to App's built-in StaticResourceController, whose
+    // is_matching now depends on RWS_CONFIG_SPA_FALLBACK.
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+
     let config = ServerConfig {
         cors_allow_all: false,
         cors_allow_origins: String::new(), // no allowed origins -> CORS denied
@@ -278,6 +288,9 @@ fn with_config_pins_cors_denial_on_fallback_request() {
 
 #[test]
 fn with_config_allows_cors_for_configured_origin_on_fallback_request() {
+    let _g = crate::test_env::lock();
+    std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
+
     let config = ServerConfig {
         cors_allow_all: false,
         cors_allow_origins: "https://trusted.example.com".to_string(),
