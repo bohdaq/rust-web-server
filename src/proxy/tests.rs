@@ -174,6 +174,83 @@ fn proxy_returns_502_when_all_backends_refuse() {
     assert_eq!(502, resp.status_code);
 }
 
+// ── Circuit breaker wiring ─────────────────────────────────────────────────────
+
+#[test]
+fn circuit_breaker_skips_open_backend_without_dialing() {
+    use crate::circuit_breaker::CircuitBreaker;
+    use std::sync::Mutex;
+
+    // A "backend" that would panic the test harness's listener thread if
+    // ever dialed is overkill — instead, prove it wasn't dialed by using a
+    // refusing port (so if the breaker's skip *didn't* work, the proxy would
+    // get a connection-refused error instead of ever reaching the healthy
+    // second backend below).
+    let open_port = refusing_port();
+    let key = format!("127.0.0.1:{}", open_port);
+
+    let breaker = Arc::new(Mutex::new(CircuitBreaker::new(1, 30)));
+    breaker.lock().unwrap().record_failure(&key); // threshold=1 -> opens immediately
+
+    let good_port = mock_backend(OK_RESPONSE);
+    let proxy = ReverseProxy::new([
+        format!("http://127.0.0.1:{}", open_port),
+        format!("http://127.0.0.1:{}", good_port),
+    ])
+    .connect_timeout_ms(200)
+    .with_circuit_breaker(breaker);
+
+    let resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(200, resp.status_code, "should skip the Open backend and reach the healthy one");
+}
+
+#[test]
+fn circuit_breaker_records_success_on_successful_proxy() {
+    use crate::circuit_breaker::{BreakerState, CircuitBreaker};
+    use std::sync::Mutex;
+
+    let port = mock_backend(OK_RESPONSE);
+    let key = format!("127.0.0.1:{}", port);
+    let breaker = Arc::new(Mutex::new(CircuitBreaker::new(3, 30)));
+    let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)])
+        .with_circuit_breaker(Arc::clone(&breaker) as Arc<dyn crate::circuit_breaker::Breaker>);
+
+    let resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(200, resp.status_code);
+    assert_eq!(BreakerState::Closed, breaker.lock().unwrap().state(&key));
+}
+
+#[test]
+fn circuit_breaker_records_failure_and_opens_after_threshold() {
+    use crate::circuit_breaker::{BreakerState, CircuitBreaker};
+    use std::sync::Mutex;
+
+    let port = refusing_port();
+    let key = format!("127.0.0.1:{}", port);
+    let breaker = Arc::new(Mutex::new(CircuitBreaker::new(1, 30)));
+    let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)])
+        .connect_timeout_ms(200)
+        .with_circuit_breaker(Arc::clone(&breaker) as Arc<dyn crate::circuit_breaker::Breaker>);
+
+    let resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(502, resp.status_code);
+    assert_eq!(
+        BreakerState::Open,
+        breaker.lock().unwrap().state(&key),
+        "a single failed dial should open the breaker (threshold=1)"
+    );
+}
+
+#[test]
+fn without_circuit_breaker_behavior_is_completely_unchanged() {
+    // No `.with_circuit_breaker(...)` call at all — same as every other test
+    // in this file, and covered here explicitly as a regression guard.
+    let port = mock_backend(OK_RESPONSE);
+    let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)]);
+    let resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(200, resp.status_code);
+}
+
 // ── Failover ──────────────────────────────────────────────────────────────────
 
 #[test]

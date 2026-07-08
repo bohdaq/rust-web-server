@@ -94,6 +94,19 @@ rws_route_duration_seconds_sum{method="GET",path="/api/users"} 47.231000000
 rws_route_duration_seconds_count{method="GET",path="/api/users"} 9413
 ```
 
+## Circuit breaker state
+
+`rws_circuit_breaker_state{backend}` is included automatically — no `MetricsLayer` or other opt-in needed — for every backend known to [`circuit_breaker::global()`](/proxy/circuit-breaker/):
+
+```
+# HELP rws_circuit_breaker_state Circuit breaker state per backend (0=closed, 1=half_open, 2=open)
+# TYPE rws_circuit_breaker_state gauge
+rws_circuit_breaker_state{backend="api-1:8080"} 0
+rws_circuit_breaker_state{backend="api-2:8080"} 2
+```
+
+The gauge value is `0` (Closed/healthy), `1` (HalfOpen/probing), or `2` (Open/unhealthy). Wiring `ReverseProxy::with_circuit_breaker(Arc::new(circuit_breaker::global()))` gets you this metric "for free" alongside the automatic proxy integration, since both read from the same breaker instance. `RedisCircuitBreaker` state doesn't appear here — the minimal hand-rolled RESP client has no `SCAN`/`KEYS` support to enumerate its keys.
+
 ## `SERVER_READY` and `/readyz`
 
 The built-in `GET /readyz` controller returns `200 OK` when `SERVER_READY` is `true` and `503 Service Unavailable` when it is `false`. The flag is set to `true` after `Server::setup()` completes and back to `false` when a shutdown signal is received, so Kubernetes stops routing traffic before the pod exits.

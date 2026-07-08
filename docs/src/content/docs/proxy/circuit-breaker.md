@@ -20,7 +20,7 @@ Closed ──(threshold failures)──► Open ──(recovery_secs elapsed)─
 |-------|-----------|
 | `Closed` | All requests are forwarded. Failure counter is incremented on each error. |
 | `Open` | All requests are rejected immediately — no TCP connection is attempted. Entered when consecutive failures reach `failure_threshold`. |
-| `HalfOpen` | One probe request is let through after `recovery_secs` have elapsed. Success closes the circuit; failure re-opens it and resets the recovery timer. |
+| `HalfOpen` | Up to `max_half_open_probes` (default 1) concurrent probe requests are let through after `recovery_secs` have elapsed; further concurrent requests are rejected like `Open` until an outcome resolves. Success closes the circuit; failure re-opens it and resets the recovery timer. |
 
 ## Creating a circuit breaker
 
@@ -29,7 +29,15 @@ use rust_web_server::circuit_breaker::CircuitBreaker;
 
 // threshold=5 consecutive failures, recovery window=30 s
 let cb = CircuitBreaker::new(5, 30);
+
+// Optional: raise how many concurrent probes are let through while HalfOpen
+// (default 1). Chainable — call before the breaker goes behind a Mutex/Arc.
+let cb = CircuitBreaker::new(5, 30).max_half_open_probes(2);
 ```
+
+:::note[Why cap HalfOpen probes at all]
+Before this cap existed, *every* concurrent request arriving the instant a backend transitioned to `HalfOpen` saw `is_available() == true` — a burst of concurrent traffic could all count as "the" trial request at once, defeating the point of testing with a single probe. The cap (default 1) rejects anything beyond it, the same as `Open`, until `record_success`/`record_failure` resolves the in-flight probe(s) and resets the count to 0.
+:::
 
 ### Global singleton
 
@@ -159,9 +167,50 @@ let app = App::new()
 Middleware is applied in push order — last-pushed is innermost. Push `ReverseProxy` first and `RetryLayer` second so that retries are visible to the outermost layers (metrics, rate limiting, etc.).
 :::
 
-## Integrating the circuit breaker manually
+## Automatic ReverseProxy wiring
 
-`RetryLayer` does not consult the `CircuitBreaker` automatically. To wire them together, call `circuit_breaker::global()` inside a custom controller or middleware before forwarding:
+`RetryLayer` does not consult the `CircuitBreaker` automatically — it retries purely on status code, with no memory between requests. `ReverseProxy` does, via `.with_circuit_breaker(breaker)`: an `Open` backend is skipped with no TCP attempt at all, and `record_success`/`record_failure` is called automatically after every dial. No manual `is_available` checks around each proxied call needed:
+
+```rust
+use std::sync::Arc;
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::circuit_breaker::global as global_breaker;
+use rust_web_server::proxy::ReverseProxy;
+
+let app = App::new().wrap(
+    ReverseProxy::new(["http://backend-1:8080", "http://backend-2:8080"])
+        .with_circuit_breaker(Arc::new(global_breaker())),
+);
+```
+
+`with_circuit_breaker` takes `Arc<dyn Breaker>` — a small object-safe trait implemented for both `Mutex<CircuitBreaker>` and `RedisCircuitBreaker`, so either kind plugs in through the same method:
+
+```rust
+use std::sync::{Arc, Mutex};
+use rust_web_server::circuit_breaker::CircuitBreaker;
+
+// A dedicated (non-global) in-memory breaker:
+let breaker = Arc::new(Mutex::new(CircuitBreaker::new(5, 30)));
+let app = App::new().wrap(
+    ReverseProxy::new(["http://backend-1:8080"]).with_circuit_breaker(breaker),
+);
+
+// Or a Redis-backed one:
+use rust_web_server::circuit_breaker::RedisCircuitBreaker;
+let breaker = Arc::new(RedisCircuitBreaker::from_env());
+let app2 = App::new().wrap(
+    ReverseProxy::new(["http://backend-1:8080"]).with_circuit_breaker(breaker),
+);
+```
+
+:::note[Fail open on Redis errors]
+Through this integration, `RedisCircuitBreaker::is_available`'s `Err` (Redis unreachable) is treated as *available* — failing open, not closed. A breaker that can't be reached shouldn't become a new single point of failure for every proxied request. Call `RedisCircuitBreaker::is_available` directly (outside this integration) if your use case needs fail-closed semantics instead.
+:::
+
+No breaker is wired by default, so existing `ReverseProxy` code sees no behavior change unless it opts in.
+
+If you're integrating a circuit breaker into your *own* custom controller or middleware instead of `ReverseProxy`, the manual pattern still works exactly as before:
 
 ```rust
 use rust_web_server::circuit_breaker;
@@ -176,3 +225,16 @@ if !allowed {
     // Return 503 without attempting a connection
 }
 ```
+
+## Metrics
+
+`GET /metrics` includes `rws_circuit_breaker_state{backend}` automatically — no opt-in layer needed — for every backend known to `circuit_breaker::global()`:
+
+```
+# HELP rws_circuit_breaker_state Circuit breaker state per backend (0=closed, 1=half_open, 2=open)
+# TYPE rws_circuit_breaker_state gauge
+rws_circuit_breaker_state{backend="api-1:8080"} 0
+rws_circuit_breaker_state{backend="api-2:8080"} 2
+```
+
+Wiring `ReverseProxy` to `circuit_breaker::global()` (as in the example above) gets you both the automatic proxy integration *and* this metric from the same breaker instance — the recommended default setup. `RedisCircuitBreaker` state isn't enumerable this way: the minimal hand-rolled RESP client has no `SCAN`/`KEYS` support to discover its keys.

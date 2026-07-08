@@ -878,13 +878,14 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 | `MetricsLayer` | `metrics` | Per-route Prometheus counters + histograms |
 | `OtelLayer` / `otel::span` / `otel::client_span` | `otel` | W3C traceparent root span + nested child spans; exports to stdout or OTLP |
 | `CacheLayer` | `cache` | In-memory GET response cache; builder `.ttl(secs)` |
-| `ReverseProxy` | `proxy` | HTTP/1.1 upstream proxy; round-robin; 502 on all-fail; built-in `ConnPool`; SSE + chunked AI streams + large downloads forwarded without buffering via `Response::stream_pipe` |
+| `ReverseProxy` | `proxy` | HTTP/1.1 upstream proxy; round-robin; 502 on all-fail; built-in `ConnPool`; SSE + chunked AI streams + large downloads forwarded without buffering via `Response::stream_pipe`; `.with_circuit_breaker(Arc<dyn Breaker>)` auto-wires a `CircuitBreaker`/`RedisCircuitBreaker` — skips `Open` backends, records outcomes automatically |
 | `ConnPool` | `proxy` | Per-backend HTTP/1.1 keep-alive connection pool; `new(max_idle, timeout)` |
 | `H2ReverseProxy` | `proxy` | HTTP/2 upstream proxy; `h2://` plain TCP, `h2s://`/`https://` TLS (ALPN `h2`); port defaults to 443 for TLS schemes; async-native sync/async bridge (works under any tokio runtime flavor); `http2` feature |
 | `GrpcProxy` | `proxy` | gRPC proxy; filters on `Content-Type: application/grpc*`; `grpc://` plain, `grpcs://`/`https://` TLS; `http2` feature |
 | `RewriteLayer` | `rewrite` | Request/response header, URI, status, body rewriting. `.request_uri_regex_rewrite(pattern, replacement)` (requires `rewrite-regex`) — regex match against the URI, whole URI replaced by the `$1`/`${name}`-expanded replacement on match, no-op otherwise |
 | `CanaryLayer` | `canary` | Weighted traffic splitting via `WeightedBackend::new(url, weight)`, smooth weighted round-robin (no bursts); backends may be plain HTTP or TLS (`https://`/`h2s://`/`grpcs://`, requires `http-client`/`http2`); `Clone` + `.update(backends, pools)` for live weight changes; `WeightedPool`/`.add_pool()` for `BackendPool`-sourced groups — see dedicated section below |
 | `RetryLayer` | `circuit_breaker` | Retry on 502/503/504 up to `max_retries` |
+| `Breaker` | `circuit_breaker` | Object-safe trait behind `ReverseProxy::with_circuit_breaker`; implemented for `Mutex<CircuitBreaker>`, `RedisCircuitBreaker`, and `&T where T: Breaker` |
 | `OidcAuth` | `sso` | OIDC auth flow + claims injection; `.exclude(prefix)` |
 
 ---
@@ -974,6 +975,23 @@ cb.record_failure("backend-1:8080")?;      // every method is Result<_, io::Erro
 if cb.is_available("backend-1:8080")? { /* send request */ }
 cb.record_success("backend-1:8080")?;
 ```
+
+**Automatic `ReverseProxy` wiring** — `.with_circuit_breaker(Arc<dyn Breaker>)` replaces manual `is_available`/`record_success`/`record_failure` calls around each proxied call: an `Open` backend is skipped with no dial attempt, and every outcome is recorded automatically.
+
+```rust
+use std::sync::Arc;
+use rust_web_server::circuit_breaker::global as global_breaker;
+use rust_web_server::proxy::ReverseProxy;
+
+let proxy = ReverseProxy::new(["http://backend-1:8080", "http://backend-2:8080"])
+    .with_circuit_breaker(Arc::new(global_breaker()));
+```
+
+`Breaker` is a small object-safe trait implemented for both `Mutex<CircuitBreaker>` and `RedisCircuitBreaker` (plus `&'static Mutex<CircuitBreaker>` via a blanket `impl<T: Breaker> Breaker for &T`, so `Arc::new(global_breaker())` — a `&'static` reference — works directly). `RedisCircuitBreaker`'s `Err` (Redis unreachable) is treated as *available* through this trait — fail open, not closed. No breaker wired by default — existing `ReverseProxy` code is unaffected unless it opts in.
+
+**HalfOpen concurrency cap** — both breakers now cap how many concurrent probes are let through while `HalfOpen` (default `1`, was unbounded): `CircuitBreaker::new(t, r).max_half_open_probes(n)` (chainable) or `RedisCircuitBreaker::set_max_half_open_probes(n)` (live setter) / `RWS_CONFIG_CIRCUIT_BREAKER_MAX_HALF_OPEN_PROBES` env var. Without this, a burst of concurrent requests arriving the instant a backend transitions to `HalfOpen` would *all* count as "the" trial request — defeating the point of testing with one probe.
+
+**Metric** — `GET /metrics` includes `rws_circuit_breaker_state{backend}` (gauge: `0`=closed, `1`=half_open, `2`=open) automatically, for every backend known to `circuit_breaker::global()`. Powered by `CircuitBreaker::all_states()`. No `RedisCircuitBreaker` equivalent — the minimal hand-rolled RESP client has no `SCAN`/`KEYS` support to enumerate its keys.
 
 Each backend's state (`state|failures|opened_at`) is one Redis string key (`GET`/`SET`, not a hash) — not atomic across concurrent instances racing the same backend, unlike `RedisRateLimiter`'s `INCR` (a circuit breaker is a self-healing heuristic, not a hard resource boundary, so an occasional lost update doesn't matter).
 
@@ -1073,6 +1091,8 @@ the historical default — needed on a multi-controller cluster running `rws` al
 ### Prometheus metrics
 
 Built-in `GET /metrics` exposes counters. `MetricsLayer` adds per-route metrics.
+`rws_circuit_breaker_state{backend}` (0=closed/1=half_open/2=open) is included automatically for
+every backend `circuit_breaker::global()` knows about — no opt-in layer needed.
 
 ```rust
 use rust_web_server::metrics::{record_request, record_error, SERVER_READY};
@@ -2060,7 +2080,8 @@ src/body/               — multipart_form_data, form_urlencoded parsers
 src/cache/              — CacheLayer middleware
 src/canary/             — CanaryLayer smooth-weighted-round-robin traffic splitting (plain HTTP or
                           TLS backends); WeightedPool for BackendPool-sourced groups; live .update()
-src/circuit_breaker/    — CircuitBreaker, RedisCircuitBreaker (persistent), RetryLayer
+src/circuit_breaker/    — CircuitBreaker, RedisCircuitBreaker (persistent), RetryLayer, Breaker trait
+                          (ReverseProxy auto-wiring), max_half_open_probes cap, all_states() (metrics)
 src/client_hint/        — Client Hints header parsing
 src/compression/        — gzip compression applied in Server::process
 src/config_reload/      — hot-reload logic; ConfigSnapshot

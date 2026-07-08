@@ -366,3 +366,43 @@ fn route_prometheus_text_contains_correct_help_and_type_lines() {
     assert!(text.contains("# HELP rws_route_duration_seconds"));
     assert!(text.contains("# TYPE rws_route_duration_seconds histogram"));
 }
+
+#[test]
+fn circuit_breaker_state_appears_in_prometheus_text() {
+    // A distinctive key scoped to this test — `circuit_breaker::global()` is
+    // a process-wide singleton shared by the whole test binary, so this must
+    // not collide with any key another test might use.
+    let key = "metrics-test-only-circuit-breaker-backend:60606";
+    {
+        let mut guard = crate::circuit_breaker::global().lock().unwrap();
+        guard.reset(key); // start from a known Closed state regardless of prior runs
+        for _ in 0..5 {
+            // global()'s threshold is fixed at 5
+            guard.record_failure(key);
+        }
+    }
+
+    let text = prometheus_text();
+    assert!(text.contains("# HELP rws_circuit_breaker_state"));
+    assert!(text.contains("# TYPE rws_circuit_breaker_state gauge"));
+    assert!(
+        text.contains(&format!("rws_circuit_breaker_state{{backend=\"{}\"}} 2", key)),
+        "expected an Open (2) line for {}, got:\n{}",
+        key,
+        text
+    );
+}
+
+#[test]
+fn circuit_breaker_state_reflects_closed_backend_as_zero() {
+    let key = "metrics-test-only-circuit-breaker-backend-closed:60607";
+    crate::circuit_breaker::global().lock().unwrap().reset(key);
+
+    let text = prometheus_text();
+    assert!(
+        text.contains(&format!("rws_circuit_breaker_state{{backend=\"{}\"}} 0", key)),
+        "expected a Closed (0) line for {}, got:\n{}",
+        key,
+        text
+    );
+}

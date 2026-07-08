@@ -78,11 +78,16 @@ struct BackendEntry {
     state: BreakerState,
     failures: u32,
     opened_at: Option<Instant>,
+    /// Probes currently let through while `state == HalfOpen`. Capped by
+    /// [`CircuitBreaker::max_half_open_probes`] so a burst of concurrent
+    /// requests arriving the instant a backend transitions to `HalfOpen`
+    /// doesn't all land as "the" trial request at once.
+    half_open_in_flight: u32,
 }
 
 impl BackendEntry {
     fn new() -> Self {
-        Self { state: BreakerState::Closed, failures: 0, opened_at: None }
+        Self { state: BreakerState::Closed, failures: 0, opened_at: None, half_open_in_flight: 0 }
     }
 }
 
@@ -98,6 +103,7 @@ pub struct CircuitBreaker {
     backends: HashMap<String, BackendEntry>,
     failure_threshold: u32,
     recovery: Duration,
+    max_half_open_probes: u32,
 }
 
 impl CircuitBreaker {
@@ -105,27 +111,51 @@ impl CircuitBreaker {
     ///
     /// * `failure_threshold` — how many consecutive failures open the circuit.
     /// * `recovery_secs` — how long the circuit stays Open before testing again.
+    ///
+    /// Defaults to letting exactly one probe through while `HalfOpen` — see
+    /// [`CircuitBreaker::max_half_open_probes`] to change that.
     pub fn new(failure_threshold: u32, recovery_secs: u64) -> Self {
         Self {
             backends: HashMap::new(),
             failure_threshold,
             recovery: Duration::from_secs(recovery_secs),
+            max_half_open_probes: 1,
         }
+    }
+
+    /// Override how many concurrent probe requests are let through while a
+    /// backend is `HalfOpen` (default: 1). Chainable — call before the
+    /// breaker is put behind a shared `Mutex`/`Arc`.
+    pub fn max_half_open_probes(mut self, n: u32) -> Self {
+        self.max_half_open_probes = n.max(1);
+        self
     }
 
     /// Returns `true` if a request should be forwarded to `backend`.
     ///
     /// Transitions `Open → HalfOpen` when the recovery window has elapsed.
+    /// While `HalfOpen`, at most `max_half_open_probes` concurrent calls
+    /// return `true` — further calls are rejected like `Open` until the
+    /// in-flight probe(s) resolve via `record_success`/`record_failure`.
     pub fn is_available(&mut self, backend: &str) -> bool {
+        let max_probes = self.max_half_open_probes;
         let entry = self.backends.entry(backend.to_string()).or_insert_with(BackendEntry::new);
         match entry.state {
             BreakerState::Closed => true,
-            BreakerState::HalfOpen => true,
+            BreakerState::HalfOpen => {
+                if entry.half_open_in_flight < max_probes {
+                    entry.half_open_in_flight += 1;
+                    true
+                } else {
+                    false
+                }
+            }
             BreakerState::Open => {
                 if let Some(opened_at) = entry.opened_at {
                     if opened_at.elapsed() >= self.recovery {
                         entry.state = BreakerState::HalfOpen;
                         entry.opened_at = None;
+                        entry.half_open_in_flight = 1;
                         return true;
                     }
                 }
@@ -136,12 +166,14 @@ impl CircuitBreaker {
 
     /// Record a successful response for `backend`.
     ///
-    /// Transitions `HalfOpen → Closed` and resets the failure counter.
+    /// Transitions `HalfOpen → Closed` and resets the failure counter and
+    /// the in-flight half-open probe count.
     pub fn record_success(&mut self, backend: &str) {
         let entry = self.backends.entry(backend.to_string()).or_insert_with(BackendEntry::new);
         entry.state = BreakerState::Closed;
         entry.failures = 0;
         entry.opened_at = None;
+        entry.half_open_in_flight = 0;
     }
 
     /// Record a failed response for `backend`.
@@ -163,6 +195,7 @@ impl CircuitBreaker {
             BreakerState::HalfOpen => {
                 entry.state = BreakerState::Open;
                 entry.opened_at = Some(Instant::now());
+                entry.half_open_in_flight = 0;
             }
             BreakerState::Open => {
                 // Already open; refresh the timer.
@@ -177,6 +210,7 @@ impl CircuitBreaker {
         entry.state = BreakerState::Closed;
         entry.failures = 0;
         entry.opened_at = None;
+        entry.half_open_in_flight = 0;
     }
 
     /// Return the current state for `backend` (defaults to `Closed` if unseen).
@@ -185,6 +219,16 @@ impl CircuitBreaker {
             .get(backend)
             .map(|e| e.state.clone())
             .unwrap_or(BreakerState::Closed)
+    }
+
+    /// Snapshot of every backend this breaker has ever seen, with its
+    /// current state. Powers the `rws_circuit_breaker_state{backend}`
+    /// metric (`crate::metrics::prometheus_text`) — there is no
+    /// `RedisCircuitBreaker` equivalent, since enumerating keys isn't
+    /// something the minimal hand-rolled RESP client supports (no
+    /// `SCAN`/`KEYS` array-reply decoding).
+    pub fn all_states(&self) -> Vec<(String, BreakerState)> {
+        self.backends.iter().map(|(k, v)| (k.clone(), v.state.clone())).collect()
     }
 }
 
@@ -253,6 +297,7 @@ pub struct RedisCircuitBreaker {
     conn: Arc<RespConn>,
     failure_threshold: AtomicU32,
     recovery_secs: AtomicU64,
+    max_half_open_probes: AtomicU32,
 }
 
 impl Clone for RedisCircuitBreaker {
@@ -261,18 +306,22 @@ impl Clone for RedisCircuitBreaker {
             conn: Arc::clone(&self.conn),
             failure_threshold: AtomicU32::new(self.failure_threshold.load(Ordering::Relaxed)),
             recovery_secs: AtomicU64::new(self.recovery_secs.load(Ordering::Relaxed)),
+            max_half_open_probes: AtomicU32::new(self.max_half_open_probes.load(Ordering::Relaxed)),
         }
     }
 }
 
 impl RedisCircuitBreaker {
     /// Create a breaker that connects to `addr` (e.g. `"127.0.0.1:6379"`).
-    /// `password` is passed to Redis `AUTH` if `Some`.
+    /// `password` is passed to Redis `AUTH` if `Some`. Defaults to letting
+    /// exactly one probe through while `HalfOpen` — see
+    /// [`RedisCircuitBreaker::set_max_half_open_probes`] to change that.
     pub fn new(addr: impl Into<String>, password: Option<String>, failure_threshold: u32, recovery_secs: u64) -> Self {
         RedisCircuitBreaker {
             conn: Arc::new(RespConn::new(addr, password)),
             failure_threshold: AtomicU32::new(failure_threshold),
             recovery_secs: AtomicU64::new(recovery_secs),
+            max_half_open_probes: AtomicU32::new(1),
         }
     }
 
@@ -282,6 +331,7 @@ impl RedisCircuitBreaker {
     /// - `RWS_REDIS_PASSWORD` (optional)
     /// - `RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD` (default `5`)
     /// - `RWS_CONFIG_CIRCUIT_BREAKER_RECOVERY_SECS` (default `30`)
+    /// - `RWS_CONFIG_CIRCUIT_BREAKER_MAX_HALF_OPEN_PROBES` (default `1`)
     pub fn from_env() -> Self {
         let host = std::env::var("RWS_REDIS_HOST").unwrap_or_else(|_| "127.0.0.1".into());
         let port = std::env::var("RWS_REDIS_PORT").unwrap_or_else(|_| "6379".into());
@@ -295,7 +345,11 @@ impl RedisCircuitBreaker {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(30);
-        Self::new(addr, password, failure_threshold, recovery_secs)
+        let breaker = Self::new(addr, password, failure_threshold, recovery_secs);
+        if let Some(n) = std::env::var("RWS_CONFIG_CIRCUIT_BREAKER_MAX_HALF_OPEN_PROBES").ok().and_then(|v| v.parse().ok()) {
+            breaker.set_max_half_open_probes(n);
+        }
+        breaker
     }
 
     /// Update the thresholds on a live breaker without restarting.
@@ -304,19 +358,26 @@ impl RedisCircuitBreaker {
         self.recovery_secs.store(recovery_secs, Ordering::Relaxed);
     }
 
+    /// Override how many concurrent probe requests are let through while a
+    /// backend is `HalfOpen` (default: 1) — on a live breaker, no restart
+    /// required.
+    pub fn set_max_half_open_probes(&self, n: u32) {
+        self.max_half_open_probes.store(n.max(1), Ordering::Relaxed);
+    }
+
     fn redis_key(backend: &str) -> Vec<u8> {
         format!("rws:cb:{}", backend).into_bytes()
     }
 
-    fn load(&self, backend: &str) -> std::io::Result<(BreakerState, u32, u64)> {
+    fn load(&self, backend: &str) -> std::io::Result<(BreakerState, u32, u64, u32)> {
         match self.conn.cmd(&[b"GET", &Self::redis_key(backend)])? {
             RespReply::Bulk(Some(bytes)) => Ok(decode_entry(&bytes)),
-            _ => Ok((BreakerState::Closed, 0, 0)),
+            _ => Ok((BreakerState::Closed, 0, 0, 0)),
         }
     }
 
-    fn store(&self, backend: &str, state: &BreakerState, failures: u32, opened_at: u64) -> std::io::Result<()> {
-        let encoded = encode_entry(state, failures, opened_at);
+    fn store(&self, backend: &str, state: &BreakerState, failures: u32, opened_at: u64, half_open_in_flight: u32) -> std::io::Result<()> {
+        let encoded = encode_entry(state, failures, opened_at, half_open_in_flight);
         self.conn.cmd(&[b"SET", &Self::redis_key(backend), encoded.as_bytes()])?;
         Ok(())
     }
@@ -324,16 +385,30 @@ impl RedisCircuitBreaker {
     /// Returns `Ok(true)` if a request should be forwarded to `backend`.
     ///
     /// Transitions `Open → HalfOpen` when the recovery window has elapsed.
+    /// While `HalfOpen`, at most `max_half_open_probes` concurrent calls
+    /// return `Ok(true)` — this is a read-then-write against one Redis key
+    /// (not atomic), the same deliberate simplification already documented
+    /// above for this type, so a race between two instances can very rarely
+    /// let one extra probe through; it cannot let an unbounded burst through.
     /// Returns `Err` if Redis is unreachable — callers decide whether that
     /// means fail open (treat as available) or fail closed (treat as not).
     pub fn is_available(&self, backend: &str) -> std::io::Result<bool> {
-        let (state, failures, opened_at) = self.load(backend)?;
+        let (state, failures, opened_at, half_open_in_flight) = self.load(backend)?;
         match state {
-            BreakerState::Closed | BreakerState::HalfOpen => Ok(true),
+            BreakerState::Closed => Ok(true),
+            BreakerState::HalfOpen => {
+                let max_probes = self.max_half_open_probes.load(Ordering::Relaxed);
+                if half_open_in_flight < max_probes {
+                    self.store(backend, &BreakerState::HalfOpen, failures, opened_at, half_open_in_flight + 1)?;
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
             BreakerState::Open => {
                 let recovery = self.recovery_secs.load(Ordering::Relaxed);
                 if now_unix().saturating_sub(opened_at) >= recovery {
-                    self.store(backend, &BreakerState::HalfOpen, failures, 0)?;
+                    self.store(backend, &BreakerState::HalfOpen, failures, 0, 1)?;
                     Ok(true)
                 } else {
                     Ok(false)
@@ -344,9 +419,10 @@ impl RedisCircuitBreaker {
 
     /// Record a successful response for `backend`.
     ///
-    /// Transitions `HalfOpen → Closed` and resets the failure counter.
+    /// Transitions `HalfOpen → Closed` and resets the failure counter and
+    /// the in-flight half-open probe count.
     pub fn record_success(&self, backend: &str) -> std::io::Result<()> {
-        self.store(backend, &BreakerState::Closed, 0, 0)
+        self.store(backend, &BreakerState::Closed, 0, 0, 0)
     }
 
     /// Record a failed response for `backend`.
@@ -355,18 +431,18 @@ impl RedisCircuitBreaker {
     /// `failure_threshold` is reached. In `HalfOpen` state, immediately
     /// re-opens the circuit and resets the recovery timer.
     pub fn record_failure(&self, backend: &str) -> std::io::Result<()> {
-        let (state, failures, _) = self.load(backend)?;
+        let (state, failures, _, _) = self.load(backend)?;
         match state {
             BreakerState::Closed => {
                 let failures = failures + 1;
                 if failures >= self.failure_threshold.load(Ordering::Relaxed) {
-                    self.store(backend, &BreakerState::Open, failures, now_unix())
+                    self.store(backend, &BreakerState::Open, failures, now_unix(), 0)
                 } else {
-                    self.store(backend, &BreakerState::Closed, failures, 0)
+                    self.store(backend, &BreakerState::Closed, failures, 0, 0)
                 }
             }
             BreakerState::HalfOpen | BreakerState::Open => {
-                self.store(backend, &BreakerState::Open, failures, now_unix())
+                self.store(backend, &BreakerState::Open, failures, now_unix(), 0)
             }
         }
     }
@@ -387,23 +463,23 @@ fn now_unix() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
-/// `"state|failures|opened_at"` — a plain-string encoding chosen so a
-/// backend's whole entry fits in one Redis key read via `GET`/written via
-/// `SET`, rather than a hash needing `HGETALL` (which `redis_protocol`'s
-/// minimal RESP client doesn't decode — it only handles simple/bulk/integer
-/// replies, not arrays).
-fn encode_entry(state: &BreakerState, failures: u32, opened_at: u64) -> String {
+/// `"state|failures|opened_at|half_open_in_flight"` — a plain-string encoding
+/// chosen so a backend's whole entry fits in one Redis key read via
+/// `GET`/written via `SET`, rather than a hash needing `HGETALL` (which
+/// `redis_protocol`'s minimal RESP client doesn't decode — it only handles
+/// simple/bulk/integer replies, not arrays).
+fn encode_entry(state: &BreakerState, failures: u32, opened_at: u64, half_open_in_flight: u32) -> String {
     let state_str = match state {
         BreakerState::Closed => "closed",
         BreakerState::Open => "open",
         BreakerState::HalfOpen => "half_open",
     };
-    format!("{}|{}|{}", state_str, failures, opened_at)
+    format!("{}|{}|{}|{}", state_str, failures, opened_at, half_open_in_flight)
 }
 
-fn decode_entry(raw: &[u8]) -> (BreakerState, u32, u64) {
+fn decode_entry(raw: &[u8]) -> (BreakerState, u32, u64, u32) {
     let text = String::from_utf8_lossy(raw);
-    let mut parts = text.splitn(3, '|');
+    let mut parts = text.splitn(4, '|');
     let state = match parts.next() {
         Some("open") => BreakerState::Open,
         Some("half_open") => BreakerState::HalfOpen,
@@ -411,7 +487,70 @@ fn decode_entry(raw: &[u8]) -> (BreakerState, u32, u64) {
     };
     let failures = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
     let opened_at = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
-    (state, failures, opened_at)
+    let half_open_in_flight = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    (state, failures, opened_at, half_open_in_flight)
+}
+
+// ── Breaker trait (ReverseProxy auto-wiring) ─────────────────────────────────
+
+/// Object-safe interface implemented by both `Mutex<CircuitBreaker>` and
+/// [`RedisCircuitBreaker`], so a consumer like
+/// [`crate::proxy::ReverseProxy::with_circuit_breaker`] can accept either
+/// breaker kind through one `Arc<dyn Breaker>` without a generic parameter
+/// leaking into its own type.
+///
+/// `RedisCircuitBreaker`'s `Err` (Redis unreachable) is treated as *available*
+/// — failing open, not closed. A breaker that can't be reached is a worse
+/// single point of failure than occasionally skipping the check it exists to
+/// perform; callers who need fail-closed semantics should call
+/// `RedisCircuitBreaker::is_available` directly and decide for themselves, as
+/// its own docs already describe.
+pub trait Breaker: Send + Sync {
+    /// Returns `true` if a request should be forwarded to `backend`.
+    fn is_available(&self, backend: &str) -> bool;
+    /// Record a successful response for `backend`.
+    fn record_success(&self, backend: &str);
+    /// Record a failed response for `backend`.
+    fn record_failure(&self, backend: &str);
+}
+
+impl Breaker for Mutex<CircuitBreaker> {
+    fn is_available(&self, backend: &str) -> bool {
+        self.lock().unwrap().is_available(backend)
+    }
+    fn record_success(&self, backend: &str) {
+        self.lock().unwrap().record_success(backend);
+    }
+    fn record_failure(&self, backend: &str) {
+        self.lock().unwrap().record_failure(backend);
+    }
+}
+
+impl Breaker for RedisCircuitBreaker {
+    fn is_available(&self, backend: &str) -> bool {
+        RedisCircuitBreaker::is_available(self, backend).unwrap_or(true)
+    }
+    fn record_success(&self, backend: &str) {
+        let _ = RedisCircuitBreaker::record_success(self, backend);
+    }
+    fn record_failure(&self, backend: &str) {
+        let _ = RedisCircuitBreaker::record_failure(self, backend);
+    }
+}
+
+/// Lets `circuit_breaker::global()` (which returns `&'static Mutex<CircuitBreaker>`,
+/// not an owned `Mutex<CircuitBreaker>`) be used directly as a `Breaker`:
+/// `Arc::new(circuit_breaker::global())` then coerces to `Arc<dyn Breaker>`.
+impl<T: Breaker + ?Sized> Breaker for &T {
+    fn is_available(&self, backend: &str) -> bool {
+        (**self).is_available(backend)
+    }
+    fn record_success(&self, backend: &str) {
+        (**self).record_success(backend);
+    }
+    fn record_failure(&self, backend: &str) {
+        (**self).record_failure(backend);
+    }
 }
 
 // ── RetryLayer ────────────────────────────────────────────────────────────────

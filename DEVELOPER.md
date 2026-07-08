@@ -120,7 +120,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Validated<T>` | `validate` | `FromRequest` wrapper — extracts then validates in one step; `400` on extraction failure, `422 Unprocessable Entity` with JSON error body on validation failure. |
 | `is_email` / `is_url` | `validate` | Format check helpers used by the derive macro; callable directly. |
 | `#[derive(Validate)]` | `macros` (proc-macro) | Derive `Validate` from `#[validate(...)]` field annotations. Validators: `length(min,max)`, `range(min,max)`, `email`, `required`, `url`. Requires `features = ["macros"]`. |
-| `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. Reuses idle TCP connections via the built-in `ConnPool`. SSE (`text/event-stream`), chunked AI token streams, and large downloads (`Content-Length > 1 MB`) are forwarded without buffering via `Response::stream_pipe`. |
+| `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. Reuses idle TCP connections via the built-in `ConnPool`. SSE (`text/event-stream`), chunked AI token streams, and large downloads (`Content-Length > 1 MB`) are forwarded without buffering via `Response::stream_pipe`. `.with_circuit_breaker(Arc<dyn circuit_breaker::Breaker>)` auto-wires a circuit breaker: an `Open` backend is skipped with no dial attempt, and every outcome is recorded automatically — no manual `is_available`/`record_success`/`record_failure` calls needed. |
 | `ConnPool` | `proxy` | Per-backend HTTP/1.1 connection pool. `ConnPool::new(max_idle, idle_timeout)` or `ConnPool::new_default()`. Share across proxy instances with `Arc<ConnPool>` via `ReverseProxy::with_pool()`. |
 | `RewriteLayer` | `rewrite` | Composable request/response rewriting middleware: request header add/replace/remove, URI set/strip-prefix/add-prefix, response header add/replace/remove, status override, body byte find-and-replace. `.request_uri_regex_rewrite(pattern, replacement)` (requires `features = ["rewrite-regex"]`) rewrites the URI by regex, nginx `rewrite`-directive style, with `$1`/`${name}` capture expansion; returns `Result<Self, regex::Error>`. |
 | `LoadBalancing` | `proxy` | Enum selecting the balancing strategy (`RoundRobin`). Passed to `ReverseProxy::strategy()`. |
@@ -148,8 +148,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `UdpProxy` | `udp_proxy` | Standalone UDP proxy (request-reply model). Forwards each datagram to a backend and returns the reply to the original client. |
 | `WsProxy` | `ws_proxy` | Standalone WebSocket proxy. `ws://` plain TCP (two-thread relay), `wss://` TLS (single-thread polling relay; `http-client` or `http2` feature). Port defaults to 80/443. `WsProxy::new()` treats all backends as always live; `WsProxy::with_live_backends(all, Arc<RwLock<Vec<String>>>)` takes a caller-managed live list for health-check-aware round-robin — `503` if it's empty. `[ws_proxy.health_check]` in `rws.config.toml` wires this up automatically for the config-driven proxy. |
 | `WeightedBackend` / `WeightedPool` / `CanaryLayer` | `canary` | Weighted traffic-splitting proxy middleware using nginx-style smooth weighted round-robin (no same-backend bursts for skewed weights). Backends are contacted over plain HTTP/1.1, or TLS when the URL uses `https://`/`h2s://`/`grpcs://` (requires the `http-client` or `http2` feature). `CanaryLayer` is `Clone` and shares state — `.update(backends, pools)` changes weights live, no restart. `WeightedPool`/`.add_pool()` sources a group's members from a `BackendPool` instead of a fixed URL. Useful for canary releases and A/B testing. |
-| `CircuitBreaker` | `circuit_breaker` | Per-backend circuit breaker (Closed→Open→HalfOpen state machine). `global()` returns a process-wide singleton. Configurable failure threshold and recovery window. State lives in an in-process `HashMap` — reset on restart. |
-| `RedisCircuitBreaker` | `circuit_breaker` | Same state machine and method names as `CircuitBreaker`, backed by Redis (hand-rolled RESP client, no feature gate) instead of an in-process map — survives a restart and is shared across every `rws` instance pointed at the same Redis server. Every method returns `Result` (network I/O); `from_env()` reads `RWS_REDIS_HOST/PORT/PASSWORD` + `RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD/RECOVERY_SECS`. |
+| `CircuitBreaker` | `circuit_breaker` | Per-backend circuit breaker (Closed→Open→HalfOpen state machine). `global()` returns a process-wide singleton. Configurable failure threshold, recovery window, and `max_half_open_probes` (default 1 — caps concurrent HalfOpen probes). State lives in an in-process `HashMap` — reset on restart. `all_states()` powers the `rws_circuit_breaker_state{backend}` metric. |
+| `RedisCircuitBreaker` | `circuit_breaker` | Same state machine and method names as `CircuitBreaker` (including the `max_half_open_probes` cap, via `set_max_half_open_probes`), backed by Redis (hand-rolled RESP client, no feature gate) instead of an in-process map — survives a restart and is shared across every `rws` instance pointed at the same Redis server. Every method returns `Result` (network I/O); `from_env()` reads `RWS_REDIS_HOST/PORT/PASSWORD` + `RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD/RECOVERY_SECS/MAX_HALF_OPEN_PROBES`. |
+| `Breaker` | `circuit_breaker` | Object-safe trait implemented by both `Mutex<CircuitBreaker>` and `RedisCircuitBreaker` (and `&'static Mutex<CircuitBreaker>` via a blanket impl); lets `ReverseProxy::with_circuit_breaker(Arc<dyn Breaker>)` accept either breaker kind. |
 | `RetryLayer` | `circuit_breaker` | Middleware that retries requests on configurable status codes (default: 502, 503, 504) up to `max_retries` times. |
 | `BackendPool` / `DiscoverySource` | `service_discovery` | Dynamic backend pool updated by a background thread. Sources: `Static`, `EnvPrefix` (env vars), `File` (one host:port per line), `Dns` (A-record lookup), `DnsSrv` (SRV lookup, weight-expanded), `Consul` (agent health-check endpoint), `Docker` (label value as address, Unix-only), `EtcdWatch` (v3 watch stream — the one source `start()` doesn't poll, see Use Case #47). |
 | `IngressRule` / `PathType` / `KubernetesIngressWatcher` / `IngressRouter` | `ingress` | Kubernetes Ingress watcher: resyncs on an interval *and* watches (`?watch=true`) for low-latency updates, parses Ingress rules (`pathType: Exact`/`Prefix`/`ImplementationSpecific`, `ingressClassName` filtering), and routes requests to the correct upstream service. `IngressRouter` implements `Application`. `.from_service_account()` (requires `http-client`/`http2`) connects to the in-cluster API server directly over TLS, trusting only the cluster's own CA. |
@@ -1736,6 +1737,9 @@ readinessProbe:
 - `rws_route_requests_total{method,path,status}` — request count per route and status code
 - `rws_route_duration_seconds{method,path}` — latency histogram (11 standard Prometheus buckets: 5 ms … 10 s)
 
+**Circuit breaker (present automatically — no opt-in layer needed)**
+- `rws_circuit_breaker_state{backend}` — `0`=Closed, `1`=HalfOpen, `2`=Open, for every backend known to `circuit_breaker::global()` (see [use case #46](#46-circuit-breaker))
+
 See [use case #33](#33-per-route-metrics) for the setup snippet.
 
 ---
@@ -2656,7 +2660,28 @@ if cb.record_failure("backend-1:8080").is_ok() {
 }
 ```
 
-Bonus beyond restart survival: since the state lives in Redis rather than in the struct, every `rws` instance pointed at the same Redis server shares one circuit per backend — a failure recorded on one instance opens the circuit on all of them, not just the one that saw the failure. Uses the same hand-rolled RESP client as `RedisRateLimiter`/`RedisSessionStore` (no new Cargo dependency, no feature gate); each backend's whole state (`state|failures|opened_at`) lives in one Redis string key, read via `GET`/written via `SET` rather than a hash — deliberately not atomic across concurrent instances racing on the same backend (unlike `RedisRateLimiter`'s `INCR`), since a circuit breaker is a self-healing heuristic where an occasional lost update has no real consequence, not a hard resource boundary.
+Bonus beyond restart survival: since the state lives in Redis rather than in the struct, every `rws` instance pointed at the same Redis server shares one circuit per backend — a failure recorded on one instance opens the circuit on all of them, not just the one that saw the failure. Uses the same hand-rolled RESP client as `RedisRateLimiter`/`RedisSessionStore` (no new Cargo dependency, no feature gate); each backend's whole state (`state|failures|opened_at|half_open_in_flight`) lives in one Redis string key, read via `GET`/written via `SET` rather than a hash — deliberately not atomic across concurrent instances racing on the same backend (unlike `RedisRateLimiter`'s `INCR`), since a circuit breaker is a self-healing heuristic where an occasional lost update has no real consequence, not a hard resource boundary.
+
+**Automatic wiring into `ReverseProxy`** — previously a caller had to manually call `is_available`/`record_success`/`record_failure` around each proxied call. `ReverseProxy::with_circuit_breaker(breaker)` does it automatically: an `Open` backend is skipped with no TCP attempt at all, and every dial's outcome is recorded without any extra code at the call site.
+
+```rust
+use std::sync::Arc;
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::circuit_breaker::global as global_breaker;
+use rust_web_server::proxy::ReverseProxy;
+
+let app = App::new().wrap(
+    ReverseProxy::new(["http://backend-1:8080", "http://backend-2:8080"])
+        .with_circuit_breaker(Arc::new(global_breaker())),
+);
+```
+
+`with_circuit_breaker` takes `Arc<dyn Breaker>` — a small object-safe trait implemented for both `Mutex<CircuitBreaker>` and `RedisCircuitBreaker` (and, via a blanket `impl<T: Breaker> Breaker for &T`, for `&'static Mutex<CircuitBreaker>` too, so `Arc::new(global_breaker())` works directly) — so either breaker kind plugs in through the same method with no generic parameter on `ReverseProxy` itself. `RedisCircuitBreaker::is_available`'s `Err` (Redis unreachable) is treated as *available* by this integration — failing open, not closed, since a breaker that can't be reached shouldn't become a new single point of failure. No breaker is wired by default, so existing `ReverseProxy` callers see no behavior change unless they opt in.
+
+**HalfOpen concurrency cap** — previously *every* concurrent request arriving the instant a backend transitioned to `HalfOpen` saw `is_available() == true`, so a burst of concurrent traffic could all count as "the" trial request at once, defeating the point of testing with one probe. Both breakers now cap how many concurrent probes are let through (default: 1) via `max_half_open_probes` — `CircuitBreaker::new(..).max_half_open_probes(n)` (chainable builder) or `RedisCircuitBreaker::set_max_half_open_probes(n)` (live setter, mirroring `set_limits`). The count resets to 0 whenever `record_success`/`record_failure` resolves the outcome, so the very next `Open → HalfOpen` transition always gets a fresh cap.
+
+**`rws_circuit_breaker_state{backend}` metric** — previously breaker trips were only visible by grepping logs. `GET /metrics` now includes this gauge automatically (no opt-in layer needed) for every backend known to `circuit_breaker::global()`: `0`=Closed, `1`=HalfOpen, `2`=Open. Powered by the new `CircuitBreaker::all_states() -> Vec<(String, BreakerState)>`. `RedisCircuitBreaker` state isn't enumerable this way (the minimal hand-rolled RESP client has no `SCAN`/`KEYS` array-reply decoding) — wiring `ReverseProxy` to `circuit_breaker::global()` gets both the auto-wiring and the metric from the same instance, which is the recommended default setup shown above.
 
 ---
 

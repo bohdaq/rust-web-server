@@ -133,6 +133,115 @@ fn reopens_after_failure_in_half_open() {
     assert_eq!(BreakerState::Open, cb.state("x"), "failure in HalfOpen should re-open");
 }
 
+// ── HalfOpen concurrency cap ──────────────────────────────────────────────────
+
+#[test]
+fn half_open_default_cap_lets_only_one_probe_through() {
+    let mut cb = CircuitBreaker::new(1, 0);
+    cb.record_failure("x");
+    std::thread::sleep(Duration::from_millis(1));
+    // First caller transitions Open -> HalfOpen and is let through.
+    assert!(cb.is_available("x"));
+    assert_eq!(BreakerState::HalfOpen, cb.state("x"));
+    // A second concurrent caller (probe still unresolved) must be rejected —
+    // this is exactly the bug: before this fix, every concurrent caller saw
+    // HalfOpen => true unconditionally.
+    assert!(!cb.is_available("x"), "a second concurrent probe should be rejected while one is in flight");
+    assert!(!cb.is_available("x"), "a third concurrent probe should also be rejected");
+}
+
+#[test]
+fn half_open_cap_releases_after_success() {
+    let mut cb = CircuitBreaker::new(1, 0);
+    cb.record_failure("x");
+    std::thread::sleep(Duration::from_millis(1));
+    assert!(cb.is_available("x"));
+    assert!(!cb.is_available("x"), "capped while the first probe is unresolved");
+    cb.record_success("x");
+    assert_eq!(BreakerState::Closed, cb.state("x"));
+    assert!(cb.is_available("x"), "Closed state has no cap");
+}
+
+#[test]
+fn half_open_cap_releases_after_failure() {
+    let mut cb = CircuitBreaker::new(1, 0);
+    cb.record_failure("x");
+    std::thread::sleep(Duration::from_millis(1));
+    assert!(cb.is_available("x"));
+    assert!(!cb.is_available("x"), "capped while the first probe is unresolved");
+    cb.record_failure("x");
+    assert_eq!(BreakerState::Open, cb.state("x"));
+    std::thread::sleep(Duration::from_millis(1));
+    // Recovery is 0s, so Open immediately re-qualifies for exactly one new
+    // HalfOpen probe — not an unbounded number, proving the in-flight count
+    // was reset to 0 (not left stuck elevated) when the first probe failed.
+    assert!(cb.is_available("x"), "exactly one new probe should be allowed after re-opening");
+    assert!(!cb.is_available("x"), "a second concurrent probe should again be capped");
+}
+
+#[test]
+fn half_open_cap_can_be_raised() {
+    let mut cb = CircuitBreaker::new(1, 0).max_half_open_probes(3);
+    cb.record_failure("x");
+    std::thread::sleep(Duration::from_millis(1));
+    assert!(cb.is_available("x"), "probe 1");
+    assert!(cb.is_available("x"), "probe 2");
+    assert!(cb.is_available("x"), "probe 3");
+    assert!(!cb.is_available("x"), "probe 4 should be rejected — cap is 3");
+}
+
+#[test]
+fn half_open_cap_of_zero_is_clamped_to_one() {
+    let mut cb = CircuitBreaker::new(1, 0).max_half_open_probes(0);
+    cb.record_failure("x");
+    std::thread::sleep(Duration::from_millis(1));
+    assert!(cb.is_available("x"), "cap=0 must be clamped to at least 1, or recovery would never be tested");
+    assert!(!cb.is_available("x"));
+}
+
+// ── all_states (metrics) ──────────────────────────────────────────────────────
+
+#[test]
+fn all_states_reflects_every_backend_seen() {
+    let mut cb = CircuitBreaker::new(1, 30);
+    cb.record_failure("a"); // opens "a"
+    let _ = cb.is_available("b"); // "b" stays Closed, but now tracked
+
+    let mut states: Vec<(String, BreakerState)> = cb.all_states();
+    states.sort_by(|a, b| a.0.cmp(&b.0));
+    assert_eq!(
+        vec![("a".to_string(), BreakerState::Open), ("b".to_string(), BreakerState::Closed)],
+        states
+    );
+}
+
+#[test]
+fn all_states_empty_for_a_fresh_breaker() {
+    let cb = CircuitBreaker::new(3, 30);
+    assert!(cb.all_states().is_empty());
+}
+
+#[test]
+fn redis_half_open_default_cap_lets_only_one_probe_through() {
+    let addr = start_fake_redis();
+    let cb = RedisCircuitBreaker::new(addr, None, 1, 0);
+    cb.record_failure("x").unwrap();
+    assert!(cb.is_available("x").unwrap());
+    assert_eq!(BreakerState::HalfOpen, cb.state("x").unwrap());
+    assert!(!cb.is_available("x").unwrap(), "a second concurrent probe should be rejected");
+}
+
+#[test]
+fn redis_half_open_cap_can_be_raised() {
+    let addr = start_fake_redis();
+    let cb = RedisCircuitBreaker::new(addr, None, 1, 0);
+    cb.set_max_half_open_probes(2);
+    cb.record_failure("x").unwrap();
+    assert!(cb.is_available("x").unwrap(), "probe 1");
+    assert!(cb.is_available("x").unwrap(), "probe 2");
+    assert!(!cb.is_available("x").unwrap(), "probe 3 should be rejected — cap is 2");
+}
+
 #[test]
 fn reset_clears_state() {
     let mut cb = CircuitBreaker::new(2, 30);

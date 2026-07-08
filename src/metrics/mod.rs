@@ -9,6 +9,12 @@
 //! - `rws_route_requests_total{method,path,status}` — request counts
 //! - `rws_route_duration_seconds{method,path}` — latency histogram
 //!
+//! **Circuit breaker state** — `rws_circuit_breaker_state{backend}` (gauge,
+//! `0`=closed, `1`=half_open, `2`=open) is emitted automatically for every
+//! backend known to [`crate::circuit_breaker::global`], with no opt-in layer
+//! needed — see [`crate::circuit_breaker`] and
+//! [`crate::proxy::ReverseProxy::with_circuit_breaker`].
+//!
 //! # Example
 //!
 //! ```rust,no_run
@@ -205,6 +211,43 @@ pub fn prometheus_text() -> String {
         out.push_str(&route_text);
     }
 
+    let breaker_text = circuit_breaker_prometheus_text();
+    if !breaker_text.is_empty() {
+        out.push('\n');
+        out.push_str(&breaker_text);
+    }
+
+    out
+}
+
+/// `rws_circuit_breaker_state{backend}` — the state of every backend known to
+/// the process-wide [`crate::circuit_breaker::global`] breaker, encoded as
+/// `0` (Closed/healthy), `1` (HalfOpen/probing), or `2` (Open/unhealthy).
+///
+/// Only the in-memory global breaker is covered — `RedisCircuitBreaker`
+/// state can't be enumerated here (no `SCAN`/`KEYS` support in the minimal
+/// hand-rolled RESP client; see [`crate::circuit_breaker::CircuitBreaker::all_states`]
+/// docs). A backend never seen by the global breaker (e.g. one whose
+/// `ReverseProxy` was wired to a different, non-global breaker instance)
+/// emits no line rather than a synthetic `0` — there's nothing to report.
+fn circuit_breaker_prometheus_text() -> String {
+    let mut states = crate::circuit_breaker::global().lock().unwrap().all_states();
+    if states.is_empty() {
+        return String::new();
+    }
+    states.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut out = String::new();
+    out.push_str("# HELP rws_circuit_breaker_state Circuit breaker state per backend (0=closed, 1=half_open, 2=open)\n");
+    out.push_str("# TYPE rws_circuit_breaker_state gauge\n");
+    for (backend, state) in states {
+        let value = match state {
+            crate::circuit_breaker::BreakerState::Closed => 0,
+            crate::circuit_breaker::BreakerState::HalfOpen => 1,
+            crate::circuit_breaker::BreakerState::Open => 2,
+        };
+        out.push_str(&format!("rws_circuit_breaker_state{{backend=\"{}\"}} {}\n", backend, value));
+    }
     out
 }
 

@@ -36,6 +36,16 @@ let app = App::new().wrap(MetricsLayer::new());
 | `rws_route_requests_total` | Counter | `method`, `path`, `status` | Requests per route and status code |
 | `rws_route_duration_seconds` | Histogram | `method`, `path` | Response time distribution |
 
+### Circuit breaker state
+
+Present automatically — no `MetricsLayer` or other opt-in needed — for every backend known to [`circuit_breaker::global()`](/proxy/circuit-breaker/):
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `rws_circuit_breaker_state` | Gauge | `backend` | `0`=closed, `1`=half_open, `2`=open |
+
+Wire `ReverseProxy::with_circuit_breaker(Arc::new(circuit_breaker::global()))` to get this metric for free alongside [automatic breaker integration](/proxy/circuit-breaker/#automatic-reverseproxy-wiring).
+
 ### Grafana / PromQL queries
 
 ```promql
@@ -50,6 +60,9 @@ histogram_quantile(0.99, rate(rws_route_duration_seconds_bucket[5m]))
 
 # Top routes by request count
 topk(10, sum by (path) (rate(rws_route_requests_total[5m])))
+
+# Backends currently tripped open
+rws_circuit_breaker_state == 2
 ```
 
 ## Logs

@@ -84,6 +84,7 @@ pub struct ReverseProxy {
     read_timeout: Duration,
     counter: AtomicUsize,
     pool: Arc<ConnPool>,
+    breaker: Option<Arc<dyn crate::circuit_breaker::Breaker>>,
 }
 
 impl ReverseProxy {
@@ -105,7 +106,30 @@ impl ReverseProxy {
             read_timeout: Duration::from_secs(30),
             counter: AtomicUsize::new(0),
             pool: Arc::new(ConnPool::new_default()),
+            breaker: None,
         }
+    }
+
+    /// Wire a [`crate::circuit_breaker::CircuitBreaker`] or
+    /// [`crate::circuit_breaker::RedisCircuitBreaker`] into this proxy:
+    /// before dialing a backend, its breaker state is checked (an `Open`
+    /// backend is skipped with no TCP attempt, exactly like a caller
+    /// manually checking `is_available` around each proxied call); after a
+    /// dial, `record_success`/`record_failure` is called automatically.
+    /// No breaker is wired by default — existing `ReverseProxy` callers see
+    /// no behavior change unless they opt in here.
+    ///
+    /// ```rust,no_run
+    /// use std::sync::Arc;
+    /// use rust_web_server::circuit_breaker::global as global_breaker;
+    /// use rust_web_server::proxy::ReverseProxy;
+    ///
+    /// let proxy = ReverseProxy::new(["http://backend-1:8080", "http://backend-2:8080"])
+    ///     .with_circuit_breaker(Arc::new(global_breaker()));
+    /// ```
+    pub fn with_circuit_breaker(mut self, breaker: Arc<dyn crate::circuit_breaker::Breaker>) -> Self {
+        self.breaker = Some(breaker);
+        self
     }
 
     /// Only proxy requests whose URI starts with `prefix`.
@@ -155,15 +179,35 @@ impl ReverseProxy {
         }
         let n = self.backends.len();
         let start = self.counter.fetch_add(1, Ordering::Relaxed);
+        let mut last_err = "all backends failed".to_string();
         for attempt in 0..n {
             let idx = (start + attempt) % n;
-            match self.try_backend(request, connection, &self.backends[idx]) {
-                Ok(resp) => return Ok(resp),
-                Err(_) if attempt + 1 < n => continue,
-                Err(e) => return Err(e),
+            let backend = &self.backends[idx];
+            let key = format!("{}:{}", backend.host, backend.port);
+
+            if let Some(breaker) = &self.breaker {
+                if !breaker.is_available(&key) {
+                    last_err = format!("circuit open for {}", key);
+                    continue;
+                }
+            }
+
+            match self.try_backend(request, connection, backend) {
+                Ok(resp) => {
+                    if let Some(breaker) = &self.breaker {
+                        breaker.record_success(&key);
+                    }
+                    return Ok(resp);
+                }
+                Err(e) => {
+                    if let Some(breaker) = &self.breaker {
+                        breaker.record_failure(&key);
+                    }
+                    last_err = e;
+                }
             }
         }
-        Err("all backends failed".to_string())
+        Err(last_err)
     }
 
     fn try_backend(
