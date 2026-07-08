@@ -28,11 +28,21 @@ Working today: polls `/apis/networking.k8s.io/v1/ingresses`, builds a live route
 
 Two new modules (`tls.rs`, `watch.rs`), 37 new/updated tests (real TLS handshakes — positive and negative — chunked-stream reassembly, `pathType` boundary semantics, class filtering, and a dedicated regression test for the namespace bug), full three-way build (default/`http1`/`http2`) green, no new Cargo dependency (PEM parsing and base64 decoding are hand-rolled, matching `rustls`/`webpki-roots` already being optional deps behind `http-client`/`http2`).
 
-### 1.2 Service discovery (`src/service_discovery/mod.rs`)
+### ✅ 1.2 Service discovery (`src/service_discovery/mod.rs`) — Done
 
 Working today: `Static`, `EnvPrefix`, `File`, `Dns` sources feeding a shared `Arc<RwLock<Vec<String>>>`.
 
-**What is missing:** Consul HTTP API source, etcd watch source, Docker label discovery, DNS SRV record support (needed for headless Services that publish port info via SRV, not just A records), weighted DNS.
+**What was missing (all five now closed):** Consul HTTP API source, etcd watch source, Docker label discovery, DNS SRV record support (needed for headless Services that publish port info via SRV, not just A records), weighted DNS.
+
+**How each was closed:**
+
+1. **Consul**: `DiscoverySource::Consul { addr, service }` (`src/service_discovery/consul.rs`, new) queries a Consul agent's `/v1/health/service/:name?passing=true` — health filtering happens server-side, so only passing instances ever come back. `Service.Address` is preferred; falls back to `Node.Address` when a service registered without one (matches Consul's own documented resolution order). Uses `crate::http_client::Client`, which needs no feature flag — `service_discovery` itself has none, so it can only depend on always-available pieces.
+2. **DNS SRV + weighted DNS**: `DiscoverySource::DnsSrv { record }` (`src/service_discovery/dns_srv.rs`, new) is a from-scratch RFC 1035/2782 query/response codec over a raw `UdpSocket` — no third-party DNS crate, including compression-pointer decoding for the target name. Only the lowest-priority tier of SRV answers is kept (RFC 2782: clients try that tier first); within it, each `target:port` is repeated `weight.clamp(1, 20)` times, which *is* this gap's "weighted DNS" — the mechanism by which a flat round-robin `Vec<String>` consumer ends up favoring higher-weight targets proportionally, since SRV carries a `weight` field plain A records don't.
+3. **Docker label discovery**: `DiscoverySource::Docker { label, socket_path }` (`src/service_discovery/docker.rs`, new) queries the Docker Engine API over its Unix socket for running containers carrying `label`, using the label's **value** as the backend address directly (e.g. `rws.backend=10.0.0.5:8080`) rather than guessing an address from published ports or network topology — deliberately sidesteps that ambiguity, and keeps the parsing logic trivially unit-testable. Unix-only (`#[cfg(unix)]`); logs a warning and returns empty elsewhere.
+4. **etcd watch**: `DiscoverySource::EtcdWatch { endpoints, prefix }` (`src/service_discovery/etcd.rs`, new) is the one source that isn't poll-driven — `BackendPool::start()` special-cases it to spawn a dedicated thread instead of the generic sleep-loop. After an initial one-shot `/v3/kv/range` listing (so `resolve()`/`refresh()` still work even without calling `start()`), the thread holds a long-lived connection to etcd's gRPC-gateway `/v3/watch` endpoint and applies `PUT`/`DELETE` events to the backend list incrementally as they arrive. It reuses `crate::ingress::watch::read_chunked_lines` (widened from `mod watch;` to `pub(crate) mod watch;` in `src/ingress/mod.rs` for this) — the same chunked-NDJSON-stream reader §1.1's Kubernetes watch already implemented, since both protocols shape their event streams identically. Unlike that watcher — which treats every event as a plain "something changed, re-list" trigger, because a Kubernetes `WatchEvent` doesn't carry enough to update one cached object in isolation — an etcd watch event *does* carry a complete key+value, so it's applied as a real incremental delta against a local map here. Plain HTTP only, no TLS yet — noted as a limitation, not silently assumed.
+5. **Shared JSON parsing**: Consul/Docker/etcd responses are parsed by a new hand-rolled recursive-descent JSON value parser (`src/service_discovery/json_lite.rs`, crate-internal, not exposed) rather than the optional `serde`/`serde_json` feature — `service_discovery` has no feature gate of its own and must stay usable in every build, so it couldn't depend on an optional one. Mirrors this crate's existing per-module "own tiny encoders" pattern (`mcp::json_rpc`, `sso::saml::xml`) rather than introducing a crate-wide JSON type.
+
+Five new modules (`json_lite.rs`, `consul.rs`, `dns_srv.rs`, `docker.rs`, `etcd.rs`), 108 new tests: a full JSON-parser test suite; Consul against a mock TCP HTTP server; DNS SRV packet encode/decode (including a crafted compression-pointer test and a pointer-loop rejection test) plus a live round-trip against a mock UDP resolver; Docker container-label parsing, chunked-response decoding, and a real `UnixListener`-backed end-to-end test; etcd's `prefix_range_end`/base64 round-trip, `apply_watch_line` delta application (PUT/DELETE, absent-`type`-defaults-to-PUT), and a full `run_once` end-to-end test against a two-request mock etcd server (initial list, then one watch event, verified via `pool.backends()`). Verified across default, `http1`-only, and default+`http1` feature combinations — 1511 tests green, zero regressions.
 
 ### 1.3 Traffic splitting / canary (`src/canary/mod.rs`)
 
@@ -83,7 +93,7 @@ JWT signing keys, DB credentials, and TLS keys are read from plain env vars or f
 | # | Gap | Area | Cloud-specific? | Effort |
 |---|---|---|---|---|
 | 1.1 | Ingress: TLS to API server, watch API, `pathType: Exact`, class filtering | K8s middleware | No | Medium |
-| 1.2 | Service discovery: Consul/etcd/Docker/SRV/weighted-DNS | K8s middleware | No | Medium |
+| 1.2 | Service discovery: Consul/etcd/Docker/SRV/weighted-DNS | K8s middleware | No | ✅ Done |
 | 1.3 | Canary: live weights, smooth WRR, `BackendPool` integration | K8s middleware | No | Small–Medium |
 | 1.4 | Circuit breaker: `ReverseProxy` auto-wiring, HalfOpen cap, metric | K8s middleware | No | Small |
 | 2.1 | `storage-gcs` feature | Cloud provider | GCP | Medium |
@@ -100,4 +110,4 @@ JWT signing keys, DB credentials, and TLS keys are read from plain env vars or f
 3. **Ingress watch API + IngressClass filtering** — the two ingress gaps most likely to bite in a real multi-tenant cluster (stale routes under polling; picking up Ingresses meant for a different controller).
 4. **`secrets::resolve()`** — highest effort but closes a recurring enterprise-adoption blocker across all three clouds at once.
 5. **Circuit breaker `ReverseProxy` wiring + metric** — small, and makes the already-implemented breaker actually self-service instead of requiring manual integration.
-6. **Service discovery / canary remaining items** — lowest urgency; current sources (Static/EnvPrefix/File/DNS) and static-weight canary already cover the common K8s case (Kubernetes Service DNS + a fixed weight split).
+6. **Service discovery remaining items** — ✅ done (Consul, etcd watch, Docker labels, DNS SRV/weighted DNS). Canary's remaining items (live weights, smooth WRR, `BackendPool` integration) are still open and lowest urgency — static-weight canary already covers the common case.

@@ -10,6 +10,10 @@
 //! | `EnvPrefix`  | Scan `PREFIX_0`, `PREFIX_1`, … environment variables.     |
 //! | `File`       | Read one `host:port` per line from a file.                |
 //! | `Dns`        | A-record lookup — resolve hostname to all IPs.            |
+//! | `DnsSrv`     | SRV record lookup — weight-expanded `host:port` list.     |
+//! | `Consul`     | Consul HTTP API `/v1/health/service/:name`.                |
+//! | `Docker`     | Docker Engine API — containers carrying a given label.    |
+//! | `EtcdWatch`  | etcd v3 watch stream — incremental, low-latency updates.   |
 //!
 //! # Example
 //!
@@ -29,6 +33,11 @@
 
 #[cfg(test)]
 mod tests;
+mod json_lite;
+mod consul;
+mod dns_srv;
+mod docker;
+mod etcd;
 
 use std::net::ToSocketAddrs;
 use std::sync::{Arc, RwLock};
@@ -47,6 +56,32 @@ pub enum DiscoverySource {
     File(String),
     /// Resolve `hostname` via A-record DNS lookup; format each IP as `ip:port`.
     Dns { hostname: String, port: u16 },
+    /// Resolve `record` (e.g. `_http._tcp.example.com`) via SRV lookup. Only the
+    /// lowest-priority tier of records is used; within that tier each `target:port`
+    /// is repeated `weight.clamp(1, 20)` times in the returned list so a plain
+    /// round-robin consumer still sees proportional selection frequency — see
+    /// [`dns_srv`] module docs for the exact algorithm and its bound.
+    DnsSrv { record: String },
+    /// Query a Consul agent's `/v1/health/service/:name` endpoint. `addr` is
+    /// `host:port` of the agent (e.g. `127.0.0.1:8500`); only instances passing
+    /// all health checks are returned.
+    Consul { addr: String, service: String },
+    /// Query the Docker Engine API (over a Unix domain socket) for running
+    /// containers carrying `label`, using each container's *value* for that
+    /// label as the backend address directly (e.g. `rws.backend=10.0.0.5:8080`)
+    /// — see [`docker`] module docs for why the label value, not a published
+    /// port guess, is the address. Unix-only; a no-op elsewhere.
+    Docker { label: String, socket_path: String },
+    /// Watch an etcd v3 key prefix via its gRPC-gateway JSON/HTTP `/v3/watch`
+    /// endpoint. Unlike every other source, this is *not* driven by the
+    /// generic poll loop — [`BackendPool::start`] spawns a dedicated
+    /// long-lived connection instead, applying `PUT`/`DELETE` events
+    /// incrementally as they arrive rather than re-listing on each one.
+    /// `resolve()` (and therefore plain `refresh()`) still performs a one-shot
+    /// `/v3/kv/range` listing, so a pool built with this source is usable
+    /// without ever calling `start()`, just without live updates. Plain HTTP
+    /// only — no TLS support yet.
+    EtcdWatch { endpoints: Vec<String>, prefix: String },
 }
 
 impl DiscoverySource {
@@ -91,6 +126,23 @@ impl DiscoverySource {
                         .collect(),
                     Err(e) => {
                         eprintln!("service_discovery: DNS lookup for {} failed: {}", addr_str, e);
+                        Vec::new()
+                    }
+                }
+            }
+
+            DiscoverySource::DnsSrv { record } => dns_srv::resolve(record),
+
+            DiscoverySource::Consul { addr, service } => consul::discover(addr, service),
+
+            DiscoverySource::Docker { label, socket_path } => docker::discover(socket_path, label),
+
+            DiscoverySource::EtcdWatch { endpoints, prefix } => {
+                let Some(endpoint) = endpoints.first() else { return Vec::new() };
+                match etcd::kv_range(endpoint, prefix) {
+                    Ok(map) => map.into_values().collect(),
+                    Err(e) => {
+                        eprintln!("service_discovery: etcd range query failed: {}", e);
                         Vec::new()
                     }
                 }
@@ -146,6 +198,48 @@ impl BackendPool {
         Self::new(DiscoverySource::Dns { hostname: hostname.into(), port })
     }
 
+    /// Create a pool whose backends are discovered via DNS SRV lookup (e.g.
+    /// `_http._tcp.my-service.default.svc.cluster.local` for a Kubernetes
+    /// headless Service). See [`DiscoverySource::DnsSrv`] for the
+    /// priority/weight handling.
+    pub fn dns_srv(record: impl Into<String>) -> Self {
+        Self::new(DiscoverySource::DnsSrv { record: record.into() })
+    }
+
+    /// Create a pool whose backends are discovered via a Consul agent's
+    /// `/v1/health/service/:name` endpoint. `addr` is `host:port` of the
+    /// agent, e.g. `"127.0.0.1:8500"`. Only instances passing all health
+    /// checks are returned.
+    pub fn consul(addr: impl Into<String>, service: impl Into<String>) -> Self {
+        Self::new(DiscoverySource::Consul { addr: addr.into(), service: service.into() })
+    }
+
+    /// Create a pool whose backends are discovered from running Docker
+    /// containers carrying `label`, using the default socket path
+    /// (`/var/run/docker.sock`). See [`DiscoverySource::Docker`] for the
+    /// label-value-is-the-address convention. Unix-only; a no-op elsewhere.
+    pub fn docker(label: impl Into<String>) -> Self {
+        Self::new(DiscoverySource::Docker {
+            label: label.into(),
+            socket_path: "/var/run/docker.sock".to_string(),
+        })
+    }
+
+    /// Same as [`BackendPool::docker`] but against a non-default Docker
+    /// socket path.
+    pub fn docker_with_socket(label: impl Into<String>, socket_path: impl Into<String>) -> Self {
+        Self::new(DiscoverySource::Docker { label: label.into(), socket_path: socket_path.into() })
+    }
+
+    /// Create a pool whose backends are discovered from an etcd v3 key
+    /// `prefix`, kept live via a watch stream once [`BackendPool::start`] is
+    /// called. `endpoints` is a list of `host:port` etcd cluster members —
+    /// only the first is used today (no client-side failover yet). Plain
+    /// HTTP only. See [`DiscoverySource::EtcdWatch`].
+    pub fn etcd(endpoints: Vec<String>, prefix: impl Into<String>) -> Self {
+        Self::new(DiscoverySource::EtcdWatch { endpoints, prefix: prefix.into() })
+    }
+
     /// Override the background refresh interval (default: 30 seconds).
     ///
     /// Only meaningful for `File` and `Dns` sources.
@@ -156,14 +250,28 @@ impl BackendPool {
 
     /// Start the background refresh thread.
     ///
-    /// For `Static` sources this is a no-op.  For all others, an immediate
+    /// For `Static` sources this is a no-op. For all others, an immediate
     /// `refresh()` is performed before spawning the background thread so that
     /// the first `backends()` call returns a populated list.
+    ///
+    /// `EtcdWatch` is special-cased: instead of the generic sleep-and-poll
+    /// loop, a dedicated thread holds a long-lived connection to etcd's watch
+    /// stream and applies `PUT`/`DELETE` events to the backend list as they
+    /// arrive — no polling interval involved after the initial `refresh()`.
     pub fn start(&self) {
         if matches!(self.source.as_ref(), DiscoverySource::Static(_)) {
             return;
         }
         self.refresh();
+
+        if let DiscoverySource::EtcdWatch { endpoints, prefix } = self.source.as_ref() {
+            let endpoints = endpoints.clone();
+            let prefix = prefix.clone();
+            let pool = self.clone();
+            std::thread::spawn(move || etcd::watch_forever(&endpoints, &prefix, &pool));
+            return;
+        }
+
         let pool = self.clone();
         let interval = Duration::from_secs(self.poll_interval_secs);
         std::thread::spawn(move || loop {

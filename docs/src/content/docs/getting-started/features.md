@@ -66,6 +66,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **Per-route rate limiting** — `PerRouteRateLimit` in config-driven mode; `RateLimitLayer` in code
 - **Per-route Bearer auth** — `BearerAuthMiddleware` in config-driven mode; `JwtLayer` in code
 - **Route matching** — host, path prefix, exact path, HTTP method, `Content-Type` prefix; first-match wins
+- **Service discovery** — `BackendPool` with `Static`/`EnvPrefix`/`File`/`Dns`/`DnsSrv` (weighted)/`Consul`/`Docker` (label value as address) sources on a poll loop, plus `EtcdWatch` on a dedicated live watch stream
 
 ---
 

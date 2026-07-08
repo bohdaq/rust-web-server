@@ -40,7 +40,10 @@ mod tests;
 
 #[cfg(any(feature = "http-client", feature = "http2"))]
 mod tls;
-mod watch;
+// `pub(crate)` (not just `mod`) so `service_discovery::etcd` can reuse
+// `read_chunked_lines` for its own gRPC-gateway JSON watch stream — the same
+// "chunked NDJSON-shaped event stream" problem this module already solved.
+pub(crate) mod watch;
 
 use std::io::{Read, Write};
 use std::net::TcpStream;

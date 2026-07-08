@@ -923,6 +923,54 @@ Each backend's state (`state|failures|opened_at`) is one Redis string key (`GET`
 
 ---
 
+## Service discovery (src/service_discovery/)
+
+```rust
+use rust_web_server::service_discovery::BackendPool;
+
+let pool = BackendPool::r#static(vec!["10.0.0.1:8080".into()]);          // fixed list, no polling
+let pool = BackendPool::env_prefix("RWS_BACKENDS").poll_interval_secs(60); // RWS_BACKENDS_0, _1, …
+let pool = BackendPool::file("/etc/rws/backends.txt").poll_interval_secs(30); // one host:port per line
+let pool = BackendPool::dns("my-service.internal", 8080).poll_interval_secs(15); // A-record lookup
+let pool = BackendPool::dns_srv("_http._tcp.my-svc.default.svc.cluster.local").poll_interval_secs(15); // SRV lookup
+let pool = BackendPool::consul("127.0.0.1:8500", "api").poll_interval_secs(10); // Consul health API
+let pool = BackendPool::docker("rws.backend").poll_interval_secs(10);    // Docker label value = address
+let pool = BackendPool::etcd(vec!["127.0.0.1:2379".into()], "/services/api/"); // etcd v3 watch stream
+
+pool.start(); // background refresh (no-op for Static); dedicated watch thread for etcd
+let backends: Vec<String> = pool.backends();
+```
+
+`DnsSrv` keeps only the lowest-priority tier of SRV answers (RFC 2782: clients try that tier first),
+then repeats each `target:port` `weight.clamp(1, 20)` times so a flat round-robin `Vec<String>`
+consumer still favors higher-weight targets proportionally — this is "weighted DNS": SRV carries a
+`weight` field plain A records don't. `Consul` calls a Consul agent's `/v1/health/service/:name`
+endpoint, which already applies health-check filtering server-side (`passing=true`); `Service.Address`
+is preferred, falling back to `Node.Address` when a service registers without one. `Docker` queries the
+local Docker Engine API over its Unix socket (`/var/run/docker.sock` by default,
+`docker_with_socket(label, path)` overrides it) for running containers carrying `label`, using the
+*label's value* as the backend address directly (e.g. `rws.backend=10.0.0.5:8080`) rather than guessing
+an address from published ports or network topology — Unix-only, a logged no-op elsewhere.
+
+`EtcdWatch` is the one source `BackendPool::start()` doesn't drive through the generic sleep-and-poll
+loop: after an initial one-shot `/v3/kv/range` listing (so the pool works even without calling
+`start()`), a dedicated thread holds a long-lived connection to etcd's gRPC-gateway `/v3/watch`
+endpoint and applies `PUT`/`DELETE` events to the backend list incrementally as they arrive — no
+polling interval after that. It reuses `crate::ingress::watch::read_chunked_lines`, the same
+chunked-NDJSON-stream reader the Kubernetes Ingress watcher below already implements (the two
+protocols shape their event streams the same way). Unlike the Ingress watcher — which treats every
+event as a plain "something changed, re-list" trigger, since a `WatchEvent` there doesn't carry enough
+to update one cached object in isolation — an etcd watch event *does* carry a complete key+value, so
+it's applied as a real incremental delta against a local map. Plain HTTP only, no TLS yet.
+
+Consul/Docker/etcd response JSON is parsed by a small hand-rolled recursive-descent value parser
+(`src/service_discovery/json_lite.rs`, crate-internal) rather than the optional `serde`/`serde_json`
+feature — `service_discovery` has no feature gate of its own and must stay usable in every build. DNS
+SRV support (`src/service_discovery/dns_srv.rs`) is a from-scratch RFC 1035/2782 query/response codec
+over a raw `UdpSocket` (including compression-pointer decoding) — no third-party DNS crate.
+
+---
+
 ## Kubernetes Ingress (src/ingress/)
 
 ```rust
@@ -2010,7 +2058,9 @@ src/rewrite/            — RewriteLayer (request/response rewriting)
 src/router/             — Router, PathParams, named/wildcard routing
 src/scheduler/          — Scheduler (fixed-rate, fixed-delay, cron)
 src/server/             — Server (bind, accept, process), ConnectionInfo, Address
-src/service_discovery/  — BackendPool, DiscoverySource variants
+src/service_discovery/  — BackendPool, DiscoverySource (Static/EnvPrefix/File/Dns/DnsSrv/Consul/
+                          Docker/EtcdWatch); json_lite (crate-internal JSON parser used by
+                          Consul/Docker/etcd); dns_srv (hand-rolled RFC 1035/2782 SRV codec)
 src/session/            — SessionStore, Session, cookie helpers
 src/mailer/             — Mailer, Email, EmailBuilder, SmtpTls, MailerError (mailer feature)
 src/sso/                — OidcAuth, OidcConfig, OidcProvider, JwksCache (sso feature);

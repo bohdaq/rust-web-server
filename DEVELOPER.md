@@ -151,7 +151,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `CircuitBreaker` | `circuit_breaker` | Per-backend circuit breaker (Closed→Open→HalfOpen state machine). `global()` returns a process-wide singleton. Configurable failure threshold and recovery window. State lives in an in-process `HashMap` — reset on restart. |
 | `RedisCircuitBreaker` | `circuit_breaker` | Same state machine and method names as `CircuitBreaker`, backed by Redis (hand-rolled RESP client, no feature gate) instead of an in-process map — survives a restart and is shared across every `rws` instance pointed at the same Redis server. Every method returns `Result` (network I/O); `from_env()` reads `RWS_REDIS_HOST/PORT/PASSWORD` + `RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD/RECOVERY_SECS`. |
 | `RetryLayer` | `circuit_breaker` | Middleware that retries requests on configurable status codes (default: 502, 503, 504) up to `max_retries` times. |
-| `BackendPool` / `DiscoverySource` | `service_discovery` | Dynamic backend pool updated by a background thread. Sources: `Static`, `EnvPrefix` (env vars), `File` (one host:port per line), `Dns` (A-record lookup). |
+| `BackendPool` / `DiscoverySource` | `service_discovery` | Dynamic backend pool updated by a background thread. Sources: `Static`, `EnvPrefix` (env vars), `File` (one host:port per line), `Dns` (A-record lookup), `DnsSrv` (SRV lookup, weight-expanded), `Consul` (agent health-check endpoint), `Docker` (label value as address, Unix-only), `EtcdWatch` (v3 watch stream — the one source `start()` doesn't poll, see Use Case #47). |
 | `IngressRule` / `PathType` / `KubernetesIngressWatcher` / `IngressRouter` | `ingress` | Kubernetes Ingress watcher: resyncs on an interval *and* watches (`?watch=true`) for low-latency updates, parses Ingress rules (`pathType: Exact`/`Prefix`/`ImplementationSpecific`, `ingressClassName` filtering), and routes requests to the correct upstream service. `IngressRouter` implements `Application`. `.from_service_account()` (requires `http-client`/`http2`) connects to the in-cluster API server directly over TLS, trusting only the cluster's own CA. |
 | `Scheduler` / `CronSchedule` | `scheduler` | `@Scheduled`-equivalent background task runner. Three modes: `.every(Duration, fn)` (fixed rate), `.after(Duration, fn)` (fixed delay), `.cron("sec min hour day month weekday", fn)`. Full cron syntax: `*`, exact, `*/step`, `N-M`, comma list. |
 | `Job` / `JobQueue` | `jobs` (requires `jobs` feature) | In-memory background job queue for one-shot, fire-and-forget work from handlers. `Job` trait (blanket-implemented for `Fn() -> Result<(), String> + Send` closures); `JobQueue::new(workers)` spawns a fixed worker pool; `.submit(job)` enqueues; failed jobs retry with exponential backoff (`.max_retries(n)`, `.backoff(initial, multiplier)`); `.join()` drains and waits. Not crash-safe — see `PersistentJobQueue`. |
@@ -2614,7 +2614,7 @@ Bonus beyond restart survival: since the state lives in Redis rather than in the
 
 ### 47. Service discovery
 
-`BackendPool` maintains a live list of backend addresses that a background thread refreshes automatically. Four discovery sources:
+`BackendPool` maintains a live list of backend addresses that a background thread refreshes automatically. Eight discovery sources:
 
 ```rust
 use rust_web_server::service_discovery::{BackendPool, DiscoverySource};
@@ -2631,7 +2631,27 @@ let pool = BackendPool::file("/etc/rws/backends.txt").poll_interval_secs(30);
 // A-record DNS resolution — resolves all IPs for the hostname.
 let pool = BackendPool::dns("my-service.internal", 8080).poll_interval_secs(15);
 
-// Start background polling thread (no-op for Static).
+// DNS SRV lookup — e.g. a Kubernetes headless Service's per-port records.
+// Only the lowest-priority tier is kept; each target:port is repeated
+// weight.clamp(1, 20) times so a flat round-robin consumer still favors
+// higher-weight targets proportionally ("weighted DNS").
+let pool = BackendPool::dns_srv("_http._tcp.my-svc.default.svc.cluster.local").poll_interval_secs(15);
+
+// Consul agent's health-check endpoint — only passing instances are returned.
+let pool = BackendPool::consul("127.0.0.1:8500", "api").poll_interval_secs(10);
+
+// Docker containers carrying a label, using the label's *value* as the
+// address directly (e.g. a container labeled `rws.backend=10.0.0.5:8080`).
+// Unix-only (Docker Engine API over /var/run/docker.sock); a no-op elsewhere.
+let pool = BackendPool::docker("rws.backend").poll_interval_secs(10);
+// let pool = BackendPool::docker_with_socket("rws.backend", "/custom/docker.sock");
+
+// etcd v3 key prefix, kept live via a watch stream (not polling) once
+// start() is called — see below.
+let pool = BackendPool::etcd(vec!["127.0.0.1:2379".into()], "/services/api/");
+
+// Start background refresh (no-op for Static; a dedicated watch thread for
+// EtcdWatch instead of the poll loop every other source uses).
 pool.start();
 
 // Read current backend list.
@@ -2639,6 +2659,10 @@ let backends: Vec<String> = pool.backends();
 ```
 
 `BackendPool` is `Clone` — all clones share the same `Arc<RwLock<Vec<String>>>` underneath, so a refresh on one clone is visible to all.
+
+**etcd is watched, not polled.** `BackendPool::start()` special-cases `EtcdWatch`: after the initial `refresh()` (a one-shot `/v3/kv/range` listing, so the pool is usable even without calling `start()`), it spawns a dedicated thread holding a long-lived connection to etcd's gRPC-gateway `/v3/watch` endpoint and applies `PUT`/`DELETE` events to the backend list incrementally as they arrive — no polling interval involved. That watch-stream reader (`src/service_discovery/etcd.rs`) reuses `crate::ingress::watch::read_chunked_lines`, the same chunked-NDJSON-stream primitive the Kubernetes Ingress watcher (Use Case #48) already implements — the two protocols shape their event streams the same way, so this is genuine code reuse, not a parallel reimplementation. Unlike the Ingress watcher (which treats every event as a "something changed, re-list" trigger, since a `WatchEvent` there doesn't carry enough to update one cached object in isolation), an etcd watch event *does* carry a complete key+value, so it's applied as a real incremental delta against a local map. Plain HTTP only — no TLS support yet.
+
+All HTTP/JSON parsing for Consul, Docker, and etcd goes through a small hand-rolled recursive-descent JSON value parser (`src/service_discovery/json_lite.rs`, crate-internal) rather than the optional `serde`/`serde_json` dependency — `service_discovery` itself has no feature gate and must stay usable in every build. DNS SRV support (`src/service_discovery/dns_srv.rs`) is a from-scratch RFC 1035/2782 query/response codec over a raw `UdpSocket`, including name-compression-pointer decoding — no third-party DNS crate, consistent with this crate's existing hand-rolled HTTP/JWT/base64 elsewhere.
 
 ---
 
