@@ -147,7 +147,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `TcpProxy` | `tcp_proxy` | Standalone L4 TCP proxy. Accepts connections on a local address and relays bytes bidirectionally to round-robin backends. |
 | `UdpProxy` | `udp_proxy` | Standalone UDP proxy (request-reply model). Forwards each datagram to a backend and returns the reply to the original client. |
 | `WsProxy` | `ws_proxy` | Standalone WebSocket proxy. `ws://` plain TCP (two-thread relay), `wss://` TLS (single-thread polling relay; `http-client` or `http2` feature). Port defaults to 80/443. `WsProxy::new()` treats all backends as always live; `WsProxy::with_live_backends(all, Arc<RwLock<Vec<String>>>)` takes a caller-managed live list for health-check-aware round-robin — `503` if it's empty. `[ws_proxy.health_check]` in `rws.config.toml` wires this up automatically for the config-driven proxy. |
-| `WeightedBackend` / `CanaryLayer` | `canary` | Weighted traffic-splitting proxy middleware; each backend has a `weight` — distribution is proportional. Backends are contacted over plain HTTP/1.1, or TLS when the URL uses `https://`/`h2s://`/`grpcs://` (requires the `http-client` or `http2` feature). Useful for canary releases and A/B testing. |
+| `WeightedBackend` / `WeightedPool` / `CanaryLayer` | `canary` | Weighted traffic-splitting proxy middleware using nginx-style smooth weighted round-robin (no same-backend bursts for skewed weights). Backends are contacted over plain HTTP/1.1, or TLS when the URL uses `https://`/`h2s://`/`grpcs://` (requires the `http-client` or `http2` feature). `CanaryLayer` is `Clone` and shares state — `.update(backends, pools)` changes weights live, no restart. `WeightedPool`/`.add_pool()` sources a group's members from a `BackendPool` instead of a fixed URL. Useful for canary releases and A/B testing. |
 | `CircuitBreaker` | `circuit_breaker` | Per-backend circuit breaker (Closed→Open→HalfOpen state machine). `global()` returns a process-wide singleton. Configurable failure threshold and recovery window. State lives in an in-process `HashMap` — reset on restart. |
 | `RedisCircuitBreaker` | `circuit_breaker` | Same state machine and method names as `CircuitBreaker`, backed by Redis (hand-rolled RESP client, no feature gate) instead of an in-process map — survives a restart and is shared across every `rws` instance pointed at the same Redis server. Every method returns `Result` (network I/O); `from_env()` reads `RWS_REDIS_HOST/PORT/PASSWORD` + `RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD/RECOVERY_SECS`. |
 | `RetryLayer` | `circuit_breaker` | Middleware that retries requests on configurable status codes (default: 502, 503, 504) up to `max_retries` times. |
@@ -2524,7 +2524,7 @@ The setting applies to both HTTPS (HTTP/2 + HTTP/1.1) and QUIC (HTTP/3) listener
 
 ### 45. Canary routing / traffic splitting
 
-`CanaryLayer` distributes requests across backends proportionally to their weights. Use it for canary releases (send 10% of traffic to a new version), A/B testing, or gradual rollouts. The distribution is deterministic: it expands the backend list by weight and uses a lock-free `AtomicUsize` counter to cycle through it.
+`CanaryLayer` distributes requests across backends proportionally to their weights, using the same *smooth* weighted round-robin (SWRR) algorithm nginx uses — weights `9, 1` select mostly `A` with a `B` evenly spaced in roughly every tenth request, never a burst of consecutive same-backend picks the way a naively pre-expanded rotation list would produce for skewed weights.
 
 ```rust
 use rust_web_server::app::App;
@@ -2553,6 +2553,54 @@ CanaryLayer::new(vec![
     WeightedBackend::new("https://canary-backend:8443", 1),
 ]);
 ```
+
+**Live weight updates — no restart required.** `CanaryLayer` is `Clone` and all clones share the same underlying `Arc<Mutex<_>>` state, so keeping a handle before wrapping lets you shift traffic at runtime (e.g. from an admin endpoint or a rollout script):
+
+```rust
+use rust_web_server::middleware::WithMiddleware;
+
+let layer = CanaryLayer::new(vec![
+    WeightedBackend::new("stable-backend:8080", 9),
+    WeightedBackend::new("canary-backend:8080", 1),
+]);
+let handle = layer.clone(); // keep this — `layer` moves into `.wrap(...)`
+let app = WithMiddleware::new(App::new()).wrap(layer);
+
+// Ramp the canary from 10% to 50%, in place:
+handle.update(
+    vec![
+        WeightedBackend::new("stable-backend:8080", 1),
+        WeightedBackend::new("canary-backend:8080", 1),
+    ],
+    vec![],
+);
+```
+
+**`BackendPool` integration** — a group's members can come from a dynamic [service discovery](#47-service-discovery) source instead of a fixed URL, via `WeightedPool` / `.add_pool(pool, weight)`. The weight controls how often *that group* is picked; which live member answers is a plain round-robin over `pool.backends()` at selection time, so pods scaling up/down in that group doesn't require touching the canary config at all:
+
+```rust
+use rust_web_server::canary::WeightedPool;
+use rust_web_server::service_discovery::BackendPool;
+
+let canary_pool = BackendPool::dns("canary.internal", 8080).poll_interval_secs(15);
+canary_pool.start();
+
+// 90% fixed stable backend, 10% split across however many canary pods
+// BackendPool currently sees.
+let app = App::new()
+    .wrap(CanaryLayer::new(vec![WeightedBackend::new("stable-backend:8080", 9)])
+        .add_pool(canary_pool, 1));
+
+// Or build a layer purely from dynamic groups:
+let stable_pool = BackendPool::dns("stable.internal", 8080).poll_interval_secs(15);
+stable_pool.start();
+let app2 = App::new().wrap(CanaryLayer::with_pools(vec![
+    WeightedPool::new(stable_pool, 9),
+    WeightedPool::new(canary_pool, 1),
+]));
+```
+
+`BackendPool` addresses are bare `"host:port"` strings with no scheme, so pool-sourced targets are always plain HTTP/1.1 — mix in a TLS `WeightedBackend` group alongside a pool if a fixed TLS endpoint is also needed.
 
 ---
 

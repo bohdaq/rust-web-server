@@ -883,9 +883,67 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 | `H2ReverseProxy` | `proxy` | HTTP/2 upstream proxy; `h2://` plain TCP, `h2s://`/`https://` TLS (ALPN `h2`); port defaults to 443 for TLS schemes; async-native sync/async bridge (works under any tokio runtime flavor); `http2` feature |
 | `GrpcProxy` | `proxy` | gRPC proxy; filters on `Content-Type: application/grpc*`; `grpc://` plain, `grpcs://`/`https://` TLS; `http2` feature |
 | `RewriteLayer` | `rewrite` | Request/response header, URI, status, body rewriting. `.request_uri_regex_rewrite(pattern, replacement)` (requires `rewrite-regex`) — regex match against the URI, whole URI replaced by the `$1`/`${name}`-expanded replacement on match, no-op otherwise |
-| `CanaryLayer` | `canary` | Weighted traffic splitting via `WeightedBackend::new(url, weight)`; backends may be plain HTTP or TLS (`https://`/`h2s://`/`grpcs://`, requires `http-client`/`http2`) |
+| `CanaryLayer` | `canary` | Weighted traffic splitting via `WeightedBackend::new(url, weight)`, smooth weighted round-robin (no bursts); backends may be plain HTTP or TLS (`https://`/`h2s://`/`grpcs://`, requires `http-client`/`http2`); `Clone` + `.update(backends, pools)` for live weight changes; `WeightedPool`/`.add_pool()` for `BackendPool`-sourced groups — see dedicated section below |
 | `RetryLayer` | `circuit_breaker` | Retry on 502/503/504 up to `max_retries` |
 | `OidcAuth` | `sso` | OIDC auth flow + claims injection; `.exclude(prefix)` |
+
+---
+
+## Canary / traffic splitting (src/canary/)
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::canary::{CanaryLayer, WeightedBackend, WeightedPool};
+use rust_web_server::middleware::WithMiddleware;
+use rust_web_server::service_discovery::BackendPool;
+
+// Fixed weighted backends — smooth weighted round-robin, not a flat
+// pre-expanded rotation, so skewed weights (e.g. 9:1) never burst.
+let layer = CanaryLayer::new(vec![
+    WeightedBackend::new("stable-backend:8080", 9),
+    WeightedBackend::new("canary-backend:8080", 1),
+]);
+
+// Clone before wrapping to keep a live-control handle.
+let handle = layer.clone();
+let app = WithMiddleware::new(App::new()).wrap(layer);
+
+// Change weights at runtime — no restart, every clone (including the one
+// already wrapped and serving traffic) picks it up on its next request.
+handle.update(
+    vec![
+        WeightedBackend::new("stable-backend:8080", 1),
+        WeightedBackend::new("canary-backend:8080", 1),
+    ],
+    vec![],
+);
+
+// A group's members can come from a BackendPool instead of a fixed URL —
+// the weight controls how often the group is picked; which live member
+// answers is a plain round-robin over pool.backends() at selection time.
+let canary_pool = BackendPool::dns("canary.internal", 8080).poll_interval_secs(15);
+canary_pool.start();
+let app2 = App::new().wrap(
+    CanaryLayer::new(vec![WeightedBackend::new("stable-backend:8080", 9)])
+        .add_pool(canary_pool, 1),
+);
+// Or purely dynamic groups on both sides:
+// CanaryLayer::with_pools(vec![WeightedPool::new(pool_a, 9), WeightedPool::new(pool_b, 1)]);
+```
+
+The SWRR algorithm (same one nginx uses): every entry's `current_weight` accumulates its configured
+weight on each selection; the maximum is picked and then decremented by the total weight. Weights
+`5, 1, 1` select roughly `A A B A C A A` (repeating) — never five `A`s in a row, which a flat
+pre-expanded rotation list (the old implementation) would have produced. A request's failover across
+multiple backends only perturbs this shared state once per request (the initial tick) — the fallback
+order for that one request is a read-only ranking of the rest, so trying several backends doesn't
+skew the sequence subsequent unrelated requests see.
+
+`BackendPool` addresses are bare `"host:port"` with no scheme, so pool-sourced targets are always
+plain HTTP/1.1 — mix in a TLS `WeightedBackend` group alongside a pool if a fixed TLS endpoint is
+also needed. `weight = 0` (on either a `WeightedBackend` or `WeightedPool`) removes that entry from
+selection entirely, whether set at construction or via `.update()`.
 
 ---
 
@@ -2000,7 +2058,8 @@ src/auth/forward.rs     — ForwardAuthLayer, delegates auth decisions to an ext
 src/blocklist/          — IP blocklist middleware
 src/body/               — multipart_form_data, form_urlencoded parsers
 src/cache/              — CacheLayer middleware
-src/canary/             — CanaryLayer weighted traffic splitting (plain HTTP or TLS backends)
+src/canary/             — CanaryLayer smooth-weighted-round-robin traffic splitting (plain HTTP or
+                          TLS backends); WeightedPool for BackendPool-sourced groups; live .update()
 src/circuit_breaker/    — CircuitBreaker, RedisCircuitBreaker (persistent), RetryLayer
 src/client_hint/        — Client Hints header parsing
 src/compression/        — gzip compression applied in Server::process

@@ -44,11 +44,19 @@ Working today: `Static`, `EnvPrefix`, `File`, `Dns` sources feeding a shared `Ar
 
 Five new modules (`json_lite.rs`, `consul.rs`, `dns_srv.rs`, `docker.rs`, `etcd.rs`), 108 new tests: a full JSON-parser test suite; Consul against a mock TCP HTTP server; DNS SRV packet encode/decode (including a crafted compression-pointer test and a pointer-loop rejection test) plus a live round-trip against a mock UDP resolver; Docker container-label parsing, chunked-response decoding, and a real `UnixListener`-backed end-to-end test; etcd's `prefix_range_end`/base64 round-trip, `apply_watch_line` delta application (PUT/DELETE, absent-`type`-defaults-to-PUT), and a full `run_once` end-to-end test against a two-request mock etcd server (initial list, then one watch event, verified via `pool.backends()`). Verified across default, `http1`-only, and default+`http1` feature combinations — 1511 tests green, zero regressions.
 
-### 1.3 Traffic splitting / canary (`src/canary/mod.rs`)
+### ✅ 1.3 Traffic splitting / canary (`src/canary/mod.rs`) — Done
 
-Working today: `CanaryLayer` distributes requests across backends by static weight via a precomputed rotation vec.
+Working today (before this fix): `CanaryLayer` distributes requests across backends by static weight via a precomputed rotation vec.
 
-**What is missing:** live weight updates without a restart (today weights are baked in at construction), smooth weighted round-robin (current scheme can burst same-backend requests within a rotation cycle for skewed weights), integration with `BackendPool` so canary targets can come from a dynamic discovery source instead of a fixed list.
+**What was missing (all three now closed):** live weight updates without a restart (weights were baked in at construction), smooth weighted round-robin (the old scheme could burst same-backend requests within a rotation cycle for skewed weights), integration with `BackendPool` so canary targets can come from a dynamic discovery source instead of a fixed list.
+
+**How each was closed:**
+
+1. **Smooth weighted round-robin**: replaced the flat pre-expanded `Vec<(host, port, tls)>` rotation (a `weight=5` backend literally appeared 5 times consecutively in the vec, so an incrementing counter walking through it produced `AAAAA B C` — a real burst) with nginx's SWRR algorithm: each backend keeps a `current_weight` that accumulates its configured weight every selection and is decremented by the total weight when picked. Weights `5, 1, 1` now select roughly `A A B A C A A` (repeating) — verified by a test asserting the longest run of the high-weight backend across two full cycles is under 5, and that per-cycle counts still land exactly on 10/2/2 as expected from the weights. Failover for one request computes a *read-only* ranked fallback order after a single SWRR tick, so retrying several backends for one request doesn't perturb the sequence subsequent requests see — same guarantee the old counter-based design had, preserved under the new algorithm.
+2. **Live weight updates**: `CanaryLayer` gained `#[derive(Clone)]` backed by `Arc<Mutex<CanaryState>>` (mirroring `BackendPool`'s own "clone freely, all clones share state" pattern) and a new `.update(backends, pools)` method that atomically swaps in a freshly built configuration — the runtime equivalent of constructing a new layer, except every existing clone (including one already wrapped into a running `Application`) picks up the change starting with its very next request. The established idiom is to `.clone()` the layer before `.wrap(...)`-ing it, keeping the clone as a live-control handle (a rollout script, admin endpoint, or scheduled task calls `.update()` on it later).
+3. **`BackendPool` integration**: new `WeightedPool { pool: BackendPool, weight: u32 }` plus `CanaryLayer::with_pools(...)` (pure dynamic-group construction) and `.add_pool(pool, weight)` (mix a dynamic group into an otherwise-static layer) — additive API, `WeightedBackend`/`CanaryLayer::new` are unchanged so no existing caller breaks. A pool-backed group's *weight* controls how often that group is picked by the cross-group SWRR tick; which specific member answers is a plain round-robin over `pool.backends()` at selection time, decoupled from the SWRR sequence — so a canary group's pod count can scale up/down freely without ever touching the traffic-split weight. `BackendPool` addresses are bare `"host:port"` with no scheme, so pool-sourced targets are always plain HTTP/1.1 (documented, not silently assumed) — mix in a TLS `WeightedBackend` group alongside a pool if a fixed TLS endpoint is also needed. An empty-at-that-moment pool contributes nothing and falls through to the next group in the fallback order, rather than erroring.
+
+24 rewritten tests (the old ones asserted against the removed flat `rotation` field and no longer applied): SWRR proportionality over a full cycle, the anti-burst regression test described above, live `.update()` swapping both weights and backends↔pools, `Clone` state sharing, `.add_pool()` mixing static and dynamic groups, a live pool's own round-robin cursor alternating across selections, and an empty/zero-weight pool being skipped. Additionally verified end-to-end against two real local HTTP servers through `WithMiddleware`+`TestClient` (not committed — a manual check): 8 requests at a 3:1 weight split landed 6:2, with no consecutive-run burst. Verified across default, `http1`-only, and default+`http1` — 1521 tests green, zero regressions.
 
 ### 1.4 Circuit breaker / retry (`src/circuit_breaker/mod.rs`)
 
@@ -94,7 +102,7 @@ JWT signing keys, DB credentials, and TLS keys are read from plain env vars or f
 |---|---|---|---|---|
 | 1.1 | Ingress: TLS to API server, watch API, `pathType: Exact`, class filtering | K8s middleware | No | Medium |
 | 1.2 | Service discovery: Consul/etcd/Docker/SRV/weighted-DNS | K8s middleware | No | ✅ Done |
-| 1.3 | Canary: live weights, smooth WRR, `BackendPool` integration | K8s middleware | No | Small–Medium |
+| 1.3 | Canary: live weights, smooth WRR, `BackendPool` integration | K8s middleware | No | ✅ Done |
 | 1.4 | Circuit breaker: `ReverseProxy` auto-wiring, HalfOpen cap, metric | K8s middleware | No | Small |
 | 2.1 | `storage-gcs` feature | Cloud provider | GCP | Medium |
 | 2.2 | `secrets::resolve()` (Vault / AWS SM / Azure KV) | Cloud provider | AWS/Azure/Vault | Medium |
@@ -107,7 +115,7 @@ JWT signing keys, DB credentials, and TLS keys are read from plain env vars or f
 
 1. **`storage-gcs`** — closes the last gap in three-cloud object storage parity; follows the exact `storage-s3`/`storage-azure` pattern already established, so it's low-risk and mechanical.
 2. **Helm chart** — ✅ done. Smallest effort, immediately unblocks real adoption (nothing to hand-edit), and forced the `docs/deployment/kubernetes.md` YAML to be validated as actually-deployable rather than illustrative (see §2.3).
-3. **Ingress watch API + IngressClass filtering** — the two ingress gaps most likely to bite in a real multi-tenant cluster (stale routes under polling; picking up Ingresses meant for a different controller).
+3. **Ingress watch API + IngressClass filtering** — ✅ done. The two ingress gaps most likely to bite in a real multi-tenant cluster (stale routes under polling; picking up Ingresses meant for a different controller).
 4. **`secrets::resolve()`** — highest effort but closes a recurring enterprise-adoption blocker across all three clouds at once.
 5. **Circuit breaker `ReverseProxy` wiring + metric** — small, and makes the already-implemented breaker actually self-service instead of requiring manual integration.
-6. **Service discovery remaining items** — ✅ done (Consul, etcd watch, Docker labels, DNS SRV/weighted DNS). Canary's remaining items (live weights, smooth WRR, `BackendPool` integration) are still open and lowest urgency — static-weight canary already covers the common case.
+6. **Service discovery and canary remaining items** — ✅ both done (Consul, etcd watch, Docker labels, DNS SRV/weighted DNS; canary's smooth WRR, live weight updates, `BackendPool` integration). All four Part 1 K8s-middleware gaps and the Helm chart in Part 2 are now closed — only `storage-gcs`, `secrets::resolve()`, and the HPA custom-metrics doc example remain open.
