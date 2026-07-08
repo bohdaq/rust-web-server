@@ -5,6 +5,7 @@ pub mod controller;
 
 use std::sync::Arc;
 
+use crate::app::controller::directory_listing::DirectoryListingAssetsController;
 use crate::app::controller::favicon::FaviconController;
 use crate::app::controller::health::HealthController;
 use crate::app::controller::ready::ReadyController;
@@ -156,6 +157,7 @@ impl Application for App {
             entry::<IndexController>(),
             entry::<StyleController>(),
             entry::<ScriptController>(),
+            entry::<DirectoryListingAssetsController>(),
             entry::<FileUploadInitiateController>(),
             entry::<FormUrlEncodedEnctypePostMethodController>(),
             entry::<FormGetMethodController>(),

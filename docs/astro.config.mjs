@@ -63,6 +63,7 @@ export default defineConfig({
           collapsed: true,
           items: [
             { label: 'CORS & Security',        link: '/features/cors-security/' },
+            { label: 'Static Files & Listing',  link: '/features/static-files/' },
             { label: 'Rate Limiting',          link: '/features/rate-limiting/' },
             { label: 'Compression',            link: '/features/compression/' },
             { label: 'HTTPS / TLS',            link: '/features/https-tls/' },

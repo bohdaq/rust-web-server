@@ -393,7 +393,7 @@ fn it_generates_not_found_page_for_absent_route() {
 }
 
 #[test]
-fn it_generates_not_found_page_for_static_directory() {
+fn it_generates_directory_listing_for_static_directory_without_index_html() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
@@ -427,19 +427,11 @@ fn it_generates_not_found_page_for_static_directory() {
     assert_eq!(request_uri.to_string(), request.request_uri);
     assert_eq!(request_http_version.to_string(), request.http_version);
 
-    // response part
+    // response part — no `index.html` in `static/subdir/`, so a directory listing is
+    // generated (200 OK) instead of the previous 404.
     let response_http_version = VERSION.http_1_1.to_string();
-    let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
-    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
-
-    let dir = env::current_dir().unwrap();
-    let working_directory = dir.as_path().to_str().unwrap();
-    let not_found_page_path = "404.html";
-
-    let response_filepath = [working_directory, SYMBOL.slash, not_found_page_path].join(SYMBOL.empty_string);
-    let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
-    let response_content_length_header_name = "Content-Length";
-    let response_content_length_header_value = response_html_file.len().to_string();
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -448,7 +440,6 @@ fn it_generates_not_found_page_for_static_directory() {
     let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
-    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
     let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
     let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
@@ -456,20 +447,23 @@ fn it_generates_not_found_page_for_static_directory() {
     assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
 
-    assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
     assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
-    assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
+
+    let body = String::from_utf8(response.content_range_list.get(0).unwrap().body.to_vec()).unwrap();
+    assert!(body.starts_with("<!DOCTYPE html>"));
+    assert!(body.contains("Index of /static/subdir/"));
+    assert!(body.contains("data.json"));
 }
 
 #[test]
-fn it_generates_not_found_page_for_static_subdirectory() {
+fn it_generates_directory_listing_with_parent_link_for_nested_static_subdirectory() {
     // request test data
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let request_method = METHOD.get;
-    let request_uri = "/static/subdir/";
+    let request_uri = "/static/no_index/";
     let request_http_version = VERSION.http_1_1.to_string();
 
 
@@ -500,17 +494,8 @@ fn it_generates_not_found_page_for_static_subdirectory() {
 
     // response part
     let response_http_version = VERSION.http_1_1.to_string();
-    let response_status_code = STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
-    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase;
-
-    let dir = env::current_dir().unwrap();
-    let working_directory = dir.as_path().to_str().unwrap();
-    let not_found_page_path = "404.html";
-
-    let response_filepath = [working_directory, SYMBOL.slash, not_found_page_path].join(SYMBOL.empty_string);
-    let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
-    let response_content_length_header_name = "Content-Length";
-    let response_content_length_header_value = response_html_file.len().to_string();
+    let response_status_code = STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase;
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -519,19 +504,25 @@ fn it_generates_not_found_page_for_static_subdirectory() {
     let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0,0,0,0)), 0);
     let raw_response: Vec<u8> = Server::process_request(mock_tcp_stream, peer_addr);
     let response = Response::_parse_response(raw_response.borrow());
-    let header = response._get_header(response_content_length_header_name.to_string()).unwrap();
 
     let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
-    let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
 
-    assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);
     assert_eq!(MimeType::TEXT_HTML, content_type_header.value);
-
-    assert_eq!(response_content_length_header_value, header.value);
     assert_eq!(response_http_version, response.http_version);
     assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
-    assert_eq!(response_html_file.into_bytes(), response.content_range_list.get(0).unwrap().body);
+
+    let body = String::from_utf8(response.content_range_list.get(0).unwrap().body.to_vec()).unwrap();
+    assert!(body.contains("alpha.txt"));
+    assert!(body.contains("beta.json"));
+    assert!(body.contains("nested/"));
+    assert!(body.contains(".. (parent directory)"));
+    assert!(body.contains("href=\"/static/\""));
+
+    // directories sort before files: "nested/" must appear before "alpha.txt"
+    let nested_index = body.find("nested/").unwrap();
+    let alpha_index = body.find("alpha.txt").unwrap();
+    assert!(nested_index < alpha_index);
 }
 
 #[test]

@@ -28,7 +28,7 @@ curl http://localhost:7878/
 # <h1>Hello</h1>
 ```
 
-`rws` serves every file under the current directory, handles range requests, sets ETags, negotiates gzip, and returns `404` for missing files — all with no configuration.
+`rws` serves every file under the current directory, handles range requests, sets ETags, negotiates gzip, and returns `404` for missing files — all with no configuration. A directory with no `index.html` renders a directory listing page instead of `404` — try `mkdir www/uploads && touch www/uploads/report.pdf && curl http://localhost:7878/uploads/`.
 
 :::note[HTTPS in one flag]
 If you have a TLS certificate, pass `--tls-cert-file=cert.pem --tls-key-file=key.pem` and the server automatically upgrades to HTTP/2 + HTTP/3:

@@ -463,3 +463,99 @@ fn stale_etag_returns_200_with_body() {
     assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n200_ok.status_code);
     assert!(!response.content_range_list.is_empty(), "200 response must include file body");
 }
+
+#[test]
+fn directory_without_index_html_matches_and_renders_listing() {
+    let path = "/static/no_index/";
+
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: path.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+        sni_hostname: None,
+    };
+
+    assert!(StaticResourceController::is_matching(&request, &connection_info));
+
+    let response = StaticResourceController::process(&request, Response::new(), &connection_info);
+
+    assert_eq!(response.status_code, *STATUS_CODE_REASON_PHRASE.n200_ok.status_code);
+    let body = String::from_utf8(response.content_range_list.get(0).unwrap().body.to_vec()).unwrap();
+    assert!(body.starts_with("<!DOCTYPE html>"));
+    assert!(body.contains("alpha.txt"));
+    assert!(body.contains("beta.json"));
+    assert!(body.contains("nested/"));
+}
+
+#[test]
+fn directory_without_index_html_matches_head_and_options() {
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+        sni_hostname: None,
+    };
+
+    let head_request = Request {
+        method: METHOD.head.to_string(),
+        request_uri: "/static/no_index/".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+    assert!(StaticResourceController::is_matching(&head_request, &connection_info));
+
+    let options_request = Request {
+        method: METHOD.options.to_string(),
+        request_uri: "/static/no_index/".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+    assert!(StaticResourceController::is_matching(&options_request, &connection_info));
+}
+
+#[test]
+fn directory_listing_escapes_display_name_and_percent_encodes_href() {
+    let path_array = vec!["static", "no_index"];
+    let fs_path = FileExt::build_path(&path_array);
+
+    let html = StaticResourceController::render_directory_listing(&fs_path, "/static/no_index");
+
+    // display text is HTML-escaped ("a & b.txt" -> "a &amp; b.txt")...
+    assert!(html.contains("a &amp; b.txt"));
+    // ...but the href is percent-encoded, not HTML-escaped, so the raw name never
+    // appears unescaped inside an href attribute
+    assert!(html.contains("href=\"/static/no_index/a%20%26%20b.txt\""));
+    assert!(!html.contains("href=\"/static/no_index/a & b.txt\""));
+}
+
+#[test]
+fn directory_listing_on_empty_or_missing_directory_still_renders_a_valid_page() {
+    let html = StaticResourceController::render_directory_listing(
+        "/nonexistent-directory-for-html-escaping-test",
+        "/no_index",
+    );
+
+    assert!(html.starts_with("<!DOCTYPE html>"));
+    assert!(html.contains("Index of /no_index/"));
+    assert!(html.contains("0 items"));
+}
+
+#[test]
+fn directory_listing_has_parent_link_except_at_static_root() {
+    let nested_html = StaticResourceController::render_directory_listing(
+        "/nonexistent-directory-for-parent-link-test",
+        "/no_index/nested",
+    );
+    assert!(nested_html.contains(".. (parent directory)"));
+    assert!(nested_html.contains("href=\"/no_index/\""));
+}

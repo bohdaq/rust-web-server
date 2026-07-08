@@ -20,7 +20,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **Hot reload** — `SIGHUP` (or `POST /admin/config/reload`) reloads CORS rules, rate limits, log format, and TLS certs without restarting — `http2`
 - **Graceful shutdown** — `SIGINT` / `SIGTERM` drain in-flight requests before exit; `SERVER_READY` flag cleared on shutdown
 - **Gzip compression** — applied automatically based on `Accept-Encoding`; configurable minimum size
-- **Static file serving** — directory listing disabled by default; chunked file streaming for large files; ETag + `Last-Modified` caching headers
+- **Static file serving** — a directory with no `index.html` renders a dark/light-adaptive directory listing page by default; chunked file streaming for large files; ETag + `Last-Modified` caching headers
 - **Thread pool** (http1 only) — hand-rolled `ThreadPool`; connection-per-thread; no tokio — `http1`
 - **Tokio async runtime** — used for `http2` and `http3` builds; `http1` is fully synchronous
 

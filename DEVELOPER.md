@@ -86,6 +86,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Router` / `PathParams` | `router` | Standalone dynamic router with `:param` and `*wildcard` path matching; `.with_host(name)` restricts a router to one virtual host. `App`'s own built-in controllers deliberately don't use `Router` — that set is small, static, and known at compile time, so a fixed if-chain is simpler than a segment matcher there. `Router` is for user-defined routes; `AppWithState`/`AsyncAppWithState` build on it and fall through to `App`'s controller chain for anything unmatched. |
 | `with_timeout` / `with_timeout_state` / `with_timeout_async` / `TimeoutLayer` | `timeout` | Per-route request timeouts. `with_timeout`/`with_timeout_state` wrap a `Router`/`AppWithState` handler to return `504 Gateway Timeout` if it doesn't finish in time (runs on a background thread — bounds the client's wait, can't truly cancel sync work). `with_timeout_async` (requires `http2`) wraps an `AsyncAppWithState` handler with genuine cancellation via `tokio::time::timeout`. `TimeoutLayer::new`/`::from_arc` wraps a whole `Application` (used by the config-driven proxy's per-route `timeout_ms`). |
 | `VirtualHostConfig` | `virtual_host` | Per-domain cert configuration `{ domain, cert_file, key_file }` for multi-domain SNI routing |
+| `StaticResourceController::render_directory_listing` | `app::controller::static_resource` | Renders the auto-generated directory listing page `App` serves (200 OK) for any requested directory that has no `index.html` — dark/light adaptive, sorted directories-first, with a breadcrumb, parent-directory link, and a client-side filter box. Default, always-on behavior — not gated by a feature flag or config setting. |
+| `DirectoryListingAssetsController` | `app::controller::directory_listing` | Serves the directory listing page's CSS/JS at `/rws-directory-listing.css` and `/rws-directory-listing.js` as same-origin `<link>`/`<script src>` assets (not inlined — inline `<style>`/`<script>` would be blocked by the framework's default `Content-Security-Policy: default-src 'self'`). Mirrors `StyleController`/`ScriptController`: a file on disk at that relative path overrides the compiled-in default. |
 | `IntoResponse` / `AppError` | `error` | Typed errors that map to HTTP status codes |
 | `TestClient` | `test_client` | In-process HTTP test client — no TCP socket required |
 | `FromRequest` / `Body` / `BodyText` / `Query` / `RequestHeaders` / `RequestId` | `extract` | Typed request extractors — parse body, query params, headers, or the request-id header, returning a ready error on failure (`RequestId` never fails; empty string if unset) |
@@ -150,7 +152,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `RedisCircuitBreaker` | `circuit_breaker` | Same state machine and method names as `CircuitBreaker`, backed by Redis (hand-rolled RESP client, no feature gate) instead of an in-process map — survives a restart and is shared across every `rws` instance pointed at the same Redis server. Every method returns `Result` (network I/O); `from_env()` reads `RWS_REDIS_HOST/PORT/PASSWORD` + `RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD/RECOVERY_SECS`. |
 | `RetryLayer` | `circuit_breaker` | Middleware that retries requests on configurable status codes (default: 502, 503, 504) up to `max_retries` times. |
 | `BackendPool` / `DiscoverySource` | `service_discovery` | Dynamic backend pool updated by a background thread. Sources: `Static`, `EnvPrefix` (env vars), `File` (one host:port per line), `Dns` (A-record lookup). |
-| `IngressRule` / `KubernetesIngressWatcher` / `IngressRouter` | `ingress` | Kubernetes Ingress watcher: polls the K8s API, parses Ingress rules, and routes requests to the correct upstream service. `IngressRouter` implements `Application`. |
+| `IngressRule` / `PathType` / `KubernetesIngressWatcher` / `IngressRouter` | `ingress` | Kubernetes Ingress watcher: resyncs on an interval *and* watches (`?watch=true`) for low-latency updates, parses Ingress rules (`pathType: Exact`/`Prefix`/`ImplementationSpecific`, `ingressClassName` filtering), and routes requests to the correct upstream service. `IngressRouter` implements `Application`. `.from_service_account()` (requires `http-client`/`http2`) connects to the in-cluster API server directly over TLS, trusting only the cluster's own CA. |
 | `Scheduler` / `CronSchedule` | `scheduler` | `@Scheduled`-equivalent background task runner. Three modes: `.every(Duration, fn)` (fixed rate), `.after(Duration, fn)` (fixed delay), `.cron("sec min hour day month weekday", fn)`. Full cron syntax: `*`, exact, `*/step`, `N-M`, comma list. |
 | `Job` / `JobQueue` | `jobs` (requires `jobs` feature) | In-memory background job queue for one-shot, fire-and-forget work from handlers. `Job` trait (blanket-implemented for `Fn() -> Result<(), String> + Send` closures); `JobQueue::new(workers)` spawns a fixed worker pool; `.submit(job)` enqueues; failed jobs retry with exponential backoff (`.max_retries(n)`, `.backoff(initial, multiplier)`); `.join()` drains and waits. Not crash-safe — see `PersistentJobQueue`. |
 | `PersistentJobQueue` | `jobs` (requires `jobs` **and** a `model-sqlite`/`model-postgres`/`model-mysql` feature) | Crash-safe job queue backed by the model layer: jobs are written to a `rws_jobs` table before being acknowledged. Jobs are `(job_type, payload)` string pairs dispatched to a handler registered via `.register(job_type, fn)` — not arbitrary closures, since closures can't be persisted. `PersistentJobQueue::new(pool).await` creates the table and resets any row left `running` by a crash back to `pending`. `.enqueue(job_type, payload).await` / `.enqueue_with_retries(...)` persist a job; `.start(workers)` spawns polling worker threads (each with its own Tokio runtime); `.tick().await` runs a single poll-claim-execute cycle for tests or custom loops. |
@@ -2642,7 +2644,7 @@ let backends: Vec<String> = pool.backends();
 
 ### 48. Kubernetes Ingress routing
 
-`KubernetesIngressWatcher` polls the Kubernetes API for Ingress resources and maintains a live route table. `IngressRouter` implements `Application` and forwards matching requests to the appropriate upstream service.
+`KubernetesIngressWatcher` watches the Kubernetes API for Ingress resources and maintains a live route table. `IngressRouter` implements `Application` and forwards matching requests to the appropriate upstream service.
 
 ```rust
 use rust_web_server::ingress::{IngressRouter, KubernetesIngressWatcher};
@@ -2653,9 +2655,13 @@ use rust_web_server::server::Server;
 //   RWS_K8S_TOKEN=<bearer-token>
 //   RWS_K8S_NAMESPACE=default
 let watcher = KubernetesIngressWatcher::from_env()
-    .expect("K8s config not found");
+    .expect("K8s config not found")
+    .ingress_class("rws"); // optional: only watch Ingress objects meant for this controller
 
-// Start background polling (default: every 30 s).
+// Start background threads: a periodic resync (default every 30 s) *and*
+// a long-lived `?watch=true` connection that triggers an immediate resync
+// on any change — see the module docs for why watch events are treated as
+// a plain re-list trigger rather than applied as incremental deltas.
 watcher.start();
 
 // Use as the top-level Application — routes to services via
@@ -2668,7 +2674,16 @@ let (listener, pool) = Server::setup().unwrap();
 Server::run(listener, pool, router);
 ```
 
-For **in-cluster** deployments, mount the service account and point kubectl proxy to the API server. TLS to `kubernetes.default.svc` is not yet handled natively — use `kubectl proxy` or set `RWS_K8S_API_SERVER=http://kubernetes.default.svc:80` with an appropriately configured proxy sidecar.
+For **in-cluster** deployments with no `kubectl proxy` sidecar, `KubernetesIngressWatcher::from_service_account()` (requires the `http-client` or `http2` feature) connects directly to `https://kubernetes.default.svc` over TLS — reading the token, namespace, and CA certificate from the mounted service account files, and the API server address from the `KUBERNETES_SERVICE_HOST`/`KUBERNETES_SERVICE_PORT` env vars Kubernetes injects into every pod:
+
+```rust
+let watcher = KubernetesIngressWatcher::from_service_account()
+    .expect("not running inside a pod, or http-client/http2 isn't enabled");
+```
+
+It trusts **only** the cluster's own CA (`/var/run/secrets/kubernetes.io/serviceaccount/ca.crt`), not the public root store `http_client` uses elsewhere in this crate — the API server's certificate is signed by that private CA, not a publicly trusted one. Without the `http-client`/`http2` feature, `from_service_account()` returns a clear error pointing back at the `kubectl proxy` + `from_env()` path instead.
+
+`IngressRule::matches` implements the two `pathType` values with real routing semantics: `Prefix` (the default, and what `ImplementationSpecific` also falls back to) matches whole path *segments* — `/foo` matches `/foo`, `/foo/`, `/foo/bar`, but not `/foobar` — and `Exact` requires the request path to equal the rule's path exactly, ignoring any query string either way.
 
 ---
 
@@ -4602,3 +4617,31 @@ fn dashboard(req: &Request) {
 4. **Logout is local-only** — `/saml/logout` destroys the SP's own session; no SP-initiated `LogoutRequest`/`LogoutResponse` exchange with the IdP, mirroring `OidcAuth`'s own logout boundary.
 
 **`AttributeMap` maps into `SamlClaims { name_id, attributes: HashMap<String,String> }`, not `OidcClaims`** — `OidcClaims` (Use Case #58) was deliberately built without a `groups` field, and this feature's own attribute-mapping example maps exactly a `groups` attribute; reusing `OidcClaims` here would silently drop it.
+
+---
+
+### 78. Directory listing for static directories without `index.html`
+
+`App` now renders a directory listing page (200 OK) whenever a requested directory has no `index.html` — previously such a request fell through to `404 Not Found`. This is default, always-on behavior, not gated by a feature flag or config setting:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::test_client::TestClient;
+
+let client = TestClient::new(App::new());
+
+// static/no_index/ has files but no index.html
+let response = client.get("/static/no_index/").send();
+assert_eq!(200, response.status());
+```
+
+The listing (`StaticResourceController::render_directory_listing`) shows a breadcrumb, a parent-directory link (unless already at a static root), and a sortable-by-eye table (directories first, then files, both case-insensitively by name) with size and last-modified columns; a client-side search box filters rows without a round-trip. Entry names are HTML-escaped for display and percent-encoded in `href`s, so filenames containing `<`, `&`, spaces, etc. render and link correctly. Dotfiles (names starting with `.`) are omitted from the listing.
+
+A directory that *does* have an `index.html` is served exactly as before — this only changes behavior for the previously-404 case.
+
+**Why the CSS/JS are separate same-origin assets, not inlined:** the framework's default `Content-Security-Policy: default-src 'self'` (see `RWS_CONFIG_CSP`) silently blocks inline `<style>`/`<script>` blocks. `DirectoryListingAssetsController` serves the listing's styling and filter-box script at `/rws-directory-listing.css` / `/rws-directory-listing.js` — same-origin `<link>`/`<script src>` references, fully compliant with the default CSP with no relaxation needed. Like `StyleController`/`ScriptController`, a file on disk at that relative path (`rws-directory-listing.css` / `.js` in the working directory) overrides the compiled-in default, so you can restyle the listing without recompiling:
+
+```rust
+// Drop a file named exactly "rws-directory-listing.css" in the working
+// directory to override the built-in dark/light theme.
+```

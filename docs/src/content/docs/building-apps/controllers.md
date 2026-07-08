@@ -91,6 +91,7 @@ These are registered in `App::execute` in this order (first match wins):
 | `IndexController` | `GET /` — serves `index.html` from the static directory |
 | `StyleController` | `GET *.css` |
 | `ScriptController` | `GET *.js` |
+| `DirectoryListingAssetsController` | `GET /rws-directory-listing.css` / `.js` — same-origin CSS/JS for the directory listing page below |
 | `FileUploadInitiateController` | `POST /upload/initiate` |
 | `FormUrlEncodedEnctypePostMethodController` | `POST` with `application/x-www-form-urlencoded` |
 | `FormGetMethodController` | `GET` requests with query parameters to form paths |
@@ -99,7 +100,7 @@ These are registered in `App::execute` in this order (first match wins):
 | `ReadyController` | `GET /readyz` — returns `200` when `SERVER_READY` is set |
 | `MetricsController` | `GET /metrics` — Prometheus text format |
 | `FaviconController` | `GET /favicon.ico` |
-| `StaticResourceController` | Any `GET` for a file found under the static directory |
+| `StaticResourceController` | Any `GET` for a file found under the static directory; a directory with no `index.html` renders a directory listing page instead of falling through to `404` |
 | `NotFoundController` | Catch-all — returns `404 Not Found` |
 
 :::note[Prefer App::with_state for new routes]

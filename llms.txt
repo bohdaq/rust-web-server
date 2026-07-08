@@ -923,6 +923,45 @@ Each backend's state (`state|failures|opened_at`) is one Redis string key (`GET`
 
 ---
 
+## Kubernetes Ingress (src/ingress/)
+
+```rust
+use rust_web_server::ingress::{IngressRouter, KubernetesIngressWatcher};
+
+// kubectl proxy + env vars (RWS_K8S_API_SERVER/RWS_K8S_TOKEN/RWS_K8S_NAMESPACE):
+let watcher = KubernetesIngressWatcher::from_env()?
+    .ingress_class("rws"); // optional: only watch Ingress objects meant for this controller
+watcher.start(); // periodic resync (default 30s) + a `?watch=true` connection for low-latency updates
+let app = IngressRouter::new(watcher);
+
+// Or, from inside a pod, no kubectl proxy sidecar (requires http-client or http2 feature):
+let watcher = KubernetesIngressWatcher::from_service_account()?;
+```
+
+`from_service_account()` connects directly to `https://kubernetes.default.svc` over TLS, reading the
+token/namespace/CA cert from the mounted service account files and the API server address from the
+`KUBERNETES_SERVICE_HOST`/`KUBERNETES_SERVICE_PORT` env vars every pod has injected automatically.
+Trusts only the cluster's own CA — not the public root store `http_client` uses elsewhere in this
+crate — since the API server's certificate is signed by that private CA. Without `http-client`/`http2`,
+it returns a clear error pointing back at `kubectl proxy` + `from_env()`.
+
+`start()` spawns two background threads: the original interval-based resync, and (new) a long-lived
+`?watch=true` streaming connection — any `ADDED`/`MODIFIED`/`DELETED` event triggers an immediate
+re-list rather than being applied as an incremental delta (a deliberate scope decision — see
+`src/ingress/watch.rs`'s module docs). A quiet cluster costs nothing (the watch thread just blocks on
+a read); a real change is picked up as soon as the API server sends the event, not after the next
+poll interval.
+
+`IngressRule.path_type` (`Prefix`/`Exact`/`ImplementationSpecific`, parsed from `pathType`) is matched
+per Kubernetes' real semantics: `Prefix` (the default, and `ImplementationSpecific`'s fallback) matches
+whole path segments — `/foo` matches `/foo`, `/foo/`, `/foo/bar`, **not** `/foobar` — and `Exact`
+requires full equality, ignoring any query string either way. `.ingress_class(name)` restricts to
+Ingress objects whose `spec.ingressClassName` equals `name` exactly (unset = accept every class,
+the historical default — needed on a multi-controller cluster running `rws` alongside e.g.
+`nginx-ingress`).
+
+---
+
 ## Observability
 
 ### Prometheus metrics
@@ -1804,6 +1843,35 @@ header-reading path. Complements `OtelLayer`'s W3C `traceparent` spans rather th
 
 ---
 
+## Directory listing (src/app/controller/static_resource/mod.rs, src/app/controller/directory_listing/mod.rs)
+
+Default, always-on behavior — not a feature flag. Any requested directory with no `index.html` now
+renders a directory listing page (200 OK) instead of `404 Not Found`; a directory that *does* have an
+`index.html` is served exactly as before.
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::test_client::TestClient;
+
+let client = TestClient::new(App::new());
+let response = client.get("/static/no_index/").send(); // no index.html in this dir
+assert_eq!(200, response.status());
+```
+
+`StaticResourceController::render_directory_listing(fs_dir_path, request_path)` builds the page: a
+breadcrumb, a parent-directory link (omitted at a static root), and a table (directories first, then
+files, both sorted case-insensitively) with size/modified columns; a client-side search box filters
+rows. Entry names are HTML-escaped for display and percent-encoded (`URL::percent_encode`) in `href`s.
+Dotfiles are omitted.
+
+The page's CSS/JS are same-origin assets at `/rws-directory-listing.css` / `/rws-directory-listing.js`
+(`DirectoryListingAssetsController`), **not** inlined `<style>`/`<script>` — the framework's default
+`Content-Security-Policy: default-src 'self'` would silently block inline blocks. Like
+`StyleController`/`ScriptController`, a file on disk at that same relative path overrides the
+compiled-in default (`include_bytes!`) without recompiling.
+
+---
+
 ## HTML templates (requires `tera` feature)
 
 ```rust
@@ -1868,6 +1936,7 @@ let www_router = Router::new().with_host("www.example.com").get("/", home_handle
 - `SameSite=Strict` session cookies — set via `session_cookie()` helper
 - `HttpOnly` flag — controllable on all `Set-Cookie` builders
 - XSS: no built-in output escaping — use Tera templates which auto-escape HTML
+- Directory listing — entry names HTML-escaped for display, percent-encoded in `href`s; dotfiles omitted; CSS/JS served as same-origin assets rather than inline blocks so the default CSP needs no relaxation
 
 ---
 

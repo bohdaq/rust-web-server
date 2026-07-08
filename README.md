@@ -212,6 +212,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Per-route timeouts — `with_timeout`/`with_timeout_state`/`with_timeout_async` wrap a handler with its own deadline; `TimeoutLayer` + config-driven proxy's `timeout_ms`
 - Per-route max body size — config-driven proxy's `[route.middleware] max_body_size` returns `413` for one route's oversized requests, stricter than the global `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`
 - Request ID middleware — `RequestIdLayer` injects/echoes `X-Request-Id` on every request and response; `RequestId` extractor to read it
+- Directory listing — any requested directory without an `index.html` renders a dark/light-adaptive listing page (breadcrumb, parent link, sortable-by-eye table, client-side filter) instead of `404`; default, always on; CSS/JS served same-origin at `/rws-directory-listing.css`/`.js` (CSP-compliant, no inline `<style>`/`<script>`), overridable by dropping a same-named file on disk
 
 </details>
 
@@ -228,7 +229,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Canary / traffic splitting — `CanaryLayer` distributes requests by weight, lock-free; backends can be plain HTTP or TLS (`https://`/`h2s://`/`grpcs://`)
 - Circuit breaker — Closed → Open → HalfOpen; `RetryLayer` retries on 502/503/504; `RedisCircuitBreaker` persists state across restarts and shares it across `rws` instances (hand-rolled RESP client)
 - Service discovery — `Static`, `EnvPrefix`, `File`, `Dns` sources; background refresh thread
-- Kubernetes Ingress — `KubernetesIngressWatcher` polls K8s API; routes to cluster services
+- Kubernetes Ingress — `KubernetesIngressWatcher` resyncs + watches the K8s API (low-latency updates); `pathType` Exact/Prefix, `ingressClassName` filtering; `.from_service_account()` connects in-cluster over TLS (`http-client`/`http2`); routes to cluster services
 
 </details>
 
