@@ -62,15 +62,20 @@
 //! # }
 //! ```
 
-#[cfg(feature = "storage-s3")]
-mod aws_credentials;
-#[cfg(feature = "storage-s3")]
-mod aws_sigv4;
+// Also compiled under `secrets` (not just `storage-s3`) — `secrets::aws_secrets_manager`
+// reuses this exact SigV4 signer and IRSA/ECS/IMDSv2 credential chain rather than
+// duplicating AWS's auth story a second time.
+#[cfg(any(feature = "storage-s3", feature = "secrets"))]
+pub(crate) mod aws_credentials;
+#[cfg(any(feature = "storage-s3", feature = "secrets"))]
+pub(crate) mod aws_sigv4;
 
 #[cfg(feature = "storage-azure")]
 mod azure_blob;
-#[cfg(feature = "storage-azure")]
-mod azure_credentials;
+// Also compiled under `secrets` — `secrets::azure_key_vault` reuses the Managed
+// Identity token fetch (parameterized by `resource`) rather than duplicating it.
+#[cfg(any(feature = "storage-azure", feature = "secrets"))]
+pub(crate) mod azure_credentials;
 #[cfg(feature = "storage-azure")]
 mod azure_signature;
 

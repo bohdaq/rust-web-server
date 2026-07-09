@@ -23,7 +23,7 @@ fn header<'a>(headers: &'a [(String, String)], name: &str) -> &'a str {
 
 #[test]
 fn signs_expected_headers() {
-    let headers = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
+    let headers = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
     assert_eq!(HOST, header(&headers, "host"));
     assert_eq!(
         "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -35,7 +35,7 @@ fn signs_expected_headers() {
 
 #[test]
 fn authorization_header_has_expected_shape() {
-    let headers = sign("PUT", HOST, "/examplebucket/test.txt", b"hello", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
+    let headers = sign("PUT", HOST, "/examplebucket/test.txt", b"hello", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
     let auth = header(&headers, "Authorization");
 
     assert!(auth.starts_with("AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, "));
@@ -48,44 +48,44 @@ fn authorization_header_has_expected_shape() {
 
 #[test]
 fn same_inputs_produce_same_signature() {
-    let a = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
-    let b = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
+    let a = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
+    let b = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
     assert_eq!(header(&a, "Authorization"), header(&b, "Authorization"));
 }
 
 #[test]
 fn signature_changes_with_payload() {
-    let a = sign("PUT", HOST, "/examplebucket/test.txt", b"hello", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
-    let b = sign("PUT", HOST, "/examplebucket/test.txt", b"world", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
+    let a = sign("PUT", HOST, "/examplebucket/test.txt", b"hello", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
+    let b = sign("PUT", HOST, "/examplebucket/test.txt", b"world", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
     assert_ne!(header(&a, "Authorization"), header(&b, "Authorization"));
     assert_ne!(header(&a, "x-amz-content-sha256"), header(&b, "x-amz-content-sha256"));
 }
 
 #[test]
 fn signature_changes_with_method() {
-    let a = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
-    let b = sign("DELETE", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
+    let a = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
+    let b = sign("DELETE", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
     assert_ne!(header(&a, "Authorization"), header(&b, "Authorization"));
 }
 
 #[test]
 fn signature_changes_with_path() {
-    let a = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
-    let b = sign("GET", HOST, "/examplebucket/other.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
+    let a = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
+    let b = sign("GET", HOST, "/examplebucket/other.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
     assert_ne!(header(&a, "Authorization"), header(&b, "Authorization"));
 }
 
 #[test]
 fn signature_changes_with_secret_key() {
-    let a = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
-    let b = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, "a-different-secret", None, EPOCH);
+    let a = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
+    let b = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, "a-different-secret", None, EPOCH, "s3");
     assert_ne!(header(&a, "Authorization"), header(&b, "Authorization"));
 }
 
 #[test]
 fn credential_scope_uses_the_given_date() {
     // 2021-01-01T00:00:00Z
-    let headers = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, 1_609_459_200);
+    let headers = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, 1_609_459_200, "s3");
     assert_eq!("20210101T000000Z", header(&headers, "x-amz-date"));
     assert!(header(&headers, "Authorization").contains("Credential=AKIAIOSFODNN7EXAMPLE/20210101/us-east-1/s3/aws4_request"));
 }
@@ -105,7 +105,7 @@ fn uri_encode_path_preserves_slashes_and_encodes_special_chars() {
 fn no_session_token_is_byte_identical_to_pre_token_behavior() {
     // Locks in backward compatibility: the `None` branch must reproduce
     // exactly what this signer produced before `session_token` existed.
-    let headers = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
+    let headers = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
     assert_eq!(4, headers.len(), "host, x-amz-content-sha256, x-amz-date, Authorization — no security token entry");
     assert!(headers.iter().all(|(k, _)| k != "x-amz-security-token"));
     assert!(!header(&headers, "Authorization").contains("x-amz-security-token"));
@@ -113,15 +113,15 @@ fn no_session_token_is_byte_identical_to_pre_token_behavior() {
 
 #[test]
 fn session_token_adds_security_token_header() {
-    let headers = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, Some("tok123"), EPOCH);
+    let headers = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, Some("tok123"), EPOCH, "s3");
     assert_eq!("tok123", header(&headers, "x-amz-security-token"));
     assert_eq!(5, headers.len());
 }
 
 #[test]
 fn session_token_is_included_in_signed_headers_list() {
-    let with_token = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, Some("tok123"), EPOCH);
-    let without_token = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH);
+    let with_token = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, Some("tok123"), EPOCH, "s3");
+    let without_token = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, None, EPOCH, "s3");
     assert!(header(&with_token, "Authorization").contains("SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-security-token"));
     assert!(header(&without_token, "Authorization").contains("SignedHeaders=host;x-amz-content-sha256;x-amz-date,"));
 }
@@ -130,7 +130,7 @@ fn session_token_is_included_in_signed_headers_list() {
 fn different_session_tokens_produce_different_signatures() {
     // The token must actually participate in the HMAC chain, not just be
     // appended to the header list without affecting the signature.
-    let a = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, Some("token-a"), EPOCH);
-    let b = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, Some("token-b"), EPOCH);
+    let a = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, Some("token-a"), EPOCH, "s3");
+    let b = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, Some("token-b"), EPOCH, "s3");
     assert_ne!(header(&a, "Authorization"), header(&b, "Authorization"));
 }

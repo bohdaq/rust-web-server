@@ -140,12 +140,16 @@ pub mod sso;
 pub mod mailer;
 #[cfg(feature = "jobs")]
 pub mod jobs;
-#[cfg(any(feature = "storage-local", feature = "storage-s3", feature = "storage-azure"))]
+// Also compiled under `secrets` — `secrets::aws_secrets_manager`/`azure_key_vault`
+// reuse `StorageError` and the SigV4/Managed-Identity credential helpers from here.
+#[cfg(any(feature = "storage-local", feature = "storage-s3", feature = "storage-azure", feature = "secrets"))]
 pub mod storage;
 #[cfg(feature = "openapi")]
 pub mod openapi;
 #[cfg(feature = "webhook")]
 pub mod webhook;
+#[cfg(feature = "secrets")]
+pub mod secrets;
 pub mod timeout;
 pub mod prelude;
 

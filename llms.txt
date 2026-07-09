@@ -1871,6 +1871,62 @@ already Unix epoch seconds, so no date parsing is needed.
 
 ---
 
+## Secrets manager integration (src/secrets/mod.rs, requires `secrets` feature)
+
+`secrets::resolve(value)` resolves a secret-*reference* string to its live value over HTTP(S); a
+value that doesn't match a recognized prefix passes through unchanged — additive to every existing
+`RWS_CONFIG_*`/`RWS_*` env var, not a breaking change.
+
+```rust,no_run
+use rust_web_server::secrets;
+
+// VAULT_ADDR / VAULT_TOKEN must already be set in the environment.
+let db_password = secrets::resolve("vault://secret/myapp/db#password")?;
+# Ok::<(), rust_web_server::secrets::SecretsError>(())
+```
+
+| Prefix | Backend | Example |
+|---|---|---|
+| `vault://path#field` | HashiCorp Vault (KV v2) | `vault://secret/myapp/db#password` |
+| `aws-sm://name` or `aws-sm://name#field` | AWS Secrets Manager | `aws-sm://prod/db-password` |
+| `azkv://vault-name/secret-name` | Azure Key Vault | `azkv://my-kv/db-password` |
+
+- **Vault** — `GET /v1/{mount}/data/{path}` (KV v2 HTTP API), `X-Vault-Token` header. `VAULT_ADDR`
+  (default `http://127.0.0.1:8200`) and `VAULT_TOKEN` (required). Token auth only — no AppRole,
+  Kubernetes auth, or renewal.
+- **AWS Secrets Manager** — reuses `storage-s3`'s SigV4 signer and IRSA/ECS/IMDSv2 credential chain
+  (`storage::aws_credentials::CredentialsProvider`) rather than a second copy of AWS's auth story.
+  Region from `AWS_REGION`/`AWS_DEFAULT_REGION`; static keys from `AWS_ACCESS_KEY_ID`/
+  `AWS_SECRET_ACCESS_KEY` if set, else the same workload-identity auto-detection `S3Storage` uses.
+  `aws-sm://name#field` parses the secret's `SecretString` as JSON and extracts one field — the
+  common "one secret holds `{"username":...,"password":...}`" shape. `AWS_ENDPOINT_URL_SECRETSMANAGER`
+  overrides the default `secretsmanager.{region}.amazonaws.com` host (same env var name the official
+  AWS SDKs use for LocalStack/VPC-endpoint overrides).
+- **Azure Key Vault** — `GET https://{vault-name}.vault.azure.net/secrets/{name}?api-version=7.4`,
+  `Authorization: Bearer {token}`. Token comes from a service-principal client-credentials grant
+  (`AZURE_KEY_VAULT_TENANT_ID`/`AZURE_KEY_VAULT_CLIENT_ID`/`AZURE_KEY_VAULT_CLIENT_SECRET`) if all
+  three are set, else the same Managed Identity auto-detection `AzureBlobStorage` uses
+  (`storage::azure_credentials`), requesting a token for Key Vault's resource URI instead of Storage's.
+
+**Automatic env var resolution** — `secrets::resolve_env_vars()` scans every currently-set
+`RWS_`-prefixed environment variable and rewrites in place (`std::env::set_var`) any whose value
+matches one of the prefixes above. `Server::setup()` calls this automatically once the `secrets`
+feature is enabled (right after `entry_point::bootstrap()`, so it sees the fully layered config) —
+so any `RWS_CONFIG_*` value, or a config-driven proxy's `token_env`-referenced variable, can be a
+secret reference with no code changes.
+
+**Fail fast, not fail open** — a value that *looks* like a secret reference but fails to resolve
+(wrong token, unreachable backend, missing field, ...) is a hard startup error (`Server::setup()`
+returns `Err`, and `main()`'s `.expect("server setup failed")` panics) rather than silently ignored —
+the alternative would be a server starting up with a JWT signing key or DB password literally equal
+to the string `"vault://secret/myapp/db#password"`.
+
+No vendor SDK for any of the three backends — all HTTP calls go through the existing
+`http_client::Client`, and JSON responses are parsed via `service_discovery::json_lite` (shared with
+`service_discovery`'s Consul/etcd backends rather than a third hand-rolled JSON parser).
+
+---
+
 ## OpenAPI / Swagger (src/openapi/mod.rs, requires `openapi` feature)
 
 Generates an OpenAPI 3.0 spec directly from registered routes — no separate spec file to maintain.
@@ -2096,6 +2152,7 @@ let www_router = Router::new().with_host("www.example.com").get("/", home_handle
 - XSS: no built-in output escaping — use Tera templates which auto-escape HTML
 - Directory listing — entry names HTML-escaped for display, percent-encoded in `href`s; dotfiles omitted; CSS/JS served as same-origin assets rather than inline blocks so the default CSP needs no relaxation
 - SPA fallback — opt-in only (`RWS_CONFIG_SPA_FALLBACK`, unset by default); scoped by a no-extension-in-last-segment heuristic plus `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES` so a real API `404` isn't silently rewritten into a `200`
+- Secrets-manager references — `secrets::resolve` (Vault/AWS Secrets Manager/Azure Key Vault, `secrets` feature); a broken `vault://`/`aws-sm://`/`azkv://` reference is a hard startup error, never a silent fallback to the literal reference string
 
 ---
 
@@ -2174,6 +2231,10 @@ src/server/             — Server (bind, accept, process), ConnectionInfo, Addr
 src/service_discovery/  — BackendPool, DiscoverySource (Static/EnvPrefix/File/Dns/DnsSrv/Consul/
                           Docker/EtcdWatch); json_lite (crate-internal JSON parser used by
                           Consul/Docker/etcd); dns_srv (hand-rolled RFC 1035/2782 SRV codec)
+src/secrets/            — secrets::resolve, SecretsError, resolve_env_vars (secrets feature);
+                          vault (HashiCorp Vault KV v2), aws_secrets_manager (reuses storage's
+                          SigV4 signer + credential chain), azure_key_vault (service principal +
+                          reused Managed Identity token fetch)
 src/session/            — SessionStore, Session, cookie helpers
 src/mailer/             — Mailer, Email, EmailBuilder, SmtpTls, MailerError (mailer feature)
 src/sso/                — OidcAuth, OidcConfig, OidcProvider, JwksCache (sso feature);
@@ -2225,7 +2286,7 @@ rust-web-server = { version = "17", default-features = false, features = ["http1
 
 ## Links
 
-- [DEVELOPER.md — 78 use-case examples](DEVELOPER.md)
+- [DEVELOPER.md — 80 use-case examples](DEVELOPER.md)
 - [spec/SSO.md — OAuth2/OIDC design spec](spec/SSO.md)
 - [spec/GAPS_V3.md — current gaps: server, proxy, framework (v17.43.0)](spec/GAPS_V3.md)
 - [spec/GAPS_V2.md — previous gap tracking (all critical items now closed)](spec/GAPS_V2.md)

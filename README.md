@@ -321,6 +321,18 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 
 </details>
 
+<details>
+<summary><strong>Secrets manager integration</strong></summary>
+
+- `secrets::resolve` — resolves a secret-reference string (`vault://path#field`, `aws-sm://name[#field]`, `azkv://vault-name/secret-name`) to its live value over HTTP(S); anything else passes through unchanged; `secrets` feature
+- HashiCorp Vault — KV v2 HTTP API, `VAULT_ADDR`/`VAULT_TOKEN`
+- AWS Secrets Manager — reuses `storage-s3`'s SigV4 signer and IRSA/ECS/IMDSv2 credential chain, no separate AWS auth story
+- Azure Key Vault — service-principal client-credentials grant, or the same Managed Identity auto-detection `AzureBlobStorage` uses
+- `resolve_env_vars()` rewrites every `RWS_`-prefixed env var whose value matches a secret-reference prefix, in place — wired into `Server::setup()` automatically, so any `RWS_CONFIG_*` value can be a secret reference with no code changes
+- Fails fast on a broken reference — a startup error, not a server silently running with a literal `"vault://..."` string as its JWT key
+
+</details>
+
 ---
 
 ## Optional features
@@ -347,6 +359,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 | `storage-local` | `LocalStorage` — file storage on local disk; no new deps |
 | `storage-s3` | `S3Storage` — S3-compatible object storage (AWS S3, R2, MinIO); AWS SigV4 signing via `hmac` + `sha2`; static keys or auto-detected workload identity (EKS IRSA / ECS task role / EC2 IMDSv2), no AWS SDK |
 | `storage-azure` | `AzureBlobStorage` — Azure Blob Storage; Shared Key HMAC-SHA256 signing via `hmac` + `sha2`; static account key or auto-detected Managed Identity (App Service/Container Apps identity endpoint / VM/AKS IMDS), no Azure SDK |
+| `secrets` | `secrets::resolve` — resolves `vault://`/`aws-sm://`/`azkv://` secret references (HashiCorp Vault, AWS Secrets Manager, Azure Key Vault) at startup; reuses `storage-s3`'s SigV4 signer and `storage-azure`'s Managed Identity token fetch; no vendor SDK |
 | `openapi` | `AppWithState`/`AsyncAppWithState::openapi(config)` — generates `GET /openapi.json` + `GET /docs` (Swagger UI) from registered routes; no new deps |
 | `webhook` | `verify_webhook_signature` — HMAC signature verification for GitHub, Shopify, and Stripe webhooks; `hmac` + `sha2`, no new deps beyond what `auth`/`crypto` already use |
 | `rewrite-regex` | `RewriteLayer::request_uri_regex_rewrite` — regex URI rewriting with capture-group expansion, nginx `rewrite`-directive style; adds `regex` |

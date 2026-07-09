@@ -161,6 +161,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Storage` / `LocalStorage` | `storage` (requires `storage-local` feature) | File storage abstraction. `Storage` trait: `put(key, data, content_type) -> Result<String, StorageError>`, `get(key)`, `delete(key)`, `url(key)` (no I/O). `LocalStorage::new(root)` stores objects as files under `root`; rejects `..` path segments; `.with_base_url(prefix)` makes `url()` return an HTTP path instead of a filesystem path. |
 | `S3Storage` / `S3Config` | `storage` (requires `storage-s3` feature) | `Storage` implementation for S3-compatible object storage (AWS S3, Cloudflare R2, MinIO) via the outbound HTTP client — no AWS SDK. Signs every request with AWS Signature Version 4 (`hmac` + `sha2`, already-in-tree crates). `S3Storage::from_env()` reads `RWS_S3_BUCKET/REGION/ENDPOINT`; credentials come from `RWS_S3_ACCESS_KEY`/`SECRET_KEY` if both are set, else auto-detected EKS IRSA / ECS task role / EC2 IMDSv2 workload identity (`RWS_S3_CREDENTIAL_SOURCE` forces a specific source). Uses path-style addressing (`{endpoint}/{bucket}/{key}`) for compatibility with custom endpoints. |
 | `AzureBlobStorage` / `AzureBlobConfig` | `storage` (requires `storage-azure` feature) | `Storage` implementation for Azure Blob Storage via the outbound HTTP client — no Azure SDK. Signs every request with the Shared Key HMAC-SHA256 scheme (`hmac` + `sha2`). `AzureBlobStorage::from_env()` reads `RWS_AZURE_ACCOUNT/CONTAINER/ENDPOINT`; credentials come from `RWS_AZURE_ACCOUNT_KEY` if set, else auto-detected Managed Identity (App Service/Container Apps identity endpoint, or VM/AKS IMDS as a last resort; `RWS_AZURE_CREDENTIAL_SOURCE` forces a specific source). |
+| `secrets::resolve` / `SecretsError` | `secrets` (requires `secrets` feature) | Resolves a secret-manager *reference* string to its live value — no vendor SDK. `vault://path#field` (HashiCorp Vault KV v2, via `VAULT_ADDR`/`VAULT_TOKEN`), `aws-sm://name[#field]` (AWS Secrets Manager, reusing `storage-s3`'s SigV4 signer and IRSA/ECS/IMDSv2 credential chain), and `azkv://vault-name/secret-name` (Azure Key Vault, reusing `storage-azure`'s Managed Identity token fetch, or a service-principal client-credentials grant via `AZURE_KEY_VAULT_TENANT_ID`/`CLIENT_ID`/`CLIENT_SECRET`) are resolved over HTTP(S); any other string passes through unchanged. `resolve_env_vars()` rewrites every `RWS_`-prefixed env var whose value matches one of these prefixes in place — called automatically by `Server::setup()`, so any `RWS_CONFIG_*` value can be a secret reference with no code changes. Resolution failures are hard startup errors (fail fast, not fail open). |
 | `TeraEngine` | `template` (requires `tera` feature) | Jinja2/Django HTML template engine. `from_dir(dir)` loads disk templates; `from_raw(&[(name, src)])` for inline templates. Global singleton via `template::init(dir)` / `template::render(name, &ctx)`. `.reload()` (or the global `template::reload()`) re-reads templates from disk without a restart — wired into `config_reload::reload()`'s `SIGHUP` hook automatically. |
 | `#[derive(Config)]` / `FromEnvStr` | `config_binding` (requires `macros` feature for derive) | Typed env-var binding. Generates `load() -> Result<Self, String>`. `#[config(env = "KEY", default = "v")]` per field; `Option<T>` for optional; struct-level `#[config(prefix = "APP_")]`. Implement `FromEnvStr` for custom types. |
 | `ProxyConfig` / `ConfigDrivenApp` / `build_from_file` | `proxy_config` | Config-driven proxy server. `ProxyConfig::is_proxy_mode()` detects `[[route]]` / `[[upstream]]` sections in `rws.config.toml`; `build_from_file()` returns a `ConfigDrivenApp` (first-match router over `Arc<Vec<CompiledRoute>>`) plus L4/WS proxy thread handles. Per-route middleware: `PerRouteRateLimit`, `PerRouteMaxBodySize`, `BearerAuthMiddleware`, `RewriteLayer`, `CacheLayer`, `IpFilter`. `DynamicProxy` performs health-aware proxying with a per-`[[upstream]]` `strategy`: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), or `least_connections` (routes to the live backend with fewest in-flight requests). `ConfigDrivenApp::with_config(ServerConfig)` pins its fallback `App` (unmatched requests — healthz/readyz/metrics/static/404) to explicit settings instead of reading `RWS_CONFIG_*` env vars per request. |
@@ -4776,5 +4777,46 @@ assert_eq!(200, response.status());
 export RWS_CONFIG_SPA_FALLBACK=index.html
 export RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES=/api
 ```
+
+### 80. Secrets-manager integration (Vault / AWS Secrets Manager / Azure Key Vault)
+
+Requires the `secrets` feature:
+
+```toml
+rust-web-server = { version = "17", features = ["secrets"] }
+```
+
+JWT signing keys, DB credentials, and TLS keys are ordinarily just plain env vars. `secrets::resolve` lets any config value instead be a *reference* to a secret held in a managed secrets store:
+
+```rust
+use rust_web_server::secrets;
+
+// VAULT_ADDR / VAULT_TOKEN must already be set in the environment.
+let db_password = secrets::resolve("vault://secret/myapp/db#password")?;
+# Ok::<(), rust_web_server::secrets::SecretsError>(())
+```
+
+| Prefix | Backend | Example |
+|---|---|---|
+| `vault://path#field` | HashiCorp Vault (KV v2) | `vault://secret/myapp/db#password` |
+| `aws-sm://name` or `aws-sm://name#field` | AWS Secrets Manager | `aws-sm://prod/db-password` |
+| `azkv://vault-name/secret-name` | Azure Key Vault | `azkv://my-kv/db-password` |
+
+A value that doesn't start with one of these prefixes passes through unchanged — resolution is additive, not a new required step for every existing plain-value config var.
+
+**Automatic env var resolution** — `Server::setup()` calls `secrets::resolve_env_vars()` automatically once this feature is enabled: it scans every currently-set `RWS_`-prefixed environment variable and rewrites in place any whose value matches one of the prefixes above. So a config value like `RWS_CONFIG_TLS_KEY_FILE` or a config-driven proxy's `token_env`-referenced variable can be a secret reference with zero code changes:
+
+```bash
+export VAULT_ADDR=https://vault.internal:8200
+export VAULT_TOKEN=s.xxxxxxxx
+export RWS_CONFIG_TLS_KEY_FILE="vault://secret/myapp/tls#key"
+rws
+```
+
+**AWS Secrets Manager** reuses `storage-s3`'s SigV4 signer and IRSA/ECS/IMDSv2 credential chain — no separate AWS credentials story to configure. Region comes from `AWS_REGION`/`AWS_DEFAULT_REGION`; static keys come from `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` if set, else the same workload-identity auto-detection `S3Storage` uses. `aws-sm://prod/db-creds#password` parses the secret's `SecretString` as JSON and extracts one field — the common "one secret holds a whole credentials object" shape.
+
+**Azure Key Vault** tries a service-principal client-credentials grant first (`AZURE_KEY_VAULT_TENANT_ID`/`AZURE_KEY_VAULT_CLIENT_ID`/`AZURE_KEY_VAULT_CLIENT_SECRET`), then falls back to the same Managed Identity detection `AzureBlobStorage` uses (App Service/Container Apps identity endpoint, or VM/AKS IMDS).
+
+**Fail fast, not fail open** — a value that *looks* like a secret reference but fails to resolve (wrong token, unreachable backend, missing field, ...) is a startup error, not a silently-ignored one: the alternative would be a server starting up with a JWT signing key literally equal to the string `"vault://secret/myapp/db#password"`.
 
 A directory or file that *does* exist is always served as itself — the fallback only ever applies to the previously-404 case, and only when the configured fallback file actually exists on disk (a typo'd `RWS_CONFIG_SPA_FALLBACK` value is a silent no-op, not a broken response). Read fresh on every request (`crate::entry_point::get_spa_fallback`), so it can be changed via `rws.config.toml` + `SIGHUP` without a restart, the same as `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`.

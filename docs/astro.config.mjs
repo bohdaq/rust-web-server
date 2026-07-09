@@ -94,6 +94,7 @@ export default defineConfig({
             { label: 'Per-Route Timeouts',     link: '/features/timeouts/' },
             { label: 'Typed Config Binding',   link: '/features/config-binding/' },
             { label: 'Webhook Verification',   link: '/features/webhooks/' },
+            { label: 'Secrets Manager Integration', link: '/features/secrets/' },
           ],
         },
         {

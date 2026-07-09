@@ -34,8 +34,10 @@ pub(super) enum Credential {
     Bearer(String),
 }
 
+/// Also used directly by `secrets::azure_key_vault`, which needs the
+/// Managed Identity endpoint but never the Shared Key path Blob Storage has.
 #[derive(Debug, Clone, PartialEq)]
-enum IdentityEndpoint {
+pub(crate) enum IdentityEndpoint {
     AppService { endpoint: String, header: String },
     Imds,
 }
@@ -46,7 +48,7 @@ enum Source {
     ManagedIdentity(IdentityEndpoint),
 }
 
-fn managed_identity_endpoint_from_env() -> IdentityEndpoint {
+pub(crate) fn managed_identity_endpoint_from_env() -> IdentityEndpoint {
     let endpoint = std::env::var("IDENTITY_ENDPOINT").ok();
     let header = std::env::var("IDENTITY_HEADER").ok();
     match (endpoint, header) {
@@ -122,8 +124,10 @@ impl AzureCredentialsProvider {
 
     fn fetch_token(&self, endpoint: &IdentityEndpoint) -> Result<(String, u64), StorageError> {
         match endpoint {
-            IdentityEndpoint::AppService { endpoint, header } => fetch_app_service_token(&self.client, endpoint, header),
-            IdentityEndpoint::Imds => fetch_imds_token(&self.client, IMDS_HOST),
+            IdentityEndpoint::AppService { endpoint, header } => {
+                fetch_app_service_token(&self.client, endpoint, header, STORAGE_RESOURCE)
+            }
+            IdentityEndpoint::Imds => fetch_imds_token(&self.client, IMDS_HOST, STORAGE_RESOURCE),
         }
     }
 }
@@ -134,10 +138,15 @@ fn epoch_now() -> u64 {
 
 // ── VM / AKS IMDS ────────────────────────────────────────────────────────────
 
-fn fetch_imds_token(client: &Client, imds_base_url: &str) -> Result<(String, u64), StorageError> {
+/// `resource` is the Azure AD audience to request a token for — Blob Storage
+/// passes `STORAGE_RESOURCE` (`https://storage.azure.com/`);
+/// `secrets::azure_key_vault` passes Key Vault's own resource URI instead,
+/// which is the only difference between the two services' Managed Identity
+/// token requests.
+pub(crate) fn fetch_imds_token(client: &Client, imds_base_url: &str, resource: &str) -> Result<(String, u64), StorageError> {
     let url = format!(
         "{imds_base_url}/metadata/identity/oauth2/token?api-version=2018-02-01&resource={}",
-        url_search_params::encode_uri_component(STORAGE_RESOURCE)
+        url_search_params::encode_uri_component(resource)
     );
     let resp = client
         .get(&url)
@@ -154,10 +163,15 @@ fn fetch_imds_token(client: &Client, imds_base_url: &str) -> Result<(String, u64
 
 // ── App Service / Container Apps identity endpoint ──────────────────────────
 
-fn fetch_app_service_token(client: &Client, identity_endpoint: &str, identity_header: &str) -> Result<(String, u64), StorageError> {
+pub(crate) fn fetch_app_service_token(
+    client: &Client,
+    identity_endpoint: &str,
+    identity_header: &str,
+    resource: &str,
+) -> Result<(String, u64), StorageError> {
     let url = format!(
         "{identity_endpoint}?resource={}&api-version=2019-08-01",
-        url_search_params::encode_uri_component(STORAGE_RESOURCE)
+        url_search_params::encode_uri_component(resource)
     );
     let resp = client
         .get(&url)
@@ -172,7 +186,7 @@ fn fetch_app_service_token(client: &Client, identity_endpoint: &str, identity_he
     parse_token_response(&body)
 }
 
-fn parse_token_response(json: &str) -> Result<(String, u64), StorageError> {
+pub(crate) fn parse_token_response(json: &str) -> Result<(String, u64), StorageError> {
     let access_token =
         extract_json_str_field(json, "access_token").ok_or_else(|| StorageError::new("token response missing access_token"))?;
     // `expires_on` is already Unix epoch seconds as a string — no date
@@ -184,7 +198,7 @@ fn parse_token_response(json: &str) -> Result<(String, u64), StorageError> {
 /// Finds `"field":"VALUE"` in `json` and returns `VALUE`. Same hand-rolled
 /// idiom as `crate::storage::aws_credentials` (and `crate::auth`) — avoids a
 /// JSON parser dependency.
-fn extract_json_str_field(json: &str, field: &str) -> Option<String> {
+pub(crate) fn extract_json_str_field(json: &str, field: &str) -> Option<String> {
     let key = format!("\"{field}\"");
     let start = json.find(key.as_str())?;
     let rest = json[start + key.len()..].trim_start();

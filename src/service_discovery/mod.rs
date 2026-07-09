@@ -33,7 +33,10 @@
 
 #[cfg(test)]
 mod tests;
-mod json_lite;
+// `pub(crate)` (not just `mod`) so `secrets`'s Vault/AWS-SM/Key-Vault backends
+// can reuse this parser for their own small JSON responses, instead of a
+// third hand-rolled JSON parser alongside this one and `mcp::json_rpc`.
+pub(crate) mod json_lite;
 mod consul;
 mod dns_srv;
 mod docker;

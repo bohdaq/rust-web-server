@@ -119,6 +119,7 @@ impl S3Storage {
             &creds.secret_key,
             creds.session_token.as_deref(),
             epoch_secs,
+            "s3",
         ))
     }
 

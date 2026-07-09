@@ -474,6 +474,9 @@ impl Server {
         set_default_values();
         bootstrap();
 
+        #[cfg(feature = "secrets")]
+        crate::secrets::resolve_env_vars().map_err(|e| e.to_string())?;
+
         println!("\nRWS Configuration End\n\n");
 
 

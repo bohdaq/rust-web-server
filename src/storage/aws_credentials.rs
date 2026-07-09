@@ -35,7 +35,7 @@ const IMDS_TIMEOUT_MS: u64 = 400;
 /// A set of AWS credentials — either static long-lived keys, or short-lived
 /// credentials obtained from IRSA/ECS/IMDS.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct Credentials {
+pub(crate) struct Credentials {
     pub access_key: String,
     pub secret_key: String,
     pub session_token: Option<String>,
@@ -59,7 +59,7 @@ impl Credentials {
 // ── Source ───────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
-pub(super) enum Source {
+pub(crate) enum Source {
     Static(Credentials),
     Irsa { role_arn: String, token_file: String },
     EcsRelative { path: String },
@@ -106,7 +106,7 @@ fn ecs_source_from_env() -> Source {
 /// The actual network fetch happens lazily on the first [`Self::get`] call
 /// and is cached until shortly before expiry — no I/O happens at
 /// construction time, matching every other constructor in this crate.
-pub(super) struct CredentialsProvider {
+pub(crate) struct CredentialsProvider {
     source: Source,
     region: String,
     client: Client,
@@ -116,7 +116,7 @@ pub(super) struct CredentialsProvider {
 impl CredentialsProvider {
     /// Env-var-only detection, zero I/O. `static_access_key`/`static_secret_key`
     /// are `None` when `S3Config`'s corresponding field was empty.
-    pub(super) fn detect(region: &str, static_access_key: Option<String>, static_secret_key: Option<String>) -> Self {
+    pub(crate) fn detect(region: &str, static_access_key: Option<String>, static_secret_key: Option<String>) -> Self {
         let source = match std::env::var("RWS_S3_CREDENTIAL_SOURCE").ok().as_deref() {
             Some("static") => Source::Static(Credentials {
                 access_key: static_access_key.unwrap_or_default(),
@@ -143,7 +143,7 @@ impl CredentialsProvider {
 
     /// Returns cached credentials if fresh, else fetches, caches, and
     /// returns new ones.
-    pub(super) fn get(&self) -> Result<Credentials, StorageError> {
+    pub(crate) fn get(&self) -> Result<Credentials, StorageError> {
         let now = epoch_now();
         {
             let guard = self.cached.lock().unwrap();

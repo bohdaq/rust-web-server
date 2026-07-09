@@ -117,7 +117,7 @@ fn parse_token_response_defaults_expiry_to_zero_when_missing() {
 fn fetch_imds_token_happy_path() {
     let (base_url, captured) = spawn_sequential_mock(vec![("HTTP/1.1 200 OK", token_json("imds-token", 1_700_000_000).into_bytes())]);
     let client = crate::http_client::Client::new();
-    let (token, expires_at) = fetch_imds_token(&client, &base_url).unwrap();
+    let (token, expires_at) = fetch_imds_token(&client, &base_url, STORAGE_RESOURCE).unwrap();
     assert_eq!("imds-token", token);
     assert_eq!(1_700_000_000, expires_at);
 
@@ -133,7 +133,7 @@ fn fetch_imds_token_times_out_cleanly_when_nothing_responds() {
     let base_url = spawn_black_hole_server();
     let client = crate::http_client::Client::new();
     let start = std::time::Instant::now();
-    let result = fetch_imds_token(&client, &base_url);
+    let result = fetch_imds_token(&client, &base_url, STORAGE_RESOURCE);
     let elapsed = start.elapsed();
     assert!(result.is_err());
     assert!(elapsed < Duration::from_secs(2), "Azure IMDS probe should fail fast on its short timeout, took {elapsed:?}");
@@ -151,7 +151,7 @@ fn fetch_app_service_token_happy_path() {
         spawn_sequential_mock(vec![("HTTP/1.1 200 OK", token_json("app-service-token", 1_700_000_000).into_bytes())]);
     let endpoint = format!("{base_url}/msi/token");
     let client = crate::http_client::Client::new();
-    let (token, _) = fetch_app_service_token(&client, &endpoint, "identity-header-secret").unwrap();
+    let (token, _) = fetch_app_service_token(&client, &endpoint, "identity-header-secret", STORAGE_RESOURCE).unwrap();
     assert_eq!("app-service-token", token);
 
     let req = &captured.lock().unwrap()[0];
@@ -164,7 +164,7 @@ fn fetch_app_service_token_errors_on_non_success_status() {
     let (base_url, _captured) = spawn_sequential_mock(vec![("HTTP/1.1 500 Internal Server Error", b"boom".to_vec())]);
     let endpoint = format!("{base_url}/msi/token");
     let client = crate::http_client::Client::new();
-    let err = fetch_app_service_token(&client, &endpoint, "tok").unwrap_err();
+    let err = fetch_app_service_token(&client, &endpoint, "tok", STORAGE_RESOURCE).unwrap_err();
     assert!(err.to_string().contains("500"));
 }
 

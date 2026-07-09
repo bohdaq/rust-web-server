@@ -57,10 +57,14 @@ fn amz_date_and_datetime(epoch_secs: u64) -> (String, String) {
     (date, datetime)
 }
 
-/// Signs a single-object S3 request. `canonical_path` must already be
+/// Signs a single AWS request (any service — `service` picks the signing
+/// scope, e.g. `"s3"` for `S3Storage`, `"secretsmanager"` for
+/// `secrets::aws_secrets_manager`). `canonical_path` must already be
 /// percent-encoded (see [`uri_encode_path`]) and must be byte-identical to
-/// the path sent on the wire. Returns the headers to attach to the request,
-/// in addition to any headers the caller adds itself (e.g. `Content-Type`).
+/// the path sent on the wire; pass `"/"` for a JSON-RPC-style POST API like
+/// Secrets Manager's, which has no per-resource path. Returns the headers to
+/// attach to the request, in addition to any headers the caller adds itself
+/// (e.g. `Content-Type`).
 ///
 /// `session_token` is `Some` when signing with temporary credentials (EKS
 /// IRSA, ECS task role, EC2 IMDSv2) — it adds `x-amz-security-token` to the
@@ -68,7 +72,7 @@ fn amz_date_and_datetime(epoch_secs: u64) -> (String, String) {
 /// it never needs interleaving with the three fixed headers. `None`
 /// reproduces byte-identical output to signing without a token.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn sign(
+pub(crate) fn sign(
     method: &str,
     host: &str,
     canonical_path: &str,
@@ -78,6 +82,7 @@ pub(super) fn sign(
     secret_key: &str,
     session_token: Option<&str>,
     epoch_secs: u64,
+    service: &str,
 ) -> Vec<(String, String)> {
     let (date, datetime) = amz_date_and_datetime(epoch_secs);
     let payload_hash = to_hex(&Sha256::digest(payload));
@@ -101,13 +106,13 @@ pub(super) fn sign(
     );
     let hashed_canonical_request = to_hex(&Sha256::digest(canonical_request.as_bytes()));
 
-    let credential_scope = format!("{date}/{region}/s3/aws4_request");
+    let credential_scope = format!("{date}/{region}/{service}/aws4_request");
     let string_to_sign =
         format!("AWS4-HMAC-SHA256\n{datetime}\n{credential_scope}\n{hashed_canonical_request}");
 
     let k_date = hmac(format!("AWS4{secret_key}").as_bytes(), date.as_bytes());
     let k_region = hmac(&k_date, region.as_bytes());
-    let k_service = hmac(&k_region, b"s3");
+    let k_service = hmac(&k_region, service.as_bytes());
     let k_signing = hmac(&k_service, b"aws4_request");
     let signature = to_hex(&hmac(&k_signing, string_to_sign.as_bytes()));
 
