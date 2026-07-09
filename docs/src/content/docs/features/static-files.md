@@ -64,6 +64,8 @@ If your own CSP is stricter than the default (via `RWS_CONFIG_CSP`) and excludes
 
 ## SPA fallback
 
+For local development, before you have a built app to serve this way, see [Frontend Dev Server Proxy](/getting-started/frontend-dev-proxy/) for running a React/Vite dev server alongside `rws`.
+
 **Opt-in — unset (disabled) by default.** `RWS_CONFIG_SPA_FALLBACK` serves a configured file for any `GET`/`HEAD` request that matches no real file, directory, or `path.html`, instead of `404` — the standard client-side-router ("SPA") fallback a React Router / Vue Router / etc. app needs for deep links to work:
 
 ```bash

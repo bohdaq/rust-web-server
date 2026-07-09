@@ -54,17 +54,17 @@ JSON support exists via the `serde` feature, but there's no `Json<T>` wrapper an
 
 **Remaining:** a `Json<T>` extractor (`FromRequest` impl deserializing the body, 400 on parse failure) and a `Json<T>` responder (serializes to a `200 application/json` `Response`), mirroring the pattern of `Body`/`BodyText` in `src/extract/mod.rs`.
 
-### No dev-mode asset proxying / HMR
+### ✅ No dev-mode asset proxying / HMR — Done
 
 rws is a production HTTP server, not a bundler — there's no built-in "proxy `/api/*` to rws, everything else to the Vite/webpack dev server" story for local development. `ReverseProxy`/`RewriteLayer` can be wired manually to achieve this, but it isn't documented as a React-specific recipe.
 
-**Remaining:** a `docs/` recipe showing `RewriteLayer` + `ReverseProxy` (or just running Vite separately and pointing its dev-server proxy config at rws) as the recommended local-dev setup.
+**Closed via a new docs page**, `docs/src/content/docs/getting-started/frontend-dev-proxy.md` ("Frontend Dev Server Proxy (React / Vite / webpack)"), linked from Getting Started and cross-linked from the SPA-fallback section of the static-files page. The recommended recipe is the *inverse* of what the gap's own sketch proposed: point Vite's/webpack's own `server.proxy` (or CRA's `package.json` `"proxy"` key) at `rws` for `/api/*`, rather than wrapping `rws` in `RewriteLayer`+`ReverseProxy` to front the dev server. Investigating `ReverseProxy::path_prefix` (`src/proxy/mod.rs`) while writing the recipe surfaced why: its prefix match proxies *matching* paths and falls through to the wrapped app otherwise — the right shape for production (serve the built frontend locally, proxy `/api` out to a real backend), but the **opposite** of what "rws fronts the dev server" would need (proxy everything *except* `/api`, which has no built-in exclude-prefix, unlike `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES`). The doc documents that direction too, as an "alternative," but is explicit that it needs a hand-written `Application` and — regardless of which direction the proxying goes — that `ReverseProxy` strips the `Upgrade` header (confirmed in source), so Vite's HMR WebSocket never survives being proxied through it either way. That combination of extra composition work plus a real functional regression (HMR degrading to full-page reloads) is exactly why the recommended direction is the dev server proxying *to* rws instead: no CORS needed, and the dev server's own HMR socket never leaves its own process. A third alternative (direct cross-origin fetch from the dev server's own origin to `rws`, using its `RWS_CONFIG_CORS_*` variables) is documented for the case where you're pointing the dev server at a shared/staging backend instead of a local `rws`.
 
-### No React-specific CSRF recipe
+### ✅ No React-specific CSRF recipe — Done
 
 The general `csrf` module exists and works, but there's no documented double-submit-cookie or header-token pattern specifically for a fetch/axios-based SPA (as opposed to a traditional server-rendered form).
 
-**Remaining:** a `docs/` example showing the CSRF token round-trip (issue on `GET`, read via a non-`HttpOnly` cookie, echo back in a request header) for a React frontend.
+**Closed via a new "React (or any fetch/axios-based SPA)" section** in `docs/src/content/docs/features/csrf.md`, covering the one real wrinkle a traditional server-rendered-form recipe doesn't have to think about: *when* the `_csrf` cookie actually gets set. In production, `rws` itself serves the built SPA, so the very first `GET` (loading `index.html`) already goes through `CsrfLayer` and sets the cookie before any React code runs — no extra step. In local dev using the recommended dev-server-proxy setup above, the HTML shell comes from the dev server, not `rws`, so nothing sets the cookie until the SPA's first request through the proxy — the doc shows priming it explicitly with one safe `GET` call on app mount (a `useEffect` example), plus an axios request interceptor that reads the cookie and attaches `X-CSRF-Token` to every mutating request afterward, so no per-call boilerplate is needed beyond that. Cross-links to `CsrfLayer::http_only` are included so a reader doesn't accidentally pick the HTML-form-only variant that would make the cookie unreadable from JS.
 
 ---
 
@@ -74,11 +74,11 @@ The general `csrf` module exists and works, but there's no documented double-sub
 |---|---|---|---|
 | 1 | SPA fallback (`index.html`) for unmatched static routes | Static file server | ✅ Done |
 | 2 | Typed `Json<T>` extractor/responder | Extractors | Small |
-| 3 | Dev-mode proxy recipe (rws + Vite/webpack dev server) | Docs | Trivial |
-| 4 | CSRF recipe for fetch/axios SPAs | Docs | Trivial |
+| 3 | Dev-mode proxy recipe (rws + Vite/webpack dev server) | Docs | ✅ Done |
+| 4 | CSRF recipe for fetch/axios SPAs | Docs | ✅ Done |
 
 ## Suggested implementation order
 
 1. **SPA fallback** — ✅ done. Was the highest-friction gap in practice: any React Router app with deep links was broken under `cargo run`/`rws` without a hand-rolled workaround.
 2. **`Json<T>` extractor/responder** — small, mechanical, and removes boilerplate from every JSON handler a React frontend talks to.
-3. **Dev-mode proxy recipe** and **CSRF recipe** — documentation-only, no code changes required, but close the remaining "how do I actually wire this up" gap for a React consumer.
+3. **Dev-mode proxy recipe** and **CSRF recipe** — ✅ both done. Documentation-only, no code changes required, closing the remaining "how do I actually wire this up" gap for a React consumer. Only `Json<T>` remains open.
