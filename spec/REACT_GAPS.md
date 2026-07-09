@@ -12,7 +12,7 @@ Full config surface (`RWS_CONFIG_CORS_ALLOW_ALL`, `_ALLOW_ORIGINS`, `_ALLOW_CRED
 
 ### JSON APIs ✅ Done
 
-`serde`/`serde_json` are optional deps (`Cargo.toml:31`) gated behind the `serde` feature. `BodyText`/`Body`/`Query` extractors (`src/extract/mod.rs`) plus `serde_json::from_str`/`to_string` cover typical fetch/axios request-response shapes.
+`serde`/`serde_json` are optional deps (`Cargo.toml:31`) gated behind the `serde` feature. `BodyText`/`Body`/`Query` extractors (`src/extract/mod.rs`) cover raw bodies and query strings; `Json<T>` (`src/json/extractor.rs`) is the typed extractor/responder for a fetch/axios-based frontend's request/response bodies specifically — see §2 below (this was initially miscategorized as a gap in an earlier draft of this document; it already existed).
 
 ### Static file serving ✅ Done
 
@@ -48,11 +48,11 @@ The only documented SPA-fallback pattern in this codebase (`docs/src/content/doc
 
 8 new tests covering: disabled-by-default, serving the configured file for an unmatched route, a real file still winning over the fallback, the extension heuristic rejecting an asset-shaped path, exclude-prefix scoping, a missing configured file being a no-op, and the root path (`/`) staying excluded regardless (`IndexController`'s territory). Verified end-to-end against a real running server for all four scenarios (deep link → 200 shell, missing asset → 404, real asset → 200, root → 200) plus exclude-prefix behavior. Verified across default, `http1`-only — 1544 tests green (up from 1536), zero regressions, and stable under repeated high-thread-count stress runs.
 
-### No typed `Json<T>` extractor/responder
+### ✅ No typed `Json<T>` extractor/responder — Already existed (gap was stale)
 
 JSON support exists via the `serde` feature, but there's no `Json<T>` wrapper analogous to Axum's — extracting a typed request body or returning a typed JSON response means hand-writing `serde_json::from_str::<T>(&BodyText::from_request(request)?.0)` and building the `Content-Type: application/json` response manually each time.
 
-**Remaining:** a `Json<T>` extractor (`FromRequest` impl deserializing the body, 400 on parse failure) and a `Json<T>` responder (serializes to a `200 application/json` `Response`), mirroring the pattern of `Body`/`BodyText` in `src/extract/mod.rs`.
+**Turned out to already be implemented** — this gap entry was simply wrong, not something to build. `Json<T>` (`src/json/extractor.rs`, `serde` feature) has existed since `v17.14.0`, well before this doc was written: `impl<T: DeserializeOwned> FromRequest for Json<T>` deserializes the request body with `serde_json::from_slice`, returning `AppError::BadRequest(...).into_response()` (400) on parse failure; `impl<T: Serialize> Json<T> { pub fn into_response(self) -> Response }` serializes to a `200 OK application/json` response (500 on the rare serialization failure); `Deref`/`DerefMut` give field access without unwrapping. It's re-exported as `rust_web_server::json::Json`, already covered by 10 passing tests (`src/json/extractor/tests.rs`), and already documented in `DEVELOPER.md` (building-blocks table + Use Case), `README.md`, and `llms.txt`. The likely reason this doc missed it: it lives in `src/json/extractor.rs` rather than `src/extract/mod.rs` (where `Body`/`BodyText`/`Query` live, and where this gap's own "remaining" text assumed it would go) — a naming/location mismatch, not a missing feature. No code or doc changes were needed to close this; only this gap-tracking file itself was out of date.
 
 ### ✅ No dev-mode asset proxying / HMR — Done
 
@@ -73,12 +73,14 @@ The general `csrf` module exists and works, but there's no documented double-sub
 | # | Gap | Area | Effort |
 |---|---|---|---|
 | 1 | SPA fallback (`index.html`) for unmatched static routes | Static file server | ✅ Done |
-| 2 | Typed `Json<T>` extractor/responder | Extractors | Small |
+| 2 | Typed `Json<T>` extractor/responder | Extractors | ✅ Done (already existed) |
 | 3 | Dev-mode proxy recipe (rws + Vite/webpack dev server) | Docs | ✅ Done |
 | 4 | CSRF recipe for fetch/axios SPAs | Docs | ✅ Done |
 
 ## Suggested implementation order
 
 1. **SPA fallback** — ✅ done. Was the highest-friction gap in practice: any React Router app with deep links was broken under `cargo run`/`rws` without a hand-rolled workaround.
-2. **`Json<T>` extractor/responder** — small, mechanical, and removes boilerplate from every JSON handler a React frontend talks to.
-3. **Dev-mode proxy recipe** and **CSRF recipe** — ✅ both done. Documentation-only, no code changes required, closing the remaining "how do I actually wire this up" gap for a React consumer. Only `Json<T>` remains open.
+2. **`Json<T>` extractor/responder** — ✅ turned out to already exist (`src/json/extractor.rs`, since v17.14.0) — this gap entry was stale, not a real gap.
+3. **Dev-mode proxy recipe** and **CSRF recipe** — ✅ both done. Documentation-only, no code changes required, closing the remaining "how do I actually wire this up" gap for a React consumer.
+
+All four gaps tracked in this document are now closed.
