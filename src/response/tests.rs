@@ -23,6 +23,50 @@ fn check_is_multipart_byteranges_content_type() {
 }
 
 #[test]
+fn json_helper_builds_application_json_response() {
+    let body = br#"{"ok":true}"#.to_vec();
+    let response = Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, body.clone());
+
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n200_ok.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase, response.reason_phrase);
+    assert_eq!(1, response.content_range_list.len());
+    let content_range = response.content_range_list.get(0).unwrap();
+    assert_eq!(MimeType::APPLICATION_JSON, content_range.content_type);
+    assert_eq!(body, content_range.body);
+}
+
+#[test]
+fn json_helper_with_error_status_and_empty_body() {
+    let response = Response::json(STATUS_CODE_REASON_PHRASE.n500_internal_server_error, vec![]);
+
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n500_internal_server_error.status_code, response.status_code);
+    let content_range = response.content_range_list.get(0).unwrap();
+    assert_eq!(MimeType::APPLICATION_JSON, content_range.content_type);
+    assert!(content_range.body.is_empty());
+}
+
+#[test]
+fn text_helper_builds_text_plain_response() {
+    let response = Response::text(STATUS_CODE_REASON_PHRASE.n400_bad_request, "invalid input");
+
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n400_bad_request.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n400_bad_request.reason_phrase, response.reason_phrase);
+    assert_eq!(1, response.content_range_list.len());
+    let content_range = response.content_range_list.get(0).unwrap();
+    assert_eq!(MimeType::TEXT_PLAIN, content_range.content_type);
+    assert_eq!("invalid input".as_bytes().to_vec(), content_range.body);
+}
+
+#[test]
+fn text_helper_with_empty_body() {
+    let response = Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "");
+
+    let content_range = response.content_range_list.get(0).unwrap();
+    assert_eq!(MimeType::TEXT_PLAIN, content_range.content_type);
+    assert!(content_range.body.is_empty());
+}
+
+#[test]
 fn error() {
     let error = Error {
         status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok,

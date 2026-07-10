@@ -96,6 +96,19 @@ pub fn get_response(
 
 Pass `None` for headers to get an empty header list. Pass `None` for the body list to get an empty body (useful for `204 No Content`).
 
+### One-line JSON / text responses
+
+For the common case — a JSON or plain-text body with no extra headers — `Response::json`/`Response::text` skip `get_response`/`Range::get_content_range` entirely:
+
+```rust
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+let response = Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, b"{\"ok\":true}".to_vec());
+let error_response = Response::text(STATUS_CODE_REASON_PHRASE.n400_bad_request, "invalid input");
+```
+
+`Response::json` takes already-serialized bytes, so it has no dependency on the `serde` feature — build `bytes` with `serde_json::to_vec(&value)?` or hand-rolled JSON. See [JSON](/building-apps/json/) for the `serde`-backed `Json<T>` extractor/responder, which serializes a typed value for you in one call.
+
 ### Streaming large files
 
 For files larger than ~8 MB, set `stream_file` instead of loading bytes into `content_range_list`. The server uses `Transfer-Encoding: chunked` and a constant memory footprint:

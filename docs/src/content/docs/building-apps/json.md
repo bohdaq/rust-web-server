@@ -115,7 +115,24 @@ println!("{}", json.title);  // via Deref
 
 ## Setting `Content-Type: application/json` manually
 
-When building a response by hand, set the content type through `Range::get_content_range`:
+`Response::json(status, bytes)` builds a `Content-Type: application/json` response in one call — no `serde` feature required, since it takes already-serialized bytes rather than a `Serialize` value:
+
+```rust
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+let json_body = br#"{"status":"ok"}"#.to_vec();
+let r = Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, json_body);
+```
+
+`Response::text(status, &str)` is the `text/plain` equivalent:
+
+```rust
+let r = Response::text(STATUS_CODE_REASON_PHRASE.n400_bad_request, "invalid input");
+```
+
+Pair `Response::json` with `serde_json::to_vec(&value)?` if you have a `Serialize` value but want to build the response yourself. If you'd rather have serialization handled for you in one call, use `Json(value).into_response()` (`serde` feature, see above) instead.
+
+Without either helper, build the `ContentRange` by hand through `Range::get_content_range`:
 
 ```rust
 use rust_web_server::range::Range;

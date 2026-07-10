@@ -71,6 +71,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Server` | `server` | Bind, accept, and process TCP connections |
 | `Request` | `request` | Parsed HTTP request (method, URI, headers, body) |
 | `Response` | `response` | HTTP response builder |
+| `Response::json` / `Response::text` | `response` | One-line response helpers: `Response::json(status, bytes)` builds a `Content-Type: application/json` response from pre-serialized bytes (no `serde` dependency — pair with `serde_json::to_vec` or hand-rolled JSON); `Response::text(status, &str)` builds a `Content-Type: text/plain` response. For serializing a typed value directly, use `Json<T>` (`serde` feature) instead. |
 | `Header` | `header` | Header constants and standard response header set |
 | `Range` / `ContentRange` | `range` | Body construction (bytes, files, multipart) |
 | `MimeType` | `mime_type` | Content-type detection from file extension |
@@ -4820,3 +4821,26 @@ rws
 **Fail fast, not fail open** — a value that *looks* like a secret reference but fails to resolve (wrong token, unreachable backend, missing field, ...) is a startup error, not a silently-ignored one: the alternative would be a server starting up with a JWT signing key literally equal to the string `"vault://secret/myapp/db#password"`.
 
 A directory or file that *does* exist is always served as itself — the fallback only ever applies to the previously-404 case, and only when the configured fallback file actually exists on disk (a typo'd `RWS_CONFIG_SPA_FALLBACK` value is a silent no-op, not a broken response). Read fresh on every request (`crate::entry_point::get_spa_fallback`), so it can be changed via `rws.config.toml` + `SIGHUP` without a restart, the same as `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`.
+
+---
+
+### 81. One-line JSON/text responses — `Response::json` / `Response::text`
+
+No feature flag required. Building a JSON or plain-text response by hand means constructing a `ContentRange` and setting `status_code`/`reason_phrase` yourself every time — easy to get subtly wrong (forgetting the `Content-Type`, mismatching status code and reason phrase). `Response::json`/`Response::text` collapse that into one call:
+
+```rust
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+fn process(_request: &Request, _response: Response, _connection: &ConnectionInfo) -> Response {
+    // application/json, from pre-serialized bytes
+    let body = br#"{"status":"ok","count":42}"#.to_vec();
+    Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, body)
+}
+
+fn error_process(_request: &Request, _response: Response, _connection: &ConnectionInfo) -> Response {
+    // text/plain
+    Response::text(STATUS_CODE_REASON_PHRASE.n400_bad_request, "invalid input")
+}
+```
+
+`Response::json` takes already-serialized bytes rather than a `Serialize` value, so it has no dependency on the `serde` feature — pair it with `serde_json::to_vec(&value)?` (or hand-rolled JSON) to build `body`. If you already have a `Serialize` type and want one call to go straight from a typed value to a response, use `Json(value).into_response()` (`serde` feature, see Use Case #2 above) instead — `Json<T>` handles the serialization step for you, these two helpers don't.

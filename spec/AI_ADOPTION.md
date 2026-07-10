@@ -89,10 +89,10 @@ Response::text(STATUS_CODE_REASON_PHRASE.n400_bad_request, "invalid input")
 
 …the surface area for errors collapses to one line. Helpers to add to `Response` and `Request`:
 
-- `Response::json(status, bytes) -> Response`
-- `Response::text(status, str) -> Response`
-- `Request::body_as_str(&self) -> Result<&str, Response>`
-- `Request::query_param(&self, key) -> Option<&str>` (wraps the existing `URL` machinery)
+- ✅ **Done** — `Response::json(status, bytes) -> Response` (`src/response/mod.rs`). Takes already-serialized bytes, not a `Serialize` value, so it has no dependency on the `serde` feature; pair with `serde_json::to_vec` or hand-rolled JSON. Builds a `Content-Type: application/json` response via the existing `Range::get_content_range`/`Response::get_response` machinery — no new body-construction path. For a typed value in one call, `Json(value).into_response()` (`serde` feature) already existed and still handles the serialize-and-respond case.
+- ✅ **Done** — `Response::text(status, str) -> Response` (`src/response/mod.rs`). Builds a `Content-Type: text/plain` response the same way.
+- `Request::body_as_str(&self) -> Result<&str, Response>` — not yet implemented.
+- `Request::query_param(&self, key) -> Option<&str>` (wraps the existing `URL` machinery) — not yet implemented.
 
 ---
 
@@ -114,6 +114,6 @@ One controller implementing the Model Context Protocol JSON-RPC envelope at `POS
 |---|------|--------|--------|
 | 1 | `llms.txt` | 1 hour | Immediate — all AI tools pick it up |
 | 2 | `examples/` directory (3-5 examples) | 2-3 hours | docs.rs indexing + GitHub discovery |
-| 3 | `Response::json` / `Response::text` helpers | 1 hour | Every AI-generated controller gets shorter |
+| 3 | `Response::json` / `Response::text` helpers | 1 hour | ✅ Done — every AI-generated controller gets shorter |
 | 4 | `prompts/SYSTEM_PROMPT.md` | 30 min | Users can activate it today |
 | 5 | MCP server controller | 1 day | Future-proofing for agentic tools |

@@ -136,6 +136,20 @@ r.content_range_list = vec![Range::get_content_range(
 r.headers.push(Header { name: "X-Custom".to_string(), value: "value".to_string() });
 ```
 
+### JSON / text response shortcut (no `serde` feature needed)
+
+```rust
+use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+// application/json — body is already-serialized bytes (e.g. serde_json::to_vec(&value)?)
+let r = Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, br#"{"ok":true}"#.to_vec());
+
+// text/plain
+let r = Response::text(STATUS_CODE_REASON_PHRASE.n400_bad_request, "invalid input");
+```
+
+For a typed `Serialize` value in one call (handles serialization for you), use `Json(value).into_response()` instead (`serde` feature — see `src/json/`).
+
 ### 302 Redirect pattern
 
 ```rust
@@ -2222,7 +2236,8 @@ src/redis_protocol/     — RespConn: crate-internal hand-rolled RESP v2 client 
 src/request/            — Request struct and HTTP/1.1 parsing
 src/request_id/         — RequestIdLayer, generate_request_id
 src/request_log/        — Per-request log middleware
-src/response/           — Response struct, STATUS_CODE_REASON_PHRASE
+src/response/           — Response struct, STATUS_CODE_REASON_PHRASE,
+                          Response::json/Response::text one-line helpers (no serde needed)
 src/rewrite/            — RewriteLayer (request/response rewriting)
                           request_uri_regex_rewrite (regex URI rewrite) (rewrite-regex feature)
 src/router/             — Router, PathParams, named/wildcard routing

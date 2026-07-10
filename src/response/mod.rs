@@ -685,6 +685,35 @@ impl Response {
         response
     }
 
+    /// Build a `Content-Type: application/json` response from already-serialized bytes.
+    ///
+    /// Takes raw bytes rather than a `Serialize` value so it carries no dependency on the
+    /// `serde` feature — pair it with `serde_json::to_vec` (or hand-rolled JSON) to build `body`.
+    /// For a one-line serialize-and-respond helper on a typed value, see [`crate::json::Json`]
+    /// (`serde` feature).
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    ///
+    /// let response = Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, br#"{"ok":true}"#.to_vec());
+    /// ```
+    pub fn json(status_code_reason_phrase: &StatusCodeReasonPhrase, body: Vec<u8>) -> Response {
+        let content_range = Range::get_content_range(body, MimeType::APPLICATION_JSON.to_string());
+        Response::get_response(status_code_reason_phrase, None, Some(vec![content_range]))
+    }
+
+    /// Build a `Content-Type: text/plain` response from a body string.
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    ///
+    /// let response = Response::text(STATUS_CODE_REASON_PHRASE.n400_bad_request, "invalid input");
+    /// ```
+    pub fn text(status_code_reason_phrase: &StatusCodeReasonPhrase, body: &str) -> Response {
+        let content_range = Range::get_content_range(body.as_bytes().to_vec(), MimeType::TEXT_PLAIN.to_string());
+        Response::get_response(status_code_reason_phrase, None, Some(vec![content_range]))
+    }
+
     pub fn generate(&mut self) -> Vec<u8> {
         let response = &mut self.clone();
 
