@@ -468,6 +468,7 @@ impl DbSessionStore {
 
 // ── RedisSessionStore ─────────────────────────────────────────────────────────
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::redis_protocol::{RespConn, RespReply};
 
 /// Session store backed by a Redis server.
@@ -500,17 +501,20 @@ use crate::redis_protocol::{RespConn, RespReply};
 /// let loaded = store.load(&sess.id).expect("load session").unwrap();
 /// assert_eq!(Some("42"), loaded.get("user_id"));
 /// ```
+#[cfg(not(target_arch = "wasm32"))]
 pub struct RedisSessionStore {
     conn: Arc<RespConn>,
     ttl: u64,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Clone for RedisSessionStore {
     fn clone(&self) -> Self {
         RedisSessionStore { conn: Arc::clone(&self.conn), ttl: self.ttl }
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl RedisSessionStore {
     /// Create a store that connects to `addr` (e.g. `"127.0.0.1:6379"`).
     /// `password` is passed to Redis `AUTH` if `Some`.

@@ -23,11 +23,9 @@ Child spans, baggage propagation, and per-database-query spans within a single i
 Built-in log-file rotation (by size or time) so the server can write logs to disk without an external `logrotate` configuration.
 :::
 
-:::caution[Coming Soon]
-**WebAssembly compile target**
+---
 
-Support for `wasm32-wasi` so the server can run inside a WebAssembly runtime such as Wasmtime or WasmEdge.
-:::
+**WebAssembly guest component** — shipped. `App`/`Router`/middleware now run inside a `wasi:http/proxy` WASM component (Wasmtime, Spin, Fastly Compute) via the separate `rws-wasm-shim` package. See [WASM Guest Component](/deployment/wasm/). Larger follow-up phases (streaming bodies, outbound HTTP from the guest) remain open — tracked in `spec/WASM_SHIM.md` in the repository.
 
 ---
 

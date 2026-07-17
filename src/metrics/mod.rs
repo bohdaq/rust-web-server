@@ -230,6 +230,14 @@ pub fn prometheus_text() -> String {
 /// docs). A backend never seen by the global breaker (e.g. one whose
 /// `ReverseProxy` was wired to a different, non-global breaker instance)
 /// emits no line rather than a synthetic `0` — there's nothing to report.
+// `circuit_breaker` is native-only (backed by `redis_protocol`'s `TcpStream`)
+// — see spec/WASM_SHIM.md. No breaker state exists to report under wasm32.
+#[cfg(target_arch = "wasm32")]
+fn circuit_breaker_prometheus_text() -> String {
+    String::new()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn circuit_breaker_prometheus_text() -> String {
     let mut states = crate::circuit_breaker::global().lock().unwrap().all_states();
     if states.is_empty() {

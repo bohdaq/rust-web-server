@@ -125,7 +125,7 @@ Low urgency; workarounds are acceptable or audience is small.
 
 - [ ] **GraphQL** — no integration with `async-graphql` or `juniper`. Add a thin `src/graphql/mod.rs` adapter that wraps `async-graphql`'s schema behind an `Application`. Closes GAPS_V3 §3.18 and GAPS_V2 §11.
 
-- [ ] **WebAssembly / `wasm32-wasi` target** — OS threads, `TcpStream`, and `aws-lc-rs` do not compile to WASM. A `wasm32-wasi` shim layer would enable running rws handlers inside Wasmtime, WasmEdge, or Fastly Compute. Closes GAPS_V3 §3.19.
+- [x] **WebAssembly / `wasm32-wasip2` target** (Foundation + Phase 1) — OS threads, `TcpStream`, and `aws-lc-rs` do not compile to WASM, so those modules are now `#[cfg(not(target_arch = "wasm32"))]`. A `wasi:http/proxy` guest shim (`rws-wasm-shim/`) reusing the existing `Application`/`Request`/`Response` seam runs rws handlers inside Wasmtime (verified via `wasmtime serve`); Spin/Fastly Compute untested. Closes GAPS_V3 §3.19. Phase 2 (streaming bodies, outbound HTTP, stateless middleware parity) and Phase 3 (stateful-middleware writeup) remain open — see `WASM_SHIM.md`.
 
 - [ ] **HTTP/2 and HTTP/3 server push** — no server-push API exposed to handlers. Pre-push CSS/JS alongside an HTML response. Minor gap given cache interaction problems. Closes GAPS_V3 §1.10.
 

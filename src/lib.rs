@@ -60,6 +60,9 @@ pub mod async_state;
 #[cfg(feature = "http2")]
 pub(crate) mod async_bridge;
 pub mod session;
+// Socket-coupled — see spec/WASM_SHIM.md for what a wasm32-wasip2 build
+// excludes and why (no OS threads, no raw TCP/TLS in a WASI guest).
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod redis_protocol;
 pub mod sse;
 pub mod compression;
@@ -78,6 +81,7 @@ pub mod metrics;
 pub mod mcp;
 pub mod request_log;
 pub mod request_id;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod otel;
 #[cfg(feature = "acme")]
 pub mod acme;
@@ -98,6 +102,7 @@ pub mod header;
 pub mod http;
 pub mod json;
 pub mod language;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod log;
 pub mod mime_type;
 pub mod null;
@@ -106,21 +111,31 @@ pub mod request;
 pub mod response;
 pub mod server;
 pub mod symbol;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod thread_pool;
 pub mod url;
 pub mod pagination;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod proxy;
 pub mod rewrite;
 pub mod scheduler;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod tcp_proxy;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod udp_proxy;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ws_proxy;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod canary;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod circuit_breaker;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod service_discovery;
 pub mod config_binding;
 pub mod di;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod proxy_config;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ingress;
 #[cfg(feature = "tera")]
 pub mod template;
@@ -128,7 +143,9 @@ pub mod validate;
 pub mod virtual_host;
 #[cfg(any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql"))]
 pub mod model;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod websocket;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod http_client;
 #[cfg(feature = "crypto")]
 pub mod crypto;
@@ -150,6 +167,9 @@ pub mod openapi;
 pub mod webhook;
 #[cfg(feature = "secrets")]
 pub mod secrets;
+// Runs wrapped work on a background OS thread to bound wait time — needs
+// `std::thread::spawn`, unavailable on wasm32-wasip2. See spec/WASM_SHIM.md.
+#[cfg(not(target_arch = "wasm32"))]
 pub mod timeout;
 pub mod prelude;
 

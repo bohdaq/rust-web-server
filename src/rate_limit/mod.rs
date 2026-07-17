@@ -2,7 +2,9 @@
 mod tests;
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
@@ -106,6 +108,7 @@ impl RateLimiter {
 
 // ── RedisRateLimiter ──────────────────────────────────────────────────────────
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::redis_protocol::{RespConn, RespReply};
 
 /// A distributed, fixed-window rate limiter backed by a Redis server.
@@ -141,12 +144,14 @@ use crate::redis_protocol::{RespConn, RespReply};
 ///     Err(e) => { /* Redis unreachable — decide fail-open vs fail-closed */ }
 /// }
 /// ```
+#[cfg(not(target_arch = "wasm32"))]
 pub struct RedisRateLimiter {
     conn: Arc<RespConn>,
     max_requests: AtomicU32,
     window_secs: AtomicU64,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Clone for RedisRateLimiter {
     fn clone(&self) -> Self {
         RedisRateLimiter {
@@ -157,6 +162,7 @@ impl Clone for RedisRateLimiter {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl RedisRateLimiter {
     /// Create a limiter that connects to `addr` (e.g. `"127.0.0.1:6379"`),
     /// allowing `max_requests` per `window_secs`-second window.

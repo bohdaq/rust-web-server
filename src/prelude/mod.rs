@@ -31,4 +31,6 @@ pub use crate::request::Request;
 pub use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 pub use crate::router::PathParams;
 pub use crate::routes;
-pub use crate::server::{ConnectionInfo, Server};
+pub use crate::server::ConnectionInfo;
+#[cfg(not(target_arch = "wasm32"))]
+pub use crate::server::Server;

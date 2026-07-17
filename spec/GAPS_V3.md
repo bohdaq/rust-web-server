@@ -299,7 +299,7 @@ No integration with `async-graphql` or `juniper`. GraphQL queries must be served
 
 ### 3.19 WebAssembly / `wasm32-wasi` target
 
-The binary uses OS threads, `std::net::TcpStream`, and `aws-lc-rs` — none of which compile to WASM today. Running rws handlers inside a WASM sandbox (Wasmtime, WasmEdge, Fastly Compute) would require a thin `wasm32-wasi` shim layer. (Already in the docs roadmap.)
+**Foundation + Phase 1 shipped.** The binary uses OS threads, `std::net::TcpStream`, and `aws-lc-rs` — none of which compile to WASM, so those modules are now `#[cfg(not(target_arch = "wasm32"))]`. Running rws handlers inside a WASM sandbox is done via a `wasi:http/proxy` guest adapter (`rws-wasm-shim/`), not a socket-level port — verified against a real `wasmtime serve` process. See `WASM_SHIM.md` for what shipped and what's still open (Phase 2: streaming bodies, outbound HTTP; Phase 3: stateful-middleware caveats).
 
 ---
 

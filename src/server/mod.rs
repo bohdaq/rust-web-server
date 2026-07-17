@@ -1,27 +1,50 @@
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 pub mod tests;
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod example;
 
+// The TCP/thread-pool accept loop below (`Server::setup`/`run`/`process`/…) needs
+// `std::net::TcpListener` and OS threads, neither available on `wasm32-wasip2`.
+// `ConnectionInfo`/`Address` further down have no socket dependency and stay
+// compiled on every target — see spec/WASM_SHIM.md for the guest-adapter that
+// replaces this accept loop under WASI.
+#[cfg(not(target_arch = "wasm32"))]
 use std::io::prelude::*;
+#[cfg(not(target_arch = "wasm32"))]
 use std::borrow::Borrow;
+#[cfg(not(target_arch = "wasm32"))]
 use std::net::{IpAddr, SocketAddr, TcpListener};
+#[cfg(not(target_arch = "wasm32"))]
 use std::str::FromStr;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::request::{METHOD, Request};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::app::App;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::application::Application;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::entry_point::{bootstrap, get_ip_port_thread_count, get_request_allocation_size, set_default_values};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::header::Header;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::log::Log;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::mime_type::MimeType;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::range::{ContentRange, Range};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::symbol::SYMBOL;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::thread_pool::ThreadPool;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct Server {}
+#[cfg(not(target_arch = "wasm32"))]
 impl Server {
     pub fn process_request(mut stream: impl Read + Write + Unpin, peer_addr: SocketAddr) -> Vec<u8> {
         let request_allocation_size = get_request_allocation_size();

@@ -268,6 +268,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Background job queue — `JobQueue` (in-memory) or `PersistentJobQueue` (crash-safe, model-backed); retry with exponential backoff; `jobs` feature
 - Kubernetes-ready — `/healthz`, `/readyz`, `/metrics`; `0.0.0.0` default bind; Dockerfile included; parameterized Helm chart at [`helm/rws/`](helm/rws/)
 - Compression — automatic gzip for text types; chunked streaming for files > 8 MB
+- WASM guest component — `rws-wasm-shim` runs `App`/`Router`/middleware inside a `wasi:http/proxy` component (Wasmtime, Spin, Fastly Compute); the host owns the socket and TLS, calling the guest once per request; see `spec/WASM_SHIM.md`
 
 </details>
 

@@ -1,0 +1,29 @@
+[package]
+name = "rws-wasm-shim"
+version = "0.1.0"
+authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
+edition = "2021"
+# wasm32-wasip2 reached Rust Tier 2 in 1.82 — higher than the main crate's
+# 1.75 MSRV. This package is only ever built for that target; see
+# spec/WASM_SHIM.md for the full plan this implements (Foundation + Phase 1).
+rust-version = "1.82"
+license = "MIT"
+description = "wasi:http/proxy guest adapter that runs rust-web-server's Application/Request/Response inside a WASM component (Wasmtime, Spin, Fastly Compute)"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+# `rust-web-server`'s default feature set (http3) pulls in tokio's
+# rt-multi-thread + quinn/h2/h3, none of which compile for wasm32-wasip2 —
+# see the #[cfg(not(target_arch = "wasm32"))] gates in the main crate's
+# lib.rs. This package only needs the core routing/controller/middleware
+# surface, so default features are disabled.
+[dependencies]
+rust-web-server = { path = "..", default-features = false }
+wasip2 = "1.0"
+
+# `cargo build --release --target wasm32-wasip2` in this directory produces
+# target/wasm32-wasip2/release/rws_wasm_shim.wasm, already a valid component
+# (no `wasm-tools component new` step needed on this target). Run it with
+# `wasmtime serve target/wasm32-wasip2/release/rws_wasm_shim.wasm`.

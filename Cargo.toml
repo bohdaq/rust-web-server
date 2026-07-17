@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.106.0"
+version = "17.107.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
@@ -10,6 +10,14 @@ rust-version = "1.75"
 license = "MIT"
 keywords = ["http", "web-server", "http3", "reverse-proxy", "mcp"]
 categories = ["network-programming", "web-programming::http-server"]
+
+[workspace]
+# Previously implicit (no [workspace] table at all — Cargo auto-added
+# rws-macros as a member since it's a path dependency of this package).
+# rws-wasm-shim depends ON rust-web-server rather than the other way around,
+# so it can't be pulled in as a path *dependency* the way rws-macros is —
+# it needs an explicit workspace membership instead. See spec/WASM_SHIM.md.
+members = ["rws-macros", "rws-wasm-shim"]
 
 [lib]
 name = "rust_web_server"

@@ -54,6 +54,14 @@ HTTP/1.1 only (no TLS, smallest binary):
 cargo build --release --no-default-features --features http1
 ```
 
+WASM guest component (`wasi:http/proxy` world — runs inside Wasmtime, Spin, or Fastly Compute; see `spec/WASM_SHIM.md`):
+```bash
+rustup target add wasm32-wasip2   # Rust 1.82+ — higher than this crate's own 1.75 MSRV
+cd rws-wasm-shim
+cargo build --release --target wasm32-wasip2
+wasmtime serve target/wasm32-wasip2/release/rws_wasm_shim.wasm
+```
+
 ## Release
 
 Open [RELEASE](RELEASE.md) for details.
@@ -4844,3 +4852,41 @@ fn error_process(_request: &Request, _response: Response, _connection: &Connecti
 ```
 
 `Response::json` takes already-serialized bytes rather than a `Serialize` value, so it has no dependency on the `serde` feature — pair it with `serde_json::to_vec(&value)?` (or hand-rolled JSON) to build `body`. If you already have a `Serialize` type and want one call to go straight from a typed value to a response, use `Json(value).into_response()` (`serde` feature, see Use Case #2 above) instead — `Json<T>` handles the serialization step for you, these two helpers don't.
+
+---
+
+### 82. Running `App` inside a WASM runtime (`wasi:http/proxy` guest)
+
+The `rws-wasm-shim` workspace package (a separate crate — see `spec/WASM_SHIM.md`) runs the same `App`/`Router`/middleware logic you use natively, but hosted inside a WASM component instead of a `TcpListener`. The host (Wasmtime, Spin, Fastly Compute) owns the socket and TLS termination; it calls the guest once per request via the standard `wasi:http/proxy` world.
+
+```bash
+rustup target add wasm32-wasip2
+cd rws-wasm-shim
+cargo build --release --target wasm32-wasip2
+wasmtime serve target/wasm32-wasip2/release/rws_wasm_shim.wasm
+# in another shell:
+curl http://127.0.0.1:8080/healthz
+```
+
+The adapter itself is a small `Guest::handle` implementation:
+
+```rust
+use wasip2::exports::http::incoming_handler::Guest;
+use wasip2::http::types::{IncomingRequest, ResponseOutparam};
+use rust_web_server::app::App;
+use rust_web_server::application::Application;
+use rust_web_server::core::New;
+
+wasip2::http::proxy::export!(Shim);
+struct Shim;
+
+impl Guest for Shim {
+    fn handle(request: IncomingRequest, response_out: ResponseOutparam) {
+        // translate `request` into a `rust_web_server::request::Request`,
+        // call App::new().execute(&request, &connection), translate the
+        // Response back — see rws-wasm-shim/src/lib.rs for the full adapter.
+    }
+}
+```
+
+Because there is no real `TcpListener`/`ThreadPool`/`rustls` in a WASM guest, everything socket- and thread-coupled (`server`, `thread_pool`, `proxy*`, `websocket`, `http_client`, `otel`, `log`, and more) is compiled out for `target_arch = "wasm32"` in the main crate — only routing, controllers, extractors, and in-memory middleware are available. Two real limitations worth knowing before relying on this: no real client IP/SNI hostname reaches `ConnectionInfo` (the host already terminated TLS), and hosts commonly instantiate a fresh guest **per request** — so stateful middleware (`RateLimiter`, `CacheLayer`, in-memory sessions) will not persist across requests unless your specific host guarantees instance reuse. Both are documented in detail in `spec/WASM_SHIM.md`.

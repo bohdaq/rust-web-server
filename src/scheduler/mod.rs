@@ -19,29 +19,38 @@
 //!     .start();
 //! ```
 
+// `cron` is pure date/time math (no threads) and stays available on every
+// target — `app::controller::static_resource` uses it unconditionally for
+// Last-Modified/cache-header formatting. `Scheduler` itself spawns one OS
+// thread per task and is native-only; see spec/WASM_SHIM.md.
 pub mod cron;
 pub use cron::CronSchedule;
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests;
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::{Duration, Instant};
 
 /// A `@Scheduled`-style background task runner.
 ///
 /// Register tasks with `.every()`, `.after()`, or `.cron()`, then call
 /// `.start()` to spawn one dedicated background thread per task.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct Scheduler {
     tasks: Vec<Task>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 struct Task {
     kind: TaskKind,
     initial_delay: Duration,
     f: Arc<dyn Fn() + Send + Sync + 'static>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 enum TaskKind {
     /// Fixed rate — interval measured from the *start* of the previous run.
     FixedRate(Duration),
@@ -51,6 +60,7 @@ enum TaskKind {
     Cron(CronSchedule),
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Scheduler {
     pub fn new() -> Self {
         Scheduler { tasks: Vec::new() }
@@ -154,6 +164,7 @@ impl Scheduler {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Default for Scheduler {
     fn default() -> Self {
         Scheduler::new()

@@ -57,7 +57,7 @@ file is the single ranked list of what's actually left, in the order to tackle i
 25. **Native gRPC server** (`prost`/`tonic`) and **Arrow/Parquet/.npy support** — both large and both would be this crate's *first* third-party parsing dependencies, breaking the hand-rolled-everything pattern the rest of the codebase follows. Worth a deliberate go/no-go conversation before scoping, not just a backlog slot.
 26. **WebSocket `permessage-deflate`** (Medium) then **WebSocket-over-HTTP/2 (RFC 8441)** (Large) — same subsystem, do deflate first.
 27. **GraphQL adapter** (Large) — lowest urgency, no stated adoption pressure in the docs.
-28. **WASM/`wasm32-wasi` shim** (Very large) — biggest unknown, do last.
+28. ✅ **Foundation + Phase 1 done** — **WASM/`wasm32-wasip2` shim** (Very large). `WASM_SHIM.md`: not a socket/thread port (infeasible — no `std::thread`, no `aws-lc-rs` on this target), but a `wasi:http/proxy` guest adapter (`rws-wasm-shim/`) reusing the existing `Application`/`Request`/`Response` seam, verified end-to-end against a real `wasmtime serve` process. Phase 2 (stateless middleware parity, streaming bodies, outbound HTTP) and Phase 3 (stateful-middleware-under-per-request-instantiation writeup) remain open.
 
 ## Deprioritized
 

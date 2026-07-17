@@ -2170,6 +2170,25 @@ let www_router = Router::new().with_host("www.example.com").get("/", home_handle
 
 ---
 
+## WASM guest component (rws-wasm-shim/, wasi:http/proxy world)
+
+Runs `App`/`Router`/middleware inside a WASM component instead of behind a `TcpListener` — the host (Wasmtime, Spin, Fastly Compute) owns the socket and TLS termination and calls the guest once per request via the standard `wasi:http/proxy` world. Separate workspace package, not part of the `rust-web-server` crate's own public API. Full plan: `spec/WASM_SHIM.md`.
+
+```bash
+rustup target add wasm32-wasip2   # Rust 1.82+ — higher than this crate's own 1.75 MSRV
+cd rws-wasm-shim
+cargo build --release --target wasm32-wasip2
+wasmtime serve target/wasm32-wasip2/release/rws_wasm_shim.wasm
+```
+
+- The main crate's socket/thread-coupled modules (`server`, `thread_pool`, `proxy*`, `websocket`, `http_client`, `otel`, `log`, `scheduler`'s `Scheduler`, `redis_protocol`, `circuit_breaker`, `canary`, `service_discovery`, `ingress`, `timeout`) are `#[cfg(not(target_arch = "wasm32"))]` — none of them exist for this target. Only routing, controllers, extractors, and in-memory middleware are available.
+- `rws-wasm-shim/src/lib.rs` implements `wasip2::exports::http::incoming_handler::Guest::handle`: translates the incoming `wasi:http` request into a `rust_web_server::request::Request`, calls `App::new().execute(&request, &connection)`, translates the `Response` back. Buffered bodies only — `stream_file`/`stream_pipe` aren't wired up yet.
+- Two real limitations, not implementation bugs: (1) no real client IP or TLS SNI hostname reaches `ConnectionInfo` — the host already terminated TLS before invoking the guest; (2) hosts commonly instantiate a fresh guest **per request**, so stateful middleware (`RateLimiter`, `CacheLayer`, in-memory sessions, `RequestIdLayer`'s counter) does not persist across requests unless your specific host guarantees instance reuse.
+- Depends on the `file-ext` crate's wasm32 support (path separator / `remove_dir_all`-based recursive delete) — fixed upstream in file-ext 12.1.0.
+- Verified end-to-end against `wasmtime serve` (real HTTP requests through curl, not just a compile check).
+
+---
+
 ## Module index
 
 ```
@@ -2274,6 +2293,8 @@ src/virtual_host/       — VirtualHostConfig
 src/webhook/            — verify_webhook_signature, WebhookProvider (GitHub/Shopify/Stripe) (webhook feature)
 src/websocket/          — WebSocket handshake, Frame codec
 src/ws_proxy/           — WsProxy (WebSocket proxy); with_live_backends() for health-check-aware routing
+
+rws-wasm-shim/          — separate workspace package; wasi:http/proxy guest adapter (wasm32-wasip2 only)
 ```
 
 ---
