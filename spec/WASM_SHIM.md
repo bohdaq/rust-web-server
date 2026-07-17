@@ -8,9 +8,13 @@ opposed to embedding a WASM plugin *inside* `rws` (that's the separate "Wasm mid
 `TODO_FINAL.md` #28. Rated "Very large / biggest unknown" there — this doc exists to turn that
 one line into a sequenced, scoped project the same way `KAFKA_ROADMAP.md` did for Kafka.
 
-**Status: Foundation and Phase 1 are shipped** (`rws-wasm-shim/`), verified end-to-end against a
-real `wasmtime serve` process — not just a compile check. See "What actually shipped" below for
-where the implementation diverged from the original sketch. Phases 2 and 3 remain open.
+**Status: Foundation, Phase 1, and most of Phase 2 are shipped** (`rws-wasm-shim/` +
+`http_client`'s new wasm32 backend), verified end-to-end against a real `wasmtime serve`
+process — not just a compile check, including real outbound HTTP **and HTTPS** (TLS terminated by
+the host) and a 9 MB streamed file download that came back byte-identical. Phase 3's biggest risk
+(per-request instance lifecycle) has been **empirically confirmed true** for `wasmtime serve`, not
+just theorized. See the per-item notes below for what shipped, what's still open, and where the
+implementation diverged from the original sketch.
 
 ---
 
@@ -189,54 +193,115 @@ wasmtime serve target/wasm32-wasip2/release/rws_wasm_shim.wasm
 
 ## Phase 2 — Feature parity for stateless middleware + streaming
 
-### 5. Middleware that only touches `Request`/`Response`
+### 5. Middleware that only touches `Request`/`Response` — done, verified per-feature
 
-Verify and wire up, one at a time, against the shim: `RequestIdLayer`, `RewriteLayer`, `IpFilter`,
-CORS, CSRF, `BasicAuthLayer`/`JwtLayer` (`auth` feature). All operate purely on the
-already-in-memory `Request`/`Response` — no socket access — so should need no changes, only
-verification under the target.
+Every feature below was individually built for `wasm32-wasip2` via
+`cargo check --target wasm32-wasip2 --no-default-features --features "<name>" --lib` and came back
+clean, no code changes needed beyond Foundation's module gating: `auth` (`BasicAuthLayer`,
+`JwtLayer`, and — once item 7 below landed — `ForwardAuthLayer` too), `auth-asymmetric`, `csrf`,
+`crypto`, `webhook`, `rewrite-regex`. `RequestIdLayer`, `RewriteLayer`, `IpFilter`, CORS, and the
+core in-memory `RateLimiter`/`CacheLayer` were already unconditionally available since Foundation
+(no feature flag). `sso`, `sso-server`, `sso-saml`, `secrets`, `storage-s3`, and `storage-azure`
+*also* came back clean — see item 7, which is what actually unblocked them.
 
-### 6. Streaming bodies
+### 6. Streaming bodies — done
 
-Wire `Response::stream_pipe`/`stream_file` through wasi-http's `output-stream` resource so large
-responses don't have to be fully buffered in guest linear memory (which is bounded and typically
-much smaller than a native process's heap).
+`rws-wasm-shim`'s `write_response` now branches on `Response::stream_pipe`/`stream_file` before
+falling back to the buffered `content_range_list` path, copying through the `wasi:http`
+output-stream in 8 KB chunks via a small `copy_in_chunks` helper instead of buffering the whole
+body. **Verified for real**: served a 9 MB file (well past the native server's 8 MB
+buffer-vs-stream threshold) through a `wasmtime serve` process with an explicit `--dir` grant, and
+the downloaded bytes were identical to the source file (`diff` clean).
 
-### 7. Outbound HTTP backend for `http_client`
+### 7. Outbound HTTP backend for `http_client` — done
 
-`src/http_client/mod.rs::Client` currently opens `TcpStream`/`rustls` directly — that doesn't
-exist in a wasi-http guest. Add a second backend using wasi-http's `outgoing-handler`, selected by
-`#[cfg(target_arch = "wasm32")]`, behind the same public `Client`/`RequestBuilder` API. This is
-what unlocks `sso`, `secrets`, `storage-s3`/`storage-azure`, `ForwardAuthLayer`, and webhook
-verification code paths inside a guest — all of them go through `http_client` already, so this one
-adapter covers all of them for free once it lands.
+`src/http_client/mod.rs::send_once` (the one-hop-no-redirect core `RequestBuilder::send()` calls
+into) now has a `#[cfg(target_arch = "wasm32")]` twin that builds a `wasi:http`
+`OutgoingRequest`/`OutgoingBody`, calls `outgoing_handler::handle`, blocks on the
+`future-incoming-response` via `.subscribe().block()`, and reads the result back into the same
+`Response` struct the native `TcpStream`/`rustls` backend produces — `ParsedUrl`, the redirect
+loop, and the whole `Response` API are untouched and shared between both backends. The host
+performs the actual connect and TLS handshake; the guest never touches `rustls` for outbound
+requests regardless of `http://` vs `https://`.
+
+**This unblocked more than expected.** Enabling `http-client` (or anything depending on it —
+`sso`, `sso-server`, `sso-saml`, `secrets`, `storage-s3`, `storage-azure`, `auth::forward`'s
+`ForwardAuthLayer`) for `wasm32-wasip2` still failed even with the new backend in place, because
+`rustls`'s own `aws-lc-rs` crypto-backend feature compiles C/asm (`aws-lc-sys`) that doesn't build
+for `wasm32-wasip2` (`fatal error: 'sys/types.h' file not found`) — and Cargo pulls in an optional
+dependency's full feature set the moment any enabled feature says `dep:rustls`, regardless of
+whether the wasm32 code path ever calls into it. Fixed by moving `rustls`/`webpki-roots` into a
+`[target.'cfg(not(target_arch = "wasm32"))'.dependencies]` table in the root `Cargo.toml` — native
+builds are unaffected (verified: `cargo test` and `cargo check --features http2/acme` all still
+pass), and wasm32 builds simply never see `rustls` at all. `tls_connect` (native TLS handshake
+helper, used by both `http_client` and `mailer`) got a matching `not(target_arch = "wasm32")` added
+to its existing feature gate.
+
+**`mailer` needed its own gate, not a fix**: it uses `TcpStream::connect` directly for the raw SMTP
+protocol (not HTTP at all — there's no `wasi:http`-equivalent for arbitrary TCP protocols), so it's
+now `#[cfg(all(feature = "mailer", not(target_arch = "wasm32")))]` in `src/lib.rs`, matching
+`tcp_proxy`/`udp_proxy`/`websocket`.
+
+**Verified for real**, not just compiled: `Client::new().get(url).send()` from inside a running
+`wasmtime serve` guest round-tripped correctly against both a local plain-HTTP test server and
+`https://example.com` (real TLS, terminated by Wasmtime's host implementation) — same public API,
+zero code changes needed in `sso`/`secrets`/`storage-s3`/`storage-azure`/`auth::forward` themselves
+to make them wasm32-compatible; they were already only using `http_client::Client`.
+
+One more thing this surfaced: `secrets`'s Vault/AWS-SM/Key-Vault backends reuse
+`service_discovery::json_lite` (a small hand-rolled JSON parser) purely for parsing, but the whole
+`service_discovery` module was gated out in Foundation because `BackendPool`/`DiscoverySource`
+(DNS/etcd/Consul/Docker) genuinely need sockets. Split the same way `scheduler::cron` was in
+Foundation: `json_lite` (plus the `pub mod service_discovery;` declaration itself) stays available
+on every target; `DiscoverySource`, `BackendPool`, and the `consul`/`dns_srv`/`docker`/`etcd`
+submodules are now gated at the item level.
 
 ---
 
-## Phase 3 — Explicitly out of scope (needs a decision, not just effort)
+## Phase 3 — Stateful middleware and instance-reuse (confirmed, not just theorized)
 
-**The biggest open risk in this whole project**: WASI-HTTP guest components are commonly
-instantiated *fresh per request* by real hosts (Fastly Compute, Spin) for isolation — this is a
-platform property, not a bug. Any process-wide `Mutex`/`OnceLock`/`AtomicBool` state silently
-resets on every single call unless the specific host you deploy to guarantees instance reuse
-(`wasmtime serve` can pool instances; that is not a portable guarantee across hosts). This
-directly affects:
+**The biggest open risk in this whole project — empirically confirmed true, not a hypothetical.**
+`wasmtime serve` instantiates a **fresh guest per request**. Proof: `rws-wasm-shim`'s adapter was
+temporarily modified to call `rust_web_server::metrics::record_request()` five times per request
+before generating the response body; the *first* `/metrics` request showed `rws_requests_total 5`
+(from its own five calls), and every subsequent `/metrics` request — second, third, fourth — showed
+exactly `5` again, never `10` or `15`. Global state (an `AtomicU64` behind a `OnceLock`) resets to
+zero every single call. This is a platform property of `wasmtime serve`, not a bug reachable from
+Rust code in this crate, and other hosts (Fastly Compute, Spin) are widely understood to behave the
+same way for the same isolation reasons — though only `wasmtime serve` was actually tested here.
 
-- `RateLimiter`'s sliding window (`rate_limit`) — would silently stop limiting anything.
-- `CacheLayer` (`cache`) — every request would miss.
-- In-memory `SessionStore` (`session`) — every request would be a fresh session.
-- `metrics` counters, MCP's `sessions`/`sse_clients` maps.
+This directly affects, and currently silently breaks under `wasmtime serve` specifically:
+
+- `RateLimiter`'s sliding window (`rate_limit`) — does not limit anything across requests.
+- `CacheLayer` (`cache`) — every request misses.
+- In-memory `SessionStore` (`session`) — every request is a fresh, empty session.
+- `metrics` counters, MCP's `sessions`/`sse_clients` maps, `RequestIdLayer`'s ID generator's
+  internal counter (the ID itself still gets generated correctly per-request, just not
+  monotonically across requests).
 
 None of this can be fixed by more Rust code in this crate — it needs either a host-provided KV/
-session binding (wasi-keyvalue proposal, still pre-1.0) or an explicit documented restriction:
-"stateful middleware requires an instance-reuse-guaranteeing host." Do not ship this feature
-implying rate limiting/caching "just works" under WASM without validating against the specific
-host the plan targets.
+session binding (the `wasi-keyvalue` proposal, still pre-1.0) or an explicit documented
+restriction: **stateful middleware requires an instance-reuse-guaranteeing host, and `wasmtime
+serve` is confirmed not to be one.** Do not ship this feature implying rate limiting/caching "just
+works" under WASM — it doesn't, at least not under the one host actually tested.
 
-Left native-only, not attempted: `thread_pool`, `scheduler`, `jobs` background queue, WebSocket
+**A second, separate limitation found during Phase 2 verification**: filesystem access is **not**
+part of the `wasi:http/proxy` world's base contract (unlike outbound HTTP, which is — see item 7)
+— it's a separate, opt-in host grant. Running `wasmtime serve` with no `--dir` flag, the static-file
+controllers silently fall back to `rws`'s built-in embedded default pages (favicon/index/404/etc.)
+for *every* path, even ones that would resolve to a real file if one existed — there is no error,
+just a quiet fallback to the wrong content. Passing `--dir HOST_DIR::.` fixed this immediately
+(confirmed: a real `index.html` and a 9 MB file both served correctly, see item 6). Document this
+prominently for anyone deploying static-file serving in a wasm32 guest — it depends entirely on the
+specific host granting filesystem access, and silently "working" with embedded fallback content
+instead of real files is easy to miss in testing.
+
+Left native-only, not attempted — all assume real OS sockets or threads that a wasi-http guest is
+never given, and have no wasi:http equivalent to bridge to (unlike `http_client`, which does):
+`thread_pool`, `scheduler`'s `Scheduler` (background jobs), `jobs` background queue, WebSocket
 upgrade (`websocket`, `ws_proxy`), L4 `tcp_proxy`/`udp_proxy`, `GrpcProxy`/`H2ReverseProxy`, ACME,
-`mailer`'s raw SMTP socket, the `model` DB layer. All assume real OS sockets or threads that a
-wasi-http guest is never given.
+`mailer`'s raw SMTP socket, the `model` DB layer, `service_discovery`'s DNS/etcd/Consul/Docker
+sources.
 
 ---
 
@@ -262,13 +327,15 @@ wasi-http guest is never given.
    `rws-wasm-shim`; fix `file-ext` for `wasm32`. Compiles clean for the target.
 2. **Phase 1** ✅ — buffered request/response round trip through `App::execute()`; verified against
    a real `wasmtime serve` process via curl; native unit tests for the pure translation logic.
-3. **Phase 2** (open) — stateless middleware parity, streaming bodies, `http_client`
-   outgoing-handler backend, and the CI job described above.
-4. **Phase 3** (open) — write down (don't silently ship) which stateful features are unsupported
-   per-host, and revisit WASI 0.3 once it's out of RC.
+3. **Phase 2** ✅ mostly — stateless middleware parity (verified per-feature), streaming bodies
+   (verified with a real 9 MB file), `http_client` outgoing-handler backend (verified with real
+   HTTP and HTTPS), which in turn unblocked `sso`/`secrets`/`storage-s3`/`storage-azure`/
+   `ForwardAuthLayer` for free. Only the CI job (scripting the manual `wasmtime serve` verification)
+   remains open.
+4. **Phase 3** — the stateful-middleware risk is now **confirmed**, not theorized (see above);
+   revisit WASI 0.3 once it's out of RC remains open.
 
-Effort/risk for the remaining phases: unchanged from `TODO_FINAL.md`'s "Very large" rating — the
-biggest unknowns are (a) per-request instance lifecycle breaking every stateful middleware
-silently, and (b) real-world crate compatibility of `argon2`/`rsa`/`p256`/`regex` under
-`wasm32-wasip2` once those optional features are actually enabled (untested — Foundation only
-verified the core, no-default-features build).
+Effort/risk for what's left: much smaller than the original "Very large" rating implied — the
+transport-level work (Foundation + Phase 1 + Phase 2) is done and verified. What remains is mostly
+documentation/decision work (Phase 3's per-host stateful-middleware writeup) plus routine CI
+plumbing, not further exploratory engineering.

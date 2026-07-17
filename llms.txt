@@ -2181,9 +2181,10 @@ cargo build --release --target wasm32-wasip2
 wasmtime serve target/wasm32-wasip2/release/rws_wasm_shim.wasm
 ```
 
-- The main crate's socket/thread-coupled modules (`server`, `thread_pool`, `proxy*`, `websocket`, `http_client`, `otel`, `log`, `scheduler`'s `Scheduler`, `redis_protocol`, `circuit_breaker`, `canary`, `service_discovery`, `ingress`, `timeout`) are `#[cfg(not(target_arch = "wasm32"))]` — none of them exist for this target. Only routing, controllers, extractors, and in-memory middleware are available.
-- `rws-wasm-shim/src/lib.rs` implements `wasip2::exports::http::incoming_handler::Guest::handle`: translates the incoming `wasi:http` request into a `rust_web_server::request::Request`, calls `App::new().execute(&request, &connection)`, translates the `Response` back. Buffered bodies only — `stream_file`/`stream_pipe` aren't wired up yet.
-- Two real limitations, not implementation bugs: (1) no real client IP or TLS SNI hostname reaches `ConnectionInfo` — the host already terminated TLS before invoking the guest; (2) hosts commonly instantiate a fresh guest **per request**, so stateful middleware (`RateLimiter`, `CacheLayer`, in-memory sessions, `RequestIdLayer`'s counter) does not persist across requests unless your specific host guarantees instance reuse.
+- The main crate's socket/thread-coupled modules (`server`, `thread_pool`, `proxy*`, `websocket`, `mailer`, `otel`, `log`, `scheduler`'s `Scheduler`, `redis_protocol`, `circuit_breaker`, `canary`, `service_discovery`'s DNS/etcd/Consul/Docker sources, `ingress`, `timeout`) are `#[cfg(not(target_arch = "wasm32"))]` — none of them exist for this target.
+- `http_client::Client` has a second backend behind `#[cfg(target_arch = "wasm32")]`, built on `wasi:http`'s `outgoing-handler` interface — outbound HTTP **and HTTPS** (TLS terminated by the host, not `rustls`) work from inside the guest, verified against a local test server and `https://example.com` for real through `wasmtime serve`. This one backend is what makes `sso`, `secrets`, `storage-s3`, `storage-azure`, and `auth::forward::ForwardAuthLayer` work in the guest too — no code changes needed in any of them, since they already only used `http_client::Client`. Required moving `rustls`'s dependency (whose own `aws-lc-rs` feature doesn't compile for `wasm32-wasip2`) into a `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]` table in the root `Cargo.toml`.
+- `rws-wasm-shim/src/lib.rs` implements `wasip2::exports::http::incoming_handler::Guest::handle`: translates the incoming `wasi:http` request into a `rust_web_server::request::Request`, calls `App::new().execute(&request, &connection)`, translates the `Response` back — streaming `Response::stream_file`/`stream_pipe` through the `wasi:http` output-stream in 8 KB chunks rather than buffering, verified with a 9 MB file download that came back byte-identical.
+- Two real limitations, confirmed empirically rather than assumed: (1) hosts commonly instantiate a fresh guest **per request** — confirmed for `wasmtime serve` specifically (a request counter read back the same fixed value on every request, never accumulating), so stateful middleware (`RateLimiter`, `CacheLayer`, in-memory sessions, `RequestIdLayer`'s counter) does not persist across requests unless your specific host guarantees instance reuse; (2) filesystem access needs an explicit host grant (`wasmtime serve --dir HOST_DIR::.`) — without it, static-file serving silently falls back to embedded default pages for every path, no error. Also: no real client IP or TLS SNI hostname reaches `ConnectionInfo` — the host already terminated TLS before invoking the guest.
 - Depends on the `file-ext` crate's wasm32 support (path separator / `remove_dir_all`-based recursive delete) — fixed upstream in file-ext 12.1.0.
 - Verified end-to-end against `wasmtime serve` (real HTTP requests through curl, not just a compile check).
 
@@ -2225,7 +2226,7 @@ src/h2_handler/         — HTTP/2 connection handler (http2 feature)
 src/h3_handler/         — HTTP/3 connection handler (http3 feature)
 src/header/             — Header struct; header name constants
 src/http/               — HTTP version constants
-src/http_client/        — Client, AsyncClient, outbound HTTP
+src/http_client/        — Client, AsyncClient, outbound HTTP; wasm32 backend via wasi:http outgoing-handler
 src/ingress/            — KubernetesIngressWatcher, IngressRouter
 src/ip_filter/          — IpFilter middleware
 src/jobs/               — Job, JobQueue, PersistentJobQueue (jobs feature)

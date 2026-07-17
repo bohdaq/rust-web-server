@@ -129,7 +129,10 @@ pub mod ws_proxy;
 pub mod canary;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod circuit_breaker;
-#[cfg(not(target_arch = "wasm32"))]
+// `BackendPool`/`DiscoverySource` (DNS/etcd/Consul/Docker) are native-only —
+// gated internally in service_discovery/mod.rs, not at this declaration —
+// because `json_lite` (a plain JSON parser, no sockets) must stay available
+// for `secrets`'s Vault/AWS-SM/Key-Vault backends on every target.
 pub mod service_discovery;
 pub mod config_binding;
 pub mod di;
@@ -145,7 +148,9 @@ pub mod virtual_host;
 pub mod model;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod websocket;
-#[cfg(not(target_arch = "wasm32"))]
+// Has both a native (TcpStream/rustls) and a wasm32 (wasi:http outgoing-handler)
+// backend behind Client::send() — see the #[cfg(target_arch = "wasm32")]
+// `send_once` in this module. spec/WASM_SHIM.md Phase 2 item 7.
 pub mod http_client;
 #[cfg(feature = "crypto")]
 pub mod crypto;
@@ -153,7 +158,10 @@ pub mod crypto;
 pub mod csrf;
 #[cfg(feature = "sso")]
 pub mod sso;
-#[cfg(feature = "mailer")]
+// SMTP is a raw-TCP protocol with no wasi:http equivalent (unlike
+// http_client, which the host can proxy via outgoing-handler) — genuinely
+// can't work in a wasi:http guest, not just ungated. spec/WASM_SHIM.md.
+#[cfg(all(feature = "mailer", not(target_arch = "wasm32")))]
 pub mod mailer;
 #[cfg(feature = "jobs")]
 pub mod jobs;

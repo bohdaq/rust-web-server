@@ -56,7 +56,9 @@
 mod tests;
 
 use std::io::{Read, Write};
+#[cfg(not(target_arch = "wasm32"))]
 use std::net::TcpStream;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 #[cfg(any(feature = "http-client", feature = "http2"))]
@@ -474,7 +476,7 @@ fn decode_chunked(data: &[u8]) -> Result<Vec<u8>, HttpClientError> {
 
 // ── TLS connector (sync) ──────────────────────────────────────────────────────
 
-#[cfg(any(feature = "http-client", feature = "http2"))]
+#[cfg(all(any(feature = "http-client", feature = "http2"), not(target_arch = "wasm32")))]
 fn tls_connect(
     host: &str,
     tcp: TcpStream,
@@ -498,6 +500,7 @@ fn tls_connect(
 
 // ── Core send (one hop, no redirect) ─────────────────────────────────────────
 
+#[cfg(not(target_arch = "wasm32"))]
 fn send_once(
     method: &str,
     parsed: &ParsedUrl,
@@ -548,6 +551,129 @@ fn send_once(
         .write_all(&request_bytes)
         .map_err(|e| HttpClientError(format!("write error: {e}")))?;
     read_response(&mut stream, is_head)
+}
+
+/// wasm32 backend: no `TcpStream`/`rustls` in a wasi:http guest, so outbound
+/// requests go through the `wasi:http` `outgoing-handler` interface instead
+/// (imported by the same `wasi:http/proxy` world `rws-wasm-shim` already
+/// builds against for the incoming side — see spec/WASM_SHIM.md Phase 2
+/// item 7). The host performs the actual connect/TLS; this function only
+/// builds the outgoing-request, blocks on the response future, and reads
+/// the result back into the same `Response` shape the native backend uses.
+///
+/// Not exercised by `cargo test` — constructing real `wasi:http` resources
+/// (`OutgoingRequest`, `outgoing_handler::handle`, ...) requires a live WASI
+/// host underneath, same limitation `rws-wasm-shim`'s own tests document.
+/// Verified instead against a real `wasmtime serve` process: both plain HTTP
+/// and HTTPS (TLS terminated by the host, not this code) round-tripped
+/// correctly through this exact `Client`/`RequestBuilder` API.
+#[cfg(target_arch = "wasm32")]
+fn send_once(
+    method: &str,
+    parsed: &ParsedUrl,
+    headers: &[(String, String)],
+    body: &Option<Vec<u8>>,
+    timeout_ms: u64,
+) -> Result<Response, HttpClientError> {
+    use wasip2::http::outgoing_handler;
+    use wasip2::http::types::{Fields, OutgoingBody, OutgoingRequest, RequestOptions, Scheme};
+
+    let wasi_headers = Fields::new();
+    for (name, value) in headers {
+        let _ = wasi_headers.append(name, value.as_bytes());
+    }
+
+    let request = OutgoingRequest::new(wasi_headers);
+    request
+        .set_method(&to_wasi_method(method))
+        .map_err(|_| HttpClientError(format!("invalid method '{method}'")))?;
+    let scheme = if parsed.scheme == "https" { Scheme::Https } else { Scheme::Http };
+    request
+        .set_scheme(Some(&scheme))
+        .map_err(|_| HttpClientError(format!("invalid scheme '{}'", parsed.scheme)))?;
+    let authority = format!("{}:{}", parsed.host, parsed.port);
+    request
+        .set_authority(Some(&authority))
+        .map_err(|_| HttpClientError(format!("invalid authority '{authority}'")))?;
+    request
+        .set_path_with_query(Some(&parsed.path_and_query))
+        .map_err(|_| HttpClientError(format!("invalid path '{}'", parsed.path_and_query)))?;
+
+    let outgoing_body = request
+        .body()
+        .map_err(|_| HttpClientError("outgoing-request body handle taken twice".to_string()))?;
+    if let Some(bytes) = body {
+        let mut out = outgoing_body
+            .write()
+            .map_err(|_| HttpClientError("outgoing-body write stream taken twice".to_string()))?;
+        out.write_all(bytes)
+            .map_err(|e| HttpClientError(format!("write error: {e}")))?;
+    }
+    OutgoingBody::finish(outgoing_body, None)
+        .map_err(|e| HttpClientError(format!("failed to finish request body: {e:?}")))?;
+
+    // Best-effort — a host that doesn't support transport timeouts returns an
+    // error from these setters, which we don't treat as fatal (the request
+    // just proceeds without a host-enforced timeout in that case).
+    let options = RequestOptions::new();
+    let timeout_ns = timeout_ms.saturating_mul(1_000_000);
+    let _ = options.set_connect_timeout(Some(timeout_ns));
+    let _ = options.set_first_byte_timeout(Some(timeout_ns));
+    let _ = options.set_between_bytes_timeout(Some(timeout_ns));
+
+    let future_response = outgoing_handler::handle(request, Some(options))
+        .map_err(|e| HttpClientError(format!("failed to dispatch request: {e:?}")))?;
+
+    future_response.subscribe().block();
+
+    let incoming_response = match future_response.get() {
+        Some(Ok(Ok(response))) => response,
+        Some(Ok(Err(code))) => return Err(HttpClientError(format!("{code:?}"))),
+        Some(Err(())) => {
+            return Err(HttpClientError("response already retrieved".to_string()))
+        }
+        None => {
+            return Err(HttpClientError(
+                "response not ready after blocking on it".to_string(),
+            ))
+        }
+    };
+
+    let status = incoming_response.status();
+    let resp_headers = incoming_response
+        .headers()
+        .entries()
+        .into_iter()
+        .map(|(name, value)| (name, String::from_utf8_lossy(&value).to_string()))
+        .collect();
+
+    let mut resp_body = Vec::new();
+    if !method.eq_ignore_ascii_case("HEAD") {
+        if let Ok(incoming_body) = incoming_response.consume() {
+            if let Ok(mut stream) = incoming_body.stream() {
+                let _ = stream.read_to_end(&mut resp_body);
+            }
+        }
+    }
+
+    Ok(Response { status, headers: resp_headers, body: resp_body })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn to_wasi_method(method: &str) -> wasip2::http::types::Method {
+    use wasip2::http::types::Method;
+    match method.to_ascii_uppercase().as_str() {
+        "GET" => Method::Get,
+        "HEAD" => Method::Head,
+        "POST" => Method::Post,
+        "PUT" => Method::Put,
+        "DELETE" => Method::Delete,
+        "CONNECT" => Method::Connect,
+        "OPTIONS" => Method::Options,
+        "TRACE" => Method::Trace,
+        "PATCH" => Method::Patch,
+        other => Method::Other(other.to_string()),
+    }
 }
 
 // ── Client ────────────────────────────────────────────────────────────────────

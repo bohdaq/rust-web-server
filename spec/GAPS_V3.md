@@ -299,7 +299,7 @@ No integration with `async-graphql` or `juniper`. GraphQL queries must be served
 
 ### 3.19 WebAssembly / `wasm32-wasi` target
 
-**Foundation + Phase 1 shipped.** The binary uses OS threads, `std::net::TcpStream`, and `aws-lc-rs` — none of which compile to WASM, so those modules are now `#[cfg(not(target_arch = "wasm32"))]`. Running rws handlers inside a WASM sandbox is done via a `wasi:http/proxy` guest adapter (`rws-wasm-shim/`), not a socket-level port — verified against a real `wasmtime serve` process. See `WASM_SHIM.md` for what shipped and what's still open (Phase 2: streaming bodies, outbound HTTP; Phase 3: stateful-middleware caveats).
+**Foundation, Phase 1, and most of Phase 2 shipped.** The binary uses OS threads, `std::net::TcpStream`, and `aws-lc-rs` — none of which compile to WASM, so those modules are now `#[cfg(not(target_arch = "wasm32"))]`. Running rws handlers inside a WASM sandbox is done via a `wasi:http/proxy` guest adapter (`rws-wasm-shim/`), not a socket-level port — verified against a real `wasmtime serve` process, including streaming a 9 MB file and outbound HTTP/HTTPS via a new wasm32 `http_client` backend (which also unblocked `sso`/`secrets`/`storage-s3`/`storage-azure`). See `WASM_SHIM.md` for the full detail, including the empirically-confirmed stateful-middleware caveat (rate limiting/caching/sessions don't survive `wasmtime serve`'s per-request instantiation).
 
 ---
 

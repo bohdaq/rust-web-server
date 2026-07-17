@@ -4889,4 +4889,12 @@ impl Guest for Shim {
 }
 ```
 
-Because there is no real `TcpListener`/`ThreadPool`/`rustls` in a WASM guest, everything socket- and thread-coupled (`server`, `thread_pool`, `proxy*`, `websocket`, `http_client`, `otel`, `log`, and more) is compiled out for `target_arch = "wasm32"` in the main crate — only routing, controllers, extractors, and in-memory middleware are available. Two real limitations worth knowing before relying on this: no real client IP/SNI hostname reaches `ConnectionInfo` (the host already terminated TLS), and hosts commonly instantiate a fresh guest **per request** — so stateful middleware (`RateLimiter`, `CacheLayer`, in-memory sessions) will not persist across requests unless your specific host guarantees instance reuse. Both are documented in detail in `spec/WASM_SHIM.md`.
+Because there is no real `TcpListener`/`ThreadPool` in a WASM guest, socket- and thread-coupled modules (`server`, `thread_pool`, `proxy*`, `websocket`, `mailer`, `otel`, `log`, and more) are compiled out for `target_arch = "wasm32"` in the main crate. `http_client::Client` is the exception: it has a second backend built on `wasi:http`'s `outgoing-handler` interface, so outbound HTTP **and HTTPS** (TLS terminated by the host, not `rustls`) work from inside the guest — verified against `https://example.com` through a real `wasmtime serve` process. That one backend is what makes `sso`, `secrets`, `storage-s3`, `storage-azure`, and `ForwardAuthLayer` work in the guest too, with no code changes to any of them — they were already only using `http_client::Client`. `Response::stream_file`/`stream_pipe` are also wired up, streaming through the `wasi:http` output-stream in chunks rather than buffering — verified with a 9 MB file download that came back byte-identical.
+
+Three real limitations worth knowing before relying on this, all confirmed against a real `wasmtime serve` process rather than assumed:
+
+1. No real client IP/SNI hostname reaches `ConnectionInfo` — the host already terminated TLS before invoking the guest.
+2. Hosts commonly instantiate a fresh guest **per request** — confirmed for `wasmtime serve` specifically (a request counter read back the same fixed value on every request, never accumulating). Stateful middleware (`RateLimiter`, `CacheLayer`, in-memory sessions) will not persist across requests unless your specific host guarantees instance reuse.
+3. Filesystem access requires an explicit host grant (`wasmtime serve --dir HOST_DIR::.`) — without it, static-file serving silently falls back to `rws`'s embedded default pages for every path, with no error.
+
+All three are documented in detail in `spec/WASM_SHIM.md`.

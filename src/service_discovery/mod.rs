@@ -31,24 +31,36 @@
 //! println!("{:?}", pool.backends());
 //! ```
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests;
 // `pub(crate)` (not just `mod`) so `secrets`'s Vault/AWS-SM/Key-Vault backends
 // can reuse this parser for their own small JSON responses, instead of a
 // third hand-rolled JSON parser alongside this one and `mcp::json_rpc`.
+// Pure parsing, no sockets — stays available on every target, unlike the
+// rest of this module (DNS/etcd/Consul/Docker all need real network access
+// no wasi:http guest has). See spec/WASM_SHIM.md.
 pub(crate) mod json_lite;
+
+#[cfg(not(target_arch = "wasm32"))]
 mod consul;
+#[cfg(not(target_arch = "wasm32"))]
 mod dns_srv;
+#[cfg(not(target_arch = "wasm32"))]
 mod docker;
+#[cfg(not(target_arch = "wasm32"))]
 mod etcd;
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::net::ToSocketAddrs;
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::{Arc, RwLock};
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 // ── DiscoverySource ───────────────────────────────────────────────────────────
 
 /// Controls how [`BackendPool`] discovers backend addresses.
+#[cfg(not(target_arch = "wasm32"))]
 pub enum DiscoverySource {
     /// Fixed list of `"host:port"` addresses — never refreshed.
     Static(Vec<String>),
@@ -87,6 +99,7 @@ pub enum DiscoverySource {
     EtcdWatch { endpoints: Vec<String>, prefix: String },
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl DiscoverySource {
     /// Perform a single discovery cycle and return the current backend list.
     fn resolve(&self) -> Vec<String> {
@@ -159,6 +172,7 @@ impl DiscoverySource {
 /// Thread-safe pool of backend addresses, optionally refreshed in the background.
 ///
 /// Clone this type freely — all clones share the same underlying `RwLock<Vec>`.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone)]
 pub struct BackendPool {
     backends: Arc<RwLock<Vec<String>>>,
@@ -166,6 +180,7 @@ pub struct BackendPool {
     poll_interval_secs: u64,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl BackendPool {
     fn new(source: DiscoverySource) -> Self {
         Self {

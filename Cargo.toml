@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.107.0"
+version = "17.108.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
@@ -68,8 +68,6 @@ url-search-params = "12.0.0"
 url-build-parse = "12.1.0"
 tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "io-util", "signal", "time"], optional = true }
 rcgen = { version = "0.13", default-features = false, features = ["pem", "aws_lc_rs"], optional = true }
-webpki-roots = { version = "0.26", optional = true }
-rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "tls12", "logging", "std"], optional = true }
 tokio-rustls = { version = "0.26", optional = true }
 rustls-pemfile = { version = "2", optional = true }
 h2 = { version = "0.4", optional = true }
@@ -92,3 +90,22 @@ argon2    = { version = "0.5", features = ["password-hash"], optional = true }
 rand_core = { version = "0.6", features = ["getrandom"], optional = true }
 aes-gcm   = { version = "0.10", optional = true }
 regex     = { version = "1", optional = true }
+
+# rustls's own "aws-lc-rs" crypto-backend feature compiles C/asm (aws-lc-sys)
+# that doesn't build for wasm32-wasip2 — moved to a native-only target table
+# so enabling `http-client` (and therefore `sso`/`secrets`/`storage-s3`/
+# `storage-azure`) doesn't drag in a dependency that can't compile for wasm32.
+# TLS itself still works there — the host performs it via `outgoing-handler`
+# (see the #[cfg(target_arch = "wasm32")] send_once in src/http_client/mod.rs)
+# instead of rustls. http2/http3/acme (which also use rustls) were already
+# unsupported on wasm32 regardless, since tokio's rt-multi-thread requires
+# real OS threads.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+webpki-roots = { version = "0.26", optional = true }
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "tls12", "logging", "std"], optional = true }
+
+# wasm32-wasip2 outbound HTTP backend for http_client::Client::send() — see
+# the #[cfg(target_arch = "wasm32")] send_once in src/http_client/mod.rs and
+# spec/WASM_SHIM.md Phase 2 item 7. Native builds never see this dependency.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasip2 = "1.0"

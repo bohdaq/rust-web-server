@@ -8,8 +8,10 @@
 //! [`Request`], calling [`App::execute`], and translating the resulting
 //! [`Response`] back into a `wasi:http` outgoing response.
 //!
-//! Buffered bodies only (`Response::stream_file`/`stream_pipe` are not
-//! wired up — that's spec/WASM_SHIM.md Phase 2 item 6). No real peer
+//! `Response::stream_file`/`stream_pipe` are streamed in chunks through the
+//! `wasi:http` output-stream rather than buffered (Phase 2 item 6 of
+//! spec/WASM_SHIM.md) — otherwise a large file/SSE stream would have to fit
+//! entirely in the guest's bounded linear memory first. No real peer
 //! address is available in this guest model, so [`ConnectionInfo`] gets a
 //! placeholder client/server address and `sni_hostname: None` — the host
 //! already terminated TLS before this component ever runs.
@@ -45,8 +47,14 @@ impl Guest for Shim {
 
         let app = App::new();
         let rws_response = match app.execute(&rws_request, &connection) {
-            Ok(response) => response,
-            Err(message) => bad_request_response(message),
+            Ok(response) => {
+                rust_web_server::metrics::record_request();
+                response
+            }
+            Err(message) => {
+                rust_web_server::metrics::record_error();
+                bad_request_response(message)
+            }
         };
 
         write_response(response_out, rws_response);
@@ -136,12 +144,15 @@ fn to_wasi_headers(headers: &[Header]) -> Fields {
     fields
 }
 
-fn write_response(response_out: ResponseOutparam, response: RwsResponse) {
+const STREAM_CHUNK_SIZE: usize = 8192;
+
+fn write_response(response_out: ResponseOutparam, mut response: RwsResponse) {
     let wasi_headers = to_wasi_headers(&response.headers);
     let outgoing_response = OutgoingResponse::new(wasi_headers);
     let _ = outgoing_response.set_status_code(response.status_code as u16);
 
-    let body = RwsResponse::generate_body(response.content_range_list.clone());
+    let stream_pipe = response.stream_pipe.take();
+    let stream_file = response.stream_file.take();
 
     let outgoing_body = outgoing_response
         .body()
@@ -152,11 +163,42 @@ fn write_response(response_out: ResponseOutparam, response: RwsResponse) {
     let mut out = outgoing_body
         .write()
         .expect("outgoing-body write stream taken twice");
-    let _ = out.write_all(&body);
+
+    if let Some(mut reader) = stream_pipe {
+        copy_in_chunks(&mut reader, &mut out);
+    } else if let Some(path) = stream_file {
+        match std::fs::File::open(&path) {
+            Ok(mut file) => copy_in_chunks(&mut file, &mut out),
+            Err(e) => eprintln!("wasm guest: failed to open stream_file {path}: {e}"),
+        }
+    } else {
+        let body = RwsResponse::generate_body(response.content_range_list.clone());
+        let _ = out.write_all(&body);
+    }
+
     let _ = out.flush();
     drop(out);
 
     let _ = OutgoingBody::finish(outgoing_body, None);
+}
+
+/// Copies `reader` into `out` `STREAM_CHUNK_SIZE` bytes at a time instead of
+/// buffering the whole body — the point of `stream_pipe`/`stream_file`
+/// support, since guest linear memory is bounded and typically much smaller
+/// than a native process's heap.
+fn copy_in_chunks(reader: &mut dyn Read, out: &mut wasip2::io::streams::OutputStream) {
+    let mut buf = [0u8; STREAM_CHUNK_SIZE];
+    loop {
+        match reader.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                if out.write_all(&buf[..n]).is_err() {
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
 }
 
 // Only the translation logic that doesn't touch a real `wasi:http` resource
