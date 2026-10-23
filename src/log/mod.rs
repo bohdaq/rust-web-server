@@ -78,7 +78,12 @@ impl Log {
         let mut log = "Usage:\n\n".to_string();
         let command_line_arg_list = CommandLineArgument::get_command_line_arg_list();
         for arg in command_line_arg_list {
-            let argument_info = format!("  {} environment variable\n  -{} or --{} as command line line argument\n  {}\n\n", arg.environment_variable, arg.short_form, arg.long_form, arg._hint.unwrap());
+            let flags = if arg.short_form.is_empty() {
+                format!("--{}", arg.long_form)
+            } else {
+                format!("-{} or --{}", arg.short_form, arg.long_form)
+            };
+            let argument_info = format!("  {} environment variable\n  {} as command line line argument\n  {}\n\n", arg.environment_variable, flags, arg._hint.unwrap());
             log = [log, argument_info].join("");
         }
         log = [log, "End of usage section\n\n".to_string()].join("");

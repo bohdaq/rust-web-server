@@ -259,7 +259,7 @@ let mcp = App::new().mcp("my-server", "1.0.0")
 | `auth` | `BasicAuthLayer`, `JwtLayer`, `ForwardAuthLayer`, `build_jwt`/`verify_jwt` (HS256) | `hmac`, `sha2` |
 | `auth-asymmetric` | `JwtLayer::rs256`/`::es256`, `verify_jwt_rs256`/`verify_jwt_es256` (implies `auth`) | `rsa`, `p256`, `rand_core` |
 | `macros` | `#[get]`, `#[derive(FromRequest)]`, `#[derive(Validate)]`, `#[derive(Config)]`, `routes!` | `rws-macros` |
-| `acme` | Automatic TLS via Let's Encrypt (implies `http2`) | `rcgen`, `aws-lc-rs` |
+| `acme` | Automatic HTTPS via Let's Encrypt / any ACME CA; `[acme]` config section (implies `http2`; in prebuilt binaries) | `rcgen`, `aws-lc-rs` |
 | `tera` | Tera HTML template engine (Jinja2/Django syntax) | `tera`, `serde`, `serde_json` |
 | `model-sqlite` | Async ORM backed by SQLite (implies `http2`); combinable with the other two `model-*` features (see `Backend`) | `sqlx` |
 | `model-postgres` | Async ORM backed by PostgreSQL (implies `http2`); combinable with the other two `model-*` features (see `Backend`) | `sqlx` |
@@ -1229,6 +1229,9 @@ strategy = "least_connections"  # "round_robin" (default) | "random" | "ip_hash"
 ```
 
 Route action types: `proxy`, `grpc`, `static`, `redirect`, `respond`, `mcp`.
+Action settings (`upstream`, `status`, `body`, `location`, timeouts, ...) may sit directly under
+`[route.action]` next to `type` (short form) or in a nested `[route.action.<type>]` table; when a key
+appears in both, the nested table wins.
 Per-route middleware: `rate_limit`, `cache`, `auth`, `ip_allow`/`ip_deny`, `rewrite`, `timeout_ms`, `max_body_size`.
 Upstream load-balancing strategies: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), `least_connections`.
 
@@ -1240,6 +1243,27 @@ Upstream load-balancing strategies: `round_robin` (default), `random`, `ip_hash`
   `{SHA}`/`$apr1$`/bcrypt
 - Unset/empty `secret_env`, a missing `htpasswd_file`, or no `auth` feature at build time all skip that
   route's auth check (warning logged to stderr at startup) rather than blocking every request
+
+### Automatic HTTPS (ACME, `acme` feature — included in the prebuilt binaries)
+
+```toml
+port               = 443
+http_redirect_port = 80     # HTTP → HTTPS redirect; also answers ACME HTTP-01 challenges
+
+[acme]
+domains = ["example.com", "www.example.com"]   # setting this enables ACME
+email   = "ops@example.com"
+# staging = true | directory = "<ACME URL>" | ca_file = "<extra root PEM>" | challenge_port = 80
+```
+
+Works with or without proxy routes. Certificate stored as `cert.pem`/`key.pem` in the working
+directory unless `tls_cert_file`/`tls_key_file` or `[acme] cert_path`/`key_path` are set. Startup
+provisioning retries with backoff until issued; renewal checks every 12h
+(`RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS`), renews within `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` (30) of
+expiry and hot-reloads. Renewal challenges are served by the redirect listener (`Server::run_redirect`),
+which listens on IPv4 and IPv6. Library: `AcmeConfig::from_env()` →
+`.install_as_tls_certificate()` → `AcmeManager::new(cfg).provision_until_ready().await` →
+`tokio::spawn(mgr.run_renewal_loop())`.
 
 ---
 

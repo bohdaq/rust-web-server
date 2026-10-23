@@ -186,7 +186,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 
 - HTTP/3 over QUIC (UDP) + HTTP/2 + HTTP/1.1 on the same port via ALPN
 - TLS via [rustls](https://github.com/rustls/rustls) — aws-lc-rs crypto, no OpenSSL
-- Automatic TLS (ACME) — Let's Encrypt provisioning + background renewal (`acme` feature)
+- Automatic HTTPS (ACME) — Let's Encrypt certificates from an `[acme]` section in `rws.config.toml`, background renewal with hot reload, private ACME CAs (`acme` feature; included in the prebuilt binaries)
 - mTLS — set `RWS_CONFIG_TLS_CLIENT_CA_FILE`; client cert required on HTTPS and QUIC
 - Virtual hosting / SNI — per-domain TLS certs; `Router::with_host()` for per-host routing
 - WebSocket (RFC 6455) — handshake, frame codec, SHA-1 + base64 built in, no extra dep

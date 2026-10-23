@@ -93,40 +93,36 @@ impl AcmeConfig {
             .collect();
         if domains.is_empty() { return None; }
 
-        let email = std::env::var(Config::RWS_CONFIG_ACME_EMAIL).unwrap_or_default();
-        let staging = std::env::var(Config::RWS_CONFIG_ACME_STAGING)
+        // Startup sets unset RWS_CONFIG_* variables to their (often empty)
+        // defaults, so an empty value must mean "not configured" here.
+        let email = non_empty_env(Config::RWS_CONFIG_ACME_EMAIL).unwrap_or_default();
+        let staging = non_empty_env(Config::RWS_CONFIG_ACME_STAGING)
             .map(|v| v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
         let directory_url = if staging {
             Self::LETSENCRYPT_STAGING.to_string()
         } else {
-            std::env::var(Config::RWS_CONFIG_ACME_DIRECTORY)
-                .unwrap_or_else(|_| Self::LETSENCRYPT.to_string())
+            non_empty_env(Config::RWS_CONFIG_ACME_DIRECTORY)
+                .unwrap_or_else(|| Self::LETSENCRYPT.to_string())
         };
 
-        let cert_path = std::env::var(Config::RWS_CONFIG_ACME_CERT_PATH)
-            .unwrap_or_else(|_| {
-                std::env::var(Config::RWS_CONFIG_TLS_CERT_FILE)
-                    .unwrap_or_else(|_| "cert.pem".to_string())
-            });
-        let key_path = std::env::var(Config::RWS_CONFIG_ACME_KEY_PATH)
-            .unwrap_or_else(|_| {
-                std::env::var(Config::RWS_CONFIG_TLS_KEY_FILE)
-                    .unwrap_or_else(|_| "key.pem".to_string())
-            });
+        let cert_path = non_empty_env(Config::RWS_CONFIG_ACME_CERT_PATH)
+            .or_else(|| non_empty_env(Config::RWS_CONFIG_TLS_CERT_FILE))
+            .unwrap_or_else(|| "cert.pem".to_string());
+        let key_path = non_empty_env(Config::RWS_CONFIG_ACME_KEY_PATH)
+            .or_else(|| non_empty_env(Config::RWS_CONFIG_TLS_KEY_FILE))
+            .unwrap_or_else(|| "key.pem".to_string());
 
-        let challenge_port = std::env::var(Config::RWS_CONFIG_ACME_CHALLENGE_PORT)
-            .ok()
+        let challenge_port = non_empty_env(Config::RWS_CONFIG_ACME_CHALLENGE_PORT)
             .and_then(|v| v.parse().ok())
             .unwrap_or(80u16);
 
-        let renew_before_days = std::env::var(Config::RWS_CONFIG_ACME_RENEW_BEFORE_DAYS)
-            .ok()
+        let renew_before_days = non_empty_env(Config::RWS_CONFIG_ACME_RENEW_BEFORE_DAYS)
             .and_then(|v| v.parse().ok())
             .unwrap_or(30i64);
 
-        let account_key_path = std::env::var(Config::RWS_CONFIG_ACME_ACCOUNT_KEY_PATH)
-            .unwrap_or_else(|_| "acme_account.key".to_string());
+        let account_key_path = non_empty_env(Config::RWS_CONFIG_ACME_ACCOUNT_KEY_PATH)
+            .unwrap_or_else(|| "acme_account.key".to_string());
 
         Some(AcmeConfig {
             domains,
@@ -139,6 +135,68 @@ impl AcmeConfig {
             account_key_path,
         })
     }
+
+    /// Point the TLS listener at this config's certificate: sets
+    /// `RWS_CONFIG_TLS_CERT_FILE` / `RWS_CONFIG_TLS_KEY_FILE` to `cert_path` /
+    /// `key_path` when they're empty, so setting only `RWS_CONFIG_ACME_DOMAINS`
+    /// is enough for `Server::run_tls` to serve the issued certificate. An
+    /// explicitly configured TLS path is left alone.
+    pub fn install_as_tls_certificate(&self) {
+        if non_empty_env(Config::RWS_CONFIG_TLS_CERT_FILE).is_none() {
+            std::env::set_var(Config::RWS_CONFIG_TLS_CERT_FILE, &self.cert_path);
+        }
+        if non_empty_env(Config::RWS_CONFIG_TLS_KEY_FILE).is_none() {
+            std::env::set_var(Config::RWS_CONFIG_TLS_KEY_FILE, &self.key_path);
+        }
+    }
+}
+
+pub(crate) fn renew_check_interval_secs() -> u64 {
+    non_empty_env(Config::RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS)
+        .and_then(|v| v.parse().ok())
+        .filter(|secs| *secs > 0)
+        .unwrap_or(12 * 3600)
+}
+
+fn non_empty_env(name: &str) -> Option<String> {
+    std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+// ── HTTP-01 challenge store ───────────────────────────────────────────────────
+//
+// Pending challenges live in a process-wide map rather than inside one
+// temporary server, so whichever listener owns the challenge port can answer
+// them: the standalone server below at startup, or `Server::run_redirect`'s
+// HTTP→HTTPS listener once it holds port 80 — renewal would otherwise fail to
+// bind the port the redirect listener already has.
+
+pub(crate) fn challenges() -> &'static std::sync::Mutex<std::collections::HashMap<String, String>> {
+    static CHALLENGES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, String>>> =
+        std::sync::OnceLock::new();
+    CHALLENGES.get_or_init(Default::default)
+}
+
+/// Port the HTTP→HTTPS redirect listener is bound to, `0` when not running.
+static REDIRECT_LISTENER_PORT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
+
+/// Called by `Server::run_redirect` once it has bound `port`, so challenges
+/// on that port are served by it instead of a standalone server.
+pub(crate) fn note_redirect_listener(port: u16) {
+    REDIRECT_LISTENER_PORT.store(port, std::sync::atomic::Ordering::SeqCst);
+}
+
+const CHALLENGE_PATH_PREFIX: &str = "/.well-known/acme-challenge/";
+
+/// The full HTTP/1.1 response for a request to `uri` if it's a pending
+/// HTTP-01 challenge (`200` with the key authorization), else `None`.
+pub(crate) fn challenge_http_response(uri: &str) -> Option<String> {
+    let token = uri.strip_prefix(CHALLENGE_PATH_PREFIX)?;
+    let key_auth = challenges().lock().unwrap().get(token)?.clone();
+    Some(format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        key_auth.len(),
+        key_auth
+    ))
 }
 
 // ── Manager ───────────────────────────────────────────────────────────────────
@@ -234,21 +292,49 @@ impl AcmeManager {
         Ok(())
     }
 
-    /// Background renewal loop. Checks every 12 hours; renews when fewer than
-    /// `renew_before_days` remain. After successful renewal, sends SIGHUP to
-    /// self so the running server reloads the TLS certificate.
-    pub async fn run_renewal_loop(self) {
+    /// Startup provisioning that doesn't give up: retries
+    /// [`provision_if_needed`](Self::provision_if_needed) with exponential
+    /// backoff (30s doubling to 15 min) until a certificate is in place —
+    /// e.g. while DNS for a new domain is still propagating. Without a
+    /// certificate the TLS listener has nothing to serve.
+    pub async fn provision_until_ready(&self) {
+        let mut delay = 30u64;
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(12 * 3600)).await;
+            match self.provision_if_needed().await {
+                Ok(()) => return,
+                Err(e) => {
+                    eprintln!("[ACME] Provisioning failed: {e}");
+                    eprintln!("[ACME] Retrying in {delay}s...");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
+                    delay = (delay * 2).min(15 * 60);
+                }
+            }
+        }
+    }
+
+    /// Background renewal loop. Checks every
+    /// `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` (default 12 hours) and
+    /// renews when fewer than `renew_before_days` remain; after a failure it
+    /// retries within an hour. After a successful renewal it sends SIGHUP to
+    /// itself (Unix) so the running server reloads the TLS certificate.
+    pub async fn run_renewal_loop(self) {
+        let interval = renew_check_interval_secs();
+        let mut next = interval;
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(next)).await;
             match self.provision_if_needed().await {
                 Ok(()) => {
+                    next = interval;
                     #[cfg(unix)]
                     {
                         // Signal the process to reload TLS cert (run_tls reloads on SIGHUP).
                         unsafe { libc::kill(libc::getpid(), libc::SIGHUP); }
                     }
                 }
-                Err(e) => eprintln!("[ACME] Renewal failed: {e}"),
+                Err(e) => {
+                    next = interval.min(3600);
+                    eprintln!("[ACME] Renewal failed: {e} — retrying in {next}s");
+                }
             }
         }
     }
@@ -295,38 +381,39 @@ impl AcmeManager {
             crypto::key_thumbprint(key)?
         );
 
-        println!("[ACME] Starting HTTP-01 challenge server on port {}...", self.config.challenge_port);
+        challenges().lock().unwrap().insert(challenge.token.clone(), key_auth);
 
-        // Start challenge server.
-        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-        let token = challenge.token.clone();
-        let ka = key_auth.clone();
+        // The redirect listener answers challenges itself once it owns the
+        // port (renewals); otherwise (startup) run a temporary server.
         let port = self.config.challenge_port;
-        let handle = tokio::spawn(async move {
-            if let Err(e) = run_challenge_server(port, token, ka, shutdown_rx).await {
-                eprintln!("[ACME] Challenge server error: {e}");
-            }
-        });
-
-        // Small delay to let the server bind before signalling ACME.
-        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-
-        // Signal challenge ready.
-        let nonce = match signal_challenge(http, key, account_url, &challenge.url, &nonce).await {
-            Ok(n) => n,
-            Err(e) => {
-                let _ = shutdown_tx.send(());
-                let _ = handle.await;
-                return Err(e);
-            }
+        let standalone = if REDIRECT_LISTENER_PORT.load(std::sync::atomic::Ordering::SeqCst) == port {
+            println!("[ACME] Answering HTTP-01 challenge via the redirect listener on port {port}.");
+            None
+        } else {
+            println!("[ACME] Starting HTTP-01 challenge server on port {port}...");
+            let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+            let handle = tokio::spawn(async move {
+                if let Err(e) = run_challenge_server(port, shutdown_rx).await {
+                    eprintln!("[ACME] Challenge server error: {e}");
+                }
+            });
+            // Small delay to let the server bind before signalling ACME.
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            Some((shutdown_tx, handle))
         };
 
-        // Poll for validation (up to 60 seconds).
-        let poll_result = poll_authorization_valid(http, key, account_url, authz_url, &nonce).await;
+        // Signal challenge ready, then poll for validation (up to 60 seconds).
+        let poll_result = match signal_challenge(http, key, account_url, &challenge.url, &nonce).await {
+            Ok(nonce) => poll_authorization_valid(http, key, account_url, authz_url, &nonce).await,
+            Err(e) => Err(e),
+        };
 
-        // Stop the challenge server regardless of poll outcome.
-        let _ = shutdown_tx.send(());
-        let _ = handle.await;
+        // Stop serving the challenge regardless of the outcome.
+        challenges().lock().unwrap().remove(&challenge.token);
+        if let Some((shutdown_tx, handle)) = standalone {
+            let _ = shutdown_tx.send(());
+            let _ = handle.await;
+        }
 
         let nonce = poll_result?;
 
@@ -565,44 +652,31 @@ async fn download_cert(
 
 async fn run_challenge_server(
     port: u16,
-    token: String,
-    key_auth: String,
     shutdown: tokio::sync::oneshot::Receiver<()>,
 ) -> Result<(), String> {
-    use tokio::net::TcpListener;
-    let listener = TcpListener::bind(format!("0.0.0.0:{port}"))
+    let listeners = crate::server::bind_all_families("0.0.0.0", port)
         .await
         .map_err(|e| format!("challenge server: bind port {port} failed: {e}"))?;
 
-    tokio::select! {
-        _ = shutdown => {}
-        _ = serve_challenges(listener, token, key_auth) => {}
+    let tasks: Vec<_> = listeners.into_iter().map(|l| tokio::spawn(serve_challenges(l))).collect();
+    let _ = shutdown.await;
+    for task in tasks {
+        task.abort();
     }
     Ok(())
 }
 
-async fn serve_challenges(
-    listener: tokio::net::TcpListener,
-    token: String,
-    key_auth: String,
-) {
+async fn serve_challenges(listener: tokio::net::TcpListener) {
     loop {
         let Ok((mut stream, _)) = listener.accept().await else { break };
-        let t = token.clone();
-        let ka = key_auth.clone();
         tokio::spawn(async move {
             let mut buf = [0u8; 1024];
-            let _ = stream.read(&mut buf).await;
-            let req = String::from_utf8_lossy(&buf);
-            let target = format!("/.well-known/acme-challenge/{}", t);
-            let response = if req.contains(&target) {
-                format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    ka.len(), ka
-                )
-            } else {
+            let n = stream.read(&mut buf).await.unwrap_or(0);
+            let req = String::from_utf8_lossy(&buf[..n]);
+            let uri = req.lines().next().and_then(|l| l.split_whitespace().nth(1)).unwrap_or("");
+            let response = challenge_http_response(uri).unwrap_or_else(|| {
                 "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
-            };
+            });
             let _ = stream.write_all(response.as_bytes()).await;
         });
     }
@@ -624,17 +698,27 @@ fn generate_csr(domains: &[String]) -> Result<(rcgen::KeyPair, Vec<u8>), String>
     Ok((cert_key, csr.der().to_vec()))
 }
 
-fn json_str(json: &str, field: &str) -> Option<String> {
+pub(crate) fn json_str(json: &str, field: &str) -> Option<String> {
     let key = format!("\"{}\"", field);
     let start = json.find(&key)? + key.len();
     let rest = json[start..].trim_start_matches([' ', ':'].as_ref()).trim_start();
-    if rest.starts_with('"') {
-        let inner = &rest[1..];
-        let end = inner.find('"')?;
-        Some(inner[..end].to_string())
-    } else {
-        None
+    let inner = rest.strip_prefix('"')?;
+    // Read up to the closing quote, unescaping \" and \\ — CA error details
+    // (e.g. Pebble's `Get \"http://...\": connection refused`) contain them.
+    let mut out = String::new();
+    let mut chars = inner.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => return Some(out),
+            '\\' => match chars.next()? {
+                'n' => out.push('\n'),
+                't' => out.push('\t'),
+                other => out.push(other),
+            },
+            c => out.push(c),
+        }
     }
+    None
 }
 
 fn json_array_strings(json: &str, field: &str) -> Vec<String> {

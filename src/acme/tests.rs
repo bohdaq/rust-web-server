@@ -1,6 +1,5 @@
 use super::crypto::{self, AccountKey};
 
-static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 // ── base64url ─────────────────────────────────────────────────────────────────
 
@@ -244,14 +243,14 @@ fn json_array_strings_extracts_urls() {
 
 #[test]
 fn acme_config_from_env_returns_none_without_domains() {
-    let _g = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = crate::test_env::lock();
     std::env::remove_var("RWS_CONFIG_ACME_DOMAINS");
     assert!(super::AcmeConfig::from_env().is_none());
 }
 
 #[test]
 fn acme_config_from_env_parses_domains() {
-    let _g = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = crate::test_env::lock();
     std::env::set_var("RWS_CONFIG_ACME_DOMAINS", "example.com,www.example.com");
     std::env::set_var("RWS_CONFIG_ACME_EMAIL", "admin@example.com");
     let result = super::AcmeConfig::from_env();
@@ -264,7 +263,7 @@ fn acme_config_from_env_parses_domains() {
 
 #[test]
 fn acme_config_staging_flag() {
-    let _g = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = crate::test_env::lock();
     std::env::set_var("RWS_CONFIG_ACME_DOMAINS", "example.com");
     std::env::set_var("RWS_CONFIG_ACME_STAGING", "true");
     let result = super::AcmeConfig::from_env();
@@ -319,4 +318,140 @@ fn generate_csr_makes_a_fresh_key_each_time() {
 #[test]
 fn generate_csr_rejects_non_ascii_domain() {
     assert!(super::generate_csr(&["bücher.example".to_string()]).is_err());
+}
+
+// ── from_env: empty values mean "not configured" ──────────────────────────────
+
+const ACME_TEST_VARS: &[&str] = &[
+    "RWS_CONFIG_ACME_DOMAINS", "RWS_CONFIG_ACME_EMAIL", "RWS_CONFIG_ACME_STAGING",
+    "RWS_CONFIG_ACME_DIRECTORY", "RWS_CONFIG_ACME_CERT_PATH", "RWS_CONFIG_ACME_KEY_PATH",
+    "RWS_CONFIG_ACME_CHALLENGE_PORT", "RWS_CONFIG_TLS_CERT_FILE", "RWS_CONFIG_TLS_KEY_FILE",
+    "RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS",
+];
+
+/// Startup sets every unset RWS_CONFIG_* variable to its default, which is
+/// an empty string for most of these — simulate that.
+fn reset_acme_env_to_startup_defaults() {
+    for var in ACME_TEST_VARS {
+        std::env::set_var(var, "");
+    }
+}
+
+#[test]
+fn from_env_with_only_domains_set_uses_working_directory_defaults() {
+    let _g = crate::test_env::lock();
+    reset_acme_env_to_startup_defaults();
+    std::env::set_var("RWS_CONFIG_ACME_DOMAINS", "example.com");
+    let cfg = super::AcmeConfig::from_env().unwrap();
+    reset_acme_env_to_startup_defaults();
+    assert_eq!("cert.pem", cfg.cert_path);
+    assert_eq!("key.pem", cfg.key_path);
+    assert_eq!(super::AcmeConfig::LETSENCRYPT, cfg.directory_url);
+    assert_eq!(80, cfg.challenge_port);
+}
+
+#[test]
+fn from_env_cert_path_prefers_acme_path_then_tls_path() {
+    let _g = crate::test_env::lock();
+    reset_acme_env_to_startup_defaults();
+    std::env::set_var("RWS_CONFIG_ACME_DOMAINS", "example.com");
+    std::env::set_var("RWS_CONFIG_TLS_CERT_FILE", "/etc/tls/cert.pem");
+    std::env::set_var("RWS_CONFIG_TLS_KEY_FILE", "/etc/tls/key.pem");
+    std::env::set_var("RWS_CONFIG_ACME_KEY_PATH", "/var/acme/key.pem");
+    let cfg = super::AcmeConfig::from_env().unwrap();
+    reset_acme_env_to_startup_defaults();
+    assert_eq!("/etc/tls/cert.pem", cfg.cert_path);
+    assert_eq!("/var/acme/key.pem", cfg.key_path);
+}
+
+#[test]
+fn install_as_tls_certificate_fills_only_empty_tls_paths() {
+    let _g = crate::test_env::lock();
+    reset_acme_env_to_startup_defaults();
+    std::env::set_var("RWS_CONFIG_ACME_DOMAINS", "example.com");
+    std::env::set_var("RWS_CONFIG_TLS_KEY_FILE", "/explicit/key.pem");
+    let cfg = super::AcmeConfig::from_env().unwrap();
+    cfg.install_as_tls_certificate();
+    let cert = std::env::var("RWS_CONFIG_TLS_CERT_FILE").unwrap();
+    let key = std::env::var("RWS_CONFIG_TLS_KEY_FILE").unwrap();
+    reset_acme_env_to_startup_defaults();
+    assert_eq!("cert.pem", cert);
+    assert_eq!("/explicit/key.pem", key);
+}
+
+#[test]
+fn renew_check_interval_defaults_to_twelve_hours_and_ignores_zero() {
+    let _g = crate::test_env::lock();
+    reset_acme_env_to_startup_defaults();
+    assert_eq!(12 * 3600, super::renew_check_interval_secs());
+    std::env::set_var("RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS", "0");
+    assert_eq!(12 * 3600, super::renew_check_interval_secs());
+    std::env::set_var("RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS", "20");
+    assert_eq!(20, super::renew_check_interval_secs());
+    reset_acme_env_to_startup_defaults();
+}
+
+// ── HTTP-01 challenge store ───────────────────────────────────────────────────
+
+#[test]
+fn challenge_http_response_serves_only_pending_tokens() {
+    super::challenges().lock().unwrap().insert("tok-123".to_string(), "tok-123.thumb".to_string());
+    let hit = super::challenge_http_response("/.well-known/acme-challenge/tok-123").unwrap();
+    let miss = super::challenge_http_response("/.well-known/acme-challenge/other");
+    let not_challenge = super::challenge_http_response("/tok-123");
+    super::challenges().lock().unwrap().remove("tok-123");
+    let after_removal = super::challenge_http_response("/.well-known/acme-challenge/tok-123");
+
+    assert!(hit.starts_with("HTTP/1.1 200 OK\r\n"));
+    assert!(hit.contains("Content-Length: 13\r\n"));
+    assert!(hit.ends_with("\r\n\r\ntok-123.thumb"));
+    assert!(miss.is_none());
+    assert!(not_challenge.is_none());
+    assert!(after_removal.is_none());
+}
+
+// ── json_str ──────────────────────────────────────────────────────────────────
+
+#[test]
+fn json_str_unescapes_quotes_in_error_details() {
+    let body = r#"{"type":"urn:ietf:params:acme:error:connection","detail":"Get \"http://a/b\": refused","status":400}"#;
+    assert_eq!(Some(r#"Get "http://a/b": refused"#.to_string()), super::json_str(body, "detail"));
+    assert_eq!(None, super::json_str(r#"{"detail":"unterminated"#, "detail"));
+}
+
+// ── ACME HTTP client ──────────────────────────────────────────────────────────
+
+#[test]
+fn host_header_includes_non_default_port() {
+    assert_eq!("acme.example", super::client::host_header("acme.example", 443));
+    assert_eq!("localhost:14000", super::client::host_header("localhost", 14000));
+}
+
+#[test]
+fn user_agent_names_rws_and_version() {
+    assert!(super::client::USER_AGENT.starts_with(&format!("rws-acme/{}", env!("CARGO_PKG_VERSION"))));
+}
+
+#[test]
+fn add_extra_roots_trusts_a_private_ca() {
+    let key = rcgen::KeyPair::generate().unwrap();
+    let mut params = rcgen::CertificateParams::new(vec!["private-ca.test".to_string()]).unwrap();
+    params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    let ca = params.self_signed(&key).unwrap();
+    let path = std::env::temp_dir().join(format!("rws_acme_ca_{}.pem", std::process::id()));
+    std::fs::write(&path, ca.pem()).unwrap();
+
+    let mut store = tokio_rustls::rustls::RootCertStore::empty();
+    super::client::add_extra_roots(&mut store, path.to_str().unwrap()).unwrap();
+    assert_eq!(1, store.len());
+}
+
+#[test]
+fn add_extra_roots_rejects_missing_or_empty_files() {
+    let mut store = tokio_rustls::rustls::RootCertStore::empty();
+    assert!(super::client::add_extra_roots(&mut store, "/nonexistent/ca.pem").is_err());
+    let path = std::env::temp_dir().join(format!("rws_acme_empty_ca_{}.pem", std::process::id()));
+    std::fs::write(&path, "not a certificate\n").unwrap();
+    let err = super::client::add_extra_roots(&mut store, path.to_str().unwrap()).unwrap_err();
+    assert!(err.contains("no certificates found"), "{err}");
 }

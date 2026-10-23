@@ -1712,3 +1712,64 @@ fn expect_100_continue_with_oversized_body_gets_413_not_100_continue() {
     assert!(written.contains("413"), "expected 413 Payload Too Large, got:\n{}", written);
     assert!(!written.contains("100 Continue"), "must not tell the client to send a body we're about to reject");
 }
+
+// ── redirect listener: dual-stack bind + ACME challenge answering ─────────────
+
+#[cfg(feature = "http2")]
+async fn redirect_round_trip(request: &str) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        Server::handle_redirect_connection(stream, 8443).await;
+    });
+    let mut client = tokio::net::TcpStream::connect(addr).await.unwrap();
+    client.write_all(request.as_bytes()).await.unwrap();
+    let mut out = String::new();
+    client.read_to_string(&mut out).await.unwrap();
+    server.await.unwrap();
+    out
+}
+
+#[cfg(feature = "http2")]
+#[tokio::test]
+async fn redirect_listener_sends_301_to_https_port() {
+    let out = redirect_round_trip("GET /a/b?c=1 HTTP/1.1\r\nHost: example.com\r\n\r\n").await;
+    assert!(out.starts_with("HTTP/1.1 301"), "{out}");
+    assert!(out.contains("Location: https://example.com:8443/a/b?c=1\r\n"), "{out}");
+}
+
+#[cfg(feature = "acme")]
+#[tokio::test]
+async fn redirect_listener_answers_pending_acme_challenge_instead_of_redirecting() {
+    crate::acme::challenges().lock().unwrap().insert("srv-tok".to_string(), "srv-tok.thumb".to_string());
+    let out = redirect_round_trip("GET /.well-known/acme-challenge/srv-tok HTTP/1.1\r\nHost: example.com\r\n\r\n").await;
+    crate::acme::challenges().lock().unwrap().remove("srv-tok");
+    assert!(out.starts_with("HTTP/1.1 200 OK"), "{out}");
+    assert!(out.ends_with("srv-tok.thumb"), "{out}");
+}
+
+#[cfg(feature = "http2")]
+#[tokio::test]
+async fn bind_all_families_wildcard_accepts_ipv4_and_ipv6_when_available() {
+    // Find a free port, then bind it for every address family.
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let listeners = crate::server::bind_all_families("0.0.0.0", port).await.unwrap();
+    assert!(!listeners.is_empty());
+    for l in &listeners {
+        assert_eq!(port, l.local_addr().unwrap().port());
+    }
+    assert!(tokio::net::TcpStream::connect(("127.0.0.1", port)).await.is_ok(), "IPv4 not accepted");
+    if std::net::TcpListener::bind("[::1]:0").is_ok() {
+        assert!(tokio::net::TcpStream::connect(("::1", port)).await.is_ok(), "IPv6 not accepted");
+    }
+}
+
+#[cfg(feature = "http2")]
+#[tokio::test]
+async fn bind_all_families_specific_ip_binds_only_that_address() {
+    let listeners = crate::server::bind_all_families("127.0.0.1", 0).await.unwrap();
+    assert_eq!(1, listeners.len());
+    assert!(listeners[0].local_addr().unwrap().ip().is_loopback());
+}

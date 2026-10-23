@@ -62,11 +62,13 @@ Continue the pattern (`_2_`, `_3_`, …) for as many domains as needed. The
 | `RWS_CONFIG_ACME_EMAIL` | `` (empty) | Contact email sent to the CA. Recommended but not required by all CAs. |
 | `RWS_CONFIG_ACME_STAGING` | `false` | Set to `true` to use the Let's Encrypt staging environment for testing. |
 | `RWS_CONFIG_ACME_DIRECTORY` | `` (empty) | Custom ACME directory URL. Defaults to Let's Encrypt production when empty. |
-| `RWS_CONFIG_ACME_CERT_PATH` | `` (empty) | Where to write the provisioned certificate chain (PEM). Defaults to `RWS_CONFIG_TLS_CERT_FILE`. |
-| `RWS_CONFIG_ACME_KEY_PATH` | `` (empty) | Where to write the certificate's private key (PEM). Defaults to `RWS_CONFIG_TLS_KEY_FILE`. |
-| `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port for the temporary HTTP-01 challenge server. Must be reachable from the internet on port 80. Not used with DNS-01. |
+| `RWS_CONFIG_ACME_CERT_PATH` | `` (empty) | Where to write the provisioned certificate chain (PEM). Defaults to `RWS_CONFIG_TLS_CERT_FILE`, else `cert.pem`. When TLS paths are unset, ACME also points the TLS listener at this file. |
+| `RWS_CONFIG_ACME_KEY_PATH` | `` (empty) | Where to write the certificate's private key (PEM). Defaults to `RWS_CONFIG_TLS_KEY_FILE`, else `key.pem`. |
+| `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port the CA connects to for HTTP-01. A temporary listener answers at startup; once the redirect listener (`RWS_CONFIG_HTTP_REDIRECT_PORT`) runs on this port it answers renewal challenges. Must be reachable from the internet on port 80. |
 | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | `30` | Renew the certificate when fewer than this many days remain on it. |
 | `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `acme_account.key` | Path to persist the ACME account key between restarts. |
+| `RWS_CONFIG_ACME_CA_FILE` | `` (empty) | PEM file of extra root CAs to trust for the ACME directory, on top of the public roots — for private ACME CAs (step-ca, Pebble). |
+| `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` | `43200` | Seconds between certificate-expiry checks. After a failed renewal the next attempt comes within an hour. |
 
 ## CORS
 

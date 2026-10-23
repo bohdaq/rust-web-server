@@ -737,6 +737,33 @@ async fn sighup() {
     std::future::pending::<()>().await
 }
 
+/// Bind `port` for both IPv4 and IPv6 when `ip` is the wildcard `0.0.0.0`
+/// (otherwise just `ip`). Let's Encrypt validates HTTP-01 over IPv6 when a
+/// domain has an AAAA record, so a v4-only challenge/redirect listener fails
+/// validation on dual-stack hosts. On Linux/macOS `[::]` already accepts
+/// IPv4 too and the second bind reports "address in use", which is fine; on
+/// Windows (`IPV6_V6ONLY` by default) both binds succeed.
+#[cfg(feature = "http2")]
+pub(crate) async fn bind_all_families(ip: &str, port: u16) -> Result<Vec<tokio::net::TcpListener>, String> {
+    use tokio::net::TcpListener;
+    if ip != "0.0.0.0" {
+        let addr = if ip.contains(':') { format!("[{ip}]:{port}") } else { format!("{ip}:{port}") };
+        return TcpListener::bind(&addr).await.map(|l| vec![l]).map_err(|e| format!("{addr}: {e}"));
+    }
+    let mut listeners = Vec::new();
+    let mut errors = Vec::new();
+    for addr in [format!("[::]:{port}"), format!("0.0.0.0:{port}")] {
+        match TcpListener::bind(&addr).await {
+            Ok(l) => listeners.push(l),
+            Err(e) => errors.push(format!("{addr}: {e}")),
+        }
+    }
+    if listeners.is_empty() {
+        return Err(errors.join("; "));
+    }
+    Ok(listeners)
+}
+
 #[cfg(feature = "http2")]
 impl Server {
     pub async fn run_tls(
@@ -843,8 +870,6 @@ impl Server {
     /// Returns immediately if TLS is not configured or the redirect port is not set.
     pub async fn run_redirect() {
         use std::env;
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        use tokio::net::TcpListener as TokioListener;
 
         let cert_path = env::var(crate::entry_point::Config::RWS_CONFIG_TLS_CERT_FILE)
             .unwrap_or_default();
@@ -867,74 +892,33 @@ impl Server {
         };
 
         let (server_ip, server_port, _) = get_ip_port_thread_count();
-        let bind_addr = format!("{}:{}", server_ip, redirect_port);
-
-        let listener = match TokioListener::bind(&bind_addr).await {
+        let listeners = match bind_all_families(&server_ip, redirect_port).await {
             Ok(l) => l,
             Err(e) => {
-                eprintln!("HTTP redirect listener error on {}: {}", bind_addr, e);
+                eprintln!("HTTP redirect listener error on port {}: {}", redirect_port, e);
                 return;
             }
         };
 
         println!("HTTP→HTTPS redirect listening on http://{}:{}", server_ip, redirect_port);
+        #[cfg(feature = "acme")]
+        crate::acme::note_redirect_listener(redirect_port);
 
-        loop {
-            tokio::select! {
-                result = listener.accept() => {
-                    match result {
-                        Ok((mut stream, _peer)) => {
-                            let https_port = server_port;
-                            tokio::spawn(async move {
-                                let mut buf = vec![0u8; 4096];
-                                let n = match stream.read(&mut buf).await {
-                                    Ok(n) => n,
-                                    Err(_) => return,
-                                };
-                                let text = String::from_utf8_lossy(&buf[..n]);
-
-                                let uri = text.lines()
-                                    .next()
-                                    .and_then(|line| line.split_whitespace().nth(1))
-                                    .unwrap_or("/")
-                                    .to_string();
-
-                                let host_header = text.lines()
-                                    .find(|l| l.to_lowercase().starts_with("host:"))
-                                    .map(|l| l[5..].trim().to_string());
-
-                                let location = match host_header {
-                                    Some(h) => {
-                                        // strip existing port from Host header
-                                        let h_no_port = if h.starts_with('[') {
-                                            // IPv6: [::1] or [::1]:port
-                                            h.find(']')
-                                                .map(|i| h[..=i].to_string())
-                                                .unwrap_or(h.clone())
-                                        } else {
-                                            h.rfind(':')
-                                                .map(|i| h[..i].to_string())
-                                                .unwrap_or(h.clone())
-                                        };
-                                        if https_port == 443 {
-                                            format!("https://{}{}", h_no_port, uri)
-                                        } else {
-                                            format!("https://{}:{}{}", h_no_port, https_port, uri)
-                                        }
-                                    }
-                                    None => format!("https://localhost:{}{}", https_port, uri),
-                                };
-
-                                let response = format!(
-                                    "HTTP/1.1 301 Moved Permanently\r\nLocation: {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-                                    location
-                                );
-                                let _ = stream.write_all(response.as_bytes()).await;
-                            });
+        for listener in listeners {
+            tokio::spawn(async move {
+                loop {
+                    match listener.accept().await {
+                        Ok((stream, _peer)) => {
+                            tokio::spawn(Server::handle_redirect_connection(stream, server_port));
                         }
                         Err(e) => eprintln!("HTTP redirect accept error: {}", e),
                     }
                 }
+            });
+        }
+
+        loop {
+            tokio::select! {
                 _ = tokio::signal::ctrl_c() => {
                     println!("\nShutting down HTTP redirect listener (SIGINT).");
                     break;
@@ -948,6 +932,64 @@ impl Server {
                 }
             }
         }
+    }
+
+    /// One redirect-listener connection: answer a pending ACME HTTP-01
+    /// challenge, or `301` to the HTTPS equivalent of the requested URL.
+    pub(crate) async fn handle_redirect_connection(mut stream: tokio::net::TcpStream, https_port: i32) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut buf = vec![0u8; 4096];
+        let n = match stream.read(&mut buf).await {
+            Ok(n) => n,
+            Err(_) => return,
+        };
+        let text = String::from_utf8_lossy(&buf[..n]);
+
+        let uri = text.lines()
+            .next()
+            .and_then(|line| line.split_whitespace().nth(1))
+            .unwrap_or("/")
+            .to_string();
+
+        // ACME HTTP-01 challenges must be answered over
+        // plain HTTP, not redirected.
+        #[cfg(feature = "acme")]
+        if let Some(challenge) = crate::acme::challenge_http_response(&uri) {
+            let _ = stream.write_all(challenge.as_bytes()).await;
+            return;
+        }
+
+        let host_header = text.lines()
+            .find(|l| l.to_lowercase().starts_with("host:"))
+            .map(|l| l[5..].trim().to_string());
+
+        let location = match host_header {
+            Some(h) => {
+                // strip existing port from Host header
+                let h_no_port = if h.starts_with('[') {
+                    // IPv6: [::1] or [::1]:port
+                    h.find(']')
+                        .map(|i| h[..=i].to_string())
+                        .unwrap_or(h.clone())
+                } else {
+                    h.rfind(':')
+                        .map(|i| h[..i].to_string())
+                        .unwrap_or(h.clone())
+                };
+                if https_port == 443 {
+                    format!("https://{}{}", h_no_port, uri)
+                } else {
+                    format!("https://{}:{}{}", h_no_port, https_port, uri)
+                }
+            }
+            None => format!("https://localhost:{}{}", https_port, uri),
+        };
+
+        let response = format!(
+            "HTTP/1.1 301 Moved Permanently\r\nLocation: {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            location
+        );
+        let _ = stream.write_all(response.as_bytes()).await;
     }
 
     async fn process_h1_tls(

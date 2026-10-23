@@ -21,16 +21,43 @@ server starts in **proxy mode** (`ConfigDrivenApp`). The built-in static-file an
 controller stack is used only as a fallback for unmatched requests.
 :::
 
-## `[server]`
+## Server settings (top level)
 
-Basic server settings. All keys map to the corresponding `RWS_CONFIG_*`
-environment variable.
+Basic server settings go at the top of the file, before any `[section]`
+header. Each key maps to the `RWS_CONFIG_*` environment variable and the
+`--flag` of the same name (`rws --help` lists them all).
 
 ```toml
-[server]
-ip            = "0.0.0.0"   # RWS_CONFIG_IP (default: 0.0.0.0)
-port          = 7878         # RWS_CONFIG_PORT (default: 7878)
-thread_count  = 200          # RWS_CONFIG_THREAD_COUNT (default: 200)
+ip                 = "0.0.0.0"   # RWS_CONFIG_IP (default: 0.0.0.0)
+port               = 443         # RWS_CONFIG_PORT (default: 7878)
+thread_count       = 200         # RWS_CONFIG_THREAD_COUNT (default: 200, http1 build only)
+tls_cert_file      = "cert.pem"  # RWS_CONFIG_TLS_CERT_FILE — enables HTTPS, HTTP/2, HTTP/3
+tls_key_file       = "key.pem"   # RWS_CONFIG_TLS_KEY_FILE
+http_redirect_port = 80          # RWS_CONFIG_HTTP_REDIRECT_PORT — HTTP → HTTPS redirect listener
+```
+
+:::caution
+Don't wrap these in a `[server]` table: keys are prefixed with their table's
+name, so `[server] port = 443` becomes `--server-port`, which doesn't exist
+and is ignored.
+:::
+
+## `[acme]`
+
+Automatic HTTPS from Let's Encrypt or another ACME CA (`acme` feature,
+included in the prebuilt binaries). Setting `domains` enables it. See
+[Automatic HTTPS](/features/acme/) for how it works.
+
+```toml
+[acme]
+domains        = ["example.com", "www.example.com"]  # RWS_CONFIG_ACME_DOMAINS
+email          = "ops@example.com"                   # RWS_CONFIG_ACME_EMAIL
+staging        = false             # Let's Encrypt staging CA (testing)
+directory      = ""                # ACME directory URL of another CA
+ca_file        = ""                # extra root CA PEM for a private ACME CA
+challenge_port = 80                # port the CA connects to for HTTP-01
+cert_path      = ""                # default: tls_cert_file, else cert.pem
+key_path       = ""                # default: tls_key_file, else key.pem
 ```
 
 ## `[cors]`
@@ -326,10 +353,13 @@ read_timeout_ms    = 30000   # (default: 30000)
 ## Complete example
 
 ```toml
-[server]
-ip           = "0.0.0.0"
-port         = 7878
-thread_count = 200
+ip                 = "0.0.0.0"
+port               = 443
+http_redirect_port = 80
+
+[acme]
+domains = ["example.com", "api.example.com"]
+email   = "ops@example.com"
 
 [cors]
 allow_all = false

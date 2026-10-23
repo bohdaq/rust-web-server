@@ -121,7 +121,8 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build
-        run: cargo build --release --bin rws --target ${{ matrix.target }}
+        # acme: automatic HTTPS; auth: JWT / basic auth in config-driven routes.
+        run: cargo build --release --bin rws --features "acme auth" --target ${{ matrix.target }}
 
       - name: Package
         shell: bash

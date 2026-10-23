@@ -323,3 +323,32 @@ fn informational_flag_absent_starts_server_normally() {
     // The program name itself is never treated as a flag.
     assert_eq!(None, informational_flag_output(&args(&["--version"])));
 }
+
+#[test]
+fn config_file_acme_section_and_redirect_port_reach_the_environment() {
+    let _g = crate::test_env::lock();
+    let toml = "http_redirect_port = 80\n\n[acme]\ndomains = [\"example.com\", \"www.example.com\"]\nemail = \"ops@example.com\"\nca_file = \"/etc/rws/ca.pem\"\n";
+    crate::entry_point::config_file::read_config_file(std::io::Cursor::new(toml.as_bytes()), String::new()).unwrap();
+    let redirect = env::var(Config::RWS_CONFIG_HTTP_REDIRECT_PORT).unwrap();
+    let domains = env::var(Config::RWS_CONFIG_ACME_DOMAINS).unwrap();
+    let email = env::var(Config::RWS_CONFIG_ACME_EMAIL).unwrap();
+    let ca_file = env::var(Config::RWS_CONFIG_ACME_CA_FILE).unwrap();
+    for var in [Config::RWS_CONFIG_HTTP_REDIRECT_PORT, Config::RWS_CONFIG_ACME_DOMAINS,
+                Config::RWS_CONFIG_ACME_EMAIL, Config::RWS_CONFIG_ACME_CA_FILE] {
+        env::set_var(var, "");
+    }
+    assert_eq!("80", redirect);
+    assert_eq!("example.com,www.example.com", domains);
+    assert_eq!("ops@example.com", email);
+    assert_eq!("/etc/rws/ca.pem", ca_file);
+}
+
+#[test]
+fn long_only_arguments_are_never_matched_by_a_bare_dash() {
+    let _g = crate::test_env::lock();
+    env::set_var(Config::RWS_CONFIG_ACME_EMAIL, "unchanged");
+    CommandLineArgument::_parse(args(&["-=evil"]), CommandLineArgument::get_command_line_arg_list());
+    let email = env::var(Config::RWS_CONFIG_ACME_EMAIL).unwrap();
+    env::set_var(Config::RWS_CONFIG_ACME_EMAIL, "");
+    assert_eq!("unchanged", email);
+}

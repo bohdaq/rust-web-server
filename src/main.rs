@@ -387,6 +387,34 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
 
 // ── main ──────────────────────────────────────────────────────────────────────
 
+/// Automatic HTTPS: when `RWS_CONFIG_ACME_DOMAINS` is set, obtain (or reuse)
+/// a certificate before the TLS listener starts, then keep it renewed.
+#[cfg(feature = "http2")]
+async fn start_acme() {
+    #[cfg(feature = "acme")]
+    {
+        use rust_web_server::acme::{AcmeConfig, AcmeManager};
+        if let Some(cfg) = AcmeConfig::from_env() {
+            cfg.install_as_tls_certificate();
+            let mgr = AcmeManager::new(cfg);
+            mgr.provision_until_ready().await;
+            tokio::spawn(mgr.run_renewal_loop());
+        }
+    }
+    #[cfg(not(feature = "acme"))]
+    {
+        let domains = std::env::var(rust_web_server::entry_point::Config::RWS_CONFIG_ACME_DOMAINS)
+            .unwrap_or_default();
+        if !domains.trim().is_empty() {
+            eprintln!(
+                "[ACME] RWS_CONFIG_ACME_DOMAINS is set, but this rws binary was built without the \
+                 `acme` feature — no certificate will be requested. Use a release binary or \
+                 `cargo install rust-web-server --features acme`."
+            );
+        }
+    }
+}
+
 /// `rws --version` / `rws --help`: print and exit before binding any socket.
 fn exit_if_informational_flag() {
     let args: Vec<String> = std::env::args().collect();
@@ -416,17 +444,7 @@ async fn main() {
     exit_if_informational_flag();
     let (listener, pool) = Server::setup().expect("server setup failed");
 
-    #[cfg(feature = "acme")]
-    {
-        use rust_web_server::acme::{AcmeConfig, AcmeManager};
-        if let Some(cfg) = AcmeConfig::from_env() {
-            let mgr = AcmeManager::new(cfg);
-            if let Err(e) = mgr.provision_if_needed().await {
-                eprintln!("[ACME] Startup provisioning failed: {e}");
-            }
-            tokio::spawn(mgr.run_renewal_loop());
-        }
-    }
+    start_acme().await;
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
@@ -450,17 +468,7 @@ async fn main() {
     exit_if_informational_flag();
     let (listener, pool) = Server::setup().expect("server setup failed");
 
-    #[cfg(feature = "acme")]
-    {
-        use rust_web_server::acme::{AcmeConfig, AcmeManager};
-        if let Some(cfg) = AcmeConfig::from_env() {
-            let mgr = AcmeManager::new(cfg);
-            if let Err(e) = mgr.provision_if_needed().await {
-                eprintln!("[ACME] Startup provisioning failed: {e}");
-            }
-            tokio::spawn(mgr.run_renewal_loop());
-        }
-    }
+    start_acme().await;
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();

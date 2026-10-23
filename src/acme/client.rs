@@ -10,6 +10,12 @@ use tokio_rustls::rustls::{self, ClientConfig, RootCertStore};
 use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::TlsConnector;
 
+/// RFC 8555 §6.1: "ACME clients MUST send a User-Agent header field".
+/// Pebble rejects requests without one; Let's Encrypt uses it for diagnostics.
+pub(crate) const USER_AGENT: &str = concat!(
+    "rws-acme/", env!("CARGO_PKG_VERSION"), " (+https://github.com/bohdaq/rust-web-server)"
+);
+
 pub struct AcmeHttpClient {
     connector: TlsConnector,
 }
@@ -37,12 +43,36 @@ impl HttpResp {
     }
 }
 
+/// Trust every certificate in the PEM file at `path` in addition to the
+/// public roots — for a private ACME CA (`RWS_CONFIG_ACME_CA_FILE`).
+pub(crate) fn add_extra_roots(store: &mut RootCertStore, path: &str) -> Result<(), String> {
+    use tokio_rustls::rustls::pki_types::{pem::PemObject, CertificateDer};
+    let bytes = std::fs::read(path)
+        .map_err(|e| format!("failed to read ACME CA file '{path}': {e}"))?;
+    let certs = CertificateDer::pem_slice_iter(&bytes)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("failed to parse ACME CA file '{path}': {e}"))?;
+    if certs.is_empty() {
+        return Err(format!("no certificates found in ACME CA file '{path}'"));
+    }
+    for cert in certs {
+        store.add(cert).map_err(|e| format!("invalid CA certificate in '{path}': {e}"))?;
+    }
+    Ok(())
+}
+
 impl AcmeHttpClient {
     pub fn new() -> Result<Self, String> {
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        let root_store = RootCertStore {
+        let mut root_store = RootCertStore {
             roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
         };
+        if let Some(ca_file) = std::env::var(crate::entry_point::Config::RWS_CONFIG_ACME_CA_FILE)
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+        {
+            add_extra_roots(&mut root_store, ca_file.trim())?;
+        }
         let config = ClientConfig::builder()
             .with_root_certificates(root_store)
             .with_no_client_auth();
@@ -65,9 +95,10 @@ impl AcmeHttpClient {
 
     pub async fn head(&self, url: &str) -> Result<HttpResp, String> {
         let (host, port, path) = parse_https_url(url)?;
+        let authority = host_header(&host, port);
         let mut stream = self.connect(&host, port).await?;
         let req = format!(
-            "HEAD {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
+            "HEAD {path} HTTP/1.1\r\nHost: {authority}\r\nUser-Agent: {USER_AGENT}\r\nConnection: close\r\n\r\n"
         );
         stream.write_all(req.as_bytes()).await.map_err(|e| e.to_string())?;
         let _ = stream.shutdown().await;
@@ -76,9 +107,10 @@ impl AcmeHttpClient {
 
     pub async fn get(&self, url: &str) -> Result<HttpResp, String> {
         let (host, port, path) = parse_https_url(url)?;
+        let authority = host_header(&host, port);
         let mut stream = self.connect(&host, port).await?;
         let req = format!(
-            "GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
+            "GET {path} HTTP/1.1\r\nHost: {authority}\r\nUser-Agent: {USER_AGENT}\r\nConnection: close\r\n\r\n"
         );
         stream.write_all(req.as_bytes()).await.map_err(|e| e.to_string())?;
         read_response(&mut stream).await
@@ -86,10 +118,12 @@ impl AcmeHttpClient {
 
     pub async fn post_jws(&self, url: &str, body: &str) -> Result<HttpResp, String> {
         let (host, port, path) = parse_https_url(url)?;
+        let authority = host_header(&host, port);
         let mut stream = self.connect(&host, port).await?;
         let req = format!(
             "POST {path} HTTP/1.1\r\n\
-             Host: {host}\r\n\
+             Host: {authority}\r\n\
+             User-Agent: {USER_AGENT}\r\n\
              Content-Type: application/jose+json\r\n\
              Content-Length: {len}\r\n\
              Connection: close\r\n\r\n\
@@ -104,6 +138,13 @@ impl AcmeHttpClient {
 // ── URL parsing ───────────────────────────────────────────────────────────────
 
 /// Split `https://host[:port]/path` → `(host, port, "/path")`.
+/// `Host` header value: RFC 9110 §7.2 requires the port whenever it isn't
+/// the scheme default — ACME servers (Pebble, step-ca on :9000) build the
+/// URLs in their responses from it.
+pub(crate) fn host_header(host: &str, port: u16) -> String {
+    if port == 443 { host.to_string() } else { format!("{host}:{port}") }
+}
+
 fn parse_https_url(url: &str) -> Result<(String, u16, String), String> {
     let stripped = url.trim_start_matches("https://");
     let (hostport, path_rest) = stripped.split_once('/').unwrap_or((stripped, ""));

@@ -119,11 +119,13 @@ impl Config {
     pub const RWS_CONFIG_ACME_DIRECTORY: &'static str = "RWS_CONFIG_ACME_DIRECTORY";
     pub const RWS_CONFIG_ACME_DIRECTORY_DEFAULT_VALUE: &'static str = "";
 
-    /// Where to write the provisioned certificate chain (PEM). Defaults to `RWS_CONFIG_TLS_CERT_FILE`.
+    /// Where to write the provisioned certificate chain (PEM). Defaults to `RWS_CONFIG_TLS_CERT_FILE`,
+    /// or `cert.pem` in the working directory when that is empty too.
     pub const RWS_CONFIG_ACME_CERT_PATH: &'static str = "RWS_CONFIG_ACME_CERT_PATH";
     pub const RWS_CONFIG_ACME_CERT_PATH_DEFAULT_VALUE: &'static str = "";
 
-    /// Where to write the certificate's private key (PEM). Defaults to `RWS_CONFIG_TLS_KEY_FILE`.
+    /// Where to write the certificate's private key (PEM). Defaults to `RWS_CONFIG_TLS_KEY_FILE`,
+    /// or `key.pem` in the working directory when that is empty too.
     pub const RWS_CONFIG_ACME_KEY_PATH: &'static str = "RWS_CONFIG_ACME_KEY_PATH";
     pub const RWS_CONFIG_ACME_KEY_PATH_DEFAULT_VALUE: &'static str = "";
 
@@ -139,6 +141,17 @@ impl Config {
     /// Path to persist the ACME account key between restarts (default `acme_account.key`).
     pub const RWS_CONFIG_ACME_ACCOUNT_KEY_PATH: &'static str = "RWS_CONFIG_ACME_ACCOUNT_KEY_PATH";
     pub const RWS_CONFIG_ACME_ACCOUNT_KEY_PATH_DEFAULT_VALUE: &'static str = "acme_account.key";
+
+    /// PEM file of extra root CAs to trust when talking to the ACME directory,
+    /// on top of the public Web PKI roots — for a private ACME CA (step-ca,
+    /// Pebble, an internal Boulder). Empty means public roots only.
+    pub const RWS_CONFIG_ACME_CA_FILE: &'static str = "RWS_CONFIG_ACME_CA_FILE";
+    pub const RWS_CONFIG_ACME_CA_FILE_DEFAULT_VALUE: &'static str = "";
+
+    /// Seconds between certificate-expiry checks in the renewal loop (default 12h).
+    /// After a failed renewal the next attempt comes after at most one hour.
+    pub const RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS: &'static str = "RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS";
+    pub const RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS_DEFAULT_VALUE: &'static str = "43200";
 
 
     pub const RWS_DEFAULT_IP: &'static str = "127.0.0.1";

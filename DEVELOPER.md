@@ -1757,55 +1757,57 @@ See [use case #33](#33-per-route-metrics) for the setup snippet.
 
 ### 35. Automatic TLS (ACME / Let's Encrypt)
 
-`AcmeManager` (`acme` feature flag) provisions a TLS certificate from Let's Encrypt at startup and renews it automatically before expiry — no `certbot`, no cron jobs, no manual restarts.
+`AcmeManager` (`acme` feature flag) provisions a TLS certificate from Let's Encrypt at startup and renews it automatically before expiry — no `certbot`, no cron jobs, no manual restarts. The prebuilt `rws` binaries include it; with no code at all:
 
 ```toml
-# Cargo.toml
-[dependencies]
-rust-web-server = { version = "17", features = ["acme"] }
+# rws.config.toml
+port               = 443
+http_redirect_port = 80   # HTTP → HTTPS redirect; also answers ACME challenges
+
+[acme]
+domains = ["example.com", "www.example.com"]
+email   = "admin@example.com"
+# staging   = true                                   # Let's Encrypt staging (testing)
+# directory = "https://ca.internal:9000/acme/acme/directory"
+# ca_file   = "/etc/rws/internal-root.pem"           # trust a private ACME CA
 ```
 
-```bash
-# Required env vars
-RWS_CONFIG_ACME_DOMAINS=example.com,www.example.com
-RWS_CONFIG_ACME_EMAIL=admin@example.com
+Each key also works as `RWS_CONFIG_ACME_<KEY>` / `--acme-<key>=`. Without explicit TLS paths the certificate is stored as `cert.pem` / `key.pem` in the working directory and served from there.
 
-# Optional
-RWS_CONFIG_ACME_STAGING=true            # use Let's Encrypt staging (testing only)
-RWS_CONFIG_ACME_CHALLENGE_PORT=80       # port for HTTP-01 challenge server (default 80)
-RWS_CONFIG_ACME_RENEW_BEFORE_DAYS=30   # renew when fewer than N days remain
-RWS_CONFIG_ACME_ACCOUNT_KEY_PATH=acme_account.key  # persisted ACME account key
-```
-
-The library integration is automatic when the `acme` feature is enabled — `main.rs` checks `AcmeConfig::from_env()` at startup:
+In your own binary (`rust-web-server = { version = "17", features = ["acme"] }`):
 
 ```rust
-#[cfg(feature = "acme")]
-{
-    use rust_web_server::acme::{AcmeConfig, AcmeManager};
+use rust_web_server::acme::{AcmeConfig, AcmeManager};
+use rust_web_server::prelude::*;
+
+#[tokio::main]
+async fn main() {
+    let (listener, pool) = Server::setup().unwrap();
     if let Some(cfg) = AcmeConfig::from_env() {
+        cfg.install_as_tls_certificate();      // point run_tls at the ACME cert
         let mgr = AcmeManager::new(cfg);
-        // Provision cert now (or skip if one is still valid).
-        if let Err(e) = mgr.provision_if_needed().await {
-            eprintln!("[ACME] Startup provisioning failed: {e}");
-        }
-        // Background loop checks every 12 hours; after renewal sends SIGHUP
-        // so the TLS acceptor reloads without restarting.
-        tokio::spawn(mgr.run_renewal_loop());
+        mgr.provision_until_ready().await;     // retries with backoff until issued
+        tokio::spawn(mgr.run_renewal_loop());  // checks every 12h, hot-reloads
     }
+    let app = App::new();
+    tokio::join!(
+        Server::run_tls(listener, pool, app.clone()),
+        Server::run_quic(app),
+        Server::run_redirect(),                // answers renewal challenges on port 80
+    );
 }
 ```
 
 **Protocol flow:**
-1. Fetches the ACME directory from Let's Encrypt.
+1. Fetches the ACME directory (sending the `User-Agent` RFC 8555 requires; extra roots from `ca_file` are trusted for private CAs).
 2. Creates or loads an ECDSA P-256 account key (stored at `acme_account.key`).
 3. Places a `newOrder` for all configured domains.
-4. For each domain, starts a temporary TCP server on port 80 that answers the HTTP-01 challenge (`/.well-known/acme-challenge/<token>`), signals the ACME server, and polls until `valid`.
+4. For each domain, publishes the HTTP-01 key authorization in a process-wide challenge store. At startup a temporary listener on the challenge port serves it; once `Server::run_redirect` owns that port, the redirect listener serves it instead — so renewals don't collide with it. Both listen on IPv4 and IPv6.
 5. Generates a fresh P-256 certificate key and CSR with `rcgen`.
 6. Finalises the order and downloads the signed certificate chain.
-7. Writes the chain to `RWS_CONFIG_TLS_CERT_FILE` and the key to `RWS_CONFIG_TLS_KEY_FILE`.
+7. Writes the chain and key to `cert_path` / `key_path`.
 
-**Zero-downtime renewal:** after writing new files, `run_renewal_loop` sends `SIGHUP` to the process. The `run_tls` accept loop catches the signal and replaces the `TlsAcceptor` in-place — no TCP connections are dropped.
+**Zero-downtime renewal:** after writing new files, `run_renewal_loop` sends `SIGHUP` to the process (Unix). The `run_tls` accept loop catches the signal and replaces the `TlsAcceptor` in-place — no TCP connections are dropped. A failed renewal is retried within an hour.
 
 ### 36. MCP server (Model Context Protocol)
 

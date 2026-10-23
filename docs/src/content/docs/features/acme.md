@@ -1,120 +1,151 @@
 ---
-title: Automatic TLS (ACME)
-description: Provision and auto-renew Let's Encrypt certificates via the ACME protocol without any external tooling.
+title: Automatic HTTPS (ACME)
+description: Get and auto-renew Let's Encrypt certificates with one config section — no certbot, no cron, no restarts.
 ---
 
-## Feature requirements
+`rws` obtains certificates from Let's Encrypt (or any ACME CA) by itself and
+keeps them renewed. Point a domain's DNS at the server, then:
 
-Automatic certificate management requires the `acme` feature, which implies
-`http2`:
+```toml
+# rws.config.toml
+port               = 443
+http_redirect_port = 80     # HTTP → HTTPS redirects; also answers ACME challenges
 
-```bash
-cargo build --features acme
+[acme]
+domains = ["example.com", "www.example.com"]
+email   = "you@example.com"
 ```
 
-The `http3` default build does **not** include ACME; add it explicitly:
-
 ```bash
-cargo build --features http3,acme
+rws
 ```
+
+On first start `rws` requests a certificate, stores it as `cert.pem` /
+`key.pem` in the working directory, and starts serving HTTPS, HTTP/2, and
+HTTP/3 with it. Later starts reuse the stored certificate. Renewal happens in
+the background and is hot-swapped without dropping connections.
+
+:::note[Which binaries include ACME]
+The prebuilt binaries (Homebrew, `cargo binstall`, Docker, GitHub Releases)
+include it. When building from source, enable the `acme` feature:
+`cargo install rust-web-server --features acme,auth`. A binary built without
+it prints a warning if `[acme]` is configured instead of silently serving
+plain HTTP.
+:::
+
+## Requirements
+
+- **DNS** for every domain in `domains` points at this server.
+- **Port 80 is reachable from the internet.** Let's Encrypt proves you control
+  the domain with an HTTP-01 challenge to `http://<domain>/.well-known/acme-challenge/…`.
+- **Binding ports 80/443 on Linux** needs root or the capability:
+  `sudo setcap cap_net_bind_service=+ep "$(which rws)"`.
+
+IPv6 is handled: when a domain has an AAAA record, Let's Encrypt validates
+over IPv6, so the challenge and redirect listeners accept both IPv4 and IPv6.
 
 ## How it works
 
-`AcmeManager` implements RFC 8555 (ACME) from scratch with no third-party ACME
-client libraries. On startup it checks whether a valid certificate already
-exists. If not, or if the certificate expires within `renew_before_days`, it:
+1. **Startup.** If no certificate exists, or it expires within
+   `renew_before_days`, `rws` runs the ACME flow before opening the HTTPS
+   port: account (key saved to `acme_account.key`), order, HTTP-01 challenge,
+   ECDSA P-256 key + CSR, finalize, download.
+2. **Challenges.** At startup a temporary listener on the challenge port
+   (default 80) answers them. Once the HTTP → HTTPS redirect listener is
+   running on that port, it answers challenges itself — so renewals never
+   compete with it for port 80.
+3. **First-time failures are retried**, e.g. while DNS for a new domain is
+   still propagating: after 30 s, doubling up to every 15 minutes, until a
+   certificate is issued.
+4. **Renewal.** Every 12 hours `rws` checks the expiry and renews when fewer
+   than `renew_before_days` (30) remain. A failed renewal is retried within an
+   hour. After renewing it reloads the TLS certificate in place (on Unix, via
+   the same `SIGHUP` reload used for config).
 
-1. Loads or generates an ACME account key (`acme_account.key` by default).
-2. Creates or looks up an account on the CA directory.
-3. Submits a new order for all configured domains.
-4. For each domain, starts a temporary HTTP-01 challenge server on port 80,
-   responds to `GET /.well-known/acme-challenge/<token>`, then polls until
-   Let's Encrypt validates.
-5. Generates an ECDSA P-256 key pair and a CSR, finalises the order, and
-   downloads the signed certificate chain.
-6. Writes the chain to `cert.pem` (or `RWS_CONFIG_ACME_CERT_PATH`) and the
-   private key to `key.pem` (or `RWS_CONFIG_ACME_KEY_PATH`).
+The ACME client (RFC 8555) is implemented in-crate. It has been tested end to
+end against [Pebble](https://github.com/letsencrypt/pebble), Let's Encrypt's
+test CA, including renewal through the redirect listener.
 
-## Quick start
+## Testing with the staging CA
 
-```bash
-export RWS_CONFIG_ACME_DOMAINS=example.com,www.example.com
-export RWS_CONFIG_ACME_EMAIL=admin@example.com
-export RWS_CONFIG_TLS_CERT_FILE=cert.pem
-export RWS_CONFIG_TLS_KEY_FILE=key.pem
+Let's Encrypt production has strict
+[rate limits](https://letsencrypt.org/docs/rate-limits/). Try your setup
+against staging first — its certificates aren't browser-trusted, but the
+limits are generous:
+
+```toml
+[acme]
+domains = ["example.com"]
+staging = true
 ```
 
-```rust
-use rust_web_server::acme::{AcmeConfig, AcmeManager};
-use rust_web_server::{App, Server};
+Delete `cert.pem`, `key.pem`, and `acme_account.key` before switching back to
+production.
 
-#[tokio::main]
-async fn main() {
-    // Provision certificate before starting the TLS server.
-    if let Some(cfg) = AcmeConfig::from_env() {
-        let mgr = AcmeManager::new(cfg);
-        mgr.provision_if_needed().await.unwrap();
+## Private ACME CAs
 
-        // Renew in the background every 12 hours.
-        tokio::spawn(mgr.run_renewal_loop());
-    }
+To use step-ca, an internal Boulder, or Pebble, set the directory URL and
+trust the CA's root certificate (in addition to the public roots):
 
-    Server::setup().run_tls(App::new()).await;
-}
+```toml
+[acme]
+domains   = ["internal.example"]
+directory = "https://ca.internal.example:9000/acme/acme/directory"
+ca_file   = "/etc/rws/internal-root.pem"
 ```
-
-## Background renewal
-
-`AcmeManager::run_renewal_loop()` sleeps for 12 hours, then calls
-`provision_if_needed()`. If renewal succeeds it sends `SIGHUP` to the running
-process, which triggers `Server::run_tls` to hot-reload the TLS acceptor with
-the new certificate — no restart required.
-
-```rust
-tokio::spawn(mgr.run_renewal_loop());
-```
-
-## Staging vs production
-
-Set `RWS_CONFIG_ACME_STAGING=true` to use the Let's Encrypt staging environment
-during development. Staging certificates are not trusted by browsers but the CA
-has much higher rate limits.
-
-```bash
-export RWS_CONFIG_ACME_STAGING=true
-```
-
-| CA | URL |
-|---|---|
-| Production | `https://acme-v02.api.letsencrypt.org/directory` |
-| Staging | `https://acme-staging-v02.api.letsencrypt.org/directory` |
-
-Set `RWS_CONFIG_ACME_DIRECTORY` to use a different ACME-compatible CA.
-
-## HTTP-01 challenge server
-
-The ACME manager binds a temporary TCP listener on port 80 (configurable via
-`RWS_CONFIG_ACME_CHALLENGE_PORT`) for the duration of each domain's HTTP-01
-challenge. The listener is shut down as soon as Let's Encrypt confirms the
-challenge is valid. Port 80 must be reachable from the public internet during
-provisioning.
-
-:::note[Port 80 binding]
-On Linux, binding port 80 without root privileges requires either
-`CAP_NET_BIND_SERVICE` or running the process as root. You can set the
-capability with: `sudo setcap cap_net_bind_service=+ep ./rws`
-:::
 
 ## Configuration reference
 
-| Variable | Default | Description |
-|---|---|---|
-| `RWS_CONFIG_ACME_DOMAINS` | — | Comma-separated domain list (required to activate ACME) |
-| `RWS_CONFIG_ACME_EMAIL` | — | Contact email sent to the CA |
-| `RWS_CONFIG_ACME_STAGING` | `false` | Use Let's Encrypt staging when `true` |
-| `RWS_CONFIG_ACME_DIRECTORY` | LE production URL | Custom ACME directory URL |
-| `RWS_CONFIG_ACME_CERT_PATH` | `RWS_CONFIG_TLS_CERT_FILE` | Where to write the certificate chain |
-| `RWS_CONFIG_ACME_KEY_PATH` | `RWS_CONFIG_TLS_KEY_FILE` | Where to write the certificate private key |
-| `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port for the HTTP-01 challenge server |
-| `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | `30` | Renew when fewer than this many days remain |
-| `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `acme_account.key` | Persist the ACME account key between restarts |
+Every setting can go in the `[acme]` section of `rws.config.toml`, on the
+command line (`--acme-domains=...`), or in the environment.
+
+| `[acme]` key | Environment variable | Default | Description |
+|---|---|---|---|
+| `domains` | `RWS_CONFIG_ACME_DOMAINS` | — | Domains for the certificate. Setting this enables ACME. |
+| `email` | `RWS_CONFIG_ACME_EMAIL` | — | Contact email for expiry notices from the CA |
+| `staging` | `RWS_CONFIG_ACME_STAGING` | `false` | Use the Let's Encrypt staging CA |
+| `directory` | `RWS_CONFIG_ACME_DIRECTORY` | Let's Encrypt | ACME directory URL of another CA |
+| `ca_file` | `RWS_CONFIG_ACME_CA_FILE` | — | Extra root CA(s) to trust for the directory (private CAs) |
+| `challenge_port` | `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port the CA connects to for HTTP-01 |
+| `cert_path` | `RWS_CONFIG_ACME_CERT_PATH` | `tls_cert_file`, else `cert.pem` | Where the certificate chain is stored |
+| `key_path` | `RWS_CONFIG_ACME_KEY_PATH` | `tls_key_file`, else `key.pem` | Where the certificate key is stored |
+| — | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | `30` | Renew when fewer than this many days remain |
+| — | `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` | `43200` | Seconds between expiry checks |
+| — | `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `acme_account.key` | Where the ACME account key is stored |
+
+Top-level `http_redirect_port` (`RWS_CONFIG_HTTP_REDIRECT_PORT`) starts the
+HTTP → HTTPS redirect listener; set it to the challenge port (80) in
+production.
+
+## Using ACME from Rust
+
+The `rws` binary does all of the above. In your own binary built on the
+library, the equivalent is:
+
+```rust
+use rust_web_server::acme::{AcmeConfig, AcmeManager};
+use rust_web_server::prelude::*;
+
+#[tokio::main]
+async fn main() {
+    let (listener, pool) = Server::setup().unwrap();
+
+    if let Some(cfg) = AcmeConfig::from_env() {
+        // Serve the issued certificate unless TLS paths were set explicitly.
+        cfg.install_as_tls_certificate();
+        let mgr = AcmeManager::new(cfg);
+        mgr.provision_until_ready().await;   // retries until issued
+        tokio::spawn(mgr.run_renewal_loop());
+    }
+
+    let app = App::new();
+    tokio::join!(
+        Server::run_tls(listener, pool, app.clone()),
+        Server::run_quic(app),
+        Server::run_redirect(),               // answers renewal challenges
+    );
+}
+```
+
+`AcmeManager::provision_if_needed()` (single attempt, returns the error) is
+also available if you want to handle failures yourself.

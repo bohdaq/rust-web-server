@@ -44,7 +44,11 @@ fn help_text() -> String {
         env!("CARGO_PKG_VERSION")
     );
     for argument in CommandLineArgument::get_command_line_arg_list() {
-        let flag = format!("-{}, --{}=<value>", argument.short_form, argument.long_form);
+        let flag = if argument.short_form.is_empty() {
+            format!("    --{}=<value>", argument.long_form)
+        } else {
+            format!("-{}, --{}=<value>", argument.short_form, argument.long_form)
+        };
         let hint = argument._hint.unwrap_or_default();
         text.push_str(&format!("  {:<44} {}\n  {:<44} [env: {}]\n", flag, hint, "", argument.environment_variable));
     }
@@ -170,6 +174,39 @@ impl CommandLineArgument {
         };
         argument_list.push(argument);
 
+        // Long-form only (empty short_form): every single letter that reads
+        // naturally is taken. In rws.config.toml these are `http_redirect_port`
+        // at the top level and the keys of an `[acme]` section (`domains`,
+        // `email`, ...), which the config-file reader prefixes to `acme-*`.
+        let long_only = [
+            ("http-redirect-port", Config::RWS_CONFIG_HTTP_REDIRECT_PORT,
+                "Plain-HTTP port that 301-redirects to HTTPS (and answers ACME HTTP-01 challenges), e.g. 80"),
+            ("acme-domains", Config::RWS_CONFIG_ACME_DOMAINS,
+                "Comma separated domains to get a Let's Encrypt certificate for; enables automatic HTTPS"),
+            ("acme-email", Config::RWS_CONFIG_ACME_EMAIL,
+                "Contact email for the ACME account"),
+            ("acme-staging", Config::RWS_CONFIG_ACME_STAGING,
+                "If set to true, uses the Let's Encrypt staging environment (untrusted test certificates)"),
+            ("acme-directory", Config::RWS_CONFIG_ACME_DIRECTORY,
+                "ACME directory URL of a CA other than Let's Encrypt"),
+            ("acme-ca-file", Config::RWS_CONFIG_ACME_CA_FILE,
+                "PEM file of extra root CAs to trust for the ACME directory (private ACME CAs)"),
+            ("acme-challenge-port", Config::RWS_CONFIG_ACME_CHALLENGE_PORT,
+                "Port the CA connects to for HTTP-01 challenges (default 80)"),
+            ("acme-cert-path", Config::RWS_CONFIG_ACME_CERT_PATH,
+                "Where to store the issued certificate (default: tls-cert-file, else cert.pem)"),
+            ("acme-key-path", Config::RWS_CONFIG_ACME_KEY_PATH,
+                "Where to store the certificate's private key (default: tls-key-file, else key.pem)"),
+        ];
+        for (long_form, environment_variable, hint) in long_only {
+            argument_list.push(CommandLineArgument {
+                short_form: "".to_string(),
+                long_form: long_form.to_string(),
+                environment_variable: environment_variable.to_string(),
+                _hint: Some(hint.to_string()),
+            });
+        }
+
         argument_list
     }
 
@@ -191,7 +228,7 @@ impl CommandLineArgument {
                                 let _param_short_form = ["-", &short_form].join("");
                                 let _param_long_form = ["--", &long_form].join("");
 
-                                parameter.eq(_param_short_form.as_str()) ||
+                                (!short_form.is_empty() && parameter.eq(_param_short_form.as_str())) ||
                                     parameter.eq(_param_long_form.as_str())
                 });
                 if boxed_predefined_argument.is_some() {
