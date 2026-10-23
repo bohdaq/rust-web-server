@@ -208,15 +208,8 @@ impl AcmeManager {
         }
 
         // 7. Generate certificate key + CSR.
-        let cert_key = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256)
-            .map_err(|e| format!("cert key generation failed: {e}"))?;
-        let mut params = rcgen::CertificateParams::new(self.config.domains.clone())
-            .map_err(|e| format!("CSR params error: {e}"))?;
-        // Let's Encrypt sets validity; override subject to be clean.
-        params.distinguished_name = rcgen::DistinguishedName::new();
-        let csr = params.serialize_request(&cert_key)
-            .map_err(|e| format!("CSR serialize error: {e}"))?;
-        let csr_b64 = crypto::base64url(csr.der());
+        let (cert_key, csr_der) = generate_csr(&self.config.domains)?;
+        let csr_b64 = crypto::base64url(&csr_der);
 
         // 8. Finalize order with CSR.
         let nonce = finalize_order(&http, &account_key, &account_url, &order.finalize_url, &csr_b64, &nonce).await?;
@@ -616,6 +609,20 @@ async fn serve_challenges(
 }
 
 // ── minimal JSON field extractor ──────────────────────────────────────────────
+
+/// Generate a fresh ECDSA P-256 certificate key and a DER-encoded CSR for
+/// `domains` (all listed as subjectAltName dNSNames, empty subject — Let's
+/// Encrypt ignores the subject and sets validity itself).
+fn generate_csr(domains: &[String]) -> Result<(rcgen::KeyPair, Vec<u8>), String> {
+    let cert_key = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256)
+        .map_err(|e| format!("cert key generation failed: {e}"))?;
+    let mut params = rcgen::CertificateParams::new(domains.to_vec())
+        .map_err(|e| format!("CSR params error: {e}"))?;
+    params.distinguished_name = rcgen::DistinguishedName::new();
+    let csr = params.serialize_request(&cert_key)
+        .map_err(|e| format!("CSR serialize error: {e}"))?;
+    Ok((cert_key, csr.der().to_vec()))
+}
 
 fn json_str(json: &str, field: &str) -> Option<String> {
     let key = format!("\"{}\"", field);

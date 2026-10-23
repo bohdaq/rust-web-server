@@ -286,3 +286,37 @@ fn extract_json_str_field(json: &str, field: &str) -> Option<String> {
 fn base64url_decode(s: &str) -> Vec<u8> {
     crypto::base64_decode_std(s).unwrap_or_default()
 }
+
+// ── generate_csr ──────────────────────────────────────────────────────────────
+
+#[test]
+fn generate_csr_lists_every_domain_and_returns_a_usable_key() {
+    use rustls::pki_types::pem::PemObject;
+    let domains = vec!["example.com".to_string(), "www.example.com".to_string()];
+    let (key, csr) = super::generate_csr(&domains).unwrap();
+
+    assert_eq!(0x30, csr[0], "CSR must be a DER SEQUENCE");
+    for domain in &domains {
+        assert!(
+            csr.windows(domain.len()).any(|w| w == domain.as_bytes()),
+            "CSR missing SAN {domain}"
+        );
+    }
+
+    // The key is written to disk as PEM and later loaded by crate::tls.
+    let der = rustls::pki_types::PrivateKeyDer::from_pem_slice(key.serialize_pem().as_bytes()).unwrap();
+    assert!(rustls::crypto::aws_lc_rs::sign::any_supported_type(&der).is_ok());
+}
+
+#[test]
+fn generate_csr_makes_a_fresh_key_each_time() {
+    let domains = vec!["example.com".to_string()];
+    let (a, _) = super::generate_csr(&domains).unwrap();
+    let (b, _) = super::generate_csr(&domains).unwrap();
+    assert_ne!(a.serialize_pem(), b.serialize_pem());
+}
+
+#[test]
+fn generate_csr_rejects_non_ascii_domain() {
+    assert!(super::generate_csr(&["bücher.example".to_string()]).is_err());
+}
