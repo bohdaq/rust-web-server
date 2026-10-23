@@ -132,7 +132,7 @@ async fn handle_stream(
 }
 
 fn send_h2_response(mut respond: h2::server::SendResponse<Bytes>, mut rws_response: Response) {
-    // Promote Content-Type, Content-Range, and Content-Length from content_range_list
+    // Promote Content-Type, Content-Length (and Content-Range on 206) from content_range_list
     // into response headers, mirroring what Response::generate_response() does for HTTP/1.1.
     if rws_response.content_range_list.len() == 1 {
         let cr = &rws_response.content_range_list[0];
@@ -140,10 +140,17 @@ fn send_h2_response(mut respond: h2::server::SendResponse<Bytes>, mut rws_respon
             name: crate::header::Header::_CONTENT_TYPE.to_string(),
             value: cr.content_type.clone(),
         });
+        let content_range = crate::response::content_range_header_value(rws_response.status_code, cr);
         rws_response.headers.push(crate::header::Header {
             name: crate::header::Header::_CONTENT_LENGTH.to_string(),
             value: cr.body.len().to_string(),
         });
+        if let Some(value) = content_range {
+            rws_response.headers.push(crate::header::Header {
+                name: crate::header::Header::_CONTENT_RANGE.to_string(),
+                value,
+            });
+        }
     } else if rws_response.content_range_list.len() > 1 {
         rws_response.headers.push(crate::header::Header {
             name: crate::header::Header::_CONTENT_TYPE.to_string(),

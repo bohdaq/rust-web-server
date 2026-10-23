@@ -9,7 +9,6 @@ use crate::range::Range;
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::{Address, ConnectionInfo};
-use crate::symbol::SYMBOL;
 
 /// An in-process HTTP test client that dispatches requests directly through an
 /// [`Application`] without opening a TCP socket.
@@ -179,19 +178,12 @@ impl TestResponse {
                 name: Header::_CONTENT_TYPE.to_string(),
                 value: content_range.content_type.to_string(),
             });
-            let content_range_header_value = [
-                Range::BYTES,
-                SYMBOL.whitespace,
-                &content_range.range.start.to_string(),
-                SYMBOL.hyphen,
-                &content_range.range.end.to_string(),
-                SYMBOL.slash,
-                &content_range.size,
-            ].join("");
-            r.headers.push(Header {
-                name: Header::_CONTENT_RANGE.to_string(),
-                value: content_range_header_value,
-            });
+            if let Some(value) = crate::response::content_range_header_value(r.status_code, content_range) {
+                r.headers.push(Header {
+                    name: Header::_CONTENT_RANGE.to_string(),
+                    value,
+                });
+            }
             r.headers.push(Header {
                 name: Header::_CONTENT_LENGTH.to_string(),
                 value: content_range.body.len().to_string(),

@@ -249,7 +249,7 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.body, buffer);
 
     let start = 11000;
-    let end = file_size;
+    let end = file_size - 1;
     let content_range = content_range_list.get(3).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
@@ -269,7 +269,7 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
     assert_eq!(content_range.unit, Range::BYTES);
     let start = file_size - 500;
-    let end = file_size;
+    let end = file_size - 1;
     assert_eq!(content_range.range.start, start);
     assert_eq!(content_range.range.end, end);
     let file = File::open(&static_filepath).unwrap();
@@ -281,7 +281,7 @@ fn get_right_content_range_of_a_file() {
     assert_eq!(content_range.body, buffer);
 
     let start = 0;
-    let end = file_size;
+    let end = file_size - 1;
     let content_range = content_range_list.get(5).unwrap();
     assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
     assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
@@ -333,25 +333,27 @@ fn parse_range_test() {
     assert_eq!(range.start, 2000);
     assert_eq!(range.end, 2300);
 
+    // `end` is inclusive: open-ended and suffix ranges stop at the last byte.
     let byte = "  11000- ";
     let range = Range::parse_range_in_content_range(file_length, byte).unwrap();
     assert_eq!(range.start, 11000);
-    assert_eq!(range.end, file_length);
+    assert_eq!(range.end, file_length - 1);
 
     let byte = " -500 ";
     let range = Range::parse_range_in_content_range(file_length, byte).unwrap();
     assert_eq!(range.start, file_length - 500);
-    assert_eq!(range.end, file_length);
+    assert_eq!(range.end, file_length - 1);
 
     let byte = " 0- ";
     let range = Range::parse_range_in_content_range(file_length, byte).unwrap();
     assert_eq!(range.start, 0);
-    assert_eq!(range.end, file_length);
+    assert_eq!(range.end, file_length - 1);
 
+    // last-pos == length is one past the end: clamped to the last byte.
     let byte = ["0-", file_length.to_string().as_str()].join("");
     let range = Range::parse_range_in_content_range(file_length, &byte).unwrap();
     assert_eq!(range.start, 0);
-    assert_eq!(range.end, file_length);
+    assert_eq!(range.end, file_length - 1);
 
     let byte = " 0-1 ";
     let range = Range::parse_range_in_content_range(file_length, byte).unwrap();
@@ -652,4 +654,54 @@ fn no_empty_string_between_header_and_body_in_parse_multipart_body() {
     let error = boxed_result.err().unwrap();
     assert_eq!(error, Range::_ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY);
 
+}
+#[test]
+fn parse_range_follows_rfc_9110_edge_cases() {
+    let len = 10;
+    let r = |s: &str| Range::parse_range_in_content_range(len, s);
+    assert_eq!((0, 0), r("0-0").map(|r| (r.start, r.end)).unwrap(), "one byte");
+    assert_eq!((2, 9), r("2-99").map(|r| (r.start, r.end)).unwrap(), "end past EOF is clamped");
+    assert_eq!((0, 9), r("-99").map(|r| (r.start, r.end)).unwrap(), "oversized suffix = whole file");
+    assert_eq!((7, 9), r("7-").map(|r| (r.start, r.end)).unwrap());
+    assert!(r("10-").is_err(), "start at EOF");
+    assert!(r("5-4").is_err(), "start after end");
+    assert!(r("-0").is_err(), "empty suffix");
+    assert!(r("abc-").is_err());
+    assert!(Range::parse_range_in_content_range(0, "0-").is_err(), "empty resource");
+}
+
+#[test]
+fn content_range_header_only_on_partial_content() {
+    use crate::response::content_range_header_value;
+    let cr = ContentRange {
+        unit: Range::BYTES.to_string(),
+        range: Range { start: 2, end: 5 },
+        size: "10".to_string(),
+        body: b"2345".to_vec(),
+        content_type: MimeType::TEXT_PLAIN.to_string(),
+    };
+    assert_eq!(Some("bytes 2-5/10".to_string()), content_range_header_value(206, &cr));
+    assert_eq!(None, content_range_header_value(200, &cr));
+}
+
+#[test]
+fn static_file_range_requests_end_to_end() {
+    use crate::test_client::TestClient;
+    use crate::app::App;
+    use crate::core::New;
+    let size = metadata(FileExt::get_static_filepath("/static/content.png").unwrap()).unwrap().len();
+    let client = TestClient::new(App::new());
+
+    let full = client.get("/static/content.png").send();
+    assert_eq!(200, full.status());
+    assert_eq!(None, full.header("Content-Range"), "no Content-Range on 200");
+
+    let tail = client.get("/static/content.png").header("Range", "bytes=-10").send();
+    assert_eq!(206, tail.status());
+    assert_eq!(Some(format!("bytes {}-{}/{}", size - 10, size - 1, size).as_str()), tail.header("Content-Range"));
+    assert_eq!(Some("10"), tail.header("Content-Length"));
+
+    let clamped = client.get("/static/content.png").header("Range", &format!("bytes=0-{}", size + 100)).send();
+    assert_eq!(206, clamped.status());
+    assert_eq!(Some(format!("bytes 0-{}/{}", size - 1, size).as_str()), clamped.header("Content-Range"));
 }

@@ -148,7 +148,7 @@ async fn send_h3_response(
     mut stream: h3::server::RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>,
     mut rws_response: Response,
 ) {
-    // Promote Content-Type and Content-Length from content_range_list into headers,
+    // Promote Content-Type, Content-Length (and Content-Range on 206) from content_range_list into headers,
     // mirroring what Response::generate_response() does for HTTP/1.1.
     if rws_response.content_range_list.len() == 1 {
         let cr = &rws_response.content_range_list[0];
@@ -156,10 +156,17 @@ async fn send_h3_response(
             name: Header::_CONTENT_TYPE.to_string(),
             value: cr.content_type.clone(),
         });
+        let content_range = crate::response::content_range_header_value(rws_response.status_code, cr);
         rws_response.headers.push(Header {
             name: Header::_CONTENT_LENGTH.to_string(),
             value: cr.body.len().to_string(),
         });
+        if let Some(value) = content_range {
+            rws_response.headers.push(Header {
+                name: Header::_CONTENT_RANGE.to_string(),
+                value,
+            });
+        }
     } else if rws_response.content_range_list.len() > 1 {
         rws_response.headers.push(Header {
             name: Header::_CONTENT_TYPE.to_string(),

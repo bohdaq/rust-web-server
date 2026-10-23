@@ -926,7 +926,7 @@ fn check_range_response_for_not_proper_range_header() {
 }
 
 #[test]
-fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesize() {
+fn check_range_response_range_end_bigger_than_filesize_is_clamped() {
     let uri = "/static/test.txt";
     let url = FileExt::get_static_filepath(uri).unwrap();
 
@@ -985,11 +985,13 @@ fn check_range_response_for_not_proper_range_header_range_end_bigger_than_filesi
     let header = response._get_header(Header::_ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
-    assert_eq!(*STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
-
-    let content_range = response.content_range_list.get(0).unwrap();
-    assert_eq!(content_range.body, Range::ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.as_bytes());
+    // RFC 9110 §14.1.2: a last-pos past the end is clamped, not rejected.
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code, response.status_code);
+    assert_eq!(2, response.content_range_list.len());
+    let second = response.content_range_list.get(1).unwrap();
+    assert_eq!(start_of_second_range as u64, second.range.start);
+    assert_eq!((length - 1) as u64, second.range.end);
+    assert_eq!(&buffer[start_of_second_range..], second.body.as_slice());
 }
 
 #[test]

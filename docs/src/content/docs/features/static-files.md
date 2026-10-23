@@ -7,6 +7,12 @@ description: How rust-web-server serves files from disk, the default directory l
 
 Any file under the process's working directory is served automatically — no configuration, no routes to register. `StaticResourceController` handles range requests, sets `ETag` / `Last-Modified` headers, negotiates gzip, and streams files larger than 8 MB without loading them fully into memory.
 
+Range requests follow RFC 9110 over HTTP/1.1, HTTP/2, and HTTP/3: `bytes=2-5`,
+open-ended `bytes=7-`, suffix `bytes=-500`, and multiple ranges get
+`206 Partial Content` with an exact `Content-Range` (`bytes 7-9/10`); a range
+ending past the file is clamped to its last byte; a range starting past the
+end gets `416`. Full `200` responses carry no `Content-Range`.
+
 ```bash
 mkdir www && echo "<h1>Hello</h1>" > www/index.html
 cd www

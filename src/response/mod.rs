@@ -257,6 +257,21 @@ pub const STATUS_CODE_REASON_PHRASE: ResponseStatusCodeReasonPhrase = ResponseSt
     n511_network_authentication_required: &StatusCodeReasonPhrase { status_code: &511, reason_phrase: "Network Authentication Required" }
 };
 
+/// The `Content-Range` value for a single-part body, or `None` when the
+/// response shouldn't carry one. RFC 9110 §14.4 gives `Content-Range` meaning
+/// only on `206 Partial Content` (and `416`, which rws answers with a plain
+/// error body), so full `200` responses get no such header. `range.end` is
+/// inclusive.
+pub fn content_range_header_value(status_code: i16, content_range: &ContentRange) -> Option<String> {
+    if status_code != *STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code {
+        return None;
+    }
+    Some(format!(
+        "{} {}-{}/{}",
+        Range::BYTES, content_range.range.start, content_range.range.end, content_range.size
+    ))
+}
+
 impl Response {
 
     pub fn build(status: StatusCodeReasonPhrase, header_list : Vec<Header>, body: Vec<ContentRange>) -> Response {
@@ -400,19 +415,12 @@ impl Response {
                 value: content_range.content_type.to_string()
             });
 
-            let content_range_header_value = [
-                Range::BYTES,
-                SYMBOL.whitespace,
-                &content_range.range.start.to_string(),
-                SYMBOL.hyphen,
-                &content_range.range.end.to_string(),
-                SYMBOL.slash,
-                &content_range.size
-            ].join("");
-            response.headers.push(Header {
-                name: Header::_CONTENT_RANGE.to_string(),
-                value: content_range_header_value.to_string()
-            });
+            if let Some(value) = content_range_header_value(response.status_code, content_range) {
+                response.headers.push(Header {
+                    name: Header::_CONTENT_RANGE.to_string(),
+                    value,
+                });
+            }
 
             response.headers.push(Header {
                 name: Header::_CONTENT_LENGTH.to_string(),
@@ -721,24 +729,17 @@ impl Response {
         if response.content_range_list.len() == 1 {
             let content_range_index = 0;
             let content_range = response.content_range_list.get(content_range_index).unwrap();
-            self.headers.push(Header {
+            response.headers.push(Header {
                 name: Header::_CONTENT_TYPE.to_string(),
                 value: content_range.content_type.to_string()
             });
 
-            let content_range_header_value = [
-                Range::BYTES,
-                SYMBOL.whitespace,
-                &content_range.range.start.to_string(),
-                SYMBOL.hyphen,
-                &content_range.range.end.to_string(),
-                SYMBOL.slash,
-                &content_range.size
-            ].join("");
-            response.headers.push(Header {
-                name: Header::_CONTENT_RANGE.to_string(),
-                value: content_range_header_value.to_string()
-            });
+            if let Some(value) = content_range_header_value(response.status_code, content_range) {
+                response.headers.push(Header {
+                    name: Header::_CONTENT_RANGE.to_string(),
+                    value,
+                });
+            }
 
             response.headers.push(Header {
                 name: Header::_CONTENT_LENGTH.to_string(),

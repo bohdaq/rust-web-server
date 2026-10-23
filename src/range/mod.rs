@@ -73,93 +73,54 @@ impl Range {
     pub const ERROR_UNABLE_TO_PARSE_RANGE_END: &'static str = "unable to parse range end";
 
 
+    /// Parse one `first-last` / `first-` / `-suffix` byte range against a
+    /// resource of `filelength` bytes (RFC 9110 §14.1.2). The returned `end`
+    /// is **inclusive** (`bytes=0-0` is one byte). A `last` past the end is
+    /// clamped to the last byte and a suffix longer than the resource selects
+    /// all of it; a range starting at or past the end, `first > last`, or any
+    /// range on an empty resource is `416 Range Not Satisfiable`.
     pub fn parse_range_in_content_range(filelength: u64, range_str: &str) -> Result<Range, Error> {
-        const START_INDEX: usize = 0;
-        const END_INDEX: usize = 1;
+        let unsatisfiable = |message: &str| Error {
+            status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
+            message: message.to_string(),
+        };
 
-        let mut range = Range { start: 0, end: filelength };
-        let parts: Vec<&str> = range_str.split(SYMBOL.hyphen).collect();
-
-        let mut start_range_not_provided = true;
-        for (i, part) in parts.iter().enumerate() {
-
-            let num = part.trim();
-            let length = num.len();
-
-            if i == START_INDEX && length != 0 {
-                start_range_not_provided = false;
-            }
-            if i == START_INDEX && length != 0 {
-                let boxed_start  = num.parse();
-                if boxed_start.is_ok() {
-                    range.start = boxed_start.unwrap()
-                } else {
-                    let message = Range::ERROR_UNABLE_TO_PARSE_RANGE_START.to_string();
-                    let error = Error {
-                        status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
-                        message: message.to_string()
-                    };
-                    return Err(error)
-                }
-            }
-            if i == END_INDEX && length != 0 {
-                let boxed_end  = num.parse();
-                if boxed_end.is_ok() {
-                    range.end = boxed_end.unwrap()
-                } else {
-                    let message = Range::ERROR_UNABLE_TO_PARSE_RANGE_END.to_string();
-                    let error = Error {
-                        status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
-                        message: message.to_string()
-                    };
-                    return Err(error)
-                }
-            }
-            if i == END_INDEX && length != 0 && start_range_not_provided {
-                let boxed_parse = num.parse();
-                if boxed_parse.is_err() {
-                    let error = Error {
-                        status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
-                        message: Range::ERROR_UNABLE_TO_PARSE_RANGE_END.to_string()
-                    };
-                    return Err(error)
-                }
-                let num_usize : u64 = boxed_parse.unwrap();
-                range.start = filelength - num_usize;
-                range.end = filelength;
-            }
-
-            if range.end > filelength {
-                let message = Range::ERROR_END_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string();
-                let error = Error {
-                    status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
-                    message,
-                };
-                return Err(error);
-            }
-
-            if range.start > filelength {
-                let message = Range::ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE.to_string();
-                let error = Error {
-                    status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
-                    message,
-                };
-                return Err(error);
-            }
-
-            if range.start > range.end {
-                let message = Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.to_string();
-                let error = Error {
-                    status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
-                    message,
-                };
-                return Err(error);
-            }
-
-
-
+        let (raw_start, raw_end) = match range_str.split_once(SYMBOL.hyphen) {
+            Some((start, end)) => (start.trim(), end.trim()),
+            None => return Err(unsatisfiable(Range::ERROR_UNABLE_TO_PARSE_RANGE_START)),
+        };
+        if filelength == 0 {
+            return Err(unsatisfiable(Range::ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE));
         }
-        Ok(range)
+        let last_byte = filelength - 1;
+
+        if raw_start.is_empty() {
+            // Suffix range: the final `raw_end` bytes.
+            let suffix: u64 = raw_end
+                .parse()
+                .map_err(|_| unsatisfiable(Range::ERROR_UNABLE_TO_PARSE_RANGE_END))?;
+            if suffix == 0 {
+                return Err(unsatisfiable(Range::ERROR_UNABLE_TO_PARSE_RANGE_END));
+            }
+            return Ok(Range { start: filelength.saturating_sub(suffix), end: last_byte });
+        }
+
+        let start: u64 = raw_start
+            .parse()
+            .map_err(|_| unsatisfiable(Range::ERROR_UNABLE_TO_PARSE_RANGE_START))?;
+        let requested_end: Option<u64> = if raw_end.is_empty() {
+            None
+        } else {
+            Some(raw_end.parse().map_err(|_| unsatisfiable(Range::ERROR_UNABLE_TO_PARSE_RANGE_END))?)
+        };
+        if requested_end.map_or(false, |end| start > end) {
+            return Err(unsatisfiable(Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE));
+        }
+        if start > last_byte {
+            return Err(unsatisfiable(Range::ERROR_START_IS_BIGGER_THAN_FILESIZE_CONTENT_RANGE));
+        }
+        let end = requested_end.map_or(last_byte, |end| end.min(last_byte));
+        Ok(Range { start, end })
     }
 
     pub fn parse_content_range(filepath: &str, filelength: u64, raw_range_value: &str) -> Result<Vec<ContentRange>, Error> {
