@@ -1322,12 +1322,39 @@ impl crate::middleware::Middleware for BearerAuthMiddleware {
         let authorized = request
             .headers
             .iter()
-            .any(|h| h.name.eq_ignore_ascii_case("authorization") && h.value == expected);
+            .any(|h| h.name.eq_ignore_ascii_case("authorization") && constant_time_eq(h.value.as_bytes(), expected.as_bytes()));
         if authorized {
             next.execute(request, conn)
         } else {
             Ok(AppError::Unauthorized.into_response())
         }
+    }
+}
+
+/// Compares in time independent of where the inputs first differ, so response
+/// timing doesn't reveal how much of a guessed token was right.
+pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
+}
+
+/// Stands in for an auth layer whose configuration can't be honoured (see
+/// `builder::apply_middleware`): every request gets `503`, never the route.
+pub(crate) struct AuthMisconfigured;
+
+impl crate::middleware::Middleware for AuthMisconfigured {
+    fn handle(
+        &self,
+        _request: &Request,
+        _conn: &ConnectionInfo,
+        _next: &dyn Application,
+    ) -> Result<Response, String> {
+        Ok(Response::text(
+            STATUS_CODE_REASON_PHRASE.n503_service_unavailable,
+            "503 Service Unavailable: authentication for this route is misconfigured",
+        ))
     }
 }
 

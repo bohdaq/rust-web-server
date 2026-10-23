@@ -8,7 +8,7 @@ use crate::middleware::WithMiddleware;
 use crate::proxy_config::{
     ActionConfig, AuthConfig, CompiledRoute, ConfigDrivenApp, DynamicProxy, MiddlewareConfig,
     ProxyConfig, RedirectAdapter, RespondAdapter, RouteMatcher, StaticAdapter, arc_app,
-    BearerAuthMiddleware, PerRouteMaxBodySize, PerRouteRateLimit,
+    AuthMisconfigured, BearerAuthMiddleware, PerRouteMaxBodySize, PerRouteRateLimit,
 };
 
 /// Build a `ConfigDrivenApp` from `rws.config.toml` and spawn L4/WS proxy
@@ -236,52 +236,56 @@ fn apply_middleware(
     }
 
     // ── Auth ───────────────────────────────────────────────────────────────
+    // Fails closed: an auth setting that can't be honoured (secret unset,
+    // htpasswd missing, feature not compiled in) puts AuthMisconfigured in
+    // front of the route instead of silently serving it unauthenticated.
     if let Some(ref auth_cfg) = mw.auth {
-        match auth_cfg {
+        let deny = |reason: String| -> Arc<dyn crate::application::Application + Send + Sync> {
+            eprintln!(
+                "[proxy_config] ERROR: {reason} — this route answers 503 until the auth configuration is fixed."
+            );
+            arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(AuthMisconfigured))
+        };
+        app = match auth_cfg {
             AuthConfig::Bearer { token_env } => {
                 let token = std::env::var(token_env).unwrap_or_default();
-                if !token.is_empty() {
-                    app = arc_app(
+                if token.is_empty() {
+                    deny(format!("bearer auth: env var '{token_env}' is unset or empty"))
+                } else {
+                    arc_app(
                         WithMiddleware::new(ArcApp(Arc::clone(&app)))
                             .wrap(BearerAuthMiddleware { token: Arc::new(token) }),
-                    );
+                    )
                 }
             }
             #[cfg(feature = "auth")]
             AuthConfig::Jwt { secret_env } => {
                 let secret = std::env::var(secret_env).unwrap_or_default();
-                if !secret.is_empty() {
-                    app = arc_app(
+                if secret.is_empty() {
+                    deny(format!("JWT auth: env var '{secret_env}' is unset or empty"))
+                } else {
+                    arc_app(
                         WithMiddleware::new(ArcApp(Arc::clone(&app)))
                             .wrap(crate::auth::JwtLayer::new(secret)),
-                    );
-                } else {
-                    eprintln!(
-                        "[proxy_config] JWT auth: env var '{}' is unset or empty; skipping JwtLayer for this route.",
-                        secret_env
-                    );
+                    )
                 }
             }
             #[cfg(not(feature = "auth"))]
             AuthConfig::Jwt { .. } => {
-                eprintln!("[proxy_config] JWT auth requires the 'auth' feature; skipping.");
+                deny("JWT auth requires the 'auth' feature, which this build doesn't include".to_string())
             }
             #[cfg(feature = "auth")]
             AuthConfig::Basic { htpasswd_file } => {
                 match crate::auth::BasicAuthLayer::from_htpasswd_file(htpasswd_file) {
-                    Ok(layer) => {
-                        app = arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(layer));
-                    }
-                    Err(e) => {
-                        eprintln!("[proxy_config] Basic auth: {e}; skipping Basic auth for this route.");
-                    }
+                    Ok(layer) => arc_app(WithMiddleware::new(ArcApp(Arc::clone(&app))).wrap(layer)),
+                    Err(e) => deny(format!("basic auth: {e}")),
                 }
             }
             #[cfg(not(feature = "auth"))]
             AuthConfig::Basic { .. } => {
-                eprintln!("[proxy_config] Basic auth requires the 'auth' feature; skipping.");
+                deny("basic auth requires the 'auth' feature, which this build doesn't include".to_string())
             }
-        }
+        };
     }
 
     // ── Rate limit ─────────────────────────────────────────────────────────

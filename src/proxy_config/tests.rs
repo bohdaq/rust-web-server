@@ -1072,14 +1072,14 @@ secret_env = "{secret_env}"
     }
 
     #[test]
-    fn jwt_auth_skipped_when_secret_env_is_unset() {
+    fn jwt_auth_fails_closed_when_secret_env_is_unset() {
         std::env::remove_var("RWSTEST_PROXY_JWT_UNSET");
         let cfg = ProxyConfig::from_str(&jwt_route_config("RWSTEST_PROXY_JWT_UNSET"));
         let (app, _) = crate::proxy_config::builder::build(cfg);
         let conn = make_conn("127.0.0.1");
-        // No JwtLayer applied since the secret is empty -> falls through to the action.
+        // No usable secret -> the route must not be served unauthenticated.
         let resp = app.execute(&make_request("GET", "/secret"), &conn).unwrap();
-        assert_eq!(200, resp.status_code);
+        assert_eq!(503, resp.status_code);
     }
 
     fn basic_route_config(htpasswd_file: &str) -> String {
@@ -1162,13 +1162,13 @@ htpasswd_file = "{htpasswd_file}"
     }
 
     #[test]
-    fn basic_auth_skipped_when_htpasswd_file_is_missing() {
+    fn basic_auth_fails_closed_when_htpasswd_file_is_missing() {
         let cfg = ProxyConfig::from_str(&basic_route_config("/nonexistent/.htpasswd-rws-test"));
         let (app, _) = crate::proxy_config::builder::build(cfg);
         let conn = make_conn("127.0.0.1");
-        // BasicAuthLayer construction fails (file not found) -> falls through to the action.
+        // BasicAuthLayer construction fails (file not found) -> 503, not the action.
         let resp = app.execute(&make_request("GET", "/secret"), &conn).unwrap();
-        assert_eq!(200, resp.status_code);
+        assert_eq!(503, resp.status_code);
     }
 }
 
@@ -1835,4 +1835,58 @@ fn from_str_nested_action_table_wins_over_short_form() {
         }
         other => panic!("expected Proxy, got {:?}", other),
     }
+}
+
+#[test]
+fn bearer_auth_fails_closed_when_token_env_is_unset() {
+    std::env::remove_var("RWSTEST_PROXY_BEARER_UNSET");
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+[route.match]
+path = "/admin"
+[route.action]
+type = "respond"
+body = "secret"
+[route.middleware.auth]
+type = "bearer"
+token_env = "RWSTEST_PROXY_BEARER_UNSET"
+"#);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    // Even a request carrying "Bearer " (an empty token) must not get through.
+    let mut req = make_request("GET", "/admin");
+    req.headers.push(crate::header::Header { name: "Authorization".to_string(), value: "Bearer ".to_string() });
+    let resp = app.execute(&req, &conn).unwrap();
+    assert_eq!(503, resp.status_code);
+    let body: Vec<u8> = resp.content_range_list.iter().flat_map(|c| c.body.clone()).collect();
+    assert!(!String::from_utf8_lossy(&body).contains("secret"));
+}
+
+#[test]
+fn constant_time_eq_matches_only_identical_bytes() {
+    use crate::proxy_config::constant_time_eq;
+    assert!(constant_time_eq(b"Bearer abc", b"Bearer abc"));
+    assert!(!constant_time_eq(b"Bearer abc", b"Bearer abd"));
+    assert!(!constant_time_eq(b"Bearer abc", b"Bearer abcd"));
+    assert!(constant_time_eq(b"", b""));
+}
+
+#[cfg(not(feature = "auth"))]
+#[test]
+fn jwt_route_fails_closed_in_a_build_without_the_auth_feature() {
+    std::env::set_var("RWSTEST_PROXY_JWT_NOFEATURE", "s3cret");
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+[route.match]
+path = "/secret"
+[route.action]
+type = "respond"
+body = "secret"
+[route.middleware.auth]
+type = "jwt"
+secret_env = "RWSTEST_PROXY_JWT_NOFEATURE"
+"#);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let resp = app.execute(&make_request("GET", "/secret"), &make_conn("127.0.0.1")).unwrap();
+    assert_eq!(503, resp.status_code);
 }

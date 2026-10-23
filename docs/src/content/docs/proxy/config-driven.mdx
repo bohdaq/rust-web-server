@@ -233,7 +233,7 @@ htpasswd_file = ".htpasswd"
 The htpasswd file supports plain-text and `{SHA256}` (rws's own scheme) entries only — not Apache's real `{SHA}`/`$apr1$`/bcrypt. See the [auth feature page](/features/auth/#validating-against-an-htpasswd-style-file) for the exact file format and how to generate a `{SHA256}` entry with `openssl`.
 
 :::note[Fails open with a warning, not silently]
-If `secret_env`/`htpasswd_file` is unset, empty, or unreadable — or the binary was built without the `auth` feature — that route's auth check is skipped (logged to stderr at startup) rather than blocking every request or aborting the whole config. Check your server's startup logs after changing `[route.middleware.auth]`.
+Auth fails closed. If `token_env`/`secret_env`/`htpasswd_file` is unset, empty, or unreadable — or the binary was built without the `auth` feature — that route answers `503 Service Unavailable` (logged to stderr at startup) instead of being served unprotected. Other routes keep working. Check your server's startup logs after changing `[route.middleware.auth]`.
 :::
 
 #### IP filter

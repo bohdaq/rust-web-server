@@ -290,4 +290,4 @@ type = "basic"
 htpasswd_file = ".htpasswd"
 ```
 
-See [Config-Driven Proxy](/proxy/config-driven/) for the full `[route.middleware]` reference. Fail-open-with-a-warning behavior applies to both: an unset/empty `secret_env`, a missing `htpasswd_file`, or building without the `auth` feature all skip that route's auth check (logged to stderr at startup) rather than aborting the whole config — the route falls through to its normal action, unprotected. Check your server's startup logs after changing auth config.
+See [Config-Driven Proxy](/proxy/config-driven/) for the full `[route.middleware]` reference. Auth config fails closed: an unset/empty `token_env`/`secret_env`, a missing `htpasswd_file`, or a build without the `auth` feature makes that route answer `503 Service Unavailable` (with an error in the startup log) instead of serving it unprotected. Other routes keep working. Bearer tokens are compared in constant time.

@@ -3173,7 +3173,7 @@ resolved path that doesn't exist returns `404`.
 |---|---|
 | `rate_limit` | `{ max_requests = 500, window_secs = 60 }` |
 | `cache` | `{ ttl_secs = 3600, vary_by = ["Accept-Encoding"] }` |
-| `auth` | `{ type = "bearer", token_env = "API_TOKEN" }` — static token, always available. `{ type = "jwt", secret_env = "JWT_SECRET" }` — HS256 verification via `JwtLayer`, requires `features = ["auth"]`. `{ type = "basic", htpasswd_file = ".htpasswd" }` — via `BasicAuthLayer::from_htpasswd_file`, requires `features = ["auth"]` (plain-text and `{SHA256}` entries only — see the `BasicAuthLayer` row above). Without the `auth` feature, `jwt`/`basic` are parsed but skipped with a startup warning; an empty/unset `secret_env` or a missing `htpasswd_file` skips just that route's auth the same way. |
+| `auth` | `{ type = "bearer", token_env = "API_TOKEN" }` — static token, always available. `{ type = "jwt", secret_env = "JWT_SECRET" }` — HS256 verification via `JwtLayer`, requires `features = ["auth"]`. `{ type = "basic", htpasswd_file = ".htpasswd" }` — via `BasicAuthLayer::from_htpasswd_file`, requires `features = ["auth"]` (plain-text and `{SHA256}` entries only — see the `BasicAuthLayer` row above). Auth fails closed: without the `auth` feature, or with an empty/unset `token_env`/`secret_env` or a missing `htpasswd_file`, that route answers `503` (startup error logged) instead of being served unauthenticated. |
 | `ip_allow` / `ip_deny` | `["192.168.1.0/24", "10.0.0.1"]` |
 | `rewrite.request[]` | `[{ type = "header_set", name = "X-Real-IP", value = "$client_ip" }]` |
 | `rewrite.response[]` | `[{ type = "header_remove", name = "Server" }]` |
@@ -4336,7 +4336,7 @@ type = "jwt"
 secret_env = "JWT_SECRET"   # reads the signing secret from this env var at startup
 ```
 
-A request without a valid `Authorization: Bearer <token>` (missing, malformed, wrong signature, or expired `exp`) gets `401 Unauthorized`. If `JWT_SECRET` is unset or empty, that route's JWT check is skipped (with a startup warning) rather than locking every request out.
+A request without a valid `Authorization: Bearer <token>` (missing, malformed, wrong signature, or expired `exp`) gets `401 Unauthorized`. If `JWT_SECRET` is unset or empty, that route answers `503` (with a startup error) rather than being served without authentication.
 
 **HTTP Basic (htpasswd file)**
 
@@ -4362,7 +4362,7 @@ echo 'bob:{SHA256}9S+9MrKzuG/4jvbEkGKChfSCrxXdyylUH5S89Saj9sc=' >> .htpasswd
 
 If you need real Apache-hash compatibility, write your own `BasicAuthLayer::new(closure)` in Rust code backed by the `bcrypt`/`sha1` crate of your choice — the config-driven `htpasswd_file` path is intentionally scoped to avoid hand-rolling deprecated hash algorithms.
 
-If `htpasswd_file` can't be read (missing, wrong permissions), that route's Basic auth check is skipped (with a startup warning), the same fail-open behavior as an unset JWT secret — a misconfigured auth file doesn't lock out the whole route silently with no explanation, but it also doesn't accidentally leave a route open forever without you noticing the warning in the logs.
+If `htpasswd_file` can't be read (missing, wrong permissions), that route answers `503` with a startup error — the same fail-closed behavior as an unset JWT secret, so a misconfigured auth file can never leave a protected route open.
 
 ### 68. Delegating auth to an external service (ForwardAuth)
 
