@@ -9,9 +9,8 @@
 //!
 //! Gated behind `any(feature = "http-client", feature = "http2")` — both
 //! already pull in `rustls`; this module adds no new dependency. PEM
-//! parsing is hand-rolled rather than using `rustls-pemfile` (only
-//! available under the `http2` feature) so this also works under
-//! `http-client` alone.
+//! parsing uses `rustls`'s own `pki_types::pem::PemObject`, which is
+//! available under either feature.
 
 #![cfg(any(feature = "http-client", feature = "http2"))]
 
@@ -20,6 +19,7 @@ use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::Duration;
 
+use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 
@@ -90,53 +90,9 @@ pub(crate) fn build_client_config(ca_pem: &str) -> Result<Arc<ClientConfig>, Str
 /// decode it to DER, in encounter order. Ignores any other PEM block type
 /// (e.g. a private key accidentally concatenated into the same file).
 pub(crate) fn parse_pem_certificates(pem: &str) -> Result<Vec<CertificateDer<'static>>, String> {
-    let mut certs = Vec::new();
-    let mut lines = pem.lines();
-    while let Some(line) = lines.next() {
-        if line.trim() != "-----BEGIN CERTIFICATE-----" {
-            continue;
-        }
-        let mut b64 = String::new();
-        let mut closed = false;
-        for l in lines.by_ref() {
-            if l.trim() == "-----END CERTIFICATE-----" {
-                closed = true;
-                break;
-            }
-            b64.push_str(l.trim());
-        }
-        if !closed {
-            return Err("unterminated CERTIFICATE block in PEM input".to_string());
-        }
-        certs.push(CertificateDer::from(base64_decode_standard(&b64)?));
-    }
-    Ok(certs)
-}
-
-fn base64_decode_standard(s: &str) -> Result<Vec<u8>, String> {
-    let mut out = Vec::with_capacity(s.len() * 3 / 4 + 1);
-    let mut buf = 0u32;
-    let mut bits = 0u32;
-    for ch in s.chars() {
-        if ch == '=' {
-            break;
-        }
-        let v: u32 = match ch {
-            'A'..='Z' => ch as u32 - 'A' as u32,
-            'a'..='z' => ch as u32 - 'a' as u32 + 26,
-            '0'..='9' => ch as u32 - '0' as u32 + 52,
-            '+' => 62,
-            '/' => 63,
-            _ => return Err(format!("invalid base64 character in PEM body: '{ch}'")),
-        };
-        buf = (buf << 6) | v;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((buf >> bits) as u8);
-        }
-    }
-    Ok(out)
+    CertificateDer::pem_slice_iter(pem.as_bytes())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("invalid PEM in CA bundle: {e}"))
 }
 
 /// Issue one GET request over a fresh TLS connection to `host:port`,

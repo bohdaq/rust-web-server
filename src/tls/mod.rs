@@ -1,13 +1,16 @@
 use std::collections::HashMap;
-use std::io::Cursor;
 use std::sync::Arc;
 use rustls::{RootCertStore, ServerConfig};
+use rustls::pki_types::pem::{self, PemObject};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier};
 use rustls::sign::CertifiedKey;
 use tokio_rustls::TlsAcceptor;
 
 use crate::virtual_host::VirtualHostConfig;
+
+#[cfg(test)]
+mod tests;
 
 // ── SNI certificate resolver ──────────────────────────────────────────────────
 
@@ -144,9 +147,7 @@ fn load_certified_key(cert_path: &str, key_path: &str) -> Result<CertifiedKey, S
 fn load_certs(path: &str) -> Result<Vec<CertificateDer<'static>>, String> {
     let bytes = std::fs::read(path)
         .map_err(|e| format!("failed to read cert file '{}': {}", path, e))?;
-    let mut cursor = Cursor::new(bytes);
-    rustls_pemfile::certs(&mut cursor)
-        .map(|r| r.map(|c| c.into_owned()))
+    CertificateDer::pem_slice_iter(&bytes)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("failed to parse certs from '{}': {}", path, e))
 }
@@ -154,11 +155,11 @@ fn load_certs(path: &str) -> Result<Vec<CertificateDer<'static>>, String> {
 fn load_key(path: &str) -> Result<PrivateKeyDer<'static>, String> {
     let bytes = std::fs::read(path)
         .map_err(|e| format!("failed to read key file '{}': {}", path, e))?;
-    let mut cursor = Cursor::new(bytes);
-    rustls_pemfile::private_key(&mut cursor)
-        .map_err(|e| format!("failed to parse key from '{}': {}", path, e))?
-        .ok_or_else(|| format!("no private key found in '{}'", path))
-        .map(|k| k.clone_key())
+    // Accepts the first PKCS#8, PKCS#1 (RSA) or SEC1 (EC) key in the file.
+    PrivateKeyDer::from_pem_slice(&bytes).map_err(|e| match e {
+        pem::Error::NoItemsFound => format!("no private key found in '{}'", path),
+        e => format!("failed to parse key from '{}': {}", path, e),
+    })
 }
 
 fn load_client_verifier(ca_path: &str) -> Result<Arc<dyn rustls::server::danger::ClientCertVerifier>, String> {
