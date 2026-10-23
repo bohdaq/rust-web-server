@@ -253,3 +253,22 @@ fn redis_check_errors_when_server_unreachable() {
     let limiter = RedisRateLimiter::new("127.0.0.1:1", None, 5, 60);
     assert!(limiter.check("10.0.0.1").is_err());
 }
+
+#[test]
+fn is_configured_only_for_a_positive_explicit_limit() {
+    let _g = crate::test_env::lock();
+    let saved = std::env::var("RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS").ok();
+    std::env::remove_var("RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS");
+    let unset = crate::rate_limit::is_configured();
+    std::env::set_var("RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS", "");
+    let empty = crate::rate_limit::is_configured();
+    std::env::set_var("RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS", "0");
+    let zero = crate::rate_limit::is_configured();
+    std::env::set_var("RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS", "500");
+    let set = crate::rate_limit::is_configured();
+    match saved {
+        Some(v) => std::env::set_var("RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS", v),
+        None => std::env::remove_var("RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS"),
+    }
+    assert_eq!((false, false, false, true), (unset, empty, zero, set));
+}

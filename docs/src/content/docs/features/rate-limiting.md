@@ -33,6 +33,19 @@ RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS=500
 RWS_CONFIG_RATE_LIMIT_WINDOW_SECS=30
 ```
 
+or in `rws.config.toml`:
+
+```toml
+[rate_limit]
+max_requests = 500
+window_secs  = 30
+```
+
+The `rws` binary enforces this global limit only when `max_requests` is set
+to a positive number (an unset limit means no global limit, not 1000/60s).
+Turning it on needs a restart; changing the numbers later is hot-reloadable
+via `SIGHUP`. In your own app, add `.wrap(RateLimitLayer)` to enforce it.
+
 ## `RateLimiter` API
 
 ### `check(key) -> bool`

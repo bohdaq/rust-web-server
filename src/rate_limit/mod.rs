@@ -258,6 +258,18 @@ impl RedisRateLimiter {
 
 static GLOBAL_LIMITER: OnceLock<RateLimiter> = OnceLock::new();
 
+/// `true` when the operator set a global rate limit
+/// (`RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS`, e.g. `[rate_limit] max_requests` in
+/// `rws.config.toml`) to a positive number. The `rws` binary enforces
+/// [`global()`] only then — an unset limit means "no global limit", not
+/// "the 1000/60s default".
+pub fn is_configured() -> bool {
+    std::env::var("RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .map_or(false, |max| max > 0)
+}
+
 /// Return the process-wide rate limiter, initialized from environment variables.
 ///
 /// | Variable | Default | Meaning |

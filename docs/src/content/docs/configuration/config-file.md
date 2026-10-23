@@ -9,11 +9,31 @@ flags. Any key set here overrides the built-in default and any system environmen
 variable, but can be overridden by a CLI flag.
 
 The file is auto-detected at startup. Override the path with the
-`RWS_CONFIG_FILE` environment variable:
+`RWS_CONFIG_FILE` environment variable (used for both server settings and
+proxy routes):
 
 ```bash
 RWS_CONFIG_FILE=/etc/rws/prod.toml rws
 ```
+
+### How keys map to settings
+
+Every setting has an `RWS_CONFIG_*` environment variable. In the file, a key's
+variable is its table name plus the key, upper-cased:
+
+| In `rws.config.toml` | Setting |
+|---|---|
+| `port = 443` (top level) | `RWS_CONFIG_PORT` |
+| `[cors]` `allow_all = true` | `RWS_CONFIG_CORS_ALLOW_ALL` |
+| `[rate_limit]` `max_requests = 500` | `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS` |
+| 2nd `[[virtual_host]]` block, `domain = ...` | `RWS_CONFIG_VIRTUAL_HOST_1_DOMAIN` |
+
+Strings keep their exact contents (`csp = "default-src 'self'; img-src *"`
+works); arrays become comma-separated lists. A key that doesn't correspond to
+any setting is reported at startup — `Warning: unknown setting '[server] port'
+in rws.config.toml — ignored` — rather than silently dropped. `[[route]]`,
+`[[upstream]]`, `[[tcp_proxy]]`, `[[udp_proxy]]`, and `[[ws_proxy]]` tables
+configure the proxy (below) and aren't settings.
 
 :::note[Proxy mode]
 When the file contains at least one `[[route]]` or `[[upstream]]` section, the
@@ -90,13 +110,35 @@ max_age           = 86400
 
 ## `[rate_limit]`
 
-Global rate-limit policy applied per client IP. Hot-reloadable.
+Global rate limit per client IP: requests over the budget get
+`429 Too Many Requests`. Off unless `max_requests` is set — enabling it needs a
+restart; changing the numbers afterwards is hot-reloadable. For per-route
+limits in proxy mode use `[route.middleware] rate_limit` instead.
 
 ```toml
 [rate_limit]
-max_requests = 1000   # Requests allowed per window (default: 1000; 0 disables)
+max_requests = 1000   # Requests allowed per window; 0 or unset = no global limit
 window_secs  = 60     # Sliding window length in seconds (default: 60)
 ```
+
+## Other settings
+
+```toml
+log_format              = "json"     # RWS_CONFIG_LOG_FORMAT: "combined" (default) | "json"
+max_body_size_in_bytes  = 10485760   # RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: 413 above this; 0 = unlimited
+csp                     = "default-src 'self'"   # RWS_CONFIG_CSP: Content-Security-Policy header
+tls_client_ca_file      = "/etc/rws/clients-ca.pem"  # RWS_CONFIG_TLS_CLIENT_CA_FILE: require client certs (mTLS)
+template_dir            = "templates"            # RWS_CONFIG_TEMPLATE_DIR
+spa_fallback            = "index.html"   # RWS_CONFIG_SPA_FALLBACK: file served for client-side routes
+spa_fallback_exclude_prefixes = ["/api"]   # RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES
+
+[circuit_breaker]                    # RWS_CONFIG_CIRCUIT_BREAKER_*: proxy backends
+failure_threshold      = 5
+recovery_secs          = 30
+max_half_open_probes   = 1
+```
+
+See [Environment Variables](/configuration/env-vars/) for what each one does.
 
 ## `[[virtual_host]]`
 

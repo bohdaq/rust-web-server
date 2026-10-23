@@ -81,12 +81,13 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
     let cache3 = cache.clone(); // captured by cache_clear tool
 
     // 3. Middleware stack (innermost → outermost):
-    //    routes → log → blocklist → maintenance → cache → MCP
+    //    routes → log → blocklist → maintenance → cache → global rate limit → MCP
     let app = http
         .wrap(LogLayer)
         .wrap(BlocklistLayer)
         .wrap(MaintenanceLayer)
-        .wrap(cache);
+        .wrap(cache)
+        .wrap(GlobalRateLimit::from_env());
 
     // 4. MCP server — POST /mcp; everything else falls through to `app`.
     let mut mcp = app.mcp("rws", env!("CARGO_PKG_VERSION"));
@@ -387,6 +388,32 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
 
 // ── main ──────────────────────────────────────────────────────────────────────
 
+/// The `[rate_limit]` / `RWS_CONFIG_RATE_LIMIT_*` per-client-IP limit,
+/// enforced only when configured (decided once at startup; enabling it later
+/// needs a restart, changing the numbers is hot-reloadable).
+struct GlobalRateLimit(bool);
+
+impl GlobalRateLimit {
+    fn from_env() -> Self {
+        GlobalRateLimit(rust_web_server::rate_limit::is_configured())
+    }
+}
+
+impl rust_web_server::middleware::Middleware for GlobalRateLimit {
+    fn handle(
+        &self,
+        request: &Request,
+        connection: &ConnectionInfo,
+        next: &dyn rust_web_server::application::Application,
+    ) -> Result<Response, String> {
+        if self.0 {
+            rust_web_server::middleware::RateLimitLayer.handle(request, connection, next)
+        } else {
+            next.execute(request, connection)
+        }
+    }
+}
+
 /// Automatic HTTPS: when `RWS_CONFIG_ACME_DOMAINS` is set, obtain (or reuse)
 /// a certificate before the TLS listener starts, then keep it renewed.
 #[cfg(feature = "http2")]
@@ -430,6 +457,7 @@ fn main() {
     let (listener, pool) = Server::setup().expect("server setup failed");
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
+        let proxy_app = rust_web_server::middleware::WithMiddleware::new(proxy_app).wrap(GlobalRateLimit::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
         Server::run(listener, pool, proxy_app);
         return;
@@ -448,6 +476,7 @@ async fn main() {
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
+        let proxy_app = rust_web_server::middleware::WithMiddleware::new(proxy_app).wrap(GlobalRateLimit::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
         tokio::join!(
             Server::run_tls(listener, pool, proxy_app.clone()),
@@ -472,6 +501,7 @@ async fn main() {
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
+        let proxy_app = rust_web_server::middleware::WithMiddleware::new(proxy_app).wrap(GlobalRateLimit::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
         tokio::join!(
             Server::run_tls(listener, pool, proxy_app.clone()),
