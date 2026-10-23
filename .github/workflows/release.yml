@@ -61,6 +61,10 @@ jobs:
             echo
             echo "Or download a binary below (Linux binaries are static musl builds)."
             echo
+            breaking=$(git log --format='- %s (%h)' "$range" | grep -E '^- [a-z]+(\([^)]*\))?!:' || true)
+            if [ -n "$breaking" ]; then
+              printf '## ⚠️ Breaking changes\n\n%s\n\n' "$breaking"
+            fi
             for kind in feat fix perf; do
               case $kind in
                 feat) title="Features" ;;
