@@ -1,6 +1,6 @@
 [package]
 name = "rws-macros"
-version = "17.26.0"
+version = "17.27.0"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT"
@@ -11,6 +11,6 @@ description = "Procedural macros for rust-web-server (route attributes)"
 proc-macro = true
 
 [dependencies]
-syn  = { version = "2", features = ["full"] }
+syn  = { version = "3", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
