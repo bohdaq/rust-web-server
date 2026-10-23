@@ -291,3 +291,35 @@ fn _override() {
     let _g = crate::test_env::lock();
     override_environment_variables_from_command_line_args()
 }
+
+fn args(list: &[&str]) -> Vec<String> {
+    list.iter().map(|s| s.to_string()).collect()
+}
+
+#[test]
+fn informational_flag_version_long_and_short() {
+    use crate::entry_point::command_line_args::informational_flag_output;
+    let expected = format!("rws {}\n", env!("CARGO_PKG_VERSION"));
+    assert_eq!(Some(expected.clone()), informational_flag_output(&args(&["rws", "--version"])));
+    assert_eq!(Some(expected), informational_flag_output(&args(&["rws", "--port=80", "-V"])));
+}
+
+#[test]
+fn informational_flag_help_lists_every_option_and_env_var() {
+    use crate::entry_point::command_line_args::informational_flag_output;
+    let help = informational_flag_output(&args(&["rws", "--help"])).unwrap();
+    for argument in CommandLineArgument::get_command_line_arg_list() {
+        assert!(help.contains(&format!("--{}=", argument.long_form)), "missing --{}", argument.long_form);
+        assert!(help.contains(&argument.environment_variable), "missing {}", argument.environment_variable);
+    }
+    assert!(help.contains("--version"));
+}
+
+#[test]
+fn informational_flag_absent_starts_server_normally() {
+    use crate::entry_point::command_line_args::informational_flag_output;
+    assert_eq!(None, informational_flag_output(&args(&["rws"])));
+    assert_eq!(None, informational_flag_output(&args(&["rws", "--port=7979", "-h=content-type"])));
+    // The program name itself is never treated as a flag.
+    assert_eq!(None, informational_flag_output(&args(&["--version"])));
+}

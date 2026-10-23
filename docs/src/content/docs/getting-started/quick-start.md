@@ -12,7 +12,7 @@ Pick the path that matches your goal. All three end with a working server you ca
 Install the binary and point it at a directory. No config file, no code.
 
 ```bash
-cargo install rust-web-server
+brew install bohdaq/tap/rws      # or: cargo binstall rust-web-server
 # create something to serve
 mkdir www && echo "<h1>Hello</h1>" > www/index.html
 cd www

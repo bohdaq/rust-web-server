@@ -387,8 +387,18 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
 
 // ── main ──────────────────────────────────────────────────────────────────────
 
+/// `rws --version` / `rws --help`: print and exit before binding any socket.
+fn exit_if_informational_flag() {
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(output) = rust_web_server::entry_point::command_line_args::informational_flag_output(&args) {
+        print!("{output}");
+        std::process::exit(0);
+    }
+}
+
 #[cfg(not(feature = "http2"))]
 fn main() {
+    exit_if_informational_flag();
     let (listener, pool) = Server::setup().expect("server setup failed");
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
@@ -403,6 +413,7 @@ fn main() {
 #[cfg(all(feature = "http2", not(feature = "http3")))]
 #[tokio::main]
 async fn main() {
+    exit_if_informational_flag();
     let (listener, pool) = Server::setup().expect("server setup failed");
 
     #[cfg(feature = "acme")]
@@ -436,6 +447,7 @@ async fn main() {
 #[cfg(feature = "http3")]
 #[tokio::main]
 async fn main() {
+    exit_if_informational_flag();
     let (listener, pool) = Server::setup().expect("server setup failed");
 
     #[cfg(feature = "acme")]

@@ -14,6 +14,46 @@ pub fn override_environment_variables_from_command_line_args() {
     println!("  End of Reading Command Line Arguments\n");
 }
 
+/// Returns the text to print for an informational flag — `--version` / `-V`
+/// or `--help` — if `args` (as from `env::args()`, program name first)
+/// contains one, so the binary can print it and exit before starting a
+/// server. `None` means start normally. `-h` is not a help alias: it's
+/// already `--cors-allow-headers`'s short form.
+pub fn informational_flag_output(args: &[String]) -> Option<String> {
+    let flags = args.iter().skip(1);
+    for arg in flags {
+        match arg.as_str() {
+            "--version" | "-V" => {
+                return Some(format!("rws {}\n", env!("CARGO_PKG_VERSION")));
+            }
+            "--help" => return Some(help_text()),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn help_text() -> String {
+    let mut text = format!(
+        "rws {} — HTTP/1.1, HTTP/2 and HTTP/3 web server and reverse proxy\n\n\
+         Usage: rws [OPTIONS]\n\n\
+         Serves the current directory on http://0.0.0.0:7878 by default. Drop an\n\
+         rws.config.toml with [[route]]/[[upstream]] sections in the working\n\
+         directory to run as a config-driven reverse proxy instead.\n\n\
+         Options (each also settable via the environment variable shown):\n",
+        env!("CARGO_PKG_VERSION")
+    );
+    for argument in CommandLineArgument::get_command_line_arg_list() {
+        let flag = format!("-{}, --{}=<value>", argument.short_form, argument.long_form);
+        let hint = argument._hint.unwrap_or_default();
+        text.push_str(&format!("  {:<44} {}\n  {:<44} [env: {}]\n", flag, hint, "", argument.environment_variable));
+    }
+    text.push_str("  -V, --version                                Print version and exit\n");
+    text.push_str("      --help                                   Print this help and exit\n\n");
+    text.push_str("Docs: https://rws8.tech\n");
+    text
+}
+
 pub struct CommandLineArgument {
     pub short_form: String,
     pub long_form: String,

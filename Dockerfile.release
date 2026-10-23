@@ -1,0 +1,20 @@
+# Release image published to ghcr.io/bohdaq/rws by .github/workflows/release.yml.
+#
+# Unlike ./Dockerfile (which compiles from source), this copies in the static
+# musl binary the release workflow already built for each platform, so a
+# multi-arch image needs no Rust toolchain and no QEMU-emulated compile.
+# Expects dist/amd64/rws and dist/arm64/rws in the build context.
+FROM gcr.io/distroless/static-debian12:nonroot
+
+ARG TARGETARCH
+COPY --chmod=755 dist/${TARGETARCH}/rws /usr/local/bin/rws
+
+# rws serves static files from its working directory — mount content here:
+#   docker run -p 7878:7878 -v "$PWD:/srv" ghcr.io/bohdaq/rws
+# or drop an rws.config.toml in it to run as a config-driven proxy.
+WORKDIR /srv
+
+# Binds 0.0.0.0:7878 by default; override with -e RWS_CONFIG_PORT=...
+EXPOSE 7878
+
+ENTRYPOINT ["/usr/local/bin/rws"]

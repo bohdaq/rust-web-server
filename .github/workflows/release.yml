@@ -1,14 +1,33 @@
 name: Release
 
-# Push a version tag (same scheme as Cargo.toml, no "v" prefix — e.g. 17.110.0)
-# and this publishes a GitHub Release whose notes list every feat/fix/perf
-# commit since the previous tag.
+# Push a version tag (same scheme as Cargo.toml, no "v" prefix — e.g. 17.111.0)
+# and this:
+#   1. publishes a GitHub Release whose notes list every feat/fix/perf commit
+#      since the previous tag,
+#   2. attaches prebuilt `rws` binaries (static musl on Linux) + .sha256 files,
+#      named the way [package.metadata.binstall] in Cargo.toml expects,
+#   3. pushes a multi-arch image to ghcr.io/bohdaq/rws built from those
+#      binaries (Dockerfile.release),
+#   4. updates the Homebrew formula in bohdaq/homebrew-tap.
+#
+# Re-running for an existing tag (e.g. after fixing this workflow) is
+# supported via workflow_dispatch; every step is idempotent.
 on:
   push:
     tags: ["[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to (re)build, e.g. 17.111.0
+        required: true
 
 permissions:
   contents: write
+  packages: write
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+  CARGO_TERM_COLOR: always
 
 jobs:
   release:
@@ -16,21 +35,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ env.TAG }}
           fetch-depth: 0
 
       - name: Check tag matches Cargo.toml
         run: |
           crate_version=$(grep -m1 '^version' Cargo.toml | cut -d '"' -f2)
-          if [ "$crate_version" != "$GITHUB_REF_NAME" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match Cargo.toml version $crate_version" >&2
+          if [ "$crate_version" != "$TAG" ]; then
+            echo "Tag $TAG does not match Cargo.toml version $crate_version" >&2
             exit 1
           fi
 
       - name: Build release notes
         run: |
-          prev=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
-          range=${prev:+$prev..}$GITHUB_REF_NAME
+          prev=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+          range=${prev:+$prev..}$TAG
           {
+            echo "## Install"
+            echo
+            echo '```bash'
+            echo "brew install bohdaq/tap/rws                       # macOS / Linux"
+            echo "cargo binstall rust-web-server                     # prebuilt binary, no compile"
+            echo "docker run -p 7878:7878 ghcr.io/bohdaq/rws:$TAG"
+            echo '```'
+            echo
+            echo "Or download a binary below (Linux binaries are static musl builds)."
+            echo
             for kind in feat fix perf; do
               case $kind in
                 feat) title="Features" ;;
@@ -43,7 +73,7 @@ jobs:
               fi
             done
             if [ -n "$prev" ]; then
-              echo "**Full diff:** https://github.com/$GITHUB_REPOSITORY/compare/$prev...$GITHUB_REF_NAME"
+              echo "**Full diff:** https://github.com/$GITHUB_REPOSITORY/compare/$prev...$TAG"
             fi
             echo
             echo "Crate: https://crates.io/crates/rust-web-server · Docs: https://rws8.tech"
@@ -53,4 +83,209 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file notes.md --verify-tag
+          fi
+
+  binaries:
+    needs: release
+    name: binary (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-musl,  os: ubuntu-latest }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm }
+          - { target: x86_64-apple-darwin,        os: macos-latest }
+          - { target: aarch64-apple-darwin,       os: macos-latest }
+          - { target: x86_64-pc-windows-msvc,     os: windows-latest }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install musl tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Install NASM (aws-lc-sys on Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --bin rws --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          name="rws-$TAG-${{ matrix.target }}"
+          mkdir "$name"
+          cp README.md LICENSE "$name/"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "target/${{ matrix.target }}/release/rws.exe" "$name/"
+            7z a "$name.zip" "$name" >/dev/null
+            archive="$name.zip"
+          else
+            cp "target/${{ matrix.target }}/release/rws" "$name/"
+            tar czf "$name.tar.gz" "$name"
+            archive="$name.tar.gz"
+          fi
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$archive" > "$archive.sha256"
+          else
+            shasum -a 256 "$archive" > "$archive.sha256"
+          fi
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Smoke test
+        if: runner.os != 'Windows' && matrix.target != 'x86_64-apple-darwin'
+        shell: bash
+        run: |
+          # Run from an empty directory, like a fresh install would.
+          bin="$PWD/rws-$TAG-${{ matrix.target }}/rws"
+          mkdir -p "$RUNNER_TEMP/smoke" && cd "$RUNNER_TEMP/smoke"
+          "$bin" --port=7979 &
+          pid=$!
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:7979/healthz && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:7979/healthz
+          kill $pid
+
+      - name: Upload to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "$ARCHIVE" "$ARCHIVE.sha256" --clobber
+
+      # Dockerfile.release copies these in per platform.
+      - name: Keep Linux binary for the image build
+        if: contains(matrix.target, 'linux')
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/rws
+
+  docker:
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-x86_64-unknown-linux-musl
+          path: dist/amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-aarch64-unknown-linux-musl
+          path: dist/arm64
+      - run: chmod +x dist/*/rws
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.release
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/rws:${{ env.TAG }}
+            ghcr.io/${{ github.repository_owner }}/rws:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ env.TAG }}
+            org.opencontainers.image.licenses=MIT
+
+  homebrew:
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.tar.gz.sha256'
+          for t in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
+            echo "SHA_$(echo $t | tr 'a-z-' 'A-Z_')=$(cut -d ' ' -f1 rws-$TAG-$t.tar.gz.sha256)" >> "$GITHUB_ENV"
+          done
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/homebrew-tap
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          path: tap
+
+      - name: Write formula
+        run: |
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          mkdir -p tap/Formula
+          cat > tap/Formula/rws.rb <<EOF
+          class Rws < Formula
+            desc "HTTP/1.1, HTTP/2 and HTTP/3 web server, reverse proxy and app framework"
+            homepage "https://rws8.tech"
+            version "$TAG"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "$base/rws-$TAG-aarch64-apple-darwin.tar.gz"
+                sha256 "$SHA_AARCH64_APPLE_DARWIN"
+              end
+              on_intel do
+                url "$base/rws-$TAG-x86_64-apple-darwin.tar.gz"
+                sha256 "$SHA_X86_64_APPLE_DARWIN"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "$base/rws-$TAG-aarch64-unknown-linux-musl.tar.gz"
+                sha256 "$SHA_AARCH64_UNKNOWN_LINUX_MUSL"
+              end
+              on_intel do
+                url "$base/rws-$TAG-x86_64-unknown-linux-musl.tar.gz"
+                sha256 "$SHA_X86_64_UNKNOWN_LINUX_MUSL"
+              end
+            end
+
+            def install
+              bin.install "rws"
+            end
+
+            test do
+              port = free_port
+              pid = spawn bin/"rws", "--port=#{port}"
+              sleep 2
+              assert_match "OK", shell_output("curl -s http://127.0.0.1:#{port}/healthz")
+            ensure
+              Process.kill("TERM", pid)
+            end
+          end
+          EOF
+          cat tap/Formula/rws.rb
+
+      - name: Push formula
+        working-directory: tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/rws.rb
+          git diff --cached --quiet && exit 0
+          git commit -m "rws $TAG"
+          git push

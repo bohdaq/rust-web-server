@@ -74,7 +74,7 @@ fn info() {
     let working_directory: String = boxed_working_directory.unwrap();
 
 
-    let expected_info = format!("HTTP to HTTPS with LetsEncrypt HTTP verification server\nVersion:           {}\nAuthors:           {}\nRepository:        {}\nDesciption:        {}\nRust Version:      {}\nLicense:           {}\nUser:              {}\nWorking Directory: {}\n",
+    let expected_info = format!("HTTP to HTTPS with LetsEncrypt HTTP verification server\nVersion:           {}\nAuthors:           {}\nRepository:        {}\nDescription:       {}\nRust Version:      {}\nLicense:           {}\nUser:              {}\nWorking Directory: {}\n",
         VERSION,
         AUTHORS,
         REPOSITORY,

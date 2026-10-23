@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.110.0"
+version = "17.111.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
@@ -28,6 +28,18 @@ name = "rws"
 path = "src/main.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+# `cargo binstall rust-web-server` downloads the prebuilt archive that
+# .github/workflows/release.yml attaches to each GitHub Release instead of
+# compiling. Linux archives are static musl builds; binstall falls back to
+# them on glibc hosts automatically.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/{ version }/rws-{ version }-{ target }{ archive-suffix }"
+bin-dir = "rws-{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
 
 [features]
 default = ["http3"]

@@ -12,7 +12,7 @@ A dependency-minimal Rust web platform: HTTP/1.1, HTTP/2, and HTTP/3 server, rev
 
 | Mode | Setup | Code required |
 |---|---|---|
-| **Static file server** | `cargo install rust-web-server && rws` | None |
+| **Static file server** | `brew install bohdaq/tap/rws && rws` | None |
 | **Config-driven proxy** | `rws.config.toml` with `[[route]]` / `[[upstream]]` | None |
 | **Library crate** | `cargo add rust-web-server` | Yes |
 
@@ -80,9 +80,19 @@ See [DEVELOPER](DEVELOPER.md) for 78 use-case examples covering JSON, auth, WebS
 
 ## Quick start — static file server
 
+Install a prebuilt `rws` binary — no Rust toolchain needed:
+
 ```bash
-cargo install rust-web-server
-rws
+brew install bohdaq/tap/rws                                  # macOS / Linux
+cargo binstall rust-web-server                               # prebuilt binary via cargo-binstall
+docker run -p 7878:7878 -v "$PWD:/srv" ghcr.io/bohdaq/rws     # Docker (amd64 / arm64)
+```
+
+Or download an archive for Linux (static musl), macOS, or Windows from [GitHub Releases](https://github.com/bohdaq/rust-web-server/releases/latest). Building from source with `cargo install rust-web-server` also works.
+
+```bash
+rws            # serves the current directory
+rws --help     # all options
 ```
 
 Starts on `http://127.0.0.1:7878`. Place files in the working directory and open the URL.

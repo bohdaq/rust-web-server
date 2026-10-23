@@ -117,7 +117,7 @@ impl Log {
         let repository = format!("Repository:        {}\n", REPOSITORY);
         log = [log, repository].join("");
 
-        let description = format!("Desciption:        {}\n", DESCRIPTION);
+        let description = format!("Description:       {}\n", DESCRIPTION);
         log = [log, description].join("");
 
         let rust_version = format!("Rust Version:      {}\n", RUST_VERSION);

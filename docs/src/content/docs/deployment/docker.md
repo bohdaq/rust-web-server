@@ -3,6 +3,22 @@ title: Docker
 description: Build and run rust-web-server in a minimal Docker container using multi-stage builds.
 ---
 
+## Prebuilt image
+
+Every release publishes a multi-arch image (linux/amd64, linux/arm64) to the GitHub Container Registry — no build step needed:
+
+```bash
+# Serve the current directory
+docker run -p 7878:7878 -v "$PWD:/srv" ghcr.io/bohdaq/rws
+
+# Pin a version
+docker run -p 7878:7878 ghcr.io/bohdaq/rws:17.111.0
+```
+
+The image is `gcr.io/distroless/static-debian12:nonroot` plus the static musl `rws` binary — no shell, no package manager, runs as a non-root user. The working directory is `/srv`: mount static content there, or put an `rws.config.toml` there to run as a config-driven proxy. Configure with `RWS_CONFIG_*` environment variables, e.g. `-e RWS_CONFIG_PORT=8080`.
+
+Build your own image with the Dockerfile below if you need non-default Cargo features or your own application code.
+
 ## Multi-stage Dockerfile
 
 The recommended Dockerfile uses a two-stage build: a `rust:1.88` builder compiles the binary, then a slim Debian image carries only the final executable.
