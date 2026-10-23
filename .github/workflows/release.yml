@@ -128,7 +128,7 @@ jobs:
         run: |
           name="rws-$TAG-${{ matrix.target }}"
           mkdir "$name"
-          cp README.md LICENSE "$name/"
+          cp -R README.md LICENSE "$name/"
           if [ "${{ runner.os }}" = "Windows" ]; then
             cp "target/${{ matrix.target }}/release/rws.exe" "$name/"
             7z a "$name.zip" "$name" >/dev/null
