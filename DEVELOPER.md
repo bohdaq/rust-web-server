@@ -2,7 +2,7 @@
 
 # Developer Info
 
-Make sure you have [Rust](https://www.rust-lang.org/tools/install) 1.75 or later installed.
+Make sure you have [Rust](https://www.rust-lang.org/tools/install) 1.88 or later installed.
 
 ```bash
 rustup update
@@ -56,7 +56,7 @@ cargo build --release --no-default-features --features http1
 
 WASM guest component (`wasi:http/proxy` world — runs inside Wasmtime, Spin, or Fastly Compute; see `spec/WASM_SHIM.md`):
 ```bash
-rustup target add wasm32-wasip2   # Rust 1.82+ — higher than this crate's own 1.75 MSRV
+rustup target add wasm32-wasip2   # wasm32-wasip2 is Tier 2 since Rust 1.82
 cd rws-wasm-shim
 cargo build --release --target wasm32-wasip2
 wasmtime serve target/wasm32-wasip2/release/rws_wasm_shim.wasm

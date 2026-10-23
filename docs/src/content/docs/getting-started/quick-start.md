@@ -58,14 +58,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 use rust_web_server::prelude::*;
 
 fn hello(_req: &Request, _params: &PathParams, _conn: &ConnectionInfo, _state: &()) -> Response {
-    Response::get_response(
-        STATUS_CODE_REASON_PHRASE.n200_ok,
-        None,
-        Some(vec![Range::get_content_range(
-            b"Hello, world!".to_vec(),
-            MimeType::TEXT_PLAIN.to_string(),
-        )]),
-    )
+    Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "Hello, world!")
 }
 
 #[tokio::main]
@@ -119,14 +112,7 @@ struct AppState {
 
 fn count(_: &Request, _: &PathParams, _: &ConnectionInfo, state: &Arc<AppState>) -> Response {
     let n = state.counter.fetch_add(1, Ordering::Relaxed);
-    Response::get_response(
-        STATUS_CODE_REASON_PHRASE.n200_ok,
-        None,
-        Some(vec![Range::get_content_range(
-            format!("count: {n}").into_bytes(),
-            MimeType::TEXT_PLAIN.to_string(),
-        )]),
-    )
+    Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &format!("count: {n}"))
 }
 
 #[tokio::main]

@@ -6,7 +6,7 @@ export default defineConfig({
     starlight({
       title: 'rust-web-server',
       description:
-        'HTTP/1.1 · HTTP/2 · HTTP/3/QUIC · Reverse Proxy · MCP Server · ORM — no third-party HTTP dependencies.',
+        'HTTP/1.1 · HTTP/2 · HTTP/3/QUIC · Reverse Proxy · MCP Server · ORM — no hyper, no Tower, one crate.',
       defaultLocale: 'root',
       locales: {
         root: { label: 'English', lang: 'en' },

@@ -1,0 +1,56 @@
+name: Release
+
+# Push a version tag (same scheme as Cargo.toml, no "v" prefix — e.g. 17.110.0)
+# and this publishes a GitHub Release whose notes list every feat/fix/perf
+# commit since the previous tag.
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check tag matches Cargo.toml
+        run: |
+          crate_version=$(grep -m1 '^version' Cargo.toml | cut -d '"' -f2)
+          if [ "$crate_version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match Cargo.toml version $crate_version" >&2
+            exit 1
+          fi
+
+      - name: Build release notes
+        run: |
+          prev=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          range=${prev:+$prev..}$GITHUB_REF_NAME
+          {
+            for kind in feat fix perf; do
+              case $kind in
+                feat) title="Features" ;;
+                fix)  title="Fixes" ;;
+                perf) title="Performance" ;;
+              esac
+              lines=$(git log --format='- %s (%h)' "$range" | grep -E "^- $kind(\(|:)" || true)
+              if [ -n "$lines" ]; then
+                printf '## %s\n\n%s\n\n' "$title" "$lines"
+              fi
+            done
+            if [ -n "$prev" ]; then
+              echo "**Full diff:** https://github.com/$GITHUB_REPOSITORY/compare/$prev...$GITHUB_REF_NAME"
+            fi
+            echo
+            echo "Crate: https://crates.io/crates/rust-web-server · Docs: https://rws8.tech"
+          } > notes.md
+          cat notes.md
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag

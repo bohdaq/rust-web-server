@@ -27,7 +27,7 @@ cargo test
 cargo test --package rust-web-server --bin rws client_hint::tests::client_hints_header -- --exact
 ```
 
-MSRV is 1.75. The `--ignore-rust-version` flag from older docs is no longer needed.
+MSRV is 1.88 (the highest `rust-version` among current dependencies across all features — tokio needs 1.85, `time`/`icu` via sqlx/tera need 1.88). CI checks it with the `msrv` job in `.github/workflows/ci.yml`; raise `rust-version` there and in `Cargo.toml` together.
 
 ## Required for every change
 
@@ -114,7 +114,7 @@ Skipping any of these four is not acceptable. Docs and tests ship with the code,
 
 ## Architecture
 
-The default build (`http3` feature) uses a tokio async runtime and serves HTTP/3 over QUIC, HTTP/2, and HTTP/1.1 over TLS. The `http1`-only build is a fully synchronous, thread-pool-based server with no async runtime. All HTTP parsing, JSON, CORS, MIME types, range requests, WebSocket, SSE, and routing are implemented from scratch with no third-party HTTP dependencies.
+The default build (`http3` feature) uses a tokio async runtime and serves HTTP/3 over QUIC, HTTP/2, and HTTP/1.1 over TLS. The `http1`-only build is a fully synchronous, thread-pool-based server with no async runtime. HTTP/1.1 parsing, JSON, CORS, MIME types, range requests, WebSocket, SSE, and routing are implemented from scratch (no hyper/Tower/Axum); HTTP/2 framing uses the `h2` crate, HTTP/3 uses `h3`/`quinn`, and TLS uses `rustls`.
 
 ### Request lifecycle
 

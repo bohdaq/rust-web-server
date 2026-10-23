@@ -5,13 +5,13 @@ description: How to install rust-web-server as a library crate, as a standalone 
 
 ## Requirements
 
-**Minimum Supported Rust Version (MSRV): 1.75**
+**Minimum Supported Rust Version (MSRV): 1.88**
 
 Install or update Rust via [rustup](https://rustup.rs/):
 
 ```bash
 rustup update stable
-rustc --version   # should print 1.75.0 or newer
+rustc --version   # should print 1.88.0 or newer
 ```
 
 ## As a library crate
@@ -114,6 +114,8 @@ These measurements are for a release build (`cargo build --release`) of the `rws
 TLS uses `rustls` with the `aws-lc-rs` crypto backend. There is no dependency on a system OpenSSL installation. Binaries are fully static with respect to TLS and are compatible with FIPS-validated environments.
 :::
 
-## No third-party HTTP dependencies
+## What's built in, and what isn't
 
-HTTP parsing, CORS, MIME types, range requests, WebSocket, SSE, and routing are all implemented from scratch inside this crate. The transitive dependency tree has no `hyper`, `actix-net`, or `tokio-util`.
+HTTP/1.1 parsing, CORS, MIME types, range requests, WebSocket, SSE, and routing are implemented inside this crate. The transitive dependency tree has no `hyper`, `tower`, or `actix-net`.
+
+The rest of the protocol stack uses established crates rather than reimplementing them: HTTP/2 framing uses `h2`, HTTP/3 and QUIC use `h3` and `quinn`, and TLS uses `rustls`. `tokio-util` appears transitively in the default build through `h2`.

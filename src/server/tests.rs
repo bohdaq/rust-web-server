@@ -1389,8 +1389,7 @@ fn http11_explicit_keep_alive_serves_multiple_requests() {
 
 #[test]
 fn write_chunked_file_produces_valid_chunked_encoding() {
-    let dir = env::current_dir().unwrap();
-    let filepath = dir.join("target").join("_chunked_test_file.txt");
+    let filepath = env::temp_dir().join(format!("rws_chunked_test_file_{}.txt", std::process::id()));
     let content = b"hello chunked world";
     std::fs::write(&filepath, content).unwrap();
 

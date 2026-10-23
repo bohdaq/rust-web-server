@@ -2,7 +2,7 @@
 
 # Release Info
 
-Make sure you have [Rust](https://www.rust-lang.org/tools/install) 1.75 or later installed.
+Make sure you have [Rust](https://www.rust-lang.org/tools/install) 1.88 or later installed.
 
 ## Build
 
@@ -29,6 +29,17 @@ cargo build --release --no-default-features --features http1
 ```bash
 cargo publish
 ```
+
+## Publish a GitHub Release
+
+Tag the commit with the exact `Cargo.toml` version (no `v` prefix) and push the tag:
+
+```bash
+git tag 17.110.0
+git push origin 17.110.0
+```
+
+`.github/workflows/release.yml` checks that the tag matches `Cargo.toml`, then publishes a GitHub Release whose notes list every `feat`/`fix`/`perf` commit since the previous tag.
 
 ## Supported architectures
 

@@ -1,5 +1,5 @@
 # ── build stage ──────────────────────────────────────────────────────────────
-FROM rust:1.75-slim AS builder
+FROM rust:1.88-slim AS builder
 
 # aws-lc-rs (used by rustls) needs cmake, clang, and a C linker
 RUN apt-get update && apt-get install -y --no-install-recommends \

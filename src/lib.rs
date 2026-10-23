@@ -1,7 +1,9 @@
 //! # rust-web-server
 //!
-//! A static file web server and HTTP toolkit written in Rust.
-//! Supports HTTP/3 (QUIC), HTTP/2, and HTTP/1.1.
+//! An HTTP/1.1, HTTP/2, and HTTP/3 (QUIC) server, reverse proxy, and
+//! application framework in one crate. HTTP/1.1 parsing, routing, middleware,
+//! JSON, WebSocket, and SSE are implemented in-crate; HTTP/2 and HTTP/3
+//! framing use the `h2` and `quinn`/`h3` crates, and TLS uses `rustls`.
 //!
 //! ## Use as a library
 //!
@@ -12,31 +14,19 @@
 //! rust-web-server = "17"
 //! ```
 //!
-//! ## Quick start: add a custom route
+//! ## Quick start
 //!
 //! ```rust,no_run
-//! use rust_web_server::controller::Controller;
-//! use rust_web_server::request::{METHOD, Request};
-//! use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
-//! use rust_web_server::range::Range;
-//! use rust_web_server::mime_type::MimeType;
-//! use rust_web_server::server::ConnectionInfo;
+//! use rust_web_server::prelude::*;
 //!
-//! pub struct PingController;
+//! fn hello(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &()) -> Response {
+//!     Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "Hello, world!")
+//! }
 //!
-//! impl Controller for PingController {
-//!     fn is_matching(request: &Request, _: &ConnectionInfo) -> bool {
-//!         request.method == METHOD.get && request.request_uri == "/ping"
-//!     }
-//!
-//!     fn process(_: &Request, mut response: Response, _: &ConnectionInfo) -> Response {
-//!         response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
-//!         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-//!         response.content_range_list = vec![
-//!             Range::get_content_range(b"pong".to_vec(), MimeType::TEXT_PLAIN.to_string())
-//!         ];
-//!         response
-//!     }
+//! fn main() {
+//!     let app = App::with_state(()).get("/hello", hello);
+//!     let (listener, pool) = Server::setup().unwrap();
+//!     Server::run(listener, pool, app);
 //! }
 //! ```
 //!

@@ -1,13 +1,14 @@
 # rws
 
+[![CI](https://github.com/bohdaq/rust-web-server/actions/workflows/ci.yml/badge.svg)](https://github.com/bohdaq/rust-web-server/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/rust-web-server.svg)](https://crates.io/crates/rust-web-server)
 [![docs.rs](https://docs.rs/rust-web-server/badge.svg)](https://docs.rs/rust-web-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![MSRV: 1.75](https://img.shields.io/badge/rust-1.75%2B-blue.svg)](https://www.rust-lang.org)
+[![MSRV: 1.88](https://img.shields.io/badge/rust-1.88%2B-blue.svg)](https://www.rust-lang.org)
 
 **Website:** [rws8.tech](https://rws8.tech/)
 
-A dependency-minimal Rust web platform: HTTP/1.1, HTTP/2, and HTTP/3 server, reverse proxy, and application framework with routing, middleware (auth, rate limiting, tracing), an async ORM, background jobs, object storage, and a mailer. Runs as a zero-code config-driven proxy or as a library crate. No third-party HTTP dependencies.
+A dependency-minimal Rust web platform: HTTP/1.1, HTTP/2, and HTTP/3 server, reverse proxy, and application framework with routing, middleware (auth, rate limiting, tracing), an async ORM, background jobs, object storage, and a mailer. Runs as a zero-code config-driven proxy or as a library crate. No hyper, no Tower — HTTP/1.1, routing, and middleware are built in; HTTP/2 and HTTP/3 framing use the standard `h2` and `quinn` crates.
 
 | Mode | Setup | Code required |
 |---|---|---|
@@ -19,7 +20,7 @@ A dependency-minimal Rust web platform: HTTP/1.1, HTTP/2, and HTTP/3 server, rev
 
 ## Why rws
 
-- **No third-party HTTP stack.** HTTP parsing, JSON, CORS, MIME, range requests, WebSocket, SSE, and routing are all implemented from scratch in this one crate — instead of pinning Axum + Tower + Hyper + a proxy crate + a JWT crate + a base64 crate and keeping their versions compatible.
+- **No hyper, no Tower, no Axum.** HTTP/1.1 parsing, CORS, MIME, range requests, WebSocket, SSE, routing, JWT, and base64 are implemented in this one crate — instead of pinning Axum + Tower + Hyper + a proxy crate + a JWT crate + a base64 crate and keeping their versions compatible. HTTP/2 and HTTP/3 framing use the widely deployed `h2` and `quinn`/`h3` crates, and TLS uses `rustls`.
 - **One `Middleware` trait, not ten Tower layers.** Auth, rate limiting, caching, tracing, rewriting, and the reverse proxy itself all implement the same `handle(request, connection, next)` signature — one pattern to learn, one pattern for an AI assistant to generate correctly.
 - **The gateway is in the binary.** Reverse proxy, TCP/UDP/WebSocket proxying, health checks, circuit breakers, and canary routing ship in the same crate as the app framework — no separate Traefik/Nginx process to run in front of it for common cases.
 - **SemVer since v1.** Frequent releases (currently v17) are additive; breaking changes only land on major version bumps. See [releases](https://github.com/bohdaq/rust-web-server/releases) for the changelog.
@@ -50,14 +51,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 use rust_web_server::prelude::*;
 
 fn hello(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &()) -> Response {
-    Response::get_response(
-        STATUS_CODE_REASON_PHRASE.n200_ok,
-        None,
-        Some(vec![Range::get_content_range(
-            b"Hello, world!".to_vec(),
-            MimeType::TEXT_PLAIN.to_string(),
-        )]),
-    )
+    Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "Hello, world!")
 }
 
 #[tokio::main]
@@ -152,7 +146,7 @@ See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full an
 
 ## Building apps with AI
 
-`rws` is written to be easy for AI coding assistants (Claude Code, Cursor, GitHub Copilot, ChatGPT, etc.) to generate correct code against on the first try — one consistent `Router`/`AppWithState` routing pattern, one `Middleware` trait for auth/rate-limiting/caching/everything else, and no third-party HTTP dependencies whose APIs a model might confuse with this crate's own.
+`rws` is written to be easy for AI coding assistants (Claude Code, Cursor, GitHub Copilot, ChatGPT, etc.) to generate correct code against on the first try — one consistent `Router`/`AppWithState` routing pattern, one `Middleware` trait for auth/rate-limiting/caching/everything else, and no hyper/Tower/Axum types whose APIs a model might confuse with this crate's own.
 
 Three files make that possible — point your AI tool at them before asking it to build something:
 
@@ -387,7 +381,7 @@ cargo build --release
 | HTTP/2 + HTTP/1.1 + TLS | `--no-default-features --features http2` | ~8 MB |
 | HTTP/1.1 only, no TLS | `--no-default-features --features http1` | ~3 MB |
 
-Binary is at `target/release/rws`. MSRV is 1.75.
+Binary is at `target/release/rws`. MSRV is 1.88.
 
 ---
 

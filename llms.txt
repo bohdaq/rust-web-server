@@ -4,12 +4,13 @@
 > Website: https://rws8.tech/
 > Crates.io: https://crates.io/crates/rust-web-server
 > Docs: https://docs.rs/rust-web-server
-> License: MIT  |  MSRV: 1.75  |  Current version: 17.60.0
+> License: MIT  |  MSRV: 1.88  |  Current version: 17.109.0
 
 `rws` is an HTTP web framework, reverse proxy, and standalone server for Rust.
-It supports HTTP/1.1, HTTP/2, and HTTP/3/QUIC over TLS with no third-party HTTP
-dependencies — all HTTP parsing, routing, middleware, WebSocket, SSE, CORS,
-rate limiting, and MIME detection are built from scratch.
+It supports HTTP/1.1, HTTP/2, and HTTP/3/QUIC over TLS without hyper, Tower,
+or Axum — HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS, rate
+limiting, and MIME detection are built in; HTTP/2 and HTTP/3 framing use the
+`h2` and `quinn`/`h3` crates, and TLS uses `rustls`.
 
 Use it in three modes:
 - **Static file server** — `cargo install rust-web-server && rws`
@@ -2175,7 +2176,7 @@ let www_router = Router::new().with_host("www.example.com").get("/", home_handle
 Runs `App`/`Router`/middleware inside a WASM component instead of behind a `TcpListener` — the host (Wasmtime, Spin, Fastly Compute) owns the socket and TLS termination and calls the guest once per request via the standard `wasi:http/proxy` world. Separate workspace package, not part of the `rust-web-server` crate's own public API. Full plan: `spec/WASM_SHIM.md`.
 
 ```bash
-rustup target add wasm32-wasip2   # Rust 1.82+ — higher than this crate's own 1.75 MSRV
+rustup target add wasm32-wasip2   # wasm32-wasip2 is Tier 2 since Rust 1.82
 cd rws-wasm-shim
 cargo build --release --target wasm32-wasip2
 wasmtime serve target/wasm32-wasip2/release/rws_wasm_shim.wasm

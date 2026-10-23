@@ -22,7 +22,7 @@ pub trait Application {
 ## Building and running
 
 ```bash
-rustup target add wasm32-wasip2   # Rust 1.82+ — higher than this crate's own 1.75 MSRV
+rustup target add wasm32-wasip2   # wasm32-wasip2 is Tier 2 since Rust 1.82
 cd rws-wasm-shim
 cargo build --release --target wasm32-wasip2
 wasmtime serve target/wasm32-wasip2/release/rws_wasm_shim.wasm

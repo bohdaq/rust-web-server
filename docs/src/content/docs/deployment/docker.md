@@ -5,11 +5,11 @@ description: Build and run rust-web-server in a minimal Docker container using m
 
 ## Multi-stage Dockerfile
 
-The recommended Dockerfile uses a two-stage build: a `rust:1.75` builder compiles the binary, then a slim Debian image carries only the final executable.
+The recommended Dockerfile uses a two-stage build: a `rust:1.88` builder compiles the binary, then a slim Debian image carries only the final executable.
 
 ```dockerfile
 # ── Stage 1: build ────────────────────────────────────────────────────────────
-FROM rust:1.75 AS builder
+FROM rust:1.88 AS builder
 WORKDIR /app
 
 # Cache dependencies before copying source.
