@@ -14,9 +14,9 @@ export default defineConfig({
       logo: {
         src: './src/assets/logo.svg',
       },
-      social: {
-        github: 'https://github.com/bohdaq/rust-web-server',
-      },
+      social: [
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/bohdaq/rust-web-server' },
+      ],
       customCss: ['./src/styles/custom.css'],
       sidebar: [
         {

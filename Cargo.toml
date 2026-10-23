@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.108.0"
+version = "17.109.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
@@ -101,8 +101,8 @@ regex     = { version = "1", optional = true }
 # unsupported on wasm32 regardless, since tokio's rt-multi-thread requires
 # real OS threads.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-webpki-roots = { version = "0.26", optional = true }
-rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "tls12", "logging", "std"], optional = true }
+webpki-roots = { version = "1.0.11", optional = true }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "tls12", "logging", "std"], optional = true }
 
 # wasm32-wasip2 outbound HTTP backend for http_client::Client::send() — see
 # the #[cfg(target_arch = "wasm32")] send_once in src/http_client/mod.rs and
