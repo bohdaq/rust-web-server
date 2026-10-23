@@ -1,9 +1,9 @@
 ---
 title: Quick Start
-description: Three paths to a running rust-web-server in under five minutes — static files, a first route, and a config-driven proxy.
+description: Four paths to a running rust-web-server in under five minutes — static files, a first route, a config-driven proxy, and automatic HTTPS.
 ---
 
-Pick the path that matches your goal. All three end with a working server you can hit with `curl`.
+Pick the path that matches your goal. Each ends with a working server you can hit with `curl`.
 
 ---
 
@@ -20,7 +20,7 @@ rws
 ```
 
 ```
-Listening on 0.0.0.0:7878
+Server is up and running at: http://0.0.0.0:7878
 ```
 
 ```bash
@@ -140,7 +140,6 @@ Drop an `rws.config.toml` next to the `rws` binary and it becomes a reverse prox
 ### Minimal config
 
 ```toml title="rws.config.toml"
-[server]
 port = 8080
 
 [[upstream]]
@@ -154,7 +153,7 @@ healthy_threshold = 2
 
 [[route]]
 [route.match]
-path = "/api/"
+path = "/api/*"
 
 [route.action]
 type     = "proxy"
@@ -172,7 +171,7 @@ body   = "Gateway ready"
 
 ```bash
 rws
-# Listening on 0.0.0.0:8080
+# Server is up and running at: http://0.0.0.0:8080
 ```
 
 ```bash
@@ -186,16 +185,46 @@ curl http://localhost:8080/api/users
 ### What the config does
 
 - `[[upstream]]` declares a named backend pool with health checking. Dead backends are removed automatically; they re-enter rotation once they pass `healthy_threshold` consecutive checks.
-- `[[route]]` rules are evaluated top-to-bottom, first match wins.
+- `[[route]]` rules are evaluated top-to-bottom, first match wins. A `path` ending in `*` is a prefix match (`/api/*` matches `/api/users`); without it the path must match exactly. Requests no route matches fall through to the static-file server.
 - `type = "proxy"` forwards the request to the named upstream. `type = "respond"` returns a fixed response.
 
 :::note[Add middleware per route]
 Rate limiting, Bearer auth, and request rewriting can all be added per-route inside the config file — no code change needed. See the Proxy & Gateway documentation for the full schema.
 :::
 
-:::caution[HTTPS in proxy mode]
-Pass `--tls-cert-file` and `--tls-key-file` (or set `RWS_CONFIG_TLS_CERT_FILE` / `RWS_CONFIG_TLS_KEY_FILE`) to enable TLS in proxy mode. Virtual-host routing with per-domain certificates is supported via `[[virtual_host]]` sections.
+:::tip[HTTPS in front of the proxy]
+Add an `[acme]` section (Path 4) and `rws` gets Let's Encrypt certificates for the proxy itself. To use your own certificates instead, set `tls_cert_file` / `tls_key_file`; per-domain certificates go in `[[virtual_host]]` blocks.
 :::
+
+---
+
+## Path 4 — Automatic HTTPS (no code)
+
+On a server whose DNS points at it, with ports 80 and 443 reachable:
+
+```toml title="rws.config.toml"
+port               = 443
+http_redirect_port = 80
+
+[acme]
+domains = ["example.com"]
+email   = "you@example.com"
+```
+
+```bash
+sudo rws     # or grant the binary CAP_NET_BIND_SERVICE to bind 80/443 without root
+```
+
+On first start `rws` requests a certificate from Let's Encrypt (stored as
+`cert.pem` / `key.pem`), then serves HTTPS with HTTP/2 and HTTP/3 and
+redirects HTTP to HTTPS. Renewal runs in the background. Try it against the
+Let's Encrypt staging CA first with `staging = true` — see
+[Automatic HTTPS](/features/acme/).
+
+```bash
+curl -I http://example.com/      # 301 → https://example.com/
+curl -I https://example.com/     # 200, valid certificate
+```
 
 ---
 

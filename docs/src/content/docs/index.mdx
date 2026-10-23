@@ -1,12 +1,13 @@
 ---
 title: rust-web-server
-description: HTTP/1.1 · HTTP/2 · HTTP/3/QUIC · Reverse Proxy · MCP Server · ORM — no hyper, no Tower, one crate.
+description: A single-binary web server and reverse proxy in Rust — automatic HTTPS, HTTP/3, load balancing, auth, configured in one TOML file. Also a Rust library.
 template: splash
 hero:
-  title: Build fast. Ship one crate.
+  title: One binary. HTTPS, proxy, done.
   tagline: >
-    HTTP/1.1 · HTTP/2 · HTTP/3/QUIC · TLS · Reverse Proxy · MCP Server · ORM.
-    One Rust crate. No hyper, no Tower.
+    A web server and reverse proxy with automatic HTTPS from Let's Encrypt,
+    HTTP/3, load balancing, and auth — configured in one TOML file.
+    When you outgrow configuration, the same engine is a Rust library.
   image:
     dark: ../../assets/logo.svg
     light: ../../assets/logo.svg
@@ -15,77 +16,120 @@ hero:
       link: /getting-started/quick-start/
       icon: right-arrow
       variant: primary
+    - text: Install
+      link: /getting-started/installation/
+      icon: download
+      variant: minimal
     - text: GitHub
       link: https://github.com/bohdaq/rust-web-server
       icon: github
       variant: minimal
-    - text: crates.io v17
-      link: https://crates.io/crates/rust-web-server
-      icon: external
-      variant: minimal
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
+
+```bash
+brew install bohdaq/tap/rws          # or: cargo binstall rust-web-server
+docker run -p 7878:7878 -v "$PWD:/srv" ghcr.io/bohdaq/rws
+```
 
 <div class="protocol-matrix">
   <span>HTTP/1.1</span>
   <span>HTTP/2</span>
   <span>HTTP/3 / QUIC</span>
+  <span>Let's Encrypt</span>
   <span>TLS (rustls)</span>
-  <span>CORS</span>
-  <span>Gzip</span>
-  <span>ETag</span>
   <span>WebSocket</span>
+  <span>gRPC</span>
   <span>SSE</span>
 </div>
+
+## Running in 60 seconds
+
+<Tabs>
+<TabItem label="Serve a folder">
+
+```bash
+cd my-site && rws
+```
+
+Serves the directory on `http://localhost:7878` — `index.html`, directory
+listings, ETags, gzip, byte ranges, and an optional SPA fallback for
+client-side routers.
+
+</TabItem>
+<TabItem label="Automatic HTTPS">
+
+```toml title="rws.config.toml"
+port               = 443
+http_redirect_port = 80
+
+[acme]
+domains = ["example.com", "www.example.com"]
+email   = "you@example.com"
+```
+
+Certificates come from Let's Encrypt on first start and renew in the
+background with zero-downtime reloads; HTTP redirects to HTTPS; HTTP/2 and
+HTTP/3 are on. [How it works →](/features/acme/)
+
+</TabItem>
+<TabItem label="Reverse proxy">
+
+```toml title="rws.config.toml"
+[[upstream]]
+name     = "app"
+backends = ["localhost:3000", "localhost:3001"]
+
+  [upstream.health_check]
+  path = "/healthz"
+
+[[route]]
+  [route.match]
+  path = "/api/*"
+
+  [route.action]
+  type     = "proxy"
+  upstream = "app"
+
+  [route.middleware]
+  rate_limit = { max_requests = 500, window_secs = 60 }
+```
+
+Requests under `/api/` are load-balanced across healthy backends; everything
+else falls through to the static files. Add `[acme]` for HTTPS in front.
+[Config-driven proxy →](/proxy/config-driven/)
+
+</TabItem>
+</Tabs>
 
 ## What's inside
 
 <CardGrid>
-  <Card title="Zero HTTP dependencies" icon="puzzle">
-    HTTP parsing, CORS, MIME types, range requests, WebSocket, SSE, and routing are all implemented from scratch — no `hyper`, no `actix-net`, no `tokio-util`.
+  <Card title="Automatic HTTPS" icon="approve-check-circle">
+    Built-in ACME client: Let's Encrypt or a private CA, HTTP→HTTPS redirects, background renewal with hot reload, IPv4 and IPv6.
   </Card>
-  <Card title="Config-driven proxy" icon="setting">
-    Drop an `rws.config.toml` next to the binary and it becomes a reverse proxy, load balancer, and API gateway. No code required.
+  <Card title="Reverse proxy & gateway" icon="setting">
+    Load balancing, health checks, bearer / JWT / basic auth that fails closed, rate limits, caching, rewrites, IP filters — plus TCP, UDP, WebSocket, and gRPC proxying.
   </Card>
-  <Card title="MCP Server" icon="rocket">
-    Expose tools, resources, and prompts to Claude and other AI agents over the MCP Streamable HTTP protocol with a simple builder API.
+  <Card title="One TOML file" icon="document">
+    Every setting lives in `rws.config.toml` (or env vars, or flags). Unknown keys are reported at startup instead of silently ignored.
   </Card>
-  <Card title="Middleware pipeline" icon="bars">
-    Compose `RateLimitLayer`, `CacheLayer`, `OtelLayer`, `JwtLayer`, `RewriteLayer`, `BasicAuthLayer`, and more via `.wrap(layer)`.
+  <Card title="No hyper, no Tower, no OpenSSL" icon="puzzle">
+    HTTP/1.1, routing, middleware, WebSocket, SSE, and the ACME client are implemented in-crate. HTTP/2 and HTTP/3 use `h2` and `quinn`; TLS uses `rustls`.
   </Card>
-  <Card title="Model layer ORM" icon="document">
-    JPA-style ORM with `#[derive(Model)]`, a type-safe `QueryBuilder`, repository pattern, migrations, and `HasMany` / `HasOne` / `BelongsTo` relations — SQLite, PostgreSQL, or MySQL.
+  <Card title="Kubernetes-ready" icon="rocket">
+    `/healthz`, `/readyz`, Prometheus `/metrics`, graceful SIGTERM shutdown, and a Kubernetes Ingress watcher.
   </Card>
-  <Card title="Kubernetes-ready" icon="approve-check-circle">
-    `/healthz`, `/readyz`, `/metrics`. Graceful SIGTERM shutdown. Prometheus-compatible scrape endpoint. First-class Kubernetes Ingress Watcher.
-  </Card>
-  <Card title="Prometheus metrics" icon="magnifier">
-    Server-wide counters plus per-route `rws_route_requests_total` and `rws_route_duration_seconds` histograms via `MetricsLayer`.
-  </Card>
-  <Card title="WebSocket & SSE" icon="bolt">
-    RFC 6455 WebSocket handshake and frame codec built in. `Sse` builder for Server-Sent Events — ideal for streaming AI tokens.
-  </Card>
-  <Card title="In-process test client" icon="approve-check">
-    `TestClient::new(App::new())` dispatches requests through your `Application` without opening a TCP socket — fast, hermetic unit tests with zero infra.
-  </Card>
-  <Card title="Dependency injection" icon="box">
-    `Container` is a `TypeId`-keyed service store for concrete types and trait objects. Pair with `App::with_state(Arc::new(container))` for ergonomic DI.
-  </Card>
-  <Card title="Background scheduler" icon="bulb">
-    Run tasks on a fixed interval, after a delay, or a cron schedule via `Scheduler::new().every(…, fn).cron("0 * * * * *", fn).start()`.
-  </Card>
-  <Card title="No OpenSSL" icon="heart">
-    TLS is powered by `rustls` with the `aws-lc-rs` crypto backend — no system OpenSSL dependency, fully static binaries, FIPS-compatible.
+  <Card title="MCP server" icon="star">
+    Expose tools, resources, and prompts to Claude and other AI agents over MCP Streamable HTTP with a builder API.
   </Card>
 </CardGrid>
 
-## Get started in 60 seconds
+## Need custom logic? It's a Rust library
 
-<div class="two-col">
-<div>
-
-### As a library
+The server above is the `rust-web-server` crate. Use it directly for routes,
+middleware, an MCP server, an ORM, background jobs, and more:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -97,14 +141,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 use rust_web_server::prelude::*;
 
 fn hello(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &()) -> Response {
-    Response::get_response(
-        STATUS_CODE_REASON_PHRASE.n200_ok,
-        None,
-        Some(vec![Range::get_content_range(
-            b"Hello, world!".to_vec(),
-            MimeType::TEXT_PLAIN.to_string(),
-        )]),
-    )
+    Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "Hello, world!")
 }
 
 #[tokio::main]
@@ -122,54 +159,20 @@ async fn main() {
 }
 ```
 
-```shell
-$ curl http://localhost:7878/hello
-Hello, world!
-```
-
-</div>
-<div>
-
-### As a proxy — no code required
-
-```toml title="rws.config.toml"
-[server]
-port = 8080
-
-[[upstream]]
-name     = "api"
-backends = ["localhost:3000", "localhost:3001"]
-
-[upstream.health_check]
-path              = "/healthz"
-interval_secs     = 10
-healthy_threshold = 2
-
-[[route]]
-[route.match]
-path = "/api/"
-
-[route.action]
-type     = "proxy"
-upstream = "api"
-
-[[route]]
-[route.match]
-path = "/"
-
-[route.action]
-type   = "respond"
-status = 200
-body   = "Gateway ready"
-```
-
-```shell
-$ rws
-Listening on 0.0.0.0:8080
-```
-
-</div>
-</div>
+<CardGrid>
+  <Card title="One middleware trait" icon="bars">
+    Auth, rate limiting, caching, tracing, rewriting, and the reverse proxy itself share one `handle(request, connection, next)` signature.
+  </Card>
+  <Card title="Model layer ORM" icon="document">
+    `#[derive(Model)]`, a type-safe `QueryBuilder`, migrations, and relations — SQLite, PostgreSQL, or MySQL.
+  </Card>
+  <Card title="Login & auth" icon="approve-check">
+    OAuth 2.0 / OIDC ("Login with Google"), SAML 2.0, its own OAuth authorization server, sessions, CSRF.
+  </Card>
+  <Card title="In-process test client" icon="magnifier">
+    `TestClient::new(app)` dispatches requests without opening a socket — fast, hermetic tests.
+  </Card>
+</CardGrid>
 
 ## Build matrix
 
@@ -179,8 +182,9 @@ Listening on 0.0.0.0:8080
 | TLS | — | rustls | rustls |
 | HTTP/2 | — | ALPN | ALPN |
 | QUIC | — | — | quinn |
-| Approx. binary | ~3 MB | ~8 MB | ~12 MB |
 | MSRV | 1.88 | 1.88 | 1.88 |
+
+The prebuilt binaries are the default build plus the `acme` and `auth` features.
 
 <div class="cta-footer">
   <a href="/getting-started/quick-start/">Read the Quick Start →</a>

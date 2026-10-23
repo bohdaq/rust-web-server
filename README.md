@@ -6,39 +6,73 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![MSRV: 1.88](https://img.shields.io/badge/rust-1.88%2B-blue.svg)](https://www.rust-lang.org)
 
+**A single-binary web server and reverse proxy, written in Rust.** Automatic HTTPS from Let's Encrypt, HTTP/3, load balancing with health checks, auth and rate limiting — configured in one TOML file, no code required. When you outgrow configuration, the same engine is a Rust library.
+
 **Website:** [rws8.tech](https://rws8.tech/)
 
-A dependency-minimal Rust web platform: HTTP/1.1, HTTP/2, and HTTP/3 server, reverse proxy, and application framework with routing, middleware (auth, rate limiting, tracing), an async ORM, background jobs, object storage, and a mailer. Runs as a zero-code config-driven proxy or as a library crate. No hyper, no Tower — HTTP/1.1, routing, and middleware are built in; HTTP/2 and HTTP/3 framing use the standard `h2` and `quinn` crates.
+```bash
+brew install bohdaq/tap/rws          # macOS / Linux — or: cargo binstall rust-web-server
+docker run -p 7878:7878 -v "$PWD:/srv" ghcr.io/bohdaq/rws
+```
 
-| Mode | Setup | Code required |
-|---|---|---|
-| **Static file server** | `brew install bohdaq/tap/rws && rws` | None |
-| **Config-driven proxy** | `rws.config.toml` with `[[route]]` / `[[upstream]]` | None |
-| **Library crate** | `cargo add rust-web-server` | Yes |
-
----
-
-## Why rws
-
-- **No hyper, no Tower, no Axum.** HTTP/1.1 parsing, CORS, MIME, range requests, WebSocket, SSE, routing, JWT, and base64 are implemented in this one crate — instead of pinning Axum + Tower + Hyper + a proxy crate + a JWT crate + a base64 crate and keeping their versions compatible. HTTP/2 and HTTP/3 framing use the widely deployed `h2` and `quinn`/`h3` crates, and TLS uses `rustls`.
-- **One `Middleware` trait, not ten Tower layers.** Auth, rate limiting, caching, tracing, rewriting, and the reverse proxy itself all implement the same `handle(request, connection, next)` signature — one pattern to learn, one pattern for an AI assistant to generate correctly.
-- **The gateway is in the binary.** Reverse proxy, TCP/UDP/WebSocket proxying, health checks, circuit breakers, and canary routing ship in the same crate as the app framework — no separate Traefik/Nginx process to run in front of it for common cases.
-- **SemVer since v1.** Frequent releases (currently v17) are additive; breaking changes only land on major version bumps. See [releases](https://github.com/bohdaq/rust-web-server/releases) for the changelog.
-
-## Contents
-
-- [Quick start — library](#quick-start--library)
-- [Quick start — static file server](#quick-start--static-file-server)
-- [Quick start — config-driven proxy](#quick-start--config-driven-proxy)
-- [Building apps with AI](#building-apps-with-ai)
-- [What's in the box](#whats-in-the-box)
-- [Optional features](#optional-features)
-- [Build from source](#build-from-source)
-- [Further reading](#further-reading)
+Prebuilt binaries for Linux (static, any distro), macOS, and Windows are on [GitHub Releases](https://github.com/bohdaq/rust-web-server/releases/latest).
 
 ---
 
-## Quick start — library
+## Serve a folder
+
+```bash
+cd my-site && rws
+```
+
+Serves the current directory on `http://localhost:7878` — `index.html`, directory listings, ETags, gzip, byte ranges (video seeking, resumable downloads), and an optional SPA fallback for client-side routers. `rws --help` lists every option.
+
+## Automatic HTTPS
+
+```toml
+# rws.config.toml
+port               = 443
+http_redirect_port = 80
+
+[acme]
+domains = ["example.com", "www.example.com"]
+email   = "you@example.com"
+```
+
+`rws` gets certificates from Let's Encrypt on first start, serves HTTPS with HTTP/2 and HTTP/3, redirects HTTP to HTTPS, and renews in the background with zero-downtime reloads. Retries until DNS is ready, IPv4 and IPv6, private ACME CAs supported. → [Automatic HTTPS](https://rws8.tech/features/acme/)
+
+## Reverse proxy
+
+```toml
+[[upstream]]
+name     = "app"
+backends = ["10.0.0.10:8080", "10.0.0.11:8080"]
+strategy = "least_connections"
+
+  [upstream.health_check]
+  path = "/healthz"
+
+[[route]]
+  [route.match]
+  host = "api.example.com"
+  path = "/v1/*"
+
+  [route.action]
+  type     = "proxy"
+  upstream = "app"
+
+  [route.middleware]
+  rate_limit = { max_requests = 500, window_secs = 60 }
+  auth       = { type = "bearer", token_env = "API_TOKEN" }
+```
+
+Load balancing (round-robin, least-connections, random, IP hash), active health checks, bearer / JWT / basic auth, rate limits, caching, IP allow/deny lists, header and URL rewrites, per-route timeouts and body limits — plus TCP, UDP, WebSocket, and gRPC proxying. Misconfigured auth fails closed. Circuit breakers, canary splits, forward auth, and service discovery are available from the library. Combine with `[acme]` for HTTPS in front of your apps. → [Config-driven proxy](https://rws8.tech/proxy/config-driven/) · [full config reference](https://rws8.tech/configuration/config-file/)
+
+---
+
+## Need custom logic? It's also a Rust library
+
+The server above is the `rust-web-server` crate. Use it directly when you need routes, middleware, or an MCP server in code:
 
 ```toml
 # Cargo.toml
@@ -69,88 +103,22 @@ async fn main() {
 }
 ```
 
-```bash
-$ curl http://localhost:7878/hello
-Hello, world!
-```
+Routing with path parameters, typed extractors, one `Middleware` trait for everything (auth, rate limiting, caching, tracing, the reverse proxy itself), WebSocket, SSE, an MCP server, an async ORM, background jobs, object storage, a mailer, and OAuth/OIDC/SAML login. See [DEVELOPER.md](DEVELOPER.md) for 78 runnable use cases.
 
-See [DEVELOPER](DEVELOPER.md) for 78 use-case examples covering JSON, auth, WebSocket, SSE, middleware, ORM, MCP, and more.
+## Why rws
 
----
+- **One binary, one file.** Static site, HTTPS, reverse proxy, and gateway features in a single executable configured by one `rws.config.toml` — no separate certbot, cron job, or proxy process.
+- **No hyper, no Tower, no Axum.** HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS, range requests, JWT, and the ACME client are implemented in this crate. HTTP/2 and HTTP/3 framing use the widely deployed `h2` and `quinn`/`h3` crates, and TLS uses `rustls` — no OpenSSL.
+- **Config and code share one engine.** Everything the TOML file does is a type you can use from Rust, so moving from configuration to code doesn't mean switching tools.
+- **SemVer since v1.** Frequent releases (currently v17) are additive; see [releases](https://github.com/bohdaq/rust-web-server/releases) for the changelog.
 
-## Quick start — static file server
+## Contents
 
-Install a prebuilt `rws` binary — no Rust toolchain needed:
-
-```bash
-brew install bohdaq/tap/rws                                  # macOS / Linux
-cargo binstall rust-web-server                               # prebuilt binary via cargo-binstall
-docker run -p 7878:7878 -v "$PWD:/srv" ghcr.io/bohdaq/rws     # Docker (amd64 / arm64)
-```
-
-Or download an archive for Linux (static musl), macOS, or Windows from [GitHub Releases](https://github.com/bohdaq/rust-web-server/releases/latest). Building from source with `cargo install rust-web-server` also works.
-
-```bash
-rws            # serves the current directory
-rws --help     # all options
-```
-
-Starts on `http://127.0.0.1:7878`. Place files in the working directory and open the URL.
-
-### With HTTPS + HTTP/2 + HTTP/3
-
-Generate a self-signed cert for local development:
-
-```bash
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes \
-  -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
-rws --tls-cert-file=cert.pem --tls-key-file=key.pem
-```
-
-HTTP/2 and HTTP/3 are negotiated automatically — no extra configuration needed. See [CONFIGURE](CONFIGURE.md) for all options.
-
----
-
-## Quick start — config-driven proxy
-
-Drop `rws.config.toml` in the working directory and run `rws` — no code required:
-
-```toml
-[[upstream]]
-name     = "api"
-backends = ["10.0.0.10:8080", "10.0.0.11:8080"]
-
-  [upstream.health_check]
-  path                = "/healthz"
-  interval_secs       = 10
-  timeout_ms          = 2000
-  healthy_threshold   = 2
-  unhealthy_threshold = 3
-
-[[route]]
-  [route.match]
-  host = "api.example.com"
-  path = "/v1/*"
-
-  [route.action]
-  type     = "proxy"
-  upstream = "api"
-
-  [route.middleware]
-  rate_limit = { max_requests = 500, window_secs = 60 }
-  auth       = { type = "bearer", token_env = "API_TOKEN" }
-
-[[route]]
-  [route.match]
-  path = "/*"
-
-  [route.action]
-  type   = "respond"
-  status = 404
-  body   = "Not Found"
-```
-
-See [`spec/PROXY_SERVER_CONFIG.md`](spec/PROXY_SERVER_CONFIG.md) for the full annotated config reference.
+- [Building apps with AI](#building-apps-with-ai)
+- [What's in the box](#whats-in-the-box)
+- [Optional features](#optional-features)
+- [Build from source](#build-from-source)
+- [Further reading](#further-reading)
 
 ---
 

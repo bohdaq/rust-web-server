@@ -4,11 +4,11 @@ version = "17.111.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
-description = "A dependency-minimal Rust web platform: HTTP/1.1, HTTP/2, and HTTP/3 server, reverse proxy, and application framework with routing, middleware (auth, rate limiting, tracing), an MCP server, an async ORM, background jobs, object storage, and a mailer. Runs as a zero-code config-driven proxy or as a library crate. No hyper, no Tower — HTTP/1.1, routing, and middleware are built in; HTTP/2 and HTTP/3 framing use the standard h2 and quinn crates."
+description = "Single-binary web server and reverse proxy: automatic HTTPS (Let's Encrypt), HTTP/1.1, HTTP/2 and HTTP/3, load balancing, auth and rate limiting, configured in one TOML file. Also a Rust library: routing, middleware, MCP server, ORM, background jobs. No hyper, no Tower; HTTP/2 and HTTP/3 framing via h2 and quinn."
 edition = "2021"
 rust-version = "1.88"
 license = "MIT"
-keywords = ["http", "web-server", "http3", "reverse-proxy", "mcp"]
+keywords = ["web-server", "reverse-proxy", "https", "http3", "acme"]
 categories = ["network-programming", "web-programming::http-server"]
 
 [workspace]
