@@ -2,7 +2,13 @@
 
 use super::BackendPool;
 
-const SCRATCHPAD: &str = "/private/tmp/claude-501/-Users-bohdantsap-git-rust-web-server/fca82dfb-17f6-4b5e-8147-6129313f132a/scratchpad";
+/// Per-process directory under the OS temp dir for file-source fixtures.
+fn scratchpad() -> String {
+    std::env::temp_dir()
+        .join(format!("rws_service_discovery_tests_{}", std::process::id()))
+        .to_string_lossy()
+        .into_owned()
+}
 
 // ── Static source ─────────────────────────────────────────────────────────────
 
@@ -50,8 +56,9 @@ fn env_prefix_empty_when_no_vars() {
 
 #[test]
 fn file_source_reads_file() {
-    let path = format!("{}/test_backends.txt", SCRATCHPAD);
-    std::fs::create_dir_all(SCRATCHPAD).unwrap();
+    let dir = scratchpad();
+    let path = format!("{}/test_backends.txt", dir);
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(&path, "10.0.0.1:8080\n10.0.0.2:8080\n").unwrap();
 
     let pool = BackendPool::file(&path);
@@ -64,8 +71,9 @@ fn file_source_reads_file() {
 
 #[test]
 fn file_source_ignores_comments_and_blank_lines() {
-    let path = format!("{}/test_backends_comments.txt", SCRATCHPAD);
-    std::fs::create_dir_all(SCRATCHPAD).unwrap();
+    let dir = scratchpad();
+    let path = format!("{}/test_backends_comments.txt", dir);
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         &path,
         "# primary backends\n10.0.0.1:8080\n\n# secondary\n10.0.0.2:9090\n",
