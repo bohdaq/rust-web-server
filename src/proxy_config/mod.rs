@@ -226,6 +226,28 @@ pub struct WsProxyConfig {
 
 // ── ProxyConfig loading ────────────────────────────────────────────────────────
 
+
+/// An action's settings may sit directly under `[route.action]` next to
+/// `type` (the short form README.md and the docs use), or in a nested
+/// `[route.action.<type>]` table (the long form). Copy short-form keys into
+/// the nested table so the parser reads one place; a key set in both keeps
+/// the nested value.
+fn merge_action_keys(map: &mut parser::SectionMap, action_section: &str, action_type: &str) {
+    if action_type.is_empty() {
+        return;
+    }
+    let short_form: Vec<(String, String)> = match map.get(action_section) {
+        Some(entries) => entries.iter().filter(|(k, _)| k != "type").cloned().collect(),
+        None => return,
+    };
+    let nested = map.entry(format!("{action_section}.{action_type}")).or_default();
+    for (key, value) in short_form {
+        if !nested.iter().any(|(k, _)| *k == key) {
+            nested.push((key, value));
+        }
+    }
+}
+
 impl ProxyConfig {
     /// Returns `true` if `rws.config.toml` (or `RWS_CONFIG_FILE`) contains
     /// `[[route]]` or `[[upstream]]` sections, meaning config-driven mode
@@ -251,7 +273,7 @@ impl ProxyConfig {
     pub fn from_str(toml: &str) -> Self {
         use parser::{get_array, get_str, get_u32, get_u64, section_exists};
 
-        let map = parser::parse(toml);
+        let mut map = parser::parse(toml);
 
         // ── upstreams ──────────────────────────────────────────────────────────
         let mut upstreams = Vec::new();
@@ -321,6 +343,7 @@ impl ProxyConfig {
             // action
             let a_sec = format!("{}.action", sec);
             let action_type = get_str(&map, &a_sec, "type");
+            merge_action_keys(&mut map, &a_sec, &action_type);
             let action = match action_type.as_str() {
                 "proxy" => {
                     let p_sec = format!("{}.action.proxy", sec);

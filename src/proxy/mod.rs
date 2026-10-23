@@ -261,7 +261,7 @@ impl ReverseProxy {
             if reusable {
                 self.pool.release(&key, stream);
             }
-            Response::parse(&resp_bytes)
+            Response::parse(&resp_bytes).map(normalize_upstream_response)
         }
     }
 }
@@ -484,7 +484,7 @@ pub(crate) fn proxy_http1(
     let mut stream = stream;
     stream.write_all(&req_bytes).map_err(|e| format!("write to backend failed: {}", e))?;
     let resp_bytes = read_response(&mut stream)?;
-    Response::parse(&resp_bytes)
+    Response::parse(&resp_bytes).map(normalize_upstream_response)
 }
 
 /// Forward a single HTTPS/1.1 request to `host:port` over TLS and return the
@@ -533,7 +533,44 @@ pub(crate) fn proxy_https1(
         .map_err(|e| format!("write to upstream failed: {}", e))?;
 
     let resp_bytes = read_response_from(&mut tls)?;
-    Response::parse(&resp_bytes)
+    Response::parse(&resp_bytes).map(normalize_upstream_response)
+}
+
+/// Headers rws regenerates for a buffered body, plus hop-by-hop headers
+/// (RFC 9110 §7.6.1) that must not be forwarded.
+const REGENERATED_OR_HOP_BY_HOP: &[&str] = &[
+    "content-length", "transfer-encoding", "connection", "keep-alive",
+    "proxy-connection", "te", "trailer", "upgrade",
+];
+
+/// Make a buffered upstream response safe to re-serialize. The body is
+/// already held in `content_range_list`, from which `Response::generate`
+/// (and the HTTP/2 / HTTP/3 writers) emit `Content-Type` and
+/// `Content-Length` themselves, so the upstream's own copies would be
+/// duplicated — and a duplicate `content-length` is a protocol error that
+/// HTTP/2 clients reject outright. The upstream's `Content-Type` is moved
+/// onto the body instead; the status line is re-emitted as HTTP/1.1
+/// regardless of the backend's version.
+pub(crate) fn normalize_upstream_response(mut response: Response) -> Response {
+    response.http_version = crate::http::VERSION.http_1_1.to_string();
+    let content_type = response
+        .headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case(crate::header::Header::_CONTENT_TYPE))
+        .map(|h| h.value.clone());
+    let has_body = !response.content_range_list.is_empty();
+    if let (Some(content_type), [range]) = (&content_type, response.content_range_list.as_mut_slice()) {
+        range.content_type = content_type.clone();
+    }
+    response.headers.retain(|h| {
+        let name = h.name.to_ascii_lowercase();
+        if name == "content-type" {
+            // Keep it only when there's no body to carry it (e.g. HEAD, 304).
+            return !has_body;
+        }
+        !REGENERATED_OR_HOP_BY_HOP.contains(&name.as_str())
+    });
+    response
 }
 
 fn bad_gateway() -> Response {
@@ -995,7 +1032,7 @@ where
         response.content_range_list = vec![Range::get_content_range(body_bytes, content_type)];
     }
 
-    Ok(response)
+    Ok(normalize_upstream_response(response))
 }
 
 // ── gRPC proxy ────────────────────────────────────────────────────────────────

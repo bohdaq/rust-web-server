@@ -752,3 +752,49 @@ async fn h2_reverse_proxy_does_not_panic_under_current_thread_runtime() {
     let response = app.execute(&get("/"), &conn()).unwrap();
     assert_eq!(502, response.status_code, "unreachable backend should yield 502, not a panic");
 }
+
+// ── upstream response normalization ───────────────────────────────────────────
+
+/// Python's http.server shape: HTTP/1.0, lowercase "Content-type".
+const PYTHON_STYLE_RESPONSE: &str =
+    "HTTP/1.0 200 OK\r\nServer: SimpleHTTP\r\nContent-type: text/html\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello";
+
+fn header_lines<'a>(raw: &'a str, name: &str) -> Vec<&'a str> {
+    raw.split("\r\n\r\n").next().unwrap()
+        .lines()
+        .filter(|l| l.to_ascii_lowercase().starts_with(&format!("{}:", name)))
+        .collect()
+}
+
+#[test]
+fn proxied_response_has_one_content_type_and_length_with_the_upstream_type() {
+    let port = mock_backend(PYTHON_STYLE_RESPONSE);
+    let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)]);
+    let resp = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
+    // What Server::process writes to the socket for HTTP/1.1.
+    let raw = String::from_utf8_lossy(&crate::response::Response::generate_response(resp, get("/"))).to_string();
+
+    assert!(raw.starts_with("HTTP/1.1 200"), "status line: {}", raw.lines().next().unwrap());
+    assert_eq!(vec!["Content-Type: text/html"], header_lines(&raw, "content-type"));
+    assert_eq!(vec!["Content-Length: 5"], header_lines(&raw, "content-length"));
+    assert!(header_lines(&raw, "connection").is_empty(), "hop-by-hop header forwarded");
+    assert_eq!(vec!["Server: SimpleHTTP"], header_lines(&raw, "server"), "end-to-end headers kept");
+    assert!(raw.ends_with("hello"));
+}
+
+#[test]
+fn normalize_keeps_content_type_header_when_there_is_no_body() {
+    use crate::header::Header;
+    use crate::response::Response;
+    let mut resp = Response::new();
+    resp.http_version = "HTTP/1.0".to_string();
+    resp.headers = vec![
+        Header { name: "content-type".to_string(), value: "text/html".to_string() },
+        Header { name: "Transfer-Encoding".to_string(), value: "chunked".to_string() },
+        Header { name: "ETag".to_string(), value: "\"abc\"".to_string() },
+    ];
+    let resp = crate::proxy::normalize_upstream_response(resp);
+    assert_eq!("HTTP/1.1", resp.http_version);
+    let names: Vec<&str> = resp.headers.iter().map(|h| h.name.as_str()).collect();
+    assert_eq!(vec!["content-type", "ETag"], names);
+}

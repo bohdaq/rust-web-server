@@ -1799,3 +1799,40 @@ fn max_body_size_zero_means_unset_not_zero_byte_limit() {
     let resp = app.execute(&request_with_body(&[b'x'; 5000]), &conn).unwrap();
     assert_eq!(200, resp.status_code);
 }
+
+// ── action keys directly under [route.action] (short form) ────────────────────
+
+#[test]
+fn from_str_reads_action_keys_written_directly_under_route_action() {
+    // The shape README.md and the docs use.
+    let cfg = ProxyConfig::from_str(
+        "[[upstream]]\nname = \"app\"\nbackends = [\"127.0.0.1:9099\"]\n\n\
+         [[route]]\n  [route.match]\n  path = \"/*\"\n\n  [route.action]\n  type     = \"proxy\"\n  upstream = \"app\"\n\n\
+         [[route]]\n  [route.match]\n  path = \"/x\"\n\n  [route.action]\n  type   = \"respond\"\n  status = 404\n  body   = \"Not Found\"\n",
+    );
+    match &cfg.routes[0].action {
+        ActionConfig::Proxy { upstream, .. } => assert_eq!(upstream, "app"),
+        other => panic!("expected Proxy, got {:?}", other),
+    }
+    match &cfg.routes[1].action {
+        ActionConfig::Respond { status, body, .. } => {
+            assert_eq!(*status, 404);
+            assert_eq!(body, "Not Found");
+        }
+        other => panic!("expected Respond, got {:?}", other),
+    }
+}
+
+#[test]
+fn from_str_nested_action_table_wins_over_short_form() {
+    let cfg = ProxyConfig::from_str(
+        "[[route]]\n  [route.match]\n  path = \"/*\"\n  [route.action]\n  type = \"proxy\"\n  upstream = \"short\"\n  connect_timeout_ms = 1000\n  [route.action.proxy]\n  upstream = \"nested\"\n",
+    );
+    match &cfg.routes[0].action {
+        ActionConfig::Proxy { upstream, connect_timeout_ms, .. } => {
+            assert_eq!(upstream, "nested");
+            assert_eq!(*connect_timeout_ms, 1000, "short-form keys absent from the nested table still apply");
+        }
+        other => panic!("expected Proxy, got {:?}", other),
+    }
+}

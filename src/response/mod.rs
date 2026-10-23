@@ -343,7 +343,8 @@ impl Response {
     pub const _HTTP_VERSION_AND_STATUS_CODE_AND_REASON_PHRASE_REGEX: &'static str = "(?P<http_version>\\w+/\\w+.\\w)\\s(?P<status_code>\\w+)\\s(?P<reason_phrase>.+)";
 
     pub fn _get_header(&self, name: String) -> Option<&Header> {
-        let header =  self.headers.iter().find(|x| x.name == name);
+        // Header names are case-insensitive (RFC 9110 §5.1), as in Request::get_header.
+        let header =  self.headers.iter().find(|x| x.name.eq_ignore_ascii_case(&name));
         header
     }
 
