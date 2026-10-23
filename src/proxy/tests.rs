@@ -798,3 +798,12 @@ fn normalize_keeps_content_type_header_when_there_is_no_body() {
     let names: Vec<&str> = resp.headers.iter().map(|h| h.name.as_str()).collect();
     assert_eq!(vec!["content-type", "ETag"], names);
 }
+
+#[test]
+fn proxy_relays_upstream_404_with_a_non_standard_reason_phrase() {
+    // Python's http.server: "404 File not found" — was turned into 502.
+    let port = mock_backend("HTTP/1.0 404 File not found\r\nContent-Type: text/html\r\nContent-Length: 9\r\nConnection: close\r\n\r\nnot found");
+    let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)]);
+    let resp = proxy.handle(&get("/missing"), &conn(), &App::new()).unwrap();
+    assert_eq!(404, resp.status_code);
+}

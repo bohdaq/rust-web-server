@@ -510,41 +510,19 @@ impl Response {
             return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
         }
 
-        let boxed_split = status_code_reason_phrase.split_once(SYMBOL.whitespace);
-        if boxed_split.is_none() {
-            return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
-        }
-        let (status_code, reason_phrase) = boxed_split.unwrap();
+        // RFC 9112 §4: status-line = HTTP-version SP status-code SP [ reason-phrase ].
+        // The reason phrase is optional free text that clients should ignore
+        // (Python's http.server sends "404 File not found"), and any 3-digit
+        // code is valid — so neither is checked against the known list.
+        let (status_code, reason_phrase) = status_code_reason_phrase
+            .split_once(SYMBOL.whitespace)
+            .unwrap_or((status_code_reason_phrase, ""));
 
-        let boxed_status_code_i16 = status_code.parse::<i16>();
-        if boxed_status_code_i16.is_err() {
-            return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
-        }
-
-        let status_code_i16 = boxed_status_code_i16.unwrap();
-
-        let list = Response::status_code_reason_phrase_list();
-        let boxed_search =
-            list
-                .iter()
-                .find(|x| {
-                    return x.status_code == &status_code_i16
-                });
-
-        if boxed_search.is_none() {
-            return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
-        }
-
-        let found_status_code_reason_phrase = boxed_search.unwrap();
-        let uppercase_reason_phrase = reason_phrase.to_uppercase();
-        let is_equal =
-            &found_status_code_reason_phrase.reason_phrase
-            .to_uppercase()
-                .eq(uppercase_reason_phrase.as_str());
-
-        if !is_equal {
-            return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
-        }
+        let is_three_digits = status_code.len() == 3 && status_code.bytes().all(|b| b.is_ascii_digit());
+        let status_code_i16 = match status_code.parse::<i16>() {
+            Ok(code) if is_three_digits && code >= 100 => code,
+            _ => return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string()),
+        };
 
         return Ok((http_version.to_string(), status_code_i16, reason_phrase.to_string()))
     }

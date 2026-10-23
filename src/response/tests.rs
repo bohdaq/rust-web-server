@@ -501,3 +501,14 @@ fn parse_no_boundary_at_the_beginning() {
     }
 }
 
+#[test]
+fn status_line_accepts_any_reason_phrase_and_any_three_digit_code() {
+    let parse = crate::response::Response::_parse_http_version_status_code_reason_phrase_string;
+    assert_eq!(Ok(("HTTP/1.0".to_string(), 404, "File not found".to_string())), parse("HTTP/1.0 404 File not found\r\n"));
+    assert_eq!(Ok(("HTTP/1.1".to_string(), 200, "".to_string())), parse("HTTP/1.1 200\r\n"), "reason phrase is optional");
+    assert_eq!(Ok(("HTTP/1.1".to_string(), 418, "I'm a teapot".to_string())), parse("HTTP/1.1 418 I'm a teapot\r\n"));
+    assert_eq!(Ok(("HTTP/1.1".to_string(), 599, "Custom".to_string())), parse("HTTP/1.1 599 Custom\r\n"));
+    for bad in ["HTTP/1.1 20 OK\r\n", "HTTP/1.1 2000 OK\r\n", "HTTP/1.1 abc OK\r\n", "HTTP/1.1 099 Low\r\n", "HTTP/9.9 200 OK\r\n"] {
+        assert!(parse(bad).is_err(), "{bad:?} should be rejected");
+    }
+}
