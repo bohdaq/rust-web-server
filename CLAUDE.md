@@ -25,7 +25,15 @@ cargo test
 
 # Run a single test (replace the test path with the one you want)
 cargo test --package rust-web-server --bin rws client_hint::tests::client_hints_header -- --exact
+
+# End-to-end checks against real implementations (CI runs both on every push):
+#   ACME against Pebble (Let's Encrypt's test CA): issuance, HTTPS h1/h2, proxy, redirects, renewal
+ci/e2e/acme_pebble.sh target/debug/rws <pebble-binary> <pebble-source-dir>
+#   HTTP/2 conformance with h2spec — must be 0 failed, 0 skipped
+ci/e2e/h2spec.sh target/debug/rws <h2spec-binary>
 ```
+
+Build `rws` with `--features "acme auth"` first for the ACME script. Pebble: `gh release download v2.10.1 --repo letsencrypt/pebble` (binary) plus `gh api repos/letsencrypt/pebble/tarball/v2.10.1` (its `test/` config and certs). h2spec: `gh release download v2.6.0 --repo summerwind/h2spec`. These caught bugs the unit tests didn't (ACME Host header/User-Agent, proxy 502s on non-canonical reason phrases, duplicate headers breaking HTTP/2) — run them after touching `acme`, `proxy`, `server`, `h2_handler`, or response parsing.
 
 MSRV is 1.88 (the highest `rust-version` among current dependencies across all features — tokio needs 1.85, `time`/`icu` via sqlx/tera need 1.88). CI checks it with the `msrv` job in `.github/workflows/ci.yml`; raise `rust-version` there and in `Cargo.toml` together.
 
@@ -182,6 +190,8 @@ Key config constants (all in `src/entry_point/mod.rs`):
 ACME (`acme` feature): `main.rs::start_acme()` → `AcmeConfig::from_env()` (empty env values = unset; cert/key default to the TLS paths, else `cert.pem`/`key.pem`) → `install_as_tls_certificate()` (fills empty `RWS_CONFIG_TLS_*` so `run_tls` serves it) → `provision_until_ready()` (backoff retry) → `run_renewal_loop()`. HTTP-01 key authorizations live in a process-wide store (`acme::challenges()`); a temporary listener serves them at startup, and once `Server::run_redirect` has bound the challenge port (`note_redirect_listener`) it serves them instead, so renewal never re-binds port 80. Challenge and redirect listeners use `server::bind_all_families` (IPv4 + IPv6). The ACME HTTP client sends `User-Agent` and a `Host` header with non-default ports, and trusts `RWS_CONFIG_ACME_CA_FILE` roots for private CAs. Verified end to end against Pebble.
 
 Byte ranges: `Range::parse_range_in_content_range` returns an **inclusive** `end` (RFC 9110 §14.1.2: open-ended/suffix ranges end at the last byte, a last-pos past EOF is clamped, oversized suffixes select the whole file). `response::content_range_header_value(status, cr)` is the single source of the `Content-Range` header — emitted only on `206` — used by `generate_response`, `generate`, `h2_handler`, `h3_handler`, and `TestClient`. Note `Range::get_content_range(body, ..)` (full bodies) still stores `end = len`; it never reaches a header because full bodies are `200`.
+
+`Response::_parse_http_version_status_code_reason_phrase_string` (used by `Response::parse`, which parses every proxied upstream response) accepts any 3-digit status ≥ 100 and any or no reason phrase (RFC 9112 §4) — it used to require the canonical phrase for a known code, so a backend's "404 File not found" became a 502. HTTP/2 advertises `SETTINGS_MAX_CONCURRENT_STREAMS = h2_handler::MAX_CONCURRENT_STREAMS` (250).
 
 Proxied buffered responses go through `proxy::normalize_upstream_response`: upstream `Content-Type` moves onto the body's `ContentRange`, upstream `Content-Length`/`Transfer-Encoding`/hop-by-hop headers are dropped (rws regenerates them — a duplicate `content-length` is an HTTP/2 protocol error), and the status line is re-emitted as HTTP/1.1. Streaming (`stream_pipe`) responses are not normalized.
 

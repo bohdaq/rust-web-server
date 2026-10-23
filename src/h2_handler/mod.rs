@@ -20,13 +20,21 @@ const FORBIDDEN_H2_RESPONSE_HEADERS: &[&str] = &[
     "te",
 ];
 
+/// `SETTINGS_MAX_CONCURRENT_STREAMS` advertised to every HTTP/2 client.
+/// Without it one connection may open unlimited simultaneous streams — a
+/// resource-exhaustion vector. 250 matches Go's net/http (nginx uses 128);
+/// HTTP/3 has the equivalent limit from quinn's default transport config.
+pub const MAX_CONCURRENT_STREAMS: u32 = 250;
+
 pub async fn handle_connection(
     stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     peer_addr: std::net::SocketAddr,
     sni_hostname: Option<String>,
     app: impl Application + Send + Clone + 'static,
 ) -> Result<(), String> {
-    let mut conn = h2::server::handshake(stream)
+    let mut conn = h2::server::Builder::new()
+        .max_concurrent_streams(MAX_CONCURRENT_STREAMS)
+        .handshake(stream)
         .await
         .map_err(|e| format!("H2 handshake failed: {}", e))?;
 

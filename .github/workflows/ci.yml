@@ -47,6 +47,41 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --all-features
 
+  # End-to-end checks against real external implementations — see ci/e2e/.
+  e2e:
+    name: e2e (${{ matrix.check }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [acme-pebble, h2spec]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: e2e
+      - run: cargo build --bin rws --features "acme auth"
+      - name: ACME against Pebble (Let's Encrypt's test CA)
+        if: matrix.check == 'acme-pebble'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/pebble/src"
+          gh release download v2.10.1 --repo letsencrypt/pebble --pattern 'pebble-linux-amd64.tar.gz' --dir "$RUNNER_TEMP/pebble"
+          tar xzf "$RUNNER_TEMP/pebble/pebble-linux-amd64.tar.gz" -C "$RUNNER_TEMP/pebble"
+          gh api repos/letsencrypt/pebble/tarball/v2.10.1 | tar xz -C "$RUNNER_TEMP/pebble/src" --strip-components=1
+          pebble_bin="$(find "$RUNNER_TEMP/pebble" -type f -name pebble -perm -u+x | head -1)"
+          ci/e2e/acme_pebble.sh target/debug/rws "$pebble_bin" "$RUNNER_TEMP/pebble/src"
+      - name: HTTP/2 conformance (h2spec)
+        if: matrix.check == 'h2spec'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v2.6.0 --repo summerwind/h2spec --pattern 'h2spec_linux_amd64.tar.gz' --dir "$RUNNER_TEMP"
+          tar xzf "$RUNNER_TEMP/h2spec_linux_amd64.tar.gz" -C "$RUNNER_TEMP"
+          ci/e2e/h2spec.sh target/debug/rws "$RUNNER_TEMP/h2spec"
+
   audit:
     name: cargo audit
     runs-on: ubuntu-latest
