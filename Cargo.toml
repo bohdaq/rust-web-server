@@ -119,4 +119,4 @@ rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs
 # the #[cfg(target_arch = "wasm32")] send_once in src/http_client/mod.rs and
 # spec/WASM_SHIM.md Phase 2 item 7. Native builds never see this dependency.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasip2 = "1.0"
+wasip2 = "2.0"

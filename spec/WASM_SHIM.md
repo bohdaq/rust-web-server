@@ -133,7 +133,7 @@ rws-wasm-shim/
 (`bytecodealliance/wasi-rs`) already vendors the `wasi:http@0.2.x` WIT package and ships generated
 Rust bindings, including `wasip2::exports::http::incoming_handler::Guest`,
 `wasip2::http::proxy::export!`, and (under its default `std` feature) `impl std::io::Read for
-InputStream` / `impl std::io::Write for OutputStream`. One dependency (`wasip2 = "1.0"`) instead
+InputStream` / `impl std::io::Write for OutputStream`. One dependency (`wasip2 = "2.0"`) instead
 of a wit-bindgen build step. `wit-bindgen`, `wasmtime`, `wasmtime-wasi-http` as dev-dependencies
 turned out unnecessary too — see item 4.
 
@@ -312,7 +312,7 @@ sources.
   add wasm32-wasip2` and `brew install wasmtime` (46.0.1) both worked with no friction.
 - No dev-only tooling needed in the end — `wit-bindgen`/`wasmtime`/`wasmtime-wasi-http` as
   dev-dependencies turned out unnecessary (see Phase 1 item 4). `rws-wasm-shim`'s only dependency
-  is `wasip2 = "1.0"`.
+  is `wasip2 = "2.0"`.
 - **Still open**: a CI job that installs `wasm32-wasip2` + `wasmtime`, builds the release
   component, runs it under `wasmtime serve` in the background, and curls it (scripting the manual
   verification already done) — kept separate from the main `cargo test` job, not blocking it.
