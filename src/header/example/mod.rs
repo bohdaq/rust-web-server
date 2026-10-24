@@ -23,8 +23,8 @@ fn parse() {
 #[test]
 fn build() {
     let header = Header {
-        name: "Custom-Header".to_string(),
-        value: "some value".to_string()
+        name: "Custom-Header".into(),
+        value: "some value".into()
     };
 
     let header_string = header.generate();

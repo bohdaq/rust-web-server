@@ -125,7 +125,7 @@ impl Controller for StaticResourceController {
 
                 if boxed_modified_date_time.is_ok() {
                     let modified_date_time = boxed_modified_date_time.unwrap();
-                    let last_modified_unix_nanos = Header{ name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.to_string(), value: modified_date_time.to_string() };
+                    let last_modified_unix_nanos = Header{ name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: modified_date_time.to_string().into() };
                     response.headers.push(last_modified_unix_nanos);
 
                     let file_size = metadata(&static_filepath).map(|m| m.len()).unwrap_or(0);
@@ -136,12 +136,12 @@ impl Controller for StaticResourceController {
                         if inm.value == etag_value || inm.value == "*" {
                             response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
                             response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
-                            response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
+                            response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
                             return response;
                         }
                     }
 
-                    response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
+                    response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
 
                     // Stream large files (> 8 MB) without loading into memory, unless it's
                     // a range request (which needs precise byte slicing from the loaded body).
@@ -149,12 +149,12 @@ impl Controller for StaticResourceController {
                     if file_size > StaticResourceController::STREAM_THRESHOLD && !is_range_request {
                         let mime = MimeType::detect_mime_type(&static_filepath);
                         response.headers.push(Header {
-                            name: Header::_CONTENT_TYPE.to_string(),
-                            value: mime,
+                            name: Header::_CONTENT_TYPE.into(),
+                            value: mime.into(),
                         });
                         response.headers.push(Header {
-                            name: Header::_CONTENT_LENGTH.to_string(),
-                            value: file_size.to_string(),
+                            name: Header::_CONTENT_LENGTH.into(),
+                            value: file_size.to_string().into(),
                         });
                         response.status_code = *status_code_reason_phrase.status_code;
                         response.reason_phrase = status_code_reason_phrase.reason_phrase.to_string();
@@ -249,7 +249,7 @@ impl StaticResourceController {
 
                 if boxed_modified_date_time.is_ok() {
                     let modified_date_time = boxed_modified_date_time.unwrap();
-                    let last_modified_unix_nanos = Header{ name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.to_string(), value: modified_date_time.to_string() };
+                    let last_modified_unix_nanos = Header{ name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: modified_date_time.to_string().into() };
                     response.headers.push(last_modified_unix_nanos);
 
                     let file_size = metadata(&static_filepath).map(|m| m.len()).unwrap_or(0);
@@ -260,23 +260,23 @@ impl StaticResourceController {
                         if inm.value == etag_value || inm.value == "*" {
                             response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
                             response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
-                            response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
+                            response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
                             return response;
                         }
                     }
 
-                    response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
+                    response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
 
                     let is_range_request = request.header(Header::_RANGE).is_some();
                     if file_size > StaticResourceController::STREAM_THRESHOLD && !is_range_request {
                         let mime = MimeType::detect_mime_type(&static_filepath);
                         response.headers.push(Header {
-                            name: Header::_CONTENT_TYPE.to_string(),
-                            value: mime,
+                            name: Header::_CONTENT_TYPE.into(),
+                            value: mime.into(),
                         });
                         response.headers.push(Header {
-                            name: Header::_CONTENT_LENGTH.to_string(),
-                            value: file_size.to_string(),
+                            name: Header::_CONTENT_LENGTH.into(),
+                            value: file_size.to_string().into(),
                         });
                         response.status_code = *status_code_reason_phrase.status_code;
                         response.reason_phrase = status_code_reason_phrase.reason_phrase.to_string();
@@ -364,8 +364,8 @@ impl StaticResourceController {
         };
 
         let mut response = std::mem::replace(response, Response::empty());
-        response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.to_string(), value: modified.as_str().to_string() });
-        response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
+        response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: modified.as_str().to_string().into() });
+        response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
         if not_modified {
             response.set_status(STATUS_CODE_REASON_PHRASE.n304_not_modified);
             return Some(response);
@@ -373,8 +373,8 @@ impl StaticResourceController {
         response.set_status(STATUS_CODE_REASON_PHRASE.n200_ok);
 
         if state.len > StaticResourceController::STREAM_THRESHOLD {
-            response.headers.push(Header { name: Header::_CONTENT_TYPE.to_string(), value: mime.to_string() });
-            response.headers.push(Header { name: Header::_CONTENT_LENGTH.to_string(), value: len.as_str().to_string() });
+            response.headers.push(Header { name: Header::_CONTENT_TYPE.into(), value: mime.to_string().into() });
+            response.headers.push(Header { name: Header::_CONTENT_LENGTH.into(), value: len.as_str().to_string().into() });
             response.stream_file = Some(fs_path);
             return Some(response);
         }
@@ -434,8 +434,8 @@ impl StaticResourceController {
 
                 if File::open(&index_html_fs_path).is_ok() {
                     let mut range_header = &Header {
-                        name: Header::_RANGE.to_string(),
-                        value: "bytes=0-".to_string()
+                        name: Header::_RANGE.into(),
+                        value: "bytes=0-".into()
                     };
 
                     let boxed_header = request.header(Header::_RANGE);
@@ -464,8 +464,8 @@ impl StaticResourceController {
                 let md = metadata(&static_filepath).unwrap();
                 if md.is_dir() {
                     let mut range_header = &Header {
-                        name: Header::_RANGE.to_string(),
-                        value: "bytes=0-".to_string()
+                        name: Header::_RANGE.into(),
+                        value: "bytes=0-".into()
                     };
 
                     let boxed_header = request.header(Header::_RANGE);
@@ -494,8 +494,8 @@ impl StaticResourceController {
 
                 if md.is_file() {
                     let mut range_header = &Header {
-                        name: Header::_RANGE.to_string(),
-                        value: "bytes=0-".to_string()
+                        name: Header::_RANGE.into(),
+                        value: "bytes=0-".into()
                     };
 
                     let boxed_header = request.header(Header::_RANGE);
@@ -523,8 +523,8 @@ impl StaticResourceController {
                     let md = metadata(&static_filepath).unwrap();
                     if md.is_file() {
                         let mut range_header = &Header {
-                            name: Header::_RANGE.to_string(),
-                            value: "bytes=0-".to_string()
+                            name: Header::_RANGE.into(),
+                            value: "bytes=0-".into()
                         };
 
                         let boxed_header = request.header(Header::_RANGE);
@@ -565,8 +565,8 @@ impl StaticResourceController {
         if content_range_list.is_empty() {
             if let Some(fallback_url_path) = spa_fallback_url_path(&components.path) {
                 let mut range_header = &Header {
-                    name: Header::_RANGE.to_string(),
-                    value: "bytes=0-".to_string()
+                    name: Header::_RANGE.into(),
+                    value: "bytes=0-".into()
                 };
 
                 let boxed_header = request.header(Header::_RANGE);

@@ -67,7 +67,7 @@ fn generate() {
 
     let form_url_encoded : String = FormUrlEncoded::generate(params_map);
 
-    let host = Header { name: Header::_HOST.to_string(), value: "localhost".to_string() };
+    let host = Header { name: Header::_HOST.into(), value: "localhost".into() };
 
     let endpoint = "/endpoint";
 

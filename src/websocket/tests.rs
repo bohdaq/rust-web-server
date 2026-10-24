@@ -68,10 +68,10 @@ fn upgrade_request() -> Request {
         request_uri: "/ws".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![
-            Header { name: "Upgrade".to_string(),              value: "websocket".to_string() },
-            Header { name: "Connection".to_string(),           value: "Upgrade".to_string() },
-            Header { name: "Sec-WebSocket-Key".to_string(),    value: "dGhlIHNhbXBsZSBub25jZQ==".to_string() },
-            Header { name: "Sec-WebSocket-Version".to_string(), value: "13".to_string() },
+            Header { name: "Upgrade".into(),              value: "websocket".into() },
+            Header { name: "Connection".into(),           value: "Upgrade".into() },
+            Header { name: "Sec-WebSocket-Key".into(),    value: "dGhlIHNhbXBsZSBub25jZQ==".into() },
+            Header { name: "Sec-WebSocket-Version".into(), value: "13".into() },
         ],
         body: vec![],
     }
@@ -108,7 +108,7 @@ fn is_upgrade_request_rejects_missing_key() {
 fn is_upgrade_request_rejects_wrong_upgrade_value() {
     let mut req = upgrade_request();
     for h in &mut req.headers {
-        if h.name == "Upgrade" { h.value = "h2c".to_string(); }
+        if h.name == "Upgrade" { h.value = "h2c".into(); }
     }
     assert!(!WebSocket::is_upgrade_request(&req));
 }

@@ -34,13 +34,13 @@ fn check_range_response_is_ok_two_part() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let range = Header {
-        name: Header::_RANGE.to_string(),
-        value: range_header_value.to_string()
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
     };
 
     let headers = vec![host, range];
@@ -131,13 +131,13 @@ fn check_range_response_is_ok_single_part() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let range = Header {
-        name: Header::_RANGE.to_string(),
-        value: range_header_value.to_string()
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
     };
 
     let headers = vec![host, range];
@@ -193,8 +193,8 @@ fn get_right_content_range_of_a_file() {
     let file_size = md.len();
 
     let header = Header {
-        name: Header::_RANGE.to_string(),
-        value: "bytes=200-1000, 1200-1400, 2000-2300, 11000-, -500, 0-, 0-1".to_string()
+        name: Header::_RANGE.into(),
+        value: "bytes=200-1000, 1200-1400, 2000-2300, 11000-, -500, 0-, 0-1".into()
     };
 
     let content_range_list : Vec<ContentRange> = Range::get_content_range_list(image_path, &header).unwrap();

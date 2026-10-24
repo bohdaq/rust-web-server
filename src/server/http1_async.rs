@@ -213,11 +213,11 @@ where
             let alt_svc = format!("h3=\":{}\"", server_port);
             #[cfg(not(feature = "http3"))]
             let alt_svc = format!("h2=\":{}\"", server_port);
-            response.headers.push(Header { name: Header::_ALT_SVC.to_string(), value: alt_svc });
+            response.headers.push(Header { name: Header::_ALT_SVC.into(), value: alt_svc.into() });
         }
         response.headers.push(Header {
-            name: Header::_CONNECTION.to_string(),
-            value: if keep_alive { "keep-alive" } else { "close" }.to_string(),
+            name: Header::_CONNECTION.into(),
+            value: if keep_alive { "keep-alive" } else { "close" }.into(),
         });
 
         Log::log_access(&request, &response, &peer_addr);
@@ -696,7 +696,7 @@ mod tests {
     impl Application for SizedFile {
         fn execute(&self, _request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
             let mut response = Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None);
-            response.headers.push(Header { name: Header::_CONTENT_LENGTH.to_string(), value: self.1.to_string() });
+            response.headers.push(Header { name: Header::_CONTENT_LENGTH.into(), value: self.1.to_string().into() });
             response.stream_file = Some(self.0.clone());
             Ok(response)
         }

@@ -93,7 +93,7 @@ fn upload(
     // 1. Get boundary from Content-Type
     let content_type = req
         .get_header("content-type")
-        .map(|h| h.value.clone())
+        .map(|h| h.value.to_string())
         .unwrap_or_default();
 
     let boundary = match FormMultipartData::extract_boundary(&content_type) {
@@ -217,14 +217,8 @@ use rust_web_server::header::Header;
 
 let file_part = Part {
     headers: vec![
-        Header {
-            name: "Content-Disposition".to_string(),
-            value: r#"form-data; name="avatar"; filename="photo.jpg""#.to_string(),
-        },
-        Header {
-            name: "Content-Type".to_string(),
-            value: "image/jpeg".to_string(),
-        },
+        Header::new("Content-Disposition", r#"form-data; name="avatar"; filename="photo.jpg""#),
+        Header::new("Content-Type", "image/jpeg"),
     ],
     body: include_bytes!("photo.jpg").to_vec(),
 };

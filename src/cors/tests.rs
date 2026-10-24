@@ -24,35 +24,35 @@ fn cors_options_preflight_request() {
     let request_host_header_name = Header::_HOST;
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let request_origin_header_name = Header::_ORIGIN;
     let request_origin_header_value = "https://foo.example";
     let origin = Header {
-        name: request_origin_header_name.to_string(),
-        value: request_origin_header_value.to_string()
+        name: request_origin_header_name.to_string().into(),
+        value: request_origin_header_value.to_string().into()
     };
 
     let request_access_control_request_method_header_name = Header::_ACCESS_CONTROL_REQUEST_METHOD;
     let request_access_control_request_method_header_value = "POST";
     let access_control_request_method = Header {
-        name: request_access_control_request_method_header_name.to_string(),
-        value: request_access_control_request_method_header_value.to_string()
+        name: request_access_control_request_method_header_name.to_string().into(),
+        value: request_access_control_request_method_header_value.to_string().into()
     };
 
     let request_access_control_request_headers_header_name = Header::_ACCESS_CONTROL_REQUEST_HEADERS;
     let request_access_control_request_headers_header_value = "content-type,x-custom-header";
     let access_control_request_headers = Header {
-        name: request_access_control_request_headers_header_name.to_string(),
-        value: request_access_control_request_headers_header_value.to_string()
+        name: request_access_control_request_headers_header_name.to_string().into(),
+        value: request_access_control_request_headers_header_value.to_string().into()
     };
 
     // aplication/json content type header makes this request follow the regular CORS flow
     let content_type = Header {
-        name: Header::_CONTENT_TYPE.to_string(),
-        value: MimeType::APPLICATION_JSON.to_string()
+        name: Header::_CONTENT_TYPE.into(),
+        value: MimeType::APPLICATION_JSON.into()
     };
 
     let headers = vec![host, origin, access_control_request_method, access_control_request_headers, content_type];
@@ -143,21 +143,21 @@ fn actual_request_after_preflight() {
     let request_host_header_name = Header::_HOST;
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     // aplication/json content type header makes this request follow the regular CORS flow
     let content_type = Header {
-        name: Header::_CONTENT_TYPE.to_string(),
-        value: MimeType::APPLICATION_JSON.to_string()
+        name: Header::_CONTENT_TYPE.into(),
+        value: MimeType::APPLICATION_JSON.into()
     };
 
     let request_origin_header_name = Header::_ORIGIN;
     let request_origin_header_value = "https://foo.example";
     let origin = Header {
-        name: request_origin_header_name.to_string(),
-        value: request_origin_header_value.to_string()
+        name: request_origin_header_name.to_string().into(),
+        value: request_origin_header_value.to_string().into()
     };
 
     let headers = vec![host, content_type, origin];
@@ -239,16 +239,16 @@ fn cors_allow_all() {
         http_version: "".to_string(),
         headers: vec![
             Header {
-                name: Header::_ORIGIN.to_string(),
-                value: origin_value.to_string()
+                name: Header::_ORIGIN.into(),
+                value: origin_value.to_string().into()
             },
             Header {
-                name: Header::_ACCESS_CONTROL_REQUEST_METHOD.to_string(),
-                value: METHOD.post.to_string()
+                name: Header::_ACCESS_CONTROL_REQUEST_METHOD.into(),
+                value: METHOD.post.to_string().into()
             },
             Header {
-                name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
-                value: expected_allow_headers
+                name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.into(),
+                value: expected_allow_headers.into()
             },
         ],
         body: vec![],
@@ -304,8 +304,8 @@ fn cors_process() {
         http_version: "".to_string(),
         headers: vec![
             Header {
-                name: Header::_ORIGIN.to_string(),
-                value: origin_value.to_string()
+                name: Header::_ORIGIN.into(),
+                value: origin_value.to_string().into()
             }
         ],
         body: vec![],
@@ -381,8 +381,8 @@ fn cors_process_default_config() {
         http_version: "".to_string(),
         headers: vec![
             Header {
-                name: Header::_ORIGIN.to_string(),
-                value: origin_value.to_string()
+                name: Header::_ORIGIN.into(),
+                value: origin_value.to_string().into()
             }
         ],
         body: vec![],
@@ -443,8 +443,8 @@ fn cors_process_empty_config() {
         http_version: "".to_string(),
         headers: vec![
             Header {
-                name: Header::_ORIGIN.to_string(),
-                value: origin_value.to_string()
+                name: Header::_ORIGIN.into(),
+                value: origin_value.to_string().into()
             }
         ],
         body: vec![],

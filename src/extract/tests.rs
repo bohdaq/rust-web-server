@@ -86,7 +86,7 @@ fn request_headers_get_case_insensitive() {
         method: "GET".to_string(),
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers: vec![Header { name: "Content-Type".to_string(), value: "text/plain".to_string() }],
+        headers: vec![Header { name: "Content-Type".into(), value: "text/plain".into() }],
         body: vec![],
     };
     let headers = RequestHeaders::from_request(&req).unwrap();

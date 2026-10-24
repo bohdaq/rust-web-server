@@ -185,7 +185,7 @@ impl Router {
             let actual = connection.sni_hostname.as_deref().or_else(|| {
                 request.headers.iter()
                     .find(|h| h.name.eq_ignore_ascii_case("host"))
-                    .map(|h| h.value.as_str())
+                    .map(|h| h.value.as_ref())
             });
             if actual != Some(required_host.as_str()) {
                 return None;

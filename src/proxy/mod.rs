@@ -290,7 +290,7 @@ pub(crate) fn build_request(
         out.extend_from_slice(part.as_bytes());
     }
     for h in request.headers.iter().filter(forwarded) {
-        for part in [h.name.as_str(), ": ", h.value.as_str(), "\r\n"] {
+        for part in [h.name.as_ref(), ": ", h.value.as_ref(), "\r\n"] {
             out.extend_from_slice(part.as_bytes());
         }
     }
@@ -439,7 +439,8 @@ pub(crate) fn normalize_upstream_response(mut response: Response) -> Response {
             .iter()
             .find(|h| h.name.eq_ignore_ascii_case(crate::header::Header::_CONTENT_TYPE))
         {
-            range.content_type.clone_from(&h.value);
+            range.content_type.clear();
+            range.content_type.push_str(&h.value);
         }
     }
     // Compared in place (the list is lower-case ASCII), not lower-cased
@@ -951,8 +952,8 @@ fn parse_status_and_headers(header_bytes: &[u8]) -> Result<Response, String> {
         if line.is_empty() { break; }
         if let Some(colon) = line.find(':') {
             headers.push(crate::header::Header {
-                name: line[..colon].trim().to_string(),
-                value: line[colon + 1..].trim().to_string(),
+                name: line[..colon].trim().to_string().into(),
+                value: (line[colon + 1..].trim().to_string()).into(),
             });
         }
     }
@@ -1246,7 +1247,7 @@ where
         if lower.is_empty() || HOP_BY_HOP.contains(&lower.as_str()) || lower == "host" {
             continue;
         }
-        builder = builder.header(&h.name, &h.value);
+        builder = builder.header(h.name.as_ref(), h.value.as_ref());
     }
     builder = builder.header("x-forwarded-for", client_ip);
     builder = builder.header("via", "2 rws");
@@ -1292,8 +1293,8 @@ where
         }
         if let Ok(v) = value.to_str() {
             response.headers.push(crate::header::Header {
-                name: name.as_str().to_string(),
-                value: v.to_string(),
+                name: name.as_str().to_string().into(),
+                value: v.to_string().into(),
             });
         }
     }
@@ -1365,7 +1366,7 @@ impl crate::middleware::Middleware for GrpcProxy {
     ) -> Result<crate::response::Response, String> {
         let ct = request
             .get_header("content-type".to_string())
-            .map(|h| h.value.as_str())
+            .map(|h| h.value.as_ref())
             .unwrap_or("");
         if ct.starts_with("application/grpc") {
             self.inner.handle(request, connection, next)

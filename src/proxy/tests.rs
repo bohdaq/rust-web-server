@@ -381,16 +381,16 @@ fn hop_by_hop_headers_are_stripped() {
 
     let mut req = get("/");
     req.headers.push(crate::header::Header {
-        name: "Connection".to_string(),
-        value: "keep-alive".to_string(),
+        name: "Connection".into(),
+        value: "keep-alive".into(),
     });
     req.headers.push(crate::header::Header {
-        name: "Transfer-Encoding".to_string(),
-        value: "chunked".to_string(),
+        name: "Transfer-Encoding".into(),
+        value: "chunked".into(),
     });
     req.headers.push(crate::header::Header {
-        name: "X-Custom".to_string(),
-        value: "should-pass".to_string(),
+        name: "X-Custom".into(),
+        value: "should-pass".into(),
     });
 
     let proxy = ReverseProxy::new([format!("http://127.0.0.1:{}", port)]);
@@ -789,13 +789,13 @@ fn normalize_keeps_content_type_header_when_there_is_no_body() {
     let mut resp = Response::new();
     resp.http_version = "HTTP/1.0".to_string();
     resp.headers = vec![
-        Header { name: "content-type".to_string(), value: "text/html".to_string() },
-        Header { name: "Transfer-Encoding".to_string(), value: "chunked".to_string() },
-        Header { name: "ETag".to_string(), value: "\"abc\"".to_string() },
+        Header { name: "content-type".into(), value: "text/html".into() },
+        Header { name: "Transfer-Encoding".into(), value: "chunked".into() },
+        Header { name: "ETag".into(), value: "\"abc\"".into() },
     ];
     let resp = crate::proxy::normalize_upstream_response(resp);
     assert_eq!("HTTP/1.1", resp.http_version);
-    let names: Vec<&str> = resp.headers.iter().map(|h| h.name.as_str()).collect();
+    let names: Vec<&str> = resp.headers.iter().map(|h| h.name.as_ref()).collect();
     assert_eq!(vec!["content-type", "ETag"], names);
 }
 
@@ -1085,7 +1085,7 @@ fn normalize_upstream_response_moves_content_type_and_drops_regenerated_headers(
     let response = crate::proxy::normalize_upstream_response(crate::response::Response::parse(raw).unwrap());
     assert_eq!("HTTP/1.1", response.http_version);
     assert_eq!("text/x", response.content_range_list[0].content_type);
-    let names: Vec<&str> = response.headers.iter().map(|h| h.name.as_str()).collect();
+    let names: Vec<&str> = response.headers.iter().map(|h| h.name.as_ref()).collect();
     assert_eq!(vec!["X-Up"], names);
     // No body: Content-Type stays as a header.
     let head = crate::response::Response::parse(b"HTTP/1.1 304 Not Modified\r\nContent-Type: text/x\r\n\r\n").unwrap();

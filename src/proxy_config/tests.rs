@@ -80,16 +80,16 @@ fn route_matcher_host() {
     // With matching Host header
     let mut req = make_request("GET", "/");
     req.headers.push(crate::header::Header {
-        name: "Host".to_string(),
-        value: "example.com".to_string(),
+        name: "Host".into(),
+        value: "example.com".into(),
     });
     assert!(matcher.matches(&req, &conn));
 
     // With non-matching Host header
     let mut req2 = make_request("GET", "/");
     req2.headers.push(crate::header::Header {
-        name: "Host".to_string(),
-        value: "other.com".to_string(),
+        name: "Host".into(),
+        value: "other.com".into(),
     });
     assert!(!matcher.matches(&req2, &conn));
 }
@@ -307,8 +307,8 @@ content_type = "text/plain"
     // pinned fallback App and should reflect its CORS settings, not env vars.
     let mut req = make_request("GET", "/healthz");
     req.headers.push(Header {
-        name: Header::_ORIGIN.to_string(),
-        value: "https://evil.example.com".to_string(),
+        name: Header::_ORIGIN.into(),
+        value: "https://evil.example.com".into(),
     });
 
     let resp = app.execute(&req, &conn).unwrap();
@@ -342,7 +342,7 @@ status = 301
         .headers
         .iter()
         .find(|h| h.name == "Location")
-        .map(|h| h.value.as_str())
+        .map(|h| h.value.as_ref())
         .unwrap_or("");
     assert_eq!(location, "https://example.com/new");
 }
@@ -401,16 +401,16 @@ fn route_matcher_content_type_prefix_matches() {
     // Matching prefix
     let mut req = make_request("POST", "/");
     req.headers.push(crate::header::Header {
-        name: "Content-Type".to_string(),
-        value: "application/grpc+proto".to_string(),
+        name: "Content-Type".into(),
+        value: "application/grpc+proto".into(),
     });
     assert!(matcher.matches(&req, &conn));
 
     // Non-matching content-type
     let mut req2 = make_request("POST", "/");
     req2.headers.push(crate::header::Header {
-        name: "Content-Type".to_string(),
-        value: "application/json".to_string(),
+        name: "Content-Type".into(),
+        value: "application/json".into(),
     });
     assert!(!matcher.matches(&req2, &conn));
 
@@ -450,8 +450,8 @@ fn route_matcher_host_and_path_both_required() {
 
     let mut req_right_host = make_request("GET", "/api/users");
     req_right_host.headers.push(crate::header::Header {
-        name: "Host".to_string(),
-        value: "example.com".to_string(),
+        name: "Host".into(),
+        value: "example.com".into(),
     });
     // Both host and path match → matches
     assert!(matcher.matches(&req_right_host, &conn));
@@ -459,16 +459,16 @@ fn route_matcher_host_and_path_both_required() {
     // Wrong host, correct path → no match
     let mut req_wrong_host = make_request("GET", "/api/users");
     req_wrong_host.headers.push(crate::header::Header {
-        name: "Host".to_string(),
-        value: "other.com".to_string(),
+        name: "Host".into(),
+        value: "other.com".into(),
     });
     assert!(!matcher.matches(&req_wrong_host, &conn));
 
     // Correct host, wrong path → no match
     let mut req_wrong_path = make_request("GET", "/other");
     req_wrong_path.headers.push(crate::header::Header {
-        name: "Host".to_string(),
-        value: "example.com".to_string(),
+        name: "Host".into(),
+        value: "example.com".into(),
     });
     assert!(!matcher.matches(&req_wrong_path, &conn));
 }
@@ -869,7 +869,7 @@ status = 301
     let conn = make_conn("127.0.0.1");
     let resp = app.execute(&make_request("GET", "/about"), &conn).unwrap();
     assert_eq!(resp.status_code, 301);
-    let location = resp.headers.iter().find(|h| h.name == "Location").map(|h| h.value.as_str()).unwrap_or("");
+    let location = resp.headers.iter().find(|h| h.name == "Location").map(|h| h.value.as_ref()).unwrap_or("");
     assert_eq!(location, "https://new.example.com/about");
 }
 
@@ -968,8 +968,8 @@ token_env = "RWSTEST_PROXY_BEARER_B"
     let conn = make_conn("127.0.0.1");
     let mut req = make_request("GET", "/secret");
     req.headers.push(crate::header::Header {
-        name: "Authorization".to_string(),
-        value: "Bearer wrong-token".to_string(),
+        name: "Authorization".into(),
+        value: "Bearer wrong-token".into(),
     });
     let resp = app.execute(&req, &conn).unwrap();
     assert_eq!(resp.status_code, 401);
@@ -1001,8 +1001,8 @@ token_env = "RWSTEST_PROXY_BEARER_C"
     let conn = make_conn("127.0.0.1");
     let mut req = make_request("GET", "/secret");
     req.headers.push(crate::header::Header {
-        name: "Authorization".to_string(),
-        value: "Bearer my-valid-token".to_string(),
+        name: "Authorization".into(),
+        value: "Bearer my-valid-token".into(),
     });
     let resp = app.execute(&req, &conn).unwrap();
     assert_eq!(resp.status_code, 200);
@@ -1054,8 +1054,8 @@ secret_env = "{secret_env}"
         let conn = make_conn("127.0.0.1");
         let mut req = make_request("GET", "/secret");
         req.headers.push(crate::header::Header {
-            name: "Authorization".to_string(),
-            value: "Bearer not-a-valid-jwt".to_string(),
+            name: "Authorization".into(),
+            value: "Bearer not-a-valid-jwt".into(),
         });
         let resp = app.execute(&req, &conn).unwrap();
         assert_eq!(401, resp.status_code);
@@ -1071,8 +1071,8 @@ secret_env = "{secret_env}"
         let token = crate::auth::build_jwt(r#"{"sub":"u1"}"#, b"my-signing-secret");
         let mut req = make_request("GET", "/secret");
         req.headers.push(crate::header::Header {
-            name: "Authorization".to_string(),
-            value: format!("Bearer {token}"),
+            name: "Authorization".into(),
+            value: format!("Bearer {token}").into(),
         });
         let resp = app.execute(&req, &conn).unwrap();
         assert_eq!(200, resp.status_code);
@@ -1128,8 +1128,8 @@ htpasswd_file = "{htpasswd_file}"
 
         let mut req = make_request("GET", "/secret");
         req.headers.push(crate::header::Header {
-            name: "Authorization".to_string(),
-            value: format!("Basic {}", crate::auth::base64_encode(b"alice:s3cret")),
+            name: "Authorization".into(),
+            value: format!("Basic {}", crate::auth::base64_encode(b"alice:s3cret")).into(),
         });
         let resp = app.execute(&req, &conn).unwrap();
         assert_eq!(200, resp.status_code);
@@ -1146,8 +1146,8 @@ htpasswd_file = "{htpasswd_file}"
 
         let mut req = make_request("GET", "/secret");
         req.headers.push(crate::header::Header {
-            name: "Authorization".to_string(),
-            value: format!("Basic {}", crate::auth::base64_encode(b"alice:wrongpass")),
+            name: "Authorization".into(),
+            value: format!("Basic {}", crate::auth::base64_encode(b"alice:wrongpass")).into(),
         });
         let resp = app.execute(&req, &conn).unwrap();
         assert_eq!(401, resp.status_code);
@@ -1271,7 +1271,7 @@ value = "DENY"
     let conn = make_conn("127.0.0.1");
     let resp = app.execute(&make_request("GET", "/page"), &conn).unwrap();
     assert_eq!(resp.status_code, 200);
-    let xfo = resp.headers.iter().find(|h| h.name.eq_ignore_ascii_case("X-Frame-Options")).map(|h| h.value.as_str()).unwrap_or("");
+    let xfo = resp.headers.iter().find(|h| h.name.eq_ignore_ascii_case("X-Frame-Options")).map(|h| h.value.as_ref()).unwrap_or("");
     assert_eq!(xfo, "DENY");
 }
 
@@ -1862,7 +1862,7 @@ token_env = "RWSTEST_PROXY_BEARER_UNSET"
     let conn = make_conn("127.0.0.1");
     // Even a request carrying "Bearer " (an empty token) must not get through.
     let mut req = make_request("GET", "/admin");
-    req.headers.push(crate::header::Header { name: "Authorization".to_string(), value: "Bearer ".to_string() });
+    req.headers.push(crate::header::Header { name: "Authorization".into(), value: "Bearer ".into() });
     let resp = app.execute(&req, &conn).unwrap();
     assert_eq!(503, resp.status_code);
     let body: Vec<u8> = resp.content_range_list.iter().flat_map(|c| c.body.clone()).collect();
@@ -1944,7 +1944,7 @@ fn inline_bearer_auth_protects_the_route() {
     let conn = make_conn("127.0.0.1");
     assert_eq!(app.execute(&make_request("GET", "/secret"), &conn).unwrap().status_code, 401);
     let mut authorized = make_request("GET", "/secret");
-    authorized.headers.push(crate::header::Header { name: "Authorization".to_string(), value: "Bearer inline-token".to_string() });
+    authorized.headers.push(crate::header::Header { name: "Authorization".into(), value: "Bearer inline-token".into() });
     assert_eq!(app.execute(&authorized, &conn).unwrap().status_code, 200);
 }
 

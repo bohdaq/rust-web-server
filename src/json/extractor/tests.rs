@@ -63,14 +63,14 @@ fn deref_gives_access_to_inner() {
 
 #[test]
 fn serializes_to_200_with_json_body() {
-    let user = User { name: "Carol".to_string(), age: 40 };
+    let user = User { name: "Carol".into(), age: 40 };
     let response = Json(user).into_response();
     assert_eq!(200, response.status_code);
 }
 
 #[test]
 fn serialized_body_is_valid_json() {
-    let user = User { name: "Dave".to_string(), age: 50 };
+    let user = User { name: "Dave".into(), age: 50 };
     let response = Json(user).into_response();
     let body = &response.content_range_list[0].body;
     let parsed: User = serde_json::from_slice(body).unwrap();
@@ -80,14 +80,14 @@ fn serialized_body_is_valid_json() {
 
 #[test]
 fn into_response_content_type_is_application_json() {
-    let response = Json(User { name: "Eve".to_string(), age: 20 }).into_response();
+    let response = Json(User { name: "Eve".into(), age: 20 }).into_response();
     assert_eq!(MimeType::APPLICATION_JSON, response.content_range_list[0].content_type);
 }
 
 #[test]
 fn roundtrip_serialize_deserialize() {
-    let original = User { name: "Frank".to_string(), age: 35 };
-    let response = Json(User { name: "Frank".to_string(), age: 35 }).into_response();
+    let original = User { name: "Frank".into(), age: 35 };
+    let response = Json(User { name: "Frank".into(), age: 35 }).into_response();
     let body = &response.content_range_list[0].body;
     let parsed: User = serde_json::from_slice(body).unwrap();
     assert_eq!(original, parsed);

@@ -100,7 +100,8 @@ Response        src/response/mod.rs      — status_code: i16, reason_phrase: St
                                            (pipe bytes to client via chunked encoding;
                                             set by ReverseProxy for SSE / AI streams / large downloads)
 
-Header          src/header/mod.rs        — name: String, value: String
+Header          src/header/mod.rs        — name: Cow<'static, str>, value: Cow<'static, str> (18.0.0)
+                                           Header::new(name, value) — &'static str borrowed, String owned
                                            (constants: Header::_CONTENT_TYPE, etc.)
 
 ConnectionInfo  src/server/mod.rs        — client: Address { ip, port },
@@ -136,7 +137,7 @@ r.content_range_list = vec![Range::get_content_range(
     b"Hello".to_vec(),
     MimeType::TEXT_PLAIN.to_string(),
 )];
-r.headers.push(Header { name: "X-Custom".to_string(), value: "value".to_string() });
+r.headers.push(Header::new("X-Custom", "value"));
 ```
 
 ### JSON / text response shortcut (no `serde` feature needed)
@@ -159,7 +160,7 @@ For a typed `Serialize` value in one call (handles serialization for you), use `
 let mut r = Response::new();
 r.status_code = *STATUS_CODE_REASON_PHRASE.n302_found.status_code;
 r.reason_phrase = STATUS_CODE_REASON_PHRASE.n302_found.reason_phrase.to_string();
-r.headers.push(Header { name: "Location".to_string(), value: "/destination".to_string() });
+r.headers.push(Header::new("Location", "/destination"));
 ```
 
 ### Typed error pattern
@@ -380,10 +381,7 @@ let mut session = state.sessions.create();
 session.set("user_id", "42");
 state.sessions.save(&session);
 // Set cookie on response:
-response.headers.push(Header {
-    name: "Set-Cookie".to_string(),
-    value: session_cookie(&session.id, "sid", 3600),
-});
+response.headers.push(Header::new("Set-Cookie", session_cookie(&session.id, "sid", 3600)));
 
 // Load a session:
 let sid = session_id_from_request(request, "sid")?;
@@ -392,10 +390,7 @@ let user_id = session.get("user_id")?;
 
 // Destroy:
 state.sessions.destroy(&sid);
-response.headers.push(Header {
-    name: "Set-Cookie".to_string(),
-    value: destroy_cookie("sid"),
-});
+response.headers.push(Header::new("Set-Cookie", destroy_cookie("sid")));
 ```
 
 `Session.id` is a public `String` field.

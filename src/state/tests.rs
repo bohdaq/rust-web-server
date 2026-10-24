@@ -58,7 +58,7 @@ struct State {
 #[test]
 fn state_accessible_in_get_handler() {
     let app = AppWithState::new(State {
-        value: "hello".to_string(),
+        value: "hello".into(),
         counter: std::sync::atomic::AtomicU32::new(0),
     })
     .get("/greet", |_req, _params, _conn, state| {
@@ -281,8 +281,8 @@ fn with_config_pins_cors_denial_on_fallback_request() {
 
     let mut req = get("/does-not-exist");
     req.headers.push(Header {
-        name: Header::_ORIGIN.to_string(),
-        value: "https://evil.example.com".to_string(),
+        name: Header::_ORIGIN.into(),
+        value: "https://evil.example.com".into(),
     });
 
     let resp = app.execute(&req, &conn()).unwrap();
@@ -303,8 +303,8 @@ fn with_config_allows_cors_for_configured_origin_on_fallback_request() {
 
     let mut req = get("/does-not-exist");
     req.headers.push(Header {
-        name: Header::_ORIGIN.to_string(),
-        value: "https://trusted.example.com".to_string(),
+        name: Header::_ORIGIN.into(),
+        value: "https://trusted.example.com".into(),
     });
 
     let resp = app.execute(&req, &conn()).unwrap();

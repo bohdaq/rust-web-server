@@ -310,7 +310,7 @@ impl SamlSp {
         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
         r.content_range_list = vec![Range::get_content_range(html.into_bytes(), MimeType::TEXT_HTML.to_string())];
-        r.headers.push(Header { name: "Set-Cookie".to_string(), value: session_cookie(&session.id, SESSION_COOKIE, SESSION_TTL) });
+        r.headers.push(Header { name: "Set-Cookie".into(), value: session_cookie(&session.id, SESSION_COOKIE, SESSION_TTL).into() });
         r
     }
 
@@ -369,7 +369,7 @@ impl SamlSp {
         self.config.sessions.save(&session);
 
         let mut r = Self::redirect(&return_to);
-        r.headers.push(Header { name: "Set-Cookie".to_string(), value: session_cookie(&session.id, SESSION_COOKIE, SESSION_TTL) });
+        r.headers.push(Header { name: "Set-Cookie".into(), value: session_cookie(&session.id, SESSION_COOKIE, SESSION_TTL).into() });
         r
     }
 
@@ -378,7 +378,7 @@ impl SamlSp {
             self.config.sessions.destroy(&sid);
         }
         let mut r = Self::redirect("/");
-        r.headers.push(Header { name: "Set-Cookie".to_string(), value: destroy_cookie(SESSION_COOKIE) });
+        r.headers.push(Header { name: "Set-Cookie".into(), value: destroy_cookie(SESSION_COOKIE).into() });
         r
     }
 
@@ -386,7 +386,7 @@ impl SamlSp {
         let mut r = Response::new();
         r.status_code = *STATUS_CODE_REASON_PHRASE.n302_found.status_code;
         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n302_found.reason_phrase.to_string();
-        r.headers.push(Header { name: "Location".to_string(), value: url.to_string() });
+        r.headers.push(Header { name: "Location".into(), value: url.to_string().into() });
         r
     }
 
@@ -422,7 +422,7 @@ impl Middleware for SamlSp {
             if let Some(session) = self.config.sessions.load(&sid) {
                 if let Some(claims_json) = session.get("_saml_claims") {
                     let mut req = request.clone();
-                    req.headers.push(Header { name: CLAIMS_HEADER.to_string(), value: claims_json.to_string() });
+                    req.headers.push(Header { name: CLAIMS_HEADER.to_string().into(), value: claims_json.to_string().into() });
                     return next.execute(&req, connection);
                 }
             }

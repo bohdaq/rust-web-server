@@ -107,7 +107,7 @@ pub(super) fn via_cursor(
             let boxed_content_type = response.header(Header::_CONTENT_TYPE);
             if boxed_content_type.is_some() {
                 let content_type_header = response.header(Header::_CONTENT_TYPE).unwrap();
-                content_type = content_type_header.value.as_str();
+                content_type = content_type_header.value.as_ref();
                 is_multipart = Response::_is_multipart_byteranges_content_type(&content_type_header);
             }
 
@@ -119,7 +119,7 @@ pub(super) fn via_cursor(
                     return Err("Content-Type is missing".to_string());
                 }
                 let content_type = boxed_content_type.unwrap();
-                let boxed_boundary = FormMultipartData::extract_boundary(content_type.value.as_str());
+                let boxed_boundary = FormMultipartData::extract_boundary(content_type.value.as_ref());
                 if boxed_boundary.is_err() {
                     return Err("unable to extract boundary from Content-Type".to_string());
                 }
@@ -206,8 +206,8 @@ pub(super) fn header_line(header_string: &str) -> Result<Header, String> {
     let header_value = StringExt::truncate_new_line_carriage_return(&raw_header_value);
 
     Ok(Header {
-        name: header_name.to_string(),
-        value: header_value.to_string()
+        name: header_name.to_string().into(),
+        value: header_value.to_string().into()
     })
 }
 

@@ -81,7 +81,7 @@ pub(crate) fn body_framing(request: &Request) -> Result<BodyFraming, String> {
         } else if header.name.eq_ignore_ascii_case(Header::_TRANSFER_ENCODING) {
             let joined = match transfer_encoding.take() {
                 Some(prev) => format!("{}, {}", prev, header.value),
-                None => header.value.clone(),
+                None => header.value.clone().into_owned(),
             };
             transfer_encoding = Some(joined);
         }
@@ -218,7 +218,7 @@ mod tests {
             method: "POST".to_string(),
             request_uri: "/".to_string(),
             http_version: "HTTP/1.1".to_string(),
-            headers: headers.iter().map(|(n, v)| Header { name: n.to_string(), value: v.to_string() }).collect(),
+            headers: headers.iter().map(|(n, v)| Header { name: n.to_string().into(), value: v.to_string().into() }).collect(),
             body: vec![],
         }
     }

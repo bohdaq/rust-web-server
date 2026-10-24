@@ -193,7 +193,7 @@ impl Middleware for RewriteLayer {
             match rule {
                 RequestRule::SetHeader { name, value } => {
                     req.headers.retain(|h| !h.name.eq_ignore_ascii_case(name));
-                    req.headers.push(Header { name: name.clone(), value: value.clone() });
+                    req.headers.push(Header { name: name.clone().into(), value: value.clone().into() });
                 }
                 RequestRule::RemoveHeader(name) => {
                     req.headers.retain(|h| !h.name.eq_ignore_ascii_case(name));
@@ -230,7 +230,7 @@ impl Middleware for RewriteLayer {
             match rule {
                 ResponseRule::SetHeader { name, value } => {
                     response.headers.retain(|h| !h.name.eq_ignore_ascii_case(name));
-                    response.headers.push(Header { name: name.clone(), value: value.clone() });
+                    response.headers.push(Header { name: name.clone().into(), value: value.clone().into() });
                 }
                 ResponseRule::RemoveHeader(name) => {
                     response.headers.retain(|h| !h.name.eq_ignore_ascii_case(name));

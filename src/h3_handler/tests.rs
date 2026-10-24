@@ -30,7 +30,7 @@ impl Application for H3App {
             }
             "/big" => {
                 let mut response = Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None);
-                response.headers.push(Header { name: Header::_CONTENT_LENGTH.to_string(), value: BIG_FILE_SIZE.to_string() });
+                response.headers.push(Header { name: Header::_CONTENT_LENGTH.into(), value: BIG_FILE_SIZE.to_string().into() });
                 response.stream_file = Some(self.big_file.clone());
                 Ok(response)
             }

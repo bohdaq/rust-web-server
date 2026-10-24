@@ -406,7 +406,7 @@ fn if_none_match_returns_304_not_modified() {
         method: METHOD.get.to_string(),
         request_uri: "/static/test.txt".to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers: vec![Header { name: Header::_IF_NONE_MATCH.to_string(), value: etag.clone() }],
+        headers: vec![Header { name: Header::_IF_NONE_MATCH.into(), value: etag.clone() }],
         body: vec![],
     };
 
@@ -435,7 +435,7 @@ fn if_none_match_star_returns_304() {
         method: METHOD.get.to_string(),
         request_uri: "/static/test.txt".to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers: vec![Header { name: Header::_IF_NONE_MATCH.to_string(), value: "*".to_string() }],
+        headers: vec![Header { name: Header::_IF_NONE_MATCH.into(), value: "*".into() }],
         body: vec![],
     };
 
@@ -459,8 +459,8 @@ fn stale_etag_returns_200_with_body() {
         request_uri: "/static/test.txt".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![Header {
-            name: Header::_IF_NONE_MATCH.to_string(),
-            value: "\"outdated-etag-value\"".to_string(),
+            name: Header::_IF_NONE_MATCH.into(),
+            value: "\"outdated-etag-value\"".into(),
         }],
         body: vec![],
     };
@@ -731,7 +731,7 @@ fn large_file_is_streamed_without_being_read() {
     assert!(response.stream_file.is_some(), "large file must stream");
     assert!(response.content_range_list.is_empty(), "and must not be loaded into memory");
     let length = response.headers.iter().find(|h| h.name == Header::_CONTENT_LENGTH).map(|h| h.value.clone());
-    assert_eq!(Some((StaticResourceController::STREAM_THRESHOLD + 1).to_string()), length);
+    assert_eq!(Some((StaticResourceController::STREAM_THRESHOLD + 1).to_string()), length.map(|v| v.into_owned()));
 }
 
 #[test]
@@ -740,7 +740,7 @@ fn large_file_honours_if_none_match() {
     let first = StaticResourceController::process_request(&static_request(METHOD.get, &file.0, vec![]), Response::new());
     let etag = first.headers.iter().find(|h| h.name == Header::_ETAG).unwrap().value.clone();
     let second = StaticResourceController::process_request(
-        &static_request(METHOD.get, &file.0, vec![Header { name: Header::_IF_NONE_MATCH.to_string(), value: etag }]),
+        &static_request(METHOD.get, &file.0, vec![Header { name: Header::_IF_NONE_MATCH.into(), value: etag }]),
         Response::new(),
     );
     assert_eq!(304, second.status_code);
@@ -756,7 +756,7 @@ fn small_files_and_ranges_take_the_regular_path() {
 
     let large = ServedFile::new("ranged.bin", (StaticResourceController::STREAM_THRESHOLD + 1) as usize);
     let ranged = StaticResourceController::process_request(
-        &static_request(METHOD.get, &large.0, vec![Header { name: Header::_RANGE.to_string(), value: "bytes=0-9".to_string() }]),
+        &static_request(METHOD.get, &large.0, vec![Header { name: Header::_RANGE.into(), value: "bytes=0-9".into() }]),
         Response::new(),
     );
     assert_eq!(206, ranged.status_code);
@@ -777,7 +777,7 @@ fn small_file_fast_path_serves_body_type_and_etag() {
     assert!(etag.ends_with("-300\""), "{etag}");
 
     let cached = StaticResourceController::process_request(
-        &static_request(METHOD.get, &file.0, vec![Header { name: Header::_IF_NONE_MATCH.to_string(), value: etag }]),
+        &static_request(METHOD.get, &file.0, vec![Header { name: Header::_IF_NONE_MATCH.into(), value: etag }]),
         Response::new(),
     );
     assert_eq!(304, cached.status_code);

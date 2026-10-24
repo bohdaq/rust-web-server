@@ -155,7 +155,7 @@ async fn list_users(pool: Arc<DbPool>, page: u64, per_page: u64) -> Response {
     r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
     if let Some(link) = page.link_header("https://api.example.com/users") {
-        r.headers.push(Header { name: "Link".to_string(), value: link });
+        r.headers.push(Header::new("Link", link));
     }
     // serialize `page.items`, `page.total_items`, `page.total_pages` into the response body
     r

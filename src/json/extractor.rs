@@ -45,7 +45,7 @@ use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 /// #[derive(Serialize)]
 /// struct UserResponse { id: u64, name: String }
 ///
-/// let response = Json(UserResponse { id: 1, name: "Alice".to_string() }).into_response();
+/// let response = Json(UserResponse { id: 1, name: "Alice".into() }).into_response();
 /// ```
 #[derive(Debug)]
 pub struct Json<T>(pub T);

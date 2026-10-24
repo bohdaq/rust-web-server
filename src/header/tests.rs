@@ -21,7 +21,7 @@ fn parse_not_valid_header() {
 
 #[test]
 fn header_test() {
-    let header = Header { name: Header::_ORIGIN.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_ORIGIN.into(), value: "some string".into() };
 
     assert_eq!(header.name, Header::_ORIGIN.to_string());
     assert_eq!(header.value, "some string".to_string());
@@ -29,71 +29,71 @@ fn header_test() {
 
 #[test]
 fn header_constants() {
-    let header = Header { name: Header::_CONTENT_TYPE.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_CONTENT_TYPE.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_CONTENT_TYPE.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_CONTENT_LENGTH.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_CONTENT_LENGTH.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_CONTENT_LENGTH.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_X_CONTENT_TYPE_OPTIONS.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_X_CONTENT_TYPE_OPTIONS.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_X_CONTENT_TYPE_OPTIONS.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_RANGE.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_RANGE.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_RANGE.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_ACCEPT_RANGES.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_ACCEPT_RANGES.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_ACCEPT_RANGES.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_CONTENT_RANGE.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_CONTENT_RANGE.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_CONTENT_RANGE.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_HOST.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_HOST.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_HOST.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_VARY.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_VARY.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_VARY.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_ORIGIN.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_ORIGIN.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_ORIGIN.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_ACCESS_CONTROL_REQUEST_METHOD.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_ACCESS_CONTROL_REQUEST_METHOD.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_ACCESS_CONTROL_REQUEST_METHOD.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_ACCESS_CONTROL_ALLOW_METHODS.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_ACCESS_CONTROL_ALLOW_METHODS.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_ACCESS_CONTROL_ALLOW_METHODS.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_ACCESS_CONTROL_MAX_AGE.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_ACCESS_CONTROL_MAX_AGE.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_ACCESS_CONTROL_MAX_AGE.to_string());
     assert_eq!(header.value, "some string".to_string());
 
-    let header = Header { name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string(), value: "some string".to_string() };
+    let header = Header { name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.into(), value: "some string".into() };
     assert_eq!(header.name, Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string());
     assert_eq!(header.value, "some string".to_string());
 
@@ -206,7 +206,7 @@ fn security_headers_in_header_list() {
     };
 
     let headers = Header::get_header_list(&request);
-    let names: Vec<&str> = headers.iter().map(|h| h.name.as_str()).collect();
+    let names: Vec<&str> = headers.iter().map(|h| h.name.as_ref()).collect();
 
     assert!(names.contains(&Header::_REFERRER_POLICY));
     assert!(names.contains(&Header::_PERMISSIONS_POLICY));
@@ -220,4 +220,35 @@ fn security_headers_in_header_list() {
 
     let csp = headers.iter().find(|h| h.name == Header::_CONTENT_SECURITY_POLICY).unwrap();
     assert_eq!(csp.value, Header::_CONTENT_SECURITY_POLICY_VALUE_DEFAULT);
+}
+#[test]
+fn header_new_borrows_static_strings_and_owns_strings() {
+    use std::borrow::Cow;
+    let h = Header::new(Header::_CONTENT_TYPE, "text/plain");
+    assert!(matches!(h.name, Cow::Borrowed(_)) && matches!(h.value, Cow::Borrowed(_)));
+    let h = Header::new("X-Id", format!("{}-{}", 1, 2));
+    assert!(matches!(h.value, Cow::Owned(_)));
+    assert_eq!("1-2", h.value);
+    assert_eq!("X-Id: 1-2", h.as_string());
+}
+
+// The standard headers are cloned onto every response: all but the
+// per-request Date must be borrowed, so that clone allocates nothing.
+#[test]
+fn standard_header_list_is_borrowed_except_date() {
+    use std::borrow::Cow;
+    use crate::server_config::ServerConfig;
+    let request = crate::request::Request { method: "GET".to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] };
+    for csp in ["", "default-src 'self'", "default-src 'none'"] {
+        let config = ServerConfig { csp: csp.to_string(), ..ServerConfig::default() };
+        let list = Header::get_header_list_with_config(&request, &config);
+        assert!(list.len() >= 9);
+        for h in &list {
+            assert!(matches!(h.name, Cow::Borrowed(_)), "{:?}", h.name);
+            if h.name != Header::_DATE_UNIX_EPOCH_NANOS {
+                assert!(matches!(h.value, Cow::Borrowed(_)), "{}: {:?}", h.name, h.value);
+            }
+        }
+        assert_eq!(!csp.is_empty(), list.iter().any(|h| h.name == Header::_CONTENT_SECURITY_POLICY && h.value == csp));
+    }
 }

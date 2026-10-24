@@ -93,8 +93,8 @@ async fn handle_stream(
     for (name, value) in request.headers() {
         if let Ok(v) = value.to_str() {
             headers.push(Header {
-                name: name.as_str().to_string(),
-                value: v.to_string(),
+                name: name.as_str().to_string().into(),
+                value: v.to_string().into(),
             });
         }
     }
@@ -173,24 +173,24 @@ async fn send_h3_response(
     if rws_response.content_range_list.len() == 1 {
         let cr = &rws_response.content_range_list[0];
         rws_response.headers.push(Header {
-            name: Header::_CONTENT_TYPE.to_string(),
-            value: cr.content_type.clone(),
+            name: Header::_CONTENT_TYPE.into(),
+            value: cr.content_type.clone().into(),
         });
         let content_range = crate::response::content_range_header_value(rws_response.status_code, cr);
         rws_response.headers.push(Header {
-            name: Header::_CONTENT_LENGTH.to_string(),
-            value: cr.body.len().to_string(),
+            name: Header::_CONTENT_LENGTH.into(),
+            value: cr.body.len().to_string().into(),
         });
         if let Some(value) = content_range {
             rws_response.headers.push(Header {
-                name: Header::_CONTENT_RANGE.to_string(),
-                value,
+                name: Header::_CONTENT_RANGE.into(),
+                value: value.into(),
             });
         }
     } else if rws_response.content_range_list.len() > 1 {
         rws_response.headers.push(Header {
-            name: Header::_CONTENT_TYPE.to_string(),
-            value: crate::range::Range::MULTIPART_BYTERANGES_CONTENT_TYPE.to_string(),
+            name: Header::_CONTENT_TYPE.into(),
+            value: crate::range::Range::MULTIPART_BYTERANGES_CONTENT_TYPE.into(),
         });
     }
 

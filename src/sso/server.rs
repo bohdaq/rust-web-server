@@ -408,7 +408,7 @@ impl AuthServer {
         let mut r = Response::new();
         r.status_code = *STATUS_CODE_REASON_PHRASE.n302_found.status_code;
         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n302_found.reason_phrase.to_string();
-        r.headers.push(Header { name: "Location".to_string(), value: url.to_string() });
+        r.headers.push(Header { name: "Location".into(), value: url.to_string().into() });
         r
     }
 

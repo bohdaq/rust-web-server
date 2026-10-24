@@ -99,8 +99,8 @@ pub fn apply_gzip(request: &Request, response: &mut Response) {
     }
 
     response.headers.push(Header {
-        name: Header::_CONTENT_ENCODING.to_string(),
-        value: "gzip".to_string(),
+        name: Header::_CONTENT_ENCODING.into(),
+        value: "gzip".into(),
     });
 
     // append Accept-Encoding to Vary, or add it
@@ -108,12 +108,12 @@ pub fn apply_gzip(request: &Request, response: &mut Response) {
     if let Some(i) = vary_pos {
         let current = response.headers[i].value.clone();
         if !current.to_lowercase().contains("accept-encoding") {
-            response.headers[i].value = format!("{}, Accept-Encoding", current);
+            response.headers[i].value = format!("{}, Accept-Encoding", current).into();
         }
     } else {
         response.headers.push(Header {
-            name: Header::_VARY.to_string(),
-            value: "Accept-Encoding".to_string(),
+            name: Header::_VARY.into(),
+            value: "Accept-Encoding".into(),
         });
     }
 }

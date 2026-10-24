@@ -234,7 +234,7 @@ mod derive {
 
     fn valid_user() -> CreateUser {
         CreateUser {
-            name: "Alice".to_string(),
+            name: "Alice".into(),
             email: "alice@example.com".to_string(),
             age: 30,
         }
@@ -247,7 +247,7 @@ mod derive {
 
     #[test]
     fn empty_name_fails_length_min() {
-        let u = CreateUser { name: "".to_string(), ..valid_user() };
+        let u = CreateUser { name: "".into(), ..valid_user() };
         let err = u.validate().unwrap_err();
         assert!(err.errors().iter().any(|e| e.field == "name"));
     }
@@ -277,7 +277,7 @@ mod derive {
     #[test]
     fn multiple_invalid_fields_accumulate_all_errors() {
         let u = CreateUser {
-            name: "".to_string(),
+            name: "".into(),
             email: "bad".to_string(),
             age: 200,
         };
@@ -312,14 +312,14 @@ mod derive {
 
     #[test]
     fn required_rejects_empty_string() {
-        let p = RequiredPayload { value: "".to_string() };
+        let p = RequiredPayload { value: "".into() };
         let err = p.validate().unwrap_err();
         assert!(err.errors().iter().any(|e| e.field == "value"));
     }
 
     #[test]
     fn required_accepts_non_empty_string() {
-        let p = RequiredPayload { value: "hello".to_string() };
+        let p = RequiredPayload { value: "hello".into() };
         assert!(p.validate().is_ok());
     }
 

@@ -322,10 +322,10 @@ impl Request {
         let line = header_string.trim_end_matches(['\r', '\n']);
         match line.split_once(':') {
             Some((name, value)) => Header {
-                name: name.to_string(),
-                value: value.trim_matches([' ', '\t']).to_string(),
+                name: name.to_string().into(),
+                value: value.trim_matches([' ', '\t']).to_string().into(),
             },
-            None => Header { name: line.to_string(), value: String::new() },
+            None => Header { name: line.to_string().into(), value: String::new().into() },
         }
     }
 

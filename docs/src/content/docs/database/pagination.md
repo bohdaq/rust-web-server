@@ -65,7 +65,7 @@ let page: Page<User> = User::query(&pool).paginate(2, 20).await?;
 
 let mut response = Response::new();
 if let Some(link) = page.link_header("https://api.example.com/users") {
-    response.headers.push(Header { name: "Link".to_string(), value: link });
+    response.headers.push(Header::new("Link", link));
 }
 // Link: <https://api.example.com/users?page=1&per_page=20>; rel="first",
 //       <https://api.example.com/users?page=1&per_page=20>; rel="prev",

@@ -87,16 +87,16 @@ fn static_file_cors_options_preflight_request_client_hints() {
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![
             Header {
-                name: Header::_ORIGIN.to_string(),
-                value: origin_value.to_string()
+                name: Header::_ORIGIN.into(),
+                value: origin_value.to_string().into()
             },
             Header {
-                name: Header::_ACCESS_CONTROL_REQUEST_METHOD.to_string(),
-                value: METHOD.post.to_string()
+                name: Header::_ACCESS_CONTROL_REQUEST_METHOD.into(),
+                value: METHOD.post.to_string().into()
             },
             Header {
-                name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string(),
-                value: expected_allow_headers
+                name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.into(),
+                value: expected_allow_headers.into()
             },
         ],
         body: vec![],
@@ -170,9 +170,9 @@ fn static_file_cors_off_options_preflight_request_client_hints() {
         request_uri: "/static/content.png".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![
-            Header { name: Header::_ORIGIN.to_string(), value: origin_value.to_string() },
-            Header { name: Header::_ACCESS_CONTROL_REQUEST_METHOD.to_string(), value: METHOD.post.to_string() },
-            Header { name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string(), value: expected_allow_headers },
+            Header { name: Header::_ORIGIN.into(), value: origin_value.to_string().into() },
+            Header { name: Header::_ACCESS_CONTROL_REQUEST_METHOD.into(), value: METHOD.post.to_string().into() },
+            Header { name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.into(), value: expected_allow_headers.into() },
         ],
         body: vec![],
     };
@@ -247,7 +247,7 @@ mod builder_tests {
         impl Middleware for AddHeader {
             fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
                 let mut resp = next.execute(request, connection)?;
-                resp.headers.push(crate::header::Header { name: "X-Test".to_string(), value: "yes".to_string() });
+                resp.headers.push(crate::header::Header { name: "X-Test".into(), value: "yes".into() });
                 Ok(resp)
             }
         }

@@ -740,7 +740,7 @@ impl Application for IngressRouter {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         let host = request
             .get_header("host".to_string())
-            .map(|h| h.value.as_str())
+            .map(|h| h.value.as_ref())
             .unwrap_or("");
 
         let rules = self.watcher.rules();

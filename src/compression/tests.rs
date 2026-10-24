@@ -14,8 +14,8 @@ fn make_request_with_gzip() -> Request {
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![Header {
-            name: Header::_ACCEPT_ENCODING.to_string(),
-            value: "gzip, deflate".to_string(),
+            name: Header::_ACCEPT_ENCODING.into(),
+            value: "gzip, deflate".into(),
         }],
         body: vec![],
     }
@@ -90,8 +90,8 @@ fn appends_accept_encoding_to_existing_vary() {
     let json = format!("[{}]", vec!["{\"k\":\"v\"}"; 100].join(","));
     let mut response = make_response(json.as_bytes(), MimeType::APPLICATION_JSON);
     response.headers.push(Header {
-        name: Header::_VARY.to_string(),
-        value: "Origin".to_string(),
+        name: Header::_VARY.into(),
+        value: "Origin".into(),
     });
 
     apply_gzip(&request, &mut response);
@@ -106,8 +106,8 @@ fn does_not_duplicate_accept_encoding_in_vary() {
     let request = make_request_with_gzip();
     let mut response = make_response(b"{}", MimeType::APPLICATION_JSON);
     response.headers.push(Header {
-        name: Header::_VARY.to_string(),
-        value: "Accept-Encoding".to_string(),
+        name: Header::_VARY.into(),
+        value: "Accept-Encoding".into(),
     });
 
     apply_gzip(&request, &mut response);
@@ -149,7 +149,7 @@ fn incompressible_bodies_are_sent_as_is() {
 fn already_encoded_responses_are_not_compressed_again() {
     let body = "<p>already gzipped upstream</p>".repeat(64);
     let mut response = make_response(body.as_bytes(), MimeType::TEXT_HTML);
-    response.headers.push(Header { name: "content-encoding".to_string(), value: "br".to_string() });
+    response.headers.push(Header { name: "content-encoding".into(), value: "br".into() });
     apply_gzip(&make_request_with_gzip(), &mut response);
     assert_eq!(response.headers.iter().filter(|h| h.name.eq_ignore_ascii_case("content-encoding")).count(), 1);
     assert_eq!(response.content_range_list[0].body, body.as_bytes());
@@ -158,7 +158,7 @@ fn already_encoded_responses_are_not_compressed_again() {
 
 fn request_accepting(value: &str) -> Request {
     let mut r = make_request_with_gzip();
-    r.headers = vec![Header { name: Header::_ACCEPT_ENCODING.to_string(), value: value.to_string() }];
+    r.headers = vec![Header { name: Header::_ACCEPT_ENCODING.into(), value: value.to_string().into() }];
     r
 }
 

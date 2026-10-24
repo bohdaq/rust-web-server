@@ -513,7 +513,7 @@ impl Response {
         head.push(b' ');
         head.extend_from_slice(reason_phrase.as_bytes());
         head.extend_from_slice(b"\r\n");
-        let header_lines = headers.iter().map(|h| (h.name.as_str(), h.value.as_str()))
+        let header_lines = headers.iter().map(|h| (h.name.as_ref(), h.value.as_ref()))
             .chain(extra.iter().filter_map(|(name, value)| value.map(|v| (*name, v))));
         for (name, value) in header_lines {
             head.extend_from_slice(name.as_bytes());
@@ -599,8 +599,8 @@ impl Response {
 
 
         Header {
-            name: header_name.to_string(),
-            value: header_value.to_string()
+            name: header_name.to_string().into(),
+            value: header_value.to_string().into()
         }
     }
 
@@ -682,7 +682,7 @@ impl Response {
         }
 
         if new_line_char_found && !current_string_is_empty {
-            let mut header = Header { name: "".to_string(), value: "".to_string() };
+            let mut header = Header { name: "".into(), value: "".into() };
             if !is_first_iteration {
                 header = Response::_parse_http_response_header_string(&string);
                 if header.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH) {
@@ -773,20 +773,20 @@ impl Response {
             let content_range_index = 0;
             let content_range = response.content_range_list.get(content_range_index).unwrap();
             response.headers.push(Header {
-                name: Header::_CONTENT_TYPE.to_string(),
-                value: content_range.content_type.to_string()
+                name: Header::_CONTENT_TYPE.into(),
+                value: content_range.content_type.to_string().into()
             });
 
             if let Some(value) = content_range_header_value(response.status_code, content_range) {
                 response.headers.push(Header {
-                    name: Header::_CONTENT_RANGE.to_string(),
-                    value,
+                    name: Header::_CONTENT_RANGE.into(),
+                    value: value.into(),
                 });
             }
 
             response.headers.push(Header {
-                name: Header::_CONTENT_LENGTH.to_string(),
-                value: content_range.body.len().to_string()
+                name: Header::_CONTENT_LENGTH.into(),
+                value: content_range.body.len().to_string().into()
             });
         }
 
@@ -802,8 +802,8 @@ impl Response {
                 Range::STRING_SEPARATOR
             ].join("");
             response.headers.push(Header {
-                name: Header::_CONTENT_TYPE.to_string(),
-                value: content_range_header_value,
+                name: Header::_CONTENT_TYPE.into(),
+                value: content_range_header_value.into(),
             });
         }
 
@@ -917,7 +917,7 @@ impl Response {
 
                 if is_multipart {
                     let content_type = response.header(Header::_CONTENT_TYPE).ok_or("Content-Type is missing")?;
-                    let boundary = FormMultipartData::extract_boundary(content_type.value.as_str())
+                    let boundary = FormMultipartData::extract_boundary(content_type.value.as_ref())
                         .map_err(|_| "unable to extract boundary from Content-Type".to_string())?;
                     let is_opening_boundary_read = false;
                     response.content_range_list = Range::parse_multipart_body_with_boundary(
@@ -928,7 +928,7 @@ impl Response {
                         bytes_read,
                         is_opening_boundary_read)?;
                 } else {
-                    let content_type = content_type_header.map_or(MimeType::APPLICATION_OCTET_STREAM, |h| h.value.as_str());
+                    let content_type = content_type_header.map_or(MimeType::APPLICATION_OCTET_STREAM, |h| h.value.as_ref());
                     let start = (cursor.position() as usize).min(input.len());
                     let body = input[start..].to_vec();
                     cursor.set_position(input.len() as u64);
@@ -969,8 +969,8 @@ impl Response {
     pub fn parse_http_response_header_string(header_string: &str) -> Result<Header, String> {
         match split_name_value(header_string) {
             Some((header_name, raw_header_value)) => Ok(Header {
-                name: header_name.to_string(),
-                value: without_cr_lf(raw_header_value).into_owned(),
+                name: header_name.to_string().into(),
+                value: without_cr_lf(raw_header_value).into_owned().into(),
             }),
             None => Err(format!("unable to parse header: {}", header_string)),
         }

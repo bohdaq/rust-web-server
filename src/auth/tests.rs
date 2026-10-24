@@ -34,7 +34,7 @@ fn get(uri: &str) -> Request {
 }
 
 fn with_header(mut req: Request, name: &str, value: &str) -> Request {
-    req.headers.push(Header { name: name.to_string(), value: value.to_string() });
+    req.headers.push(Header { name: name.to_string().into(), value: value.to_string().into() });
     req
 }
 

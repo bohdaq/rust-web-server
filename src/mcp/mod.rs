@@ -1079,22 +1079,22 @@ impl McpServer {
     fn start_sse_stream(&self, request: &Request) -> Response {
         let session_id = request.get_header("Mcp-Session-Id".to_string()).map(|h| h.value.clone());
         let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(SSE_CHANNEL_CAPACITY);
-        self.sse_clients.lock().unwrap().push(SseClient { session_id, sender: tx });
+        self.sse_clients.lock().unwrap().push(SseClient { session_id: session_id.map(|v| v.into_owned()), sender: tx });
 
         let mut response = Response::new();
         response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
         response.headers.push(Header {
-            name: Header::_CONTENT_TYPE.to_string(),
-            value: "text/event-stream".to_string(),
+            name: Header::_CONTENT_TYPE.into(),
+            value: "text/event-stream".into(),
         });
         response.headers.push(Header {
-            name: Header::_CACHE_CONTROL.to_string(),
-            value: "no-cache".to_string(),
+            name: Header::_CACHE_CONTROL.into(),
+            value: "no-cache".into(),
         });
         response.headers.push(Header {
-            name: "X-Accel-Buffering".to_string(),
-            value: "no".to_string(),
+            name: "X-Accel-Buffering".into(),
+            value: "no".into(),
         });
         response.stream_pipe = Some(Box::new(SseChannelReader::new(rx)));
         response
@@ -1991,8 +1991,8 @@ impl McpServer {
             .insert(session_id.clone(), StoredClientInfo { name, version, supports_sampling, supports_roots, roots: None });
 
         response.headers.push(Header {
-            name: "Mcp-Session-Id".to_string(),
-            value: session_id,
+            name: "Mcp-Session-Id".into(),
+            value: session_id.into(),
         });
     }
 
@@ -2348,7 +2348,7 @@ impl McpServer {
     fn context_for(&self, request: &Request) -> McpContext {
         let session_id = request
             .get_header("Mcp-Session-Id".to_string())
-            .map(|h| h.value.clone());
+            .map(|h| h.value.to_string());
 
         let (client_name, client_version, sampling_supported, roots_supported) = match &session_id {
             Some(sid) => match self.sessions.lock().unwrap().get(sid) {
@@ -2481,7 +2481,7 @@ impl Application for McpServer {
             if let Some(oauth) = &self.oauth {
                 let provided = request.headers.iter()
                     .find(|h| h.name.eq_ignore_ascii_case("authorization"))
-                    .map(|h| h.value.as_str())
+                    .map(|h| h.value.as_ref())
                     .unwrap_or("");
                 let bearer = provided.strip_prefix("Bearer ").unwrap_or("");
                 if bearer.is_empty() {
@@ -2500,7 +2500,7 @@ impl Application for McpServer {
                 // Check the static bearer token before processing any MCP request.
                 let provided = request.headers.iter()
                     .find(|h| h.name.eq_ignore_ascii_case("authorization"))
-                    .map(|h| h.value.as_str())
+                    .map(|h| h.value.as_ref())
                     .unwrap_or("");
                 let bearer = provided.strip_prefix("Bearer ").unwrap_or("");
                 if bearer != expected.as_str() {
@@ -2511,7 +2511,7 @@ impl Application for McpServer {
             if let Some(expected) = &self.auth_token {
                 let provided = request.headers.iter()
                     .find(|h| h.name.eq_ignore_ascii_case("authorization"))
-                    .map(|h| h.value.as_str())
+                    .map(|h| h.value.as_ref())
                     .unwrap_or("");
                 let bearer = provided.strip_prefix("Bearer ").unwrap_or("");
                 if bearer != expected.as_str() {
@@ -2533,8 +2533,8 @@ impl Application for McpServer {
                     r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
                     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
                     r.headers.push(Header {
-                        name: "Allow".to_string(),
-                        value: "GET, POST, OPTIONS".to_string(),
+                        name: "Allow".into(),
+                        value: "GET, POST, OPTIONS".into(),
                     });
                     r
                 }
@@ -2543,8 +2543,8 @@ impl Application for McpServer {
                     r.status_code = *STATUS_CODE_REASON_PHRASE.n405_method_not_allowed.status_code;
                     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n405_method_not_allowed.reason_phrase.to_string();
                     r.headers.push(Header {
-                        name: "Allow".to_string(),
-                        value: "GET, POST, OPTIONS".to_string(),
+                        name: "Allow".into(),
+                        value: "GET, POST, OPTIONS".into(),
                     });
                     r.content_range_list = vec![Range::get_content_range(
                         b"MCP endpoint only accepts GET (SSE) or POST".to_vec(),
@@ -2621,8 +2621,8 @@ fn unauthorized() -> Response {
     r.status_code = *STATUS_CODE_REASON_PHRASE.n401_unauthorized.status_code;
     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n401_unauthorized.reason_phrase.to_string();
     r.headers.push(Header {
-        name: "WWW-Authenticate".to_string(),
-        value: "Bearer".to_string(),
+        name: "WWW-Authenticate".into(),
+        value: "Bearer".into(),
     });
     r.content_range_list = vec![Range::get_content_range(
         b"Unauthorized".to_vec(),

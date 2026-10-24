@@ -30,7 +30,7 @@ fn req(method: &str, headers: Vec<Header>, body: Vec<u8>) -> Request {
 }
 
 fn header(name: &str, value: &str) -> Header {
-    Header { name: name.to_string(), value: value.to_string() }
+    Header { name: name.to_string().into(), value: value.to_string().into() }
 }
 
 /// An inner app that always returns 200.
@@ -53,8 +53,8 @@ impl Application for TokenEchoApp {
         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
         if let Some(tok) = CsrfToken::from_request(request) {
             r.headers.push(Header {
-                name: "X-Echo-Token".to_string(),
-                value: tok.value().to_string(),
+                name: "X-Echo-Token".into(),
+                value: tok.value().to_string().into(),
             });
         }
         Ok(r)
@@ -66,7 +66,7 @@ fn set_cookie_header(response: &Response) -> Option<String> {
         .headers
         .iter()
         .find(|h| h.name.eq_ignore_ascii_case("set-cookie"))
-        .map(|h| h.value.clone())
+        .map(|h| h.value.clone()).map(|v| v.into_owned())
 }
 
 fn extract_cookie_token(response: &Response) -> Option<String> {

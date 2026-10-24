@@ -165,7 +165,7 @@ impl Server {
         };
 
         let mut header_list = Header::get_header_list(&error_request);
-        header_list.push(Header { name: Header::_CONNECTION.to_string(), value: "close".to_string() });
+        header_list.push(Header { name: Header::_CONNECTION.into(), value: "close".into() });
         let error_response: Response = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n413_payload_too_large,
             Some(header_list),
@@ -215,7 +215,7 @@ impl Server {
         };
 
         let mut header_list = Header::get_header_list(&error_request);
-        header_list.push(Header { name: Header::_CONNECTION.to_string(), value: "close".to_string() });
+        header_list.push(Header { name: Header::_CONNECTION.into(), value: "close".into() });
         let error_response: Response = Response::get_response(status, Some(header_list), Some(vec![content_range]));
 
         Response::generate_response(error_response, error_request)
@@ -261,7 +261,7 @@ impl Server {
         };
 
         let mut header_list = Header::get_header_list(&error_request);
-        header_list.push(Header { name: Header::_CONNECTION.to_string(), value: "close".to_string() });
+        header_list.push(Header { name: Header::_CONNECTION.into(), value: "close".into() });
         let error_response: Response = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n417_expectation_failed,
             Some(header_list),
@@ -437,8 +437,8 @@ impl Server {
             crate::compression::apply_gzip(&request, &mut response);
 
             response.headers.push(Header {
-                name: Header::_CONNECTION.to_string(),
-                value: if keep_alive { "keep-alive".to_string() } else { "close".to_string() },
+                name: Header::_CONNECTION.into(),
+                value: if keep_alive { "keep-alive".into() } else { "close".into() },
             });
 
             Log::log_access(&request, &response, &client_addr);
@@ -514,8 +514,8 @@ impl Server {
         let chunked = !response.headers.iter().any(|h| h.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH));
         if chunked {
             response.headers.push(Header {
-                name: Header::_TRANSFER_ENCODING.to_string(),
-                value: "chunked".to_string(),
+                name: Header::_TRANSFER_ENCODING.into(),
+                value: "chunked".into(),
             });
         }
 
@@ -561,8 +561,8 @@ impl Server {
         response.headers.retain(|h| !h.name.eq_ignore_ascii_case("content-length"));
         if !backend_is_chunked {
             response.headers.push(Header {
-                name: Header::_TRANSFER_ENCODING.to_string(),
-                value: "chunked".to_string(),
+                name: Header::_TRANSFER_ENCODING.into(),
+                value: "chunked".into(),
             });
         }
 

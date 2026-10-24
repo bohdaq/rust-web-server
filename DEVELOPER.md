@@ -80,7 +80,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Request` | `request` | Parsed HTTP request (method, URI, headers, body) |
 | `Response` | `response` | HTTP response builder |
 | `Response::json` / `Response::text` | `response` | One-line response helpers: `Response::json(status, bytes)` builds a `Content-Type: application/json` response from pre-serialized bytes (no `serde` dependency — pair with `serde_json::to_vec` or hand-rolled JSON); `Response::text(status, &str)` builds a `Content-Type: text/plain` response. For serializing a typed value directly, use `Json<T>` (`serde` feature) instead. |
-| `Header` | `header` | Header constants and standard response header set |
+| `Header` | `header` | Header constants and standard response header set. `name`/`value` are `Cow<'static, str>` (18.0.0; were `String`): build with `Header::new(name, value)` — a `&'static str` is borrowed, a `String` owned — and read through `Deref<Target = str>` (`&*h.value`, `h.value.as_ref()`, `h.value.to_string()` for an owned copy). |
 | `Range` / `ContentRange` | `range` | Body construction (bytes, files, multipart) |
 | `MimeType` | `mime_type` | Content-type detection from file extension |
 | `STATUS_CODE_REASON_PHRASE` | `response` | All HTTP status codes as typed constants |
@@ -221,6 +221,26 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Email` / `EmailBuilder` | `mailer` | RFC 5322 email builder. `Email::builder().to(addr).subject(s).text(body).html(body).cc(addr).bcc(addr).reply_to(addr).build()`. Validates that at least one `To:` address, a subject, and a body (text or HTML) are provided. Generates `multipart/alternative` when both text and HTML are set. |
 | `SmtpTls` | `mailer` | Enum for SMTP TLS mode: `None`, `Starttls`, `Smtps`. |
 | `MailerError` | `mailer` | Error type for SMTP failures: `MissingConfig`, `Io`, `Smtp`, `Build`. Implements `std::error::Error`. |
+
+### Migrating to 18.0.0: `Header` fields are `Cow<'static, str>`
+
+`Header { name, value }` changed from `String` to `Cow<'static, str>`, so the standard headers on every response (built from `&'static str` constants) are borrowed instead of allocated on each request. Code that builds or reads headers changes like this:
+
+```rust
+use rust_web_server::header::Header;
+
+// Before (17.x): Header { name: Header::_LOCATION.to_string(), value: url }
+let location_url = "/new-path".to_string();
+let h = Header::new(Header::_LOCATION, location_url);   // &'static str borrowed, String owned
+let h2 = Header { name: "X-Static".into(), value: "fixed".into() }; // fields still public
+
+// Reading: Cow<str> derefs to str.
+let v: &str = &h.value;                 // or h.value.as_ref(); `.as_str()` is gone
+let owned: String = h2.value.to_string();
+assert_eq!("/new-path", h.value);       // compares with &str directly
+```
+
+`header.value.push_str(..)` becomes `header.value.to_mut().push_str(..)`, and a function that took `&String` should take `&str`.
 
 ---
 
@@ -370,10 +390,7 @@ use rust_web_server::header::Header;
 fn process(_request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
     response.status_code = *STATUS_CODE_REASON_PHRASE.n301_moved_permanently.status_code;
     response.reason_phrase = STATUS_CODE_REASON_PHRASE.n301_moved_permanently.reason_phrase.to_string();
-    response.headers.push(Header {
-        name: Header::_LOCATION.to_string(),
-        value: "https://example.com/new-path".to_string(),
-    });
+    response.headers.push(Header::new(Header::_LOCATION, "https://example.com/new-path"));
     response
 }
 ```
@@ -486,10 +503,7 @@ fn process(request: &Request, mut response: Response, _connection: &ConnectionIn
         .max_age(3600)
         .build();
 
-    response.headers.push(Header {
-        name: "Set-Cookie".to_string(),
-        value: set_cookie,
-    });
+    response.headers.push(Header::new("Set-Cookie", set_cookie));
 
     response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
@@ -1046,10 +1060,7 @@ let app = App::with_state(State { sessions: SessionStore::new(3600) })
         let mut r = Response::new();
         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-        r.headers.push(Header {
-            name: "Set-Cookie".to_string(),
-            value: session::session_cookie(&sess.id, "sid", 3600),
-        });
+        r.headers.push(Header::new("Set-Cookie", session::session_cookie(&sess.id, "sid", 3600)));
         r
     })
     .post("/logout", |req, _params, _conn, state| {
@@ -1059,10 +1070,7 @@ let app = App::with_state(State { sessions: SessionStore::new(3600) })
         let mut r = Response::new();
         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-        r.headers.push(Header {
-            name: "Set-Cookie".to_string(),
-            value: session::destroy_cookie("sid"),
-        });
+        r.headers.push(Header::new("Set-Cookie", session::destroy_cookie("sid")));
         r
     })
     .get("/profile", |req, _params, _conn, state| {
@@ -1451,7 +1459,7 @@ fn sse_handler(_req: &_, _p: &_, _c: &_, _s: &_) -> Response {
     let mut r = Response::new();
     r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-    r.headers.push(Header { name: "Content-Type".into(), value: "text/event-stream".into() });
+    r.headers.push(Header::new("Content-Type", "text/event-stream"));
     r.stream_pipe = Some(Box::new(std::io::Cursor::new(b"data: hello\n\n".to_vec())));
     r
 }
@@ -4548,7 +4556,7 @@ Both result types build an RFC 8288 `Link` response header:
 use rust_web_server::header::Header;
 
 if let Some(link) = page.link_header("https://api.example.com/users") {
-    response.headers.push(Header { name: "Link".to_string(), value: link });
+    response.headers.push(Header::new("Link", link));
 }
 // Link: <...?page=1&per_page=20>; rel="first", <...?page=1&per_page=20>; rel="prev",
 //       <...?page=3&per_page=20>; rel="next", <...?page=5&per_page=20>; rel="last"

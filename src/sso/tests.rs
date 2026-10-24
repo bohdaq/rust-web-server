@@ -915,14 +915,14 @@ mod oidc_auth_tests {
     }
 
     fn with_cookie(mut req: Request, name: &str, value: &str) -> Request {
-        req.headers.push(Header { name: "Cookie".to_string(), value: format!("{name}={value}") });
+        req.headers.push(Header { name: "Cookie".into(), value: format!("{name}={value}").into() });
         req
     }
 
     fn header(response: &Response, name: &str) -> Option<String> {
         response.headers.iter()
             .find(|h| h.name.eq_ignore_ascii_case(name))
-            .map(|h| h.value.clone())
+            .map(|h| h.value.clone()).map(|v| v.into_owned())
     }
 
     /// An `Application` that always returns 200 OK.
@@ -1284,8 +1284,8 @@ mod oidc_auth_tests {
     fn claims_accessors_read_injected_header() {
         let mut req = get("/dashboard");
         req.headers.push(Header {
-            name: super::super::oidc_auth::CLAIMS_HEADER.to_string(),
-            value: r#"{"sub":"user1","iss":"i","aud":[],"exp":0,"iat":0,"email":"user1@example.com"}"#.to_string(),
+            name: super::super::oidc_auth::CLAIMS_HEADER.to_string().into(),
+            value: r#"{"sub":"user1","iss":"i","aud":[],"exp":0,"iat":0,"email":"user1@example.com"}"#.to_string().into(),
         });
         assert_eq!(OidcAuth::sub(&req), Some("user1".to_string()));
         assert_eq!(OidcAuth::email(&req), Some("user1@example.com".to_string()));
@@ -1625,14 +1625,14 @@ mod server_tests {
     }
 
     fn with_cookie(mut req: Request, name: &str, value: &str) -> Request {
-        req.headers.push(Header { name: "Cookie".to_string(), value: format!("{name}={value}") });
+        req.headers.push(Header { name: "Cookie".into(), value: format!("{name}={value}").into() });
         req
     }
 
     fn header(response: &Response, name: &str) -> Option<String> {
         response.headers.iter()
             .find(|h| h.name.eq_ignore_ascii_case(name))
-            .map(|h| h.value.clone())
+            .map(|h| h.value.clone()).map(|v| v.into_owned())
     }
 
     struct OkApp;

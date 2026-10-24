@@ -484,12 +484,12 @@ fn post(uri: &str, body: &str) -> Request {
 }
 
 fn with_cookie(mut req: Request, name: &str, value: &str) -> Request {
-    req.headers.push(Header { name: "Cookie".to_string(), value: format!("{name}={value}") });
+    req.headers.push(Header { name: "Cookie".into(), value: format!("{name}={value}").into() });
     req
 }
 
 fn header(response: &Response, name: &str) -> Option<String> {
-    response.headers.iter().find(|h| h.name.eq_ignore_ascii_case(name)).map(|h| h.value.clone())
+    response.headers.iter().find(|h| h.name.eq_ignore_ascii_case(name)).map(|h| h.value.clone()).map(|v| v.into_owned())
 }
 
 fn extract_cookie(response: &Response) -> (String, String) {

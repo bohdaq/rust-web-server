@@ -17,7 +17,7 @@ fn is_matching_only_for_multipart_post_to_its_path() {
         request_uri: uri.to_string(),
         http_version: "HTTP/1.1".to_string(),
         headers: content_type
-            .map(|v| vec![Header { name: Header::_CONTENT_TYPE.to_string(), value: v.to_string() }])
+            .map(|v| vec![Header { name: Header::_CONTENT_TYPE.into(), value: v.to_string().into() }])
             .unwrap_or_default(),
         body: vec![],
     };

@@ -24,7 +24,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 |---|---|---|
 | `Request` | `request` | Parsed HTTP request: method, URI, version, headers, body bytes |
 | `Response` | `response` | HTTP response: status code, headers, body as `Vec<ContentRange>` |
-| `Header` | `header` | Name/value pair; constants for all standard header names |
+| `Header` | `header` | Name/value pair (`Cow<'static, str>` fields since 18.0.0; build with `Header::new(name, value)`); constants for all standard header names |
 | `MimeType` | `mime_type` | MIME type string constants |
 | `Range` / `ContentRange` | `range` | Body content-range helpers used by `Response` |
 

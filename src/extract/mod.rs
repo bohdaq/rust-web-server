@@ -122,7 +122,7 @@ impl RequestHeaders {
         let lower = name.to_lowercase();
         self.0.iter()
             .find(|h| h.name.to_lowercase() == lower)
-            .map(|h| h.value.as_str())
+            .map(|h| h.value.as_ref())
     }
 }
 
@@ -138,10 +138,10 @@ pub struct RequestId(pub String);
 impl FromRequest for RequestId {
     fn from_request(request: &Request) -> Result<Self, Response> {
         Ok(RequestId(
-            request
+            (request
                 .get_header(crate::request_id::DEFAULT_HEADER.to_string())
                 .map(|h| h.value.clone())
-                .unwrap_or_default(),
+                .unwrap_or_default()).into_owned(),
         ))
     }
 }

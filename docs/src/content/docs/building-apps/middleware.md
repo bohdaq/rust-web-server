@@ -111,10 +111,7 @@ impl Middleware for RequestIdLayer {
 
         // Mutate the response on the way out
         let id = format!("{}-{}", connection.server.ip, connection.server.port);
-        response.headers.push(rust_web_server::header::Header {
-            name: "X-Request-Id".to_string(),
-            value: id,
-        });
+        response.headers.push(rust_web_server::header::Header::new("X-Request-Id", id));
 
         Ok(response)
     }

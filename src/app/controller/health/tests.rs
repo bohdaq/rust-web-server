@@ -22,7 +22,7 @@ fn make_healthz_request() -> Request {
         method: METHOD.get.to_string(),
         request_uri: "/healthz".to_string(),
         http_version: VERSION.http_1_1.to_string(),
-        headers: vec![Header { name: "Host".to_string(), value: "localhost".to_string() }],
+        headers: vec![Header { name: "Host".into(), value: "localhost".into() }],
         body: vec![],
     }
 }

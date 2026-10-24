@@ -26,7 +26,7 @@
 //! use rust_web_server::request_id::DEFAULT_HEADER;
 //!
 //! fn handler(request: &Request) {
-//!     let id = request.get_header(DEFAULT_HEADER.to_string()).map(|h| h.value.as_str()).unwrap_or("");
+//!     let id = request.get_header(DEFAULT_HEADER.to_string()).map(|h| h.value.as_ref()).unwrap_or("");
 //!     println!("[{}] handling request", id);
 //! }
 //! ```
@@ -126,19 +126,19 @@ impl Default for RequestIdLayer {
 
 impl Middleware for RequestIdLayer {
     fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
-        let existing = request.get_header(self.header.clone()).map(|h| h.value.clone());
+        let existing = request.get_header(self.header.clone()).map(|h| h.value.to_string());
 
         let (id, mut response) = match existing {
             Some(id) => (id, next.execute(request, connection)?),
             None => {
                 let id = generate_request_id();
                 let mut req = request.clone();
-                req.headers.push(Header { name: self.header.clone(), value: id.clone() });
+                req.headers.push(Header { name: self.header.clone().into(), value: id.clone().into() });
                 (id, next.execute(&req, connection)?)
             }
         };
 
-        response.headers.push(Header { name: self.header.clone(), value: id });
+        response.headers.push(Header { name: self.header.clone().into(), value: id.into() });
         Ok(response)
     }
 

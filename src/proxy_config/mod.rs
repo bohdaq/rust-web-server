@@ -710,7 +710,7 @@ impl RouteMatcher {
                         .headers
                         .iter()
                         .find(|h| h.name.eq_ignore_ascii_case("host"))
-                        .map(|h| h.value.as_str())
+                        .map(|h| h.value.as_ref())
                 })
                 .unwrap_or("");
             if actual_host != expected_host.as_str() {
@@ -743,7 +743,7 @@ impl RouteMatcher {
                 .headers
                 .iter()
                 .find(|h| h.name.eq_ignore_ascii_case("content-type"))
-                .map(|h| h.value.as_str())
+                .map(|h| h.value.as_ref())
                 .unwrap_or("");
             if !actual_ct.starts_with(ct_prefix.as_str()) {
                 return false;
@@ -1316,7 +1316,7 @@ impl Application for RedirectAdapter {
         let mut r = Response::new();
         r.status_code = self.status;
         r.reason_phrase = self.reason.as_ref().clone();
-        r.headers.push(Header { name: "Location".to_string(), value: location });
+        r.headers.push(Header { name: "Location".into(), value: location.into() });
         Ok(r)
     }
 }
@@ -1493,8 +1493,8 @@ impl crate::middleware::Middleware for PerRouteRateLimit {
             let mut response = AppError::TooManyRequests.into_response();
             let retry_after = self.0.retry_after(&conn.client.ip);
             response.headers.push(Header {
-                name: Header::_RETRY_AFTER.to_string(),
-                value: retry_after.to_string(),
+                name: Header::_RETRY_AFTER.into(),
+                value: retry_after.to_string().into(),
             });
             Ok(response)
         }

@@ -22,8 +22,8 @@ fn get_with_cookie(cookie_header: &str) -> Request {
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![Header {
-            name: "Cookie".to_string(),
-            value: cookie_header.to_string(),
+            name: "Cookie".into(),
+            value: cookie_header.to_string().into(),
         }],
         body: vec![],
     }

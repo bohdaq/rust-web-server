@@ -317,7 +317,7 @@ impl Range {
             if string.starts_with(Header::_CONTENT_RANGE) && content_range_is_not_parsed {
                 let content_range_header = Response::_parse_http_response_header_string(string.as_str());
 
-                let boxed_result = Range::_parse_content_range_header_value(content_range_header.value);
+                let boxed_result = Range::_parse_content_range_header_value(content_range_header.value.into_owned());
                 if boxed_result.is_ok() {
                     let (start, end, size) = boxed_result.unwrap();
 
@@ -576,7 +576,7 @@ impl Range {
         if string.starts_with(Header::_CONTENT_RANGE) && content_range_is_not_parsed {
             let content_range_header = Response::_parse_http_response_header_string(string.as_str());
 
-            let boxed_result = Range::_parse_content_range_header_value(content_range_header.value);
+            let boxed_result = Range::_parse_content_range_header_value(content_range_header.value.into_owned());
             if boxed_result.is_ok() {
                 let (start, end, size) = boxed_result.unwrap();
 
@@ -760,7 +760,7 @@ impl Range {
             if string.starts_with(Header::_CONTENT_RANGE) && content_range_is_not_parsed {
                 let content_range_header = Response::_parse_http_response_header_string(string.as_str());
 
-                let boxed_result = Range::_parse_content_range_header_value(content_range_header.value);
+                let boxed_result = Range::_parse_content_range_header_value(content_range_header.value.into_owned());
                 if boxed_result.is_ok() {
                     let (start, end, size) = boxed_result.unwrap();
 

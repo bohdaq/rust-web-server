@@ -29,14 +29,14 @@ impl Cors {
         let origin = request.header(Header::_ORIGIN);
         if origin.is_some() {
             let allow_origin = Header {
-                name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
-                value: origin.unwrap().value.to_string()
+                name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.into(),
+                value: origin.unwrap().value.to_string().into()
             };
             headers.push(allow_origin);
 
             let allow_credentials = Header {
-                name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
-                value: "true".to_string()
+                name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.into(),
+                value: "true".into()
             };
             headers.push(allow_credentials);
 
@@ -45,8 +45,8 @@ impl Cors {
                 let method = request.header(Header::_ACCESS_CONTROL_REQUEST_METHOD);
                 if method.is_some() {
                     let allow_method = Header {
-                        name: Header::_ACCESS_CONTROL_ALLOW_METHODS.to_string(),
-                        value: method.unwrap().value.to_string()
+                        name: Header::_ACCESS_CONTROL_ALLOW_METHODS.into(),
+                        value: method.unwrap().value.to_string().into()
                     };
                     headers.push(allow_method);
                 }
@@ -55,21 +55,21 @@ impl Cors {
                 if access_control_request_headers.is_some() {
                     let request_headers = access_control_request_headers.unwrap();
                     let allow_headers = Header {
-                        name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
-                        value: request_headers.value.to_lowercase(),
+                        name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.into(),
+                        value: request_headers.value.to_lowercase().into(),
                     };
                     headers.push(allow_headers);
 
                     let expose_headers = Header {
-                        name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
-                        value: request_headers.value.to_lowercase(),
+                        name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.into(),
+                        value: request_headers.value.to_lowercase().into(),
                     };
                     headers.push(expose_headers);
                 }
 
                 let max_age = Header {
-                    name: Header::_ACCESS_CONTROL_MAX_AGE.to_string(),
-                    value: Cors::MAX_AGE.to_string()
+                    name: Header::_ACCESS_CONTROL_MAX_AGE.into(),
+                    value: Cors::MAX_AGE.into()
                 };
                 headers.push(max_age);
             }
@@ -98,15 +98,15 @@ impl Cors {
         }
 
         let allow_origin = Header {
-            name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
-            value: origin_value
+            name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.into(),
+            value: origin_value.into()
         };
         headers.push(allow_origin);
 
         if cors.allow_credentials {
             let allow_credentials = Header {
-                name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
-                value: cors.allow_credentials.to_string()
+                name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.into(),
+                value: cors.allow_credentials.to_string().into()
             };
             headers.push(allow_credentials);
         }
@@ -115,28 +115,28 @@ impl Cors {
         if is_options {
             let methods = cors.allow_methods.join(",");
             let allow_methods = Header {
-                name: Header::_ACCESS_CONTROL_ALLOW_METHODS.to_string(),
-                value: methods
+                name: Header::_ACCESS_CONTROL_ALLOW_METHODS.into(),
+                value: methods.into()
             };
             headers.push(allow_methods);
 
             let allow_headers_value = cors.allow_headers.join(",");
             let allow_headers = Header {
-                name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
-                value: allow_headers_value.to_lowercase()
+                name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.into(),
+                value: allow_headers_value.to_lowercase().into()
             };
             headers.push(allow_headers);
 
             let allow_expose_headers  = cors.expose_headers.join(",");
             let expose_headers = Header {
-                name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
-                value: allow_expose_headers.to_lowercase()
+                name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.into(),
+                value: allow_expose_headers.to_lowercase().into()
             };
             headers.push(expose_headers);
 
             let max_age = Header {
-                name: Header::_ACCESS_CONTROL_MAX_AGE.to_string(),
-                value: cors.max_age.to_string()
+                name: Header::_ACCESS_CONTROL_MAX_AGE.into(),
+                value: cors.max_age.to_string().into()
             };
             headers.push(max_age);
         }
@@ -165,46 +165,46 @@ impl Cors {
         }
         let origin_value = boxed_origin.unwrap().value.clone();
 
-        if !config.cors_allow_origins.contains(&origin_value) {
+        if !config.cors_allow_origins.contains(&*origin_value) {
             return Ok(headers);
         }
 
         headers.push(Header {
-            name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
+            name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.into(),
             value: origin_value,
         });
 
         let credentials_str = &config.cors_allow_credentials;
         if credentials_str.eq_ignore_ascii_case("true") {
             headers.push(Header {
-                name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.to_string(),
-                value: "true".to_string(),
+                name: Header::_ACCESS_CONTROL_ALLOW_CREDENTIALS.into(),
+                value: "true".into(),
             });
         }
 
         if request.method == METHOD.options {
             if !config.cors_allow_methods.is_empty() {
                 headers.push(Header {
-                    name: Header::_ACCESS_CONTROL_ALLOW_METHODS.to_string(),
-                    value: config.cors_allow_methods.clone(),
+                    name: Header::_ACCESS_CONTROL_ALLOW_METHODS.into(),
+                    value: config.cors_allow_methods.clone().into(),
                 });
             }
             if !config.cors_allow_headers.is_empty() {
                 headers.push(Header {
-                    name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.to_string(),
-                    value: config.cors_allow_headers.to_lowercase(),
+                    name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.into(),
+                    value: config.cors_allow_headers.to_lowercase().into(),
                 });
             }
             if !config.cors_expose_headers.is_empty() {
                 headers.push(Header {
-                    name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.to_string(),
-                    value: config.cors_expose_headers.to_lowercase(),
+                    name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.into(),
+                    value: config.cors_expose_headers.to_lowercase().into(),
                 });
             }
             if !config.cors_max_age.is_empty() {
                 headers.push(Header {
-                    name: Header::_ACCESS_CONTROL_MAX_AGE.to_string(),
-                    value: config.cors_max_age.clone(),
+                    name: Header::_ACCESS_CONTROL_MAX_AGE.into(),
+                    value: config.cors_max_age.clone().into(),
                 });
             }
         }

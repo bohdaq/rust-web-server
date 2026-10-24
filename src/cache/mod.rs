@@ -182,7 +182,7 @@ impl CacheLayer {
         for vh in &self.vary_headers {
             let val = request.headers.iter()
                 .find(|h| h.name.eq_ignore_ascii_case(vh))
-                .map(|h| h.value.as_str())
+                .map(|h| h.value.as_ref())
                 .unwrap_or("");
             key.push('\x00');
             key.push_str(val);
@@ -224,9 +224,9 @@ impl CacheLayer {
         let age = Self::age_secs(entry);
         // Replace or add the Age header.
         if let Some(h) = response.headers.iter_mut().find(|h| h.name.eq_ignore_ascii_case("Age")) {
-            h.value = age.to_string();
+            h.value = age.to_string().into();
         } else {
-            response.headers.push(Header { name: "Age".to_string(), value: age.to_string() });
+            response.headers.push(Header { name: "Age".into(), value: age.to_string().into() });
         }
         response
     }

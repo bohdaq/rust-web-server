@@ -76,7 +76,7 @@ use rust_web_server::webhook::{verify_webhook_signature, WebhookProvider};
 fn stripe_webhook(request: &Request) -> Response {
     let signature = request
         .get_header("Stripe-Signature".to_string())
-        .map(|h| h.value.clone())
+        .map(|h| h.value.to_string())
         .unwrap_or_default();
 
     if !verify_webhook_signature(WebhookProvider::Stripe, &request.body, b"whsec_...", &signature) {

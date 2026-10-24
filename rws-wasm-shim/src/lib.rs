@@ -98,8 +98,8 @@ fn to_rws_request(request: &IncomingRequest) -> RwsRequest {
         .entries()
         .into_iter()
         .map(|(name, value)| Header {
-            name,
-            value: String::from_utf8_lossy(&value).to_string(),
+            name: name.into(),
+            value: String::from_utf8_lossy(&value).to_string().into(),
         })
         .collect();
 

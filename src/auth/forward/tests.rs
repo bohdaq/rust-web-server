@@ -30,7 +30,7 @@ fn get(uri: &str) -> Request {
 }
 
 fn with_header(mut req: Request, name: &str, value: &str) -> Request {
-    req.headers.push(Header { name: name.to_string(), value: value.to_string() });
+    req.headers.push(Header { name: name.to_string().into(), value: value.to_string().into() });
     req
 }
 
@@ -57,9 +57,9 @@ impl Application for EchoHeaderApp {
         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
 
         let count = request.headers.iter().filter(|h| h.name.eq_ignore_ascii_case(self.0)).count();
-        r.headers.push(Header { name: "X-Echo-Count".to_string(), value: count.to_string() });
+        r.headers.push(Header { name: "X-Echo-Count".into(), value: count.to_string().into() });
         if let Some(h) = request.headers.iter().find(|h| h.name.eq_ignore_ascii_case(self.0)) {
-            r.headers.push(Header { name: "X-Echo".to_string(), value: h.value.clone() });
+            r.headers.push(Header { name: "X-Echo".into(), value: h.value.clone() });
         }
         Ok(r)
     }
@@ -122,7 +122,7 @@ fn copies_header_from_auth_response_onto_forwarded_request() {
     let layer = ForwardAuthLayer::new(format!("http://127.0.0.1:{}/verify", port)).copy_header("X-User-Id");
     let resp = layer.handle(&get("/"), &conn(), &EchoHeaderApp("X-User-Id")).unwrap();
     assert_eq!(200, resp.status_code);
-    let echoed = resp.headers.iter().find(|h| h.name == "X-Echo").map(|h| h.value.as_str());
+    let echoed = resp.headers.iter().find(|h| h.name == "X-Echo").map(|h| h.value.as_ref());
     assert_eq!(Some("alice"), echoed);
 }
 
@@ -136,9 +136,9 @@ fn copied_header_replaces_client_forged_header_not_append() {
     let req = with_header(get("/"), "X-User-Id", "mallory");
     let resp = layer.handle(&req, &conn(), &EchoHeaderApp("X-User-Id")).unwrap();
 
-    let count = resp.headers.iter().find(|h| h.name == "X-Echo-Count").map(|h| h.value.as_str());
+    let count = resp.headers.iter().find(|h| h.name == "X-Echo-Count").map(|h| h.value.as_ref());
     assert_eq!(Some("1"), count, "expected exactly one X-User-Id header on the forwarded request");
-    let echoed = resp.headers.iter().find(|h| h.name == "X-Echo").map(|h| h.value.as_str());
+    let echoed = resp.headers.iter().find(|h| h.name == "X-Echo").map(|h| h.value.as_ref());
     assert_eq!(Some("alice"), echoed, "trusted auth-service value must win over the client-forged one");
 }
 
@@ -148,7 +148,7 @@ fn copy_header_absent_from_auth_response_leaves_original_untouched() {
     let layer = ForwardAuthLayer::new(format!("http://127.0.0.1:{}/verify", port)).copy_header("X-User-Id");
     let req = with_header(get("/"), "X-User-Id", "original");
     let resp = layer.handle(&req, &conn(), &EchoHeaderApp("X-User-Id")).unwrap();
-    let echoed = resp.headers.iter().find(|h| h.name == "X-Echo").map(|h| h.value.as_str());
+    let echoed = resp.headers.iter().find(|h| h.name == "X-Echo").map(|h| h.value.as_ref());
     assert_eq!(Some("original"), echoed);
 }
 
@@ -164,7 +164,7 @@ fn copies_multiple_headers() {
         .copy_header("X-User-Id")
         .copy_header("X-Roles");
     let resp = layer.handle(&get("/"), &conn(), &EchoHeaderApp("X-Roles")).unwrap();
-    let echoed = resp.headers.iter().find(|h| h.name == "X-Echo").map(|h| h.value.as_str());
+    let echoed = resp.headers.iter().find(|h| h.name == "X-Echo").map(|h| h.value.as_ref());
     assert_eq!(Some("admin,editor"), echoed);
 }
 
@@ -198,7 +198,7 @@ fn redirect_auth_response_preserves_location_header() {
     let resp = layer.handle(&get("/"), &conn(), &OkApp).unwrap();
 
     assert_eq!(302, resp.status_code);
-    let location = resp.headers.iter().find(|h| h.name.eq_ignore_ascii_case("Location")).map(|h| h.value.as_str());
+    let location = resp.headers.iter().find(|h| h.name.eq_ignore_ascii_case("Location")).map(|h| h.value.as_ref());
     assert_eq!(Some("https://sso.example.com/login"), location);
 }
 

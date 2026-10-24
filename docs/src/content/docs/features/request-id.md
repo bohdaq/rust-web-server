@@ -44,7 +44,7 @@ use rust_web_server::request::Request;
 use rust_web_server::request_id::DEFAULT_HEADER;
 
 fn handler(request: &Request) {
-    let id = request.get_header(DEFAULT_HEADER.to_string()).map(|h| h.value.as_str()).unwrap_or("");
+    let id = request.get_header(DEFAULT_HEADER.to_string()).map(|h| h.value.as_ref()).unwrap_or("");
 }
 ```
 

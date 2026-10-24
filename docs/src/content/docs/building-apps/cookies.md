@@ -86,10 +86,7 @@ fn login(
     let mut r = Response::new();
     r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-    r.headers.push(Header {
-        name:  "Set-Cookie".to_string(),
-        value: cookie_value,
-    });
+    r.headers.push(Header::new("Set-Cookie", cookie_value));
     r
 }
 ```
@@ -192,14 +189,8 @@ let cookie_value = SetCookie::new("session", "")
 Push one `Set-Cookie` header per cookie. HTTP allows (and requires) multiple `Set-Cookie` headers in a single response:
 
 ```rust
-r.headers.push(Header {
-    name:  "Set-Cookie".to_string(),
-    value: SetCookie::new("session", token).path("/").http_only().build(),
-});
-r.headers.push(Header {
-    name:  "Set-Cookie".to_string(),
-    value: SetCookie::new("theme", "dark").path("/").max_age(31536000).build(),
-});
+r.headers.push(Header::new("Set-Cookie", SetCookie::new("session", token).path("/").http_only().build()));
+r.headers.push(Header::new("Set-Cookie", SetCookie::new("theme", "dark").path("/").max_age(31536000).build()));
 ```
 
 ## Full request/response cycle example
@@ -239,16 +230,16 @@ fn refresh_session(
     let mut r = Response::new();
     r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-    r.headers.push(Header {
-        name:  "Set-Cookie".to_string(),
-        value: SetCookie::new("session", new_token)
+    r.headers.push(Header::new(
+        "Set-Cookie",
+        SetCookie::new("session", new_token)
             .path("/")
             .http_only()
             .secure()
             .same_site("Strict")
             .max_age(3600)
             .build(),
-    });
+    ));
     r
 }
 

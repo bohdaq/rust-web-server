@@ -17,12 +17,12 @@ fn log_request_response() {
         request_uri: "/script.js".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![
-            Header { name: Header::_HOST.to_string(), value: "127.0.0.1:7878".to_string() },
-            Header { name: Header::_USER_AGENT.to_string(), value: "SOME USER AGENT".to_string() },
-            Header { name: Header::_ACCEPT.to_string(), value: "*/*".to_string() },
-            Header { name: Header::_ACCEPT_LANGUAGE.to_string(), value: "en-US,en;q=0.5".to_string() },
-            Header { name: Header::_ACCEPT_ENCODING.to_string(), value: "gzip, deflate, br".to_string() },
-            Header { name: Header::_REFERER.to_string(), value: "https://127.0.0.1:7878/".to_string() },
+            Header { name: Header::_HOST.into(), value: "127.0.0.1:7878".into() },
+            Header { name: Header::_USER_AGENT.into(), value: "SOME USER AGENT".into() },
+            Header { name: Header::_ACCEPT.into(), value: "*/*".into() },
+            Header { name: Header::_ACCEPT_LANGUAGE.into(), value: "en-US,en;q=0.5".into() },
+            Header { name: Header::_ACCEPT_ENCODING.into(), value: "gzip, deflate, br".into() },
+            Header { name: Header::_REFERER.into(), value: "https://127.0.0.1:7878/".into() },
         ],
         body: vec![],
     };

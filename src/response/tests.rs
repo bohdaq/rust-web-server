@@ -14,8 +14,8 @@ use crate::symbol::SYMBOL;
 #[test]
 fn check_is_multipart_byteranges_content_type() {
     let content_type = Header {
-        name: Header::_CONTENT_TYPE.to_string(),
-        value: "multipart/byteranges; boundary=String_separator".to_string(),
+        name: Header::_CONTENT_TYPE.into(),
+        value: "multipart/byteranges; boundary=String_separator".into(),
     };
 
     let is_multipart = Response::_is_multipart_byteranges_content_type(&content_type);
@@ -551,10 +551,10 @@ fn generate_response_coalesced_appends_small_bodies_only() {
     let response = || {
         let mut r = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n200_ok,
-            Some(vec![Header { name: "X-A".to_string(), value: "1".to_string() }]),
+            Some(vec![Header { name: "X-A".into(), value: "1".into() }]),
             Some(vec![Range::get_content_range(b"hello".to_vec(), "text/plain".to_string())]),
         );
-        r.headers.push(Header { name: "X-B".to_string(), value: "2".to_string() });
+        r.headers.push(Header { name: "X-B".into(), value: "2".into() });
         r
     };
     let expected_head = "HTTP/1.1 200 OK\r\nX-A: 1\r\nX-B: 2\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\n";

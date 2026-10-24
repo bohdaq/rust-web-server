@@ -161,7 +161,7 @@ impl OidcAuth {
         let mut r = Response::new();
         r.status_code  = *STATUS_CODE_REASON_PHRASE.n302_found.status_code;
         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n302_found.reason_phrase.to_string();
-        r.headers.push(Header { name: "Location".to_string(), value: url.to_string() });
+        r.headers.push(Header { name: "Location".into(), value: url.to_string().into() });
         r
     }
 
@@ -189,8 +189,8 @@ impl OidcAuth {
         let url = self.client.authorization_url(&verifier, &state, &nonce);
         let mut response = Self::redirect(&url);
         response.headers.push(Header {
-            name:  "Set-Cookie".to_string(),
-            value: session_cookie(&session.id, SESSION_COOKIE, SESSION_TTL),
+            name:  "Set-Cookie".into(),
+            value: session_cookie(&session.id, SESSION_COOKIE, SESSION_TTL).into(),
         });
         response
     }
@@ -265,8 +265,8 @@ impl OidcAuth {
 
         let mut response = Self::redirect(&return_to);
         response.headers.push(Header {
-            name:  "Set-Cookie".to_string(),
-            value: session_cookie(&session.id, SESSION_COOKIE, SESSION_TTL),
+            name:  "Set-Cookie".into(),
+            value: session_cookie(&session.id, SESSION_COOKIE, SESSION_TTL).into(),
         });
         response
     }
@@ -277,8 +277,8 @@ impl OidcAuth {
         }
         let mut response = Self::redirect("/");
         response.headers.push(Header {
-            name:  "Set-Cookie".to_string(),
-            value: destroy_cookie(SESSION_COOKIE),
+            name:  "Set-Cookie".into(),
+            value: destroy_cookie(SESSION_COOKIE).into(),
         });
         response
     }
@@ -316,8 +316,8 @@ impl Middleware for OidcAuth {
                     // Inject claims header so downstream handlers can read them
                     let mut req = request.clone();
                     req.headers.push(Header {
-                        name:  CLAIMS_HEADER.to_string(),
-                        value: claims_json.to_string(),
+                        name:  CLAIMS_HEADER.to_string().into(),
+                        value: claims_json.to_string().into(),
                     });
                     return next.execute(&req, connection);
                 }

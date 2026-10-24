@@ -195,12 +195,12 @@ impl Sse {
         response.reason_phrase =
             STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
         response.headers.push(Header {
-            name: Header::_CACHE_CONTROL.to_string(),
-            value: "no-cache".to_string(),
+            name: Header::_CACHE_CONTROL.into(),
+            value: "no-cache".into(),
         });
         response.headers.push(Header {
-            name: "X-Accel-Buffering".to_string(),
-            value: "no".to_string(),
+            name: "X-Accel-Buffering".into(),
+            value: "no".into(),
         });
         response.content_range_list = vec![Range::get_content_range(
             body,

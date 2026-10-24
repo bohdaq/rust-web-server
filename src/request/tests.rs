@@ -813,13 +813,13 @@ fn invalid_content_length_is_an_error_not_a_panic() {
 #[test]
 fn header_values_keep_colons_and_tolerate_missing_spaces() {
     let h = Request::parse_http_request_header_string("Referer: http://example.com:8080/a: b\r\n");
-    assert_eq!(("Referer", "http://example.com:8080/a: b"), (h.name.as_str(), h.value.as_str()));
+    assert_eq!(("Referer", "http://example.com:8080/a: b"), (h.name.as_ref(), h.value.as_ref()));
     let h = Request::parse_http_request_header_string("X-Compact:value\r\n");
-    assert_eq!(("X-Compact", "value"), (h.name.as_str(), h.value.as_str()));
+    assert_eq!(("X-Compact", "value"), (h.name.as_ref(), h.value.as_ref()));
     let h = Request::parse_http_request_header_string("X-Padded: \t value \t\r\n");
     assert_eq!("value", h.value);
     let h = Request::parse_http_request_header_string("Host:\r\n");
-    assert_eq!(("Host", ""), (h.name.as_str(), h.value.as_str()));
+    assert_eq!(("Host", ""), (h.name.as_ref(), h.value.as_ref()));
 }
 
 #[test]

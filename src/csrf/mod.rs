@@ -26,6 +26,7 @@
 //! token and embed it in the form:
 //!
 //! ```rust,no_run
+//! use rust_web_server::core::New;
 //! use rust_web_server::csrf::CsrfToken;
 //! use rust_web_server::request::Request;
 //! use rust_web_server::response::Response;
@@ -223,14 +224,14 @@ impl Middleware for CsrfLayer {
             // Inject so CsrfToken::from_request can retrieve it inside the handler.
             let mut req = request.clone();
             req.headers.push(Header {
-                name: INJECTED_HEADER.to_string(),
-                value: token.clone(),
+                name: INJECTED_HEADER.to_string().into(),
+                value: token.clone().into(),
             });
 
             let mut response = next.execute(&req, connection)?;
             response.headers.push(Header {
-                name: "Set-Cookie".to_string(),
-                value: self.cookie_header_value(&token),
+                name: "Set-Cookie".into(),
+                value: self.cookie_header_value(&token).into(),
             });
             Ok(response)
         } else {
@@ -281,7 +282,7 @@ impl CsrfToken {
     pub fn from_request(req: &Request) -> Option<Self> {
         for h in &req.headers {
             if h.name.eq_ignore_ascii_case(INJECTED_HEADER) {
-                return Some(CsrfToken(h.value.clone()));
+                return Some(CsrfToken(h.value.clone().into_owned()));
             }
         }
         None

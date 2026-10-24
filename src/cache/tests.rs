@@ -33,7 +33,7 @@ fn get(uri: &str) -> Request {
 
 fn get_with_header(uri: &str, name: &str, value: &str) -> Request {
     let mut r = get(uri);
-    r.headers.push(Header { name: name.to_string(), value: value.to_string() });
+    r.headers.push(Header { name: name.to_string().into(), value: value.to_string().into() });
     r
 }
 
@@ -52,7 +52,7 @@ fn ok_response() -> Response {
         http_version: VERSION.http_1_1.to_string(),
         status_code: 200,
         reason_phrase: "OK".to_string(),
-        headers: vec![Header { name: "Content-Type".to_string(), value: "text/plain".to_string() }],
+        headers: vec![Header { name: "Content-Type".into(), value: "text/plain".into() }],
         content_range_list: vec![],
         stream_file: None,
         stream_pipe: None,
@@ -93,7 +93,7 @@ fn response_with_status(status: i16) -> Response {
 
 fn response_with_cache_control(value: &str) -> Response {
     let mut r = ok_response();
-    r.headers.push(Header { name: "Cache-Control".to_string(), value: value.to_string() });
+    r.headers.push(Header { name: "Cache-Control".into(), value: value.to_string().into() });
     r
 }
 
@@ -271,14 +271,14 @@ fn multiple_vary_headers_combine_into_key() {
         .vary_by_header("Accept-Language");
 
     let mut req_en = get("/");
-    req_en.headers.push(Header { name: "Accept".to_string(), value: "text/html".to_string() });
-    req_en.headers.push(Header { name: "Accept-Language".to_string(), value: "en".to_string() });
+    req_en.headers.push(Header { name: "Accept".into(), value: "text/html".into() });
+    req_en.headers.push(Header { name: "Accept-Language".into(), value: "en".into() });
 
     let mut req_fr = req_en.clone();
     req_fr.headers.iter_mut()
         .find(|h| h.name == "Accept-Language")
         .unwrap()
-        .value = "fr".to_string();
+        .value = "fr".into();
 
     layer.handle(&req_en, &conn(), &app).unwrap();
     layer.handle(&req_fr, &conn(), &app).unwrap();

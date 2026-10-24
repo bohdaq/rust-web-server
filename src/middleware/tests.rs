@@ -63,7 +63,7 @@ struct AddHeaderMiddleware {
 impl Middleware for AddHeaderMiddleware {
     fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
         let mut response = next.execute(request, connection)?;
-        response.headers.push(crate::header::Header { name: self.name.to_string(), value: self.value.to_string() });
+        response.headers.push(crate::header::Header { name: self.name.to_string().into(), value: self.value.to_string().into() });
         Ok(response)
     }
 }

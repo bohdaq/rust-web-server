@@ -107,7 +107,7 @@ impl<'a, A: Application> TestRequest<'a, A> {
 
     /// Add a request header.
     pub fn header(mut self, name: &str, value: &str) -> Self {
-        self.headers.push(Header { name: name.to_string(), value: value.to_string() });
+        self.headers.push(Header { name: name.to_string().into(), value: value.to_string().into() });
         self
     }
 
@@ -175,18 +175,18 @@ impl TestResponse {
         if r.content_range_list.len() == 1 {
             let content_range = r.content_range_list.get(0).unwrap();
             r.headers.push(Header {
-                name: Header::_CONTENT_TYPE.to_string(),
-                value: content_range.content_type.to_string(),
+                name: Header::_CONTENT_TYPE.into(),
+                value: content_range.content_type.to_string().into(),
             });
             if let Some(value) = crate::response::content_range_header_value(r.status_code, content_range) {
                 r.headers.push(Header {
-                    name: Header::_CONTENT_RANGE.to_string(),
-                    value,
+                    name: Header::_CONTENT_RANGE.into(),
+                    value: value.into(),
                 });
             }
             r.headers.push(Header {
-                name: Header::_CONTENT_LENGTH.to_string(),
-                value: content_range.body.len().to_string(),
+                name: Header::_CONTENT_LENGTH.into(),
+                value: content_range.body.len().to_string().into(),
             });
         }
 
@@ -214,7 +214,7 @@ impl TestResponse {
         self.headers
             .iter()
             .find(|h| h.name.to_lowercase() == lower)
-            .map(|h| h.value.as_str())
+            .map(|h| h.value.as_ref())
     }
 
     /// All response headers.

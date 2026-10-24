@@ -103,13 +103,13 @@ fn multipart_form_data_body_in_request() {
     let expected_body : Vec<u8> = body.to_vec(); // creates copy of the vector
 
     let host = Header {
-        name: Header::_HOST.to_string(),
-        value: "localhost".to_string()
+        name: Header::_HOST.into(),
+        value: "localhost".into()
     };
 
     let content_type = Header {
-        name: Header::_CONTENT_TYPE.to_string(),
-        value: format!("multipart/form-data; boundary={}", boundary).to_string()
+        name: Header::_CONTENT_TYPE.into(),
+        value: format!("multipart/form-data; boundary={}", boundary).to_string().into()
     };
 
     let request : Request = Request {
@@ -175,13 +175,13 @@ fn multipart_form_data_body_in_response() {
     };
 
     let host = Header {
-        name: Header::_HOST.to_string(),
-        value: "localhost".to_string()
+        name: Header::_HOST.into(),
+        value: "localhost".into()
     };
 
     let content_type = Header {
-        name: Header::_CONTENT_TYPE.to_string(),
-        value: format!("multipart/form-data; boundary={}", boundary).to_string()
+        name: Header::_CONTENT_TYPE.into(),
+        value: format!("multipart/form-data; boundary={}", boundary).to_string().into()
     };
 
     let response = Response {
@@ -213,13 +213,13 @@ fn form_urlencoded() {
     let expected_body : Vec<u8> = body.to_vec(); // creates copy of the vector
 
     let host = Header {
-        name: Header::_HOST.to_string(),
-        value: "localhost".to_string()
+        name: Header::_HOST.into(),
+        value: "localhost".into()
     };
 
     let content_type = Header {
-        name: Header::_CONTENT_TYPE.to_string(),
-        value: "application/x-www-form-urlencoded".to_string()
+        name: Header::_CONTENT_TYPE.into(),
+        value: "application/x-www-form-urlencoded".into()
     };
 
     let request : Request = Request {
@@ -258,13 +258,13 @@ fn json_in_request() {
     let expected_body : Vec<u8> = body.to_vec(); // creates copy of the vector
 
     let host = Header {
-        name: Header::_HOST.to_string(),
-        value: "localhost".to_string()
+        name: Header::_HOST.into(),
+        value: "localhost".into()
     };
 
     let content_type = Header {
-        name: Header::_CONTENT_TYPE.to_string(),
-        value: "application/json".to_string()
+        name: Header::_CONTENT_TYPE.into(),
+        value: "application/json".into()
     };
 
     let request : Request = Request {
@@ -314,13 +314,13 @@ fn json_body_in_response() {
     };
 
     let host = Header {
-        name: Header::_HOST.to_string(),
-        value: "localhost".to_string()
+        name: Header::_HOST.into(),
+        value: "localhost".into()
     };
 
     let content_type = Header {
-        name: Header::_CONTENT_TYPE.to_string(),
-        value: "application/json".to_string()
+        name: Header::_CONTENT_TYPE.into(),
+        value: "application/json".into()
     };
 
     let response = Response {
@@ -348,21 +348,21 @@ fn multipart_body_in_response() {
 
     // building body (content_range_list)
     let range = Header {
-        name: Header::_RANGE.to_string(),
-        value: "bytes=200-1000, 1200-1400".to_string()
+        name: Header::_RANGE.into(),
+        value: "bytes=200-1000, 1200-1400".into()
     };
 
     let content_range_list : Vec<ContentRange> = Range::get_content_range_list(resource_uri, &range).unwrap();
 
     // building response
     let host = Header {
-        name: Header::_HOST.to_string(),
-        value: "localhost".to_string()
+        name: Header::_HOST.into(),
+        value: "localhost".into()
     };
 
     let content_type = Header {
-        name: Header::_CONTENT_TYPE.to_string(),
-        value: Range::MULTIPART_BYTERANGES_CONTENT_TYPE.to_string()
+        name: Header::_CONTENT_TYPE.into(),
+        value: Range::MULTIPART_BYTERANGES_CONTENT_TYPE.into()
     };
 
     let response = Response {

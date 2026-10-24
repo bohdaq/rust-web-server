@@ -123,10 +123,7 @@ Builds a `Set-Cookie` header value with `HttpOnly`, `SameSite=Lax`, `Path=/`, an
 
 ```rust
 let cookie_value = session::session_cookie(&session.id, "sid", 3600);
-response.headers.push(Header {
-    name: "Set-Cookie".to_string(),
-    value: cookie_value,
-});
+response.headers.push(Header::new("Set-Cookie", cookie_value));
 ```
 
 ### `destroy_cookie`
@@ -135,10 +132,7 @@ Clears the browser cookie by setting `Max-Age=0`.
 
 ```rust
 let cookie_value = session::destroy_cookie("sid");
-response.headers.push(Header {
-    name: "Set-Cookie".to_string(),
-    value: cookie_value,
-});
+response.headers.push(Header::new("Set-Cookie", cookie_value));
 ```
 
 ## Complete login/profile example
@@ -162,10 +156,7 @@ let app = App::with_state(State { sessions: SessionStore::new(3600) })
         let mut r = Response::new();
         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-        r.headers.push(Header {
-            name: "Set-Cookie".to_string(),
-            value: session::session_cookie(&sess.id, "sid", 3600),
-        });
+        r.headers.push(Header::new("Set-Cookie", session::session_cookie(&sess.id, "sid", 3600)));
         r
     })
     .get("/profile", |req, _params, _conn, state| {
@@ -200,10 +191,7 @@ let app = App::with_state(State { sessions: SessionStore::new(3600) })
         }
         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-        r.headers.push(Header {
-            name: "Set-Cookie".to_string(),
-            value: session::destroy_cookie("sid"),
-        });
+        r.headers.push(Header::new("Set-Cookie", session::destroy_cookie("sid")));
         r
     });
 ```

@@ -168,10 +168,9 @@ Create a header value pair:
 ```rust
 use rust_web_server::header::Header;
 
-let location = Header {
-    name: Header::_LOCATION.to_string(),
-    value: "/new-path".to_string(),
-};
+// name and value are Cow<'static, str> (18.0.0): a &'static str is borrowed,
+// a String (e.g. format!(..)) is owned. Read them as &str via deref.
+let location = Header::new(Header::_LOCATION, "/new-path");
 response.headers.push(location);
 ```
 
@@ -181,10 +180,7 @@ response.headers.push(location);
 
 ```rust
 let mut header_list = Header::get_header_list(request);
-header_list.push(Header {
-    name: Header::_CACHE_CONTROL.to_string(),
-    value: "no-store".to_string(),
-});
+header_list.push(Header::new(Header::_CACHE_CONTROL, "no-store"));
 ```
 
 ## MimeType constants

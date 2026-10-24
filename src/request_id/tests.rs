@@ -41,7 +41,7 @@ impl Application for EchoRequestIdApp {
     fn execute(&self, request: &Request, _conn: &ConnectionInfo) -> Result<Response, String> {
         use crate::mime_type::MimeType;
         use crate::range::Range;
-        let seen = request.get_header(DEFAULT_HEADER.to_string()).map(|h| h.value.clone()).unwrap_or_default();
+        let seen = request.get_header(DEFAULT_HEADER.to_string()).map(|h| h.value.to_string()).unwrap_or_default();
         let mut r = ok();
         r.content_range_list = vec![Range::get_content_range(seen.into_bytes(), MimeType::TEXT_PLAIN.to_string())];
         Ok(r)
@@ -98,7 +98,7 @@ fn generates_and_injects_an_id_when_none_is_present() {
 fn preserves_an_incoming_id_unchanged() {
     let app = WithMiddleware::new(EchoRequestIdApp).wrap(RequestIdLayer::new());
     let mut req = get("/x");
-    req.headers.push(crate::header::Header { name: DEFAULT_HEADER.to_string(), value: "upstream-id-123".to_string() });
+    req.headers.push(crate::header::Header { name: DEFAULT_HEADER.to_string().into(), value: "upstream-id-123".into() });
 
     let resp = app.execute(&req, &conn()).unwrap();
     assert_eq!("upstream-id-123", body_of(&resp));
@@ -138,7 +138,7 @@ fn response_status_is_unaffected() {
 fn request_id_extractor_reads_the_header_when_present() {
     use crate::extract::{FromRequest, RequestId};
     let mut req = get("/x");
-    req.headers.push(crate::header::Header { name: DEFAULT_HEADER.to_string(), value: "abc-123".to_string() });
+    req.headers.push(crate::header::Header { name: DEFAULT_HEADER.to_string().into(), value: "abc-123".into() });
 
     let id = RequestId::from_request(&req).unwrap();
     assert_eq!("abc-123", id.as_str());

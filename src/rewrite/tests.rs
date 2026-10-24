@@ -77,14 +77,14 @@ fn request_header_set_adds_new_header() {
 #[test]
 fn request_header_set_replaces_existing_header() {
     let mut req = get("/");
-    req.headers.push(Header { name: "X-Env".to_string(), value: "staging".to_string() });
+    req.headers.push(Header { name: "X-Env".into(), value: "staging".into() });
     let spy = Spy::new(ok(b""));
     let layer = RewriteLayer::new().request_header_set("x-env", "production");
     layer.handle(&req, &conn(), &spy).unwrap();
     let received = spy.captured();
     let values: Vec<&str> = received.headers.iter()
         .filter(|h| h.name.eq_ignore_ascii_case("X-Env"))
-        .map(|h| h.value.as_str())
+        .map(|h| h.value.as_ref())
         .collect();
     assert_eq!(vec!["production"], values, "should have exactly one X-Env with the new value");
 }
@@ -92,7 +92,7 @@ fn request_header_set_replaces_existing_header() {
 #[test]
 fn request_header_remove_removes_header() {
     let mut req = get("/");
-    req.headers.push(Header { name: "X-Debug".to_string(), value: "1".to_string() });
+    req.headers.push(Header { name: "X-Debug".into(), value: "1".into() });
     let spy = Spy::new(ok(b""));
     let layer = RewriteLayer::new().request_header_remove("X-Debug");
     layer.handle(&req, &conn(), &spy).unwrap();
@@ -103,7 +103,7 @@ fn request_header_remove_removes_header() {
 #[test]
 fn request_header_remove_is_case_insensitive() {
     let mut req = get("/");
-    req.headers.push(Header { name: "x-debug".to_string(), value: "1".to_string() });
+    req.headers.push(Header { name: "x-debug".into(), value: "1".into() });
     let spy = Spy::new(ok(b""));
     let layer = RewriteLayer::new().request_header_remove("X-DEBUG");
     layer.handle(&req, &conn(), &spy).unwrap();
@@ -234,13 +234,13 @@ fn response_header_set_adds_new_header() {
 #[test]
 fn response_header_set_replaces_existing() {
     let mut reply = ok(b"");
-    reply.headers.push(Header { name: "Cache-Control".to_string(), value: "max-age=3600".to_string() });
+    reply.headers.push(Header { name: "Cache-Control".into(), value: "max-age=3600".into() });
     let spy = Spy::new(reply);
     let layer = RewriteLayer::new().response_header_set("cache-control", "no-store");
     let resp = layer.handle(&get("/"), &conn(), &spy).unwrap();
     let values: Vec<&str> = resp.headers.iter()
         .filter(|h| h.name.eq_ignore_ascii_case("Cache-Control"))
-        .map(|h| h.value.as_str())
+        .map(|h| h.value.as_ref())
         .collect();
     assert_eq!(vec!["no-store"], values, "should have exactly one Cache-Control header");
 }
@@ -248,7 +248,7 @@ fn response_header_set_replaces_existing() {
 #[test]
 fn response_header_remove_removes_header() {
     let mut reply = ok(b"");
-    reply.headers.push(Header { name: "Server".to_string(), value: "rws".to_string() });
+    reply.headers.push(Header { name: "Server".into(), value: "rws".into() });
     let spy = Spy::new(reply);
     let layer = RewriteLayer::new().response_header_remove("Server");
     let resp = layer.handle(&get("/"), &conn(), &spy).unwrap();

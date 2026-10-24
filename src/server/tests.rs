@@ -57,8 +57,8 @@ fn it_generates_successful_response_with_index_html() {
 
     // request part
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let headers = vec![host];
@@ -123,8 +123,8 @@ fn it_generates_successful_response_with_index_html_as_symlink() {
 
     // request part
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let headers = vec![host];
@@ -191,8 +191,8 @@ fn it_generates_successful_response_with_static_file() {
 
     // request part
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let headers = vec![host];
@@ -266,8 +266,8 @@ fn it_generates_not_found_page_for_absent_static_file() {
 
     // request part
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let headers = vec![host];
@@ -341,8 +341,8 @@ fn it_generates_not_found_page_for_absent_route() {
 
     // request part
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let headers = vec![host];
@@ -412,8 +412,8 @@ fn it_generates_directory_listing_for_static_directory_without_index_html() {
 
     // request part
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let headers = vec![host];
@@ -477,8 +477,8 @@ fn it_generates_directory_listing_with_parent_link_for_nested_static_subdirector
 
     // request part
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let headers = vec![host];
@@ -582,8 +582,8 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
 
     // request part
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let headers = vec![host];
@@ -653,8 +653,8 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
 
     // request part
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let headers = vec![host];
@@ -727,8 +727,8 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 
     // request part
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let headers = vec![host];
@@ -800,8 +800,8 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
 
     // request part
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let headers = vec![host];
@@ -880,13 +880,13 @@ fn check_range_response_for_not_proper_range_header() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let range = Header {
-        name: Header::_RANGE.to_string(),
-        value: range_header_value.to_string()
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
     };
 
     let headers = vec![host, range];
@@ -947,13 +947,13 @@ fn check_range_response_range_end_bigger_than_filesize_is_clamped() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let range = Header {
-        name: Header::_RANGE.to_string(),
-        value: range_header_value.to_string()
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
     };
 
     let headers = vec![host, range];
@@ -1016,13 +1016,13 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let range = Header {
-        name: Header::_RANGE.to_string(),
-        value: range_header_value.to_string()
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
     };
 
     let headers = vec![host, range];
@@ -1083,13 +1083,13 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let range = Header {
-        name: Header::_RANGE.to_string(),
-        value: range_header_value.to_string()
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
     };
 
     let headers = vec![host, range];
@@ -1150,13 +1150,13 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let range = Header {
-        name: Header::_RANGE.to_string(),
-        value: range_header_value.to_string()
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
     };
 
     let headers = vec![host, range];
@@ -1212,13 +1212,13 @@ fn check_range_response_for_not_proper_range_header_malformed() {
     let request_host_header_name = "Host";
     let request_host_header_value = "localhost:7777";
     let host = Header {
-        name: request_host_header_name.to_string(),
-        value: request_host_header_value.to_string()
+        name: request_host_header_name.to_string().into(),
+        value: request_host_header_value.to_string().into()
     };
 
     let range = Header {
-        name: Header::_RANGE.to_string(),
-        value: range_header_value.to_string()
+        name: Header::_RANGE.into(),
+        value: range_header_value.to_string().into()
     };
 
     let headers = vec![host, range];
@@ -1404,8 +1404,8 @@ fn write_chunked_file_produces_valid_chunked_encoding() {
         status_code: *STATUS_CODE_REASON_PHRASE.n200_ok.status_code,
         reason_phrase: STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string(),
         headers: vec![Header {
-            name: Header::_CONTENT_TYPE.to_string(),
-            value: MimeType::TEXT_PLAIN.to_string(),
+            name: Header::_CONTENT_TYPE.into(),
+            value: MimeType::TEXT_PLAIN.into(),
         }],
         content_range_list: vec![],
         stream_file: None,
@@ -1789,7 +1789,7 @@ fn write_chunked_file_with_known_length_sends_raw_body_not_chunked() {
         http_version: VERSION.http_1_1.to_string(),
         status_code: 200,
         reason_phrase: "OK".to_string(),
-        headers: vec![Header { name: Header::_CONTENT_LENGTH.to_string(), value: "9".to_string() }],
+        headers: vec![Header { name: Header::_CONTENT_LENGTH.into(), value: "9".into() }],
         content_range_list: vec![],
         stream_file: None,
         stream_pipe: None,

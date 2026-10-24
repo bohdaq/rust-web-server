@@ -44,13 +44,13 @@ impl ClientHint {
 
     pub fn get_accept_client_hints_header() -> Header {
         let hint_header_value = ClientHint::get_client_hint_list();
-        let header = Header { name: ClientHint::ACCEPT_CLIENT_HINTS.to_string(), value: hint_header_value.to_string() };
+        let header = Header { name: ClientHint::ACCEPT_CLIENT_HINTS.into(), value: hint_header_value.to_string().into() };
         header
     }
 
     pub fn get_critical_client_hints_header() -> Header {
         let hint_header_value = ClientHint::get_client_hint_list();
-        let header = Header { name: ClientHint::CRITICAL_CLIENT_HINTS.to_string(), value: hint_header_value.to_string() };
+        let header = Header { name: ClientHint::CRITICAL_CLIENT_HINTS.into(), value: hint_header_value.to_string().into() };
         header
     }
 

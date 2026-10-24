@@ -49,10 +49,7 @@
 //!         let mut r = Response::new();
 //!         r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
 //!         r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-//!         r.headers.push(Header {
-//!             name: "Set-Cookie".to_string(),
-//!             value: session::session_cookie(&sess.id, "sid", 3600),
-//!         });
+//!         r.headers.push(Header::new("Set-Cookie", session::session_cookie(&sess.id, "sid", 3600)));
 //!         r
 //!     })
 //!     .get("/profile", |req, _params, _conn, state| {
@@ -266,7 +263,7 @@ pub fn session_id_from_request(request: &Request, cookie_name: &str) -> Option<S
 /// use rust_web_server::{session, header::Header};
 ///
 /// let value = session::session_cookie("abc123", "sid", 3600);
-/// // response.headers.push(Header { name: "Set-Cookie".to_string(), value });
+/// // response.headers.push(Header::new("Set-Cookie", value));
 /// ```
 pub fn session_cookie(session_id: &str, cookie_name: &str, ttl_secs: u64) -> String {
     SetCookie::new(cookie_name, session_id)

@@ -101,9 +101,9 @@ impl WebSocket {
             status_code: *STATUS_CODE_REASON_PHRASE.n101_switching_protocols.status_code,
             reason_phrase: STATUS_CODE_REASON_PHRASE.n101_switching_protocols.reason_phrase.to_string(),
             headers: vec![
-                Header { name: "Upgrade".to_string(),              value: "websocket".to_string() },
-                Header { name: "Connection".to_string(),           value: "Upgrade".to_string() },
-                Header { name: "Sec-WebSocket-Accept".to_string(), value: accept },
+                Header { name: "Upgrade".into(),              value: "websocket".into() },
+                Header { name: "Connection".into(),           value: "Upgrade".into() },
+                Header { name: "Sec-WebSocket-Accept".into(), value: accept.into() },
             ],
             content_range_list: vec![],
             stream_file: None,
@@ -112,8 +112,8 @@ impl WebSocket {
 
         if let Some(proto) = request.get_header("Sec-WebSocket-Protocol".to_string()) {
             response.headers.push(Header {
-                name: "Sec-WebSocket-Protocol".to_string(),
-                value: proto.value.split(',').next().unwrap_or("").trim().to_string(),
+                name: "Sec-WebSocket-Protocol".into(),
+                value: proto.value.split(',').next().unwrap_or("").trim().to_string().into(),
             });
         }
 

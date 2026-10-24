@@ -878,7 +878,7 @@ fn application_opens_sse_stream_for_get_on_mcp_path() {
     let resp = client.get("/mcp").send();
     assert_eq!(resp.status(), 200);
     let content_type = resp.headers().iter().find(|h| h.name.eq_ignore_ascii_case("content-type"));
-    assert_eq!(content_type.map(|h| h.value.as_str()), Some("text/event-stream"));
+    assert_eq!(content_type.map(|h| h.value.as_ref()), Some("text/event-stream"));
 }
 
 #[test]
@@ -1073,7 +1073,7 @@ fn get_request() -> crate::request::Request {
 
 fn get_request_with_session(session_id: Option<&str>) -> crate::request::Request {
     let headers = match session_id {
-        Some(sid) => vec![crate::header::Header { name: "Mcp-Session-Id".to_string(), value: sid.to_string() }],
+        Some(sid) => vec![crate::header::Header { name: "Mcp-Session-Id".into(), value: sid.to_string().into() }],
         None => vec![],
     };
     crate::request::Request {
@@ -1090,7 +1090,7 @@ fn start_sse_stream_returns_event_stream_headers_and_a_reader() {
     let srv = make_server();
     let resp = srv.start_sse_stream(&get_request());
     assert_eq!(resp.status_code, 200);
-    let content_type = resp.headers.iter().find(|h| h.name == "Content-Type").map(|h| h.value.as_str());
+    let content_type = resp.headers.iter().find(|h| h.name == "Content-Type").map(|h| h.value.as_ref());
     assert_eq!(content_type, Some("text/event-stream"));
     assert!(resp.stream_pipe.is_some());
 }

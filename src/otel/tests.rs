@@ -194,7 +194,7 @@ fn otlp_build_body_contains_service_name() {
         trace_id: new_trace_id(),
         span_id: new_span_id(),
         parent_span_id: None,
-        name: "GET /api/users".to_string(),
+        name: "GET /api/users".into(),
         start_ns: 1_000_000_000,
         end_ns:   1_001_000_000,
         http_method: "GET".to_string(),
@@ -221,7 +221,7 @@ fn otlp_build_body_includes_parent_span_id_when_present() {
         trace_id: new_trace_id(),
         span_id: new_span_id(),
         parent_span_id: Some(parent),
-        name: "POST /orders".to_string(),
+        name: "POST /orders".into(),
         start_ns: 0,
         end_ns: 1,
         http_method: "POST".to_string(),
@@ -243,7 +243,7 @@ fn otlp_build_body_no_parent_span_id_when_root() {
         trace_id: new_trace_id(),
         span_id: new_span_id(),
         parent_span_id: None,
-        name: "GET /".to_string(),
+        name: "GET /".into(),
         start_ns: 0,
         end_ns: 1,
         http_method: "GET".to_string(),
@@ -265,7 +265,7 @@ fn otlp_build_body_is_valid_json_structure() {
         trace_id: new_trace_id(),
         span_id: new_span_id(),
         parent_span_id: None,
-        name: "GET /".to_string(),
+        name: "GET /".into(),
         start_ns: 0,
         end_ns: 1,
         http_method: "GET".to_string(),
@@ -293,7 +293,7 @@ fn otlp_build_body_error_span_has_status_code_2() {
         trace_id: new_trace_id(),
         span_id: new_span_id(),
         parent_span_id: None,
-        name: "GET /boom".to_string(),
+        name: "GET /boom".into(),
         start_ns: 0,
         end_ns: 1,
         http_method: "GET".to_string(),
@@ -510,7 +510,7 @@ fn otlp_build_body_renders_client_kind() {
     let span_data = crate::otel::SpanData {
         trace_id: new_trace_id(),
         span_id: new_span_id(),
-        name: "upstream.call".to_string(),
+        name: "upstream.call".into(),
         kind: SpanKind::Client,
         ..Default::default()
     };
@@ -525,7 +525,7 @@ fn otlp_build_body_renders_internal_kind() {
     let span_data = crate::otel::SpanData {
         trace_id: new_trace_id(),
         span_id: new_span_id(),
-        name: "db.query".to_string(),
+        name: "db.query".into(),
         kind: SpanKind::Internal,
         ..Default::default()
     };
@@ -540,7 +540,7 @@ fn otlp_build_body_renders_generic_attributes() {
     let span_data = crate::otel::SpanData {
         trace_id: new_trace_id(),
         span_id: new_span_id(),
-        name: "db.query".to_string(),
+        name: "db.query".into(),
         attributes: vec![
             ("db.statement".to_string(), AttributeValue::String("SELECT 1".to_string())),
             ("db.rows".to_string(), AttributeValue::Int(3)),
@@ -563,7 +563,7 @@ fn otlp_build_body_omits_http_attributes_when_http_method_empty() {
     let span_data = crate::otel::SpanData {
         trace_id: new_trace_id(),
         span_id: new_span_id(),
-        name: "db.query".to_string(),
+        name: "db.query".into(),
         attributes: vec![("db.statement".to_string(), AttributeValue::String("SELECT 1".to_string()))],
         ..Default::default()
     };
@@ -578,7 +578,7 @@ fn stdout_format_span_includes_kind_and_attributes() {
     let span_data = crate::otel::SpanData {
         trace_id: new_trace_id(),
         span_id: new_span_id(),
-        name: "db.query".to_string(),
+        name: "db.query".into(),
         kind: SpanKind::Internal,
         attributes: vec![("db.statement".to_string(), AttributeValue::String("SELECT 1".to_string()))],
         ..Default::default()

@@ -134,7 +134,7 @@ impl Middleware for ForwardAuthLayer {
         for name in &self.copy_headers {
             if let Some(value) = auth_response.header(name) {
                 forwarded.headers.retain(|h| !h.name.eq_ignore_ascii_case(name));
-                forwarded.headers.push(Header { name: name.clone(), value: value.to_string() });
+                forwarded.headers.push(Header { name: name.clone().into(), value: value.to_string().into() });
             }
         }
 
@@ -163,7 +163,7 @@ fn passthrough_response(auth_response: &crate::http_client::Response) -> Respons
         if EXCLUDED_PASSTHROUGH_HEADERS.contains(&name.to_lowercase().as_str()) {
             continue;
         }
-        r.headers.push(Header { name: name.clone(), value: value.clone() });
+        r.headers.push(Header { name: name.clone().into(), value: value.clone().into() });
     }
 
     let body = auth_response.bytes();

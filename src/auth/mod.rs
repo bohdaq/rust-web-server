@@ -457,8 +457,8 @@ impl<F: Fn(&str, &str) -> bool + Send + Sync + 'static> Middleware for BasicAuth
         let challenge = || {
             let mut r = AppError::Unauthorized.into_response();
             r.headers.push(Header {
-                name: "WWW-Authenticate".to_string(),
-                value: "Basic realm=\"Protected\"".to_string(),
+                name: "WWW-Authenticate".into(),
+                value: "Basic realm=\"Protected\"".into(),
             });
             r
         };

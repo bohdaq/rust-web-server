@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use crate::client_hint::ClientHint;
 use crate::cors::Cors;
 use crate::ext::date_time_ext::DateTimeExt;
@@ -19,12 +20,18 @@ mod example;
 /// Use the associated string constants (e.g. [`Header::_CONTENT_TYPE`]) for header names.
 /// [`Header::get_header_list`] returns the standard set of response headers (client hints,
 /// CORS, cache control, security headers) that should be included on every response.
+///
+/// Name and value are `Cow<'static, str>` (18.0.0; `String` before): the
+/// built-in names and fixed values are borrowed `&'static str`s, so building
+/// and cloning the standard header set allocates nothing. Construct with
+/// [`Header::new`] (or `.into()` on each field); read through `Deref<Target =
+/// str>` (`&*header.value`, `header.value.trim()`, `header.value == "x"`).
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Header {
     /// Header name, e.g. `"Content-Type"`.
-    pub name: String,
+    pub name: Cow<'static, str>,
     /// Header value, e.g. `"application/json"`.
-    pub value: String,
+    pub value: Cow<'static, str>,
 }
 
 /// Headers every built-in response carries, around the per-request `Date`.
@@ -34,6 +41,18 @@ struct FixedHeaders {
 }
 
 impl Header {
+
+    /// A header from anything that converts into `Cow<'static, str>`: a
+    /// `&'static str` (borrowed, no allocation) or a `String` (owned).
+    ///
+    /// ```
+    /// use rust_web_server::header::Header;
+    /// let h = Header::new(Header::_CONTENT_TYPE, format!("text/{}", "plain"));
+    /// assert_eq!("text/plain", h.value);
+    /// ```
+    pub fn new(name: impl Into<Cow<'static, str>>, value: impl Into<Cow<'static, str>>) -> Header {
+        Header { name: name.into(), value: value.into() }
+    }
 
     pub fn as_string(&self) -> String {
         let formatted = format!("{}: {}", self.name, self.value);
@@ -199,22 +218,50 @@ impl Header {
         let before_date = vec![
             ClientHint::get_accept_client_hints_header(),
             ClientHint::get_critical_client_hints_header(),
-            Header { name: Header::_VARY.to_string(), value: vary },
+            Header { name: Header::_VARY.into(), value: vary.into() },
             Header::get_x_content_type_options_header(),
             Header::get_accept_ranges_header(),
             Header::get_x_frame_options_header(),
         ];
         let mut after_date = vec![
             Header::get_no_cache_header(),
-            Header { name: Header::_REFERRER_POLICY.to_string(), value: Header::_REFERRER_POLICY_VALUE_DEFAULT.to_string() },
-            Header { name: Header::_PERMISSIONS_POLICY.to_string(), value: Header::_PERMISSIONS_POLICY_VALUE_DEFAULT.to_string() },
+            Header { name: Header::_REFERRER_POLICY.into(), value: Header::_REFERRER_POLICY_VALUE_DEFAULT.into() },
+            Header { name: Header::_PERMISSIONS_POLICY.into(), value: Header::_PERMISSIONS_POLICY_VALUE_DEFAULT.into() },
         ];
         if !csp.is_empty() {
-            after_date.push(Header { name: Header::_CONTENT_SECURITY_POLICY.to_string(), value: csp.to_string() });
+            after_date.push(Header { name: Header::_CONTENT_SECURITY_POLICY.into(), value: csp.to_string().into() });
         }
+        // Borrowed values clone for free: everything here is per CSP value,
+        // not per request, so the built strings are interned for good.
+        let before_date = before_date.into_iter().map(Header::interned).collect();
+        let after_date = after_date.into_iter().map(Header::interned).collect();
         let fixed = Arc::new(FixedHeaders { before_date, after_date });
         *CACHE.write().unwrap_or_else(|e| e.into_inner()) = Some((csp.to_string(), Arc::clone(&fixed)));
         fixed
+    }
+
+    /// `self` with an owned name or value turned into a `&'static str`
+    /// leaked once per distinct string (a process-wide set), so cloning it
+    /// never allocates. Only for values from a small, bounded set — the
+    /// fixed response headers, which change only with the CSP setting.
+    fn interned(self) -> Header {
+        fn intern(s: Cow<'static, str>) -> Cow<'static, str> {
+            use std::collections::HashSet;
+            use std::sync::{Mutex, OnceLock};
+            let owned = match s {
+                Cow::Borrowed(_) => return s,
+                Cow::Owned(owned) => owned,
+            };
+            static INTERNED: OnceLock<Mutex<HashSet<&'static str>>> = OnceLock::new();
+            let mut set = INTERNED.get_or_init(|| Mutex::new(HashSet::new())).lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(existing) = set.get(owned.as_str()) {
+                return Cow::Borrowed(existing);
+            }
+            let leaked: &'static str = Box::leak(owned.into_boxed_str());
+            set.insert(leaked);
+            Cow::Borrowed(leaked)
+        }
+        Header { name: intern(self.name), value: intern(self.value) }
     }
 
     /// Build the standard response header list, reading CORS and CSP settings
@@ -231,43 +278,43 @@ impl Header {
 
     pub fn get_x_content_type_options_header() -> Header {
         Header {
-            name: Header::_X_CONTENT_TYPE_OPTIONS.to_string(),
-            value: Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF.to_string(),
+            name: Header::_X_CONTENT_TYPE_OPTIONS.into(),
+            value: Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF.into(),
         }
     }
 
     pub fn get_accept_ranges_header() -> Header {
         Header {
-            name: Header::_ACCEPT_RANGES.to_string(),
-            value: Range::BYTES.to_string(),
+            name: Header::_ACCEPT_RANGES.into(),
+            value: Range::BYTES.into(),
         }
     }
 
     pub fn get_x_frame_options_header() -> Header {
         Header {
-            name: Header::_X_FRAME_OPTIONS.to_string(),
-            value: Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN.to_string(),
+            name: Header::_X_FRAME_OPTIONS.into(),
+            value: Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN.into(),
         }
     }
 
     pub fn get_date_iso_8601_header() -> Header {
         Header {
-            name: Header::_DATE_UNIX_EPOCH_NANOS.to_string(),
-            value: crate::ext::decimal::Decimal::new(DateTimeExt::_now_unix_epoch_nanos()).as_str().to_string(),
+            name: Header::_DATE_UNIX_EPOCH_NANOS.into(),
+            value: crate::ext::decimal::Decimal::new(DateTimeExt::_now_unix_epoch_nanos()).as_str().to_string().into(),
         }
     }
 
     pub fn get_no_cache_header() -> Header {
         Header {
-            name: Header::_CACHE_CONTROL.to_string(),
-            value: Header::_DO_NOT_STORE_CACHE.to_string(),
+            name: Header::_CACHE_CONTROL.into(),
+            value: Header::_DO_NOT_STORE_CACHE.into(),
         }
     }
 
     pub fn get_hsts_header() -> Header {
         Header {
-            name: Header::_STRICT_TRANSPORT_SECURITY.to_string(),
-            value: Header::_STRICT_TRANSPORT_SECURITY_VALUE_DEFAULT.to_string(),
+            name: Header::_STRICT_TRANSPORT_SECURITY.into(),
+            value: Header::_STRICT_TRANSPORT_SECURITY_VALUE_DEFAULT.into(),
         }
     }
 
@@ -284,8 +331,8 @@ impl Header {
         let (name, value) = boxed_split.unwrap();
 
         let header = Header {
-            name: name.trim().to_string(),
-            value: value.trim().to_string(),
+            name: name.trim().to_string().into(),
+            value: value.trim().to_string().into(),
         };
 
         Ok(header)
