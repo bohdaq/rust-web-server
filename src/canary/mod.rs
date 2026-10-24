@@ -356,7 +356,8 @@ impl CanaryLayer {
                     Err("CanaryLayer: TLS backend requires the http-client or http2 feature".to_string())
                 }
             } else {
-                crate::proxy::proxy_http1(
+                crate::proxy::forward_pooled(
+                    crate::proxy::shared_pool(),
                     request,
                     &connection.client.ip,
                     host,

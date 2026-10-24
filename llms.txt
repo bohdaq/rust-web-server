@@ -896,7 +896,7 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 | `OtelLayer` / `otel::span` / `otel::client_span` | `otel` | W3C traceparent root span + nested child spans; exports to stdout or OTLP |
 | `CacheLayer` | `cache` | In-memory GET response cache; builder `.ttl(secs)` |
 | `ReverseProxy` | `proxy` | HTTP/1.1 upstream proxy; round-robin; 502 on all-fail; built-in `ConnPool`; SSE + chunked AI streams + large downloads forwarded without buffering via `Response::stream_pipe`; `.with_circuit_breaker(Arc<dyn Breaker>)` auto-wires a `CircuitBreaker`/`RedisCircuitBreaker` — skips `Open` backends, records outcomes automatically |
-| `ConnPool` | `proxy` | Per-backend HTTP/1.1 keep-alive connection pool; `new(max_idle, timeout)` |
+| `ConnPool` | `proxy` | Per-backend HTTP/1.1 keep-alive connection pool; `new(max_idle, timeout)`. ReverseProxy, config-driven `[[route]]` proxies, canary and ingress all pool (64 idle per backend); a stale pooled connection is retried once on a fresh one for idempotent methods, never for POST/PATCH |
 | `H2ReverseProxy` | `proxy` | HTTP/2 upstream proxy; `h2://` plain TCP, `h2s://`/`https://` TLS (ALPN `h2`); port defaults to 443 for TLS schemes; async-native sync/async bridge (works under any tokio runtime flavor); `http2` feature |
 | `GrpcProxy` | `proxy` | gRPC proxy; filters on `Content-Type: application/grpc*`; `grpc://` plain, `grpcs://`/`https://` TLS; `http2` feature |
 | `RewriteLayer` | `rewrite` | Request/response header, URI, status, body rewriting. `.request_uri_regex_rewrite(pattern, replacement)` (requires `rewrite-regex`) — regex match against the URI, whole URI replaced by the `$1`/`${name}`-expanded replacement on match, no-op otherwise |

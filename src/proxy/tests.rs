@@ -817,3 +817,70 @@ fn proxied_request_has_no_empty_header_line() {
     assert!(!out.contains("\r\n: "), "{out:?}");
     assert!(out.starts_with("GET /api/1k.bin HTTP/1.1\r\nHost: 127.0.0.1:9000\r\nAccept: */*\r\n"), "{out:?}");
 }
+
+// ── forward_pooled: reuse, stale-connection retry, no replay of POST ──────────
+
+/// Serves one keep-alive response per accepted connection, then closes it —
+/// like a backend whose idle timeout fires right after responding. Returns
+/// (port, connections accepted).
+fn closes_after_each_response_backend(max_conns: usize) -> (u16, Arc<AtomicU32>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let accepted = Arc::new(AtomicU32::new(0));
+    let accepted2 = Arc::clone(&accepted);
+    thread::spawn(move || {
+        for _ in 0..max_conns {
+            if let Ok((mut stream, _)) = listener.accept() {
+                accepted2.fetch_add(1, AtOrd::Relaxed);
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: keep-alive\r\n\r\nok");
+                // Closed without Connection: close — the pooled copy is now stale.
+            }
+        }
+    });
+    (port, accepted)
+}
+
+fn post(uri: &str) -> Request {
+    let mut r = get(uri);
+    r.method = METHOD.post.to_string();
+    r.body = b"x".to_vec();
+    r
+}
+
+#[test]
+fn forward_pooled_reuses_one_backend_connection() {
+    let (port, accepted) = keepalive_backend(KEEPALIVE_RESPONSE, 3);
+    let pool = ConnPool::new(8, Duration::from_secs(60));
+    for _ in 0..5 {
+        let resp = crate::proxy::forward_pooled(&pool, &get("/"), "10.0.0.1", "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2)).unwrap();
+        assert_eq!(200, resp.status_code);
+    }
+    assert_eq!(1, accepted.load(AtOrd::Relaxed), "5 sequential requests, 1 TCP connection");
+}
+
+#[test]
+fn forward_pooled_retries_a_stale_connection_for_get() {
+    let (port, accepted) = closes_after_each_response_backend(4);
+    let pool = ConnPool::new(8, Duration::from_secs(60));
+    let fwd = |r: &Request| crate::proxy::forward_pooled(&pool, r, "10.0.0.1", "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2));
+    assert_eq!(200, fwd(&get("/")).unwrap().status_code);
+    thread::sleep(Duration::from_millis(50)); // let the close land
+    // The pooled connection is dead; a GET is retried on a fresh one.
+    assert_eq!(200, fwd(&get("/")).unwrap().status_code);
+    assert_eq!(2, accepted.load(AtOrd::Relaxed));
+}
+
+#[test]
+fn forward_pooled_does_not_replay_a_post_on_a_stale_connection() {
+    let (port, accepted) = closes_after_each_response_backend(4);
+    let pool = ConnPool::new(8, Duration::from_secs(60));
+    let fwd = |r: &Request| crate::proxy::forward_pooled(&pool, r, "10.0.0.1", "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2));
+    assert_eq!(200, fwd(&get("/")).unwrap().status_code);
+    thread::sleep(Duration::from_millis(50));
+    // The backend might have received it: a non-idempotent request fails
+    // rather than being sent twice.
+    assert!(fwd(&post("/")).is_err());
+    assert_eq!(1, accepted.load(AtOrd::Relaxed), "no second connection for the POST");
+}

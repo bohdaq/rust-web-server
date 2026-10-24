@@ -105,7 +105,7 @@ impl ReverseProxy {
             connect_timeout: Duration::from_secs(5),
             read_timeout: Duration::from_secs(30),
             counter: AtomicUsize::new(0),
-            pool: Arc::new(ConnPool::new_default()),
+            pool: Arc::new(ConnPool::new(POOL_MAX_IDLE, Duration::from_secs(60))),
             breaker: None,
         }
     }
@@ -216,53 +216,15 @@ impl ReverseProxy {
         connection: &ConnectionInfo,
         backend: &Backend,
     ) -> Result<Response, String> {
-        let key = format!("{}:{}", backend.host, backend.port);
-
-        // Try a pooled connection first; fall back to a fresh one.
-        let stream = if let Some(pooled) = self.pool.acquire(&key) {
-            pooled
-        } else {
-            let addr_str = key.as_str();
-            let sock_addr = addr_str
-                .to_socket_addrs()
-                .map_err(|e| format!("DNS lookup for {} failed: {}", addr_str, e))?
-                .next()
-                .ok_or_else(|| format!("no address resolved for {}", addr_str))?;
-            TcpStream::connect_timeout(&sock_addr, self.connect_timeout)
-                .map_err(|e| format!("connect to {} failed: {}", addr_str, e))?
-        };
-
-        stream.set_read_timeout(Some(self.read_timeout)).map_err(|e| e.to_string())?;
-        stream.set_write_timeout(Some(Duration::from_secs(10))).map_err(|e| e.to_string())?;
-
-        // keep_alive = true: send Connection: keep-alive so the server holds
-        // the connection open after responding.
-        let req_bytes = build_request(request, &backend.host, &connection.client.ip, true);
-        let mut stream = stream;
-        stream.write_all(&req_bytes).map_err(|e| format!("write to backend failed: {}", e))?;
-
-        let mut tmp = [0u8; 4096];
-        let (header_bytes, body_prefix) = read_headers_only(&mut stream, &mut tmp)?;
-        let header_lower =
-            std::str::from_utf8(&header_bytes).unwrap_or("").to_ascii_lowercase();
-
-        if should_stream_response(&header_lower) {
-            // Streaming path — pipe bytes straight to the client.
-            // The connection cannot be reused while the body is in flight.
-            let mut resp = parse_status_and_headers(&header_bytes)?;
-            resp.stream_pipe =
-                Some(Box::new(ConcatReader::new(body_prefix, stream)));
-            Ok(resp)
-        } else {
-            // Buffered path — read the full body, then optionally return the
-            // connection to the pool.
-            let (resp_bytes, reusable) =
-                read_response_from_partial(&mut stream, header_bytes, body_prefix, &mut tmp)?;
-            if reusable {
-                self.pool.release(&key, stream);
-            }
-            Response::parse(&resp_bytes).map(normalize_upstream_response)
-        }
+        forward_pooled(
+            &self.pool,
+            request,
+            &connection.client.ip,
+            &backend.host,
+            backend.port,
+            self.connect_timeout,
+            self.read_timeout,
+        )
     }
 }
 
@@ -400,12 +362,9 @@ fn rewrite_as_content_length(buf: &mut Vec<u8>, header_end: usize, decoded: &[u8
     buf.extend_from_slice(decoded);
 }
 
-/// Non-pooled version of the response reader, used by callers that send
-/// `Connection: close` (e.g. `proxy_http1`, `proxy_https1`).
-pub(crate) fn read_response(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
-    read_response_from(stream)
-}
-
+/// Read a whole response from a connection that sent `Connection: close`
+/// (`proxy_https1`); plain-HTTP upstreams use the pooled `forward_pooled`.
+#[cfg(any(feature = "http-client", feature = "http2"))]
 pub(crate) fn read_response_from<R: Read>(stream: &mut R) -> Result<Vec<u8>, String> {
     let mut buf: Vec<u8> = Vec::with_capacity(8192);
     let mut tmp = [0u8; 4096];
@@ -455,37 +414,6 @@ pub(crate) fn read_response_from<R: Read>(stream: &mut R) -> Result<Vec<u8>, Str
     }
 
     Ok(buf)
-}
-
-/// Forward a single HTTP/1.1 request to `host:port` and return the response.
-///
-/// This is the shared low-level building block used by [`crate::canary`] and
-/// [`crate::ingress`] so they don't have to duplicate the TCP + request/response
-/// marshalling code.
-pub(crate) fn proxy_http1(
-    request: &Request,
-    client_ip: &str,
-    host: &str,
-    port: u16,
-    connect_timeout: Duration,
-    read_timeout: Duration,
-) -> Result<Response, String> {
-    use std::net::ToSocketAddrs;
-    let addr_str = format!("{}:{}", host, port);
-    let sock_addr = addr_str
-        .to_socket_addrs()
-        .map_err(|e| format!("DNS lookup for {} failed: {}", addr_str, e))?
-        .next()
-        .ok_or_else(|| format!("no address resolved for {}", addr_str))?;
-    let stream = TcpStream::connect_timeout(&sock_addr, connect_timeout)
-        .map_err(|e| format!("connect to {} failed: {}", addr_str, e))?;
-    stream.set_read_timeout(Some(read_timeout)).map_err(|e| e.to_string())?;
-    stream.set_write_timeout(Some(Duration::from_secs(10))).map_err(|e| e.to_string())?;
-    let req_bytes = build_request(request, host, client_ip, false);
-    let mut stream = stream;
-    stream.write_all(&req_bytes).map_err(|e| format!("write to backend failed: {}", e))?;
-    let resp_bytes = read_response(&mut stream)?;
-    Response::parse(&resp_bytes).map(normalize_upstream_response)
 }
 
 /// Forward a single HTTPS/1.1 request to `host:port` over TLS and return the
@@ -621,16 +549,158 @@ impl<R: Read + Send> Read for ConcatReader<R> {
     }
 }
 
+
+/// Idle backend connections kept per `host:port`. 64 matches common nginx
+/// `keepalive` settings and the benchmark's concurrency; fewer meant most
+/// requests at 64-way concurrency still paid a TCP connect.
+pub(crate) const POOL_MAX_IDLE: usize = 64;
+
+/// The process-wide backend connection pool used by config-driven proxy
+/// routes (`proxy_config::DynamicProxy`), keyed by `host:port`.
+pub(crate) fn shared_pool() -> &'static ConnPool {
+    static POOL: std::sync::OnceLock<ConnPool> = std::sync::OnceLock::new();
+    POOL.get_or_init(|| ConnPool::new(POOL_MAX_IDLE, Duration::from_secs(60)))
+}
+
+/// Forward `request` to `host:port` over HTTP/1.1 — the shared building
+/// block of `ReverseProxy`, config-driven proxy routes, `canary`, and
+/// `ingress` — reusing an idle pooled
+/// connection when there is one and returning the connection to `pool`
+/// after a complete, reusable response.
+///
+/// A backend may close an idle keep-alive connection at any moment, so a
+/// pooled connection that fails before *any* response byte arrives is
+/// retried once on a fresh connection — but only for idempotent methods
+/// (RFC 9110 §9.2.2): the request may already have reached the backend.
+pub(crate) fn forward_pooled(
+    pool: &ConnPool,
+    request: &Request,
+    client_ip: &str,
+    host: &str,
+    port: u16,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
+    let key = format!("{}:{}", host, port);
+    if let Some(stream) = pool.acquire(&key) {
+        match exchange(pool, &key, stream, request, host, client_ip, read_timeout) {
+            Exchange::Done(response) => return Ok(response),
+            Exchange::NoResponse(_) if is_idempotent(&request.method) => {} // stale: retry fresh
+            Exchange::NoResponse(e) | Exchange::Failed(e) => return Err(e),
+        }
+    }
+    let sock_addr = key
+        .to_socket_addrs()
+        .map_err(|e| format!("DNS lookup for {} failed: {}", key, e))?
+        .next()
+        .ok_or_else(|| format!("no address resolved for {}", key))?;
+    let stream = TcpStream::connect_timeout(&sock_addr, connect_timeout)
+        .map_err(|e| format!("connect to {} failed: {}", key, e))?;
+    let _ = stream.set_nodelay(true);
+    match exchange(pool, &key, stream, request, host, client_ip, read_timeout) {
+        Exchange::Done(response) => Ok(response),
+        Exchange::NoResponse(e) | Exchange::Failed(e) => Err(e),
+    }
+}
+
+fn is_idempotent(method: &str) -> bool {
+    matches!(method, "GET" | "HEAD" | "OPTIONS" | "TRACE" | "PUT" | "DELETE")
+}
+
+enum Exchange {
+    Done(Response),
+    /// Failed before any response byte (write error, or closed/errored on the first read).
+    NoResponse(String),
+    Failed(String),
+}
+
+/// One request/response on `stream`. A fully read, keep-alive response puts
+/// the connection back in `pool`; a streamed response keeps it until done.
+fn exchange(
+    pool: &ConnPool,
+    key: &str,
+    mut stream: TcpStream,
+    request: &Request,
+    host: &str,
+    client_ip: &str,
+    read_timeout: Duration,
+) -> Exchange {
+    if let Err(e) = stream
+        .set_read_timeout(Some(read_timeout))
+        .and_then(|_| stream.set_write_timeout(Some(Duration::from_secs(10))))
+    {
+        return Exchange::Failed(e.to_string());
+    }
+    // keep_alive = true: ask the backend to hold the connection open.
+    let req_bytes = build_request(request, host, client_ip, true);
+    if let Err(e) = stream.write_all(&req_bytes) {
+        return Exchange::NoResponse(format!("write to backend failed: {}", e));
+    }
+
+    let mut tmp = [0u8; 4096];
+    let (header_bytes, body_prefix) = match read_response_head(&mut stream, &mut tmp) {
+        Ok(head) => head,
+        Err(HeadError::NothingReceived(e)) => return Exchange::NoResponse(e),
+        Err(HeadError::Partial(e)) => return Exchange::Failed(e),
+    };
+    let header_lower = std::str::from_utf8(&header_bytes).unwrap_or("").to_ascii_lowercase();
+
+    if should_stream_response(&header_lower) {
+        // Streaming path — pipe bytes straight to the client; the connection
+        // can't be reused while the body is in flight.
+        return match parse_status_and_headers(&header_bytes) {
+            Ok(mut response) => {
+                response.stream_pipe = Some(Box::new(ConcatReader::new(body_prefix, stream)));
+                Exchange::Done(response)
+            }
+            Err(e) => Exchange::Failed(e),
+        };
+    }
+    // Buffered path — read the full body, then return the connection to the pool.
+    match read_response_from_partial(&mut stream, header_bytes, body_prefix, &mut tmp) {
+        Ok((resp_bytes, reusable)) => {
+            if reusable {
+                pool.release(key, stream);
+            }
+            match Response::parse(&resp_bytes) {
+                Ok(response) => Exchange::Done(normalize_upstream_response(response)),
+                Err(e) => Exchange::Failed(e),
+            }
+        }
+        Err(e) => Exchange::Failed(e),
+    }
+}
+
 /// Read exactly the HTTP response headers (up to and including `\r\n\r\n`).
 ///
 /// Returns `(header_bytes, body_prefix)` where `body_prefix` contains any
 /// body bytes that arrived in the same TCP segment as the headers.
+#[cfg(test)]
 fn read_headers_only(stream: &mut TcpStream, tmp: &mut [u8]) -> Result<(Vec<u8>, Vec<u8>), String> {
+    read_response_head(stream, tmp).map_err(|e| match e {
+        HeadError::NothingReceived(msg) | HeadError::Partial(msg) => msg,
+    })
+}
+
+/// Why reading a response head failed: before any byte arrived (the request
+/// may never have been processed — e.g. a pooled connection the backend had
+/// already closed) or part-way through.
+enum HeadError {
+    NothingReceived(String),
+    Partial(String),
+}
+
+fn read_response_head(stream: &mut TcpStream, tmp: &mut [u8]) -> Result<(Vec<u8>, Vec<u8>), HeadError> {
     let mut buf: Vec<u8> = Vec::with_capacity(4096);
     loop {
-        let n = stream.read(tmp).map_err(|e| e.to_string())?;
+        let n = match stream.read(tmp) {
+            Ok(n) => n,
+            Err(e) if buf.is_empty() => return Err(HeadError::NothingReceived(e.to_string())),
+            Err(e) => return Err(HeadError::Partial(e.to_string())),
+        };
         if n == 0 {
-            return Err("backend closed connection before headers were complete".to_string());
+            let msg = "backend closed connection before headers were complete".to_string();
+            return Err(if buf.is_empty() { HeadError::NothingReceived(msg) } else { HeadError::Partial(msg) });
         }
         buf.extend_from_slice(&tmp[..n]);
         if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {

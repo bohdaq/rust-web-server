@@ -1013,7 +1013,10 @@ impl Application for DynamicProxy {
                 Err("TLS upstream not supported in this build".to_string())
             }
         } else {
-            crate::proxy::proxy_http1(
+            // Pooled keep-alive connections to the backend (a fresh TCP
+            // connection per request halved throughput vs. Caddy/nginx).
+            crate::proxy::forward_pooled(
+                crate::proxy::shared_pool(),
                 effective_request,
                 &conn.client.ip,
                 &host,

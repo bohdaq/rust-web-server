@@ -752,7 +752,8 @@ impl Application for IngressRouter {
                     "{}.{}.svc.cluster.local",
                     rule.service_name, rule.namespace
                 );
-                crate::proxy::proxy_http1(
+                crate::proxy::forward_pooled(
+                    crate::proxy::shared_pool(),
                     request,
                     &connection.client.ip,
                     &upstream_host,
