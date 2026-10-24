@@ -217,3 +217,37 @@ fn render_summarizes() {
     report.error("e");
     assert_eq!(report.render("f.toml"), "error: e\nwarning: w\nf.toml: 1 error, 1 warning\n");
 }
+
+// issue #25: --format=json gives CI and editors one machine-readable object.
+
+#[test]
+fn wants_json_output_reads_the_format_flag() {
+    assert!(wants_json_output(&args(&["rws", "--check", "--format=json"])));
+    assert!(!wants_json_output(&args(&["rws", "--check"])));
+}
+
+#[test]
+fn render_json_carries_path_ok_and_both_lists() {
+    let mut report = ConfigReport::default();
+    report.error("route 'api': upstream 'x' is not a declared [[upstream]]");
+    report.warn("spa_fallback = \"missing.html\": the file does not exist");
+
+    let json = report.render_json("rws.config.toml");
+    assert!(json.starts_with('{') && json.ends_with('}'), "{json}");
+    assert!(json.contains(r#""path":"rws.config.toml""#), "{json}");
+    assert!(json.contains(r#""ok":false"#), "{json}");
+    assert!(json.contains(r#""errors":["route 'api': upstream 'x' is not a declared [[upstream]]"]"#), "{json}");
+    assert!(json.contains(r#""warnings":["#), "{json}");
+    // the report itself is still renderable as text
+    assert!(report.render("rws.config.toml").starts_with("error: "));
+}
+
+#[test]
+fn render_json_escapes_quotes_and_stays_valid_looking() {
+    let mut report = ConfigReport::default();
+    report.error(r#"port = "nope": not a port number"#);
+    let json = report.render_json("p.toml");
+    assert!(json.contains(r#"\"nope\""#), "{json}");
+    let ok = ConfigReport::default().render_json("p.toml");
+    assert!(ok.contains(r#""ok":true"#) && ok.contains(r#""errors":[]"#), "{ok}");
+}

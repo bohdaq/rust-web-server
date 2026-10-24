@@ -453,7 +453,11 @@ fn exit_if_informational_flag() {
     }
     if let Some(path) = rust_web_server::config_check::check_target_from_args(&args) {
         let report = rust_web_server::config_check::check_file(&path);
-        print!("{}", report.render(&path));
+        if rust_web_server::config_check::wants_json_output(&args) {
+            println!("{}", report.render_json(&path));
+        } else {
+            print!("{}", report.render(&path));
+        }
         std::process::exit(if report.is_ok() { 0 } else { 1 });
     }
 }
