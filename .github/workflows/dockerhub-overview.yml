@@ -1,0 +1,24 @@
+name: Docker Hub overview
+
+# Keeps https://hub.docker.com/r/bohdaq/rws in sync with .github/DOCKERHUB.md.
+on:
+  push:
+    branches: [main]
+    paths: [.github/DOCKERHUB.md]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  overview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ vars.DOCKERHUB_USERNAME }}/rws
+          short-description: "Web server & reverse proxy in Rust: automatic HTTPS, HTTP/3, load balancing — one TOML file"
+          readme-filepath: .github/DOCKERHUB.md

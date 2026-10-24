@@ -43,7 +43,7 @@ git push origin 17.110.0
 
 1. publishes a GitHub Release whose notes list every `feat`/`fix`/`perf` commit since the previous tag, with commits marked breaking (`type!:` / `type(scope)!:`) repeated in a "Breaking changes" section at the top;
 2. builds `rws` for the targets below and attaches `rws-<version>-<target>.tar.gz` (`.zip` on Windows) plus a `.sha256` for each — the names `[package.metadata.binstall]` in `Cargo.toml` points `cargo binstall` at;
-3. smoke-tests the image, then pushes `<version>`, `<major>` and `latest` (linux/amd64 + linux/arm64) to `ghcr.io/bohdaq/rws` and, when the `DOCKERHUB_USERNAME` variable and `DOCKERHUB_TOKEN` secret are set, to Docker Hub `bohdaq/rws` (also syncing its overview from `.github/DOCKERHUB.md`), built from those binaries via `Dockerfile.release`;
+3. smoke-tests the image, then pushes `<version>`, `<major>` and `latest` (linux/amd64 + linux/arm64) to `ghcr.io/bohdaq/rws` and, when the `DOCKERHUB_USERNAME` variable and `DOCKERHUB_TOKEN` secret are set, to Docker Hub `bohdaq/rws` (its overview is synced from `.github/DOCKERHUB.md` by `dockerhub-overview.yml` whenever that file changes), built from those binaries via `Dockerfile.release`;
 4. rewrites `Formula/rws.rb` in [bohdaq/homebrew-tap](https://github.com/bohdaq/homebrew-tap), authenticated with the `HOMEBREW_TAP_DEPLOY_KEY` repository secret (a write-enabled deploy key on the tap repo).
 
 To rebuild an existing tag after fixing the workflow, run it manually (Actions → Release → Run workflow) with that tag; every step is idempotent.

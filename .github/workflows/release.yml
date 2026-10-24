@@ -9,7 +9,8 @@ name: Release
 #   3. smoke-tests, then pushes a multi-arch image (Dockerfile.release, built
 #      from those binaries) to ghcr.io/bohdaq/rws and — when DOCKERHUB_USERNAME
 #      / DOCKERHUB_TOKEN are configured — to Docker Hub, tagged <version>,
-#      <major> and latest, and syncs the Docker Hub overview,
+#      <major> and latest (the Docker Hub overview is synced separately by
+#      dockerhub-overview.yml),
 #   4. updates the Homebrew formula in bohdaq/homebrew-tap.
 #
 # Re-running for an existing tag (e.g. after fixing this workflow) is
@@ -268,15 +269,6 @@ jobs:
             org.opencontainers.image.title=rws
             org.opencontainers.image.description=Single-binary web server and reverse proxy: automatic HTTPS, HTTP/3, load balancing, configured in one TOML file
             org.opencontainers.image.url=https://rws8.tech
-      - name: Docker Hub overview
-        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
-        uses: peter-evans/dockerhub-description@v4
-        with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ env.DOCKERHUB_TOKEN }}
-          repository: ${{ env.DOCKERHUB_USERNAME }}/rws
-          short-description: "Web server & reverse proxy in Rust: automatic HTTPS, HTTP/3, load balancing — one TOML file"
-          readme-filepath: .github/DOCKERHUB.md
 
   homebrew:
     needs: binaries
