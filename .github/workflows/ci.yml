@@ -95,7 +95,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: fuzz
-      - uses: taiki-e/install-action@cargo-fuzz
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
       - run: fuzz/run.sh ${{ github.event_name == 'schedule' && 600 || 30 }} 4
       - name: Keep crashing inputs
         if: failure()
