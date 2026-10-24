@@ -18,6 +18,12 @@ categories = ["network-programming", "web-programming::http-server"]
 # so it can't be pulled in as a path *dependency* the way rws-macros is —
 # it needs an explicit workspace membership instead. See spec/WASM_SHIM.md.
 members = ["rws-macros", "rws-wasm-shim"]
+# fuzz/ is its own workspace (cargo-fuzz, nightly-only) — see fuzz/README.md.
+exclude = ["fuzz"]
+
+[lints.rust]
+# `cargo fuzz` builds with --cfg fuzzing (see src/lib.rs fuzz_api).
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
 
 [lib]
 name = "rust_web_server"

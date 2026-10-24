@@ -57,170 +57,174 @@ impl FormMultipartData {
                 mut bytes_read: i128,
                 total_bytes: i128,
                 mut part_list: Vec<Part>) -> Result<Vec<Part>, String> {
-        let mut buf = vec![];
-        let mut part = Part { headers: vec![], body: vec![] };
+        // A loop, not tail recursion (not guaranteed to be eliminated):
+        // one stack frame per part let an upload with thousands of tiny
+        // parts overflow the stack and abort the process.
+        loop {
+            let mut buf = vec![];
+            let mut part = Part { headers: vec![], body: vec![] };
 
-        // first boundary starts parsable payload
-        if bytes_read == 0 {
-            let boxed_read = cursor.read_until(b'\n', &mut buf);
-            if boxed_read.is_err() {
-                let message = boxed_read.err().unwrap().to_string();
-                return Err(message);
+            // first boundary starts parsable payload
+            if bytes_read == 0 {
+                let boxed_read = cursor.read_until(b'\n', &mut buf);
+                if boxed_read.is_err() {
+                    let message = boxed_read.err().unwrap().to_string();
+                    return Err(message);
+                }
+                let bytes_offset = boxed_read.unwrap();
+                let b : &[u8] = &buf;
+                bytes_read = bytes_read + bytes_offset as i128;
+
+                let boxed_line = String::from_utf8(Vec::from(b));
+                if boxed_line.is_err() {
+                    let error_message = boxed_line.err().unwrap().to_string();
+                    return Err(error_message);
+                }
+                let string = boxed_line.unwrap();
+                let string = StringExt::filter_ascii_control_characters(&string);
+                let string = StringExt::truncate_new_line_carriage_return(&string);
+
+                let _current_string_is_boundary =
+                    string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
+                        .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
+
+                if !_current_string_is_boundary {
+                    let message = format!("Body in multipart/form-data request needs to start with a boundary, actual string: '{}'", string);
+                    return Err(message.to_string())
+                }
             }
-            let bytes_offset = boxed_read.unwrap();
-            let b : &[u8] = &buf;
-            bytes_read = bytes_read + bytes_offset as i128;
 
-            let boxed_line = String::from_utf8(Vec::from(b));
-            if boxed_line.is_err() {
-                let error_message = boxed_line.err().unwrap().to_string();
-                return Err(error_message);
+            // headers part. by spec it shall have at least Content-Disposition header or more, following
+            // by empty line. Headers shall be valid utf-8 encoded strings
+            let mut current_string_is_empty = false;
+            while !current_string_is_empty {
+                buf = vec![];
+                let boxed_read = cursor.read_until(b'\n', &mut buf);
+                if boxed_read.is_err() {
+                    let message = boxed_read.err().unwrap().to_string();
+                    return Err(message);
+                }
+                let bytes_offset = boxed_read.unwrap();
+                let b : &[u8] = &buf;
+                bytes_read = bytes_read + bytes_offset as i128;
+
+                let boxed_line = String::from_utf8(Vec::from(b));
+                if boxed_line.is_err() {
+                    let error_message = boxed_line.err().unwrap().to_string();
+                    return Err(error_message);
+                }
+                let string = boxed_line.unwrap();
+
+                let string = StringExt::filter_ascii_control_characters(&string);
+                current_string_is_empty = string.trim().len() == 0;
+
+                let _current_string_is_boundary =
+                    string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
+                        .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
+
+                if _current_string_is_boundary {
+                    let message = "There is at least one missing body part in the multipart/form-data request";
+                    return Err(message.to_string())
+                }
+
+                if bytes_read == total_bytes as i128 {
+                    return Ok(part_list)
+                }
+
+
+                // multipart/form-data part does not have any header specified
+                if current_string_is_empty && part.headers.len() == 0 {
+                    let message = "One of the body parts does not have any header specified. At least Content-Disposition is required";
+                    return Err(message.to_string());
+                }
+
+                if !current_string_is_empty {
+                    let boxed_header = Header::parse_header(&string);
+                    if boxed_header.is_err() {
+                        let message = boxed_header.err().unwrap();
+                        return Err(message)
+                    }
+
+                    let header = boxed_header.unwrap();
+                    part.headers.push(header);
+                }
             }
-            let string = boxed_line.unwrap();
-            let string = StringExt::filter_ascii_control_characters(&string);
-            let string = StringExt::truncate_new_line_carriage_return(&string);
 
-            let _current_string_is_boundary =
-                string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
-                    .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
 
-            if !_current_string_is_boundary {
-                let message = format!("Body in multipart/form-data request needs to start with a boundary, actual string: '{}'", string);
-                return Err(message.to_string())
+            // multipart/form-data body part. it just arbitrary bytes. ends by delimiter.
+            let mut _boundary_position = 0;
+            let mut current_string_is_boundary = false;
+            while !current_string_is_boundary {
+                buf = vec![];
+
+                let boxed_read = cursor.read_until(b'\n', &mut buf);
+                if boxed_read.is_err() {
+                    let message = boxed_read.err().unwrap().to_string();
+                    return Err(message);
+                }
+
+                let bytes_offset = boxed_read.unwrap();
+
+                if bytes_offset == 0 { break };
+
+                let b : &[u8] = &buf;
+
+                bytes_read = bytes_read + bytes_offset as i128;
+
+                let escaped_dash_boundary = boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string);
+
+                current_string_is_boundary = false;
+                if b.len() >= escaped_dash_boundary.len() {
+                    let boxed_sequence = FormMultipartData::find_subsequence(b, escaped_dash_boundary.as_bytes());
+                    if boxed_sequence.is_some() {
+                        current_string_is_boundary = true;
+                        _boundary_position = boxed_sequence.unwrap();
+                    }
+                }
+
+                if !current_string_is_boundary {
+                    part.body.append(&mut buf.clone());
+                }
+
             }
-        }
 
-        // headers part. by spec it shall have at least Content-Disposition header or more, following
-        // by empty line. Headers shall be valid utf-8 encoded strings
-        let mut current_string_is_empty = false;
-        while !current_string_is_empty {
-            buf = vec![];
-            let boxed_read = cursor.read_until(b'\n', &mut buf);
-            if boxed_read.is_err() {
-                let message = boxed_read.err().unwrap().to_string();
-                return Err(message);
+            if !current_string_is_boundary && bytes_read == total_bytes as i128 {
+                let message = "No end boundary present in the multipart/form-data request body";
+                return Err(message.to_string());
             }
-            let bytes_offset = boxed_read.unwrap();
-            let b : &[u8] = &buf;
-            bytes_read = bytes_read + bytes_offset as i128;
 
-            let boxed_line = String::from_utf8(Vec::from(b));
-            if boxed_line.is_err() {
-                let error_message = boxed_line.err().unwrap().to_string();
-                return Err(error_message);
+            // body for specific part may end with a new line or carriage return and a new line
+            // in both cases new line carriage return delimiter is not part of the body
+            let body_length = part.body.len();
+            if body_length > 2 { // check if body itself is present
+                let is_new_line_carriage_return_ending =
+                    *part.body.get(body_length-2).unwrap() == b'\r'
+                        && *part.body.get(body_length-1).unwrap() == b'\n';
+
+                let is_new_line_ending =
+                    *part.body.get(body_length-2).unwrap() != b'\r'
+                        && *part.body.get(body_length-1).unwrap() == b'\n';
+
+                if is_new_line_carriage_return_ending {
+                    part.body.remove(body_length - 1); // removing \n
+                    part.body.remove(body_length - 2); // removing \r
+                }
+
+                if is_new_line_ending {
+                    part.body.remove(body_length - 1); // removing \n
+                }
             }
-            let string = boxed_line.unwrap();
 
-            let string = StringExt::filter_ascii_control_characters(&string);
-            current_string_is_empty = string.trim().len() == 0;
 
-            let _current_string_is_boundary =
-                string.replace(SYMBOL.hyphen, SYMBOL.empty_string)
-                    .ends_with(&boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string));
 
-            if _current_string_is_boundary {
-                let message = "There is at least one missing body part in the multipart/form-data request";
-                return Err(message.to_string())
-            }
+            part_list.push(part);
+
 
             if bytes_read == total_bytes as i128 {
                 return Ok(part_list)
             }
 
-
-            // multipart/form-data part does not have any header specified
-            if current_string_is_empty && part.headers.len() == 0 {
-                let message = "One of the body parts does not have any header specified. At least Content-Disposition is required";
-                return Err(message.to_string());
-            }
-
-            if !current_string_is_empty {
-                let boxed_header = Header::parse_header(&string);
-                if boxed_header.is_err() {
-                    let message = boxed_header.err().unwrap();
-                    return Err(message)
-                }
-
-                let header = boxed_header.unwrap();
-                part.headers.push(header);
-            }
         }
-
-
-        // multipart/form-data body part. it just arbitrary bytes. ends by delimiter.
-        let mut _boundary_position = 0;
-        let mut current_string_is_boundary = false;
-        while !current_string_is_boundary {
-            buf = vec![];
-
-            let boxed_read = cursor.read_until(b'\n', &mut buf);
-            if boxed_read.is_err() {
-                let message = boxed_read.err().unwrap().to_string();
-                return Err(message);
-            }
-
-            let bytes_offset = boxed_read.unwrap();
-
-            if bytes_offset == 0 { break };
-
-            let b : &[u8] = &buf;
-
-            bytes_read = bytes_read + bytes_offset as i128;
-
-            let escaped_dash_boundary = boundary.replace(SYMBOL.hyphen, SYMBOL.empty_string);
-
-            current_string_is_boundary = false;
-            if b.len() >= escaped_dash_boundary.len() {
-                let boxed_sequence = FormMultipartData::find_subsequence(b, escaped_dash_boundary.as_bytes());
-                if boxed_sequence.is_some() {
-                    current_string_is_boundary = true;
-                    _boundary_position = boxed_sequence.unwrap();
-                }
-            }
-
-            if !current_string_is_boundary {
-                part.body.append(&mut buf.clone());
-            }
-
-        }
-
-        if !current_string_is_boundary && bytes_read == total_bytes as i128 {
-            let message = "No end boundary present in the multipart/form-data request body";
-            return Err(message.to_string());
-        }
-
-        // body for specific part may end with a new line or carriage return and a new line
-        // in both cases new line carriage return delimiter is not part of the body
-        let body_length = part.body.len();
-        if body_length > 2 { // check if body itself is present
-            let is_new_line_carriage_return_ending =
-                *part.body.get(body_length-2).unwrap() == b'\r'
-                    && *part.body.get(body_length-1).unwrap() == b'\n';
-
-            let is_new_line_ending =
-                *part.body.get(body_length-2).unwrap() != b'\r'
-                    && *part.body.get(body_length-1).unwrap() == b'\n';
-
-            if is_new_line_carriage_return_ending {
-                part.body.remove(body_length - 1); // removing \n
-                part.body.remove(body_length - 2); // removing \r
-            }
-
-            if is_new_line_ending {
-                part.body.remove(body_length - 1); // removing \n
-            }
-        }
-
-
-
-        part_list.push(part);
-
-
-        if bytes_read == total_bytes as i128 {
-            return Ok(part_list)
-        }
-
-        FormMultipartData::parse_form_part_recursively(cursor, boundary, bytes_read, total_bytes, part_list)
     }
 
     pub fn extract_boundary(content_type: &str) -> Result<String, String> {

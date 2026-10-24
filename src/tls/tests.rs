@@ -12,23 +12,23 @@ const RSA_PKCS1_KEY_PEM: &str = "-----BEGIN RSA PRIVATE KEY-----\nMIIEoQIBAAKCAQ
 
 const EC_SEC1_KEY_PEM: &str = "-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEIEq5USLmdFPuLr88OLcgsig1jFBR4EBG1G0F2NH2hxssoAoGCCqGSM49\nAwEHoUQDQgAEXnZm8Pe0O7yTeql6/Nm/+IisvgsMTwp5EIpc2JMG9zToFkWCES9C\nFk0JwwNlPDBJpHelWLcPsAYQVEHn0nhb2g==\n-----END EC PRIVATE KEY-----\n";
 
-/// Writes `contents` to a per-process temp file and returns its path.
-fn write_fixture(name: &str, contents: &str) -> String {
-    let path = std::env::temp_dir().join(format!("rws_tls_tests_{}_{}", std::process::id(), name));
-    std::fs::write(&path, contents).unwrap();
-    path.to_string_lossy().into_owned()
+/// Writes `contents` to a temp file that is deleted when the guard drops.
+fn write_fixture(name: &str, contents: &str) -> crate::test_env::TempPath {
+    let path = crate::test_env::TempPath::new(&format!("tls_{}", name));
+    std::fs::write(&*path, contents).unwrap();
+    path
 }
 
 #[test]
 fn load_certs_reads_every_certificate_in_the_file() {
     let path = write_fixture("chain.pem", &format!("{CERT_PEM}{CERT_PEM}"));
-    assert_eq!(2, load_certs(&path).unwrap().len());
+    assert_eq!(2, load_certs(path.as_str()).unwrap().len());
 }
 
 #[test]
 fn load_certs_skips_non_certificate_sections() {
     let path = write_fixture("cert_and_key.pem", &format!("{RSA_PKCS8_KEY_PEM}{CERT_PEM}"));
-    assert_eq!(1, load_certs(&path).unwrap().len());
+    assert_eq!(1, load_certs(path.as_str()).unwrap().len());
 }
 
 #[test]
@@ -45,14 +45,14 @@ fn load_key_accepts_pkcs8_pkcs1_and_sec1() {
         ("sec1.pem", EC_SEC1_KEY_PEM),
     ] {
         let path = write_fixture(name, pem);
-        assert!(load_key(&path).is_ok(), "{name} should load");
+        assert!(load_key(path.as_str()).is_ok(), "{name} should load");
     }
 }
 
 #[test]
 fn load_key_with_no_key_in_file_says_so() {
     let path = write_fixture("only_cert.pem", CERT_PEM);
-    let err = load_key(&path).unwrap_err();
+    let err = load_key(path.as_str()).unwrap_err();
     assert!(err.contains("no private key found"), "{err}");
 }
 
@@ -66,5 +66,5 @@ fn load_key_missing_file_is_an_error() {
 fn load_certified_key_pairs_cert_with_key() {
     let cert = write_fixture("pair_cert.pem", CERT_PEM);
     let key = write_fixture("pair_key.pem", RSA_PKCS1_KEY_PEM);
-    assert_eq!(1, load_certified_key(&cert, &key).unwrap().cert.len());
+    assert_eq!(1, load_certified_key(cert.as_str(), key.as_str()).unwrap().cert.len());
 }

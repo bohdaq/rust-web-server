@@ -167,8 +167,9 @@ pub(crate) fn parse_value(raw: &str) -> String {
 /// Strip leading/trailing `"` or `'` from a value.
 fn strip_quotes(s: &str) -> String {
     let s = s.trim();
-    if (s.starts_with('"') && s.ends_with('"')) ||
-       (s.starts_with('\'') && s.ends_with('\'')) {
+    // len >= 2: a lone `"` or `'` both starts and ends with a quote.
+    if s.len() >= 2 && ((s.starts_with('"') && s.ends_with('"')) ||
+       (s.starts_with('\'') && s.ends_with('\''))) {
         s[1..s.len() - 1].to_string()
     } else {
         s.to_string()

@@ -528,10 +528,13 @@ impl Response {
     }
 
     pub fn _parse_http_response_header_string(header_string: &str) -> Header {
-        let header_parts: Vec<&str> = header_string.split(Header::NAME_VALUE_SEPARATOR).collect();
-        let header_name = header_parts[0].to_string();
-        let raw_header_value = header_parts[1].to_string();
-        let header_value = StringExt::truncate_new_line_carriage_return(&raw_header_value);
+        // A line without ": " (malformed upstream input) is a name with an
+        // empty value, as in Request::parse_http_request_header_string —
+        // not an index-out-of-bounds panic.
+        let (header_name, raw_header_value) = header_string
+            .split_once(Header::NAME_VALUE_SEPARATOR)
+            .unwrap_or((header_string, ""));
+        let header_value = StringExt::truncate_new_line_carriage_return(raw_header_value);
 
 
         Header {
@@ -621,8 +624,9 @@ impl Response {
             let mut header = Header { name: "".to_string(), value: "".to_string() };
             if !is_first_iteration {
                 header = Response::_parse_http_response_header_string(&string);
-                if header.name == Header::_CONTENT_LENGTH {
-                    content_length = header.value.parse().unwrap();
+                if header.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH) {
+                    // No error channel here: treat an invalid value as absent.
+                    content_length = header.value.trim().parse().unwrap_or(0);
                 }
             }
 
@@ -811,139 +815,145 @@ impl Response {
         cursor: &mut Cursor<&[u8]>,
         mut iteration_number: usize,
         response: &mut Response,
-        mut content_length: usize,
+        _content_length: usize,
         total_bytes: i32,
         mut bytes_read: i32) -> Result<(), String> {
+        // A loop, not tail recursion (which Rust doesn't guarantee to
+        // eliminate): one stack frame per header line let a backend sending
+        // thousands of header lines overflow the stack and abort the process.
+        loop {
 
-        let mut buffer = vec![];
-        let boxed_read = cursor.read_until(b'\n', &mut buffer);
-        if boxed_read.is_err() {
-            let message = format!("unable to parse raw response via cursor {}", boxed_read.err().unwrap());
-            return Err(message);
-        }
-        let bytes_offset = boxed_read.unwrap();
-        bytes_read = bytes_read + bytes_offset as i32;
-        if bytes_read == total_bytes {
-            // end of stream
-        }
-        let mut buffer_as_u8_array: &[u8] = &buffer;
-        let boxed_string = String::from_utf8(Vec::from(buffer_as_u8_array));
-        if boxed_string.is_err() {
-            let message = boxed_string.err().unwrap().to_string();
-            return Err(message);
-        }
-        let string = boxed_string.unwrap();
-
-        let is_first_iteration = iteration_number == 0;
-        let new_line_char_found = bytes_offset != 0;
-        let current_string_is_empty = string.trim().len() == 0;
-
-        if is_first_iteration {
-            let boxed_http_version_status_code_reason_phrase = Response::_parse_http_version_status_code_reason_phrase_string(&string);
-            if boxed_http_version_status_code_reason_phrase.is_err() {
-                let message = boxed_http_version_status_code_reason_phrase.err().unwrap();
+            let mut buffer = vec![];
+            let boxed_read = cursor.read_until(b'\n', &mut buffer);
+            if boxed_read.is_err() {
+                let message = format!("unable to parse raw response via cursor {}", boxed_read.err().unwrap());
                 return Err(message);
             }
+            let bytes_offset = boxed_read.unwrap();
+            bytes_read = bytes_read + bytes_offset as i32;
+            if bytes_read == total_bytes {
+                // end of stream
+            }
+            let mut buffer_as_u8_array: &[u8] = &buffer;
+            let boxed_string = String::from_utf8(Vec::from(buffer_as_u8_array));
+            if boxed_string.is_err() {
+                let message = boxed_string.err().unwrap().to_string();
+                return Err(message);
+            }
+            let string = boxed_string.unwrap();
 
-            let (http_version, status_code, reason_phrase) = boxed_http_version_status_code_reason_phrase.unwrap();
+            let is_first_iteration = iteration_number == 0;
+            let new_line_char_found = bytes_offset != 0;
+            let current_string_is_empty = string.trim().len() == 0;
 
-            response.http_version = http_version;
-            response.status_code = status_code;
-            response.reason_phrase = reason_phrase;
-        }
+            if is_first_iteration {
+                let boxed_http_version_status_code_reason_phrase = Response::_parse_http_version_status_code_reason_phrase_string(&string);
+                if boxed_http_version_status_code_reason_phrase.is_err() {
+                    let message = boxed_http_version_status_code_reason_phrase.err().unwrap();
+                    return Err(message);
+                }
 
-        if current_string_is_empty {
-            let mut is_multipart = false;
-            // if response does not contain Content-Type, it will be defaulted to APPLICATION_OCTET_STREAM
-            let mut content_type = MimeType::APPLICATION_OCTET_STREAM;
+                let (http_version, status_code, reason_phrase) = boxed_http_version_status_code_reason_phrase.unwrap();
 
-            let boxed_content_type = response.get_header(Header::_CONTENT_TYPE.to_string());
-            if boxed_content_type.is_some() {
-                let content_type_header = response.get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
-                content_type = content_type_header.value.as_str();
-                is_multipart = Response::_is_multipart_byteranges_content_type(&content_type_header);
+                response.http_version = http_version;
+                response.status_code = status_code;
+                response.reason_phrase = reason_phrase;
             }
 
+            if current_string_is_empty {
+                let mut is_multipart = false;
+                // if response does not contain Content-Type, it will be defaulted to APPLICATION_OCTET_STREAM
+                let mut content_type = MimeType::APPLICATION_OCTET_STREAM;
 
-            if is_multipart {
-                let content_range_list : Vec<ContentRange> = vec![];
                 let boxed_content_type = response.get_header(Header::_CONTENT_TYPE.to_string());
-                if boxed_content_type.is_none() {
-                    return Err("Content-Type is missing".to_string());
-                }
-                let content_type = boxed_content_type.unwrap();
-                let boxed_boundary = FormMultipartData::extract_boundary(content_type.value.as_str());
-                if boxed_boundary.is_err() {
-                    return Err("unable to extract boundary from Content-Type".to_string());
-                }
-                let boundary = boxed_boundary.unwrap();
-
-                let is_opening_boundary_read = false;
-                let boxed_content_range_list =
-                    Range::parse_multipart_body_with_boundary(
-                        cursor,
-                        content_range_list,
-                        boundary,
-                        total_bytes,
-                        bytes_read,
-                        is_opening_boundary_read);
-                if boxed_content_range_list.is_err() {
-                    let message = boxed_content_range_list.err().unwrap();
-                    return Err(message);
+                if boxed_content_type.is_some() {
+                    let content_type_header = response.get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+                    content_type = content_type_header.value.as_str();
+                    is_multipart = Response::_is_multipart_byteranges_content_type(&content_type_header);
                 }
 
-                response.content_range_list = boxed_content_range_list.unwrap();
-            } else {
-                buffer = vec![];
-                let boxed_read = cursor.read_to_end(&mut buffer);
-                if boxed_read.is_err() {
-                    let message = boxed_read.err().unwrap().to_string();
-                    return Err(message);
+
+                if is_multipart {
+                    let content_range_list : Vec<ContentRange> = vec![];
+                    let boxed_content_type = response.get_header(Header::_CONTENT_TYPE.to_string());
+                    if boxed_content_type.is_none() {
+                        return Err("Content-Type is missing".to_string());
+                    }
+                    let content_type = boxed_content_type.unwrap();
+                    let boxed_boundary = FormMultipartData::extract_boundary(content_type.value.as_str());
+                    if boxed_boundary.is_err() {
+                        return Err("unable to extract boundary from Content-Type".to_string());
+                    }
+                    let boundary = boxed_boundary.unwrap();
+
+                    let is_opening_boundary_read = false;
+                    let boxed_content_range_list =
+                        Range::parse_multipart_body_with_boundary(
+                            cursor,
+                            content_range_list,
+                            boundary,
+                            total_bytes,
+                            bytes_read,
+                            is_opening_boundary_read);
+                    if boxed_content_range_list.is_err() {
+                        let message = boxed_content_range_list.err().unwrap();
+                        return Err(message);
+                    }
+
+                    response.content_range_list = boxed_content_range_list.unwrap();
+                } else {
+                    buffer = vec![];
+                    let boxed_read = cursor.read_to_end(&mut buffer);
+                    if boxed_read.is_err() {
+                        let message = boxed_read.err().unwrap().to_string();
+                        return Err(message);
+                    }
+                    let bytes_offset = boxed_read.unwrap();
+                    bytes_read = bytes_read + bytes_offset as i32;
+                    if bytes_read == total_bytes {
+                        // end of stream
+                    }
+
+                    buffer_as_u8_array = &buffer;
+
+                    let content_range = ContentRange {
+                        unit: Range::BYTES.to_string(),
+                        range: Range {
+                            start: 0,
+                            end: buffer_as_u8_array.len() as u64
+                        },
+                        size: buffer_as_u8_array.len().to_string(),
+                        body: Vec::from(buffer_as_u8_array),
+                        content_type: content_type.to_string()
+                    };
+                    response.content_range_list = vec![content_range];
+
+
                 }
-                let bytes_offset = boxed_read.unwrap();
-                bytes_read = bytes_read + bytes_offset as i32;
-                if bytes_read == total_bytes {
-                    // end of stream
-                }
 
-                buffer_as_u8_array = &buffer;
-
-                let content_range = ContentRange {
-                    unit: Range::BYTES.to_string(),
-                    range: Range {
-                        start: 0,
-                        end: buffer_as_u8_array.len() as u64
-                    },
-                    size: buffer_as_u8_array.len().to_string(),
-                    body: Vec::from(buffer_as_u8_array),
-                    content_type: content_type.to_string()
-                };
-                response.content_range_list = vec![content_range];
-
-
+                return Ok(());
             }
 
-            return Ok(());
-        }
-
-        if new_line_char_found && !current_string_is_empty {
-            if !is_first_iteration {
-                let boxed_header = Response::parse_http_response_header_string(&string);
-                if boxed_header.is_err() {
-                    let message = boxed_header.err().unwrap();
-                    return Err(message);
+            if new_line_char_found && !current_string_is_empty {
+                if !is_first_iteration {
+                    let boxed_header = Response::parse_http_response_header_string(&string);
+                    if boxed_header.is_err() {
+                        let message = boxed_header.err().unwrap();
+                        return Err(message);
+                    }
+                    let header = boxed_header.unwrap();
+                    if header.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH) {
+                        // An upstream-supplied value: reject garbage instead of panicking.
+                        let _: usize = header.value.trim().parse()
+                            .map_err(|_| format!("invalid Content-Length: {:?}", header.value))?;
+                    }
+                    response.headers.push(header);
                 }
-                let header = boxed_header.unwrap();
-                if header.name == Header::_CONTENT_LENGTH {
-                    content_length = header.value.parse().unwrap();
-                }
-                response.headers.push(header);
-            }
 
             iteration_number += 1;
-            return Response::parse_raw_response_via_cursor(cursor, iteration_number, response, content_length, total_bytes, bytes_read );
         } else {
             return Err("unable to parse".to_string());
+        }
         }
     }
 

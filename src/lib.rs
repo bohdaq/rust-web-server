@@ -190,6 +190,9 @@ pub mod h3_handler;
 /// their entire duration so they don't race with other tests reading the
 /// same variables.
 #[cfg(test)]
+mod stack_depth_tests;
+
+#[cfg(test)]
 pub mod test_env {
     use std::sync::{Mutex, OnceLock};
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -198,4 +201,50 @@ pub mod test_env {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
     }
+
+    /// A per-process path under the OS temp dir that is deleted (file or
+    /// directory) when dropped — so a test cleans up even when an assertion
+    /// fails before its last line.
+    pub struct TempPath(std::path::PathBuf);
+
+    impl TempPath {
+        pub fn new(name: &str) -> Self {
+            TempPath(std::env::temp_dir().join(format!("rws_test_{}_{}", std::process::id(), name)))
+        }
+
+        pub fn as_str(&self) -> &str {
+            self.0.to_str().expect("temp dir path is UTF-8")
+        }
+    }
+
+    impl std::ops::Deref for TempPath {
+        type Target = std::path::Path;
+        fn deref(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempPath {
+        fn drop(&mut self) {
+            if self.0.is_dir() {
+                let _ = std::fs::remove_dir_all(&self.0);
+            } else {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+    }
 }
+
+/// Entry points for `fuzz/` targets that reach crate-private parsers.
+/// Compiled only under `--cfg fuzzing`, which `cargo fuzz` sets — never part
+/// of the public API.
+#[cfg(fuzzing)]
+#[doc(hidden)]
+pub mod fuzz_api {
+    /// The SAML XML parser (`sso::saml::xml`), fed IdP-supplied documents.
+    #[cfg(feature = "sso-saml")]
+    pub fn saml_xml_parse(xml: &str) {
+        let _ = crate::sso::saml::xml_parse_for_fuzzing(xml);
+    }
+}
+

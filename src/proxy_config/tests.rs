@@ -1890,3 +1890,9 @@ secret_env = "RWSTEST_PROXY_JWT_NOFEATURE"
     let resp = app.execute(&make_request("GET", "/secret"), &make_conn("127.0.0.1")).unwrap();
     assert_eq!(503, resp.status_code);
 }
+
+#[test]
+fn from_str_survives_a_lone_quote_value() {
+    // Found by fuzzing: `J='` sliced s[1..0] and panicked.
+    let _ = ProxyConfig::from_str("J='\nK=\"\n[[route]]\npath = '\n");
+}

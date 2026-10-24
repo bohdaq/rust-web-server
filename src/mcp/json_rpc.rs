@@ -81,7 +81,12 @@ fn extract_value(s: &str) -> Option<String> {
                     _ => end += 1,
                 }
             }
-            Some(s[..end].to_string())
+            // A trailing backslash steps past the end; an unterminated string
+            // is malformed either way.
+            if end > bytes.len() {
+                return None;
+            }
+            s.get(..end).map(|v| v.to_string())
         }
         _ => {
             let end = s.find(|c: char| matches!(c, ',' | '}' | ']') || c.is_whitespace())

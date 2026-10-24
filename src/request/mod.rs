@@ -10,7 +10,6 @@ use crate::header::Header;
 use crate::ext::string_ext::StringExt;
 use crate::http::HTTP;
 use crate::symbol::SYMBOL;
-use url_build_parse::parse_url;
 use crate::url::URL;
 
 /// A parsed HTTP request.
@@ -132,10 +131,9 @@ impl Request {
 
     pub fn get_uri_path(&self) -> Result<String, String> {
         // scheme and host required for the parse_url function
-        let url_array = ["http://", "localhost", &self.request_uri];
-        let url = url_array.join(SYMBOL.empty_string);
+        let url = self.request_uri.to_string();
 
-        let boxed_url_components = parse_url(&url);
+        let boxed_url_components = crate::url::URL::parse_request_target(&url);
         if boxed_url_components.is_err() {
             let message = boxed_url_components.err().unwrap().to_string();
             return Err(message)
@@ -263,6 +261,8 @@ impl Request {
         }
 
         let (request_uri, http_version) = boxed_without_method.unwrap();
+        let request_uri = Request::normalize_request_target(request_uri)
+            .ok_or_else(|| Request::_ERROR_UNABLE_TO_PARSE_METHOD_AND_REQUEST_URI_AND_HTTP_VERSION.to_string())?;
 
 
         let supported_http_versions = HTTP::version_list();
@@ -270,8 +270,33 @@ impl Request {
             return Err(Request::_ERROR_UNABLE_TO_PARSE_METHOD_AND_REQUEST_URI_AND_HTTP_VERSION.to_string())
         }
 
-        Ok((method.to_string(), request_uri.to_string(), http_version.to_string()))
+        Ok((method.to_string(), request_uri, http_version.to_string()))
 
+    }
+
+    /// RFC 9112 §3.2 request targets: origin-form (`/path?query`) is kept,
+    /// absolute-form (`http://host/path?query`) is reduced to its
+    /// origin-form path, asterisk-form (`*`) is kept. Anything else —
+    /// authority-form (`host:443`, CONNECT is not served) or junk like `:x` —
+    /// is `None`, so the request is rejected before reaching a controller.
+    pub fn normalize_request_target(target: &str) -> Option<String> {
+        if target.starts_with('/') || target == "*" {
+            return Some(target.to_string());
+        }
+        let lower = target.to_ascii_lowercase();
+        let after_scheme = if lower.starts_with("http://") {
+            &target["http://".len()..]
+        } else if lower.starts_with("https://") {
+            &target["https://".len()..]
+        } else {
+            return None;
+        };
+        let path_start = after_scheme.find(|c| c == '/' || c == '?').unwrap_or(after_scheme.len());
+        if path_start == 0 {
+            return None; // no authority
+        }
+        let rest = &after_scheme[path_start..];
+        Some(if rest.starts_with('/') { rest.to_string() } else { format!("/{}", rest) })
     }
 
     pub fn parse_http_request_header_string(header_string: &str) -> Header {
@@ -288,63 +313,51 @@ impl Request {
         }
     }
 
-    pub fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, request: &mut Request, mut content_length: usize) -> Result<bool, String> {
-        let mut buf = vec![];
-        let bytes_offset = cursor.read_until(b'\n', &mut buf).unwrap();
-        let b : &[u8] = &buf;
-        let boxed_request = String::from_utf8(Vec::from(b));
-        if boxed_request.is_err() {
-            let error_message = boxed_request.err().unwrap().to_string();
-            return Err(error_message);
-        }
-        let string = boxed_request.unwrap();
+    /// Parse the request line, headers, and body from `cursor` into `request`.
+    ///
+    /// Iterative: this used to recurse once per header line, so a single
+    /// request with a few thousand short header lines overflowed the worker
+    /// thread's stack and aborted the whole process. Errors anywhere in the
+    /// head (bad UTF-8, an invalid Content-Length) are returned instead of
+    /// being logged and dropped.
+    pub fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usize, request: &mut Request, content_length: usize) -> Result<bool, String> {
+        let _ = content_length;
+        loop {
+            let mut buf = vec![];
+            let bytes_offset = cursor.read_until(b'\n', &mut buf).map_err(|e| e.to_string())?;
+            let string = String::from_utf8(buf).map_err(|e| e.to_string())?;
 
-        let is_first_iteration = iteration_number == 0;
-        let new_line_char_found = bytes_offset != 0;
-        let current_string_is_empty = string.trim().len() == 0;
-
-        if is_first_iteration {
-            match Request::parse_method_and_request_uri_and_http_version_string(&string) {
-                Ok((method, request_uri, http_version)) => {
-                    request.method = method;
-                    request.request_uri = request_uri;
-                    request.http_version = http_version;
-                }
-                Err(error_message) => {
-                    return Err(error_message)
-                }
+            let is_first_iteration = iteration_number == 0;
+            if is_first_iteration {
+                let (method, request_uri, http_version) =
+                    Request::parse_method_and_request_uri_and_http_version_string(&string)?;
+                request.method = method;
+                request.request_uri = request_uri;
+                request.http_version = http_version;
             }
-        }
 
-        if current_string_is_empty {
-            return Ok(true);
-        }
+            // Blank line (end of the head) or end of input.
+            if bytes_offset == 0 || string.trim().is_empty() {
+                break;
+            }
 
-        if new_line_char_found && !current_string_is_empty {
             let mut header = Header { name: "".to_string(), value: "".to_string() };
             if !is_first_iteration {
                 header = Request::parse_http_request_header_string(&string);
-                if header.name == Header::_CONTENT_LENGTH {
-                    content_length = header.value.parse().unwrap();
+                if header.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH) {
+                    // A client-supplied value: reject garbage (RFC 9112 §6.3) instead of panicking.
+                    let _: usize = header.value.trim().parse()
+                        .map_err(|_| format!("invalid Content-Length: {:?}", header.value))?;
                 }
             }
-
             request.headers.push(header);
             iteration_number += 1;
-            let boxed_read = Request::cursor_read(cursor, iteration_number, request, content_length);
-            if boxed_read.is_err() {
-                let reason = boxed_read.err().unwrap().to_string();
-                eprintln!("unable to read request: {}", reason);
-            }
         }
 
         // remaining part is request body
-
-        let mut buf = vec![];
-        let _ = cursor.read_to_end(&mut buf).unwrap();
-        let b : &[u8] = &buf;
-
-        request.body.append(&mut Vec::from(b));// = Vec::from(b);
+        let mut body = vec![];
+        cursor.read_to_end(&mut body).map_err(|e| e.to_string())?;
+        request.body.append(&mut body);
 
         Ok(true)
     }

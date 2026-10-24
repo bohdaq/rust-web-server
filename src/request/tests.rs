@@ -139,13 +139,9 @@ fn test_request_empty_request_uri() {
 
     let request_line = [method, request_uri, http_version].join(" ");
 
+    // RFC 9112 §3: the request-target is not optional.
     let boxed_request = Request::parse_request(request_line.as_bytes());
-
-    let request = boxed_request.unwrap();
-
-    assert_eq!(method, request.method);
-    assert_eq!(request_uri, request.request_uri);
-    assert_eq!(http_version, request.http_version);
+    assert!(boxed_request.is_err());
 }
 
 #[test]
@@ -743,15 +739,9 @@ fn get_path_no_path() {
         // handle error
     }
 
-    let request = boxed_request.unwrap();
-
-    let boxed_path: Result<String, String> = request.get_path();
-    if boxed_path.is_err() {
-        // handle error
-    }
-
-    assert!(boxed_path.is_ok());
-    assert_eq!(boxed_path.unwrap(), "");
+    // "GET ?some=1234&key=5678 HTTP/1.1" — a target without a leading "/"
+    // isn't origin-form (RFC 9112 §3.2.1), so it's rejected outright.
+    assert!(boxed_request.is_err());
 }
 
 #[test]
@@ -787,4 +777,35 @@ fn get_path() {
     let query = query_option.unwrap();
     assert_eq!(query.get("key").unwrap(), "5678");
     assert_eq!(query.get("some").unwrap(), "1234");
+}
+#[test]
+fn normalize_request_target_follows_rfc_9112_forms() {
+    let n = Request::normalize_request_target;
+    assert_eq!(Some("/a?b=1".to_string()), n("/a?b=1"));
+    assert_eq!(Some("*".to_string()), n("*"));
+    assert_eq!(Some("/x/y?z".to_string()), n("http://example.com:8080/x/y?z"), "absolute-form -> path");
+    assert_eq!(Some("/".to_string()), n("HTTPS://example.com"));
+    assert_eq!(Some("/?q".to_string()), n("http://example.com?q"));
+    for bad in [":x", "example.com:443", "", "?q", "http:///nohost", "ftp://x/"] {
+        assert_eq!(None, n(bad), "{bad:?}");
+    }
+}
+
+#[test]
+fn request_with_a_junk_target_is_rejected_not_passed_on() {
+    // Used to reach StaticResourceController and panic a worker thread.
+    assert!(Request::parse(b"GET :x HTTP/1.1\r\nHost: a\r\n\r\n").is_err());
+    let absolute = Request::parse(b"GET http://a.example/p?q=1 HTTP/1.1\r\nHost: a.example\r\n\r\n").unwrap();
+    assert_eq!("/p?q=1", absolute.request_uri);
+}
+
+#[test]
+fn invalid_content_length_is_an_error_not_a_panic() {
+    // Found by fuzzing: `.parse().unwrap()` on a client-supplied value.
+    for value in ["abc", "-1", "1e3", "99999999999999999999999"] {
+        let raw = format!("POST /api HTTP/1.1\r\nHost: a\r\nContent-Length: {value}\r\n\r\n");
+        assert!(Request::parse(raw.as_bytes()).is_err(), "{value}");
+    }
+    let ok = Request::parse(b"POST /api HTTP/1.1\r\nHost: a\r\ncontent-length: 2\r\n\r\nhi").unwrap();
+    assert_eq!(b"hi".to_vec(), ok.body, "lower-case header name honoured");
 }

@@ -81,7 +81,7 @@ pub(crate) fn parse(xml: &str) -> Result<XmlNode, String> {
     let bytes = xml.as_bytes();
     let mut pos = 0usize;
     skip_prolog(bytes, &mut pos);
-    let (node, _) = parse_element(bytes, pos)?;
+    let (node, _) = parse_element(bytes, pos, 0)?;
     Ok(node)
 }
 
@@ -104,7 +104,16 @@ fn skip_prolog(bytes: &[u8], pos: &mut usize) {
     }
 }
 
-fn parse_element(bytes: &[u8], mut pos: usize) -> Result<(XmlNode, usize), String> {
+/// Deepest element nesting accepted. Real SAML responses nest about 10
+/// levels; the limit stops a hostile document (POSTed to the ACS endpoint
+/// before any signature check) from recursing until the stack overflows,
+/// which aborts the process.
+const MAX_DEPTH: usize = 32;
+
+fn parse_element(bytes: &[u8], mut pos: usize, depth: usize) -> Result<(XmlNode, usize), String> {
+    if depth > MAX_DEPTH {
+        return Err(format!("XML nested deeper than {} elements", MAX_DEPTH));
+    }
     skip_whitespace(bytes, &mut pos);
     if bytes.get(pos) != Some(&b'<') {
         return Err("expected '<'".to_string());
@@ -205,7 +214,7 @@ fn parse_element(bytes: &[u8], mut pos: usize) -> Result<(XmlNode, usize), Strin
             return Ok((XmlNode { name, attrs, children, text, start, end: pos }, pos));
         }
 
-        let (child, new_pos) = parse_element(bytes, pos)?;
+        let (child, new_pos) = parse_element(bytes, pos, depth + 1)?;
         pos = new_pos;
         children.push(child);
     }

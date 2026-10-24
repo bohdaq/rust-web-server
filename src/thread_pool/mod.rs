@@ -74,15 +74,25 @@ impl Worker {
 
         let boxed_thread = builder.spawn(move || loop {
 
-            let boxed_lock = receiver.lock();
-            if boxed_lock.is_err() {
-                eprintln!("Worker {} -> unable to acquire lock {}", id, boxed_lock.err().unwrap());
-            } else {
-                let boxed_job = boxed_lock.unwrap().recv();
-                match boxed_job {
-                    Ok(job) => job(),
-                    Err(_) => break,
+            // A poisoned lock still guards a usable receiver — recover it
+            // rather than spinning on the error forever.
+            let boxed_job = receiver.lock().unwrap_or_else(|e| e.into_inner()).recv();
+            match boxed_job {
+                // A panicking job must not take the worker with it: otherwise
+                // each panic permanently shrinks the pool, and a client that
+                // can trigger one can stop the server with `size` requests.
+                Ok(job) => {
+                    if let Err(panic) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)) {
+                        let message = panic
+                            .downcast_ref::<&str>()
+                            .map(|s| s.to_string())
+                            .or_else(|| panic.downcast_ref::<String>().cloned())
+                            .unwrap_or_else(|| "non-string panic payload".to_string());
+                        eprintln!("Worker {}: request handler panicked ({}); worker continues", id, message);
+                        metrics::record_error();
+                    }
                 }
+                Err(_) => break,
             }
 
         });

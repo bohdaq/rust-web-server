@@ -88,10 +88,10 @@ fn proxy_tables_and_unknown_keys_set_nothing() {
 #[test]
 fn rws_config_file_selects_the_file_when_no_path_is_given() {
     let _g = crate::test_env::lock();
-    let path = env::temp_dir().join(format!("rws_config_file_test_{}.toml", std::process::id()));
-    std::fs::write(&path, "log_format = \"json\"\n").unwrap();
+    let path = crate::test_env::TempPath::new("config_file.toml");
+    std::fs::write(&*path, "log_format = \"json\"\n").unwrap();
     let saved = (env::var("RWS_CONFIG_FILE").ok(), env::var("RWS_CONFIG_LOG_FORMAT").ok());
-    env::set_var("RWS_CONFIG_FILE", &path);
+    env::set_var("RWS_CONFIG_FILE", path.as_str());
     env::remove_var("RWS_CONFIG_LOG_FORMAT");
     super::override_environment_variables_from_config(None);
     let got = env::var("RWS_CONFIG_LOG_FORMAT").ok();
@@ -157,4 +157,13 @@ fn every_setting_in_the_source_is_reachable_from_the_config_file() {
         }
     }
     assert!(missing.is_empty(), "not settable from rws.config.toml: {:?} — add to SETTINGS_WITHOUT_FLAG", missing);
+}
+
+#[test]
+fn nul_byte_in_a_value_is_ignored_not_a_crash() {
+    let _g = crate::test_env::lock();
+    // env::set_var panics on NUL; both the flag path (port) and the
+    // flagless path (log_format) must skip such a value instead.
+    let got = load_and_read("port = \"1\u{0}2\"\nlog_format = \"a\u{0}b\"\ncsp = \"ok\"\n", &["RWS_CONFIG_PORT", "RWS_CONFIG_LOG_FORMAT", "RWS_CONFIG_CSP"]);
+    assert_eq!(vec![None, None, Some("ok".to_string())], got);
 }

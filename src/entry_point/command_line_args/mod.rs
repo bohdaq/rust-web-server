@@ -242,6 +242,11 @@ impl CommandLineArgument {
     }
 
     pub fn set_environment_variable(argument: &CommandLineArgument, value: String) {
+        if value.contains('\0') {
+            // env::set_var panics on NUL; reachable from rws.config.toml values.
+            eprintln!("    Warning: value for --{} contains a NUL byte — ignored", argument.long_form);
+            return;
+        }
         env::set_var(&argument.environment_variable, &value);
         println!("    Set env variable '{}' to value '{}'", argument.environment_variable, &value);
     }

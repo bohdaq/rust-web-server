@@ -512,3 +512,19 @@ fn status_line_accepts_any_reason_phrase_and_any_three_digit_code() {
         assert!(parse(bad).is_err(), "{bad:?} should be rejected");
     }
 }
+
+#[test]
+fn invalid_upstream_content_length_is_an_error_not_a_panic() {
+    // Found by fuzzing: a backend's Content-Length went through `.parse().unwrap()`.
+    let raw = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 5\rD\r\n\r\nhello";
+    assert!(crate::response::Response::parse(raw).is_err());
+}
+
+#[test]
+fn multipart_part_header_without_separator_does_not_panic() {
+    // Found by fuzzing: a part header line with no ": " indexed past the split.
+    let raw = b"HTTP/1.1 206 Partial Content\r\nContent-Type: multipart/byteranges; boundary=XX\r\n\r\n--XX\r\nnot-a-header\r\n\r\nab\r\n--XX--\r\n";
+    let _ = crate::response::Response::parse(raw);
+    let header = crate::response::Response::_parse_http_response_header_string("no-separator\r\n");
+    assert_eq!("no-separator", header.name.trim_end());
+}

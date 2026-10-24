@@ -140,3 +140,14 @@ fn build_parse_roundtrip() {
     let rebuilt = URL::build(components).unwrap();
     assert_eq!(original, rebuilt);
 }
+#[test]
+fn parse_request_target_accepts_origin_form_only() {
+    use crate::url::URL;
+    let parsed = URL::parse_request_target("/a/b?x=1").unwrap();
+    assert_eq!("/a/b", parsed.path);
+    // ":x" would otherwise become the port of http://localhost:x and panic
+    // inside url-build-parse.
+    for bad in [":x", "", "*", "http://example.com/", "?q=1"] {
+        assert!(URL::parse_request_target(bad).is_err(), "{bad:?}");
+    }
+}

@@ -36,4 +36,15 @@ impl URL {
     pub fn parse(url: &str) -> Result<UrlComponents, String> {
         parse_url(url)
     }
+
+    /// Parse an origin-form request target (`/path?query`) — what
+    /// `Request::request_uri` holds. Anything not starting with `/` is an
+    /// error rather than being glued onto a placeholder authority, where a
+    /// target like `:x` would become the port of `http://localhost:x`.
+    pub fn parse_request_target(target: &str) -> Result<UrlComponents, String> {
+        if !target.starts_with('/') {
+            return Err(format!("not an origin-form request target: {:?}", target));
+        }
+        parse_url(&format!("http://localhost{}", target))
+    }
 }

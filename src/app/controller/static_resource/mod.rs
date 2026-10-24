@@ -19,10 +19,14 @@ pub struct StaticResourceController;
 
 impl Controller for StaticResourceController {
     fn is_matching(request: &Request, _connection: &ConnectionInfo) -> bool {
-        let url_array = ["http://", "localhost", &request.request_uri];
-        let url = url_array.join(SYMBOL.empty_string);
+        // Only origin-form targets name a file ("*" and anything a caller
+        // built by hand don't); URL::parse below expects "http://localhost/...".
+        if !request.request_uri.starts_with('/') {
+            return false;
+        }
+        let url = request.request_uri.to_string();
 
-        let boxed_url_components = URL::parse(&url);
+        let boxed_url_components = URL::parse_request_target(&url);
         if boxed_url_components.is_err() {
             let message = boxed_url_components.as_ref().err().unwrap().to_string();
             // unfallable
@@ -109,10 +113,9 @@ impl Controller for StaticResourceController {
                 let dir = env::current_dir().unwrap();
                 let working_directory = dir.as_path().to_str().unwrap();
 
-                let url_array = ["http://", "localhost", &request.request_uri];
-                let url = url_array.join(SYMBOL.empty_string);
+                let url = request.request_uri.to_string();
 
-                let boxed_url_components = URL::parse(&url);
+                let boxed_url_components = URL::parse_request_target(&url);
                 if boxed_url_components.is_err() {
                     let message = boxed_url_components.as_ref().err().unwrap().to_string();
                     // unfallable
@@ -315,10 +318,9 @@ impl StaticResourceController {
         let dir = env::current_dir().unwrap();
         let working_directory = dir.as_path().to_str().unwrap();
 
-        let url_array = ["http://", "localhost", &request.request_uri];
-        let url = url_array.join(SYMBOL.empty_string);
+        let url = request.request_uri.to_string();
 
-        let boxed_url_components = URL::parse(&url);
+        let boxed_url_components = URL::parse_request_target(&url);
         if boxed_url_components.is_err() {
             let message = boxed_url_components.as_ref().err().unwrap().to_string();
             // unfallable
@@ -461,10 +463,9 @@ impl StaticResourceController {
                             range_header = boxed_header.unwrap();
                         }
 
-                        let url_array = ["http://", "localhost", &request.request_uri];
-                        let url = url_array.join(SYMBOL.empty_string);
+                        let url = request.request_uri.to_string();
 
-                        let boxed_url_components = URL::parse(&url);
+                        let boxed_url_components = URL::parse_request_target(&url);
                         if boxed_url_components.is_err() {
                             let message = boxed_url_components.as_ref().err().unwrap().to_string();
                             // unfallable

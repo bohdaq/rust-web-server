@@ -2509,3 +2509,12 @@ mod oauth_tests {
     }
 }
 
+
+#[test]
+fn trailing_backslash_in_a_json_string_does_not_panic() {
+    // Found by fuzzing: the string scanner skipped two bytes on `\` and
+    // sliced past the end of the input.
+    assert_eq!(None, crate::mcp::json_rpc::extract_raw(r#"{"id":"abc\"#, "id"));
+    let server = McpServer::new("t", "1");
+    let _ = server.handle_request(r#"[{"id":2,"method":"tools/call","params":"e\"#);
+}

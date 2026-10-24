@@ -117,6 +117,11 @@ pub fn read_config_file(
 }
 
 fn set_setting(name: &str, value: &str) {
+    if value.contains('\0') {
+        // env::set_var panics on NUL — a stray byte in the file must not crash startup.
+        eprintln!("    Warning: value for {} contains a NUL byte — ignored", name);
+        return;
+    }
     env::set_var(name, value);
     println!("    Set env variable '{}' to value '{}'", name, value);
 }

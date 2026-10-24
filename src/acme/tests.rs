@@ -438,8 +438,8 @@ fn add_extra_roots_trusts_a_private_ca() {
     let mut params = rcgen::CertificateParams::new(vec!["private-ca.test".to_string()]).unwrap();
     params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
     let ca = params.self_signed(&key).unwrap();
-    let path = std::env::temp_dir().join(format!("rws_acme_ca_{}.pem", std::process::id()));
-    std::fs::write(&path, ca.pem()).unwrap();
+    let path = crate::test_env::TempPath::new("acme_ca.pem");
+    std::fs::write(&*path, ca.pem()).unwrap();
 
     let mut store = tokio_rustls::rustls::RootCertStore::empty();
     super::client::add_extra_roots(&mut store, path.to_str().unwrap()).unwrap();
@@ -450,8 +450,8 @@ fn add_extra_roots_trusts_a_private_ca() {
 fn add_extra_roots_rejects_missing_or_empty_files() {
     let mut store = tokio_rustls::rustls::RootCertStore::empty();
     assert!(super::client::add_extra_roots(&mut store, "/nonexistent/ca.pem").is_err());
-    let path = std::env::temp_dir().join(format!("rws_acme_empty_ca_{}.pem", std::process::id()));
-    std::fs::write(&path, "not a certificate\n").unwrap();
+    let path = crate::test_env::TempPath::new("acme_empty_ca.pem");
+    std::fs::write(&*path, "not a certificate\n").unwrap();
     let err = super::client::add_extra_roots(&mut store, path.to_str().unwrap()).unwrap_err();
     assert!(err.contains("no certificates found"), "{err}");
 }

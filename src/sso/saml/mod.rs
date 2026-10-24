@@ -71,6 +71,16 @@ mod der;
 mod metadata;
 mod xml;
 
+#[cfg(any(fuzzing, test))]
+pub(crate) fn xml_parse_for_tests(input: &str) -> Result<(), String> {
+    xml::parse(input).map(|_| ())
+}
+
+#[cfg(fuzzing)]
+pub(crate) fn xml_parse_for_fuzzing(input: &str) -> Result<(), String> {
+    xml::parse(input).map(|_| ())
+}
+
 #[cfg(test)]
 mod tests;
 

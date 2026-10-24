@@ -2,14 +2,6 @@
 
 use super::BackendPool;
 
-/// Per-process directory under the OS temp dir for file-source fixtures.
-fn scratchpad() -> String {
-    std::env::temp_dir()
-        .join(format!("rws_service_discovery_tests_{}", std::process::id()))
-        .to_string_lossy()
-        .into_owned()
-}
-
 // ── Static source ─────────────────────────────────────────────────────────────
 
 #[test]
@@ -56,12 +48,10 @@ fn env_prefix_empty_when_no_vars() {
 
 #[test]
 fn file_source_reads_file() {
-    let dir = scratchpad();
-    let path = format!("{}/test_backends.txt", dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(&path, "10.0.0.1:8080\n10.0.0.2:8080\n").unwrap();
+    let path = crate::test_env::TempPath::new("sd_backends.txt");
+    std::fs::write(&*path, "10.0.0.1:8080\n10.0.0.2:8080\n").unwrap();
 
-    let pool = BackendPool::file(&path);
+    let pool = BackendPool::file(path.as_str());
     pool.refresh();
     let backends = pool.backends();
     assert_eq!(2, backends.len(), "got {:?}", backends);
@@ -71,16 +61,14 @@ fn file_source_reads_file() {
 
 #[test]
 fn file_source_ignores_comments_and_blank_lines() {
-    let dir = scratchpad();
-    let path = format!("{}/test_backends_comments.txt", dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let path = crate::test_env::TempPath::new("sd_backends_comments.txt");
     std::fs::write(
-        &path,
+        &*path,
         "# primary backends\n10.0.0.1:8080\n\n# secondary\n10.0.0.2:9090\n",
     )
     .unwrap();
 
-    let pool = BackendPool::file(&path);
+    let pool = BackendPool::file(path.as_str());
     pool.refresh();
     let backends = pool.backends();
     assert_eq!(2, backends.len(), "got {:?}", backends);
