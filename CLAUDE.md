@@ -31,9 +31,16 @@ cargo test --package rust-web-server --bin rws client_hint::tests::client_hints_
 ci/e2e/acme_pebble.sh target/debug/rws <pebble-binary> <pebble-source-dir>
 #   HTTP/2 conformance with h2spec — must be 0 failed, 0 skipped
 ci/e2e/h2spec.sh target/debug/rws <h2spec-binary>
+
+# Fuzz every untrusted-input parser (nightly + cargo-fuzz) — see fuzz/README.md
+fuzz/run.sh 60 4
 ```
 
 Build `rws` with `--features "acme auth"` first for the ACME script. Pebble: `gh release download v2.10.1 --repo letsencrypt/pebble` (binary) plus `gh api repos/letsencrypt/pebble/tarball/v2.10.1` (its `test/` config and certs). h2spec: `gh release download v2.6.0 --repo summerwind/h2spec`. These caught bugs the unit tests didn't (ACME Host header/User-Agent, proxy 502s on non-canonical reason phrases, duplicate headers breaking HTTP/2) — run them after touching `acme`, `proxy`, `server`, `h2_handler`, or response parsing.
+
+**Parsers of untrusted input** (requests, upstream responses, bodies, JSON, MCP, SAML XML, config files) must not recurse per line, part, or nesting level without a bound: a stack overflow aborts the whole process and can't be caught. Use loops; where recursion is natural (XML nesting), cap the depth (`sso::saml::xml::MAX_DEPTH`). `src/stack_depth_tests.rs` runs each such parser on a 256 KB stack — add a case there for a new parser, and a fuzz target in `fuzz/`. Never `unwrap()` a parse of a header or body value. The sync `ThreadPool` wraps each job in `catch_unwind`, so a handler panic costs one connection, not a worker; tokio tasks already isolate panics. Request targets are normalized in `Request::parse` (origin-form kept, absolute-form reduced to its path, `*` kept, anything else rejected) and code that needs a URL from `request_uri` uses `URL::parse_request_target`, never `"http://localhost" + uri`.
+
+Tests that write files use `crate::test_env::TempPath::new(name)` — it deletes the file/dir on drop, even when an assertion fails — never a bare path under `temp_dir()`.
 
 MSRV is 1.88 (the highest `rust-version` among current dependencies across all features — tokio needs 1.85, `time`/`icu` via sqlx/tera need 1.88). CI checks it with the `msrv` job in `.github/workflows/ci.yml`; raise `rust-version` there and in `Cargo.toml` together.
 

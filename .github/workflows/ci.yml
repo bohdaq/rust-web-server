@@ -84,6 +84,28 @@ jobs:
           tar xzf "$RUNNER_TEMP/h2spec_linux_amd64.tar.gz" -C "$RUNNER_TEMP"
           ci/e2e/h2spec.sh target/debug/rws "$RUNNER_TEMP/h2spec"
 
+  # Every parser that sees untrusted input — see fuzz/README.md. 30 s per
+  # target on push; 10 minutes each in the weekly scheduled run.
+  fuzz:
+    name: fuzz
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - uses: taiki-e/install-action@cargo-fuzz
+      - run: fuzz/run.sh ${{ github.event_name == 'schedule' && 600 || 30 }} 4
+      - name: Keep crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: |
+            fuzz/artifacts
+            fuzz/logs
+
   audit:
     name: cargo audit
     runs-on: ubuntu-latest

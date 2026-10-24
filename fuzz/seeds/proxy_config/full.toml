@@ -1,0 +1,24 @@
+[[upstream]]
+name = "app"
+backends = ["10.0.0.1:80", "10.0.0.2:80"]
+strategy = "least_connections"
+  [upstream.health_check]
+  path = "/healthz"
+[[route]]
+name = "api"
+  [route.match]
+  host = "a.example"
+  path = "/v1/*"
+  [route.action]
+  type = "proxy"
+  upstream = "app"
+  [route.middleware]
+  rate_limit = { max_requests = 5, window_secs = 60 }
+  auth = { type = "bearer", token_env = "T" }
+  [[route.middleware.rewrite.request]]
+  type = "set_header"
+  name = "X"
+  value = "y"
+[[tcp_proxy]]
+listen = "0.0.0.0:5432"
+backends = ["db:5432"]

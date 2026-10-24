@@ -1,0 +1,1 @@
+[{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"x":1},"_meta":{"progressToken":"p"}}},{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":2}},{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{"cursor":"MA=="}}]

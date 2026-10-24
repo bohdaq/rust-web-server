@@ -1,0 +1,10 @@
+port = 443
+http_redirect_port = 80
+csp = "default-src 'self'" # c
+[acme]
+domains = ["a.example", "b.example"]
+[rate_limit]
+max_requests = 5
+[[virtual_host]]
+domain = "a"
+cert_file = "a.pem"
