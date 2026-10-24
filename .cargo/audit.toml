@@ -9,4 +9,12 @@ ignore = [
     # RsaPrivateKey appears only in tests, to mint fixtures — so the
     # vulnerable code path is never reached in production builds.
     "RUSTSEC-2023-0071",
+    # RUSTSEC-2026-0387 (crypto-bigint 0.5, via p256 0.13 -> elliptic-curve):
+    # timing variability in operations meant to be constant-time. rws uses
+    # p256 only to *verify* ES256 signatures (auth-asymmetric JwtLayer,
+    # sso::jwks) — public key, message and signature are all public, so a
+    # timing difference reveals nothing secret. The fix (crypto-bigint 0.7)
+    # needs p256 0.14, part of the RustCrypto upgrade blocked on rsa 0.10
+    # leaving release candidate; drop this entry with that upgrade.
+    "RUSTSEC-2026-0387",
 ]
