@@ -14,31 +14,36 @@ same machine.
 (`--disable-compression`: the Caddy and nginx configs don't compress, and
 `rws` compresses text by default), access logs off everywhere. `rws` is the
 release build (`--features "acme auth"`), Caddy 2.11.7, nginx from Ubuntu with
-`sendfile` and upstream keep-alive enabled.
+`sendfile`, `open_file_cache` and upstream keep-alive enabled.
 
 | Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | Peak memory (MiB) |
 |---|---|---:|---:|---:|---:|
-| Static file, 1 KiB | rws | 52,601 | 1.22 | 3.23 | 8.4 |
-| | Caddy | 28,367 | 1.79 | 8.67 | 68.1 |
-| | nginx | 109,021 | 0.39 | 2.40 | 23.6 |
-| Static file, 1 MiB | rws | 11,362 | 5.18 | 11.39 | 8.8 |
-| | Caddy | 3,279 | 14.99 | 88.70 | 70.6 |
-| | nginx | 12,704 | 4.72 | 11.15 | 23.7 |
-| Reverse proxy, 1 KiB | rws | 29,436 | 2.10 | 4.31 | 15.5 |
-| | Caddy | 21,601 | 2.60 | 8.82 | 66.5 |
-| | nginx | 51,591 | 1.14 | 3.05 | 24.6 |
+| Static file, 1 KiB | rws | 49,405 | 1.10 | 3.37 | 8.5 |
+| | Caddy | 18,647 | 2.75 | 13.41 | 68.2 |
+| | nginx | 82,035 | 0.54 | 3.01 | 23.4 |
+| Static file, 1 MiB | rws | 8,926 | 6.83 | 14.81 | 8.8 |
+| | Caddy | 2,420 | 18.82 | 123.23 | 70.6 |
+| | nginx | 10,117 | 5.97 | 14.63 | 23.5 |
+| Reverse proxy, 1 KiB | rws | 27,790 | 2.19 | 4.98 | 12.8 |
+| | Caddy | 13,418 | 4.16 | 14.34 | 66.5 |
+| | nginx | 34,176 | 1.73 | 4.42 | 24.5 |
 
 Every request in every scenario returned `200 OK`.
 
+On a 10-core Mac (same tools and configuration, `oha` on the same machine):
+1 KiB static — rws 107k, nginx 100k; 1 MiB static — 9.8k vs 9.4k; proxy —
+49.0k vs 48.9k requests per second.
+
 ## Reading the numbers
 
-- **Against Caddy:** `rws` serves 1.9× (small) to 3.5× (large) as many
-  file requests and 36% more proxied requests per second, with a lower p99
-  and about a sixth of the memory.
-- **Against nginx:** large files are within 11% — both use `sendfile`, so
-  the kernel does the copying. On small files and proxying nginx is about
-  twice as fast: its event loop does all the work on one thread, while rws
-  still crosses threads for the parts that may block (proxying).
+- **Against Caddy:** `rws` serves 2.6× (small) to 3.7× (large) as many file
+  requests and 2.1× as many proxied requests per second, with a p99 three to
+  eight times lower and about an eighth of the memory.
+- **Against nginx:** on the 4-CPU runner nginx leads by 12% on large files,
+  19% on proxying and 40% on small files, with a similar p99; with more cores
+  (the 10-core run above) the two are even. The load generator shares the
+  runner's 4 CPUs, so the server that needs the least CPU per request wins
+  most there.
 - Shared CI runners are noisy: absolute numbers vary by a factor of two
   between runs. Compare servers within one run, not numbers across runs.
 - Compression matters: with `Accept-Encoding: gzip` sent and only `rws`
@@ -47,13 +52,16 @@ Every request in every scenario returned `200 OK`.
 
 ## Why it's fast
 
-- **One `open` and one `fstat` per static file**; size and modification time
-  come from the open file, and a small file is read from that same handle.
+- **Open files are reused** (an open-file cache like nginx's): a request for
+  a hot file costs one `fstat` and one positional read.
 - **Quick requests run on the event loop.** Static files, health checks and
   metrics skip the hand-off to a blocking thread pool, as in nginx. Handlers
-  that may block (your routes, proxying) still get a pool thread, so a slow
-  backend can't stall other connections. See
+  that may block (your routes) still get a pool thread, so a slow handler
+  can't stall other connections. See
   [`runs_inline`](/building-apps/middleware/#running-on-the-event-loop-runs_inline).
+- **Proxying holds no thread.** Proxy routes to plain-HTTP backends wait for
+  the backend on the connection's task, over pooled keep-alive connections.
+- **One idle timer per connection**, pushed back on each read without a lock.
 - **`sendfile` for downloads** over plain HTTP on Linux and macOS: the kernel
   copies file pages straight to the socket.
 - **Configuration is a cached snapshot**, not read from the environment on
