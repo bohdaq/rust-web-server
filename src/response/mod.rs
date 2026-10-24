@@ -368,9 +368,10 @@ impl Response {
         let one = 1;
 
         if content_range_list.len() == one {
-            let index = 0;
-            let content_range = content_range_list.get(index).unwrap();
-            body = content_range.body.to_vec();
+            // Move the body out rather than copy it: for a large file that
+            // copy was a second full-size buffer per in-flight response.
+            let mut content_range_list = content_range_list;
+            return content_range_list.swap_remove(0).body;
         }
 
         if content_range_list.len() > one {
@@ -405,7 +406,19 @@ impl Response {
         body
     }
 
-    pub fn generate_response(mut response: Response, request: Request) -> Vec<u8> {
+    /// The serialized response: status line + headers, then the body.
+    pub fn generate_response(response: Response, request: Request) -> Vec<u8> {
+        let (mut head, body) = Response::generate_response_parts(response, request);
+        head.extend_from_slice(&body);
+        head
+    }
+
+    /// Like [`generate_response`](Self::generate_response), but returns the
+    /// head (status line + headers + blank line) and the body separately, so
+    /// a connection writer can send them back to back without first copying
+    /// a large body into one combined buffer. The body is empty for HEAD and
+    /// OPTIONS.
+    pub fn generate_response_parts(mut response: Response, request: Request) -> (Vec<u8>, Vec<u8>) {
 
         if response.content_range_list.len() == 1 {
             let content_range_index = 0;
@@ -467,12 +480,11 @@ impl Response {
         let is_head = request.method == METHOD.head;
         let is_options = request.method == METHOD.options;
 
-        return if is_head || is_options {
-            response_without_body.into_bytes()
+        if is_head || is_options {
+            (response_without_body.into_bytes(), Vec::new())
         } else {
-            [response_without_body.into_bytes(), body].concat()
+            (response_without_body.into_bytes(), body)
         }
-
     }
 
     pub fn _parse_response(response_vec_u8: &[u8]) -> Response {

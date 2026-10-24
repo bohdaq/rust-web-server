@@ -103,7 +103,7 @@ limits change — only the allowed maximum and window size are updated.
 
 | Variable | Default | Options | Description |
 |----------|---------|---------|-------------|
-| `RWS_CONFIG_LOG_FORMAT` | `json` | `json`, `combined` | Log format for access logs. `json` writes structured JSON. `combined` writes Combined Log Format (Apache/nginx-compatible). |
+| `RWS_CONFIG_LOG_FORMAT` | `json` | `json`, `combined`, `off` | Log format for access logs. `json` writes structured JSON. `combined` writes Combined Log Format (Apache/nginx-compatible). `off` (or `none`) writes no per-request line — e.g. behind a proxy that already logs. Hot-reloadable. |
 
 The log format is hot-reloadable.
 

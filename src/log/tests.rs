@@ -250,30 +250,28 @@ fn json_output_is_a_single_line() {
 // ── Log::log_access ───────────────────────────────────────────────────────────
 
 #[test]
-fn log_access_uses_combined_by_default() {
-    // Ensure the env var is unset so we get combined format.
-    std::env::remove_var(crate::entry_point::Config::RWS_CONFIG_LOG_FORMAT);
-
+fn access_log_line_follows_log_format() {
+    let _g = crate::test_env::lock();
+    let var = crate::entry_point::Config::RWS_CONFIG_LOG_FORMAT;
+    let saved = std::env::var(var).ok();
     let req  = make_request("GET", "/ping");
     let resp = ok_response_with_body(b"pong");
     let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
 
-    // log_access writes to stdout — we just verify it doesn't panic.
-    Log::log_access(&req, &resp, &peer);
-}
+    std::env::remove_var(var);
+    let unset = Log::access_log_line(&req, &resp, &peer);
+    std::env::set_var(var, "json");
+    let json = Log::access_log_line(&req, &resp, &peer);
+    std::env::set_var(var, "off");
+    let off = Log::access_log_line(&req, &resp, &peer);
+    std::env::set_var(var, "NONE");
+    let none = Log::access_log_line(&req, &resp, &peer);
+    Log::log_access(&req, &resp, &peer); // prints nothing, must not panic
+    match saved { Some(v) => std::env::set_var(var, v), None => std::env::remove_var(var) }
 
-#[test]
-fn log_access_uses_json_when_env_var_set() {
-    std::env::set_var(crate::entry_point::Config::RWS_CONFIG_LOG_FORMAT, "json");
-
-    let req  = make_request("GET", "/ping");
-    let resp = ok_response_with_body(b"pong");
-    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
-
-    // Must not panic; JSON path is exercised by the env var.
-    Log::log_access(&req, &resp, &peer);
-
-    std::env::remove_var(crate::entry_point::Config::RWS_CONFIG_LOG_FORMAT);
+    assert!(unset.unwrap().contains("\"GET /ping"), "unset -> Combined Log Format");
+    assert!(json.unwrap().starts_with('{'), "json -> a JSON object");
+    assert_eq!((None, None), (off, none));
 }
 
 // ── Log::server_url_thread_count ──────────────────────────────────────────────

@@ -1,4 +1,3 @@
-use std::env;
 use std::fs::{File, metadata, read_dir};
 use std::time::UNIX_EPOCH;
 use file_ext::FileExt;
@@ -38,7 +37,7 @@ impl Controller for StaticResourceController {
         let os_specific_separator : String = FileExt::get_path_separator();
         let os_specific_path = &components.path.replace(SYMBOL.slash, os_specific_separator.as_str());
 
-        let boxed_static_filepath = FileExt::get_static_filepath(&os_specific_path);
+        let boxed_static_filepath = static_fs_path(&os_specific_path);
         if boxed_static_filepath.is_err() {
             return false
         }
@@ -49,17 +48,13 @@ impl Controller for StaticResourceController {
         // before, otherwise `process_static_resources` renders a directory listing.
         let mut is_directory = false;
 
+        // One stat answers both "exists?" and "directory?" — no open().
         let boxed_md = metadata(&static_filepath);
-        if boxed_md.is_ok() {
-            let md = boxed_md.unwrap();
-            if md.is_dir() {
-                is_directory = true;
-            }
+        let mut is_file = false;
+        if let Ok(md) = &boxed_md {
+            is_directory = md.is_dir();
+            is_file = md.is_file();
         }
-
-
-
-        let boxed_file = File::open(&static_filepath);
 
         let is_get = request.method == METHOD.get;
         let is_head = request.method == METHOD.head;
@@ -67,14 +62,14 @@ impl Controller for StaticResourceController {
 
         let is_matching_method = (is_get || is_head || is_options) && (request.request_uri != SYMBOL.slash);
 
-        if boxed_file.is_ok() || is_directory {
+        if is_file || is_directory {
             is_matching_method
         } else {
             // check if file with same name and .html extension exists
             if !static_filepath.ends_with(".html") {
                 let html_suffix = ".html";
                 let html_file = [&components.path.replace(SYMBOL.slash, &FileExt::get_path_separator()), html_suffix].join(SYMBOL.empty_string);
-                if let Ok(html_static_filepath) = FileExt::get_static_filepath(&html_file) {
+                if let Ok(html_static_filepath) = static_fs_path(&html_file) {
                     if File::open(&html_static_filepath).is_ok() {
                         return is_matching_method;
                     }
@@ -91,6 +86,9 @@ impl Controller for StaticResourceController {
     }
 
     fn process(request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
+        if let Some(streamed) = StaticResourceController::stream_large_file(request, &mut response) {
+            return streamed;
+        }
         let boxed_content_range_list = StaticResourceController::process_static_resources(&request);
         if boxed_content_range_list.is_ok() {
             let content_range_list = boxed_content_range_list.unwrap();
@@ -110,7 +108,7 @@ impl Controller for StaticResourceController {
                 }
 
 
-                let dir = env::current_dir().unwrap();
+                let dir = std::path::PathBuf::from(working_directory());
                 let working_directory = dir.as_path().to_str().unwrap();
 
                 let url = request.request_uri.to_string();
@@ -125,7 +123,7 @@ impl Controller for StaticResourceController {
                 let components = boxed_url_components.unwrap();
 
                 let static_filepath = [working_directory, components.path.as_str()].join(SYMBOL.empty_string);
-                let boxed_modified_date_time = FileExt::file_modified_utc(&static_filepath);
+                let boxed_modified_date_time = file_modified_utc(&static_filepath);
 
                 if boxed_modified_date_time.is_ok() {
                     let modified_date_time = boxed_modified_date_time.unwrap();
@@ -149,9 +147,8 @@ impl Controller for StaticResourceController {
 
                     // Stream large files (> 8 MB) without loading into memory, unless it's
                     // a range request (which needs precise byte slicing from the loaded body).
-                    const STREAM_THRESHOLD: u64 = 8 * 1024 * 1024;
                     let is_range_request = request.get_header(Header::_RANGE.to_string()).is_some();
-                    if file_size > STREAM_THRESHOLD && !is_range_request {
+                    if file_size > StaticResourceController::STREAM_THRESHOLD && !is_range_request {
                         let mime = MimeType::detect_mime_type(&static_filepath);
                         response.headers.push(Header {
                             name: Header::_CONTENT_TYPE.to_string(),
@@ -199,7 +196,7 @@ impl Controller for StaticResourceController {
 impl StaticResourceController {
 
     pub fn is_matching_request(request: &Request) -> bool {
-        let boxed_static_filepath = FileExt::get_static_filepath(&request.request_uri);
+        let boxed_static_filepath = static_fs_path(&request.request_uri);
         if boxed_static_filepath.is_err() {
             return false
         }
@@ -225,6 +222,9 @@ impl StaticResourceController {
     }
 
     pub fn process_request(request: &Request, mut response: Response) -> Response {
+        if let Some(streamed) = StaticResourceController::stream_large_file(request, &mut response) {
+            return streamed;
+        }
         let boxed_content_range_list = StaticResourceController::process_static_resources(&request);
         if boxed_content_range_list.is_ok() {
             let content_range_list = boxed_content_range_list.unwrap();
@@ -244,10 +244,10 @@ impl StaticResourceController {
                 }
 
 
-                let dir = env::current_dir().unwrap();
+                let dir = std::path::PathBuf::from(working_directory());
                 let working_directory = dir.as_path().to_str().unwrap();
                 let static_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
-                let boxed_modified_date_time = FileExt::file_modified_utc(&static_filepath);
+                let boxed_modified_date_time = file_modified_utc(&static_filepath);
 
                 if boxed_modified_date_time.is_ok() {
                     let modified_date_time = boxed_modified_date_time.unwrap();
@@ -269,9 +269,8 @@ impl StaticResourceController {
 
                     response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
 
-                    const STREAM_THRESHOLD: u64 = 8 * 1024 * 1024;
                     let is_range_request = request.get_header(Header::_RANGE.to_string()).is_some();
-                    if file_size > STREAM_THRESHOLD && !is_range_request {
+                    if file_size > StaticResourceController::STREAM_THRESHOLD && !is_range_request {
                         let mime = MimeType::detect_mime_type(&static_filepath);
                         response.headers.push(Header {
                             name: Header::_CONTENT_TYPE.to_string(),
@@ -314,8 +313,55 @@ impl StaticResourceController {
         response
     }
 
+    /// Files larger than this are streamed from disk (`Response::stream_file`)
+    /// rather than read into memory — 64 concurrent downloads of a 1 MiB file
+    /// otherwise hold ~64 MiB plus copies.
+    pub const STREAM_THRESHOLD: u64 = 256 * 1024;
+
+    /// Fast path for a GET/HEAD of a large regular file without a `Range`
+    /// header: answer with headers and `stream_file` **before** reading
+    /// anything. `process_static_resources` reads the whole file, so deciding
+    /// to stream only after calling it (as this controller used to) still
+    /// loaded e.g. a 1 GB file into memory per request. `None` = not
+    /// applicable; the regular path handles it (directories, `.html`
+    /// resolution, ranges, small files).
+    fn stream_large_file(request: &Request, response: &mut Response) -> Option<Response> {
+        if request.method != METHOD.get && request.method != METHOD.head {
+            return None;
+        }
+        if request.get_header(Header::_RANGE.to_string()).is_some() {
+            return None;
+        }
+        let path = URL::parse_request_target(&request.request_uri).ok()?.path;
+        let fs_path = static_fs_path(&path.replace(SYMBOL.slash, &FileExt::get_path_separator())).ok()?;
+        let md = metadata(&fs_path).ok()?;
+        if !md.is_file() || md.len() <= StaticResourceController::STREAM_THRESHOLD {
+            return None;
+        }
+
+        let mut response = std::mem::replace(response, Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None));
+        let modified = file_modified_utc(&fs_path).unwrap_or(0);
+        let etag_value = format!("\"{}-{}\"", modified, md.len());
+        response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.to_string(), value: modified.to_string() });
+        let not_modified = request
+            .get_header(Header::_IF_NONE_MATCH.to_string())
+            .map_or(false, |inm| inm.value == etag_value || inm.value == "*");
+        response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
+        if not_modified {
+            response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
+            response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
+            return Some(response);
+        }
+        response.headers.push(Header { name: Header::_CONTENT_TYPE.to_string(), value: MimeType::detect_mime_type(&fs_path) });
+        response.headers.push(Header { name: Header::_CONTENT_LENGTH.to_string(), value: md.len().to_string() });
+        response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        response.stream_file = Some(fs_path);
+        Some(response)
+    }
+
     pub fn process_static_resources(request: &Request) -> Result<Vec<ContentRange>, Error> {
-        let dir = env::current_dir().unwrap();
+        let dir = std::path::PathBuf::from(working_directory());
         let working_directory = dir.as_path().to_str().unwrap();
 
         let url = request.request_uri.to_string();
@@ -332,7 +378,7 @@ impl StaticResourceController {
         let os_specific_separator : String = FileExt::get_path_separator();
         let os_specific_path = &components.path.replace(SYMBOL.slash, os_specific_separator.as_str());
 
-        let boxed_static_filepath = FileExt::get_static_filepath(&os_specific_path);
+        let boxed_static_filepath = static_fs_path(&os_specific_path);
 
         let static_filepath = boxed_static_filepath.unwrap();
 
@@ -672,7 +718,7 @@ fn spa_fallback_url_path(url_path: &str) -> Option<String> {
     let normalized_name = fallback_name.trim_start_matches('/').replace('/', &separator);
     let fallback_url_path = format!("{}{}", separator, normalized_name);
 
-    let boxed_fs_path = FileExt::get_static_filepath(&fallback_url_path);
+    let boxed_fs_path = static_fs_path(&fallback_url_path);
     let fs_path = boxed_fs_path.ok()?;
     if File::open(&fs_path).is_ok() {
         Some(fallback_url_path)
@@ -760,3 +806,36 @@ const DIRECTORY_LISTING_TAIL: &str = concat!(
     "</body>\n",
     "</html>\n",
 );
+
+/// The process working directory — the static-file root — read once.
+/// `rws` never changes it after startup, and `std::env::current_dir()` is
+/// several syscalls (on macOS it opens "."): the static-file path used to ask
+/// for it four to six times per request. A library user who changes the
+/// working directory after the first request keeps the original root.
+pub(crate) fn working_directory() -> &'static str {
+    static DIR: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        std::env::current_dir()
+            .map(|d| d.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    })
+}
+
+/// `FileExt::get_static_filepath` without the per-call `current_dir()`:
+/// the working directory followed by `path`.
+pub(crate) fn static_fs_path(path: &str) -> Result<String, String> {
+    Ok(format!("{}{}", working_directory(), path))
+}
+
+/// `FileExt::file_modified_utc` (nanoseconds since the Unix epoch) from a
+/// `stat`, without opening the file.
+pub(crate) fn file_modified_utc(path: &str) -> Result<u128, String> {
+    let modified = metadata(path)
+        .and_then(|md| md.modified())
+        .map_err(|e| format!("<p>Unable to open file: {}</p> <p>error: {}</p>", path, e))?;
+    Ok(modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0))
+}
+

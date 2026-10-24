@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::body::multipart_form_data::FormMultipartData;
 use crate::controller::Controller;
 use crate::ext::string_ext::StringExt;
@@ -14,32 +17,22 @@ pub struct FormMultipartEnctypePostMethodController;
 
 impl Controller for FormMultipartEnctypePostMethodController {
     fn is_matching(request: &Request, _connection: &ConnectionInfo) -> bool {
-        let boxed_content_type = request.get_header(Header::_CONTENT_TYPE.to_string());
-        if boxed_content_type.is_none() {
-            eprintln!("unable to get content-type header for {} {}", request.method, request.request_uri);
+        // Cheapest checks first, and no logging: every request is asked
+        // whether it matches, and "no" is not an error. (This used to
+        // eprintln! for every request without a Content-Type — the process-
+        // wide stderr lock was the single biggest cost under load.)
+        if request.method != METHOD.post {
             return false;
         }
-
-        let boxed_path = request.get_uri_path();
-        if boxed_path.is_err() {
-            let message = format!("unable to get path {} {} {}", request.method, request.request_uri, boxed_path.err().unwrap());
-            eprintln!("{}", message);
-            return false
+        match request.get_uri_path() {
+            Ok(path) if path == "/form-multipart-enctype-post-method" => {}
+            _ => return false,
         }
-
-        let path = boxed_path.unwrap();
-
-        let content_type_header = boxed_content_type.unwrap();
-        let is_form_multipart_content_type =
-            StringExt::filter_ascii_control_characters(&content_type_header.value.to_lowercase())
-                .starts_with(FormMultipartEnctypePostMethodController::MULTIPART_FORM_DATA_CONTENT_TYPE);
-        if !is_form_multipart_content_type {
-            let message = format!("Content-Type header does not start with {} for {} {}", FormMultipartEnctypePostMethodController::MULTIPART_FORM_DATA_CONTENT_TYPE, request.method, request.request_uri);
-            eprintln!("{}", message);
-            return false
+        match request.get_header(Header::_CONTENT_TYPE.to_string()) {
+            Some(content_type) => StringExt::filter_ascii_control_characters(&content_type.value.to_lowercase())
+                .starts_with(FormMultipartEnctypePostMethodController::MULTIPART_FORM_DATA_CONTENT_TYPE),
+            None => false,
         }
-
-        path == "/form-multipart-enctype-post-method" && request.method == METHOD.post
     }
 
     fn process(_request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {

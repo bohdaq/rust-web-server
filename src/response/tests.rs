@@ -528,3 +528,18 @@ fn multipart_part_header_without_separator_does_not_panic() {
     let header = crate::response::Response::_parse_http_response_header_string("no-separator\r\n");
     assert_eq!("no-separator", header.name.trim_end());
 }
+
+#[test]
+fn generate_response_parts_splits_head_and_body() {
+    use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+    let request = |m: &str| crate::request::Request { method: m.to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] };
+    let (head, body) = Response::generate_response_parts(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "hello"), request("GET"));
+    let head = String::from_utf8(head).unwrap();
+    assert!(head.starts_with("HTTP/1.1 200 OK\r\n") && head.ends_with("\r\n\r\n"), "{head:?}");
+    assert!(head.contains("Content-Length: 5\r\n"));
+    assert_eq!(b"hello".to_vec(), body);
+    let (_, head_body) = Response::generate_response_parts(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "hello"), request("HEAD"));
+    assert!(head_body.is_empty(), "HEAD has no body");
+    let whole = Response::generate_response(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "hello"), request("GET"));
+    assert!(String::from_utf8(whole).unwrap().ends_with("\r\n\r\nhello"));
+}

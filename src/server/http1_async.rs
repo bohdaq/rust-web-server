@@ -149,8 +149,9 @@ where
         if response.stream_pipe.is_some() || response.stream_file.is_some() {
             write_streaming(&mut stream, response, request).await?;
         } else {
-            let raw = Response::generate_response(response, request);
-            stream.write_all(&raw).await.map_err(|e| e.to_string())?;
+            let (head, body) = Response::generate_response_parts(response, request);
+            stream.write_all(&head).await.map_err(|e| e.to_string())?;
+            stream.write_all(&body).await.map_err(|e| e.to_string())?;
             stream.flush().await.map_err(|e| e.to_string())?;
         }
 

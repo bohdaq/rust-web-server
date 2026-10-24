@@ -199,7 +199,7 @@ impl Range {
 
         let file_path_part = components.path.replace(SYMBOL.slash, &FileExt::get_path_separator());
 
-        let boxed_static_filepath = FileExt::get_static_filepath(&file_path_part);
+        let boxed_static_filepath = crate::app::controller::static_resource::static_fs_path(&file_path_part);
         if boxed_static_filepath.is_err() {
             let error = Error {
                 status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n500_internal_server_error,

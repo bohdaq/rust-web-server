@@ -699,3 +699,66 @@ fn spa_fallback_does_not_apply_to_the_root_path() {
 
     std::env::remove_var("RWS_CONFIG_SPA_FALLBACK");
 }
+// ── large files: decide to stream before reading ──────────────────────────────
+
+/// A file under `target/` (inside the working directory, so the static
+/// controller serves it), deleted on drop.
+struct ServedFile(String);
+impl ServedFile {
+    fn new(name: &str, len: usize) -> Self {
+        let url = format!("/target/rws_static_test_{}_{}", std::process::id(), name);
+        let fs = format!("{}{}", crate::app::controller::static_resource::working_directory(), url);
+        std::fs::write(&fs, vec![b'x'; len]).unwrap();
+        ServedFile(url)
+    }
+}
+impl Drop for ServedFile {
+    fn drop(&mut self) {
+        let fs = format!("{}{}", crate::app::controller::static_resource::working_directory(), self.0);
+        let _ = std::fs::remove_file(fs);
+    }
+}
+
+fn static_request(method: &str, uri: &str, headers: Vec<Header>) -> Request {
+    Request { method: method.to_string(), request_uri: uri.to_string(), http_version: VERSION.http_1_1.to_string(), headers, body: vec![] }
+}
+
+#[test]
+fn large_file_is_streamed_without_being_read() {
+    let file = ServedFile::new("large.bin", (StaticResourceController::STREAM_THRESHOLD + 1) as usize);
+    let response = StaticResourceController::process_request(&static_request(METHOD.get, &file.0, vec![]), Response::new());
+    assert_eq!(200, response.status_code);
+    assert!(response.stream_file.is_some(), "large file must stream");
+    assert!(response.content_range_list.is_empty(), "and must not be loaded into memory");
+    let length = response.headers.iter().find(|h| h.name == Header::_CONTENT_LENGTH).map(|h| h.value.clone());
+    assert_eq!(Some((StaticResourceController::STREAM_THRESHOLD + 1).to_string()), length);
+}
+
+#[test]
+fn large_file_honours_if_none_match() {
+    let file = ServedFile::new("etag.bin", (StaticResourceController::STREAM_THRESHOLD + 1) as usize);
+    let first = StaticResourceController::process_request(&static_request(METHOD.get, &file.0, vec![]), Response::new());
+    let etag = first.headers.iter().find(|h| h.name == Header::_ETAG).unwrap().value.clone();
+    let second = StaticResourceController::process_request(
+        &static_request(METHOD.get, &file.0, vec![Header { name: Header::_IF_NONE_MATCH.to_string(), value: etag }]),
+        Response::new(),
+    );
+    assert_eq!(304, second.status_code);
+    assert!(second.stream_file.is_none());
+}
+
+#[test]
+fn small_files_and_ranges_take_the_regular_path() {
+    let small = ServedFile::new("small.bin", 1024);
+    let response = StaticResourceController::process_request(&static_request(METHOD.get, &small.0, vec![]), Response::new());
+    assert!(response.stream_file.is_none());
+    assert_eq!(1024, response.content_range_list.iter().map(|c| c.body.len()).sum::<usize>());
+
+    let large = ServedFile::new("ranged.bin", (StaticResourceController::STREAM_THRESHOLD + 1) as usize);
+    let ranged = StaticResourceController::process_request(
+        &static_request(METHOD.get, &large.0, vec![Header { name: Header::_RANGE.to_string(), value: "bytes=0-9".to_string() }]),
+        Response::new(),
+    );
+    assert_eq!(206, ranged.status_code);
+    assert_eq!(10, ranged.content_range_list[0].body.len());
+}

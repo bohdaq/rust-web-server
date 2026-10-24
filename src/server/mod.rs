@@ -363,10 +363,17 @@ impl Server {
         use std::fs::File;
         use std::io::Read as _;
 
-        response.headers.push(Header {
-            name: Header::_TRANSFER_ENCODING.to_string(),
-            value: "chunked".to_string(),
-        });
+        // With a known Content-Length (static files set it) the body goes out
+        // as-is; Transfer-Encoding: chunked is only for an unknown length.
+        // Sending both is forbidden (RFC 9112 §6.1) — mismatched handling of
+        // the two by intermediaries is how request smuggling happens.
+        let chunked = !response.headers.iter().any(|h| h.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH));
+        if chunked {
+            response.headers.push(Header {
+                name: Header::_TRANSFER_ENCODING.to_string(),
+                value: "chunked".to_string(),
+            });
+        }
 
         // build status line + headers (no body)
         let status = [
@@ -392,13 +399,19 @@ impl Server {
             loop {
                 let n = file.read(&mut buf).map_err(|e| e.to_string())?;
                 if n == 0 { break; }
-                // chunk header: hex size + CRLF
-                stream.write_all(format!("{:x}\r\n", n).as_bytes()).map_err(|e| e.to_string())?;
-                stream.write_all(&buf[..n]).map_err(|e| e.to_string())?;
-                stream.write_all(b"\r\n").map_err(|e| e.to_string())?;
+                if chunked {
+                    // chunk header: hex size + CRLF
+                    stream.write_all(format!("{:x}\r\n", n).as_bytes()).map_err(|e| e.to_string())?;
+                    stream.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+                    stream.write_all(b"\r\n").map_err(|e| e.to_string())?;
+                } else {
+                    stream.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+                }
             }
-            // terminal chunk
-            stream.write_all(b"0\r\n\r\n").map_err(|e| e.to_string())?;
+            if chunked {
+                // terminal chunk
+                stream.write_all(b"0\r\n\r\n").map_err(|e| e.to_string())?;
+            }
         }
 
         stream.flush().map_err(|e| e.to_string())
@@ -813,6 +826,7 @@ impl Server {
                 result = tokio_listener.accept() => {
                     match result {
                         Ok((tcp_stream, peer_addr)) => {
+                            let _ = tcp_stream.set_nodelay(true);
                             let acceptor = tls_acceptor.clone();
                             let app = app.clone();
                             tokio::spawn(async move {
@@ -895,6 +909,9 @@ impl Server {
                 result = tokio_listener.accept() => {
                     match result {
                         Ok((tcp_stream, peer_addr)) => {
+                            // Head and body go out as separate writes: don't let
+                            // Nagle hold the body back waiting for an ACK.
+                            let _ = tcp_stream.set_nodelay(true);
                             let app = app.clone();
                             tokio::spawn(async move {
                                 crate::metrics::connection_open();

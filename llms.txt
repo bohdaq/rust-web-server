@@ -1135,7 +1135,7 @@ outbound calls.
 
 ### Access log
 
-Combined Log Format by default. `RWS_CONFIG_LOG_FORMAT=json` switches to structured JSON.
+JSON by default in the `rws` binary (`RWS_CONFIG_LOG_FORMAT=json`); `combined` gives Combined Log Format, `off` disables the per-request line.
 
 ### Hot config reload
 
@@ -1164,7 +1164,7 @@ RWS_CONFIG_TLS_CLIENT_CA_FILE    path to CA cert (enables mTLS)
 RWS_CONFIG_HTTP_REDIRECT_PORT    if set, listens on this port and sends 301 → HTTPS
 RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS   default: unset = no global limit in the rws binary (RateLimitLayer itself defaults to 1000)
 RWS_CONFIG_RATE_LIMIT_WINDOW_SECS   default: 60
-RWS_CONFIG_LOG_FORMAT            "combined" (default) | "json"
+RWS_CONFIG_LOG_FORMAT            "json" (binary default) | "combined" | "off" (no per-request line)
 RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES   default: 10000 (per-read chunk size; bodies larger than this span multiple reads)
 RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES   default: 0 (unlimited); 413 before buffering when exceeded
 RWS_CONFIG_SPA_FALLBACK          default: unset (disabled); e.g. "index.html" — see "SPA fallback" section

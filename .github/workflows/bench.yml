@@ -1,0 +1,53 @@
+name: Benchmark
+
+# Manually triggered: rws vs Caddy vs nginx on one GitHub-hosted runner — see
+# bench/run.sh for the scenarios and settings. Results go to the job summary
+# and the bench-results artifact. Shared CI runners are noisy: compare servers
+# within one run, not numbers across runs.
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: Seconds per scenario
+        default: "20"
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Same build as the release binaries.
+      - run: cargo build --release --bin rws --features "acme auth"
+      - name: Install nginx, Caddy, oha
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y nginx
+          sudo systemctl stop nginx || true
+          gh release download v2.11.7 --repo caddyserver/caddy --pattern 'caddy_2.11.7_linux_amd64.tar.gz' --dir "$RUNNER_TEMP"
+          tar xzf "$RUNNER_TEMP/caddy_2.11.7_linux_amd64.tar.gz" -C "$RUNNER_TEMP" caddy
+          gh release download v1.16.0 --repo hatoo/oha --pattern 'oha-linux-amd64' --dir "$RUNNER_TEMP"
+          chmod +x "$RUNNER_TEMP/oha-linux-amd64"
+          nginx -v; "$RUNNER_TEMP/caddy" version; "$RUNNER_TEMP/oha-linux-amd64" --version
+      - name: Run
+        run: |
+          RWS=target/release/rws OHA="$RUNNER_TEMP/oha-linux-amd64" CADDY="$RUNNER_TEMP/caddy" \
+            NGINX="$(command -v nginx)" DURATION="${{ inputs.duration }}s" bench/run.sh
+          {
+            echo "## rws vs Caddy vs nginx"
+            echo
+            echo "rws $(grep -m1 '^version' Cargo.toml | cut -d'"' -f2) @ ${GITHUB_SHA::7} · Caddy 2.11.7 · $(nginx -v 2>&1)"
+            echo
+            cat bench-results.md
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: |
+            bench-results.md
+            bench-results.json

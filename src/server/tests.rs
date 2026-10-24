@@ -1775,3 +1775,25 @@ async fn bind_all_families_specific_ip_binds_only_that_address() {
     assert_eq!(1, listeners.len());
     assert!(listeners[0].local_addr().unwrap().ip().is_loopback());
 }
+
+#[test]
+fn write_chunked_file_with_known_length_sends_raw_body_not_chunked() {
+    let file = crate::test_env::TempPath::new("raw_body.txt");
+    std::fs::write(&*file, b"hello raw").unwrap();
+    let response = Response {
+        http_version: VERSION.http_1_1.to_string(),
+        status_code: 200,
+        reason_phrase: "OK".to_string(),
+        headers: vec![Header { name: Header::_CONTENT_LENGTH.to_string(), value: "9".to_string() }],
+        content_range_list: vec![],
+        stream_file: None,
+        stream_pipe: None,
+    };
+    let request = Request { method: METHOD.get.to_string(), request_uri: "/".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: vec![] };
+    let mut out = Vec::new();
+    Server::write_chunked_file(&mut out, response, request, file.as_str()).unwrap();
+    let raw = String::from_utf8(out).unwrap();
+    // Content-Length and Transfer-Encoding together are forbidden (RFC 9112 §6.1).
+    assert!(!raw.to_ascii_lowercase().contains("transfer-encoding"), "{raw}");
+    assert!(raw.ends_with("\r\n\r\nhello raw"), "{raw:?}");
+}

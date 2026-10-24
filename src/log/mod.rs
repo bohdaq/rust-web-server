@@ -181,14 +181,27 @@ impl Log {
     /// `RWS_CONFIG_LOG_FORMAT` (`"combined"` or `"json"`). Call this instead of
     /// `Log::combined` so that format selection is centralised.
     pub fn log_access(request: &Request, response: &Response, peer_addr: &SocketAddr) {
+        if let Some(line) = Log::access_log_line(request, response, peer_addr) {
+            println!("{}", line);
+        }
+    }
+
+    /// The access-log line for `RWS_CONFIG_LOG_FORMAT`: `json` (the `rws`
+    /// binary's default), Combined Log Format for any other value (including
+    /// unset, in library use), or `None` for `off`/`none` — no per-request
+    /// line, e.g. behind a proxy that already logs or when benchmarking.
+    /// Read per request, so it's hot-reloadable.
+    pub fn access_log_line(request: &Request, response: &Response, peer_addr: &SocketAddr) -> Option<String> {
         let format = std::env::var(crate::entry_point::Config::RWS_CONFIG_LOG_FORMAT)
             .unwrap_or_default();
-        let line = if format == "json" {
+        if format.eq_ignore_ascii_case("off") || format.eq_ignore_ascii_case("none") {
+            return None;
+        }
+        Some(if format == "json" {
             Log::json(request, response, peer_addr)
         } else {
             Log::combined(request, response, peer_addr)
-        };
-        println!("{}", line);
+        })
     }
 
     fn format_iso8601(secs: u64) -> String {
