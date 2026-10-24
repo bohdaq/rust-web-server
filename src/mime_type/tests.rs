@@ -905,3 +905,135 @@ fn wasm_mime_type_constant() {
     assert_eq!(MimeType::APPLICATION_WASM, "application/wasm");
     assert_eq!(MimeType::WASM_SUFFIX, ".wasm");
 }
+
+// The extension `match` must give exactly what the suffix walk gives, for
+// every known suffix in every path shape — including the ones where its
+// `ends_with` and `Path::extension` checks disagree (dotfiles, a trailing
+// slash) and case variants (both are case-sensitive).
+#[test]
+fn mime_type_for_matches_the_suffix_walk() {
+    let suffixes = [
+        MimeType::TXT_SUFFIX,
+        MimeType::CSS_SUFFIX,
+        MimeType::HTML_SUFFIX,
+        MimeType::HTM_SUFFIX,
+        MimeType::JS_SUFFIX,
+        MimeType::MJS_SUFFIX,
+        MimeType::APNG_SUFFIX,
+        MimeType::AVIF_SUFFIX,
+        MimeType::GIF_SUFFIX,
+        MimeType::JPG_SUFFIX,
+        MimeType::JPEG_SUFFIX,
+        MimeType::JPE_SUFFIX,
+        MimeType::JIF_SUFFIX,
+        MimeType::JFIF_SUFFIX,
+        MimeType::PNG_SUFFIX,
+        MimeType::SVG_SUFFIX,
+        MimeType::WEBP_SUFFIX,
+        MimeType::BMP_SUFFIX,
+        MimeType::ICO_SUFFIX,
+        MimeType::CUR_SUFFIX,
+        MimeType::TIF_SUFFIX,
+        MimeType::TIFF_SUFFIX,
+        MimeType::AAC_SUFFIX,
+        MimeType::FLAC_SUFFIX,
+        MimeType::WAV_SUFFIX,
+        MimeType::M4A_SUFFIX,
+        MimeType::N3GP_SUFFIX,
+        MimeType::MPG_SUFFIX,
+        MimeType::MPEG_SUFFIX,
+        MimeType::MP4_SUFFIX,
+        MimeType::M4V_SUFFIX,
+        MimeType::M4P_SUFFIX,
+        MimeType::OGA_SUFFIX,
+        MimeType::OGG_SUFFIX,
+        MimeType::OGV_SUFFIX,
+        MimeType::MOV_SUFFIX,
+        MimeType::WEBM_SUFFIX,
+        MimeType::ABW_SUFFIX,
+        MimeType::AVI_SUFFIX,
+        MimeType::AZV_SUFFIX,
+        MimeType::BIN_SUFFIX,
+        MimeType::BZ_SUFFIX,
+        MimeType::BZ2_SUFFIX,
+        MimeType::CDA_SUFFIX,
+        MimeType::CSH_SUFFIX,
+        MimeType::CSV_SUFFIX,
+        MimeType::DOC_SUFFIX,
+        MimeType::DOCX_SUFFIX,
+        MimeType::EOT_SUFFIX,
+        MimeType::EPUB_SUFFIX,
+        MimeType::GZ_SUFFIX,
+        MimeType::ICS_SUFFIX,
+        MimeType::JAR_SUFFIX,
+        MimeType::JSON_SUFFIX,
+        MimeType::JSONLD_SUFFIX,
+        MimeType::MIDI_SUFFIX,
+        MimeType::MID_SUFFIX,
+        MimeType::MP3_SUFFIX,
+        MimeType::MPKG_SUFFIX,
+        MimeType::ODP_SUFFIX,
+        MimeType::ODS_SUFFIX,
+        MimeType::ODT_SUFFIX,
+        MimeType::OGX_SUFFIX,
+        MimeType::OPUS_SUFFIX,
+        MimeType::OTF_SUFFIX,
+        MimeType::PDF_SUFFIX,
+        MimeType::PHP_SUFFIX,
+        MimeType::PPT_SUFFIX,
+        MimeType::PPTX_SUFFIX,
+        MimeType::RAR_SUFFIX,
+        MimeType::RTF_SUFFIX,
+        MimeType::SH_SUFFIX,
+        MimeType::SWF_SUFFIX,
+        MimeType::TAR_SUFFIX,
+        MimeType::TS_SUFFIX,
+        MimeType::TTF_SUFFIX,
+        MimeType::VSD_SUFFIX,
+        MimeType::WEBA_SUFFIX,
+        MimeType::WOFF_SUFFIX,
+        MimeType::WOFF2_SUFFIX,
+        MimeType::XHTML_SUFFIX,
+        MimeType::XLS_SUFFIX,
+        MimeType::XLSX_SUFFIX,
+        MimeType::XML_SUFFIX,
+        MimeType::XUL_SUFFIX,
+        MimeType::ZIP_SUFFIX,
+        MimeType::N7Z_SUFFIX,
+        MimeType::N3G2_SUFFIX,
+        MimeType::CRT_SUFFIX,
+        MimeType::WASM_SUFFIX
+    ];
+    let mut paths: Vec<String> = vec![
+        "".into(), "/".into(), ".".into(), "..".into(), "/.".into(), "/..".into(), "noext".into(),
+        "/noext".into(), "/a.".into(), "/a..b".into(), "/a.b/".into(), "/.hidden".into(), "/a.unknown".into(),
+    ];
+    for suffix in suffixes {
+        let (s, u) = (suffix, suffix.to_uppercase());
+        for shape in [
+            format!("/a{s}"), format!("{s}"), format!("/{s}"), format!("a{s}"), format!("/d/a.b{s}"),
+            format!("/a{u}"), format!("/a{s}x"), format!("/a{s}/"), format!("/d{s}/x"), format!("/a{s}."),
+            format!("/..{s}"), format!("/a{s}{s}"), format!("/d.x/{s}"), format!("/a.tar{s}"),
+            format!("/a{s}?q=1"),
+        ] {
+            paths.push(shape);
+        }
+    }
+    for path in &paths {
+        assert_eq!(MimeType::mime_type_by_suffix(path), MimeType::mime_type_for(path), "path {:?}", path);
+        assert_eq!(MimeType::mime_type_by_suffix(path), MimeType::detect_mime_type(path), "path {:?}", path);
+    }
+}
+
+#[test]
+fn mime_type_for_common_files() {
+    assert_eq!(MimeType::TEXT_HTML, MimeType::mime_type_for("/srv/www/index.html"));
+    assert_eq!(MimeType::APPLICATION_GZIP, MimeType::mime_type_for("/srv/a.tar.gz"));
+    assert_eq!(MimeType::APPLICATION_JSONLD, MimeType::mime_type_for("/x.jsonld"));
+    assert_eq!(MimeType::APPLICATION_OCTET_STREAM, MimeType::mime_type_for("/x.HTML"));
+    assert_eq!(MimeType::APPLICATION_OCTET_STREAM, MimeType::mime_type_for("/x.nope"));
+    // A dotfile has no extension for the Path-based checks...
+    assert_eq!(MimeType::APPLICATION_OCTET_STREAM, MimeType::mime_type_for("/.html"));
+    // ...but the ends_with ones still see the suffix.
+    assert_eq!(MimeType::TEXT_CSS, MimeType::mime_type_for("/.css"));
+}

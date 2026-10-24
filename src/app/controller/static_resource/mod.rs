@@ -336,7 +336,7 @@ impl StaticResourceController {
         // A symlink whose own name has no recognizable type goes to the
         // general path, which takes the type from the link target: such names
         // are opened with O_NOFOLLOW, so a symlink simply fails to open.
-        let mime = MimeType::detect_mime_type(&fs_path);
+        let mime = MimeType::mime_type_for(&fs_path);
         let follow_symlinks = mime != MimeType::APPLICATION_OCTET_STREAM;
         let file = open_file_cache::open(&fs_path, follow_symlinks)?;
         let state = file.state()?;
@@ -358,14 +358,14 @@ impl StaticResourceController {
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
 
         if state.len > StaticResourceController::STREAM_THRESHOLD {
-            response.headers.push(Header { name: Header::_CONTENT_TYPE.to_string(), value: mime });
+            response.headers.push(Header { name: Header::_CONTENT_TYPE.to_string(), value: mime.to_string() });
             response.headers.push(Header { name: Header::_CONTENT_LENGTH.to_string(), value: state.len.to_string() });
             response.stream_file = Some(fs_path);
             return Some(response);
         }
 
         let body = file.contents(&state).ok()?;
-        response.content_range_list = vec![Range::get_content_range(body, mime)];
+        response.content_range_list = vec![Range::get_content_range(body, mime.to_string())];
         Some(response)
     }
 

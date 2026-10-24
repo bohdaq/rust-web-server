@@ -196,15 +196,121 @@ impl MimeType {
     /// Returns the MIME type string for the given file path based on its extension.
     /// Falls back to `"application/octet-stream"` for unknown extensions.
     pub fn detect_mime_type(request_uri: &str) -> String {
+        MimeType::mime_type_for(request_uri).to_string()
+    }
+
+    /// [`MimeType::detect_mime_type`] without allocating: one `match` on the
+    /// extension for the usual shape (a last path segment with a dot after
+    /// its first character); other shapes — dotfiles, a trailing `/` — take
+    /// the original suffix-by-suffix walk, whose `ends_with` and
+    /// `Path::extension` checks disagree there. Case-sensitive, like that walk.
+    pub(crate) fn mime_type_for(path: &str) -> &'static str {
+        let name_start = path
+            .rfind(|c: char| c == '/' || (cfg!(windows) && c == '\\'))
+            .map_or(0, |i| i + 1);
+        let name = &path[name_start..];
+        match name.rfind('.') {
+            Some(dot) if dot > 0 => MimeType::mime_type_for_extension(&name[dot + 1..]),
+            _ => MimeType::mime_type_by_suffix(path),
+        }
+    }
+
+    /// The MIME type for an extension (without the dot), as the suffix walk
+    /// would pick it; `application/octet-stream` for an unknown one.
+    fn mime_type_for_extension(extension: &str) -> &'static str {
+        match extension {
+            "txt" => MimeType::TEXT_PLAIN,
+            "css" => MimeType::TEXT_CSS,
+            "html" | "htm" => MimeType::TEXT_HTML,
+            "mjs" | "js" => MimeType::TEXT_JAVASCRIPT,
+            "apng" => MimeType::IMAGE_APNG,
+            "avif" => MimeType::IMAGE_AVIF,
+            "gif" => MimeType::IMAGE_GIF,
+            "svg" => MimeType::IMAGE_SVG,
+            "jpg" | "jpeg" | "jpe" | "jif" | "jfif" => MimeType::IMAGE_JPEG,
+            "png" => MimeType::IMAGE_PNG,
+            "webp" => MimeType::IMAGE_WEBP,
+            "bmp" => MimeType::IMAGE_BMP,
+            "ico" | "cur" => MimeType::IMAGE_ICO,
+            "tif" | "tiff" => MimeType::IMAGE_TIFF,
+            "aac" => MimeType::AUDIO_AAC,
+            "flac" => MimeType::AUDIO_FLAC,
+            "wav" => MimeType::AUDIO_WAV,
+            "m4a" => MimeType::AUDIO_MP4,
+            "oga" => MimeType::AUDIO_OGG,
+            "3gp" => MimeType::VIDEO_3GP,
+            "mpg" | "mpeg" => MimeType::VIDEO_MPEG,
+            "mp4" | "m4v" | "m4p" => MimeType::VIDEO_MP4,
+            "ogg" | "ogv" => MimeType::VIDEO_OGG,
+            "mov" => MimeType::VIDEO_QUICKTIME,
+            "webm" => MimeType::VIDEO_WEBM,
+            "abw" => MimeType::APPLICATION_ABIWORD,
+            "avi" => MimeType::VIDEO_X_MSVIDEO,
+            "azw" => MimeType::APPLICATION_VND_AMAZON_EBOOK,
+            "bz" => MimeType::APPLICATION_X_BZIP,
+            "bz2" => MimeType::APPLICATION_X_BZIP2,
+            "cda" => MimeType::APPLICATION_X_CDF,
+            "csh" => MimeType::APPLICATION_X_CSH,
+            "csv" => MimeType::TEXT_CSV,
+            "doc" => MimeType::APPLICATION_MSWORD,
+            "docx" => MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENTS_WORDPROCESSINGIMPL_DOCUMENT,
+            "eot" => MimeType::APPLICATION_VND_MS_FONTOBJECT,
+            "epub" => MimeType::APPLICATION_EPUB_ZIP,
+            "gz" => MimeType::APPLICATION_GZIP,
+            "ics" => MimeType::TEXT_CALENDAR,
+            "jar" => MimeType::APPLICATION_JAVA_ARCHIVE,
+            "json" => MimeType::APPLICATION_JSON,
+            "jsonld" => MimeType::APPLICATION_JSONLD,
+            "midi" | "mid" => MimeType::AUDIO_MIDI,
+            "mp3" => MimeType::AUDIO_MPEG,
+            "mpkg" => MimeType::APPLICATION_VND_APPLE_INSTALLER_XML,
+            "odp" => MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION,
+            "ods" => MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET,
+            "odt" => MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT,
+            "ogx" => MimeType::APPLICATION_OGG,
+            "opus" => MimeType::AUDIO_OPUS,
+            "otf" => MimeType::FONT_OTF,
+            "pdf" => MimeType::APPLICATION_PDF,
+            "php" => MimeType::APPLICATION_X_HTTPD_PHP,
+            "ppt" => MimeType::APPLICATION_VND_MS_POWERPOINT,
+            "pptx" => MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION,
+            "rar" => MimeType::APPLICATION_VND_RAR,
+            "rtf" => MimeType::APPLICATION_RTF,
+            "sh" => MimeType::APPLICATION_X_SH,
+            "swf" => MimeType::APPLICATION_X_SHOCKWAVE_FLASH,
+            "tar" => MimeType::APPLICATION_X_TAR,
+            "ts" => MimeType::VIDEO_MP2T,
+            "ttf" => MimeType::FONT_TTF,
+            "vsd" => MimeType::APPLICATION_VND_VISIO,
+            "weba" => MimeType::AUDIO_WEBM,
+            "woff" => MimeType::FONT_WOFF,
+            "woff2" => MimeType::FONT_WOFF2,
+            "xhtml" => MimeType::APPLICATION_XHTML_XML,
+            "xls" => MimeType::APPLICATION_VND_MS_EXCEL,
+            "xlsx" => MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET,
+            "xml" => MimeType::APPLICATION_XML,
+            "xul" => MimeType::APPLICATION_VND_MOZILLA_XUL_XML,
+            "zip" => MimeType::APPLICATION_ZIP,
+            "7z" => MimeType::APPLICATION_X_7Z_COMPRESSED,
+            "3g2" => MimeType::VIDEO_3GPP2,
+            "crt" => MimeType::APPLICATION_X_X509_CA_CERT,
+            "wasm" => MimeType::APPLICATION_WASM,
+            _ => MimeType::APPLICATION_OCTET_STREAM,
+        }
+    }
+
+    /// The original detection: each known suffix in turn, some by
+    /// `ends_with` on the whole path, some by `Path::extension`.
+    fn mime_type_by_suffix(request_uri: &str) -> &'static str {
 
         let is_txt_suffix = request_uri.ends_with(MimeType::TXT_SUFFIX);
         if is_txt_suffix {
-            return MimeType::TEXT_PLAIN.to_string();
+            return MimeType::TEXT_PLAIN;
         }
 
         let is_css_suffix = request_uri.ends_with(MimeType::CSS_SUFFIX);
         if is_css_suffix {
-            return MimeType::TEXT_CSS.to_string();
+            return MimeType::TEXT_CSS;
         }
 
         let mut is_html_suffix = false;
@@ -217,7 +323,7 @@ impl MimeType {
         }
 
         if is_html_suffix {
-            return MimeType::TEXT_HTML.to_string();
+            return MimeType::TEXT_HTML;
         }
 
         let mut is_js_suffix = false;
@@ -230,27 +336,27 @@ impl MimeType {
         }
 
         if is_js_suffix {
-            return MimeType::TEXT_JAVASCRIPT.to_string();
+            return MimeType::TEXT_JAVASCRIPT;
         }
 
         let is_apng_suffix = request_uri.ends_with(MimeType::APNG_SUFFIX);
         if is_apng_suffix {
-            return MimeType::IMAGE_APNG.to_string();
+            return MimeType::IMAGE_APNG;
         }
 
         let is_avif_suffix = request_uri.ends_with(MimeType::AVIF_SUFFIX);
         if is_avif_suffix {
-            return MimeType::IMAGE_AVIF.to_string();
+            return MimeType::IMAGE_AVIF;
         }
 
         let is_gif_suffix = request_uri.ends_with(MimeType::GIF_SUFFIX);
         if is_gif_suffix {
-            return MimeType::IMAGE_GIF.to_string();
+            return MimeType::IMAGE_GIF;
         }
 
         let is_svg_suffix = request_uri.ends_with(MimeType::SVG_SUFFIX);
         if is_svg_suffix {
-            return MimeType::IMAGE_SVG.to_string();
+            return MimeType::IMAGE_SVG;
         }
 
         let mut is_jpeg_suffix = false;
@@ -263,22 +369,22 @@ impl MimeType {
         }
 
         if is_jpeg_suffix {
-            return MimeType::IMAGE_JPEG.to_string();
+            return MimeType::IMAGE_JPEG;
         }
 
         let is_png_suffix = request_uri.ends_with(MimeType::PNG_SUFFIX);
         if is_png_suffix {
-            return MimeType::IMAGE_PNG.to_string();
+            return MimeType::IMAGE_PNG;
         }
 
         let is_webp_suffix = request_uri.ends_with(MimeType::WEBP_SUFFIX);
         if is_webp_suffix {
-            return MimeType::IMAGE_WEBP.to_string();
+            return MimeType::IMAGE_WEBP;
         }
 
         let is_bmp_suffix = request_uri.ends_with(MimeType::BMP_SUFFIX);
         if is_bmp_suffix {
-            return MimeType::IMAGE_BMP.to_string();
+            return MimeType::IMAGE_BMP;
         }
 
         let mut is_ico_suffix = false;
@@ -291,7 +397,7 @@ impl MimeType {
         }
 
         if is_ico_suffix {
-            return MimeType::IMAGE_ICO.to_string();
+            return MimeType::IMAGE_ICO;
         }
 
         let mut is_tiff_suffix = false;
@@ -304,37 +410,37 @@ impl MimeType {
         }
 
         if is_tiff_suffix {
-            return MimeType::IMAGE_TIFF.to_string();
+            return MimeType::IMAGE_TIFF;
         }
 
         let is_aac_suffix = request_uri.ends_with(MimeType::AAC_SUFFIX);
         if is_aac_suffix {
-            return MimeType::AUDIO_AAC.to_string();
+            return MimeType::AUDIO_AAC;
         }
 
         let is_flac_suffix = request_uri.ends_with(MimeType::FLAC_SUFFIX);
         if is_flac_suffix {
-            return MimeType::AUDIO_FLAC.to_string();
+            return MimeType::AUDIO_FLAC;
         }
 
         let is_wav_suffix = request_uri.ends_with(MimeType::WAV_SUFFIX);
         if is_wav_suffix {
-            return MimeType::AUDIO_WAV.to_string();
+            return MimeType::AUDIO_WAV;
         }
 
         let is_m4a_suffix = request_uri.ends_with(MimeType::M4A_SUFFIX);
         if is_m4a_suffix {
-            return MimeType::AUDIO_MP4.to_string();
+            return MimeType::AUDIO_MP4;
         }
 
         let is_oga_suffix = request_uri.ends_with(MimeType::OGA_SUFFIX);
         if is_oga_suffix {
-            return MimeType::AUDIO_OGG.to_string();
+            return MimeType::AUDIO_OGG;
         }
 
         let is_3gp_suffix = request_uri.ends_with(MimeType::N3GP_SUFFIX);
         if is_3gp_suffix {
-            return MimeType::VIDEO_3GP.to_string();
+            return MimeType::VIDEO_3GP;
         }
 
         let mut is_mpeg_suffix = false;
@@ -347,7 +453,7 @@ impl MimeType {
         }
 
         if is_mpeg_suffix {
-            return MimeType::VIDEO_MPEG.to_string();
+            return MimeType::VIDEO_MPEG;
         }
 
         let mut is_video_mp4_suffix = false;
@@ -360,7 +466,7 @@ impl MimeType {
         }
 
         if is_video_mp4_suffix {
-            return MimeType::VIDEO_MP4.to_string();
+            return MimeType::VIDEO_MP4;
         }
 
         let mut is_video_ogg_suffix = false;
@@ -373,107 +479,107 @@ impl MimeType {
         }
 
         if is_video_ogg_suffix {
-            return MimeType::VIDEO_OGG.to_string();
+            return MimeType::VIDEO_OGG;
         }
 
         let is_mov_suffix = request_uri.ends_with(MimeType::MOV_SUFFIX);
         if is_mov_suffix {
-            return MimeType::VIDEO_QUICKTIME.to_string();
+            return MimeType::VIDEO_QUICKTIME;
         }
 
         let is_webm_suffix = request_uri.ends_with(MimeType::WEBM_SUFFIX);
         if is_webm_suffix {
-            return MimeType::VIDEO_WEBM.to_string();
+            return MimeType::VIDEO_WEBM;
         }
 
         let is_abw_suffix = request_uri.ends_with(MimeType::ABW_SUFFIX);
         if is_abw_suffix {
-            return MimeType::APPLICATION_ABIWORD.to_string();
+            return MimeType::APPLICATION_ABIWORD;
         }
 
         let is_avi_suffix = request_uri.ends_with(MimeType::AVI_SUFFIX);
         if is_avi_suffix {
-            return MimeType::VIDEO_X_MSVIDEO.to_string();
+            return MimeType::VIDEO_X_MSVIDEO;
         }
 
         let is_azv_suffix = request_uri.ends_with(MimeType::AZV_SUFFIX);
         if is_azv_suffix {
-            return MimeType::APPLICATION_VND_AMAZON_EBOOK.to_string();
+            return MimeType::APPLICATION_VND_AMAZON_EBOOK;
         }
 
         let is_bin_suffix = request_uri.ends_with(MimeType::BIN_SUFFIX);
         if is_bin_suffix {
-            return MimeType::APPLICATION_OCTET_STREAM.to_string();
+            return MimeType::APPLICATION_OCTET_STREAM;
         }
 
         let is_bz_suffix = request_uri.ends_with(MimeType::BZ_SUFFIX);
         if is_bz_suffix {
-            return MimeType::APPLICATION_X_BZIP.to_string();
+            return MimeType::APPLICATION_X_BZIP;
         }
 
         let is_bz2_suffix = request_uri.ends_with(MimeType::BZ2_SUFFIX);
         if is_bz2_suffix {
-            return MimeType::APPLICATION_X_BZIP2.to_string();
+            return MimeType::APPLICATION_X_BZIP2;
         }
 
         let is_cda_suffix = request_uri.ends_with(MimeType::CDA_SUFFIX);
         if is_cda_suffix {
-            return MimeType::APPLICATION_X_CDF.to_string();
+            return MimeType::APPLICATION_X_CDF;
         }
 
         let is_csh_suffix = request_uri.ends_with(MimeType::CSH_SUFFIX);
         if is_csh_suffix {
-            return MimeType::APPLICATION_X_CSH.to_string();
+            return MimeType::APPLICATION_X_CSH;
         }
 
         let is_csv_suffix = request_uri.ends_with(MimeType::CSV_SUFFIX);
         if is_csv_suffix {
-            return MimeType::TEXT_CSV.to_string();
+            return MimeType::TEXT_CSV;
         }
 
         let is_doc_suffix = request_uri.ends_with(MimeType::DOC_SUFFIX);
         if is_doc_suffix {
-            return MimeType::APPLICATION_MSWORD.to_string();
+            return MimeType::APPLICATION_MSWORD;
         }
 
         let is_docx_suffix = request_uri.ends_with(MimeType::DOCX_SUFFIX);
         if is_docx_suffix {
-            return MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENTS_WORDPROCESSINGIMPL_DOCUMENT.to_string();
+            return MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENTS_WORDPROCESSINGIMPL_DOCUMENT;
         }
 
         let is_eot_suffix = request_uri.ends_with(MimeType::EOT_SUFFIX);
         if is_eot_suffix {
-            return MimeType::APPLICATION_VND_MS_FONTOBJECT.to_string();
+            return MimeType::APPLICATION_VND_MS_FONTOBJECT;
         }
 
         let is_epub_suffix = request_uri.ends_with(MimeType::EPUB_SUFFIX);
         if is_epub_suffix {
-            return MimeType::APPLICATION_EPUB_ZIP.to_string();
+            return MimeType::APPLICATION_EPUB_ZIP;
         }
 
         let is_gz_suffix = request_uri.ends_with(MimeType::GZ_SUFFIX);
         if is_gz_suffix {
-            return MimeType::APPLICATION_GZIP.to_string();
+            return MimeType::APPLICATION_GZIP;
         }
 
         let is_ics_suffix = request_uri.ends_with(MimeType::ICS_SUFFIX);
         if is_ics_suffix {
-            return MimeType::TEXT_CALENDAR.to_string();
+            return MimeType::TEXT_CALENDAR;
         }
 
         let is_jar_suffix = request_uri.ends_with(MimeType::JAR_SUFFIX);
         if is_jar_suffix {
-            return MimeType::APPLICATION_JAVA_ARCHIVE.to_string();
+            return MimeType::APPLICATION_JAVA_ARCHIVE;
         }
 
         let is_json_suffix = request_uri.ends_with(MimeType::JSON_SUFFIX);
         if is_json_suffix {
-            return MimeType::APPLICATION_JSON.to_string();
+            return MimeType::APPLICATION_JSON;
         }
 
         let is_jsonld_suffix = request_uri.ends_with(MimeType::JSONLD_SUFFIX);
         if is_jsonld_suffix {
-            return MimeType::APPLICATION_JSONLD.to_string();
+            return MimeType::APPLICATION_JSONLD;
         }
 
 
@@ -487,175 +593,175 @@ impl MimeType {
         }
 
         if is_midi_suffix {
-            return MimeType::AUDIO_MIDI.to_string();
+            return MimeType::AUDIO_MIDI;
         }
 
         let is_mp3_suffix = request_uri.ends_with(MimeType::MP3_SUFFIX);
         if is_mp3_suffix {
-            return MimeType::AUDIO_MPEG.to_string();
+            return MimeType::AUDIO_MPEG;
         }
 
         let is_mpkg_suffix = request_uri.ends_with(MimeType::MPKG_SUFFIX);
         if is_mpkg_suffix {
-            return MimeType::APPLICATION_VND_APPLE_INSTALLER_XML.to_string();
+            return MimeType::APPLICATION_VND_APPLE_INSTALLER_XML;
         }
 
         let is_odp_suffix = request_uri.ends_with(MimeType::ODP_SUFFIX);
         if is_odp_suffix {
-            return MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION.to_string();
+            return MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_PRESENTATION;
         }
 
         let is_ods_suffix = request_uri.ends_with(MimeType::ODS_SUFFIX);
         if is_ods_suffix {
-            return MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET.to_string();
+            return MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET;
         }
 
         let is_odt_suffix = request_uri.ends_with(MimeType::ODT_SUFFIX);
         if is_odt_suffix {
-            return MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT.to_string();
+            return MimeType::APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT;
         }
 
         let is_ogx_suffix = request_uri.ends_with(MimeType::OGX_SUFFIX);
         if is_ogx_suffix {
-            return MimeType::APPLICATION_OGG.to_string();
+            return MimeType::APPLICATION_OGG;
         }
 
         let is_opus_suffix = request_uri.ends_with(MimeType::OPUS_SUFFIX);
         if is_opus_suffix {
-            return MimeType::AUDIO_OPUS.to_string();
+            return MimeType::AUDIO_OPUS;
         }
 
         let is_otf_suffix = request_uri.ends_with(MimeType::OTF_SUFFIX);
         if is_otf_suffix {
-            return MimeType::FONT_OTF.to_string();
+            return MimeType::FONT_OTF;
         }
 
         let is_pdf_suffix = request_uri.ends_with(MimeType::PDF_SUFFIX);
         if is_pdf_suffix {
-            return MimeType::APPLICATION_PDF.to_string();
+            return MimeType::APPLICATION_PDF;
         }
 
         let is_php_suffix = request_uri.ends_with(MimeType::PHP_SUFFIX);
         if is_php_suffix {
-            return MimeType::APPLICATION_X_HTTPD_PHP.to_string();
+            return MimeType::APPLICATION_X_HTTPD_PHP;
         }
 
         let is_ppt_suffix = request_uri.ends_with(MimeType::PPT_SUFFIX);
         if is_ppt_suffix {
-            return MimeType::APPLICATION_VND_MS_POWERPOINT.to_string();
+            return MimeType::APPLICATION_VND_MS_POWERPOINT;
         }
 
         let is_pptx_suffix = request_uri.ends_with(MimeType::PPTX_SUFFIX);
         if is_pptx_suffix {
-            return MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION.to_string();
+            return MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_PRESENTATIONML_PRESENTATION;
         }
 
         let is_rar_suffix = request_uri.ends_with(MimeType::RAR_SUFFIX);
         if is_rar_suffix {
-            return MimeType::APPLICATION_VND_RAR.to_string();
+            return MimeType::APPLICATION_VND_RAR;
         }
 
         let is_rtf_suffix = request_uri.ends_with(MimeType::RTF_SUFFIX);
         if is_rtf_suffix {
-            return MimeType::APPLICATION_RTF.to_string();
+            return MimeType::APPLICATION_RTF;
         }
 
         let is_sh_suffix = request_uri.ends_with(MimeType::SH_SUFFIX);
         if is_sh_suffix {
-            return MimeType::APPLICATION_X_SH.to_string();
+            return MimeType::APPLICATION_X_SH;
         }
 
         let is_swf_suffix = request_uri.ends_with(MimeType::SWF_SUFFIX);
         if is_swf_suffix {
-            return MimeType::APPLICATION_X_SHOCKWAVE_FLASH.to_string();
+            return MimeType::APPLICATION_X_SHOCKWAVE_FLASH;
         }
 
         let is_tar_suffix = request_uri.ends_with(MimeType::TAR_SUFFIX);
         if is_tar_suffix {
-            return MimeType::APPLICATION_X_TAR.to_string();
+            return MimeType::APPLICATION_X_TAR;
         }
 
         let is_ts_suffix = request_uri.ends_with(MimeType::TS_SUFFIX);
         if is_ts_suffix {
-            return MimeType::VIDEO_MP2T.to_string();
+            return MimeType::VIDEO_MP2T;
         }
 
         let is_ttf_suffix = request_uri.ends_with(MimeType::TTF_SUFFIX);
         if is_ttf_suffix {
-            return MimeType::FONT_TTF.to_string();
+            return MimeType::FONT_TTF;
         }
 
         let is_vsd_suffix = request_uri.ends_with(MimeType::VSD_SUFFIX);
         if is_vsd_suffix {
-            return MimeType::APPLICATION_VND_VISIO.to_string();
+            return MimeType::APPLICATION_VND_VISIO;
         }
 
         let is_weba_suffix = request_uri.ends_with(MimeType::WEBA_SUFFIX);
         if is_weba_suffix {
-            return MimeType::AUDIO_WEBM.to_string();
+            return MimeType::AUDIO_WEBM;
         }
 
         let is_woff_suffix = request_uri.ends_with(MimeType::WOFF_SUFFIX);
         if is_woff_suffix {
-            return MimeType::FONT_WOFF.to_string();
+            return MimeType::FONT_WOFF;
         }
 
         let is_woff2_suffix = request_uri.ends_with(MimeType::WOFF2_SUFFIX);
         if is_woff2_suffix {
-            return MimeType::FONT_WOFF2.to_string();
+            return MimeType::FONT_WOFF2;
         }
 
         let is_xhtml_suffix = request_uri.ends_with(MimeType::XHTML_SUFFIX);
         if is_xhtml_suffix {
-            return MimeType::APPLICATION_XHTML_XML.to_string();
+            return MimeType::APPLICATION_XHTML_XML;
         }
 
         let is_xls_suffix = request_uri.ends_with(MimeType::XLS_SUFFIX);
         if is_xls_suffix {
-            return MimeType::APPLICATION_VND_MS_EXCEL.to_string();
+            return MimeType::APPLICATION_VND_MS_EXCEL;
         }
 
         let is_xlsx_suffix = request_uri.ends_with(MimeType::XLSX_SUFFIX);
         if is_xlsx_suffix {
-            return MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET.to_string();
+            return MimeType::APPLICATION_VND_OPENXMLFORMATS_OFFICEDOCUMENT_SPREADSHEETML_SHEET;
         }
 
         let is_xml_suffix = request_uri.ends_with(MimeType::XML_SUFFIX);
         if is_xml_suffix {
-            return MimeType::APPLICATION_XML.to_string();
+            return MimeType::APPLICATION_XML;
         }
 
         let is_xul_suffix = request_uri.ends_with(MimeType::XUL_SUFFIX);
         if is_xul_suffix {
-            return MimeType::APPLICATION_VND_MOZILLA_XUL_XML.to_string();
+            return MimeType::APPLICATION_VND_MOZILLA_XUL_XML;
         }
 
         let is_zip_suffix = request_uri.ends_with(MimeType::ZIP_SUFFIX);
         if is_zip_suffix {
-            return MimeType::APPLICATION_ZIP.to_string();
+            return MimeType::APPLICATION_ZIP;
         }
 
         let is_zip_suffix = request_uri.ends_with(MimeType::N7Z_SUFFIX);
         if is_zip_suffix {
-            return MimeType::APPLICATION_X_7Z_COMPRESSED.to_string();
+            return MimeType::APPLICATION_X_7Z_COMPRESSED;
         }
 
         let is_zip_suffix = request_uri.ends_with(MimeType::N3G2_SUFFIX);
         if is_zip_suffix {
-            return MimeType::VIDEO_3GPP2.to_string();
+            return MimeType::VIDEO_3GPP2;
         }
 
         let is_crt_suffix = request_uri.ends_with(MimeType::CRT_SUFFIX);
         if is_crt_suffix {
-            return MimeType::APPLICATION_X_X509_CA_CERT.to_string();
+            return MimeType::APPLICATION_X_X509_CA_CERT;
         }
 
         let is_wasm_suffix = request_uri.ends_with(MimeType::WASM_SUFFIX);
         if is_wasm_suffix {
-            return MimeType::APPLICATION_WASM.to_string();
+            return MimeType::APPLICATION_WASM;
         }
 
-        return MimeType::APPLICATION_OCTET_STREAM.to_string();
+        return MimeType::APPLICATION_OCTET_STREAM;
     }
 
     pub fn get_extension_from_filename(filename: &str) -> Option<&str> {
