@@ -119,6 +119,11 @@ impl Middleware for IpFilter {
             _ => next.execute(request, connection),
         }
     }
+
+    /// In-memory only: safe on the event loop.
+    fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
 }
 
 impl IpRange {

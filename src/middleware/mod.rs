@@ -81,6 +81,11 @@ impl Middleware for RateLimitLayer {
             Ok(AppError::TooManyRequests.into_response())
         }
     }
+
+    /// In-memory only: safe on the event loop.
+    fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
 }
 
 /// A single middleware layer.
@@ -97,6 +102,14 @@ pub trait Middleware: Send + Sync {
         connection: &ConnectionInfo,
         next: &dyn Application,
     ) -> Result<Response, String>;
+
+    /// `true` when this layer's own work for `request` never blocks (in-memory
+    /// state, atomics, short mutexes) — see [`Application::runs_inline`]. A
+    /// [`WithMiddleware`] stack runs inline only if every layer and the inner
+    /// application agree. Default `false`.
+    fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        false
+    }
 }
 
 /// An [`Application`] that applies a stack of [`Middleware`] layers before
@@ -139,6 +152,10 @@ impl<A: Clone> Clone for WithMiddleware<A> {
 impl<A: Application> Application for WithMiddleware<A> {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         Chain { app: &self.inner, layers: &self.layers, index: 0 }.execute(request, connection)
+    }
+
+    fn runs_inline(&self, request: &Request, connection: &ConnectionInfo) -> bool {
+        self.layers.iter().all(|l| l.runs_inline(request, connection)) && self.inner.runs_inline(request, connection)
     }
 }
 

@@ -412,6 +412,10 @@ impl rust_web_server::middleware::Middleware for GlobalRateLimit {
             next.execute(request, connection)
         }
     }
+
+    fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true // an in-memory counter
+    }
 }
 
 /// Automatic HTTPS: when `RWS_CONFIG_ACME_DOMAINS` is set, obtain (or reuse)

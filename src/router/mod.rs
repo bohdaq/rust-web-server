@@ -170,6 +170,17 @@ impl Router {
     /// When `.with_host()` is set, this returns `None` immediately unless the
     /// request's SNI hostname (TLS) or `Host` header (plain HTTP) matches.
     pub fn handle(&self, request: &Request, connection: &ConnectionInfo) -> Option<Response> {
+        let (route, params) = self.find(request, connection)?;
+        Some((route.handler)(request, &params, connection))
+    }
+
+    /// `true` if [`handle`](Self::handle) would run a handler for `request`
+    /// (method, path and host all match), without running it.
+    pub fn matches(&self, request: &Request, connection: &ConnectionInfo) -> bool {
+        self.find(request, connection).is_some()
+    }
+
+    fn find(&self, request: &Request, connection: &ConnectionInfo) -> Option<(&Route, PathParams)> {
         if let Some(required_host) = &self.host {
             let actual = connection.sni_hostname.as_deref().or_else(|| {
                 request.headers.iter()
@@ -189,8 +200,7 @@ impl Router {
                 continue;
             }
             if let Some(params) = matcher::try_match(&route.segments, &path_segs) {
-                let params = PathParams::from_map(params);
-                return Some((route.handler)(request, &params, connection));
+                return Some((route, PathParams::from_map(params)));
             }
         }
         None

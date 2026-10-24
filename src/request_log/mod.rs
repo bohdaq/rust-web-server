@@ -133,4 +133,9 @@ impl Middleware for LogLayer {
 
         result
     }
+
+    /// In-memory only: safe on the event loop.
+    fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
 }

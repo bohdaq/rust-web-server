@@ -2561,6 +2561,18 @@ impl Application for McpServer {
             None      => App::new().execute(request, connection),
         }
     }
+
+    /// MCP calls run tool handlers (user code): never inline. Other requests
+    /// go to the fallback app, which decides.
+    fn runs_inline(&self, request: &Request, connection: &ConnectionInfo) -> bool {
+        if request.request_uri == self.path || request.request_uri.starts_with("/.well-known/") {
+            return false;
+        }
+        match &self.fallback {
+            Some(app) => app.runs_inline(request, connection),
+            None => App::is_inline_request(request),
+        }
+    }
 }
 
 // ── public helper ─────────────────────────────────────────────────────────────

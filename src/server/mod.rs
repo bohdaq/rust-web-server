@@ -6,6 +6,8 @@ mod example;
 pub(crate) mod http1_async;
 #[cfg(feature = "http2")]
 pub(crate) mod body_stream;
+#[cfg(feature = "http2")]
+pub(crate) mod sendfile;
 pub(crate) mod framing;
 
 // The TCP/thread-pool accept loop below (`Server::setup`/`run`/`process`/…) needs
@@ -439,42 +441,15 @@ impl Server {
     /// The response headers are written first, then the file is read and written in 64 KB chunks.
     pub(crate) fn write_chunked_file(
         stream: &mut impl Write,
-        mut response: Response,
+        response: Response,
         request: Request,
         filepath: &str,
     ) -> Result<(), String> {
         use std::fs::File;
         use std::io::Read as _;
 
-        // With a known Content-Length (static files set it) the body goes out
-        // as-is; Transfer-Encoding: chunked is only for an unknown length.
-        // Sending both is forbidden (RFC 9112 §6.1) — mismatched handling of
-        // the two by intermediaries is how request smuggling happens.
-        let chunked = !response.headers.iter().any(|h| h.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH));
-        if chunked {
-            response.headers.push(Header {
-                name: Header::_TRANSFER_ENCODING.to_string(),
-                value: "chunked".to_string(),
-            });
-        }
-
-        // build status line + headers (no body)
-        let status = [
-            response.http_version.clone(),
-            response.status_code.to_string(),
-            response.reason_phrase.clone(),
-        ].join(SYMBOL.whitespace);
-
-        let mut headers_str = SYMBOL.new_line_carriage_return.to_string();
-        for header in &response.headers {
-            headers_str.push_str(&header.name);
-            headers_str.push_str(Header::NAME_VALUE_SEPARATOR);
-            headers_str.push_str(&header.value);
-            headers_str.push_str(SYMBOL.new_line_carriage_return);
-        }
-        let head = format!("{}{}{}", status, headers_str, SYMBOL.new_line_carriage_return);
-
-        stream.write_all(head.as_bytes()).map_err(|e| e.to_string())?;
+        let (head, chunked) = Server::stream_file_head(response);
+        stream.write_all(&head).map_err(|e| e.to_string())?;
 
         if request.method != METHOD.head && request.method != METHOD.options {
             let mut file = File::open(filepath).map_err(|e| e.to_string())?;
@@ -498,6 +473,39 @@ impl Server {
         }
 
         stream.flush().map_err(|e| e.to_string())
+    }
+
+    /// The status line and headers of a `stream_file` response, and whether
+    /// its body is sent chunked. With a known Content-Length (static files
+    /// set it) the body goes out as-is; Transfer-Encoding: chunked is only
+    /// for an unknown length. Sending both is forbidden (RFC 9112 §6.1) —
+    /// mismatched handling of the two by intermediaries is how request
+    /// smuggling happens.
+    pub(crate) fn stream_file_head(mut response: Response) -> (Vec<u8>, bool) {
+        let chunked = !response.headers.iter().any(|h| h.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH));
+        if chunked {
+            response.headers.push(Header {
+                name: Header::_TRANSFER_ENCODING.to_string(),
+                value: "chunked".to_string(),
+            });
+        }
+
+        // build status line + headers (no body)
+        let status = [
+            response.http_version.clone(),
+            response.status_code.to_string(),
+            response.reason_phrase.clone(),
+        ].join(SYMBOL.whitespace);
+
+        let mut headers_str = SYMBOL.new_line_carriage_return.to_string();
+        for header in &response.headers {
+            headers_str.push_str(&header.name);
+            headers_str.push_str(Header::NAME_VALUE_SEPARATOR);
+            headers_str.push_str(&header.value);
+            headers_str.push_str(SYMBOL.new_line_carriage_return);
+        }
+        let head = format!("{}{}{}", status, headers_str, SYMBOL.new_line_carriage_return);
+        (head.into_bytes(), chunked)
     }
 
     /// Streams a `Read` source to `stream` using HTTP/1.1 chunked transfer encoding.

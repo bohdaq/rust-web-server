@@ -887,6 +887,7 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 | `BasicAuthLayer<F>` | `auth` | HTTP Basic; closure `(user, pass) -> bool`; 401 on failure. `::from_htpasswd_file(path)` loads plain-text/`{SHA256}` entries from a file. |
 | `JwtLayer` | `auth` | HS256 Bearer token; 401 on invalid. `::rs256`/`::es256` (RS256/ES256 against a static PEM public key) require `auth-asymmetric` |
 | `ForwardAuthLayer` | `auth::forward` | Delegates the allow/deny decision to an external HTTP service; 2xx copies configured headers through, other statuses pass the auth response through verbatim, unreachable → 502 |
+| (any) | `middleware` | `Middleware::runs_inline(&self, req, conn) -> bool` (default false): declare a layer non-blocking; `Application::runs_inline` likewise — the async servers run a request on the event loop (no blocking-pool handoff) only when every layer and the app opt in. Built-in in-memory layers and `App` (GET/HEAD) opt in; user routes, proxy routes, MCP never do |
 | `IpFilter` | `ip_filter` | Allow or deny by IPv4/IPv6 address or CIDR; 403 on block; `ip_filter::is_valid_entry` |
 | `CsrfLayer` | `csrf` | Double-submit cookie; 403 on mismatch for POST/PUT/PATCH/DELETE |
 | `OidcAuth` | `sso` | OAuth2/OIDC auth; redirects unauthenticated users to `/auth/login` |

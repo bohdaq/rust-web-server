@@ -948,6 +948,16 @@ impl Application for ConfigDrivenApp {
             None => generation.dispatch.execute(request, conn),
         }
     }
+
+    /// Routes proxy upstream or run configured middleware: only requests
+    /// that match no route and fall through to the static files run inline,
+    /// and only without a global `[middleware]` table.
+    fn runs_inline(&self, request: &Request, conn: &ConnectionInfo) -> bool {
+        let generation = self.current();
+        generation.entry.is_none()
+            && !generation.dispatch.routes.iter().any(|r| r.matcher.matches(request, conn))
+            && App::is_inline_request(request)
+    }
 }
 
 // ── NullApp ────────────────────────────────────────────────────────────────────

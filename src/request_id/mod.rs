@@ -141,4 +141,9 @@ impl Middleware for RequestIdLayer {
         response.headers.push(Header { name: self.header.clone(), value: id });
         Ok(response)
     }
+
+    /// In-memory only: safe on the event loop.
+    fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
 }

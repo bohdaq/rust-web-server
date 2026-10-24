@@ -50,7 +50,7 @@ pkg-fmt = "zip"
 [features]
 default = ["http3"]
 http1 = ["dep:ctrlc", "dep:libc"]
-http2 = ["dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots"]
+http2 = ["dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "dep:libc"]
 http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn"]
 http-client = ["dep:rustls", "dep:webpki-roots"]
 acme   = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs"]

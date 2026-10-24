@@ -75,7 +75,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | Type | Module | Purpose |
 |------|--------|---------|
 | `Controller` trait | `controller` | Match a request and produce a response |
-| `Application` trait | `application` | Wire controllers into a dispatch loop |
+| `Application` trait | `application` | Wire controllers into a dispatch loop. `runs_inline(request, connection) -> bool` (default `false`): `true` lets the async servers run that request on the event loop instead of the blocking pool — only for work that never waits (the built-in `App` opts in for GET/HEAD; wrappers agree only if every layer does). |
 | `Server` | `server` | Bind, accept, and process TCP connections |
 | `Request` | `request` | Parsed HTTP request (method, URI, headers, body) |
 | `Response` | `response` | HTTP response builder |
@@ -104,7 +104,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `RedisRateLimiter` | `rate_limit` | Distributed fixed-window rate limiter backed by a Redis server via a hand-rolled RESP client; shares one counter across every `rws` instance. `from_env()` reads `RWS_REDIS_HOST/PORT/PASSWORD` + `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS/WINDOW_SECS`. |
 | `WebSocket` / `Frame` | `websocket` | RFC 6455 WebSocket handshake, frame read/write; SHA-1 and base64 built in |
 | `AppWithState<S>` | `state` | State-aware application with built-in dynamic routing; state shared via `Arc<S>`. Use `App::with_state(S)` as the entry point. `.with_config(ServerConfig)` pins the fallback `App` (for requests none of this app's routes match) to explicit CORS/CSP settings instead of reading `RWS_CONFIG_*` env vars per request — mirrors `App::with_config`. |
-| `Middleware` / `WithMiddleware` | `middleware` | Composable middleware pipeline wrapping any `Application`. Use `App::new().wrap(layer)` or `AppWithState::wrap(layer)`. |
+| `Middleware` / `WithMiddleware` | `middleware` | Composable middleware pipeline wrapping any `Application`. Use `App::new().wrap(layer)` or `AppWithState::wrap(layer)`. `Middleware::runs_inline` (default `false`) declares a layer non-blocking; a stack runs inline only if every layer and the inner app do. |
+| `Router::matches` | `router` | `true` if `handle()` would run a handler for the request, without running it. |
+| `server_config::invalidate()` / `ServerConfig::current()` | `server_config` | Per-request configuration snapshot (see `ServerConfig`). |
 | `RateLimitLayer` | `middleware` | Built-in middleware that enforces the global rate limiter per client IP |
 | `AsyncAppWithState<S>` | `async_state` | Like `AppWithState<S>` but handlers are `async fn`; requires `http2` feature. Entry point: `App::with_async_state(S)`. `.with_config(ServerConfig)` pins the fallback `App`, same as `AppWithState::with_config`. |
 | `Sse` / `SseEvent` | `sse` | Build a buffered `text/event-stream` response from a sequence of events. Correct headers set automatically. |
@@ -4985,3 +4987,38 @@ let app = App::new().wrap(
         .path_prefix("/api"),
 );
 ```
+
+### 86. Letting a quick handler run on the event loop
+
+The async servers hand every request to a blocking thread pool by default, so
+a slow handler can't stall other connections. A request that is quick and
+never waits can skip that handoff — the built-in `App` does this for static
+files and health checks. An `Application` opts in per request with
+`runs_inline`:
+
+```rust
+use rust_web_server::application::Application;
+use rust_web_server::request::Request;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::server::ConnectionInfo;
+
+#[derive(Clone)]
+struct Ping;
+
+impl Application for Ping {
+    fn execute(&self, _request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
+        Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "pong"))
+    }
+
+    // In-memory, no I/O: safe to run on the event loop.
+    fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
+}
+```
+
+Return `true` only for work that never waits on a database, the network or
+a lock held across I/O — on the event loop, that would stall every
+connection on the same worker thread. Wrapped in middleware, the request
+runs inline only if every layer opts in too (`Middleware::runs_inline`).
+

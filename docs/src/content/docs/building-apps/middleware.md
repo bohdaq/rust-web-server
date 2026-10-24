@@ -130,6 +130,35 @@ use rust_web_server::core::New;
 let app = App::new().wrap(RequestIdLayer);
 ```
 
+### Running on the event loop (`runs_inline`)
+
+The async servers normally hand each request to a blocking thread pool, so a
+slow handler can't stall other connections. For requests that are quick and
+never wait — health checks, metrics, small static files — that handoff costs
+more than the work, so rws runs them directly on the event loop, as nginx
+does. A request runs inline only if **every** layer and the inner application
+say so for that request:
+
+```rust
+impl Middleware for RequestIdLayer {
+    fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application)
+        -> Result<Response, String> { /* … */ }
+
+    // Only in-memory work: safe on the event loop.
+    fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
+}
+```
+
+The default is `false`, and it must stay `false` for a layer that can wait —
+a database or Redis call, an outbound HTTP request, a lock held across I/O.
+A layer that doesn't opt in simply keeps the stack on the blocking pool, so
+leaving it out is always safe. The built-in in-memory layers
+(`RateLimitLayer`, `CacheLayer`, `IpFilter`, `RequestIdLayer`, `MetricsLayer`,
+`LogLayer`, `BlocklistLayer`, `MaintenanceLayer`) opt in; user route handlers,
+proxy routes and MCP calls never run inline.
+
 ### Short-circuit example
 
 Return a response without calling `next` to block the request:

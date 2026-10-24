@@ -119,7 +119,7 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
     /// per-request env read.
     fn fallback_app(&self) -> App {
         match &self.config {
-            Some(c) => App::with_config((**c).clone()),
+            Some(c) => App::with_shared_config(Arc::clone(c)),
             None => App::new(),
         }
     }
@@ -291,5 +291,11 @@ impl<S: Send + Sync + 'static> Application for AppWithState<S> {
             return Ok(response);
         }
         self.fallback_app().execute(request, connection)
+    }
+
+    /// Route handlers are user code and may block: only requests no route
+    /// matches, falling through to the built-in `App`, run inline.
+    fn runs_inline(&self, request: &Request, connection: &ConnectionInfo) -> bool {
+        !self.router.matches(request, connection) && App::is_inline_request(request)
     }
 }

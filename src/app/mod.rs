@@ -130,6 +130,19 @@ impl App {
     pub fn with_config(config: ServerConfig) -> Self {
         App { config: Some(Arc::new(config)) }
     }
+
+    /// [`App::with_config`] sharing an existing `Arc` instead of copying it.
+    pub(crate) fn with_shared_config(config: Arc<ServerConfig>) -> Self {
+        App { config: Some(config) }
+    }
+
+    /// Whether the built-in controllers answer `request` without blocking:
+    /// every GET/HEAD they serve is in memory or a local file read (health,
+    /// metrics, assets, static files — large files are only opened here and
+    /// streamed from the blocking pool). Uploads and form posts aren't.
+    pub(crate) fn is_inline_request(request: &Request) -> bool {
+        request.method == crate::request::METHOD.get || request.method == crate::request::METHOD.head
+    }
 }
 
 impl Application for App {
@@ -177,6 +190,10 @@ impl Application for App {
         }
 
         Ok(response)
+    }
+
+    fn runs_inline(&self, request: &Request, _connection: &ConnectionInfo) -> bool {
+        App::is_inline_request(request)
     }
 }
 

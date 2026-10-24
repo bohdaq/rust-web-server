@@ -22,6 +22,8 @@ use crate::http::VERSION;
 use crate::log::Log;
 use crate::request::Request;
 use crate::response::Response;
+use crate::core::New;
+use crate::server::sendfile::{self, SendfileSocket};
 use crate::server::{framing, Address, ConnectionInfo, Server};
 
 /// Longest wait for a client to send a request head (or the next request on a
@@ -42,7 +44,7 @@ pub(crate) async fn serve<S, A>(
     app: A,
 ) -> Result<(), String>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + AsyncWrite + Unpin + Send + SendfileSocket + 'static,
     A: Application + Send + Clone + 'static,
 {
     let (server_ip, server_port, _) = get_ip_port_thread_count();
@@ -169,7 +171,7 @@ where
             sni_hostname: sni_hostname.clone(),
         };
 
-        let (request, result) = execute_blocking(app.clone(), request, connection)
+        let (request, result) = execute_request(app.clone(), request, connection)
             .await
             .map_err(|e| format!("request handler panicked: {}", e))?;
 
@@ -199,7 +201,9 @@ where
         Log::log_access(&request, &response, &peer_addr);
 
         if response.stream_pipe.is_some() || response.stream_file.is_some() {
-            write_streaming(&mut stream, response, request).await?;
+            if !write_file_zero_copy(&mut stream, &mut response, &request).await? {
+                write_streaming(&mut stream, response, request).await?;
+            }
         } else {
             let (head, body) = Response::generate_response_parts(response, request);
             stream.write_all(&head).await.map_err(|e| e.to_string())?;
@@ -213,6 +217,31 @@ where
     }
     let _ = stream.shutdown().await;
     Ok(())
+}
+
+/// Run the `Application` for one request: directly on this task when the app
+/// says the request is quick and non-blocking (`Application::runs_inline` —
+/// health checks, small static files), otherwise on the blocking pool via
+/// [`execute_blocking`]. The blocking-pool handoff (a shared lock and two
+/// cross-thread wake-ups) cost more than serving a small file. A panic is
+/// caught either way and costs only this request.
+pub(crate) async fn execute_request<A: Application + Send + 'static>(
+    app: A,
+    request: Request,
+    connection: ConnectionInfo,
+) -> Result<(Request, Result<Response, String>), String> {
+    if app.runs_inline(&request, &connection) {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.execute(&request, &connection)))
+            .map_err(|panic| {
+                panic
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| panic.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "panic".to_string())
+            })?;
+        return Ok((request, result));
+    }
+    execute_blocking(app, request, connection).await
 }
 
 /// Run the (synchronous) `Application` off the async scheduler — file reads
@@ -292,6 +321,41 @@ async fn write_streaming<S: AsyncWrite + Unpin>(
         Some(e) => Err(e),
         None => produced,
     }
+}
+
+/// A `stream_file` GET with a known `Content-Length` over plain TCP: write
+/// the head, then let the kernel copy the file to the socket (`sendfile`).
+/// `Ok(false)` — nothing written — when that doesn't apply (TLS, HEAD, a
+/// chunked or piped body, an unsupported OS, a file that won't open); the
+/// caller then uses [`write_streaming`].
+async fn write_file_zero_copy<S: AsyncWrite + Unpin + SendfileSocket>(
+    stream: &mut S,
+    response: &mut Response,
+    request: &Request,
+) -> Result<bool, String> {
+    if !sendfile::SUPPORTED || response.stream_pipe.is_some() || request.method != crate::request::METHOD.get {
+        return Ok(false);
+    }
+    let Some(path) = response.stream_file.clone() else { return Ok(false) };
+    let Some(len) = response
+        .headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH))
+        .and_then(|h| h.value.trim().parse::<u64>().ok())
+    else {
+        return Ok(false);
+    };
+    if stream.sendfile_socket().is_none() {
+        return Ok(false);
+    }
+    let Ok(file) = std::fs::File::open(&path) else { return Ok(false) };
+
+    let (head, _) = Server::stream_file_head(std::mem::replace(response, Response::new()));
+    stream.write_all(&head).await.map_err(|e| e.to_string())?;
+    stream.flush().await.map_err(|e| e.to_string())?;
+    let socket = stream.sendfile_socket().expect("checked above");
+    sendfile::send_file(socket, &file, len).await.map_err(|e| e.to_string())?;
+    Ok(true)
 }
 
 /// `std::io::Write` that hands each buffer to the async writer task.
@@ -497,6 +561,108 @@ mod tests {
         assert!(out.contains("uri=/b body=hi"), "{out}");
         assert!(out.contains("uri=/c body="), "{out}");
         assert!(task.await.unwrap().is_ok());
+    }
+
+
+    /// Answers inline (opted in) or not, and records the thread it ran on.
+    #[derive(Clone)]
+    struct ThreadProbe {
+        inline: bool,
+        ran_on: std::sync::Arc<std::sync::Mutex<Option<std::thread::ThreadId>>>,
+    }
+
+    impl Application for ThreadProbe {
+        fn execute(&self, request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
+            if request.request_uri == "/panic" {
+                panic!("inline handler bug");
+            }
+            *self.ran_on.lock().unwrap() = Some(std::thread::current().id());
+            Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "ok"))
+        }
+
+        fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+            self.inline
+        }
+    }
+
+    fn probe_connection() -> ConnectionInfo {
+        ConnectionInfo {
+            client: Address { ip: "127.0.0.1".to_string(), port: 1 },
+            server: Address { ip: "127.0.0.1".to_string(), port: 2 },
+            request_size: 1024,
+            sni_hostname: None,
+        }
+    }
+
+    fn probe_request(uri: &str) -> Request {
+        Request { method: "GET".to_string(), request_uri: uri.to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] }
+    }
+
+    #[tokio::test]
+    async fn inline_requests_run_on_the_calling_thread_others_on_the_blocking_pool() {
+        let here = std::thread::current().id();
+        for (inline, expect_here) in [(true, true), (false, false)] {
+            let probe = ThreadProbe { inline, ran_on: Default::default() };
+            let (_, result) = execute_request(probe.clone(), probe_request("/"), probe_connection()).await.unwrap();
+            assert!(result.is_ok());
+            let ran_on = probe.ran_on.lock().unwrap().unwrap();
+            assert_eq!(ran_on == here, expect_here, "inline = {inline}");
+        }
+    }
+
+    #[tokio::test]
+    async fn inline_handler_panic_is_caught() {
+        let probe = ThreadProbe { inline: true, ran_on: Default::default() };
+        let err = execute_request(probe, probe_request("/panic"), probe_connection()).await.unwrap_err();
+        assert!(err.contains("inline handler bug"), "{err}");
+    }
+
+
+    /// A `stream_file` response with a known length — the static-file shape.
+    #[derive(Clone)]
+    struct SizedFile(String, usize);
+
+    impl Application for SizedFile {
+        fn execute(&self, _request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
+            let mut response = Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None);
+            response.headers.push(Header { name: Header::_CONTENT_LENGTH.to_string(), value: self.1.to_string() });
+            response.stream_file = Some(self.0.clone());
+            Ok(response)
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn plain_tcp_file_is_sent_with_sendfile_and_keep_alive_continues() {
+        let file = crate::test_env::TempPath::new("http1_async_sendfile.bin");
+        let content: Vec<u8> = (0..700_000u32).map(|i| (i % 249) as u8).collect();
+        std::fs::write(&*file, &content).unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = SizedFile(file.as_str().to_string(), content.len());
+        let server = tokio::spawn(async move {
+            let (tcp, peer_addr) = listener.accept().await.unwrap();
+            serve(tcp, peer_addr, None, false, app).await
+        });
+
+        let mut client = tokio::net::TcpStream::connect(addr).await.unwrap();
+        client.write_all(b"GET /a HTTP/1.1\r\nHost: x\r\n\r\nGET /b HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").await.unwrap();
+        let mut raw = Vec::new();
+        client.read_to_end(&mut raw).await.unwrap();
+        assert!(server.await.unwrap().is_ok());
+
+        // Two complete responses, each a head plus exactly Content-Length bytes.
+        let mut rest = &raw[..];
+        for _ in 0..2 {
+            let head_end = rest.windows(4).position(|w| w == b"\r\n\r\n").expect("response head") + 4;
+            let head = String::from_utf8_lossy(&rest[..head_end]).to_string();
+            assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+            assert!(!head.contains("Transfer-Encoding"), "{head}");
+            assert!(rest[head_end..].len() >= content.len());
+            assert!(rest[head_end..head_end + content.len()] == content[..], "body differs from the file");
+            rest = &rest[head_end + content.len()..];
+        }
+        assert!(rest.is_empty());
     }
 
 }
