@@ -18,31 +18,46 @@ release build (`--features "acme auth"`), Caddy 2.11.7, nginx from Ubuntu with
 
 | Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | Peak memory (MiB) |
 |---|---|---:|---:|---:|---:|
-| Static file, 1 KiB | rws | 23,418 | 2.62 | 5.81 | 20.2 |
-| | Caddy | 18,755 | 2.71 | 13.38 | 67.1 |
-| | nginx | 70,904 | 0.64 | 2.93 | 23.2 |
-| Static file, 1 MiB | rws | 2,882 | 21.86 | 41.16 | 47.4 |
-| | Caddy | 2,382 | 18.89 | 126.97 | 69.4 |
-| | nginx | 9,577 | 6.16 | 14.98 | 23.4 |
-| Reverse proxy, 1 KiB | rws | 19,315 | 3.20 | 6.45 | 33.0 |
-| | Caddy | 13,634 | 4.10 | 14.05 | 66.1 |
-| | nginx | 33,324 | 1.79 | 4.61 | 24.4 |
+| Static file, 1 KiB | rws | 52,601 | 1.22 | 3.23 | 8.4 |
+| | Caddy | 28,367 | 1.79 | 8.67 | 68.1 |
+| | nginx | 109,021 | 0.39 | 2.40 | 23.6 |
+| Static file, 1 MiB | rws | 11,362 | 5.18 | 11.39 | 8.8 |
+| | Caddy | 3,279 | 14.99 | 88.70 | 70.6 |
+| | nginx | 12,704 | 4.72 | 11.15 | 23.7 |
+| Reverse proxy, 1 KiB | rws | 29,436 | 2.10 | 4.31 | 15.5 |
+| | Caddy | 21,601 | 2.60 | 8.82 | 66.5 |
+| | nginx | 51,591 | 1.14 | 3.05 | 24.6 |
 
 Every request in every scenario returned `200 OK`.
 
 ## Reading the numbers
 
-- **Against Caddy:** `rws` serves about 20–25% more static-file requests and
-  40% more proxied requests per second, with a p99 two to three times lower
-  and a third of the memory.
-- **nginx** is two to three times faster than both. It's the reference point
-  for what the hardware can do, not the project's target: `rws` competes with
-  Caddy on what you get from one binary and one config file.
+- **Against Caddy:** `rws` serves 1.9× (small) to 3.5× (large) as many
+  file requests and 36% more proxied requests per second, with a lower p99
+  and about a sixth of the memory.
+- **Against nginx:** large files are within 11% — both use `sendfile`, so
+  the kernel does the copying. On small files and proxying nginx is about
+  twice as fast: its event loop does all the work on one thread, while rws
+  still crosses threads for the parts that may block (proxying).
 - Shared CI runners are noisy: absolute numbers vary by a factor of two
   between runs. Compare servers within one run, not numbers across runs.
 - Compression matters: with `Accept-Encoding: gzip` sent and only `rws`
   compressing, the comparison measures `gzip`, not the servers. Compare like
   for like.
+
+## Why it's fast
+
+- **One `open` and one `fstat` per static file**; size and modification time
+  come from the open file, and a small file is read from that same handle.
+- **Quick requests run on the event loop.** Static files, health checks and
+  metrics skip the hand-off to a blocking thread pool, as in nginx. Handlers
+  that may block (your routes, proxying) still get a pool thread, so a slow
+  backend can't stall other connections. See
+  [`runs_inline`](/building-apps/middleware/#running-on-the-event-loop-runs_inline).
+- **`sendfile` for downloads** over plain HTTP on Linux and macOS: the kernel
+  copies file pages straight to the socket.
+- **Configuration is a cached snapshot**, not read from the environment on
+  every request; a reload replaces it.
 
 ## Reproduce
 
