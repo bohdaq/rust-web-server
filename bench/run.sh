@@ -22,6 +22,11 @@
 # and children; the shared nginx backend isn't counted). With the load
 # generator on the same machine that's what decides throughput on a small CI
 # runner — and it can be measured on any machine.
+#
+# PERF_DIR=<dir> also records a `perf` profile of rws for each scenario
+# (<dir>/<scenario>.data, sampled at 999 Hz with call graphs; PERF overrides
+# the command, e.g. PERF="sudo perf"). Sampling costs throughput, so don't
+# compare the numbers of a profiled run with an unprofiled one.
 set -euo pipefail
 
 RWS="${RWS:?set RWS to the rws binary}"
@@ -33,6 +38,9 @@ NGINX="${NGINX:-}"
 export -n NGINX 2>/dev/null || true
 DURATION="${DURATION:-15s}"
 CONNECTIONS="${CONNECTIONS:-64}"
+PERF_DIR="${PERF_DIR:-}"
+PERF="${PERF:-perf}"
+[ -n "$PERF_DIR" ] && mkdir -p "$PERF_DIR" && PERF_DIR="$(cd "$PERF_DIR" && pwd)"
 
 abs() { echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; }
 RWS="$(abs "$RWS")"
@@ -100,8 +108,12 @@ RESULTS="$WORK/results.jsonl"
 : > "$RESULTS"
 
 run_load() { # <server-name> <pid> <scenario> <url>
-  local name="$1" pid="$2" scenario="$3" url="$4" peak=0 rss cpu_before cpu_after
+  local name="$1" pid="$2" scenario="$3" url="$4" peak=0 rss cpu_before cpu_after perf_pid=""
   "$OHA" -z 2s -c "$CONNECTIONS" --no-tui --disable-compression "$url" > /dev/null 2>&1 || true   # warm-up
+  if [ -n "$PERF_DIR" ] && [ "$name" = rws ]; then
+    $PERF record -F 999 -g -p "$pid" -o "$PERF_DIR/$scenario.data" -- sleep "${DURATION%s}" > /dev/null 2>&1 &
+    perf_pid=$!
+  fi
   cpu_before=$(cpu_ms "$pid")
   "$OHA" -z "$DURATION" -c "$CONNECTIONS" --no-tui --disable-compression --output-format json "$url" > "$WORK/oha.json" &
   local oha_pid=$!
@@ -112,6 +124,7 @@ run_load() { # <server-name> <pid> <scenario> <url>
   done
   wait "$oha_pid"
   cpu_after=$(cpu_ms "$pid")
+  [ -n "$perf_pid" ] && wait "$perf_pid"
   kill -0 "$pid" 2>/dev/null || { echo "$name exited during the $scenario run" >&2; exit 1; }
   python3 -I - "$name" "$scenario" "$peak" "$WORK/oha.json" "$((cpu_after - cpu_before))" >> "$RESULTS" <<'EOF'
 import json, sys

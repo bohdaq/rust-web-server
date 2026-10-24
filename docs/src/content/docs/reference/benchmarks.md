@@ -87,3 +87,19 @@ RWS=target/release/rws OHA=oha CADDY=caddy NGINX=nginx bench/run.sh
 serves as the shared backend for every proxy under test. `DURATION` (default
 `15s`) and `CONNECTIONS` (default `64`) tune the load. The script prints a
 Markdown table and writes `bench-results.md` and `bench-results.json`.
+
+## Profile
+
+To see where `rws` spends its CPU, run the workflow with **profile** checked:
+it builds with frame pointers and samples `rws` with `perf` during each
+scenario. The job summary lists the hottest symbols, and the `bench-profile`
+artifact has flat and call-tree reports plus `perf script` output for flame
+graphs (`inferno-collapse-perf | inferno-flamegraph`). Locally, on Linux:
+
+```bash
+RUSTFLAGS="-C force-frame-pointers=yes" cargo build --release --bin rws --features "acme auth"
+PERF_DIR=perf RWS=target/release/rws OHA=oha NGINX=nginx bench/run.sh
+perf report -i perf/static-1k.data --no-children
+```
+
+Sampling slows `rws` down, so take throughput numbers from an unprofiled run.

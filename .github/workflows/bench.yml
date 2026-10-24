@@ -3,13 +3,19 @@ name: Benchmark
 # Manually triggered: rws vs Caddy vs nginx on one GitHub-hosted runner — see
 # bench/run.sh for the scenarios and settings. Results go to the job summary
 # and the bench-results artifact. Shared CI runners are noisy: compare servers
-# within one run, not numbers across runs.
+# within one run, not numbers across runs. With `profile`, rws is also
+# sampled with `perf` (frame-pointer build) during each scenario; the reports
+# go to the job summary and the bench-profile artifact.
 on:
   workflow_dispatch:
     inputs:
       duration:
         description: Seconds per scenario
         default: "20"
+      profile:
+        description: Record a perf profile of rws (lowers its throughput)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,8 +27,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # Same build as the release binaries.
+      # Same build as the release binaries (plus frame pointers when profiling,
+      # so perf can walk the stacks).
       - run: cargo build --release --bin rws --features "acme auth"
+        env:
+          RUSTFLAGS: ${{ inputs.profile && '-C force-frame-pointers=yes' || '' }}
+      - name: Install perf
+        if: inputs.profile
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y "linux-tools-$(uname -r)" || sudo apt-get install -y linux-tools-azure linux-tools-generic
+          sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0
+          perf --version
       - name: Install nginx, Caddy, oha
         env:
           GH_TOKEN: ${{ github.token }}
@@ -37,7 +53,8 @@ jobs:
       - name: Run
         run: |
           RWS=target/release/rws OHA="$RUNNER_TEMP/oha-linux-amd64" CADDY="$RUNNER_TEMP/caddy" \
-            NGINX="$(command -v nginx)" DURATION="${{ inputs.duration }}s" bench/run.sh
+            NGINX="$(command -v nginx)" DURATION="${{ inputs.duration }}s" \
+            PERF_DIR="${{ inputs.profile && 'perf' || '' }}" bench/run.sh
           {
             echo "## rws vs Caddy vs nginx"
             echo
@@ -45,6 +62,31 @@ jobs:
             echo
             cat bench-results.md
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Profile reports
+        if: inputs.profile
+        run: |
+          for data in perf/*.data; do
+            scenario="$(basename "$data" .data)"
+            # Flat: where the CPU time is spent (self time per symbol / per binary).
+            perf report -i "$data" --stdio --no-children --sort dso,symbol --percent-limit 0.5 -g none > "perf/$scenario.flat.txt" 2>/dev/null
+            perf report -i "$data" --stdio --no-children --sort dso -g none > "perf/$scenario.dso.txt" 2>/dev/null
+            # Inclusive, with callers: what each subsystem costs including callees.
+            perf report -i "$data" --stdio --children --sort symbol --percent-limit 3 -g caller,0.5,callee,function,percent > "perf/$scenario.tree.txt" 2>/dev/null
+            # For flame graphs: inferno-collapse-perf < x.script | inferno-flamegraph > x.svg
+            perf script -i "$data" 2>/dev/null | gzip > "perf/$scenario.script.gz"
+            {
+              echo "### perf: $scenario (self time, ≥ 0.5%)"
+              echo '```'
+              grep -v '^#' "perf/$scenario.flat.txt" | grep -v '^$' | head -60
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+          rm -f perf/*.data
+      - uses: actions/upload-artifact@v4
+        if: inputs.profile
+        with:
+          name: bench-profile
+          path: perf/
       - uses: actions/upload-artifact@v4
         with:
           name: bench-results
