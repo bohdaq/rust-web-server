@@ -55,6 +55,12 @@ where
     // the next pipelined request. See `super::framing`.
     let mut pending: Vec<u8> = Vec::new();
     let mut read_buffer = vec![0u8; request_allocation_size as usize];
+    // One idle timer for the whole connection, pushed back before each read.
+    // Moving a deadline later is a lock-free compare-and-swap in tokio;
+    // creating a timer per read (`tokio::time::timeout`) took the timer
+    // driver's lock, shared by all worker threads, twice per read.
+    let idle = tokio::time::sleep(READ_TIMEOUT);
+    tokio::pin!(idle);
 
     'session: loop {
         // Read until the request head is complete — it may span several reads.
@@ -68,7 +74,7 @@ where
                 }
                 framing::HeadScan::Incomplete => {}
             }
-            if !read_more(&mut stream, &mut read_buffer, &mut pending).await {
+            if !read_more(&mut stream, &mut read_buffer, &mut pending, idle.as_mut()).await {
                 // Closed, read error, or idle past the timeout: end of the session.
                 break None;
             }
@@ -117,7 +123,7 @@ where
                     break;
                 }
                 while (pending.len() as u64) < declared_len {
-                    if !read_more(&mut stream, &mut read_buffer, &mut pending).await {
+                    if !read_more(&mut stream, &mut read_buffer, &mut pending, idle.as_mut()).await {
                         break 'session; // closed or stalled mid-body
                     }
                 }
@@ -151,7 +157,7 @@ where
                             return Err(message);
                         }
                     }
-                    if !read_more(&mut stream, &mut read_buffer, &mut pending).await {
+                    if !read_more(&mut stream, &mut read_buffer, &mut pending, idle.as_mut()).await {
                         break 'session;
                     }
                 }
@@ -262,15 +268,25 @@ pub(crate) async fn execute_blocking<A: Application + Send + 'static>(
     .map_err(|e| e.to_string())
 }
 
-/// One read (bounded by [`READ_TIMEOUT`]) appended to `pending`. `false` when
-/// the peer closed, the read failed, or it timed out.
-async fn read_more<S: AsyncRead + Unpin>(stream: &mut S, read_buffer: &mut [u8], pending: &mut Vec<u8>) -> bool {
-    match tokio::time::timeout(READ_TIMEOUT, stream.read(read_buffer)).await {
-        Ok(Ok(n)) if n > 0 => {
-            pending.extend_from_slice(&read_buffer[..n]);
-            true
-        }
-        _ => false,
+/// One read (bounded by [`READ_TIMEOUT`], via the connection's `idle` timer)
+/// appended to `pending`. `false` when the peer closed, the read failed, or
+/// it timed out.
+async fn read_more<S: AsyncRead + Unpin>(
+    stream: &mut S,
+    read_buffer: &mut [u8],
+    pending: &mut Vec<u8>,
+    mut idle: std::pin::Pin<&mut tokio::time::Sleep>,
+) -> bool {
+    idle.as_mut().reset(tokio::time::Instant::now() + READ_TIMEOUT);
+    tokio::select! {
+        read = stream.read(read_buffer) => match read {
+            Ok(n) if n > 0 => {
+                pending.extend_from_slice(&read_buffer[..n]);
+                true
+            }
+            _ => false,
+        },
+        _ = idle => false,
     }
 }
 
@@ -663,6 +679,22 @@ mod tests {
             rest = &rest[head_end + content.len()..];
         }
         assert!(rest.is_empty());
+    }
+
+
+    #[tokio::test(start_paused = true)]
+    async fn idle_timer_restarts_on_every_read() {
+        // Pieces 20 s apart: 40 s in total, but never 30 s without a read.
+        let (mut client, server) = tokio::io::duplex(1024);
+        let task = tokio::spawn(serve(server, peer(), None, false, Hello));
+        client.write_all(b"GET /slow HTTP/1.1\r\n").await.unwrap();
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        client.write_all(b"Host: x\r\n").await.unwrap();
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        client.write_all(b"Connection: close\r\n\r\n").await.unwrap();
+        let out = read_until_count(&mut client, "hello", 1).await;
+        assert!(out.starts_with("HTTP/1.1 200"), "{out}");
+        assert!(task.await.unwrap().is_ok());
     }
 
 }

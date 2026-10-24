@@ -150,6 +150,7 @@ window_secs  = 60     # Sliding window length in seconds (default: 60)
 ```toml
 log_format              = "json"     # RWS_CONFIG_LOG_FORMAT: "combined" (default) | "json"
 max_body_size_in_bytes  = 10485760   # RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: 413 above this; 0 = unlimited
+open_file_cache_secs    = 1          # RWS_CONFIG_OPEN_FILE_CACHE_SECS: reuse open static files this long; 0 = off
 csp                     = "default-src 'self'"   # RWS_CONFIG_CSP: Content-Security-Policy header
 tls_client_ca_file      = "/etc/rws/clients-ca.pem"  # RWS_CONFIG_TLS_CLIENT_CA_FILE: require client certs (mTLS)
 template_dir            = "templates"            # RWS_CONFIG_TEMPLATE_DIR

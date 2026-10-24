@@ -26,6 +26,20 @@ curl http://localhost:7878/          # serves index.html
 curl http://localhost:7878/index.html # same file, explicit path
 ```
 
+## How files are served fast
+
+- **Open files are reused.** A static file's open handle is kept for one
+  second (`open_file_cache_secs`, `0` turns it off) and read with positional
+  reads, so a request for a hot file costs one `fstat` instead of an `open`,
+  several `stat`s and a `close`. Size and modification time are read on every
+  request, so a file edited in place is served correctly at once; a file
+  replaced by a new one (a rename) or deleted is noticed within the second.
+  At most 128 files are held open.
+- **Downloads use `sendfile`** over plain HTTP on Linux and macOS: the kernel
+  copies the file to the socket.
+- **Static files and health checks run on the event loop**, without a hand-off
+  to a thread pool.
+
 ## Directory listing
 
 **Default, always-on behavior — not gated by a feature flag or config setting.** A requested directory that has no `index.html` renders a directory listing page (`200 OK`) instead of falling through to `404 Not Found`. A directory that *does* have an `index.html` is served exactly as before — this only changes what happens for the previously-404 case.

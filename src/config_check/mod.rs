@@ -176,7 +176,7 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     report.error(format!("{key} = {value:?}: not a positive number"));
                 }
             }
-            "RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES" | "RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS" | "RWS_CONFIG_RATE_LIMIT_WINDOW_SECS"
+            "RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES" | "RWS_CONFIG_OPEN_FILE_CACHE_SECS" | "RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS" | "RWS_CONFIG_RATE_LIMIT_WINDOW_SECS"
             | "RWS_CONFIG_ACME_RENEW_BEFORE_DAYS" | "RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS"
             | "RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD" | "RWS_CONFIG_CIRCUIT_BREAKER_MAX_HALF_OPEN_PROBES"
             | "RWS_CONFIG_CIRCUIT_BREAKER_RECOVERY_SECS" | Config::RWS_CONFIG_CORS_MAX_AGE => {

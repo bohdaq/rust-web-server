@@ -8,7 +8,8 @@
 # scenario needs NGINX: an nginx instance on :9000 is the shared backend for
 # every server under test. Tunables: DURATION (default 15s), CONNECTIONS (64).
 #
-# No compression anywhere: oha runs with --disable-compression (no
+# Like for like: nginx under test gets open_file_cache (rws caches open
+# files by default, nginx doesn't), and no compression anywhere: oha runs with --disable-compression (no
 # Accept-Encoding), since the Caddy and nginx configs below don't compress and
 # rws compresses text by default — otherwise rws alone would be deflating
 # every response.
@@ -167,6 +168,7 @@ if [ -n "$NGINX" ]; then
 worker_processes auto; daemon off; pid $WORK/nginx.pid; error_log $WORK/nginx-error.log;
 events { worker_connections 4096; }
 http { access_log off; sendfile on; tcp_nopush on; keepalive_requests 1000000;
+  open_file_cache max=128 inactive=20s; open_file_cache_valid 1s;
   upstream backend { server 127.0.0.1:9000; keepalive 64; }
   server { listen 127.0.0.1:8083; root $SITE;
     location /api/ { proxy_pass http://backend; proxy_http_version 1.1; proxy_set_header Connection ""; } } }

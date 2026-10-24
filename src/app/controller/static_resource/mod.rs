@@ -13,6 +13,7 @@ use crate::url::URL;
 
 #[cfg(test)]
 mod tests;
+pub(crate) mod open_file_cache;
 
 pub struct StaticResourceController;
 
@@ -48,12 +49,14 @@ impl Controller for StaticResourceController {
         // before, otherwise `process_static_resources` renders a directory listing.
         let mut is_directory = false;
 
-        // One stat answers both "exists?" and "directory?" — no open().
-        let boxed_md = metadata(&static_filepath);
-        let mut is_file = false;
-        if let Ok(md) = &boxed_md {
-            is_directory = md.is_dir();
-            is_file = md.is_file();
+        // A file the open-file cache holds needs no stat; otherwise one stat
+        // answers both "exists?" and "directory?" — no open().
+        let mut is_file = open_file_cache::is_cached_file(&static_filepath);
+        if !is_file {
+            if let Ok(md) = metadata(&static_filepath) {
+                is_directory = md.is_dir();
+                is_file = md.is_file();
+            }
         }
 
         let is_get = request.method == METHOD.get;
@@ -337,27 +340,16 @@ impl StaticResourceController {
         let path = URL::parse_request_target(&request.request_uri).ok()?.path;
         let fs_path = static_fs_path(&path.replace(SYMBOL.slash, &FileExt::get_path_separator())).ok()?;
         // A symlink whose own name has no recognizable type goes to the
-        // general path, which takes the type from the link target. (The extra
-        // lstat is paid only for untyped names.)
+        // general path, which takes the type from the link target: such names
+        // are opened with O_NOFOLLOW, so a symlink simply fails to open.
         let mime = MimeType::detect_mime_type(&fs_path);
-        if mime == MimeType::APPLICATION_OCTET_STREAM
-            && std::fs::symlink_metadata(&fs_path).map_or(true, |m| m.file_type().is_symlink())
-        {
-            return None;
-        }
-        let mut file = File::open(&fs_path).ok()?;
-        let md = file.metadata().ok()?;
-        if !md.is_file() {
-            return None;
-        }
+        let follow_symlinks = mime != MimeType::APPLICATION_OCTET_STREAM;
+        let file = open_file_cache::open(&fs_path, follow_symlinks)?;
+        let state = file.state()?;
 
         let mut response = std::mem::replace(response, Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None));
-        let modified = md
-            .modified()
-            .ok()
-            .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
-            .map_or(0, |d| d.as_nanos());
-        let etag_value = format!("\"{}-{}\"", modified, md.len());
+        let modified = state.modified;
+        let etag_value = format!("\"{}-{}\"", modified, state.len);
         response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.to_string(), value: modified.to_string() });
         let not_modified = request
             .get_header(Header::_IF_NONE_MATCH.to_string())
@@ -371,17 +363,14 @@ impl StaticResourceController {
         response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
 
-        if md.len() > StaticResourceController::STREAM_THRESHOLD {
+        if state.len > StaticResourceController::STREAM_THRESHOLD {
             response.headers.push(Header { name: Header::_CONTENT_TYPE.to_string(), value: mime });
-            response.headers.push(Header { name: Header::_CONTENT_LENGTH.to_string(), value: md.len().to_string() });
+            response.headers.push(Header { name: Header::_CONTENT_LENGTH.to_string(), value: state.len.to_string() });
             response.stream_file = Some(fs_path);
             return Some(response);
         }
 
-        let mut body = Vec::with_capacity(md.len() as usize);
-        if std::io::Read::read_to_end(&mut file, &mut body).is_err() {
-            return None;
-        }
+        let body = file.read_all(state.len).ok()?;
         response.content_range_list = vec![Range::get_content_range(body, mime)];
         Some(response)
     }
