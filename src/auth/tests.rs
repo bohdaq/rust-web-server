@@ -278,10 +278,23 @@ mod asymmetric_jwt {
         })
     }
 
+    /// A random P-256 signing key from `rand_core` 0.6's `OsRng` (p256 0.14's
+    /// own generator wants a newer `rand_core`).
+    fn random_ec_key() -> p256::ecdsa::SigningKey {
+        use rand_core::RngCore;
+        loop {
+            let mut bytes = [0u8; 32];
+            rand_core::OsRng.fill_bytes(&mut bytes);
+            if let Ok(key) = p256::ecdsa::SigningKey::from_slice(&bytes) {
+                return key;
+            }
+        }
+    }
+
     fn ec_keypair() -> &'static (EcSigningKey, EcVerifyingKey) {
         static KEYPAIR: OnceLock<(EcSigningKey, EcVerifyingKey)> = OnceLock::new();
         KEYPAIR.get_or_init(|| {
-            let signing_key = EcSigningKey::random(&mut rand_core::OsRng);
+            let signing_key = random_ec_key();
             let verifying_key = *signing_key.verifying_key();
             (signing_key, verifying_key)
         })
@@ -379,7 +392,7 @@ mod asymmetric_jwt {
     #[test]
     fn verify_jwt_es256_wrong_key_returns_none() {
         let (signing_key, _) = ec_keypair();
-        let other_signing = EcSigningKey::random(&mut rand_core::OsRng);
+        let other_signing = random_ec_key();
         let other_verifying = *other_signing.verifying_key();
         let token = build_jwt_es256(r#"{"sub":"u"}"#, signing_key);
         assert!(verify_jwt_es256(&token, &other_verifying).is_none());
@@ -470,7 +483,7 @@ mod asymmetric_jwt {
     #[test]
     fn jwt_layer_es256_wrong_key_returns_401() {
         let (signing_key, _) = ec_keypair();
-        let other_signing = EcSigningKey::random(&mut rand_core::OsRng);
+        let other_signing = random_ec_key();
         let other_verifying = *other_signing.verifying_key();
         let layer = JwtLayer::es256(&ec_public_key_pem(&other_verifying)).unwrap();
         let token = build_jwt_es256(r#"{"sub":"u"}"#, signing_key);

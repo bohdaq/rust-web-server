@@ -11,10 +11,8 @@ use std::sync::Mutex;
 
 use p256::ecdsa::signature::Verifier as EcVerifier;
 use p256::ecdsa::{Signature as EcSignature, VerifyingKey as EcVerifyingKey};
-#[allow(deprecated)]
-use p256::elliptic_curve::generic_array::GenericArray;
-use p256::EncodedPoint;
 use rsa::pkcs1v15::VerifyingKey as RsaVerifyingKey;
+use rsa::signature::Verifier as RsaVerifier;
 use rsa::{BigUint, RsaPublicKey};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -204,15 +202,17 @@ impl JwksCache {
                     if x.len() != 32 || y.len() != 32 {
                         continue;
                     }
-                    let xb = GenericArray::from_slice(x.as_slice());
-                    let yb = GenericArray::from_slice(y.as_slice());
-                    let point = EncodedPoint::from_affine_coordinates(xb, yb, false);
-                    if let Ok(vk) = EcVerifyingKey::from_encoded_point(&point) {
+                    // Uncompressed SEC1 point: 0x04 || x || y.
+                    let mut sec1 = Vec::with_capacity(65);
+                    sec1.push(0x04);
+                    sec1.extend_from_slice(x);
+                    sec1.extend_from_slice(y);
+                    if let Ok(vk) = EcVerifyingKey::from_sec1_bytes(&sec1) {
                         // JWT ES256 signatures are r||s (64 bytes), not DER
-                        let sig_arr: &[u8; 64] = signature
-                            .try_into()
-                            .map_err(|_| SsoError("ES256 sig wrong length".into()))?;
-                        if let Ok(sig) = EcSignature::from_bytes(sig_arr.into()) {
+                        if signature.len() != 64 {
+                            return Err(SsoError("ES256 sig wrong length".into()));
+                        }
+                        if let Ok(sig) = EcSignature::from_slice(signature) {
                             if vk.verify(message, &sig).is_ok() {
                                 return Ok(true);
                             }

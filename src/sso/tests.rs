@@ -511,10 +511,23 @@ mod jwks_tests {
 
     // ── EC (ES256) ───────────────────────────────────────────────────────────
 
+    /// A random P-256 signing key from `rand_core` 0.6's `OsRng` (p256 0.14's
+    /// own generator wants a newer `rand_core`).
+    fn random_ec_key() -> p256::ecdsa::SigningKey {
+        use rand_core::RngCore;
+        loop {
+            let mut bytes = [0u8; 32];
+            rand_core::OsRng.fill_bytes(&mut bytes);
+            if let Ok(key) = p256::ecdsa::SigningKey::from_slice(&bytes) {
+                return key;
+            }
+        }
+    }
+
     fn ec_jwk_json(kid: &str, verifying_key: &p256::ecdsa::VerifyingKey) -> String {
-        let point = verifying_key.to_encoded_point(false);
-        let x = base64url_encode(point.x().unwrap());
-        let y = base64url_encode(point.y().unwrap());
+        let point = verifying_key.to_sec1_point(false);
+        let x = base64url_encode(&point.x().unwrap()[..]);
+        let y = base64url_encode(&point.y().unwrap()[..]);
         format!(r#"{{"kty":"EC","kid":"{kid}","crv":"P-256","x":"{x}","y":"{y}"}}"#)
     }
 
@@ -526,7 +539,7 @@ mod jwks_tests {
 
     #[test]
     fn verify_jwt_es256_success() {
-        let signing_key = p256::ecdsa::SigningKey::random(&mut rand_core::OsRng);
+        let signing_key = random_ec_key();
         let claims = format!(
             r#"{{"sub":"user2","iss":"https://idp.example.com","aud":"client1","exp":{},"iat":{}}}"#,
             unix_now() + 3600,
@@ -717,7 +730,7 @@ mod jwks_tests {
         // token's kid isn't among those cached keys, so the first
         // try_verify finds no candidates and fails; JwksCache must refetch
         // and retry before giving up.
-        let old_signing_key = p256::ecdsa::SigningKey::random(&mut rand_core::OsRng);
+        let old_signing_key = random_ec_key();
         let old_jwk = ec_jwk_json("old-key", old_signing_key.verifying_key());
 
         let claims = format!(
