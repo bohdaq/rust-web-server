@@ -217,3 +217,52 @@ fn render_summarizes() {
     report.error("e");
     assert_eq!(report.render("f.toml"), "error: e\nwarning: w\nf.toml: 1 error, 1 warning\n");
 }
+
+// issue #26: three more checks catch real mistakes.
+
+#[test]
+fn a_missing_spa_fallback_file_is_a_warning() {
+    let report = check_str(r#"
+spa_fallback = "does-not-exist.html"
+"#);
+    assert!(has(&report.warnings, "spa_fallback"), "{report:?}");
+
+    let existing = std::env::temp_dir().join("rws-check-fallback-ok.html");
+    std::fs::write(&existing, "<html></html>").unwrap();
+    let dir = existing.parent().unwrap();
+    let report = check_str(&format!(
+        r#"spa_fallback = "{}""#,
+        existing.display()
+    ));
+    let _ = dir;
+    assert!(!has(&report.warnings, "spa_fallback"), "{report:?}");
+    std::fs::remove_file(&existing).ok();
+}
+
+#[test]
+fn a_cors_origin_with_a_path_or_no_scheme_is_a_warning() {
+    let report = check_str(r#"
+[cors]
+allow_origins = "https://ok.example.com, example.com, https://bad.example.com/, https://x.example.com/path"
+"#);
+    assert!(!has(&report.warnings, "ok.example.com"), "{report:?}");
+    assert!(has(&report.warnings, "does not look like"), "{report:?}");
+    assert!(has(&report.warnings, "trailing slash"), "{report:?}");
+    assert!(has(&report.warnings, "path"), "{report:?}");
+}
+
+#[test]
+fn two_virtual_hosts_with_the_same_domain_are_an_error() {
+    let report = check_str(r#"
+[[virtual_host]]
+domain = "same.example.com"
+cert_file = "/tmp/a.pem"
+key_file = "/tmp/a.key"
+
+[[virtual_host]]
+domain = "same.example.com"
+cert_file = "/tmp/b.pem"
+key_file = "/tmp/b.key"
+"#);
+    assert!(has(&report.errors, "same domain"), "{report:?}");
+}
