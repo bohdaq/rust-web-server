@@ -63,6 +63,16 @@ in rws.config.toml — ignored` — rather than silently dropped. `[[route]]`,
 `[[upstream]]`, `[[tcp_proxy]]`, `[[udp_proxy]]`, and `[[ws_proxy]]` tables
 configure the proxy (below) and aren't settings.
 
+An inline table is the same as a sub-table, here and in the proxy sections:
+
+```toml
+rate_limit = { max_requests = 1000, window_secs = 60 }
+# same as
+[rate_limit]
+max_requests = 1000
+window_secs  = 60
+```
+
 :::note[Proxy mode]
 When the file contains at least one `[[route]]` or `[[upstream]]` section, the
 server starts in **proxy mode** (`ConfigDrivenApp`). The built-in static-file and

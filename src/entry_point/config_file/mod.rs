@@ -91,39 +91,89 @@ pub fn collect_settings(
 
         let Some((raw_key, raw_value)) = line.split_once('=') else { continue };
         let key = raw_key.trim();
-        let value = parse_value(raw_value);
 
         let root = table.split('.').next().unwrap_or("");
         if PROXY_TABLES.contains(&root) {
             continue;
         }
 
-        if table == "virtual_host" {
-            let field = key.to_ascii_uppercase();
-            if VIRTUAL_HOST_FIELDS.contains(&field.as_str()) {
-                let name = format!("RWS_CONFIG_VIRTUAL_HOST_{}_{}", array_index.unwrap_or(0), field);
-                resolved.settings.push((name, value));
-            } else {
-                resolved.unknown.push(qualified_key(&table, key));
+        // An inline table, `rate_limit = { max_requests = 5 }`, is the
+        // sub-table `[rate_limit]` (or `[<table>.rate_limit]`), as in TOML
+        // and as in the proxy sections.
+        if let Some(inner) = raw_value.trim().strip_prefix('{').and_then(|v| v.strip_suffix('}')) {
+            let sub_table = if table.is_empty() { key.to_string() } else { format!("{}.{}", table, key) };
+            for entry in split_top_level(inner) {
+                if let Some((inner_key, inner_value)) = entry.split_once('=') {
+                    resolve_setting(&sub_table, array_index, inner_key.trim(), parse_value(inner_value), &flags, &mut resolved);
+                } else if !entry.trim().is_empty() {
+                    resolved.unknown.push(qualified_key(&sub_table, entry.trim()));
+                }
             }
             continue;
         }
 
-        let path = if table.is_empty() { key.to_string() } else { format!("{}_{}", table.replace('.', "_"), key) };
-        let long_form = path.replace('_', "-");
-        if let Some(flag) = flags.iter().find(|f| f.long_form == long_form) {
-            resolved.settings.push((flag.environment_variable.clone(), value));
-            continue;
-        }
-        let name = format!("RWS_CONFIG_{}", path.to_ascii_uppercase());
-        if SETTINGS_WITHOUT_FLAG.contains(&name.as_str()) {
-            resolved.settings.push((name, value));
-        } else {
-            resolved.unknown.push(qualified_key(&table, key));
-        }
+        resolve_setting(&table, array_index, key, parse_value(raw_value), &flags, &mut resolved);
     }
 
     Ok(resolved)
+}
+
+/// Map one `key = value` in `table` to its `RWS_CONFIG_*` setting, or record
+/// it as unknown.
+fn resolve_setting(
+    table: &str,
+    array_index: Option<usize>,
+    key: &str,
+    value: String,
+    flags: &[CommandLineArgument],
+    resolved: &mut ConfigSettings,
+) {
+    if table == "virtual_host" {
+        let field = key.to_ascii_uppercase();
+        if VIRTUAL_HOST_FIELDS.contains(&field.as_str()) {
+            let name = format!("RWS_CONFIG_VIRTUAL_HOST_{}_{}", array_index.unwrap_or(0), field);
+            resolved.settings.push((name, value));
+        } else {
+            resolved.unknown.push(qualified_key(table, key));
+        }
+        return;
+    }
+
+    let path = if table.is_empty() { key.to_string() } else { format!("{}_{}", table.replace('.', "_"), key) };
+    let long_form = path.replace('_', "-");
+    if let Some(flag) = flags.iter().find(|f| f.long_form == long_form) {
+        resolved.settings.push((flag.environment_variable.clone(), value));
+        return;
+    }
+    let name = format!("RWS_CONFIG_{}", path.to_ascii_uppercase());
+    if SETTINGS_WITHOUT_FLAG.contains(&name.as_str()) {
+        resolved.settings.push((name, value));
+    } else {
+        resolved.unknown.push(qualified_key(table, key));
+    }
+}
+
+/// Split an inline table's body on commas outside quotes and `[...]`.
+fn split_top_level(inner: &str) -> Vec<&str> {
+    let mut items = vec![];
+    let mut quote: Option<char> = None;
+    let mut depth = 0usize;
+    let mut start = 0;
+    for (i, c) in inner.char_indices() {
+        match (quote, c) {
+            (None, '"') | (None, '\'') => quote = Some(c),
+            (Some(q), c) if c == q => quote = None,
+            (None, '[') => depth += 1,
+            (None, ']') => depth = depth.saturating_sub(1),
+            (None, ',') if depth == 0 => {
+                items.push(&inner[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    items.push(&inner[start..]);
+    items
 }
 
 /// Apply every setting in a `rws.config.toml` document to the process

@@ -167,3 +167,31 @@ fn nul_byte_in_a_value_is_ignored_not_a_crash() {
     let got = load_and_read("port = \"1\u{0}2\"\nlog_format = \"a\u{0}b\"\ncsp = \"ok\"\n", &["RWS_CONFIG_PORT", "RWS_CONFIG_LOG_FORMAT", "RWS_CONFIG_CSP"]);
     assert_eq!(vec![None, None, Some("ok".to_string())], got);
 }
+
+// issue #27: inline tables in settings.
+
+fn settings_of(toml: &str) -> super::ConfigSettings {
+    super::collect_settings(std::io::Cursor::new(toml.as_bytes()), String::new()).unwrap()
+}
+
+#[test]
+fn inline_tables_equal_sub_tables() {
+    let inline = settings_of("rate_limit = { max_requests = 5, window_secs = 30 }\nacme = { domains = [\"a.example.com\", \"b.example.com\"], email = \"me@example.com\" }\n");
+    let tables = settings_of("[rate_limit]\nmax_requests = 5\nwindow_secs = 30\n[acme]\ndomains = [\"a.example.com\", \"b.example.com\"]\nemail = \"me@example.com\"\n");
+    assert_eq!(inline, tables);
+    assert!(inline.unknown.is_empty(), "{:?}", inline.unknown);
+    assert!(inline.settings.contains(&("RWS_CONFIG_ACME_DOMAINS".to_string(), "a.example.com,b.example.com".to_string())));
+}
+
+#[test]
+fn inline_table_with_an_unknown_key_reports_it() {
+    let s = settings_of("rate_limit = { max_requests = 5, max_reqests = 6 }\n");
+    assert_eq!(s.unknown, vec!["[rate_limit] max_reqests".to_string()]);
+    assert!(s.settings.contains(&("RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS".to_string(), "5".to_string())));
+}
+
+#[test]
+fn inline_table_inside_a_table_nests() {
+    let s = settings_of("[cors]\nallow = { all = true }\n");
+    assert_eq!(s.settings, vec![("RWS_CONFIG_CORS_ALLOW_ALL".to_string(), "true".to_string())]);
+}
