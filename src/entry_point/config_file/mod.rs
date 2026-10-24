@@ -148,6 +148,7 @@ fn set_setting(name: &str, value: &str) {
         return;
     }
     env::set_var(name, value);
+    crate::server_config::invalidate();
     println!("    Set env variable '{}' to value '{}'", name, value);
 }
 

@@ -189,10 +189,10 @@ impl Log {
     /// binary's default), Combined Log Format for any other value (including
     /// unset, in library use), or `None` for `off`/`none` — no per-request
     /// line, e.g. behind a proxy that already logs or when benchmarking.
-    /// Read per request, so it's hot-reloadable.
+    /// Taken from `ServerConfig::current()`, so it's hot-reloadable.
     pub fn access_log_line(request: &Request, response: &Response, peer_addr: &SocketAddr) -> Option<String> {
-        let format = std::env::var(crate::entry_point::Config::RWS_CONFIG_LOG_FORMAT)
-            .unwrap_or_default();
+        let config = crate::server_config::ServerConfig::current();
+        let format = &config.log_format;
         if format.eq_ignore_ascii_case("off") || format.eq_ignore_ascii_case("none") {
             return None;
         }

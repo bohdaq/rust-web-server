@@ -30,7 +30,26 @@
 #[cfg(test)]
 mod tests;
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
+
 use crate::entry_point::Config;
+
+/// Bumped whenever `RWS_CONFIG_*` variables change (see [`invalidate`]).
+static GENERATION: AtomicU64 = AtomicU64::new(1);
+
+/// The snapshot [`ServerConfig::current`] hands out, with the generation it
+/// was built at.
+static CURRENT: RwLock<Option<(u64, Arc<ServerConfig>)>> = RwLock::new(None);
+
+/// Mark the cached [`ServerConfig::current`] snapshot stale: the next call
+/// re-reads the environment. Called by everything in the crate that writes
+/// `RWS_CONFIG_*` variables (config file, command line, defaults,
+/// `config_reload::reload`); call it yourself after `std::env::set_var` of
+/// a setting that should take effect immediately.
+pub fn invalidate() {
+    GENERATION.fetch_add(1, Ordering::SeqCst);
+}
 
 /// Default `Content-Security-Policy` header value. Mirrors
 /// `Header::_CONTENT_SECURITY_POLICY_VALUE_DEFAULT` without creating a
@@ -106,9 +125,8 @@ impl ServerConfig {
     /// Build a `ServerConfig` by reading all `RWS_CONFIG_*` environment
     /// variables. Missing variables fall back to their default values.
     ///
-    /// Call this once at startup (inside `App::new()`) rather than on every
-    /// request. For hot-reload, use `config_reload::current()` to get a
-    /// fresh snapshot after a `SIGHUP`/`POST /admin/config/reload`.
+    /// Each call reads every variable — the environment lock is taken once
+    /// per variable — so per-request code uses [`ServerConfig::current`].
     pub fn from_env() -> Self {
         let read = |key: &str| std::env::var(key).unwrap_or_default();
         Self {
@@ -130,5 +148,24 @@ impl ServerConfig {
             .and_then(|v| v.parse().ok())
             .unwrap_or(*Config::RWS_DEFAULT_REQUEST_ALLOCATION_SIZE_IN_BYTES),
         }
+    }
+
+    /// The configuration from the environment, read once and shared: an
+    /// atomic load and an `Arc` clone per call instead of ten `getenv`s.
+    /// Rebuilt after [`invalidate`] — which `config_reload::reload()` (SIGHUP,
+    /// `POST /admin/config/reload`) and every config writer in the crate call,
+    /// so hot reload still takes effect on the next request.
+    pub fn current() -> Arc<ServerConfig> {
+        let generation = GENERATION.load(Ordering::SeqCst);
+        if let Some((built_at, config)) = CURRENT.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            if *built_at == generation {
+                return Arc::clone(config);
+            }
+        }
+        // Built from the generation read *before* the environment: a change
+        // during the rebuild leaves the cache stale, not wrong.
+        let fresh = Arc::new(ServerConfig::from_env());
+        *CURRENT.write().unwrap_or_else(|e| e.into_inner()) = Some((generation, Arc::clone(&fresh)));
+        fresh
     }
 }

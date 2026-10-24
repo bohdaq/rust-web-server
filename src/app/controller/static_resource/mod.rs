@@ -86,8 +86,8 @@ impl Controller for StaticResourceController {
     }
 
     fn process(request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
-        if let Some(streamed) = StaticResourceController::stream_large_file(request, &mut response) {
-            return streamed;
+        if let Some(served) = StaticResourceController::serve_regular_file(request, &mut response) {
+            return served;
         }
         let boxed_content_range_list = StaticResourceController::process_static_resources(&request);
         if boxed_content_range_list.is_ok() {
@@ -222,7 +222,7 @@ impl StaticResourceController {
     }
 
     pub fn process_request(request: &Request, mut response: Response) -> Response {
-        if let Some(streamed) = StaticResourceController::stream_large_file(request, &mut response) {
+        if let Some(streamed) = StaticResourceController::serve_regular_file(request, &mut response) {
             return streamed;
         }
         let boxed_content_range_list = StaticResourceController::process_static_resources(&request);
@@ -318,14 +318,16 @@ impl StaticResourceController {
     /// otherwise hold ~64 MiB plus copies.
     pub const STREAM_THRESHOLD: u64 = 256 * 1024;
 
-    /// Fast path for a GET/HEAD of a large regular file without a `Range`
-    /// header: answer with headers and `stream_file` **before** reading
-    /// anything. `process_static_resources` reads the whole file, so deciding
-    /// to stream only after calling it (as this controller used to) still
-    /// loaded e.g. a 1 GB file into memory per request. `None` = not
-    /// applicable; the regular path handles it (directories, `.html`
-    /// resolution, ranges, small files).
-    fn stream_large_file(request: &Request, response: &mut Response) -> Option<Response> {
+    /// Fast path for a GET/HEAD of a regular file without a `Range` header:
+    /// one `open` and one `fstat` — size and modified time come from the open
+    /// handle, and a small file is read from that same handle — like nginx.
+    /// (The general path below stats the file five or six times and opens it
+    /// twice.) Files over [`Self::STREAM_THRESHOLD`] are answered with
+    /// `stream_file` before anything is read. The `Content-Type` comes from
+    /// the requested name. `None` = not applicable; the general path handles
+    /// it (directories, `.html` resolution, ranges, OPTIONS, symlinks whose
+    /// name has no known type).
+    fn serve_regular_file(request: &Request, response: &mut Response) -> Option<Response> {
         if request.method != METHOD.get && request.method != METHOD.head {
             return None;
         }
@@ -334,13 +336,27 @@ impl StaticResourceController {
         }
         let path = URL::parse_request_target(&request.request_uri).ok()?.path;
         let fs_path = static_fs_path(&path.replace(SYMBOL.slash, &FileExt::get_path_separator())).ok()?;
-        let md = metadata(&fs_path).ok()?;
-        if !md.is_file() || md.len() <= StaticResourceController::STREAM_THRESHOLD {
+        // A symlink whose own name has no recognizable type goes to the
+        // general path, which takes the type from the link target. (The extra
+        // lstat is paid only for untyped names.)
+        let mime = MimeType::detect_mime_type(&fs_path);
+        if mime == MimeType::APPLICATION_OCTET_STREAM
+            && std::fs::symlink_metadata(&fs_path).map_or(true, |m| m.file_type().is_symlink())
+        {
+            return None;
+        }
+        let mut file = File::open(&fs_path).ok()?;
+        let md = file.metadata().ok()?;
+        if !md.is_file() {
             return None;
         }
 
         let mut response = std::mem::replace(response, Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None));
-        let modified = file_modified_utc(&fs_path).unwrap_or(0);
+        let modified = md
+            .modified()
+            .ok()
+            .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_nanos());
         let etag_value = format!("\"{}-{}\"", modified, md.len());
         response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.to_string(), value: modified.to_string() });
         let not_modified = request
@@ -352,11 +368,21 @@ impl StaticResourceController {
             response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
             return Some(response);
         }
-        response.headers.push(Header { name: Header::_CONTENT_TYPE.to_string(), value: MimeType::detect_mime_type(&fs_path) });
-        response.headers.push(Header { name: Header::_CONTENT_LENGTH.to_string(), value: md.len().to_string() });
         response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
-        response.stream_file = Some(fs_path);
+
+        if md.len() > StaticResourceController::STREAM_THRESHOLD {
+            response.headers.push(Header { name: Header::_CONTENT_TYPE.to_string(), value: mime });
+            response.headers.push(Header { name: Header::_CONTENT_LENGTH.to_string(), value: md.len().to_string() });
+            response.stream_file = Some(fs_path);
+            return Some(response);
+        }
+
+        let mut body = Vec::with_capacity(md.len() as usize);
+        if std::io::Read::read_to_end(&mut file, &mut body).is_err() {
+            return None;
+        }
+        response.content_range_list = vec![Range::get_content_range(body, mime)];
         Some(response)
     }
 

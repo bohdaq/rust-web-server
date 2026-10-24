@@ -218,7 +218,7 @@ impl Header {
     /// `src/extract/mod.rs`). For all call-sites inside [`App::execute`] use
     /// [`get_header_list_with_config`] instead.
     pub fn get_header_list(request: &Request) -> Vec<Header> {
-        Self::get_header_list_with_config(request, &crate::server_config::ServerConfig::from_env())
+        Self::get_header_list_with_config(request, &crate::server_config::ServerConfig::current())
     }
 
 

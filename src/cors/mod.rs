@@ -218,7 +218,7 @@ impl Cors {
     /// (e.g. inside [`App::execute`]). This variant is kept for call-sites that
     /// do not yet have an `App`-level config reference.
     pub fn process_using_default_config(request: &Request) -> Result<Vec<Header>, Error> {
-        let config = ServerConfig::from_env();
+        let config = ServerConfig::current();
         Self::process_using_config(request, &config)
     }
 
@@ -226,7 +226,7 @@ impl Cors {
     ///
     /// Prefer [`get_headers_from_config`] when a [`ServerConfig`] is available.
     pub fn get_headers(request: &Request) -> Vec<Header> {
-        let config = ServerConfig::from_env();
+        let config = ServerConfig::current();
         Cors::get_headers_from_config(request, &config)
     }
 }

@@ -143,8 +143,8 @@ impl Application for App {
     // controller chain for anything they don't handle themselves.
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         let config = match &self.config {
-            Some(c) => (**c).clone(),
-            None => ServerConfig::from_env(),
+            Some(c) => Arc::clone(c),
+            None => ServerConfig::current(),
         };
         let header_list = Header::get_header_list_with_config(request, &config);
         let response = Response::get_response(
@@ -199,7 +199,7 @@ impl App {
         };
         let app = App::new();
         let response = app.execute(&request, &conn).unwrap_or_else(|_| {
-            let header_list = Header::get_header_list_with_config(&request, &ServerConfig::from_env());
+            let header_list = Header::get_header_list_with_config(&request, &ServerConfig::current());
             Response::get_response(
                 STATUS_CODE_REASON_PHRASE.n500_internal_server_error,
                 Some(header_list),

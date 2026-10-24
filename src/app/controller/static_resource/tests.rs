@@ -762,3 +762,44 @@ fn small_files_and_ranges_take_the_regular_path() {
     assert_eq!(206, ranged.status_code);
     assert_eq!(10, ranged.content_range_list[0].body.len());
 }
+
+// ── regular files: one open, metadata from the handle ─────────────────────────
+
+#[test]
+fn small_file_fast_path_serves_body_type_and_etag() {
+    let file = ServedFile::new("fast.txt", 300);
+    let response = StaticResourceController::process_request(&static_request(METHOD.get, &file.0, vec![]), Response::new());
+    assert_eq!(200, response.status_code);
+    assert_eq!(1, response.content_range_list.len());
+    assert_eq!(vec![b'x'; 300], response.content_range_list[0].body);
+    assert_eq!(crate::mime_type::MimeType::TEXT_PLAIN, response.content_range_list[0].content_type);
+    let etag = response.headers.iter().find(|h| h.name == Header::_ETAG).expect("ETag").value.clone();
+    assert!(etag.ends_with("-300\""), "{etag}");
+
+    let cached = StaticResourceController::process_request(
+        &static_request(METHOD.get, &file.0, vec![Header { name: Header::_IF_NONE_MATCH.to_string(), value: etag }]),
+        Response::new(),
+    );
+    assert_eq!(304, cached.status_code);
+    assert!(cached.content_range_list.is_empty());
+}
+
+#[test]
+fn fast_path_matches_the_general_path() {
+    // Same file through the fast path (GET) and the general path (a Range
+    // covering the whole file): same bytes and same type.
+    let file = ServedFile::new("same.css", 700);
+    let fast = StaticResourceController::process_request(&static_request(METHOD.get, &file.0, vec![]), Response::new());
+    let general = StaticResourceController::process_static_resources(&static_request(METHOD.get, &file.0, vec![])).unwrap();
+    assert_eq!(general[0].body, fast.content_range_list[0].body);
+    assert_eq!(general[0].content_type, fast.content_range_list[0].content_type);
+}
+
+#[test]
+fn fast_path_declines_directories_and_options() {
+    let dir = static_request(METHOD.get, "/src/", vec![]);
+    let mut response = Response::new();
+    assert!(StaticResourceController::serve_regular_file(&dir, &mut response).is_none());
+    let file = ServedFile::new("opts.txt", 10);
+    assert!(StaticResourceController::serve_regular_file(&static_request(METHOD.options, &file.0, vec![]), &mut Response::new()).is_none());
+}

@@ -127,6 +127,7 @@ pub fn resolve_env_vars() -> Result<(), SecretsError> {
         let resolved = resolve(&value)
             .map_err(|e| SecretsError::new(format!("resolving secret reference for {key}: {e}")))?;
         std::env::set_var(&key, resolved);
+        crate::server_config::invalidate();
     }
     Ok(())
 }

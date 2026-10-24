@@ -166,6 +166,7 @@ pub fn bootstrap() {
     read_system_environment_variables();
     override_environment_variables_from_config(None);
     override_environment_variables_from_command_line_args();
+    crate::server_config::invalidate();
 }
 
 pub fn set_default_values() {
@@ -296,6 +297,7 @@ pub fn set_default_values() {
         println!("    There is an environment variable  for '{}', default value won't be set", Config::RWS_CONFIG_LOG_FORMAT);
     }
 
+    crate::server_config::invalidate();
     println!("  End of initializing default values\n");
 }
 

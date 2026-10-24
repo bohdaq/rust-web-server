@@ -21,6 +21,8 @@ curl -X POST http://localhost:8080/admin/config/reload
 
 Both re-parse `rws.config.toml`, update process environment variables, apply the new rate-limit thresholds to the live `RateLimiter`, and publish a new `ConfigSnapshot` atomically. On `http2`/`http3` builds, `SIGHUP` also rebuilds the `TlsAcceptor` with fresh certificates for every virtual host. If the `tera` feature is enabled and `template::init()` was called, both also re-glob Tera templates from disk — see [Templates: hot reload](/building-apps/templates/#hot-reload).
 
+Request handling reads settings from a cached snapshot (`ServerConfig::current()`), not from the environment on every request; a reload rebuilds it, so changes apply from the next request. A library user who changes an `RWS_CONFIG_*` variable with `std::env::set_var` calls `rust_web_server::server_config::invalidate()` afterwards for the same effect.
+
 ## What reloads without restart
 
 | Setting | Env var |

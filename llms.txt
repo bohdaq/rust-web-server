@@ -1788,7 +1788,7 @@ let client = TestClient::new(App::with_config(config));
 let res = client.get("/").send();
 ```
 
-`ServerConfig::from_env()` reads all `RWS_CONFIG_*` vars (used by `App::new()` on each request for hot-reload). `ServerConfig::default()` returns hardcoded defaults without touching env vars.
+`ServerConfig::from_env()` reads all `RWS_CONFIG_*` vars; `ServerConfig::current()` is the cached snapshot `App::new()` uses per request (hot reload calls `server_config::invalidate()` so the next request sees new values; call it after a direct `std::env::set_var`). `ServerConfig::default()` returns hardcoded defaults without touching env vars.
 
 `AppWithState`, `AsyncAppWithState` (requires `http2`), and `ConfigDrivenApp` (config-driven proxy) each
 fall through to a built-in `App` for anything their own routes/rules don't match. By default that

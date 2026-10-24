@@ -246,16 +246,22 @@ fn access_log_line_follows_log_format() {
     let resp = ok_response_with_body(b"pong");
     let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
 
-    std::env::remove_var(var);
+    // Direct env writes need invalidate(): the format comes from the cached
+    // ServerConfig::current() snapshot.
+    let set = |value: Option<&str>| {
+        match value { Some(v) => std::env::set_var(var, v), None => std::env::remove_var(var) }
+        crate::server_config::invalidate();
+    };
+    set(None);
     let unset = Log::access_log_line(&req, &resp, &peer);
-    std::env::set_var(var, "json");
+    set(Some("json"));
     let json = Log::access_log_line(&req, &resp, &peer);
-    std::env::set_var(var, "off");
+    set(Some("off"));
     let off = Log::access_log_line(&req, &resp, &peer);
-    std::env::set_var(var, "NONE");
+    set(Some("NONE"));
     let none = Log::access_log_line(&req, &resp, &peer);
     Log::log_access(&req, &resp, &peer); // prints nothing, must not panic
-    match saved { Some(v) => std::env::set_var(var, v), None => std::env::remove_var(var) }
+    set(saved.as_deref());
 
     assert!(unset.unwrap().contains("\"GET /ping"), "unset -> Combined Log Format");
     assert!(json.unwrap().starts_with('{'), "json -> a JSON object");

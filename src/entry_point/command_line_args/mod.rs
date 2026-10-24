@@ -250,6 +250,7 @@ impl CommandLineArgument {
             return;
         }
         env::set_var(&argument.environment_variable, &value);
+        crate::server_config::invalidate();
         println!("    Set env variable '{}' to value '{}'", argument.environment_variable, &value);
     }
 }

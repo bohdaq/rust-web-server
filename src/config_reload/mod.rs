@@ -145,6 +145,7 @@ pub fn reload() {
     // while workers only read env vars, so the single-writer / many-readers
     // pattern is safe in practice on all supported platforms.
     override_environment_variables_from_config(None);
+    crate::server_config::invalidate();
 
     let snapshot = ConfigSnapshot::from_env();
 

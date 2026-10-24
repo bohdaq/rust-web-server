@@ -37,3 +37,32 @@ mod server_config_tests {
         let _ = cfg.cors_allow_methods;
     }
 }
+
+#[test]
+fn current_is_cached_until_invalidated() {
+    let _g = crate::test_env::lock();
+    let var = crate::entry_point::Config::RWS_CONFIG_CORS_ALLOW_ORIGINS;
+    let saved = std::env::var(var).ok();
+    std::env::set_var(var, "https://first.example");
+    crate::server_config::invalidate();
+    let first = crate::server_config::ServerConfig::current();
+    assert_eq!(first.cors_allow_origins, "https://first.example");
+    // Same snapshot while nothing invalidates it — no environment reads.
+    assert!(std::sync::Arc::ptr_eq(&first, &crate::server_config::ServerConfig::current()));
+
+    std::env::set_var(var, "https://second.example");
+    assert_eq!(crate::server_config::ServerConfig::current().cors_allow_origins, "https://first.example", "not re-read without invalidate");
+    crate::server_config::invalidate();
+    assert_eq!(crate::server_config::ServerConfig::current().cors_allow_origins, "https://second.example");
+
+    match saved { Some(v) => std::env::set_var(var, v), None => std::env::remove_var(var) }
+    crate::server_config::invalidate();
+}
+
+#[test]
+fn config_reload_refreshes_the_snapshot() {
+    let _g = crate::test_env::lock();
+    let before = crate::server_config::ServerConfig::current();
+    crate::config_reload::reload();
+    assert!(!std::sync::Arc::ptr_eq(&before, &crate::server_config::ServerConfig::current()), "reload must rebuild the snapshot");
+}
