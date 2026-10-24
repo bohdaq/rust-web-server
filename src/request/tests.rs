@@ -809,3 +809,23 @@ fn invalid_content_length_is_an_error_not_a_panic() {
     let ok = Request::parse(b"POST /api HTTP/1.1\r\nHost: a\r\ncontent-length: 2\r\n\r\nhi").unwrap();
     assert_eq!(b"hi".to_vec(), ok.body, "lower-case header name honoured");
 }
+
+#[test]
+fn header_values_keep_colons_and_tolerate_missing_spaces() {
+    let h = Request::parse_http_request_header_string("Referer: http://example.com:8080/a: b\r\n");
+    assert_eq!(("Referer", "http://example.com:8080/a: b"), (h.name.as_str(), h.value.as_str()));
+    let h = Request::parse_http_request_header_string("X-Compact:value\r\n");
+    assert_eq!(("X-Compact", "value"), (h.name.as_str(), h.value.as_str()));
+    let h = Request::parse_http_request_header_string("X-Padded: \t value \t\r\n");
+    assert_eq!("value", h.value);
+    let h = Request::parse_http_request_header_string("Host:\r\n");
+    assert_eq!(("Host", ""), (h.name.as_str(), h.value.as_str()));
+}
+
+#[test]
+fn method_and_version_checks_ignore_case() {
+    assert!(Request::is_supported_method("get") && Request::is_supported_method("PATCH"));
+    assert!(!Request::is_supported_method("BREW"));
+    assert!(crate::http::HTTP::is_supported_version("http/1.1"));
+    assert!(!crate::http::HTTP::is_supported_version("HTTP/4.0"));
+}

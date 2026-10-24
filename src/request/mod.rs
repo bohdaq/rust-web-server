@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::io;
 use std::io::{BufRead, Cursor, Read};
 use crate::header::Header;
-use crate::ext::string_ext::StringExt;
 use crate::http::HTTP;
 use crate::symbol::SYMBOL;
 use crate::url::URL;
@@ -68,6 +67,9 @@ impl Request {
 
         let host_header = boxed_host.unwrap();
         let host = host_header.value.to_string();
+        if host.is_empty() {
+            return Ok(None); // `Host:` with no value names no domain
+        }
 
         let boxed_host_port = host.split_once(&SYMBOL.colon.to_string());
         if boxed_host_port.is_none() {
@@ -139,6 +141,14 @@ impl Request {
             return Err(message)
         }
         Ok(boxed_url_components.unwrap().path)
+    }
+
+    /// `true` if `method` (any case) is one of [`Request::method_list`],
+    /// without building that list — it's checked on every request.
+    pub fn is_supported_method(method: &str) -> bool {
+        [METHOD.get, METHOD.head, METHOD.post, METHOD.put, METHOD.delete, METHOD.connect, METHOD.options, METHOD.trace, METHOD.patch]
+            .iter()
+            .any(|m| m.eq_ignore_ascii_case(method))
     }
 
     pub fn method_list() -> Vec<String> {
@@ -250,8 +260,7 @@ impl Request {
         }
 
         let (method, without_method) = boxed_split_without_method.unwrap();
-        let supported_methods = Request::method_list();
-        if !supported_methods.contains(&method.to_uppercase().to_string()) {
+        if !Request::is_supported_method(method) {
             return Err(Request::_ERROR_UNABLE_TO_PARSE_METHOD_AND_REQUEST_URI_AND_HTTP_VERSION.to_string())
         }
 
@@ -265,8 +274,7 @@ impl Request {
             .ok_or_else(|| Request::_ERROR_UNABLE_TO_PARSE_METHOD_AND_REQUEST_URI_AND_HTTP_VERSION.to_string())?;
 
 
-        let supported_http_versions = HTTP::version_list();
-        if !supported_http_versions.contains(&http_version.to_uppercase().to_string()) {
+        if !HTTP::is_supported_version(http_version) {
             return Err(Request::_ERROR_UNABLE_TO_PARSE_METHOD_AND_REQUEST_URI_AND_HTTP_VERSION.to_string())
         }
 
@@ -299,17 +307,18 @@ impl Request {
         Some(if rest.starts_with('/') { rest.to_string() } else { format!("/{}", rest) })
     }
 
+    /// `Name: value` → `Header`. The name ends at the first `:`; the value
+    /// is everything after it, without surrounding spaces/tabs (RFC 9112
+    /// §5.1). Splitting on every ": " used to cut a value that itself
+    /// contained ": " short, and `Name:value` (no space) had an empty value.
     pub fn parse_http_request_header_string(header_string: &str) -> Header {
-        let header_parts: Vec<&str> = header_string.split(Header::NAME_VALUE_SEPARATOR).collect();
-        let header_name = StringExt::truncate_new_line_carriage_return(header_parts[0]);
-        let mut header_value= "".to_string();
-        if header_parts.get(1).is_some() {
-            header_value = StringExt::truncate_new_line_carriage_return(header_parts[1]);
-        }
-
-        Header {
-            name: header_name,
-            value: header_value,
+        let line = header_string.trim_end_matches(['\r', '\n']);
+        match line.split_once(':') {
+            Some((name, value)) => Header {
+                name: name.to_string(),
+                value: value.trim_matches([' ', '\t']).to_string(),
+            },
+            None => Header { name: line.to_string(), value: String::new() },
         }
     }
 

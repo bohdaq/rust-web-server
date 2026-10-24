@@ -460,30 +460,36 @@ impl Response {
 
         let body = Response::generate_body(response.content_range_list);
 
-        let mut headers_str = SYMBOL.new_line_carriage_return.to_string();
-        for header in response.headers {
-            let mut header_string = SYMBOL.empty_string.to_string();
-            header_string.push_str(&header.name);
-            header_string.push_str(Header::NAME_VALUE_SEPARATOR);
-            header_string.push_str(&header.value);
-            header_string.push_str(SYMBOL.new_line_carriage_return);
-            headers_str.push_str(&header_string);
+        // One buffer, sized up front, written once: this used to build a
+        // String per header, grow a second one, join the status line and
+        // copy it all again with format! — the biggest allocation cost of a
+        // small response.
+        let status_code = response.status_code.to_string();
+        let capacity = response.http_version.len() + status_code.len() + response.reason_phrase.len() + 4
+            + response.headers.iter().map(|h| h.name.len() + h.value.len() + 4).sum::<usize>()
+            + 2;
+        let mut head = Vec::with_capacity(capacity);
+        head.extend_from_slice(response.http_version.as_bytes());
+        head.push(b' ');
+        head.extend_from_slice(status_code.as_bytes());
+        head.push(b' ');
+        head.extend_from_slice(response.reason_phrase.as_bytes());
+        head.extend_from_slice(b"\r\n");
+        for header in &response.headers {
+            head.extend_from_slice(header.name.as_bytes());
+            head.extend_from_slice(Header::NAME_VALUE_SEPARATOR.as_bytes());
+            head.extend_from_slice(header.value.as_bytes());
+            head.extend_from_slice(b"\r\n");
         }
-        let status = [response.http_version, response.status_code.to_string(), response.reason_phrase].join(SYMBOL.whitespace);
-        let response_without_body = format!(
-            "{}{}{}",
-            status,
-            headers_str,
-            SYMBOL.new_line_carriage_return,
-        );
+        head.extend_from_slice(b"\r\n");
 
         let is_head = request.method == METHOD.head;
         let is_options = request.method == METHOD.options;
 
         if is_head || is_options {
-            (response_without_body.into_bytes(), Vec::new())
+            (head, Vec::new())
         } else {
-            (response_without_body.into_bytes(), body)
+            (head, body)
         }
     }
 
@@ -517,8 +523,7 @@ impl Response {
         }
 
         let (http_version, status_code_reason_phrase) = boxed_split.unwrap();
-        let supported_http_versions = HTTP::version_list();
-        if !supported_http_versions.contains(&http_version.to_uppercase().to_string()) {
+        if !HTTP::is_supported_version(http_version) {
             return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
         }
 

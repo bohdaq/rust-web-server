@@ -20,6 +20,14 @@ pub const VERSION: Version = Version {
 pub struct HTTP;
 
 impl HTTP {
+    /// `true` if `version` (any case) is one of [`HTTP::version_list`],
+    /// without building that list.
+    pub fn is_supported_version(version: &str) -> bool {
+        [VERSION.http_0_9, VERSION.http_1_0, VERSION.http_1_1, VERSION.http_2_0, VERSION.http_3_0]
+            .iter()
+            .any(|v| v.eq_ignore_ascii_case(version))
+    }
+
     pub fn version_list() -> Vec<String> {
         let version_0_9 = VERSION.http_0_9.to_string();
         let version_1_0 = VERSION.http_1_0.to_string();
