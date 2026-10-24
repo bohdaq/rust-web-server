@@ -2,6 +2,7 @@ use std::fs::{File, metadata, read_dir};
 use std::time::UNIX_EPOCH;
 use file_ext::FileExt;
 use crate::controller::Controller;
+use crate::ext::decimal::Decimal;
 use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::{ContentRange, Range};
@@ -341,31 +342,44 @@ impl StaticResourceController {
         let file = open_file_cache::open(&fs_path, follow_symlinks)?;
         let state = file.state()?;
 
-        let mut response = std::mem::replace(response, Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None));
-        let modified = state.modified;
-        let etag_value = format!("\"{}-{}\"", modified, state.len);
-        response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.to_string(), value: modified.to_string() });
+        // ETag "<modified>-<len>" and the nanosecond Last-Modified, built
+        // without format!: this runs for every request.
+        let modified = Decimal::new(state.modified);
+        let len = Decimal::new(state.len as u128);
+        let mut etag_value = String::with_capacity(modified.as_str().len() + len.as_str().len() + 3);
+        etag_value.push('"');
+        etag_value.push_str(modified.as_str());
+        etag_value.push('-');
+        etag_value.push_str(len.as_str());
+        etag_value.push('"');
         let not_modified = request
             .header(Header::_IF_NONE_MATCH)
             .map_or(false, |inm| inm.value == etag_value || inm.value == "*");
+        // Everything that can fail happens before `response` is taken: on
+        // `None` the general path carries on with it.
+        let body = if not_modified || state.len > StaticResourceController::STREAM_THRESHOLD {
+            None
+        } else {
+            Some(file.contents(&state).ok()?)
+        };
+
+        let mut response = std::mem::replace(response, Response::empty());
+        response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.to_string(), value: modified.as_str().to_string() });
         response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
         if not_modified {
-            response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
-            response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
+            response.set_status(STATUS_CODE_REASON_PHRASE.n304_not_modified);
             return Some(response);
         }
-        response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
-        response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        response.set_status(STATUS_CODE_REASON_PHRASE.n200_ok);
 
         if state.len > StaticResourceController::STREAM_THRESHOLD {
             response.headers.push(Header { name: Header::_CONTENT_TYPE.to_string(), value: mime.to_string() });
-            response.headers.push(Header { name: Header::_CONTENT_LENGTH.to_string(), value: state.len.to_string() });
+            response.headers.push(Header { name: Header::_CONTENT_LENGTH.to_string(), value: len.as_str().to_string() });
             response.stream_file = Some(fs_path);
             return Some(response);
         }
 
-        let body = file.contents(&state).ok()?;
-        response.content_range_list = vec![Range::get_content_range(body, mime.to_string())];
+        response.content_range_list = vec![Range::get_content_range(body.unwrap_or_default(), mime.to_string())];
         Some(response)
     }
 

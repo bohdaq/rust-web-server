@@ -227,15 +227,13 @@ where
                 write_streaming(&mut stream, response, request).await?;
             }
         } else {
-            let (mut head, body) = Response::generate_response_parts(response, request);
             // One write — one syscall, one TCP segment — for a small response:
             // with TCP_NODELAY on, writing head and body separately sent two
-            // segments and doubled the client's receive work.
-            if body.len() <= COALESCE_LIMIT {
-                head.extend_from_slice(&body);
-                stream.write_all(&head).await.map_err(|e| e.to_string())?;
-            } else {
-                stream.write_all(&head).await.map_err(|e| e.to_string())?;
+            // segments and doubled the client's receive work. The head buffer
+            // is sized for the body too, so appending it doesn't reallocate.
+            let (head, body) = Response::generate_response_coalesced(response, request, COALESCE_LIMIT);
+            stream.write_all(&head).await.map_err(|e| e.to_string())?;
+            if !body.is_empty() {
                 stream.write_all(&body).await.map_err(|e| e.to_string())?;
             }
             stream.flush().await.map_err(|e| e.to_string())?;

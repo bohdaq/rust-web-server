@@ -543,3 +543,91 @@ fn generate_response_parts_splits_head_and_body() {
     let whole = Response::generate_response(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "hello"), request("GET"));
     assert!(String::from_utf8(whole).unwrap().ends_with("\r\n\r\nhello"));
 }
+
+#[test]
+fn generate_response_coalesced_appends_small_bodies_only() {
+    use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+    let request = |m: &str| crate::request::Request { method: m.to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] };
+    let response = || {
+        let mut r = Response::get_response(
+            STATUS_CODE_REASON_PHRASE.n200_ok,
+            Some(vec![Header { name: "X-A".to_string(), value: "1".to_string() }]),
+            Some(vec![Range::get_content_range(b"hello".to_vec(), "text/plain".to_string())]),
+        );
+        r.headers.push(Header { name: "X-B".to_string(), value: "2".to_string() });
+        r
+    };
+    let expected_head = "HTTP/1.1 200 OK\r\nX-A: 1\r\nX-B: 2\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\n";
+
+    let (head, body) = Response::generate_response_coalesced(response(), request("GET"), 5);
+    assert_eq!(format!("{expected_head}hello").into_bytes(), head);
+    assert!(body.is_empty());
+    assert_eq!(head.len(), head.capacity(), "sized for head and body up front");
+
+    let (head, body) = Response::generate_response_coalesced(response(), request("GET"), 4);
+    assert_eq!(expected_head.as_bytes(), &head[..]);
+    assert_eq!(b"hello".to_vec(), body);
+
+    let (head, body) = Response::generate_response_parts(response(), request("GET"));
+    assert_eq!(expected_head.as_bytes(), &head[..]);
+    assert_eq!(b"hello".to_vec(), body);
+
+    for method in ["HEAD", "OPTIONS"] {
+        let (head, body) = Response::generate_response_coalesced(response(), request(method), usize::MAX);
+        assert_eq!(expected_head.as_bytes(), &head[..], "{method}");
+        assert!(body.is_empty());
+    }
+    assert_eq!(format!("{expected_head}hello").into_bytes(), Response::generate_response(response(), request("GET")));
+}
+
+#[test]
+fn generate_response_parts_partial_and_multipart_headers() {
+    use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+    let request = crate::request::Request { method: "GET".to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] };
+    let part = |start: u64, end: u64, body: &[u8]| ContentRange {
+        unit: Range::BYTES.to_string(),
+        range: Range { start, end },
+        size: "10".to_string(),
+        body: body.to_vec(),
+        content_type: "text/plain".to_string(),
+    };
+
+    let single = Response::get_response(STATUS_CODE_REASON_PHRASE.n206_partial_content, None, Some(vec![part(2, 4, b"cde")]));
+    let (head, body) = Response::generate_response_parts(single, request.clone());
+    assert_eq!(
+        "HTTP/1.1 206 Partial Content\r\nContent-Type: text/plain\r\nContent-Range: bytes 2-4/10\r\nContent-Length: 3\r\n\r\n",
+        String::from_utf8(head).unwrap()
+    );
+    assert_eq!(b"cde".to_vec(), body);
+
+    let multi = Response::get_response(STATUS_CODE_REASON_PHRASE.n206_partial_content, None, Some(vec![part(0, 0, b"a"), part(9, 9, b"j")]));
+    let (head, body) = Response::generate_response_parts(multi, request.clone());
+    assert_eq!(
+        "HTTP/1.1 206 Partial Content\r\nContent-Type: multipart/byteranges; boundary=String_separator\r\n\r\n",
+        String::from_utf8(head).unwrap()
+    );
+    assert!(String::from_utf8_lossy(&body).contains("Content-Range:  bytes 0-0/10"));
+
+    let mut odd = Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None);
+    odd.status_code = 599;
+    odd.reason_phrase = "Custom".to_string();
+    let (head, body) = Response::generate_response_parts(odd, request.clone());
+    assert_eq!("HTTP/1.1 599 Custom\r\n\r\n", String::from_utf8(head).unwrap());
+    assert!(body.is_empty());
+
+    let mut negative = Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None);
+    negative.status_code = -1;
+    let (head, _) = Response::generate_response_parts(negative, request);
+    assert!(String::from_utf8(head).unwrap().starts_with("HTTP/1.1 -1 OK\r\n"));
+}
+
+#[test]
+fn set_status_and_empty() {
+    use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+    let mut response = Response::get_response(STATUS_CODE_REASON_PHRASE.n501_not_implemented, None, None);
+    response.set_status(STATUS_CODE_REASON_PHRASE.n304_not_modified);
+    assert_eq!(304, response.status_code);
+    assert_eq!("Not Modified", response.reason_phrase);
+    let empty = Response::empty();
+    assert_eq!(0, empty.http_version.capacity() + empty.reason_phrase.capacity() + empty.headers.capacity());
+}

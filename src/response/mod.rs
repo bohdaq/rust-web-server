@@ -3,6 +3,7 @@ mod tests;
 #[cfg(test)]
 mod example;
 
+use crate::ext::decimal::Decimal;
 use std::io;
 use std::io::{BufRead, Cursor, Read};
 use crate::body::multipart_form_data::FormMultipartData;
@@ -274,6 +275,27 @@ pub fn content_range_header_value(status_code: i16, content_range: &ContentRange
 
 impl Response {
 
+    /// A response with nothing in it and no allocations — a placeholder to
+    /// `std::mem::replace` a real one with.
+    pub(crate) fn empty() -> Response {
+        Response {
+            http_version: String::new(),
+            status_code: 0,
+            reason_phrase: String::new(),
+            headers: Vec::new(),
+            content_range_list: Vec::new(),
+            stream_file: None,
+            stream_pipe: None,
+        }
+    }
+
+    /// Set the status code and reason phrase, reusing the phrase's buffer.
+    pub(crate) fn set_status(&mut self, status: &StatusCodeReasonPhrase) {
+        self.status_code = *status.status_code;
+        self.reason_phrase.clear();
+        self.reason_phrase.push_str(status.reason_phrase);
+    }
+
     pub fn build(status: StatusCodeReasonPhrase, header_list : Vec<Header>, body: Vec<ContentRange>) -> Response {
         Response {
             http_version: VERSION.http_1_1.to_string(),
@@ -408,9 +430,7 @@ impl Response {
 
     /// The serialized response: status line + headers, then the body.
     pub fn generate_response(response: Response, request: Request) -> Vec<u8> {
-        let (mut head, body) = Response::generate_response_parts(response, request);
-        head.extend_from_slice(&body);
-        head
+        Response::generate_response_coalesced(response, request, usize::MAX).0
     }
 
     /// Like [`generate_response`](Self::generate_response), but returns the
@@ -418,31 +438,33 @@ impl Response {
     /// a connection writer can send them back to back without first copying
     /// a large body into one combined buffer. The body is empty for HEAD and
     /// OPTIONS.
-    pub fn generate_response_parts(mut response: Response, request: Request) -> (Vec<u8>, Vec<u8>) {
+    pub fn generate_response_parts(response: Response, request: Request) -> (Vec<u8>, Vec<u8>) {
+        Response::generate_response_coalesced(response, request, 0)
+    }
 
-        if response.content_range_list.len() == 1 {
-            let content_range_index = 0;
-            let content_range = response.content_range_list.get(content_range_index).unwrap();
-            response.headers.push(Header {
-                name: Header::_CONTENT_TYPE.to_string(),
-                value: content_range.content_type.to_string()
-            });
+    /// [`generate_response_parts`](Self::generate_response_parts), except
+    /// that a body of at most `coalesce_limit` bytes is appended to the head
+    /// (sized for both up front) and the returned body is then empty — one
+    /// buffer for one `write`, without growing the head afterwards.
+    pub(crate) fn generate_response_coalesced(response: Response, request: Request, coalesce_limit: usize) -> (Vec<u8>, Vec<u8>) {
+        let Response { http_version, status_code, reason_phrase, headers, mut content_range_list, .. } = response;
 
-            if let Some(value) = content_range_header_value(response.status_code, content_range) {
-                response.headers.push(Header {
-                    name: Header::_CONTENT_RANGE.to_string(),
-                    value,
-                });
-            }
-
-            response.headers.push(Header {
-                name: Header::_CONTENT_LENGTH.to_string(),
-                value: content_range.body.len().to_string()
-            });
+        // Content-Type, Content-Range and Content-Length follow the other
+        // headers; they're written straight into the head rather than pushed
+        // onto `headers` first.
+        let mut content_type: Option<String> = None;
+        let mut content_range: Option<String> = None;
+        let mut content_length: Option<Decimal> = None;
+        if content_range_list.len() == 1 {
+            let range = &mut content_range_list[0];
+            content_range = content_range_header_value(status_code, range);
+            content_length = Some(Decimal::new(range.body.len() as u128));
+            // A single range's body is moved out by generate_body, which
+            // doesn't look at its type.
+            content_type = Some(std::mem::take(&mut range.content_type));
         }
-
-        if response.content_range_list.len() > 1 {
-            let content_range_header_value = [
+        if content_range_list.len() > 1 {
+            content_type = Some([
                 Range::MULTIPART,
                 SYMBOL.slash,
                 Range::BYTERANGES,
@@ -451,42 +473,56 @@ impl Response {
                 Range::BOUNDARY,
                 SYMBOL.equals,
                 Range::STRING_SEPARATOR
-            ].join("");
-            response.headers.push(Header {
-                name: Header::_CONTENT_TYPE.to_string(),
-                value: content_range_header_value,
-            });
+            ].join(""));
         }
 
-        let body = Response::generate_body(response.content_range_list);
+        let is_head = request.method == METHOD.head;
+        let is_options = request.method == METHOD.options;
+        let body = if is_head || is_options {
+            Vec::new()
+        } else {
+            Response::generate_body(content_range_list)
+        };
+        let coalesce = body.len() <= coalesce_limit;
 
         // One buffer, sized up front, written once: this used to build a
         // String per header, grow a second one, join the status line and
         // copy it all again with format! — the biggest allocation cost of a
         // small response.
-        let status_code = response.status_code.to_string();
-        let capacity = response.http_version.len() + status_code.len() + response.reason_phrase.len() + 4
-            + response.headers.iter().map(|h| h.name.len() + h.value.len() + 4).sum::<usize>()
-            + 2;
+        let status = u16::try_from(status_code).map(|code| Decimal::new(code as u128));
+        let status_text = match &status {
+            Ok(decimal) => std::borrow::Cow::Borrowed(decimal.as_str()),
+            Err(_) => std::borrow::Cow::Owned(status_code.to_string()),
+        };
+        let extra = [
+            (Header::_CONTENT_TYPE, content_type.as_deref()),
+            (Header::_CONTENT_RANGE, content_range.as_deref()),
+            (Header::_CONTENT_LENGTH, content_length.as_ref().map(Decimal::as_str)),
+        ];
+        let capacity = http_version.len() + status_text.len() + reason_phrase.len() + 4
+            + headers.iter().map(|h| h.name.len() + h.value.len() + 4).sum::<usize>()
+            + extra.iter().map(|(name, value)| value.map_or(0, |v| name.len() + v.len() + 4)).sum::<usize>()
+            + 2
+            + if coalesce { body.len() } else { 0 };
         let mut head = Vec::with_capacity(capacity);
-        head.extend_from_slice(response.http_version.as_bytes());
+        head.extend_from_slice(http_version.as_bytes());
         head.push(b' ');
-        head.extend_from_slice(status_code.as_bytes());
+        head.extend_from_slice(status_text.as_bytes());
         head.push(b' ');
-        head.extend_from_slice(response.reason_phrase.as_bytes());
+        head.extend_from_slice(reason_phrase.as_bytes());
         head.extend_from_slice(b"\r\n");
-        for header in &response.headers {
-            head.extend_from_slice(header.name.as_bytes());
+        let header_lines = headers.iter().map(|h| (h.name.as_str(), h.value.as_str()))
+            .chain(extra.iter().filter_map(|(name, value)| value.map(|v| (*name, v))));
+        for (name, value) in header_lines {
+            head.extend_from_slice(name.as_bytes());
             head.extend_from_slice(Header::NAME_VALUE_SEPARATOR.as_bytes());
-            head.extend_from_slice(header.value.as_bytes());
+            head.extend_from_slice(value.as_bytes());
             head.extend_from_slice(b"\r\n");
         }
         head.extend_from_slice(b"\r\n");
 
-        let is_head = request.method == METHOD.head;
-        let is_options = request.method == METHOD.options;
-
-        if is_head || is_options {
+        if coalesce {
+            head.extend_from_slice(&body);
             (head, Vec::new())
         } else {
             (head, body)

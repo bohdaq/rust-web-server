@@ -253,7 +253,7 @@ impl Header {
     pub fn get_date_iso_8601_header() -> Header {
         Header {
             name: Header::_DATE_UNIX_EPOCH_NANOS.to_string(),
-            value: DateTimeExt::_now_unix_epoch_nanos().to_string(),
+            value: crate::ext::decimal::Decimal::new(DateTimeExt::_now_unix_epoch_nanos()).as_str().to_string(),
         }
     }
 

@@ -468,7 +468,7 @@ impl Range {
         let content_range = ContentRange {
             unit: Range::BYTES.to_string(),
             range: Range { start: 0, end: length },
-            size: length.to_string(),
+            size: crate::ext::decimal::Decimal::new(length as u128).as_str().to_string(),
             body,
             content_type: mime_type
         };
