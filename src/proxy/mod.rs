@@ -31,6 +31,7 @@ pub(crate) mod async_upstream;
 mod tests;
 
 use std::io::{Read, Write};
+use crate::ext::decimal::Decimal;
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -269,33 +270,59 @@ pub(crate) fn build_request(
     client_ip: &str,
     keep_alive: bool,
 ) -> Vec<u8> {
-    let mut out: Vec<u8> = Vec::new();
-    let _ = write!(
-        out,
-        "{} {} HTTP/1.1\r\nHost: {}\r\n",
-        request.method, request.request_uri, backend_host
-    );
-    for h in &request.headers {
-        let lower = h.name.to_lowercase();
+    // One buffer, sized up front and filled with extend_from_slice — no
+    // write!/format machinery, no lower-cased copy of each header name.
+    let forwarded = |h: &&crate::header::Header| {
         // An empty name would be sent as a malformed ": value" line.
-        if lower.is_empty() || HOP_BY_HOP.contains(&lower.as_str()) || lower == "host" {
-            continue;
-        }
-        let _ = write!(out, "{}: {}\r\n", h.name, h.value);
+        !h.name.is_empty() && !is_hop_by_hop_or_host(&h.name)
+    };
+    let body_len = Decimal::new(request.body.len() as u128);
+    let capacity = request.method.len() + request.request_uri.len() + backend_host.len() + 25
+        + request.headers.iter().filter(forwarded).map(|h| h.name.len() + h.value.len() + 4).sum::<usize>()
+        + client_ip.len() + 19
+        + 13
+        + 24
+        + if request.body.is_empty() { 0 } else { body_len.as_str().len() + 18 }
+        + 2
+        + request.body.len();
+    let mut out: Vec<u8> = Vec::with_capacity(capacity);
+    for part in [request.method.as_str(), " ", request.request_uri.as_str(), " HTTP/1.1\r\nHost: ", backend_host, "\r\n"] {
+        out.extend_from_slice(part.as_bytes());
     }
-    let _ = write!(out, "X-Forwarded-For: {}\r\n", client_ip);
-    let _ = write!(out, "Via: 1.1 rws\r\n");
+    for h in request.headers.iter().filter(forwarded) {
+        for part in [h.name.as_str(), ": ", h.value.as_str(), "\r\n"] {
+            out.extend_from_slice(part.as_bytes());
+        }
+    }
+    for part in ["X-Forwarded-For: ", client_ip, "\r\n", "Via: 1.1 rws\r\n"] {
+        out.extend_from_slice(part.as_bytes());
+    }
     if keep_alive {
-        let _ = write!(out, "Connection: keep-alive\r\n");
+        out.extend_from_slice(b"Connection: keep-alive\r\n");
     } else {
-        let _ = write!(out, "Connection: close\r\n");
+        out.extend_from_slice(b"Connection: close\r\n");
     }
     if !request.body.is_empty() {
-        let _ = write!(out, "Content-Length: {}\r\n", request.body.len());
+        out.extend_from_slice(b"Content-Length: ");
+        out.extend_from_slice(body_len.as_str().as_bytes());
+        out.extend_from_slice(b"\r\n");
     }
-    let _ = write!(out, "\r\n");
+    out.extend_from_slice(b"\r\n");
     out.extend_from_slice(&request.body);
     out
+}
+
+/// Whether a request header is dropped on the way upstream: hop-by-hop
+/// headers and `Host` (rws sends its own). Matches `to_lowercase()` against
+/// the lower-case list — Unicode lower-casing, so a non-ASCII name (where
+/// e.g. the Kelvin sign lower-cases to `k`) still takes that path.
+fn is_hop_by_hop_or_host(name: &str) -> bool {
+    if name.is_ascii() {
+        name.eq_ignore_ascii_case("host") || HOP_BY_HOP.iter().any(|h| name.eq_ignore_ascii_case(h))
+    } else {
+        let lower = name.to_lowercase();
+        lower == "host" || HOP_BY_HOP.contains(&lower.as_str())
+    }
 }
 
 /// Decode HTTP/1.1 chunked transfer-encoding from `stream`.
@@ -403,23 +430,26 @@ const REGENERATED_OR_HOP_BY_HOP: &[&str] = &[
 /// onto the body instead; the status line is re-emitted as HTTP/1.1
 /// regardless of the backend's version.
 pub(crate) fn normalize_upstream_response(mut response: Response) -> Response {
-    response.http_version = crate::http::VERSION.http_1_1.to_string();
-    let content_type = response
-        .headers
-        .iter()
-        .find(|h| h.name.eq_ignore_ascii_case(crate::header::Header::_CONTENT_TYPE))
-        .map(|h| h.value.clone());
+    response.http_version.clear();
+    response.http_version.push_str(crate::http::VERSION.http_1_1);
     let has_body = !response.content_range_list.is_empty();
-    if let (Some(content_type), [range]) = (&content_type, response.content_range_list.as_mut_slice()) {
-        range.content_type = content_type.clone();
+    if let [range] = response.content_range_list.as_mut_slice() {
+        if let Some(h) = response
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case(crate::header::Header::_CONTENT_TYPE))
+        {
+            range.content_type.clone_from(&h.value);
+        }
     }
+    // Compared in place (the list is lower-case ASCII), not lower-cased
+    // into a new String per header.
     response.headers.retain(|h| {
-        let name = h.name.to_ascii_lowercase();
-        if name == "content-type" {
+        if h.name.eq_ignore_ascii_case("content-type") {
             // Keep it only when there's no body to carry it (e.g. HEAD, 304).
             return !has_body;
         }
-        !REGENERATED_OR_HOP_BY_HOP.contains(&name.as_str())
+        !REGENERATED_OR_HOP_BY_HOP.iter().any(|name| h.name.eq_ignore_ascii_case(name))
     });
     response
 }

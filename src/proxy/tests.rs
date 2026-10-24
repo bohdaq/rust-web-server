@@ -1066,3 +1066,29 @@ fn tls_ca_file_errors_are_reported() {
     let err = crate::proxy::UpstreamTls::from_ca_file(empty.as_str()).err().unwrap();
     assert!(err.contains("no certificates"), "{err}");
 }
+
+#[test]
+fn proxied_request_drops_hop_by_hop_and_host_in_any_case() {
+    let req = crate::request::Request::parse(
+        b"POST /a?b=1 HTTP/1.1\r\nHOST: client\r\nConnection: x\r\nKEEP-ALIVE: 5\r\nTe: trailers\r\n\xe2\x84\xaaeep-Alive: 1\r\nX-Kept: v\r\nContent-Length: 3\r\n\r\nabc",
+    ).unwrap();
+    let out = crate::proxy::build_request(&req, "b:9", "10.0.0.1", false);
+    let expected = "POST /a?b=1 HTTP/1.1\r\nHost: b:9\r\nX-Kept: v\r\nContent-Length: 3\r\n\
+        X-Forwarded-For: 10.0.0.1\r\nVia: 1.1 rws\r\nConnection: close\r\nContent-Length: 3\r\n\r\nabc";
+    assert_eq!(expected, String::from_utf8(out.clone()).unwrap());
+    assert!(out.capacity() - out.len() < 16, "sized up front, not grown: {} of {}", out.len(), out.capacity());
+}
+
+#[test]
+fn normalize_upstream_response_moves_content_type_and_drops_regenerated_headers() {
+    let raw = b"HTTP/1.0 200 OK\r\nCONTENT-TYPE: text/x\r\nContent-Length: 2\r\nTransfer-Encoding: chunked\r\nX-Up: 1\r\n\r\nhi";
+    let response = crate::proxy::normalize_upstream_response(crate::response::Response::parse(raw).unwrap());
+    assert_eq!("HTTP/1.1", response.http_version);
+    assert_eq!("text/x", response.content_range_list[0].content_type);
+    let names: Vec<&str> = response.headers.iter().map(|h| h.name.as_str()).collect();
+    assert_eq!(vec!["X-Up"], names);
+    // No body: Content-Type stays as a header.
+    let head = crate::response::Response::parse(b"HTTP/1.1 304 Not Modified\r\nContent-Type: text/x\r\n\r\n").unwrap();
+    let head = crate::proxy::normalize_upstream_response(crate::response::Response { content_range_list: vec![], ..head });
+    assert_eq!(1, head.headers.len());
+}
