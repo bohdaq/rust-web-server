@@ -45,6 +45,37 @@ impl ConfigReport {
     }
 
     /// Human-readable report, one finding per line, ending in a verdict.
+    /// One JSON object: `{"path":…,"ok":…,"errors":[…],"warnings":[…]}`.
+    /// Strings are escaped; exit codes stay with the caller.
+    pub fn render_json(&self, path: &str) -> String {
+        fn escaped(s: &str) -> String {
+            let mut out = String::with_capacity(s.len() + 2);
+            for c in s.chars() {
+                match c {
+                    '"' => out.push_str("\\\""),
+                    '\\' => out.push_str("\\\\"),
+                    '\n' => out.push_str("\\n"),
+                    '\r' => out.push_str("\\r"),
+                    '\t' => out.push_str("\\t"),
+                    c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+                    c => out.push(c),
+                }
+            }
+            out
+        }
+        let list = |items: &[String]| {
+            let inner: Vec<String> = items.iter().map(|i| format!("\"{}\"", escaped(i))).collect();
+            format!("[{}]", inner.join(","))
+        };
+        format!(
+            "{{\"path\":\"{}\",\"ok\":{},\"errors\":{},\"warnings\":{}}}",
+            escaped(path),
+            self.is_ok(),
+            list(&self.errors),
+            list(&self.warnings),
+        )
+    }
+
     pub fn render(&self, path: &str) -> String {
         let mut out = String::new();
         for e in &self.errors {
@@ -91,6 +122,11 @@ pub fn check_target_from_args(args: &[String]) -> Option<String> {
         }
     }
     None
+}
+
+/// Whether the arguments ask for machine-readable output (`--format=json`).
+pub fn wants_json_output(args: &[String]) -> bool {
+    args.iter().any(|a| a == "--format=json")
 }
 
 /// `RWS_CONFIG_FILE` if set, else `rws.config.toml` in the working directory.

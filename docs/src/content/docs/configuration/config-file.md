@@ -24,7 +24,11 @@ exits `0` if it has no errors, `1` otherwise — like `nginx -t`:
 ```bash
 rws --check                       # the file rws would load
 rws --check=/etc/rws/prod.toml    # a specific file
+rws --check --format=json         # machine-readable, for CI and editors
 ```
+
+With `--format=json` the report is one JSON object —
+`{"path":…,"ok":…,"errors":[…],"warnings":[…]}` — with the same exit codes.
 
 ```text
 error: [route.action] upsteam: unknown key — ignored
