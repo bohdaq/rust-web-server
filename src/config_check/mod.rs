@@ -44,7 +44,6 @@ impl ConfigReport {
         self.errors.is_empty()
     }
 
-    /// Human-readable report, one finding per line, ending in a verdict.
     /// One JSON object: `{"path":…,"ok":…,"errors":[…],"warnings":[…]}`.
     /// Strings are escaped; exit codes stay with the caller.
     pub fn render_json(&self, path: &str) -> String {
@@ -76,6 +75,7 @@ impl ConfigReport {
         )
     }
 
+    /// Human-readable report, one finding per line, ending in a verdict.
     pub fn render(&self, path: &str) -> String {
         let mut out = String::new();
         for e in &self.errors {

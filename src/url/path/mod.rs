@@ -185,7 +185,6 @@ impl UrlPath {
 
             if part.is_static {
                 if previous_part.is_some() {
-                    let unboxed_previous_part = previous_part.clone().unwrap();
 
                     // read until first char of static pattern
                     // add to map

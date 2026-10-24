@@ -55,6 +55,11 @@ impl RateLimiter {
         self.window_secs.store(window_secs, Ordering::Relaxed);
     }
 
+    /// The current `(max_requests, window_secs)`.
+    pub fn limits(&self) -> (u32, u64) {
+        (self.max_requests.load(Ordering::Relaxed), self.window_secs.load(Ordering::Relaxed))
+    }
+
     fn window(&self) -> Duration {
         Duration::from_secs(self.window_secs.load(Ordering::Relaxed))
     }
@@ -90,7 +95,9 @@ impl RateLimiter {
     /// Seconds a rejected `key` should wait before trying again.
     ///
     /// The window length, a safe upper bound: the oldest request in the
-    /// window may expire sooner, which only makes the client retry early.
+    /// window may expire sooner, so a client that waits this long is never
+    /// rejected again for the same burst — it may only wait longer than
+    /// strictly needed.
     pub fn retry_after(&self, _key: &str) -> u64 {
         self.window_secs.load(Ordering::Relaxed)
     }

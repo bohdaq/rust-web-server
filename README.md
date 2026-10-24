@@ -235,7 +235,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 <details>
 <summary><strong>Security</strong></summary>
 
-- Per-IP rate limiting — sliding-window `RateLimiter` + `RateLimitLayer`; hot-reloadable
+- Per-IP rate limiting — sliding-window `RateLimiter` + `RateLimitLayer`; hot-reloadable; `429` responses carry `Retry-After`
 - Distributed rate limiting — `RedisRateLimiter`, a fixed-window limiter backed by a Redis server (hand-rolled RESP client), for a shared budget across multiple `rws` instances behind a load balancer
 - Max request body size — `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` rejects oversized bodies with `413` before buffering them, across HTTP/1.1, HTTP/2, and HTTP/3; `0` (default) is unlimited
 - HTTP/1.1 request framing — request heads up to 64 KiB across any number of reads (`431` beyond), pipelined requests, chunked request bodies; a request with both `Content-Length` and `Transfer-Encoding` or conflicting lengths is rejected (`400`) so a proxy in front can't be desynced (request smuggling)
@@ -261,7 +261,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - OpenTelemetry tracing — `OtelLayer`; W3C `traceparent`; stdout or OTLP (Jaeger, Tempo); nested child spans via `otel::span`/`otel::client_span`
 - Access log — Combined Log Format or `RWS_CONFIG_LOG_FORMAT=json`
 - Hot config reload — `SIGHUP` or `POST /admin/config/reload`; no restart required. In proxy mode routes, upstreams and `[middleware]` reload too — validated first, a file with errors leaves the running routes serving
-- `rws --check` — validates `rws.config.toml` (unknown keys, bad values, TLS files, undeclared upstreams, unset auth secrets) and exits 1 on errors, like `nginx -t`
+- `rws --check` — validates `rws.config.toml` (unknown keys, bad values, TLS files, undeclared upstreams, unset auth secrets, duplicate virtual hosts, CORS origins that can never match, a missing SPA fallback file) and exits 1 on errors, like `nginx -t`; `--format=json` for CI and editors
 - Graceful shutdown — SIGTERM drains connections; `/readyz` returns `503` during drain
 - Background scheduler — fixed-rate, fixed-delay, 6-field cron; one thread per task
 - Background job queue — `JobQueue` (in-memory) or `PersistentJobQueue` (crash-safe, model-backed); retry with exponential backoff; `jobs` feature

@@ -227,16 +227,10 @@ spa_fallback = "does-not-exist.html"
 "#);
     assert!(has(&report.warnings, "spa_fallback"), "{report:?}");
 
-    let existing = std::env::temp_dir().join("rws-check-fallback-ok.html");
-    std::fs::write(&existing, "<html></html>").unwrap();
-    let dir = existing.parent().unwrap();
-    let report = check_str(&format!(
-        r#"spa_fallback = "{}""#,
-        existing.display()
-    ));
-    let _ = dir;
+    let existing = crate::test_env::TempPath::new("check-fallback-ok.html");
+    std::fs::write(existing.as_str(), "<html></html>").unwrap();
+    let report = check_str(&format!(r#"spa_fallback = "{}""#, existing.as_str()));
     assert!(!has(&report.warnings, "spa_fallback"), "{report:?}");
-    std::fs::remove_file(&existing).ok();
 }
 
 #[test]
@@ -265,6 +259,7 @@ cert_file = "/tmp/b.pem"
 key_file = "/tmp/b.key"
 "#);
     assert!(has(&report.errors, "same domain"), "{report:?}");
+}
 
 // issue #25: --format=json gives CI and editors one machine-readable object.
 

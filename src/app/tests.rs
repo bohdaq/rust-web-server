@@ -332,7 +332,19 @@ mod builder_tests {
     // through set_limits with an IP of its own.
     #[test]
     fn rate_limit_429_carries_retry_after_within_the_window() {
+        // The process-wide limiter is shared with every test that goes
+        // through RateLimitLayer: hold the lock and restore its limits.
+        let _g = crate::test_env::lock();
+        let saved = crate::rate_limit::global().limits();
+        struct Restore((u32, u64));
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                crate::rate_limit::global().set_limits(self.0 .0, self.0 .1);
+            }
+        }
+        let _restore = Restore(saved);
         let ip = "203.0.113.77";
+        crate::rate_limit::global().reset(ip);
         crate::rate_limit::global().set_limits(1, 30);
         crate::rate_limit::global().check(ip); // burn the one allowed request
         let app = App::new().wrap(RateLimitLayer);
