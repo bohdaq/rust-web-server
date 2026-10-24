@@ -8,6 +8,11 @@
 # scenario needs NGINX: an nginx instance on :9000 is the shared backend for
 # every server under test. Tunables: DURATION (default 15s), CONNECTIONS (64).
 #
+# No compression anywhere: oha runs with --disable-compression (no
+# Accept-Encoding), since the Caddy and nginx configs below don't compress and
+# rws compresses text by default — otherwise rws alone would be deflating
+# every response.
+#
 # Scenarios (HTTP/1.1, keep-alive, access logs off everywhere):
 #   static-1k  GET a 1 KiB file          static-1m  GET a 1 MiB file
 #   proxy-1k   GET /api/1k.bin, proxied to the backend
@@ -61,8 +66,8 @@ RESULTS="$WORK/results.jsonl"
 
 run_load() { # <server-name> <pid> <scenario> <url>
   local name="$1" pid="$2" scenario="$3" url="$4" peak=0 rss
-  "$OHA" -z 2s -c "$CONNECTIONS" --no-tui "$url" > /dev/null 2>&1 || true   # warm-up
-  "$OHA" -z "$DURATION" -c "$CONNECTIONS" --no-tui --output-format json "$url" > "$WORK/oha.json" &
+  "$OHA" -z 2s -c "$CONNECTIONS" --no-tui --disable-compression "$url" > /dev/null 2>&1 || true   # warm-up
+  "$OHA" -z "$DURATION" -c "$CONNECTIONS" --no-tui --disable-compression --output-format json "$url" > "$WORK/oha.json" &
   local oha_pid=$!
   while kill -0 "$oha_pid" 2>/dev/null; do
     rss="$(rss_tree "$pid")"
@@ -179,7 +184,7 @@ path, out_dir, duration, conns = sys.argv[1:5]
 rows = [json.loads(l) for l in open(path) if l.strip()]
 cpus = os.cpu_count()
 lines = [
-    f"Load: oha, {conns} connections, {duration} per scenario, HTTP/1.1 keep-alive, access logs off. "
+    f"Load: oha, {conns} connections, {duration} per scenario, HTTP/1.1 keep-alive, no compression, access logs off. "
     f"Machine: {platform.system()} {platform.machine()}, {cpus} CPUs (load generator on the same machine).",
     "",
     "| Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | 200 OK | Peak RSS (MiB) |",

@@ -22,11 +22,26 @@ const COMPRESSIBLE: &[&str] = &[
     "image/svg+xml",
 ];
 
-/// If the client accepts gzip and the response body is compressible text,
-/// compress every content range in-place and add `Content-Encoding: gzip`.
-/// Also appends `Accept-Encoding` to the `Vary` header.
+/// Bodies smaller than this are sent uncompressed: gzip's framing overhead
+/// and the CPU time outweigh what it saves (Caddy's `encode` uses the same
+/// minimum).
+pub const MIN_COMPRESS_SIZE: usize = 512;
+
+/// If the client accepts gzip and the response body is compressible text of
+/// at least [`MIN_COMPRESS_SIZE`] bytes, compress every content range
+/// in-place and add `Content-Encoding: gzip`; also appends `Accept-Encoding`
+/// to the `Vary` header. A body that gzip doesn't make smaller (already
+/// compressed or random data) is left as it was, and so is a response that
+/// already has a `Content-Encoding` (e.g. a backend that compressed it).
 pub fn apply_gzip(request: &Request, response: &mut Response) {
     if response.content_range_list.is_empty() {
+        return;
+    }
+    if response.headers.iter().any(|h| h.name.eq_ignore_ascii_case(Header::_CONTENT_ENCODING)) {
+        return;
+    }
+    let original_size: usize = response.content_range_list.iter().map(|cr| cr.body.len()).sum();
+    if original_size < MIN_COMPRESS_SIZE {
         return;
     }
 
@@ -50,29 +65,26 @@ pub fn apply_gzip(request: &Request, response: &mut Response) {
         return;
     }
 
-    let mut compressed_ok = true;
-    for cr in &mut response.content_range_list {
+    let mut compressed_bodies = Vec::with_capacity(response.content_range_list.len());
+    for cr in &response.content_range_list {
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
         if encoder.write_all(&cr.body).is_err() {
-            compressed_ok = false;
-            break;
+            return;
         }
         match encoder.finish() {
-            Ok(compressed) => {
-                let new_len = compressed.len() as u64;
-                cr.body = compressed;
-                cr.range.end = new_len;
-                cr.size = new_len.to_string();
-            }
-            Err(_) => {
-                compressed_ok = false;
-                break;
-            }
+            Ok(compressed) => compressed_bodies.push(compressed),
+            Err(_) => return,
         }
     }
-
-    if !compressed_ok {
+    let compressed_size: usize = compressed_bodies.iter().map(Vec::len).sum();
+    if compressed_size >= original_size {
         return;
+    }
+    for (cr, compressed) in response.content_range_list.iter_mut().zip(compressed_bodies) {
+        let new_len = compressed.len() as u64;
+        cr.body = compressed;
+        cr.range.end = new_len;
+        cr.size = new_len.to_string();
     }
 
     response.headers.push(Header {

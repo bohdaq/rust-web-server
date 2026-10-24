@@ -7,13 +7,17 @@ description: Automatic gzip compression for text-based responses with no configu
 
 ## How it works
 
-`compression::apply_gzip(request, response)` is called in `Server::process()` after `app.execute()` returns, before the response bytes are written to the socket. It performs three checks in sequence:
+`compression::apply_gzip(request, response)` is called by the HTTP/1.1 connection handler after `app.execute()` returns, before the response bytes are written to the socket. It compresses only when:
 
-1. The response body is non-empty.
-2. The `Accept-Encoding` request header contains `gzip` (case-insensitive).
-3. The response `Content-Type` matches a compressible MIME type (see below).
+1. The response has no `Content-Encoding` already — a backend's gzipped or Brotli response is passed through, never compressed twice.
+2. The body is at least 512 bytes (`compression::MIN_COMPRESS_SIZE`, the same minimum Caddy uses): below that, gzip's framing and CPU cost outweigh the savings.
+3. The `Accept-Encoding` request header contains `gzip` (case-insensitive).
+4. The response `Content-Type` matches a compressible MIME type (see below).
 
-If all three pass, every `ContentRange` in the response body is compressed in-place with `flate2`'s default compression level. The response then receives:
+Every `ContentRange` is then compressed with `flate2`'s default level. If the
+result isn't smaller than the original — random or already-compressed data
+served as text — the original body is sent instead. A compressed response
+receives:
 
 - `Content-Encoding: gzip`
 - `Vary: Accept-Encoding` (appended to any existing `Vary` value, or added if absent)

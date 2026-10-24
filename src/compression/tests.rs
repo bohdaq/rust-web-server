@@ -36,7 +36,8 @@ fn make_response(body: &[u8], mime: &str) -> Response {
 #[test]
 fn compresses_text_html_when_gzip_accepted() {
     let request = make_request_with_gzip();
-    let mut response = make_response(b"<html>hello</html>", MimeType::TEXT_HTML);
+    let html = "<html>hello</html>".repeat(64);
+    let mut response = make_response(html.as_bytes(), MimeType::TEXT_HTML);
 
     apply_gzip(&request, &mut response);
 
@@ -50,7 +51,7 @@ fn compresses_text_html_when_gzip_accepted() {
     let mut decoder = GzDecoder::new(compressed.as_slice());
     let mut decompressed = String::new();
     decoder.read_to_string(&mut decompressed).unwrap();
-    assert_eq!(decompressed, "<html>hello</html>");
+    assert_eq!(decompressed, html);
 }
 
 #[test]
@@ -86,7 +87,8 @@ fn does_not_compress_binary_content() {
 #[test]
 fn appends_accept_encoding_to_existing_vary() {
     let request = make_request_with_gzip();
-    let mut response = make_response(b"{}", MimeType::APPLICATION_JSON);
+    let json = format!("[{}]", vec!["{\"k\":\"v\"}"; 100].join(","));
+    let mut response = make_response(json.as_bytes(), MimeType::APPLICATION_JSON);
     response.headers.push(Header {
         name: Header::_VARY.to_string(),
         value: "Origin".to_string(),
@@ -117,4 +119,38 @@ fn does_not_duplicate_accept_encoding_in_vary() {
     let ae_count = vary.value.to_lowercase().matches("accept-encoding").count();
     assert_eq!(vary_count, 1);
     assert_eq!(ae_count, 1, "Accept-Encoding should not be duplicated in Vary");
+}
+
+fn is_gzipped(response: &Response) -> bool {
+    response.headers.iter().any(|h| h.name == Header::_CONTENT_ENCODING)
+}
+
+#[test]
+fn small_bodies_are_not_compressed() {
+    let body = "a".repeat(crate::compression::MIN_COMPRESS_SIZE - 1);
+    let mut response = make_response(body.as_bytes(), MimeType::TEXT_HTML);
+    apply_gzip(&make_request_with_gzip(), &mut response);
+    assert!(!is_gzipped(&response));
+    assert_eq!(response.content_range_list[0].body, body.as_bytes());
+}
+
+#[test]
+fn incompressible_bodies_are_sent_as_is() {
+    // Pseudo-random bytes: gzip output would be larger than the input.
+    let mut state: u32 = 0x1234_5678;
+    let body: Vec<u8> = (0..2048).map(|_| { state ^= state << 13; state ^= state >> 17; state ^= state << 5; state as u8 }).collect();
+    let mut response = make_response(&body, MimeType::TEXT_PLAIN);
+    apply_gzip(&make_request_with_gzip(), &mut response);
+    assert!(!is_gzipped(&response));
+    assert_eq!(response.content_range_list[0].body, body);
+}
+
+#[test]
+fn already_encoded_responses_are_not_compressed_again() {
+    let body = "<p>already gzipped upstream</p>".repeat(64);
+    let mut response = make_response(body.as_bytes(), MimeType::TEXT_HTML);
+    response.headers.push(Header { name: "content-encoding".to_string(), value: "br".to_string() });
+    apply_gzip(&make_request_with_gzip(), &mut response);
+    assert_eq!(response.headers.iter().filter(|h| h.name.eq_ignore_ascii_case("content-encoding")).count(), 1);
+    assert_eq!(response.content_range_list[0].body, body.as_bytes());
 }
