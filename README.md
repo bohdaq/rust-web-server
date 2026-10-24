@@ -103,7 +103,7 @@ async fn main() {
 }
 ```
 
-Routing with path parameters, typed extractors, one `Middleware` trait for everything (auth, rate limiting, caching, tracing, the reverse proxy itself), WebSocket, SSE, an MCP server, an async ORM, background jobs, object storage, a mailer, and OAuth/OIDC/SAML login. See [DEVELOPER.md](DEVELOPER.md) for 78 runnable use cases.
+Routing with path parameters, typed extractors, one `Middleware` trait for everything (auth, rate limiting, caching, tracing, the reverse proxy itself), WebSocket, SSE, an MCP server, an async ORM, background jobs, object storage, a mailer, and OAuth/OIDC/SAML login. See [DEVELOPER.md](DEVELOPER.md) for 85 runnable use cases.
 
 ## Why rws
 
@@ -111,10 +111,32 @@ Routing with path parameters, typed extractors, one `Middleware` trait for every
 - **No hyper, no Tower, no Axum.** HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS, range requests, JWT, and the ACME client are implemented in this crate. HTTP/2 and HTTP/3 framing use the widely deployed `h2` and `quinn`/`h3` crates, and TLS uses `rustls` — no OpenSSL.
 - **Config and code share one engine.** Everything the TOML file does is a type you can use from Rust, so moving from configuration to code doesn't mean switching tools.
 - **Tested against the real world.** CI fuzzes every parser that sees untrusted input, checks HTTP/2 conformance with h2spec, and runs the ACME flow end to end against Let's Encrypt's test CA on every push. Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
+- **Fast.** Serves static files faster than Caddy with a lower p99 and less memory; nginx is still about 3× faster — see [Performance](#performance).
 - **SemVer since v1.** Frequent releases (currently v17) are additive; see [releases](https://github.com/bohdaq/rust-web-server/releases) for the changelog.
+
+## Performance
+
+Requests per second (p99 latency), on one 4-CPU GitHub Actions runner with
+the load generator on the same machine: `oha`, 64 keep-alive connections,
+20 s per scenario, access logs off.
+
+| Scenario | rws | Caddy 2.11 | nginx |
+|---|---:|---:|---:|
+| Static file, 1 KiB | **45,137** (3.1 ms) | 39,319 (7.1 ms) | 140,750 (2.4 ms) |
+| Static file, 1 MiB | **4,901** (25 ms) | 3,951 (77 ms) | 15,990 (9.8 ms) |
+| Reverse proxy, 1 KiB | 25,412 (5.2 ms) | **27,819** (8.2 ms) | 65,618 (2.8 ms) |
+| Peak memory | 25–55 MiB | 67–71 MiB | 24 MiB |
+
+nginx is the speed reference here, not the target: `rws` aims at Caddy's
+use case — one binary, automatic HTTPS, a config file — and is faster than
+Caddy at serving files and close to it as a proxy. Shared CI runners are
+noisy, so compare servers within a run, not across runs. Reproduce it with
+[`bench/run.sh`](bench/run.sh) or the manual
+[Benchmark workflow](.github/workflows/bench.yml).
 
 ## Contents
 
+- [Performance](#performance)
 - [Building apps with AI](#building-apps-with-ai)
 - [What's in the box](#whats-in-the-box)
 - [Optional features](#optional-features)

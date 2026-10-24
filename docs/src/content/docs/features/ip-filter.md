@@ -1,6 +1,6 @@
 ---
 title: IP Filtering
-description: Allow or deny requests by client IPv4 address or CIDR range with the IpFilter middleware.
+description: Allow or deny requests by client IPv4 or IPv6 address or CIDR range with the IpFilter middleware.
 ---
 
 ## Quick start
@@ -46,7 +46,7 @@ IpFilter::deny([
 
 ## Entry formats
 
-Each entry in the list is either an exact IPv4 address or a CIDR range:
+Each entry in the list is an exact IPv4 or IPv6 address, or a CIDR range:
 
 | Format | Example | Matches |
 |---|---|---|
@@ -55,15 +55,21 @@ Each entry in the list is either an exact IPv4 address or a CIDR range:
 | CIDR /16 | `"192.168.0.0/16"` | `192.168.0.0` – `192.168.255.255` |
 | CIDR /24 | `"192.168.1.0/24"` | `192.168.1.0` – `192.168.1.255` |
 | CIDR /32 | `"10.0.0.1/32"` | Only `10.0.0.1` |
+| IPv6 address | `"2001:db8::1"` | Only `2001:db8::1` |
+| IPv6 CIDR | `"2001:db8::/32"` | `2001:db8::` – `2001:db8:ffff:…` |
 
-Malformed entries (invalid syntax, prefix length > 32) are silently skipped at construction time.
+Malformed entries (invalid syntax, a prefix longer than 32 for IPv4 or 128
+for IPv6) are skipped at construction time. `ip_filter::is_valid_entry(entry)`
+tells you whether an entry parses, and `rws --check` reports invalid entries in
+`rws.config.toml`.
 
-## IPv6 behaviour
+## IPv4 and IPv6 clients
 
-`IpFilter` only parses IPv4 addresses. IPv6 client addresses are never matched by any rule:
-
-- **Allow mode** — IPv6 clients are blocked (`403 Forbidden`)
-- **Deny mode** — IPv6 clients pass through
+`rws` listens on IPv4 and IPv6. An IPv4 client reaching a dual-stack socket is
+reported as an IPv4-mapped address (`::ffff:10.1.2.3`); IPv4 rules match it
+exactly as they match `10.1.2.3`. IPv4 rules never match native IPv6 clients
+and vice versa, so a deny list meant for everyone needs both families — for
+example `["0.0.0.0/0", "::/0"]`.
 
 ## Use case: restrict admin routes to internal network
 
