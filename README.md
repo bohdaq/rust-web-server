@@ -12,7 +12,7 @@
 
 ```bash
 brew install bohdaq/tap/rws          # macOS / Linux — or: cargo binstall rust-web-server
-docker run -p 7878:7878 -v "$PWD:/srv" ghcr.io/bohdaq/rws
+docker run -p 7878:7878 -v "$PWD:/srv" bohdaq/rws
 ```
 
 Prebuilt binaries for Linux (static, any distro), macOS, and Windows are on [GitHub Releases](https://github.com/bohdaq/rust-web-server/releases/latest).

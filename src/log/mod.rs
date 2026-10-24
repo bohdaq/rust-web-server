@@ -1,6 +1,5 @@
 use std::net::SocketAddr;
 use std::thread;
-use file_ext::FileExt;
 use crate::entry_point::command_line_args::CommandLineArgument;
 use crate::request::Request;
 use crate::response::Response;
@@ -90,6 +89,18 @@ impl Log {
         log
     }
 
+    /// The user rws runs as, for the startup banner: `$USER`, `$LOGNAME` or
+    /// `%USERNAME%`, else `"unknown"`. Deliberately not `whoami` (what
+    /// `FileExt::get_current_user` runs): minimal container images such as
+    /// distroless have no `whoami`, and the banner's `unwrap()` on that
+    /// error crashed the published Docker image at startup.
+    pub fn current_user() -> String {
+        ["USER", "LOGNAME", "USERNAME"]
+            .iter()
+            .find_map(|var| std::env::var(var).ok().filter(|v| !v.trim().is_empty()))
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+
     pub fn info(name: &str) -> String {
         let mut log = format!("{}\n", name).to_string();
         const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -98,20 +109,8 @@ impl Log {
         const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
         const RUST_VERSION: &str = env!("CARGO_PKG_RUST_VERSION");
         const LICENSE: &str = env!("CARGO_PKG_LICENSE");
-        let boxed_user = FileExt::get_current_user();
-        if boxed_user.is_err() {
-            let message = boxed_user.as_ref().err().unwrap();
-            eprintln!("{}", message)
-        }
-        let user: String = boxed_user.unwrap();
-
-        let boxed_working_directory = FileExt::get_static_filepath("");
-        if boxed_working_directory.is_err() {
-            let message = boxed_working_directory.as_ref().err().unwrap();
-            eprintln!("{}", message)
-        }
-
-        let working_directory: String = boxed_working_directory.unwrap();
+        let user = Log::current_user();
+        let working_directory = crate::app::controller::static_resource::working_directory().to_string();
 
         let version = format!("Version:           {}\n", VERSION);
         log = [log, version].join("");

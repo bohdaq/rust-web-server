@@ -50,7 +50,7 @@ Every release ships prebuilt binaries, so no Rust toolchain is needed:
 |---|---|---|
 | Homebrew | `brew install bohdaq/tap/rws` | macOS (Apple Silicon, Intel), Linux (x86_64, arm64) |
 | cargo-binstall | `cargo binstall rust-web-server` | everything below, without compiling |
-| Docker | `docker run -p 7878:7878 -v "$PWD:/srv" ghcr.io/bohdaq/rws` | linux/amd64, linux/arm64 |
+| Docker | `docker run -p 7878:7878 -v "$PWD:/srv" bohdaq/rws` (also `ghcr.io/bohdaq/rws`) | linux/amd64, linux/arm64 |
 | Download | [GitHub Releases](https://github.com/bohdaq/rust-web-server/releases/latest) | `x86_64`/`aarch64-unknown-linux-musl`, `x86_64`/`aarch64-apple-darwin`, `x86_64-pc-windows-msvc` |
 | From source | `cargo install rust-web-server` | anywhere Rust 1.88+ runs |
 

@@ -5,17 +5,34 @@ description: Build and run rust-web-server in a minimal Docker container using m
 
 ## Prebuilt image
 
-Every release publishes a multi-arch image (linux/amd64, linux/arm64) to the GitHub Container Registry — no build step needed:
+Every release publishes a multi-arch image (linux/amd64, linux/arm64) to
+[Docker Hub](https://hub.docker.com/r/bohdaq/rws) as `bohdaq/rws` and to the
+GitHub Container Registry as `ghcr.io/bohdaq/rws`, tagged with the full
+version (`17.112.0`), the major version (`17`), and `latest`:
 
 ```bash
 # Serve the current directory
-docker run -p 7878:7878 -v "$PWD:/srv" ghcr.io/bohdaq/rws
+docker run -p 7878:7878 -v "$PWD:/srv:ro" bohdaq/rws
 
-# Pin a version
-docker run -p 7878:7878 ghcr.io/bohdaq/rws:17.111.0
+# Pin a version (recommended in production)
+docker run -p 7878:7878 -v "$PWD:/srv:ro" bohdaq/rws:17.112.0
 ```
 
-The image is `gcr.io/distroless/static-debian12:nonroot` plus the static musl `rws` binary — no shell, no package manager, runs as a non-root user. The working directory is `/srv`: mount static content there, or put an `rws.config.toml` there to run as a config-driven proxy. Configure with `RWS_CONFIG_*` environment variables, e.g. `-e RWS_CONFIG_PORT=8080`.
+The image is `gcr.io/distroless/static-debian12:nonroot` plus the static musl `rws` binary (about 12 MB) — no shell, no package manager, runs as a non-root user. The working directory is `/srv`: mount static content there, or put an `rws.config.toml` there to run as a config-driven proxy. Configure with `RWS_CONFIG_*` environment variables, e.g. `-e RWS_CONFIG_PORT=8080`. Each release image is started and checked (`/healthz`, the served page, `--version`) before it's published.
+
+### Automatic HTTPS in Docker
+
+`rws` writes the Let's Encrypt certificate, its key and the ACME account key
+to `/data` (owned by the image's user). Mount a volume there so restarts reuse
+the certificate instead of requesting a new one:
+
+```bash
+docker run -d --name rws -p 80:80 -p 443:443 -p 443:443/udp \
+  -v "$PWD:/srv:ro" -v rws-data:/data bohdaq/rws
+```
+
+with an `[acme]` section in the mounted `rws.config.toml` (see
+[Automatic HTTPS](/features/acme/)). `443/udp` carries HTTP/3.
 
 Build your own image with the Dockerfile below if you need non-default Cargo features or your own application code.
 

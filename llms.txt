@@ -14,7 +14,7 @@ limiting, and MIME detection are built in; HTTP/2 and HTTP/3 framing use the
 `h2` and `quinn`/`h3` crates, and TLS uses `rustls`.
 
 Use it in three modes:
-- **Static file server** — `brew install bohdaq/tap/rws && rws` (or `cargo binstall rust-web-server`, `docker run -p 7878:7878 ghcr.io/bohdaq/rws`, prebuilt archives on GitHub Releases, or `cargo install rust-web-server` to build from source); `rws --help` lists options
+- **Static file server** — `brew install bohdaq/tap/rws && rws` (or `cargo binstall rust-web-server`, `docker run -p 7878:7878 bohdaq/rws` (Docker Hub; also ghcr.io/bohdaq/rws), prebuilt archives on GitHub Releases, or `cargo install rust-web-server` to build from source); `rws --help` lists options
 - **Config-driven proxy** — drop `rws.config.toml` with `[[route]]`/`[[upstream]]`; no code required
 - **Automatic HTTPS** — an `[acme]` section with `domains = [...]` (works with either mode above)
 - **Library crate** — `cargo add rust-web-server`; use as a full application framework

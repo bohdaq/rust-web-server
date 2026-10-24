@@ -58,20 +58,8 @@ fn info() {
     const RUST_VERSION: &str = env!("CARGO_PKG_RUST_VERSION");
     const LICENSE: &str = env!("CARGO_PKG_LICENSE");
 
-    let boxed_user = FileExt::get_current_user();
-    if boxed_user.is_err() {
-        let message = boxed_user.as_ref().err().unwrap();
-        eprintln!("{}", message)
-    }
-    let user: String = boxed_user.unwrap();
-
-    let boxed_working_directory = FileExt::get_static_filepath("");
-    if boxed_working_directory.is_err() {
-        let message = boxed_working_directory.as_ref().err().unwrap();
-        eprintln!("{}", message)
-    }
-
-    let working_directory: String = boxed_working_directory.unwrap();
+    let user = Log::current_user();
+    let working_directory = crate::app::controller::static_resource::working_directory().to_string();
 
 
     let expected_info = format!("HTTP to HTTPS with LetsEncrypt HTTP verification server\nVersion:           {}\nAuthors:           {}\nRepository:        {}\nDescription:       {}\nRust Version:      {}\nLicense:           {}\nUser:              {}\nWorking Directory: {}\n",
@@ -290,4 +278,9 @@ fn server_url_thread_count_two_lines() {
     assert_eq!(2, lines.len(), "expected exactly 2 lines: {:?}", lines);
     assert!(lines[0].contains("http://0.0.0.0:80"));
     assert!(lines[1].contains("8"));
+}
+#[test]
+fn current_user_never_fails_and_needs_no_external_program() {
+    // Must work in images without `whoami` (distroless) — never empty.
+    assert!(!Log::current_user().trim().is_empty());
 }

@@ -6,8 +6,10 @@ name: Release
 #      since the previous tag,
 #   2. attaches prebuilt `rws` binaries (static musl on Linux) + .sha256 files,
 #      named the way [package.metadata.binstall] in Cargo.toml expects,
-#   3. pushes a multi-arch image to ghcr.io/bohdaq/rws built from those
-#      binaries (Dockerfile.release),
+#   3. smoke-tests, then pushes a multi-arch image (Dockerfile.release, built
+#      from those binaries) to ghcr.io/bohdaq/rws and — when DOCKERHUB_USERNAME
+#      / DOCKERHUB_TOKEN are configured — to Docker Hub, tagged <version>,
+#      <major> and latest, and syncs the Docker Hub overview,
 #   4. updates the Homebrew formula in bohdaq/homebrew-tap.
 #
 # Re-running for an existing tag (e.g. after fixing this workflow) is
@@ -56,7 +58,7 @@ jobs:
             echo '```bash'
             echo "brew install bohdaq/tap/rws                       # macOS / Linux"
             echo "cargo binstall rust-web-server                     # prebuilt binary, no compile"
-            echo "docker run -p 7878:7878 ghcr.io/bohdaq/rws:$TAG"
+            echo "docker run -p 7878:7878 bohdaq/rws:$TAG"
             echo '```'
             echo
             echo "Or download a binary below (Linux binaries are static musl builds)."
@@ -183,6 +185,12 @@ jobs:
   docker:
     needs: binaries
     runs-on: ubuntu-latest
+    env:
+      # Docker Hub publishing is skipped until both are configured
+      # (repository variable DOCKERHUB_USERNAME, secret DOCKERHUB_TOKEN —
+      # a Docker Hub personal access token with Read & Write scope).
+      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -198,24 +206,77 @@ jobs:
       - run: chmod +x dist/*/rws
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
+
+      # Smoke-test the image before publishing it: the 17.111/17.112 images
+      # crashed at startup (no `whoami` in distroless) and nothing caught it.
+      - name: Build amd64 image for testing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.release
+          platforms: linux/amd64
+          load: true
+          tags: rws-smoke:test
+      - name: Smoke-test the image
+        run: |
+          mkdir -p "$RUNNER_TEMP/site" && echo "smoke" > "$RUNNER_TEMP/site/index.html"
+          docker run -d --name rws-smoke -p 7878:7878 -v "$RUNNER_TEMP/site:/srv:ro" rws-smoke:test
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:7878/healthz && break; sleep 1; done
+          curl -sf http://127.0.0.1:7878/healthz
+          [ "$(curl -sf http://127.0.0.1:7878/)" = "smoke" ]
+          [ "$(docker run --rm rws-smoke:test --version)" = "rws $TAG" ]
+          # /data must belong to the image's nonroot user (65532) — ACME writes
+          # certificates there.
+          docker create --name rws-data-check rws-smoke:test >/dev/null
+          docker cp rws-data-check:/data - | tar --numeric-owner -tvf - | head -1 | grep -q " 65532/65532 "
+          docker rm rws-data-check >/dev/null
+          docker logs rws-smoke 2>&1 | tail -5
+          docker rm -f rws-smoke
+
+      - name: Tags
+        id: tags
+        run: |
+          major="${TAG%%.*}"
+          tags="ghcr.io/${{ github.repository_owner }}/rws:$TAG,ghcr.io/${{ github.repository_owner }}/rws:$major,ghcr.io/${{ github.repository_owner }}/rws:latest"
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            tags="$tags,docker.io/$DOCKERHUB_USERNAME/rws:$TAG,docker.io/$DOCKERHUB_USERNAME/rws:$major,docker.io/$DOCKERHUB_USERNAME/rws:latest"
+          else
+            echo "::warning::DOCKERHUB_USERNAME / DOCKERHUB_TOKEN not set — publishing to ghcr.io only"
+          fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
+      - uses: docker/login-action@v3
+        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.release
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/rws:${{ env.TAG }}
-            ghcr.io/${{ github.repository_owner }}/rws:latest
+          tags: ${{ steps.tags.outputs.tags }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ env.TAG }}
             org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.title=rws
+            org.opencontainers.image.description=Single-binary web server and reverse proxy: automatic HTTPS, HTTP/3, load balancing, configured in one TOML file
+            org.opencontainers.image.url=https://rws8.tech
+      - name: Docker Hub overview
+        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKERHUB_USERNAME }}/rws
+          short-description: "Web server & reverse proxy in Rust: automatic HTTPS, HTTP/3, load balancing — one TOML file"
+          readme-filepath: .github/DOCKERHUB.md
 
   homebrew:
     needs: binaries

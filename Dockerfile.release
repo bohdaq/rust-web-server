@@ -1,20 +1,41 @@
-# Release image published to ghcr.io/bohdaq/rws by .github/workflows/release.yml.
+# check=skip=SecretsUsedInArgOrEnv
+# (RWS_CONFIG_ACME_ACCOUNT_KEY_PATH etc. are file paths, not secrets.)
+
+# Release image published to Docker Hub (bohdaq/rws) and ghcr.io/bohdaq/rws by
+# .github/workflows/release.yml.
 #
 # Unlike ./Dockerfile (which compiles from source), this copies in the static
 # musl binary the release workflow already built for each platform, so a
 # multi-arch image needs no Rust toolchain and no QEMU-emulated compile.
 # Expects dist/amd64/rws and dist/arm64/rws in the build context.
+
+# distroless has no shell or mkdir: make the writable data dir here.
+FROM busybox:1.36.1-musl AS dirs
+RUN mkdir -p /data
+
 FROM gcr.io/distroless/static-debian12:nonroot
 
 ARG TARGETARCH
 COPY --chmod=755 dist/${TARGETARCH}/rws /usr/local/bin/rws
 
+# State rws writes — the Let's Encrypt certificate, its key, and the ACME
+# account key — goes to /data, owned by the image's nonroot user (/srv is
+# root-owned, and usually a read-only bind mount). Keep it in a volume so a
+# restart reuses the certificate instead of requesting a new one:
+#   docker run -p 80:80 -p 443:443 -v rws-data:/data -v "$PWD:/srv" bohdaq/rws
+COPY --from=dirs --chown=65532:65532 /data /data
+ENV RWS_CONFIG_ACME_CERT_PATH=/data/cert.pem \
+    RWS_CONFIG_ACME_KEY_PATH=/data/key.pem \
+    RWS_CONFIG_ACME_ACCOUNT_KEY_PATH=/data/acme_account.key
+VOLUME /data
+
 # rws serves static files from its working directory — mount content here:
-#   docker run -p 7878:7878 -v "$PWD:/srv" ghcr.io/bohdaq/rws
-# or drop an rws.config.toml in it to run as a config-driven proxy.
+#   docker run -p 7878:7878 -v "$PWD:/srv" bohdaq/rws
+# or put an rws.config.toml in it to run as a config-driven proxy.
 WORKDIR /srv
 
-# Binds 0.0.0.0:7878 by default; override with -e RWS_CONFIG_PORT=...
+# Binds 0.0.0.0:7878 by default; override with -e RWS_CONFIG_PORT=... or
+# `port` in rws.config.toml.
 EXPOSE 7878
 
 ENTRYPOINT ["/usr/local/bin/rws"]
