@@ -1321,6 +1321,7 @@ fn count_occurrences(haystack: &[u8], needle: &[u8]) -> usize {
 
 #[test]
 fn keep_alive_http11_serves_two_requests_on_same_stream() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
     let req1 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[]);
     let req2 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[]);
     let mut stream = SequentialMockStream::new(vec![req1, req2]);
@@ -1342,6 +1343,7 @@ fn keep_alive_http11_serves_two_requests_on_same_stream() {
 
 #[test]
 fn connection_close_header_serves_one_request_and_stops() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
     let req1 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[("Connection", "close")]);
     let req2 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[]);
     let mut stream = SequentialMockStream::new(vec![req1, req2]);
@@ -1359,6 +1361,7 @@ fn connection_close_header_serves_one_request_and_stops() {
 
 #[test]
 fn http10_defaults_to_connection_close() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
     let req1 = raw_get_request("/static/test.txt", VERSION.http_1_0, &[]);
     let req2 = raw_get_request("/static/test.txt", VERSION.http_1_0, &[]);
     let mut stream = SequentialMockStream::new(vec![req1, req2]);
@@ -1376,6 +1379,7 @@ fn http10_defaults_to_connection_close() {
 
 #[test]
 fn http11_explicit_keep_alive_serves_multiple_requests() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
     let req1 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[("Connection", "keep-alive")]);
     let req2 = raw_get_request("/static/test.txt", VERSION.http_1_1, &[("Connection", "keep-alive")]);
     let mut stream = SequentialMockStream::new(vec![req1, req2]);
@@ -1682,6 +1686,7 @@ fn no_expect_header_never_sends_100_continue() {
 
 #[test]
 fn expect_unsupported_value_returns_417_without_reading_body() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
     let mut stream = SequentialMockStream::new(vec![
         raw_post_request_headers_only(5, &[("Expect", "gzip-trailer")]),
         b"hello".to_vec(), // never consumed — the request is rejected before this read
@@ -1815,6 +1820,7 @@ impl crate::application::Application for EchoFraming {
 
 #[test]
 fn framing_request_head_larger_than_one_read_is_served() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
     // A 30 KB cookie, delivered in 4 KB reads: used to be cut off at the first read.
     let mut raw = b"GET /big HTTP/1.1\r\nHost: x\r\nCookie: ".to_vec();
     raw.extend(std::iter::repeat(b'c').take(30_000));
@@ -1828,6 +1834,7 @@ fn framing_request_head_larger_than_one_read_is_served() {
 
 #[test]
 fn framing_request_head_over_the_limit_gets_431() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
     let mut raw = b"GET / HTTP/1.1\r\nCookie: ".to_vec();
     raw.extend(std::iter::repeat(b'c').take(crate::server::framing::MAX_HEAD_SIZE));
     let reads: Vec<Vec<u8>> = raw.chunks(16000).map(|c| c.to_vec()).collect();
@@ -1839,6 +1846,7 @@ fn framing_request_head_over_the_limit_gets_431() {
 
 #[test]
 fn framing_pipelined_requests_in_one_read_are_all_served() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
     let raw = b"POST /a HTTP/1.1\r\nContent-Length: 3\r\n\r\nabcGET /b HTTP/1.1\r\nConnection: close\r\n\r\n".to_vec();
     let mut stream = SequentialMockStream::new(vec![raw]);
     Server::process(&mut stream, make_connection(), EchoFraming).unwrap();
@@ -1849,6 +1857,7 @@ fn framing_pipelined_requests_in_one_read_are_all_served() {
 
 #[test]
 fn framing_chunked_request_body_is_decoded() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
     let raw = b"POST /c HTTP/1.1\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\nhello\r\n".to_vec();
     let rest = b"6\r\n world\r\n0\r\n\r\n".to_vec();
     let mut stream = SequentialMockStream::new(vec![raw, rest]);
@@ -1859,6 +1868,7 @@ fn framing_chunked_request_body_is_decoded() {
 
 #[test]
 fn framing_content_length_with_transfer_encoding_is_rejected() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
     let raw = b"POST / HTTP/1.1\r\nContent-Length: 3\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n".to_vec();
     let mut stream = SequentialMockStream::new(vec![raw]);
     assert!(Server::process(&mut stream, make_connection(), EchoFraming).is_err());
@@ -1867,6 +1877,7 @@ fn framing_content_length_with_transfer_encoding_is_rejected() {
 
 #[test]
 fn framing_body_cut_short_is_not_dispatched() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
     let raw = b"POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\nabc".to_vec();
     let mut stream = SequentialMockStream::new(vec![raw]);
     Server::process(&mut stream, make_connection(), EchoFraming).unwrap();
