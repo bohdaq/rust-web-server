@@ -152,9 +152,13 @@ host                  # port defaults to 80
 `https://` backends are reached over TLS (rustls), with the certificate
 verified against the WebPKI root store — the CA bundle browsers use. TLS
 connections are pooled like plain ones, so the handshake is paid once per
-connection, not per request. A backend with a self-signed or private-CA
-certificate can't be verified this way yet; terminate TLS in front of it or
-reach it over plain HTTP on a private network.
+connection, not per request. For a backend with a private-CA or
+self-signed certificate, trust that CA instead of the public roots:
+
+```rust
+let proxy = ReverseProxy::new(["https://billing.internal:8443"])
+    .tls_ca_file("/etc/rws/internal-ca.pem")?;   // PEM; replaces the WebPKI roots
+```
 :::
 
 ## Streaming responses

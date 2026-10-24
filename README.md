@@ -103,7 +103,7 @@ async fn main() {
 }
 ```
 
-Routing with path parameters, typed extractors, one `Middleware` trait for everything (auth, rate limiting, caching, tracing, the reverse proxy itself), WebSocket, SSE, an MCP server, an async ORM, background jobs, object storage, a mailer, and OAuth/OIDC/SAML login. See [DEVELOPER.md](DEVELOPER.md) for 87 runnable use cases.
+Routing with path parameters, typed extractors, one `Middleware` trait for everything (auth, rate limiting, caching, tracing, the reverse proxy itself), WebSocket, SSE, an MCP server, an async ORM, background jobs, object storage, a mailer, and OAuth/OIDC/SAML login. See [DEVELOPER.md](DEVELOPER.md) for 88 runnable use cases.
 
 ## Why rws
 
@@ -219,7 +219,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 <summary><strong>Proxy & gateway</strong></summary>
 
 - Config-driven proxy — `rws.config.toml` with `[[route]]` / `[[upstream]]`; per-route middleware including bearer/JWT/Basic auth (`auth` feature for JWT/Basic — no Rust code needed)
-- Reverse proxy middleware — `ReverseProxy`; round-robin; `502` when all backends fail; built-in `ConnPool` reuses keep-alive connections, plain and TLS (`https://` backends pay one handshake per connection, not per request); SSE, chunked AI streams, and large downloads are streamed without buffering via `Response::stream_pipe`
+- Reverse proxy middleware — `ReverseProxy`; round-robin; `502` when all backends fail; built-in `ConnPool` reuses keep-alive connections, plain and TLS (`https://` backends pay one handshake per connection, not per request); private-CA backends via `tls_ca_file`; SSE, chunked AI streams, and large downloads are streamed without buffering via `Response::stream_pipe`
 - HTTP/2 reverse proxy — `H2ReverseProxy` (`h2://`, `h2s://`, `https://`); `GrpcProxy` wraps it for `Content-Type: application/grpc*` (`grpc://`, `grpcs://`); TLS upstreams via rustls + ALPN `h2`; async-native sync/async bridge works under any tokio runtime flavor, not just `multi_thread`
 - L4 TCP proxy — `TcpProxy` bidirectional relay, any TCP protocol (databases, legacy HTTP)
 - UDP proxy — `UdpProxy` datagram proxy; DNS / syslog style
@@ -395,7 +395,7 @@ Binary is at `target/release/rws`. MSRV is 1.88.
 ## Further reading
 
 - [CONFIGURE](CONFIGURE.md) — all configuration options (env vars, config file, CLI flags)
-- [DEVELOPER](DEVELOPER.md) — building blocks reference and 87 use-case examples
+- [DEVELOPER](DEVELOPER.md) — building blocks reference and 88 use-case examples
 - [FAQ](FAQ.md) — common problems and solutions
 - [spec/PROXY_SERVER_CONFIG.md](spec/PROXY_SERVER_CONFIG.md) — annotated proxy config reference
 - [spec/AI_ADOPTION.md](spec/AI_ADOPTION.md) — AI adoption strategy

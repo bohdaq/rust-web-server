@@ -25,6 +25,7 @@ pub(crate) fn start_health_checker(
     live: Arc<RwLock<Vec<String>>>,
     config: HealthCheckConfig,
     stop: Arc<AtomicBool>,
+    trust: Option<Arc<crate::proxy::UpstreamTls>>,
 ) {
     std::thread::Builder::new()
         .name(format!("health-{}", upstream_name))
@@ -44,7 +45,7 @@ pub(crate) fn start_health_checker(
                 }
 
                 for (i, backend) in backends.iter().enumerate() {
-                    let ok = check_backend(backend, &config.path, timeout);
+                    let ok = check_backend(backend, &config.path, timeout, trust.as_deref());
                     if ok {
                         successes[i] += 1;
                         failures[i] = 0;
@@ -87,7 +88,7 @@ pub(crate) fn start_health_checker(
 
 /// Send a minimal HTTP(S)/1.1 GET request to `backend` at `path` with the
 /// given `timeout`. Returns `true` on a 2xx response.
-fn check_backend(backend: &str, path: &str, timeout: Duration) -> bool {
+fn check_backend(backend: &str, path: &str, timeout: Duration, trust: Option<&crate::proxy::UpstreamTls>) -> bool {
     let (host, port, tls) = match parse_backend_url(backend) {
         Some(t) => t,
         None => return false,
@@ -112,7 +113,7 @@ fn check_backend(backend: &str, path: &str, timeout: Duration) -> bool {
     );
 
     if tls {
-        check_via_tls(stream, &host, req.as_bytes())
+        check_via_tls(stream, &host, req.as_bytes(), trust)
     } else {
         let mut stream = stream;
         if stream.write_all(req.as_bytes()).is_err() {
@@ -127,17 +128,14 @@ fn check_backend(backend: &str, path: &str, timeout: Duration) -> bool {
 }
 
 #[cfg(any(feature = "http-client", feature = "http2"))]
-fn check_via_tls(stream: TcpStream, host: &str, req: &[u8]) -> bool {
+fn check_via_tls(stream: TcpStream, host: &str, req: &[u8], trust: Option<&crate::proxy::UpstreamTls>) -> bool {
     use rustls::pki_types::ServerName;
-    use std::sync::Arc;
 
-    let root_store =
-        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    let config = Arc::new(
-        crate::tls_client_builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth(),
-    );
+    // The upstream's tls_ca_file roots, else the shared WebPKI config.
+    let config = match trust {
+        Some(t) => t.client_config(),
+        None => crate::proxy::tls_client_config(),
+    };
     let server_name = match ServerName::try_from(host.to_string()) {
         Ok(n) => n,
         Err(_) => return false,
@@ -159,7 +157,7 @@ fn check_via_tls(stream: TcpStream, host: &str, req: &[u8]) -> bool {
 
 // When rustls is not compiled in, silently skip TLS health checks.
 #[cfg(not(any(feature = "http-client", feature = "http2")))]
-fn check_via_tls(_stream: TcpStream, _host: &str, _req: &[u8]) -> bool {
+fn check_via_tls(_stream: TcpStream, _host: &str, _req: &[u8], _trust: Option<&crate::proxy::UpstreamTls>) -> bool {
     false
 }
 

@@ -893,7 +893,15 @@ fn forward_pooled_does_not_replay_a_post_on_a_stale_connection() {
 /// config trusting the certificate, connections accepted).
 #[cfg(feature = "http2")]
 fn tls_backend(response: &'static [u8], responses_per_conn: usize) -> (u16, Arc<rustls::ClientConfig>, Arc<AtomicU32>) {
+    let (port, config, accepted, _) = tls_backend_with_pem(response, responses_per_conn);
+    (port, config, accepted)
+}
+
+/// [`tls_backend`] that also returns the backend certificate as PEM.
+#[cfg(feature = "http2")]
+fn tls_backend_with_pem(response: &'static [u8], responses_per_conn: usize) -> (u16, Arc<rustls::ClientConfig>, Arc<AtomicU32>, String) {
     let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+    let cert_pem = certified.cert.pem();
     let cert_der = rustls::pki_types::CertificateDer::from(certified.cert.der().to_vec());
     let key_der = rustls::pki_types::PrivateKeyDer::try_from(certified.signing_key.serialize_der()).unwrap();
     let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
@@ -942,7 +950,7 @@ fn tls_backend(response: &'static [u8], responses_per_conn: usize) -> (u16, Arc<
             });
         }
     });
-    (port, client_config, accepted)
+    (port, client_config, accepted, cert_pem)
 }
 
 #[cfg(feature = "http2")]
@@ -1027,4 +1035,34 @@ fn head_response_with_content_length_is_not_waited_on() {
     let again = crate::proxy::forward_pooled(&pool, &head, "10.0.0.1", "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2)).unwrap();
     assert_eq!(200, again.status_code);
     assert_eq!(1, accepted.load(AtOrd::Relaxed));
+}
+
+
+// ── tls_ca_file: trusting a private CA ────────────────────────────────────────
+
+#[cfg(feature = "http2")]
+#[test]
+fn reverse_proxy_trusts_a_private_ca_from_tls_ca_file() {
+    let (port, _, _, pem) = tls_backend_with_pem(KEEPALIVE_RESPONSE.as_bytes(), 100);
+    let ca = crate::test_env::TempPath::new("rp_private_ca.pem");
+    std::fs::write(ca.as_str(), pem).unwrap();
+
+    // Self-signed: not trusted by the WebPKI roots.
+    let public = ReverseProxy::new([format!("https://localhost:{port}")]);
+    let refused = public.handle(&get("/"), &conn(), &App::new());
+    assert!(refused.map_or(true, |r| r.status_code == 502));
+
+    let private = ReverseProxy::new([format!("https://localhost:{port}")]).tls_ca_file(ca.as_str()).unwrap();
+    let response = private.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(200, response.status_code);
+}
+
+#[cfg(feature = "http2")]
+#[test]
+fn tls_ca_file_errors_are_reported() {
+    assert!(crate::proxy::UpstreamTls::from_ca_file("/nonexistent/ca.pem").is_err());
+    let empty = crate::test_env::TempPath::new("rp_empty_ca.pem");
+    std::fs::write(empty.as_str(), "not a certificate").unwrap();
+    let err = crate::proxy::UpstreamTls::from_ca_file(empty.as_str()).err().unwrap();
+    assert!(err.contains("no certificates"), "{err}");
 }

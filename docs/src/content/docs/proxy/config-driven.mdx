@@ -66,6 +66,23 @@ path          = "/healthz"
 interval_secs = 10
 ```
 
+For internal services behind a private CA or a self-signed certificate, name
+the CA to trust with `tls_ca_file`. It **replaces** the public roots for that
+upstream — requests and health checks alike — so only certificates issued by
+that CA are accepted:
+
+```toml
+[[upstream]]
+name        = "billing"
+backends    = ["https://billing.internal:8443"]
+tls_ca_file = "/etc/rws/internal-ca.pem"
+```
+
+A CA file that can't be read fails closed: the upstream answers `502` and the
+error is logged, rather than falling back to the public roots. `rws --check`
+reports it. A reload re-reads the file, so a rotated CA takes effect on
+`SIGHUP`.
+
 :::note[Feature requirement]
 HTTPS upstreams require the `http-client` or `http2` feature — both are included in the default (`http3`) build and the `http2`-only build. The `http1`-only build (`--no-default-features --features http1`) returns `502` for HTTPS backends and logs an error.
 :::

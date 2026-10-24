@@ -2083,3 +2083,75 @@ fn an_undeclared_https_upstream_is_reached_over_tls() {
     let _ = app.execute(&make_request("GET", "/"), &make_conn("127.0.0.1"));
     assert_eq!(0x16, rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap());
 }
+
+
+#[cfg(feature = "http2")]
+#[test]
+fn upstream_tls_ca_file_trusts_a_private_ca_and_fails_closed_when_unloadable() {
+    // A self-signed HTTPS backend on localhost.
+    let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+    let ca = crate::test_env::TempPath::new("pc_private_ca.pem");
+    std::fs::write(ca.as_str(), certified.cert.pem()).unwrap();
+    let key = rustls::pki_types::PrivateKeyDer::try_from(certified.signing_key.serialize_der()).unwrap();
+    let server_config = std::sync::Arc::new(
+        rustls::ServerConfig::builder_with_provider(std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
+            .with_safe_default_protocol_versions().unwrap()
+            .with_no_client_auth()
+            .with_single_cert(vec![rustls::pki_types::CertificateDer::from(certified.cert.der().to_vec())], key)
+            .unwrap(),
+    );
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let server_config = std::sync::Arc::clone(&server_config);
+            std::thread::spawn(move || {
+                use std::io::{Read, Write};
+                let mut tls = rustls::StreamOwned::new(rustls::ServerConnection::new(server_config).unwrap(), stream);
+                let mut buf = [0u8; 4096];
+                let mut head = Vec::new();
+                while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match tls.read(&mut buf) {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => head.extend_from_slice(&buf[..n]),
+                    }
+                }
+                let _ = tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nprivate");
+                let _ = tls.flush();
+            });
+        }
+    });
+
+    let config_for = |ca_file: &str| ProxyConfig::from_str(&format!(r#"
+[[upstream]]
+name        = "internal"
+backends    = ["https://localhost:{port}"]
+tls_ca_file = "{ca_file}"
+
+[[route]]
+  [route.action]
+  type     = "proxy"
+  upstream = "internal"
+  read_timeout_ms = 2000
+"#));
+
+    let (app, _) = crate::proxy_config::builder::build(config_for(ca.as_str()));
+    let response = app.execute(&make_request("GET", "/"), &make_conn("127.0.0.1")).unwrap();
+    assert_eq!(response.status_code, 200);
+
+    // An unloadable CA file fails closed: 502, never the public roots.
+    let (app, _) = crate::proxy_config::builder::build(config_for("/nonexistent/ca.pem"));
+    let response = app.execute(&make_request("GET", "/"), &make_conn("127.0.0.1")).unwrap();
+    assert_eq!(response.status_code, 502);
+
+    let mut report = crate::config_check::ConfigReport::default();
+    config_for("/nonexistent/ca.pem").validate(&mut report);
+    assert!(report.errors.iter().any(|e| e.contains("cannot read CA file")), "{:?}", report.errors);
+}
+
+#[test]
+fn tls_ca_file_on_a_plain_upstream_is_a_warning() {
+    let mut report = crate::config_check::ConfigReport::default();
+    ProxyConfig::from_str("[[upstream]]\nname = \"app\"\nbackends = [\"127.0.0.1:3000\"]\ntls_ca_file = \"/x.pem\"\n").validate(&mut report);
+    assert!(report.warnings.iter().any(|w| w.contains("isn't used")), "{:?}", report.warnings);
+}

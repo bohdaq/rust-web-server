@@ -139,6 +139,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `#[derive(Validate)]` | `macros` (proc-macro) | Derive `Validate` from `#[validate(...)]` field annotations. Validators: `length(min,max)`, `range(min,max)`, `email`, `required`, `url`. Requires `features = ["macros"]`. |
 | `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. Reuses idle TCP connections via the built-in `ConnPool`. SSE (`text/event-stream`), chunked AI token streams, and large downloads (`Content-Length > 1 MB`) are forwarded without buffering via `Response::stream_pipe`. `.with_circuit_breaker(Arc<dyn circuit_breaker::Breaker>)` auto-wires a circuit breaker: an `Open` backend is skipped with no dial attempt, and every outcome is recorded automatically — no manual `is_available`/`record_success`/`record_failure` calls needed. |
 | `RateLimiter::retry_after` / `RateLimiter::limits` | `rate_limit` | Seconds a rejected client should wait (the window length; sent as `Retry-After` on every `429` from `RateLimitLayer` and per-route limits), and the current `(max_requests, window_secs)`. |
+| `UpstreamTls` / `ReverseProxy::tls_ca_file` | `proxy` | Trust the CA certificates in a PEM file for `https://` backends **instead of** the WebPKI roots (private CA / self-signed). Config: `[[upstream]] tls_ca_file`; health checks use the same roots; an unloadable file fails closed (502). |
 | `ConnPool` / `Pool<S>` | `proxy` | Per-backend HTTP/1.1 connection pool (`ConnPool = Pool<TcpStream>`; `https://` backends use an internal `Pool` of TLS streams, so TLS connections are reused too). `ConnPool::new(max_idle, idle_timeout)` or `ConnPool::new_default()`. Share across proxy instances with `Arc<ConnPool>` via `ReverseProxy::with_pool()`. Config-driven proxy routes, `CanaryLayer` and the ingress proxy share a process-wide pool (64 idle connections per backend). A pooled connection the backend has already closed is retried once on a fresh connection for idempotent methods (GET, HEAD, OPTIONS, PUT, DELETE) — never for POST/PATCH, which may already have been processed. |
 | `RewriteLayer` | `rewrite` | Composable request/response rewriting middleware: request header add/replace/remove, URI set/strip-prefix/add-prefix, response header add/replace/remove, status override, body byte find-and-replace. `.request_uri_regex_rewrite(pattern, replacement)` (requires `features = ["rewrite-regex"]`) rewrites the URI by regex, nginx `rewrite`-directive style, with `$1`/`${name}` capture expansion; returns `Result<Self, regex::Error>`. |
 | `LoadBalancing` | `proxy` | Enum selecting the balancing strategy (`RoundRobin`). Passed to `ReverseProxy::strategy()`. |
@@ -5061,4 +5062,25 @@ Wrapped in middleware, the async path is offered only if every layer passes
 the request through unchanged (`Middleware::is_passthrough`); otherwise
 `execute` runs as before. The config-driven proxy uses this for plain-HTTP
 routes without middleware.
+
+### 88. Proxying to a backend with a private CA
+
+Internal services often present certificates from a company CA or a
+self-signed one, which the public root store rejects. Name the CA to trust;
+it replaces the public roots for that proxy:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::core::New;
+use rust_web_server::proxy::ReverseProxy;
+
+let proxy = ReverseProxy::new(["https://billing.internal:8443"])
+    .tls_ca_file("/etc/rws/internal-ca.pem")
+    .expect("CA file loads");
+let app = App::new().wrap(proxy.path_prefix("/billing"));
+```
+
+In `rws.config.toml` the same setting is `tls_ca_file` on an `[[upstream]]`;
+health checks use it too, and a CA file that can't be loaded makes the
+upstream answer `502` instead of trusting public CAs.
 

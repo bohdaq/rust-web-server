@@ -87,6 +87,7 @@ pub struct ReverseProxy {
     counter: AtomicUsize,
     pool: Arc<ConnPool>,
     breaker: Option<Arc<dyn crate::circuit_breaker::Breaker>>,
+    trust: Option<Arc<UpstreamTls>>,
 }
 
 impl ReverseProxy {
@@ -109,6 +110,7 @@ impl ReverseProxy {
             counter: AtomicUsize::new(0),
             pool: Arc::new(ConnPool::new(POOL_MAX_IDLE, Duration::from_secs(60))),
             breaker: None,
+            trust: None,
         }
     }
 
@@ -169,6 +171,14 @@ impl ReverseProxy {
         self
     }
 
+    /// Trust the CA certificates in the PEM file `path` for `https://`
+    /// backends, **instead of** the public WebPKI roots — for internal
+    /// services behind a private CA or a self-signed certificate.
+    pub fn tls_ca_file(mut self, path: &str) -> Result<Self, String> {
+        self.trust = Some(Arc::new(UpstreamTls::from_ca_file(path)?));
+        Ok(self)
+    }
+
     /// Set the maximum number of idle connections per backend (default: 8).
     pub fn max_idle_conns(mut self, n: usize) -> Self {
         self.pool = Arc::new(ConnPool::new(n, Duration::from_secs(60)));
@@ -218,13 +228,14 @@ impl ReverseProxy {
         connection: &ConnectionInfo,
         backend: &Backend,
     ) -> Result<Response, String> {
-        forward_upstream(
+        forward_upstream_trusting(
             &self.pool,
             request,
             &connection.client.ip,
             &backend.host,
             backend.port,
             backend.tls,
+            self.trust.as_deref(),
             self.connect_timeout,
             self.read_timeout,
         )
@@ -511,15 +522,113 @@ pub(crate) fn forward_upstream(
     connect_timeout: Duration,
     read_timeout: Duration,
 ) -> Result<Response, String> {
+    forward_upstream_trusting(plain_pool, request, client_ip, host, port, tls, None, connect_timeout, read_timeout)
+}
+
+/// [`forward_upstream`] with the trust settings of one upstream: `trust`
+/// replaces the WebPKI roots for TLS backends (a private CA).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn forward_upstream_trusting(
+    plain_pool: &ConnPool,
+    request: &Request,
+    client_ip: &str,
+    host: &str,
+    port: u16,
+    tls: bool,
+    trust: Option<&UpstreamTls>,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
     if tls {
         #[cfg(any(feature = "http-client", feature = "http2"))]
-        return forward_via(shared_tls_pool(), request, client_ip, host, port, read_timeout, || {
-            connect_tls(host, port, connect_timeout)
-        });
+        {
+            let (pool, config) = match trust {
+                Some(t) => (t.pool, Arc::clone(&t.config)),
+                None => (shared_tls_pool(), tls_client_config()),
+            };
+            return forward_via(pool, request, client_ip, host, port, read_timeout, || {
+                connect_tls_with(Arc::clone(&config), host, port, connect_timeout)
+            });
+        }
         #[cfg(not(any(feature = "http-client", feature = "http2")))]
-        return Err("HTTPS backends need the http2 or http-client feature, which this build doesn't include".to_string());
+        {
+            let _ = trust;
+            return Err("HTTPS backends need the http2 or http-client feature, which this build doesn't include".to_string());
+        }
     }
     forward_pooled(plain_pool, request, client_ip, host, port, connect_timeout, read_timeout)
+}
+
+/// Trust settings for one upstream's TLS backends: the certificates in a CA
+/// file **instead of** the WebPKI roots — for internal services behind a
+/// private CA or a self-signed certificate (nginx's
+/// `proxy_ssl_trusted_certificate`). Connections are pooled per CA file, so
+/// two upstreams at the same address with different CAs never share one.
+pub struct UpstreamTls {
+    #[cfg(any(feature = "http-client", feature = "http2"))]
+    config: Arc<rustls::ClientConfig>,
+    #[cfg(any(feature = "http-client", feature = "http2"))]
+    pool: &'static Pool<TlsStream>,
+}
+
+impl UpstreamTls {
+    /// Load the PEM certificates in `path` as the only trusted roots.
+    pub fn from_ca_file(path: &str) -> Result<UpstreamTls, String> {
+        #[cfg(any(feature = "http-client", feature = "http2"))]
+        {
+            use rustls::pki_types::{pem::PemObject, CertificateDer};
+            let bytes = std::fs::read(path).map_err(|e| format!("cannot read CA file '{path}': {e}"))?;
+            let certs = CertificateDer::pem_slice_iter(&bytes)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("cannot parse CA file '{path}': {e}"))?;
+            if certs.is_empty() {
+                return Err(format!("no certificates in CA file '{path}'"));
+            }
+            let mut roots = rustls::RootCertStore::empty();
+            for cert in certs {
+                roots.add(cert).map_err(|e| format!("invalid CA certificate in '{path}': {e}"))?;
+            }
+            let config = Arc::new(crate::tls_client_builder().with_root_certificates(roots).with_no_client_auth());
+            Ok(UpstreamTls { config, pool: tls_pool_for_ca(path) })
+        }
+        #[cfg(not(any(feature = "http-client", feature = "http2")))]
+        Err(format!("tls_ca_file '{path}': HTTPS backends need the http2 or http-client feature"))
+    }
+
+    /// Trust nothing: every TLS handshake fails, so the upstream answers 502.
+    /// Used when a configured CA file can't be loaded — failing closed rather
+    /// than falling back to the public roots.
+    pub(crate) fn reject_all(label: &str) -> UpstreamTls {
+        #[cfg(any(feature = "http-client", feature = "http2"))]
+        {
+            let config = Arc::new(
+                crate::tls_client_builder().with_root_certificates(rustls::RootCertStore::empty()).with_no_client_auth(),
+            );
+            UpstreamTls { config, pool: tls_pool_for_ca(&format!("reject-all:{label}")) }
+        }
+        #[cfg(not(any(feature = "http-client", feature = "http2")))]
+        {
+            let _ = label;
+            UpstreamTls {}
+        }
+    }
+
+    /// The client configuration (for health checks).
+    #[cfg(any(feature = "http-client", feature = "http2"))]
+    pub(crate) fn client_config(&self) -> Arc<rustls::ClientConfig> {
+        Arc::clone(&self.config)
+    }
+}
+
+/// One pool per CA file, for the life of the process.
+#[cfg(any(feature = "http-client", feature = "http2"))]
+fn tls_pool_for_ca(path: &str) -> &'static Pool<TlsStream> {
+    static POOLS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, &'static Pool<TlsStream>>>> =
+        std::sync::OnceLock::new();
+    let mut pools = POOLS.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    pools
+        .entry(path.to_string())
+        .or_insert_with(|| Box::leak(Box::new(Pool::new(POOL_MAX_IDLE, Duration::from_secs(60)))))
 }
 
 /// Forward `request` to `host:port` over plain HTTP/1.1, reusing an idle
@@ -600,7 +709,7 @@ fn shared_tls_pool() -> &'static Pool<TlsStream> {
 /// certificate. Built once — parsing the root store per request was a large
 /// part of the per-request cost of HTTPS upstreams.
 #[cfg(any(feature = "http-client", feature = "http2"))]
-fn tls_client_config() -> Arc<rustls::ClientConfig> {
+pub(crate) fn tls_client_config() -> Arc<rustls::ClientConfig> {
     static CONFIG: std::sync::OnceLock<Arc<rustls::ClientConfig>> = std::sync::OnceLock::new();
     Arc::clone(CONFIG.get_or_init(|| {
         let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());

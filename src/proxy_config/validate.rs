@@ -32,7 +32,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         section
     };
     let keys: Vec<&'static str> = match section {
-        "upstream" => vec!["name", "backends", "strategy"],
+        "upstream" => vec!["name", "backends", "strategy", "tls_ca_file"],
         "upstream.health_check" | "ws_proxy.health_check" => HEALTH_CHECK_KEYS.to_vec(),
         "route" => vec!["name"],
         "route.match" => vec!["host", "path", "method", "content_type"],
@@ -145,6 +145,14 @@ impl ProxyConfig {
             for backend in &upstream.backends {
                 if !is_host_port(backend) {
                     report.error(format!("{label}: backend '{backend}' is not host:port"));
+                }
+            }
+            if let Some(ca) = &upstream.tls_ca_file {
+                if let Err(e) = crate::proxy::UpstreamTls::from_ca_file(ca) {
+                    report.error(format!("{label}: {e}; its https:// backends would answer 502"));
+                }
+                if !upstream.tls {
+                    report.warn(format!("{label}: tls_ca_file is set but no backend is https://, so it isn't used"));
                 }
             }
             if !STRATEGIES.contains(&upstream.strategy.as_str()) {

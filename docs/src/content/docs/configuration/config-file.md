@@ -223,6 +223,7 @@ Defines a named backend pool. Upstreams are referenced by name from routes.
 name      = "api"
 backends  = ["localhost:3000", "localhost:3001"]
 strategy  = "round_robin"   # "round_robin" | "random" | "ip_hash" | "least_connections" (default: round_robin)
+# tls_ca_file = "/etc/rws/internal-ca.pem"  # https:// backends: trust this CA instead of the public roots
 
 [upstream.health_check]
 path                = "/health"  # HTTP path polled on each backend (default: /health)

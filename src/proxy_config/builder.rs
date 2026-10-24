@@ -53,10 +53,24 @@ fn build_with_source(config: ProxyConfig, source: Option<String>) -> (ConfigDriv
 pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>) -> Vec<CompiledRoute> {
     // ── 1. Build upstream name → live backends map ─────────────────────────
     let mut upstream_lives: HashMap<String, Arc<RwLock<Vec<String>>>> = HashMap::new();
+    // tls_ca_file trust settings per upstream, loaded once per compile (so a
+    // reload picks up a rotated CA). A CA file that can't be loaded fails
+    // closed: every handshake fails (502) instead of trusting public CAs.
+    let mut upstream_trust: HashMap<String, Arc<crate::proxy::UpstreamTls>> = HashMap::new();
 
     for upstream in &config.upstreams {
         let live = Arc::new(RwLock::new(upstream.backends.clone()));
         upstream_lives.insert(upstream.name.clone(), Arc::clone(&live));
+
+        let trust = upstream.tls_ca_file.as_ref().map(|path| {
+            Arc::new(crate::proxy::UpstreamTls::from_ca_file(path).unwrap_or_else(|e| {
+                eprintln!("[proxy_config] ERROR: upstream '{}': {e} — its TLS backends answer 502 until this is fixed", upstream.name);
+                crate::proxy::UpstreamTls::reject_all(&upstream.name)
+            }))
+        });
+        if let Some(trust) = &trust {
+            upstream_trust.insert(upstream.name.clone(), Arc::clone(trust));
+        }
 
         if let Some(ref hc) = upstream.health_check {
             crate::proxy_config::health::start_health_checker(
@@ -65,6 +79,7 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                 Arc::clone(&live),
                 hc.clone(),
                 Arc::clone(health_stop),
+                trust,
             );
         }
     }
@@ -107,7 +122,7 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                         add_path_prefix.clone(),
                         upstream_tls,
                         upstream_strategy,
-                    ));
+                    ).with_trust(upstream_trust.get(upstream.as_str()).cloned()));
                     if proxy.supports_async() && route.middleware.is_empty() {
                         async_proxy = Some(Arc::clone(&proxy));
                     }
@@ -138,7 +153,10 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                     let upstream_strategy = upstream_cfg
                         .map(|u| u.strategy.clone())
                         .unwrap_or_else(|| "round_robin".to_string());
-                    arc_app(DynamicProxy::new(live, *connect_timeout_ms, *read_timeout_ms, None, None, upstream_tls, upstream_strategy))
+                    arc_app(
+                        DynamicProxy::new(live, *connect_timeout_ms, *read_timeout_ms, None, None, upstream_tls, upstream_strategy)
+                            .with_trust(upstream_trust.get(upstream.as_str()).cloned()),
+                    )
                 }
 
                 ActionConfig::Mcp | ActionConfig::Unknown(_) => {
@@ -217,6 +235,7 @@ fn spawn_listeners(config: &ProxyConfig) -> Vec<std::thread::JoinHandle<()>> {
                 Arc::clone(&live),
                 hc.clone(),
                 Arc::new(AtomicBool::new(false)),
+                None,
             );
         }
 

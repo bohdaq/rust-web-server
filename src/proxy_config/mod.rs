@@ -67,6 +67,10 @@ pub struct UpstreamConfig {
     /// upstream are made over TLS. Requires the `http-client` or `http2`
     /// feature (which bring in `rustls` + `webpki-roots`).
     pub tls: bool,
+    /// `tls_ca_file` — PEM file of CA certificates to trust for this
+    /// upstream's `https://` backends **instead of** the public WebPKI roots
+    /// (a private CA or a self-signed certificate). `None` = WebPKI.
+    pub tls_ca_file: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -308,7 +312,8 @@ impl ProxyConfig {
                 None
             };
             let tls = backends.iter().any(|b| b.starts_with("https://"));
-            upstreams.push(UpstreamConfig { name, backends, strategy, health_check, tls });
+            let tls_ca_file = Some(get_str(&map, &sec, "tls_ca_file")).filter(|v| !v.is_empty());
+            upstreams.push(UpstreamConfig { name, backends, strategy, health_check, tls, tls_ca_file });
             i += 1;
         }
 
@@ -1042,9 +1047,17 @@ pub(crate) struct DynamicProxy {
     tls: bool,
     strategy: LoadBalanceStrategy,
     connections: Arc<RwLock<HashMap<String, Arc<AtomicUsize>>>>,
+    /// The upstream's `tls_ca_file` trust settings; `None` = WebPKI roots.
+    trust: Option<Arc<crate::proxy::UpstreamTls>>,
 }
 
 impl DynamicProxy {
+    /// Trust the given CA for TLS backends instead of the WebPKI roots.
+    pub(crate) fn with_trust(mut self, trust: Option<Arc<crate::proxy::UpstreamTls>>) -> Self {
+        self.trust = trust;
+        self
+    }
+
     pub(crate) fn new(
         live: Arc<RwLock<Vec<String>>>,
         connect_timeout_ms: u64,
@@ -1064,6 +1077,7 @@ impl DynamicProxy {
             tls,
             strategy: LoadBalanceStrategy::parse(&strategy),
             connections: Arc::new(RwLock::new(HashMap::new())),
+            trust: None,
         }
     }
 
@@ -1218,13 +1232,14 @@ impl Application for DynamicProxy {
 
         // Pooled keep-alive connections to the backend, TLS or not (a fresh
         // connection per request halved throughput vs. Caddy/nginx).
-        let result = crate::proxy::forward_upstream(
+        let result = crate::proxy::forward_upstream_trusting(
             crate::proxy::shared_pool(),
             &prepared.request,
             &conn.client.ip,
             &prepared.host,
             prepared.port,
             self.tls,
+            self.trust.as_deref(),
             self.connect_timeout,
             self.read_timeout,
         );
