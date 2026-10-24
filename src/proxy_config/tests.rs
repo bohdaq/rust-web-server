@@ -902,9 +902,16 @@ window_secs = 60
     let r1 = app.execute(&req, &conn).unwrap();
     assert_eq!(r1.status_code, 200, "first request should pass");
 
-    // Second request: over limit → 429
+    // Second request: over limit → 429, with Retry-After naming the window
     let r2 = app.execute(&req, &conn).unwrap();
     assert_eq!(r2.status_code, 429, "second request should be rate-limited");
+    let retry = r2
+        .headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case("Retry-After"))
+        .unwrap_or_else(|| panic!("no Retry-After on the 429: {:?}", r2.headers));
+    let seconds: u64 = retry.value.parse().expect("Retry-After must be an integer");
+    assert!(seconds > 0 && seconds <= 60, "Retry-After out of range: {seconds}");
 }
 
 #[test]
