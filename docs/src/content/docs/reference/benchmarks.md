@@ -10,37 +10,39 @@ on a 4-CPU GitHub Actions runner (Linux x86_64), with the load generator on the
 same machine.
 
 **Load:** [`oha`](https://github.com/hatoo/oha), 64 keep-alive connections,
-20 seconds per scenario after a 2-second warm-up, HTTP/1.1, access logs off
-everywhere. `rws` is the release build (`--features "acme auth"`), Caddy 2.11.7,
-nginx from Ubuntu with `sendfile` and upstream keep-alive enabled.
+20 seconds per scenario after a 2-second warm-up, HTTP/1.1, no compression
+(`--disable-compression`: the Caddy and nginx configs don't compress, and
+`rws` compresses text by default), access logs off everywhere. `rws` is the
+release build (`--features "acme auth"`), Caddy 2.11.7, nginx from Ubuntu with
+`sendfile` and upstream keep-alive enabled.
 
 | Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | Peak memory (MiB) |
 |---|---|---:|---:|---:|---:|
-| Static file, 1 KiB | rws | 45,137 | 1.35 | 3.11 | 24.9 |
-| | Caddy | 39,319 | 1.14 | 7.10 | 66.7 |
-| | nginx | 140,750 | 0.39 | 2.41 | 23.6 |
-| Static file, 1 MiB | rws | 4,901 | 12.87 | 25.22 | 54.8 |
-| | Caddy | 3,951 | 11.65 | 76.57 | 70.7 |
-| | nginx | 15,990 | 3.72 | 9.76 | 23.6 |
-| Reverse proxy, 1 KiB | rws | 25,412 | 2.41 | 5.20 | 42.1 |
-| | Caddy | 27,819 | 1.85 | 8.24 | 68.3 |
-| | nginx | 65,618 | 0.87 | 2.75 | 24.5 |
+| Static file, 1 KiB | rws | 23,418 | 2.62 | 5.81 | 20.2 |
+| | Caddy | 18,755 | 2.71 | 13.38 | 67.1 |
+| | nginx | 70,904 | 0.64 | 2.93 | 23.2 |
+| Static file, 1 MiB | rws | 2,882 | 21.86 | 41.16 | 47.4 |
+| | Caddy | 2,382 | 18.89 | 126.97 | 69.4 |
+| | nginx | 9,577 | 6.16 | 14.98 | 23.4 |
+| Reverse proxy, 1 KiB | rws | 19,315 | 3.20 | 6.45 | 33.0 |
+| | Caddy | 13,634 | 4.10 | 14.05 | 66.1 |
+| | nginx | 33,324 | 1.79 | 4.61 | 24.4 |
 
 Every request in every scenario returned `200 OK`.
 
 ## Reading the numbers
 
-- **Static files:** `rws` serves more requests per second than Caddy, with a
-  p99 two to three times lower and less memory.
-- **Reverse proxy:** `rws` reaches about 90% of Caddy's throughput with a lower
-  p99. Its upstream path is synchronous (each proxied request holds a
-  blocking-pool thread for the round trip); an async path is
-  [tracked here](https://github.com/bohdaq/rust-web-server/issues/30).
-- **nginx** is about three times faster than both. It's the reference point for
-  what the hardware can do, not the project's target: `rws` competes with
+- **Against Caddy:** `rws` serves about 20–25% more static-file requests and
+  40% more proxied requests per second, with a p99 two to three times lower
+  and a third of the memory.
+- **nginx** is two to three times faster than both. It's the reference point
+  for what the hardware can do, not the project's target: `rws` competes with
   Caddy on what you get from one binary and one config file.
-- Shared CI runners are noisy. Compare servers within one run, not numbers
-  across runs.
+- Shared CI runners are noisy: absolute numbers vary by a factor of two
+  between runs. Compare servers within one run, not numbers across runs.
+- Compression matters: with `Accept-Encoding: gzip` sent and only `rws`
+  compressing, the comparison measures `gzip`, not the servers. Compare like
+  for like.
 
 ## Reproduce
 

@@ -1139,7 +1139,7 @@ JSON by default in the `rws` binary (`RWS_CONFIG_LOG_FORMAT=json`); `combined` g
 
 ### Performance
 
-Benchmarked against Caddy 2.11 and nginx on one 4-CPU runner (`oha`, 64 keep-alive connections; `bench/run.sh`, `.github/workflows/bench.yml`): static 1 KiB — rws 45.1k req/s (p99 3.1 ms), Caddy 39.3k (7.1 ms), nginx 140.8k (2.4 ms); static 1 MiB — rws 4.9k, Caddy 4.0k, nginx 16.0k; reverse proxy 1 KiB — rws 25.4k (p99 5.2 ms), Caddy 27.8k (8.2 ms), nginx 65.6k. Docs: https://rws8.tech/reference/benchmarks/
+Benchmarked against Caddy 2.11 and nginx on one 4-CPU runner (`oha`, 64 keep-alive connections, no compression; `bench/run.sh`, `.github/workflows/bench.yml`): static 1 KiB — rws 23.4k req/s (p99 5.8 ms), Caddy 18.8k (13.4 ms), nginx 70.9k (2.9 ms); static 1 MiB — rws 2.9k, Caddy 2.4k, nginx 9.6k; reverse proxy 1 KiB — rws 19.3k (p99 6.5 ms), Caddy 13.6k (14.1 ms), nginx 33.3k. Peak memory rws 20–47 MiB, Caddy 66–69 MiB. Docs: https://rws8.tech/reference/benchmarks/
 
 ### Hot config reload
 
