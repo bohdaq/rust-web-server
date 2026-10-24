@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/bohdaq/rust-web-server/discussions
+    about: Ask how to do something, or float an idea before writing it up.
+  - name: Security vulnerability
+    url: https://github.com/bohdaq/rust-web-server/security/advisories/new
+    about: Report privately, please — not as a public issue.

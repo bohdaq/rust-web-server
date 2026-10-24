@@ -1,38 +1,31 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Something doesn't work as documented
 title: ''
-labels: ''
+labels: bug
 assignees: ''
 
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+**What happened**
+What you did and what went wrong. Include the error or log output.
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+**What you expected**
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+**How to reproduce**
+The smallest `rws.config.toml` and request (`curl …`) that shows the problem.
+Run `rws --check` on the config first — it catches most configuration mistakes.
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+```toml
+```
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+```bash
+curl -v …
+```
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+**Environment**
+- rws version (`rws --version`):
+- How you installed it (release binary / Homebrew / Docker / `cargo install`, with features):
+- OS:
 
-**Additional context**
-Add any other context about the problem here.
+Security issues: please report privately instead — see SECURITY.md.

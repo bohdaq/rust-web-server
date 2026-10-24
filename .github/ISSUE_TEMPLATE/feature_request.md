@@ -1,20 +1,17 @@
 ---
 name: Feature request
-about: Suggest an idea for this project
+about: Suggest something rws should do
 title: ''
-labels: ''
+labels: enhancement
 assignees: ''
 
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+**What you're trying to do**
+The problem or use case, not the solution yet.
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+**What you'd like rws to do**
+For example, the `rws.config.toml` you'd want to write, or the Rust API you'd want to call.
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
-
-**Additional context**
-Add any other context or screenshots about the feature request here.
+**How you do it today**
+A workaround, or how nginx / Caddy / Traefik handle it.

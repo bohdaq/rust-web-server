@@ -369,11 +369,15 @@ Binary is at `target/release/rws`. MSRV is 1.88.
 ## Further reading
 
 - [CONFIGURE](CONFIGURE.md) — all configuration options (env vars, config file, CLI flags)
-- [DEVELOPER](DEVELOPER.md) — building blocks reference and 78 use-case examples
+- [DEVELOPER](DEVELOPER.md) — building blocks reference and 85 use-case examples
 - [FAQ](FAQ.md) — common problems and solutions
 - [spec/PROXY_SERVER_CONFIG.md](spec/PROXY_SERVER_CONFIG.md) — annotated proxy config reference
 - [spec/AI_ADOPTION.md](spec/AI_ADOPTION.md) — AI adoption strategy
 - [docs.rs/rust-web-server](https://docs.rs/rust-web-server) — API reference
+
+## Contributing
+
+Issues labelled [good first issue](https://github.com/bohdaq/rust-web-server/labels/good%20first%20issue) are a good place to start; questions go to [Discussions](https://github.com/bohdaq/rust-web-server/discussions). See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build, test and send a change.
 
 ## License
 
