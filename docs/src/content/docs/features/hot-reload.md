@@ -1,6 +1,6 @@
 ---
 title: Hot Config Reload
-description: Update CORS rules, rate limits, log format, TLS certificates, and Tera templates without restarting the server.
+description: Update proxy routes, CORS rules, rate limits, log format, TLS certificates, and Tera templates without restarting the server.
 ---
 
 ## Triggering a reload
@@ -32,6 +32,30 @@ Both re-parse `rws.config.toml`, update process environment variables, apply the
 | Request allocation size | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
 | TLS certificates (http2+ builds) | `RWS_CONFIG_TLS_CERT_FILE`, `RWS_CONFIG_TLS_KEY_FILE` |
 | Tera templates (`tera` feature) | re-read from the directory passed to `template::init()` — see [Templates: hot reload](/building-apps/templates/#hot-reload) |
+| Proxy routes, upstreams, health checks, `[middleware]` | `[[route]]`, `[[upstream]]`, `[middleware]` in `rws.config.toml` — see below |
+
+## Reloading proxy routes
+
+In proxy mode (a config file with `[[route]]` or `[[upstream]]` sections), a
+reload also rebuilds the routes. Edit the file, check it, then signal:
+
+```bash
+rws --check && kill -HUP $(pgrep rws)
+```
+
+The new file is validated first — the same checks as
+[`rws --check`](/configuration/config-file/#check-the-file-before-you-deploy).
+If it has errors, they are logged and **the running routes keep serving**; a
+typo never takes the proxy down:
+
+```text
+[proxy_config] reload ERROR: route 'api': unknown action type 'proxxy' (expected proxy, grpc, static, redirect or respond)
+[proxy_config] rws.config.toml has errors — keeping the running routes
+```
+
+Otherwise the new routes take effect for the next request, requests already
+in progress finish on the old ones, health checkers for the old upstreams stop
+and new ones start. A reload of an unchanged file does nothing.
 
 ## What requires a restart
 
@@ -40,6 +64,7 @@ Both re-parse `rws.config.toml`, update process environment variables, apply the
 | IP address | Bound socket cannot be moved |
 | Port | Bound socket cannot be moved |
 | Thread count | Thread pool is fixed at startup |
+| `[[tcp_proxy]]`, `[[udp_proxy]]`, `[[ws_proxy]]` | Their listener sockets are bound at startup; a reload that changes them logs a warning |
 
 ## `ConfigSnapshot`
 

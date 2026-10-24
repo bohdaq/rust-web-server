@@ -6,6 +6,7 @@
 
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -13,7 +14,9 @@ use crate::proxy_config::HealthCheckConfig;
 
 /// Start a background health-checker thread.
 ///
-/// The thread runs until the process exits. It periodically checks every
+/// The thread runs until `stop` is set (checked once per interval — a hot
+/// reload sets it for the replaced configuration's checkers) or the process
+/// exits. It periodically checks every
 /// backend in `backends` by sending `GET {config.path} HTTP/1.1` and tracking
 /// consecutive successes/failures. The `live` list is updated accordingly.
 pub(crate) fn start_health_checker(
@@ -21,6 +24,7 @@ pub(crate) fn start_health_checker(
     backends: Vec<String>,
     live: Arc<RwLock<Vec<String>>>,
     config: HealthCheckConfig,
+    stop: Arc<AtomicBool>,
 ) {
     std::thread::Builder::new()
         .name(format!("health-{}", upstream_name))
@@ -35,6 +39,9 @@ pub(crate) fn start_health_checker(
 
             loop {
                 std::thread::sleep(interval);
+                if stop.load(Ordering::Relaxed) {
+                    return;
+                }
 
                 for (i, backend) in backends.iter().enumerate() {
                     let ok = check_backend(backend, &config.path, timeout);

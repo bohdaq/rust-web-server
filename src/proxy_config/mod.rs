@@ -33,7 +33,8 @@ pub mod validate;
 #[cfg(test)]
 mod tests;
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 
 use crate::app::App;
 use crate::application::Application;
@@ -631,7 +632,7 @@ fn collect_rewrite_rules(
     rules
 }
 
-fn config_file_path() -> String {
+pub(crate) fn config_file_path() -> String {
     std::env::var("RWS_CONFIG_FILE").unwrap_or_else(|_| "rws.config.toml".to_string())
 }
 
@@ -744,16 +745,40 @@ impl RouteMatcher {
 
 /// An `Application` that routes requests based on a parsed `ProxyConfig`.
 ///
-/// `Clone` is cheap: every field is an `Arc` or `App` (itself an
-/// `Option<Arc<ServerConfig>>`).
+/// Clones share one live configuration: a hot reload
+/// ([`ConfigDrivenApp::reload_from_str`], run on `SIGHUP` for an app built by
+/// [`build_from_file`]) swaps it for every clone at once. In-flight requests
+/// finish on the configuration they started with.
 #[derive(Clone)]
 pub struct ConfigDrivenApp {
+    current: Arc<RwLock<Arc<Generation>>>,
+    /// Serializes reloads: one SIGHUP reaches every accept loop.
+    reload_lock: Arc<std::sync::Mutex<()>>,
+}
+
+/// One loaded configuration: its compiled routes plus what a reload needs.
+struct Generation {
     dispatch: RouteDispatch,
-    /// The top-level `[middleware]` table, applied around every request —
-    /// matched routes and the fallback alike.
-    global_middleware: Arc<MiddlewareConfig>,
-    /// `dispatch` wrapped in the global middleware; `None` when there is none.
+    /// `dispatch` wrapped in the top-level `[middleware]` table; `None` when
+    /// that table is empty.
     entry: Option<Arc<dyn Application + Send + Sync>>,
+    config: ProxyConfig,
+    /// The file text this generation was built from, to skip no-op reloads.
+    source: Option<String>,
+    /// Set when this generation is replaced: stops its health checkers.
+    health_stop: Arc<AtomicBool>,
+}
+
+impl Generation {
+    fn new(routes: Arc<Vec<CompiledRoute>>, fallback: App, config: ProxyConfig, health_stop: Arc<AtomicBool>, source: Option<String>) -> Self {
+        let dispatch = RouteDispatch { routes, fallback };
+        let entry = if config.global_middleware.is_empty() {
+            None
+        } else {
+            Some(builder::apply_middleware(arc_app(dispatch.clone()), &config.global_middleware))
+        };
+        Generation { dispatch, entry, config, source, health_stop }
+    }
 }
 
 /// First-match routing over the compiled routes, then the fallback.
@@ -788,24 +813,28 @@ impl MiddlewareConfig {
     }
 }
 
+/// What a successful [`ConfigDrivenApp::reload_from_str`] changed.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReloadOutcome {
+    /// The configuration text is unchanged; nothing was rebuilt.
+    Unchanged,
+    /// New routes are live. `warnings` includes `[[tcp_proxy]]` /
+    /// `[[udp_proxy]]` / `[[ws_proxy]]` changes, which need a restart.
+    Reloaded { routes: usize, warnings: Vec<String> },
+}
+
 impl ConfigDrivenApp {
-    pub(crate) fn new(routes: Vec<CompiledRoute>, global_middleware: MiddlewareConfig) -> Self {
+    pub(crate) fn new(routes: Vec<CompiledRoute>, config: ProxyConfig, health_stop: Arc<AtomicBool>, source: Option<String>) -> Self {
         use crate::core::New;
-        let mut app = ConfigDrivenApp {
-            dispatch: RouteDispatch { routes: Arc::new(routes), fallback: App::new() },
-            global_middleware: Arc::new(global_middleware),
-            entry: None,
-        };
-        app.rebuild_entry();
-        app
+        let generation = Generation::new(Arc::new(routes), App::new(), config, health_stop, source);
+        ConfigDrivenApp {
+            current: Arc::new(RwLock::new(Arc::new(generation))),
+            reload_lock: Arc::new(std::sync::Mutex::new(())),
+        }
     }
 
-    fn rebuild_entry(&mut self) {
-        self.entry = if self.global_middleware.is_empty() {
-            None
-        } else {
-            Some(builder::apply_middleware(arc_app(self.dispatch.clone()), &self.global_middleware))
-        };
+    fn current(&self) -> Arc<Generation> {
+        Arc::clone(&self.current.read().unwrap_or_else(|e| e.into_inner()))
     }
 
     /// Pin the fallback [`App`] (used for any request none of the
@@ -814,7 +843,8 @@ impl ConfigDrivenApp {
     ///
     /// Mirrors [`App::with_config`] / [`crate::state::AppWithState::with_config`]
     /// — same rationale: safe for parallel tests, and lets multiple
-    /// differently-configured proxy instances coexist in one process.
+    /// differently-configured proxy instances coexist in one process. The
+    /// pinned fallback is kept across hot reloads.
     ///
     /// ```rust,no_run
     /// use rust_web_server::proxy_config::build_from_file;
@@ -823,18 +853,99 @@ impl ConfigDrivenApp {
     /// let (app, _handles) = build_from_file();
     /// let app = app.with_config(ServerConfig::default());
     /// ```
-    pub fn with_config(mut self, config: ServerConfig) -> Self {
-        self.dispatch.fallback = App::with_config(config);
-        self.rebuild_entry();
+    pub fn with_config(self, config: ServerConfig) -> Self {
+        {
+            let mut slot = self.current.write().unwrap_or_else(|e| e.into_inner());
+            let old = Arc::clone(&slot);
+            *slot = Arc::new(Generation::new(
+                Arc::clone(&old.dispatch.routes),
+                App::with_config(config),
+                old.config.clone(),
+                Arc::clone(&old.health_stop),
+                old.source.clone(),
+            ));
+        }
         self
+    }
+
+    /// Replace the routes, upstreams and `[middleware]` with those in `toml`.
+    ///
+    /// The new configuration is validated first ([`ProxyConfig::validate`]
+    /// plus unknown keys); if it has errors, the running configuration stays
+    /// in place and the errors are returned — a typo never takes the proxy
+    /// down. Otherwise the new routes go live for every clone of this app,
+    /// the previous configuration's health checkers stop, and new ones start.
+    /// `[[tcp_proxy]]` / `[[udp_proxy]]` / `[[ws_proxy]]` listeners are not
+    /// rebound; a change to them is reported as a warning.
+    pub fn reload_from_str(&self, toml: &str) -> Result<ReloadOutcome, crate::config_check::ConfigReport> {
+        let _serialized = self.reload_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let old = self.current();
+        if old.source.as_deref() == Some(toml) {
+            return Ok(ReloadOutcome::Unchanged);
+        }
+        let config = ProxyConfig::from_str(toml);
+        let mut report = crate::config_check::ConfigReport::default();
+        validate::check_unknown_keys(toml, &mut report);
+        config.validate(&mut report);
+        if !report.is_ok() {
+            return Err(report);
+        }
+
+        let mut warnings = report.warnings;
+        let listeners = |c: &ProxyConfig| format!("{:?}{:?}{:?}", c.tcp_proxies, c.udp_proxies, c.ws_proxies);
+        if listeners(&config) != listeners(&old.config) {
+            warnings.push("[[tcp_proxy]] / [[udp_proxy]] / [[ws_proxy]] changes need a restart; the old listeners keep running".to_string());
+        }
+
+        let health_stop = Arc::new(AtomicBool::new(false));
+        let routes = builder::compile_routes(&config, &health_stop);
+        let route_count = routes.len();
+        let generation = Generation::new(Arc::new(routes), old.dispatch.fallback.clone(), config, health_stop, Some(toml.to_string()));
+        let replaced = {
+            let mut slot = self.current.write().unwrap_or_else(|e| e.into_inner());
+            std::mem::replace(&mut *slot, Arc::new(generation))
+        };
+        replaced.health_stop.store(true, Ordering::Relaxed);
+        Ok(ReloadOutcome::Reloaded { routes: route_count, warnings })
+    }
+
+    /// Re-read the configuration file (`RWS_CONFIG_FILE` or
+    /// `rws.config.toml`) and [`reload_from_str`](Self::reload_from_str) it,
+    /// logging the outcome. Registered as a [`crate::config_reload`] hook by
+    /// [`build_from_file`].
+    pub fn reload_from_file(&self) {
+        let path = config_file_path();
+        let toml = match std::fs::read_to_string(&path) {
+            Ok(toml) => toml,
+            Err(e) => {
+                eprintln!("[proxy_config] reload: cannot read {path}: {e} — keeping the running routes");
+                return;
+            }
+        };
+        match self.reload_from_str(&toml) {
+            Ok(ReloadOutcome::Unchanged) => {}
+            Ok(ReloadOutcome::Reloaded { routes, warnings }) => {
+                for w in &warnings {
+                    eprintln!("[proxy_config] Warning: {w}");
+                }
+                println!("[proxy_config] reloaded {path}: {routes} route{}", if routes == 1 { "" } else { "s" });
+            }
+            Err(report) => {
+                for e in &report.errors {
+                    eprintln!("[proxy_config] reload ERROR: {e}");
+                }
+                eprintln!("[proxy_config] {path} has errors — keeping the running routes");
+            }
+        }
     }
 }
 
 impl Application for ConfigDrivenApp {
     fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
-        match &self.entry {
+        let generation = self.current();
+        match &generation.entry {
             Some(entry) => entry.execute(request, conn),
-            None => self.dispatch.execute(request, conn),
+            None => generation.dispatch.execute(request, conn),
         }
     }
 }
@@ -860,8 +971,7 @@ impl Application for NullApp {
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::RwLock;
+use std::sync::atomic::AtomicUsize;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Backend-selection strategy for `DynamicProxy`, configured via the

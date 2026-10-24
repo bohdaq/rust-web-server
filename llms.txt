@@ -1141,7 +1141,12 @@ JSON by default in the `rws` binary (`RWS_CONFIG_LOG_FORMAT=json`); `combined` g
 
 `SIGHUP` or `POST /admin/config/reload` re-reads `rws.config.toml` and applies
 CORS, rate-limit, log-format changes live. On TLS builds, also rebuilds the
-`TlsAcceptor` with fresh certificates.
+`TlsAcceptor` with fresh certificates. In proxy mode it also reloads
+`[[route]]`/`[[upstream]]`/`[middleware]`: `ConfigDrivenApp::reload_from_str(toml)
+-> Result<ReloadOutcome, ConfigReport>` validates first and keeps the running
+routes if the file has errors; old health checkers stop. `[[tcp_proxy]]`/
+`[[udp_proxy]]`/`[[ws_proxy]]` need a restart. `config_reload::on_reload(hook)`
+registers your own reload hook.
 
 ---
 

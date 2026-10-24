@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, h2spec, slow-clients]
+        check: [acme-pebble, h2spec, slow-clients, config-reload]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -86,6 +86,9 @@ jobs:
       - name: Idle / slow clients can't starve the server
         if: matrix.check == 'slow-clients'
         run: ci/e2e/slow_clients.sh target/debug/rws
+      - name: rws --check and SIGHUP route reload
+        if: matrix.check == 'config-reload'
+        run: ci/e2e/config_reload.sh target/debug/rws
 
   # Every parser that sees untrusted input — see fuzz/README.md. 30 s per
   # target on push; 10 minutes each in the weekly scheduled run.

@@ -2,6 +2,7 @@
 //! health checkers and L4/WS proxy threads.
 
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock};
 
 use crate::middleware::WithMiddleware;
@@ -14,9 +15,12 @@ use crate::proxy_config::{
 /// Build a `ConfigDrivenApp` from `rws.config.toml` and spawn L4/WS proxy
 /// threads. Returns the app and a list of background thread handles.
 /// Problems `ProxyConfig::validate` finds are printed first (the same
-/// findings `rws --check` reports).
+/// findings `rws --check` reports). The returned app reloads its routes when
+/// the configuration is reloaded (`SIGHUP`, `POST /admin/config/reload`) —
+/// see [`ConfigDrivenApp::reload_from_file`].
 pub fn build_from_file() -> (ConfigDrivenApp, Vec<std::thread::JoinHandle<()>>) {
-    let config = ProxyConfig::load();
+    let source = std::fs::read_to_string(crate::proxy_config::config_file_path()).unwrap_or_default();
+    let config = ProxyConfig::from_str(&source);
     let mut report = crate::config_check::ConfigReport::default();
     config.validate(&mut report);
     for e in &report.errors {
@@ -25,11 +29,28 @@ pub fn build_from_file() -> (ConfigDrivenApp, Vec<std::thread::JoinHandle<()>>) 
     for w in &report.warnings {
         eprintln!("[proxy_config] Warning: {w}");
     }
-    build(config)
+    let (app, handles) = build_with_source(config, Some(source));
+    let reloadable = app.clone();
+    crate::config_reload::on_reload(move || reloadable.reload_from_file());
+    (app, handles)
 }
 
 /// Build a `ConfigDrivenApp` from a `ProxyConfig` struct.
 pub fn build(config: ProxyConfig) -> (ConfigDrivenApp, Vec<std::thread::JoinHandle<()>>) {
+    build_with_source(config, None)
+}
+
+fn build_with_source(config: ProxyConfig, source: Option<String>) -> (ConfigDrivenApp, Vec<std::thread::JoinHandle<()>>) {
+    let health_stop = Arc::new(AtomicBool::new(false));
+    let compiled = compile_routes(&config, &health_stop);
+    let handles = spawn_listeners(&config);
+    (ConfigDrivenApp::new(compiled, config, health_stop, source), handles)
+}
+
+/// Compile `config`'s routes and start health checkers for its upstreams;
+/// the checkers stop when `health_stop` is set. Used at startup and on every
+/// hot reload.
+pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>) -> Vec<CompiledRoute> {
     // ── 1. Build upstream name → live backends map ─────────────────────────
     let mut upstream_lives: HashMap<String, Arc<RwLock<Vec<String>>>> = HashMap::new();
 
@@ -43,6 +64,7 @@ pub fn build(config: ProxyConfig) -> (ConfigDrivenApp, Vec<std::thread::JoinHand
                 upstream.backends.clone(),
                 Arc::clone(&live),
                 hc.clone(),
+                Arc::clone(health_stop),
             );
         }
     }
@@ -124,8 +146,13 @@ pub fn build(config: ProxyConfig) -> (ConfigDrivenApp, Vec<std::thread::JoinHand
 
         compiled.push(CompiledRoute { matcher, handler });
     }
+    compiled
+}
 
-    // ── 3. Spawn L4/WS proxy threads ──────────────────────────────────────
+/// Start the `[[tcp_proxy]]` / `[[udp_proxy]]` / `[[ws_proxy]]` listeners.
+/// Startup only: a hot reload can't move bound sockets, so changes to these
+/// sections need a restart.
+fn spawn_listeners(config: &ProxyConfig) -> Vec<std::thread::JoinHandle<()>> {
     let mut handles: Vec<std::thread::JoinHandle<()>> = Vec::new();
 
     for tcp_cfg in &config.tcp_proxies {
@@ -183,6 +210,7 @@ pub fn build(config: ProxyConfig) -> (ConfigDrivenApp, Vec<std::thread::JoinHand
                 backends.clone(),
                 Arc::clone(&live),
                 hc.clone(),
+                Arc::new(AtomicBool::new(false)),
             );
         }
 
@@ -200,7 +228,7 @@ pub fn build(config: ProxyConfig) -> (ConfigDrivenApp, Vec<std::thread::JoinHand
         handles.push(h);
     }
 
-    (ConfigDrivenApp::new(compiled, config.global_middleware.clone()), handles)
+    handles
 }
 
 /// Wrap `handler` with the middleware layers described by `mw`, innermost

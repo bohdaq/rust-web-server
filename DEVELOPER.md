@@ -122,6 +122,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `IpFilter` | `ip_filter` | Allow/deny middleware keyed on client IPv4 or IPv6 address or CIDR range (IPv4 rules also match IPv4-mapped `::ffff:a.b.c.d` clients). `IpFilter::allow([...])` passes only listed addresses; `IpFilter::deny([...])` blocks them. `ip_filter::is_valid_entry(entry)` tells whether an entry parses (malformed entries are skipped). |
 | `config_check::check_file` / `check_str` / `ConfigReport` | `config_check` | `rws --check[=<file>]`: validates `rws.config.toml` without starting the server — unknown keys, wrongly typed values, unloadable TLS files, ACME mistakes, proxy routes pointing at undeclared upstreams, unset auth secrets. `ConfigReport { errors, warnings }`, `.is_ok()`, `.render(path)`. |
 | `ProxyConfig::validate(&mut ConfigReport)` | `proxy_config` | Semantic checks of the proxy sections (also printed at startup by `build_from_file`). |
+| `ConfigDrivenApp::reload_from_str` / `reload_from_file` / `ReloadOutcome` | `proxy_config` | Hot-reload proxy routes, upstreams and `[middleware]` for every clone of the app; validates first and keeps the running routes on errors. Wired to `SIGHUP` by `build_from_file`. |
+| `config_reload::on_reload(hook)` | `config_reload` | Run your own closure at the end of every config reload (`SIGHUP`, `POST /admin/config/reload`). |
 | `RequestIdLayer` / `RequestId` | `request_id` | Correlation-ID middleware. Echoes an incoming `X-Request-Id` unchanged, or generates one (`generate_request_id()`, UUID-v4-shaped, not crypto-random) — either way it's injected into the request (readable by handlers) and set on the response. `.header(name)` overrides the header name. `RequestId` (in `extract`) is a `FromRequest` convenience for reading it. |
 | `routes!` | `macros` | Declarative routing macro — builds `AppWithState`, `AsyncAppWithState`, or `Router` from a `METHOD "path" => handler` table. |
 | `OpenApiConfig` / `build_spec` | `openapi` (requires `openapi` feature) | OpenAPI 3.0 schema generation. `AppWithState::openapi(config)` / `AsyncAppWithState::openapi(config)` add `GET /openapi.json` (generated spec) and `GET /docs` (Swagger UI via CDN) covering every route registered so far. Scope: paths, methods, path parameters (`:name`/`*name` → `{name}`) — no request/response body schemas, since Rust has no runtime type reflection to extract them from `#[derive(Validate)]`/serde types. |
@@ -4937,4 +4939,30 @@ fn production_config_is_valid() {
 
 Auth secrets and certificate files are checked in the current environment, so
 run it where the server runs (or with the same environment variables set).
+
+### 84. Reloading proxy routes without a restart
+
+A config-driven proxy built by `build_from_file()` (what the `rws` binary does)
+reloads its `[[route]]`, `[[upstream]]` and `[middleware]` sections on
+`SIGHUP` or `POST /admin/config/reload`. An embedding application can drive
+the same thing directly — e.g. from its own admin endpoint or a file watcher:
+
+```rust
+use rust_web_server::proxy_config::{build_from_file, ReloadOutcome};
+
+let (app, _listeners) = build_from_file();
+let reloader = app.clone();          // clones share the live routes
+
+// later, after rws.config.toml changed:
+match reloader.reload_from_str(&std::fs::read_to_string("rws.config.toml")?) {
+    Ok(ReloadOutcome::Reloaded { routes, warnings }) => println!("{routes} routes live; {warnings:?}"),
+    Ok(ReloadOutcome::Unchanged) => {}
+    Err(report) => eprintln!("kept the running routes:\n{}", report.render("rws.config.toml")),
+}
+```
+
+A file with errors never replaces the running routes. `[[tcp_proxy]]`,
+`[[udp_proxy]]` and `[[ws_proxy]]` listeners are bound once at startup; a
+reload that changes them returns a warning. To run your own code on every
+reload, register a hook with `config_reload::on_reload(|| ...)`.
 

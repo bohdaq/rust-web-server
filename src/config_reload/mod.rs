@@ -23,6 +23,8 @@
 //! | Request allocation size | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
 //! | Max body size | `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` |
 //! | Tera templates (`tera` feature, if `template::init()` was called) | re-read from disk — see [`crate::template`] |
+//! | Proxy `[[route]]`, `[[upstream]]`, `[middleware]` (config-driven proxy) | validated, then swapped in; a file with errors leaves the running routes in place — see [`crate::proxy_config::ConfigDrivenApp::reload_from_str`] |
+//! | Anything registered with [`on_reload`] | your hook |
 //!
 //! # What is NOT hot-reloadable (requires restart)
 //!
@@ -31,6 +33,7 @@
 //! | IP / Port | Bound socket cannot be moved |
 //! | Thread count | Thread pool is fixed at startup |
 //! | TLS cert / key | TLS acceptor is built once at startup |
+//! | `[[tcp_proxy]]` / `[[udp_proxy]]` / `[[ws_proxy]]` | Bound listener sockets |
 
 #[cfg(test)]
 mod tests;
@@ -159,6 +162,10 @@ pub fn reload() {
     #[cfg(feature = "tera")]
     crate::template::reload_if_initialized();
 
+    for hook in hooks().lock().unwrap_or_else(|e| e.into_inner()).iter() {
+        hook();
+    }
+
     println!(
         "Config reloaded — cors_allow_all={} rate_limit={}/{} log_format={}",
         snapshot.cors_allow_all,
@@ -166,6 +173,21 @@ pub fn reload() {
         snapshot.rate_limit_window_secs,
         snapshot.log_format,
     );
+}
+
+type ReloadHook = Box<dyn Fn() + Send + Sync>;
+
+fn hooks() -> &'static std::sync::Mutex<Vec<ReloadHook>> {
+    static HOOKS: OnceLock<std::sync::Mutex<Vec<ReloadHook>>> = OnceLock::new();
+    HOOKS.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// Run `hook` at the end of every [`reload`], after the settings have been
+/// re-read — for state that is built from the configuration file rather than
+/// read from `RWS_CONFIG_*` per request. The config-driven proxy registers
+/// one to reload its routes ([`crate::proxy_config::ConfigDrivenApp::reload_from_file`]).
+pub fn on_reload(hook: impl Fn() + Send + Sync + 'static) {
+    hooks().lock().unwrap_or_else(|e| e.into_inner()).push(Box::new(hook));
 }
 
 /// Install a `SIGHUP` signal handler that sets [`RELOAD_REQUESTED`].

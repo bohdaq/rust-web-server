@@ -236,7 +236,8 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Prometheus metrics — `GET /metrics`; `MetricsLayer` adds per-route counters + histograms
 - OpenTelemetry tracing — `OtelLayer`; W3C `traceparent`; stdout or OTLP (Jaeger, Tempo); nested child spans via `otel::span`/`otel::client_span`
 - Access log — Combined Log Format or `RWS_CONFIG_LOG_FORMAT=json`
-- Hot config reload — `SIGHUP` or `POST /admin/config/reload`; no restart required
+- Hot config reload — `SIGHUP` or `POST /admin/config/reload`; no restart required. In proxy mode routes, upstreams and `[middleware]` reload too — validated first, a file with errors leaves the running routes serving
+- `rws --check` — validates `rws.config.toml` (unknown keys, bad values, TLS files, undeclared upstreams, unset auth secrets) and exits 1 on errors, like `nginx -t`
 - Graceful shutdown — SIGTERM drains connections; `/readyz` returns `503` during drain
 - Background scheduler — fixed-rate, fixed-delay, 6-field cron; one thread per task
 - Background job queue — `JobQueue` (in-memory) or `PersistentJobQueue` (crash-safe, model-backed); retry with exponential backoff; `jobs` feature

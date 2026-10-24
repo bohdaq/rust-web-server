@@ -1964,3 +1964,85 @@ ip_filter = { deny = ["10.0.0.0/8"] }
     assert_eq!(app.execute(&make_request("GET", "/api"), &allowed).unwrap().status_code, 200);
     assert_eq!(app.execute(&make_request("GET", "/healthz"), &allowed).unwrap().status_code, 200);
 }
+
+// ── hot reload ────────────────────────────────────────────────────────────────
+
+fn respond_config(body: &str) -> String {
+    format!(r#"
+[[route]]
+  [route.match]
+  path = "/v"
+  [route.action]
+  type = "respond"
+  body = "{body}"
+"#)
+}
+
+fn body_of(app: &crate::proxy_config::ConfigDrivenApp, path: &str) -> String {
+    let response = app.execute(&make_request("GET", path), &make_conn("127.0.0.1")).unwrap();
+    response.content_range_list.iter().map(|r| String::from_utf8_lossy(&r.body).to_string()).collect()
+}
+
+#[test]
+fn reload_swaps_routes_for_every_clone() {
+    let (app, _) = crate::proxy_config::builder::build(ProxyConfig::from_str(&respond_config("v1")));
+    let clone = app.clone();
+    assert_eq!(body_of(&clone, "/v"), "v1");
+    let outcome = app.reload_from_str(&respond_config("v2")).unwrap();
+    assert_eq!(outcome, crate::proxy_config::ReloadOutcome::Reloaded { routes: 1, warnings: vec![] });
+    assert_eq!(body_of(&clone, "/v"), "v2");
+    assert_eq!(app.reload_from_str(&respond_config("v2")).unwrap(), crate::proxy_config::ReloadOutcome::Unchanged);
+}
+
+#[test]
+fn reload_with_errors_keeps_the_running_routes() {
+    let (app, _) = crate::proxy_config::builder::build(ProxyConfig::from_str(&respond_config("v1")));
+    let broken = respond_config("v2").replace("type = \"respond\"", "type = \"respnd\"");
+    let report = app.reload_from_str(&broken).unwrap_err();
+    assert!(report.errors.iter().any(|e| e.contains("unknown action type 'respnd'")), "{:?}", report.errors);
+    assert_eq!(body_of(&app, "/v"), "v1");
+}
+
+#[test]
+fn reload_stops_the_replaced_health_checkers() {
+    let config = r#"
+[[upstream]]
+name     = "app"
+backends = ["127.0.0.1:9"]
+  [upstream.health_check]
+  interval_secs = 3600
+
+[[route]]
+  [route.action]
+  type     = "proxy"
+  upstream = "app"
+"#;
+    let (app, _) = crate::proxy_config::builder::build(ProxyConfig::from_str(config));
+    let first = app.current();
+    assert!(!first.health_stop.load(std::sync::atomic::Ordering::Relaxed));
+    app.reload_from_str(&config.replace("3600", "3601")).unwrap();
+    assert!(first.health_stop.load(std::sync::atomic::Ordering::Relaxed));
+    assert!(!app.current().health_stop.load(std::sync::atomic::Ordering::Relaxed));
+}
+
+#[test]
+fn reload_warns_that_listener_changes_need_a_restart() {
+    let (app, _) = crate::proxy_config::builder::build(ProxyConfig::from_str(&respond_config("v1")));
+    let with_listener = format!("{}\n[[tcp_proxy]]\nname = \"db\"\nlisten = \"127.0.0.1:0\"\nbackends = [\"127.0.0.1:5432\"]\n", respond_config("v1"));
+    match app.reload_from_str(&with_listener).unwrap() {
+        crate::proxy_config::ReloadOutcome::Reloaded { warnings, .. } => {
+            assert!(warnings.iter().any(|w| w.contains("need a restart")), "{warnings:?}");
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn reload_keeps_a_pinned_fallback_config() {
+    let (app, _) = crate::proxy_config::builder::build(ProxyConfig::from_str(&respond_config("v1")));
+    let app = app.with_config(crate::server_config::ServerConfig::default());
+    app.reload_from_str(&respond_config("v2")).unwrap();
+    assert_eq!(body_of(&app, "/v"), "v2");
+    let fallback = app.execute(&make_request("GET", "/healthz"), &make_conn("127.0.0.1")).unwrap();
+    assert_eq!(fallback.status_code, 200);
+}

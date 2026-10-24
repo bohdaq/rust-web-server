@@ -138,3 +138,17 @@ fn reload_updates_snapshot() {
     assert_eq!(expected.cors_allow_all, snap.cors_allow_all);
     assert_eq!(expected.log_format, snap.log_format);
 }
+
+#[test]
+fn reload_runs_registered_hooks() {
+    let _g = crate::test_env::lock();
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&calls);
+    super::on_reload(move || {
+        counter.fetch_add(1, Ordering::SeqCst);
+    });
+    super::reload();
+    assert!(calls.load(Ordering::SeqCst) >= 1);
+}
