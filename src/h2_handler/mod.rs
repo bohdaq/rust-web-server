@@ -26,6 +26,13 @@ const FORBIDDEN_H2_RESPONSE_HEADERS: &[&str] = &[
 /// HTTP/3 has the equivalent limit from quinn's default transport config.
 pub const MAX_CONCURRENT_STREAMS: u32 = 250;
 
+/// `SETTINGS_MAX_HEADER_LIST_SIZE`: the largest request header block (decoded)
+/// a client may send. Without it the `h2` crate's own default (16 MiB) lets
+/// one request make the server buffer megabytes of headers. 64 KiB is well
+/// above real traffic (nginx's defaults allow ~32 KB) and matches the HTTP/3
+/// limit in `h3_handler`.
+pub const MAX_HEADER_LIST_SIZE: u32 = 64 * 1024;
+
 pub async fn handle_connection(
     stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     peer_addr: std::net::SocketAddr,
@@ -34,6 +41,7 @@ pub async fn handle_connection(
 ) -> Result<(), String> {
     let mut conn = h2::server::Builder::new()
         .max_concurrent_streams(MAX_CONCURRENT_STREAMS)
+        .max_header_list_size(MAX_HEADER_LIST_SIZE)
         .handshake(stream)
         .await
         .map_err(|e| format!("H2 handshake failed: {}", e))?;

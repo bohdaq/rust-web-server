@@ -33,7 +33,9 @@ pub async fn handle_connection(
         .and_then(|d| d.downcast::<quinn::crypto::rustls::HandshakeData>().ok())
         .and_then(|d| d.server_name.clone());
 
-    let mut h3_conn = h3::server::Connection::new(h3_quinn::Connection::new(conn))
+    let mut h3_conn = h3::server::builder()
+        .max_field_section_size(crate::h2_handler::MAX_HEADER_LIST_SIZE as u64)
+        .build(h3_quinn::Connection::new(conn))
         .await
         .map_err(|e| format!("H3 connection error: {}", e))?;
 

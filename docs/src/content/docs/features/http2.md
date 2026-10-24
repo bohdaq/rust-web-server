@@ -116,6 +116,9 @@ HTTP/1.1 TLS connections.
 
 Each HTTP/2 connection advertises `SETTINGS_MAX_CONCURRENT_STREAMS = 250`
 (the same limit as Go's `net/http`), so one client can't open unbounded
-simultaneous streams. CI runs [h2spec](https://github.com/summerwind/h2spec)
+simultaneous streams, and `SETTINGS_MAX_HEADER_LIST_SIZE = 64 KiB`, so one
+request can't make the server buffer megabytes of headers (HTTP/3 uses the
+same 64 KiB field-section limit; HTTP/1.1 reads a request head in one
+`request_allocation_size` chunk, 10 KB by default). CI runs [h2spec](https://github.com/summerwind/h2spec)
 against a live server on every commit and requires all 146 tests to pass
 with none skipped (`ci/e2e/h2spec.sh`).

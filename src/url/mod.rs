@@ -5,7 +5,7 @@ mod example;
 pub mod path;
 
 use std::collections::HashMap;
-use url_build_parse::{build_url, parse_url, UrlComponents};
+use url_build_parse::{build_url, UrlAuthority, UrlComponents, UrlUserInfo};
 use url_search_params::{build_url_search_params, encode_uri_component, parse_url_search_params};
 use url_search_params::decode_uri_component;
 
@@ -48,3 +48,79 @@ impl URL {
         parse_url(&format!("http://localhost{}", target))
     }
 }
+
+/// RFC 3986 parse of `scheme:[//authority]path[?query][#fragment]` into
+/// url-build-parse's `UrlComponents`, without panicking on malformed input.
+/// (url-build-parse's own `parse_url` unwraps on input-derived values — e.g.
+/// a non-numeric port — so a hostile URL could panic the caller.)
+fn parse_url(url: &str) -> Result<UrlComponents, String> {
+    let (scheme, rest) = url.split_once(':').ok_or("unable to identify scheme")?;
+    if rest.is_empty() {
+        return Err("error: remaining url is empty".to_string());
+    }
+    let mut components = UrlComponents::new();
+    components.scheme = scheme.to_string();
+
+    // Authority: after "//", up to the first '/', '?' or '#'.
+    let mut remaining = rest;
+    if let Some(after) = rest.strip_prefix("//") {
+        let end = after.find(['/', '?', '#']).unwrap_or(after.len());
+        components.authority = Some(parse_authority(&after[..end])?);
+        remaining = &after[end..];
+    }
+
+    // Path: up to the first '?' or '#'.
+    let path_end = remaining.find(['?', '#']).unwrap_or(remaining.len());
+    components.path = remaining[..path_end].to_string();
+    remaining = &remaining[path_end..];
+
+    if let Some(after) = remaining.strip_prefix('?') {
+        let query_end = after.find('#').unwrap_or(after.len());
+        components.query = Some(parse_url_search_params(&after[..query_end]));
+        remaining = &after[query_end..];
+    }
+    if let Some(fragment) = remaining.strip_prefix('#') {
+        components.fragment = Some(fragment.to_string());
+    }
+    Ok(components)
+}
+
+/// `[userinfo@]host[:port]`, with `[...]` IPv6 hosts.
+fn parse_authority(authority: &str) -> Result<UrlAuthority, String> {
+    let (user_info, host_port) = match authority.split_once('@') {
+        Some((user_info, host_port)) => {
+            let user_info = match user_info.split_once(':') {
+                Some((username, password)) => UrlUserInfo {
+                    username: username.to_string(),
+                    password: Some(password.to_string()),
+                },
+                None => UrlUserInfo { username: user_info.to_string(), password: None },
+            };
+            (Some(user_info), host_port)
+        }
+        None => (None, authority),
+    };
+
+    let (host, port_str) = if host_port.starts_with('[') {
+        let close = host_port.find(']').ok_or("unterminated IPv6 host")?;
+        let after = &host_port[close + 1..];
+        let port = match after.strip_prefix(':') {
+            Some(port) => Some(port),
+            None if after.is_empty() => None,
+            None => return Err(format!("unexpected characters after IPv6 host: {:?}", after)),
+        };
+        (&host_port[..=close], port)
+    } else {
+        match host_port.split_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (host_port, None),
+        }
+    };
+
+    let port = match port_str {
+        Some(port) => Some(port.parse::<usize>().map_err(|_| format!("invalid port: {:?}", port))?),
+        None => None,
+    };
+    Ok(UrlAuthority { user_info, host: host.to_string(), port })
+}
+

@@ -151,3 +151,40 @@ fn parse_request_target_accepts_origin_form_only() {
         assert!(URL::parse_request_target(bad).is_err(), "{bad:?}");
     }
 }
+
+#[test]
+fn parse_never_panics_on_malformed_urls() {
+    use crate::url::URL;
+    // Invalid ports, unterminated IPv6 hosts, empty remainders: errors.
+    for bad in ["http://localhost:x/", "http://h:", "http://[::1", "http://[::1]x/", "a:"] {
+        assert!(URL::parse(bad).is_err(), "{bad:?}");
+    }
+    // The fuzzer's crash input for url-build-parse: a strange but parseable
+    // scheme + query — it just must not panic.
+    let _ = URL::parse("\n:?9{//\0{:/");
+}
+
+#[test]
+fn parse_splits_every_component() {
+    use crate::url::URL;
+    let c = URL::parse("https://user:pw@[::1]:8443/a/b?x=1&y=two#frag").unwrap();
+    assert_eq!("https", c.scheme);
+    let a = c.authority.unwrap();
+    assert_eq!("[::1]", a.host);
+    assert_eq!(Some(8443), a.port);
+    let ui = a.user_info.unwrap();
+    assert_eq!(("user", Some("pw".to_string())), (ui.username.as_str(), ui.password));
+    assert_eq!("/a/b", c.path);
+    assert_eq!(Some("two"), c.query.as_ref().unwrap().get("y").map(|s| s.as_str()));
+    assert_eq!(Some("frag".to_string()), c.fragment);
+
+    // Authority ends at the first '/', '?' or '#' (RFC 3986 §3.2).
+    let c = URL::parse("http://host?q=/x").unwrap();
+    assert_eq!("host", c.authority.unwrap().host);
+    assert_eq!("", c.path);
+    assert_eq!(Some("/x"), c.query.as_ref().unwrap().get("q").map(|s| s.as_str()));
+
+    let c = URL::parse("mailto:someone@example.com").unwrap();
+    assert!(c.authority.is_none());
+    assert_eq!("someone@example.com", c.path);
+}

@@ -42,3 +42,12 @@ fi
 if ! grep -qE "tests, ([0-9]+) passed, 0 skipped, 0 failed" h2spec.out; then
   echo "h2spec reported skipped or failed tests"; exit 1
 fi
+
+# SETTINGS_MAX_HEADER_LIST_SIZE (64 KiB): an oversized header block is
+# refused, and the server keeps serving afterwards.
+big="$(head -c 100000 /dev/zero | tr '\0' a)"
+code="$(curl -sk --http2 -o /dev/null -w '%{http_code}' -H "X-Big: $big" "https://localhost:$PORT/" || true)"
+[ "$code" != "200" ] || { echo "100 KB header block was accepted"; exit 1; }
+code="$(curl -sk --http2 -o /dev/null -w '%{http_code}' "https://localhost:$PORT/")"
+[ "$code" = "200" ] || { echo "server unhealthy after oversized headers: $code"; exit 1; }
+echo "oversized header block refused; server still serving"
