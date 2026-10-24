@@ -80,10 +80,10 @@ pub fn encrypted_cookie(value: &str, key: &[u8]) -> String {
 
     let mut nonce_bytes = [0u8; 12];
     OsRng.fill_bytes(&mut nonce_bytes);
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::from(nonce_bytes);
 
     let ciphertext = cipher
-        .encrypt(nonce, value.as_bytes())
+        .encrypt(&nonce, value.as_bytes())
         .expect("AES-256-GCM encryption of a cookie-sized value cannot fail");
 
     format!("{}.{}", to_hex(&nonce_bytes), to_hex(&ciphertext))
@@ -102,8 +102,9 @@ pub fn decrypt_cookie(encrypted: &str, key: &[u8]) -> Option<String> {
     let ciphertext = from_hex(ciphertext_hex)?;
 
     let cipher = Aes256Gcm::new_from_slice(&Sha256::digest(key)).ok()?;
-    let nonce = Nonce::from_slice(&nonce_bytes);
-    let plaintext = cipher.decrypt(nonce, ciphertext.as_ref()).ok()?;
+    let nonce_bytes: [u8; 12] = nonce_bytes.as_slice().try_into().ok()?;
+    let nonce = Nonce::from(nonce_bytes);
+    let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref()).ok()?;
     String::from_utf8(plaintext).ok()
 }
 

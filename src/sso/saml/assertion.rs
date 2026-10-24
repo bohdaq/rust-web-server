@@ -210,7 +210,7 @@ fn verify_signature(raw_xml: &str, assertion: &XmlNode, idp_signing_key: &RsaPub
     signed_bytes.extend_from_slice(raw_xml[assertion.start..signature.start].as_bytes());
     signed_bytes.extend_from_slice(raw_xml[signature.end..assertion.end].as_bytes());
     let actual_digest = Sha256::digest(&signed_bytes);
-    if actual_digest.as_slice() != expected_digest.as_slice() {
+    if actual_digest[..] != expected_digest[..] {
         return Err(SsoError("Assertion digest does not match Reference/DigestValue".into()));
     }
 
