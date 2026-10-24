@@ -24,7 +24,7 @@ use crate::request::Request;
 use crate::response::Response;
 use crate::core::New;
 use crate::server::sendfile::{self, SendfileSocket};
-use crate::server::{framing, Address, ConnectionInfo, Server};
+use crate::server::{framing, Address, ConnectionInfo, Server, REQUEST_HEAD_TIMEOUT};
 
 /// Longest wait for a client to send a request head (or the next request on a
 /// keep-alive connection) and for each read of a request body.
@@ -63,7 +63,9 @@ where
     tokio::pin!(idle);
 
     'session: loop {
-        // Read until the request head is complete — it may span several reads.
+        // Read until the request head is complete — it may span several reads,
+        // but must finish within REQUEST_HEAD_TIMEOUT of its first byte.
+        let mut head_deadline: Option<tokio::time::Instant> = None;
         let head_len = loop {
             framing::skip_leading_empty_lines(&mut pending);
             match framing::scan_head(&pending) {
@@ -74,9 +76,19 @@ where
                 }
                 framing::HeadScan::Incomplete => {}
             }
-            if !read_more(&mut stream, &mut read_buffer, &mut pending, idle.as_mut()).await {
-                // Closed, read error, or idle past the timeout: end of the session.
+            if !pending.is_empty() && head_deadline.is_none() {
+                head_deadline = Some(tokio::time::Instant::now() + REQUEST_HEAD_TIMEOUT);
+            }
+            if !read_more(&mut stream, &mut read_buffer, &mut pending, idle.as_mut(), head_deadline).await {
+                // Closed, read error, or a timeout: end of the session. A head
+                // that ran out its deadline gets a 408 first.
+                if head_deadline.is_some_and(|d| tokio::time::Instant::now() >= d) {
+                    write_and_flush(&mut stream, &Server::request_timeout_response()).await;
+                }
                 break None;
+            }
+            if head_deadline.is_none() {
+                head_deadline = Some(tokio::time::Instant::now() + REQUEST_HEAD_TIMEOUT);
             }
         };
         let Some(head_len) = head_len else { break };
@@ -123,7 +135,7 @@ where
                     break;
                 }
                 while (pending.len() as u64) < declared_len {
-                    if !read_more(&mut stream, &mut read_buffer, &mut pending, idle.as_mut()).await {
+                    if !read_more(&mut stream, &mut read_buffer, &mut pending, idle.as_mut(), None).await {
                         break 'session; // closed or stalled mid-body
                     }
                 }
@@ -157,7 +169,7 @@ where
                             return Err(message);
                         }
                     }
-                    if !read_more(&mut stream, &mut read_buffer, &mut pending, idle.as_mut()).await {
+                    if !read_more(&mut stream, &mut read_buffer, &mut pending, idle.as_mut(), None).await {
                         break 'session;
                     }
                 }
@@ -294,16 +306,18 @@ pub(crate) async fn execute_blocking<A: Application + Send + 'static>(
     .map_err(|e| e.to_string())
 }
 
-/// One read (bounded by [`READ_TIMEOUT`], via the connection's `idle` timer)
-/// appended to `pending`. `false` when the peer closed, the read failed, or
-/// it timed out.
+/// One read (bounded by [`READ_TIMEOUT`], via the connection's `idle` timer,
+/// and by `deadline` when given) appended to `pending`. `false` when the
+/// peer closed, the read failed, or it timed out.
 async fn read_more<S: AsyncRead + Unpin>(
     stream: &mut S,
     read_buffer: &mut [u8],
     pending: &mut Vec<u8>,
     mut idle: std::pin::Pin<&mut tokio::time::Sleep>,
+    deadline: Option<tokio::time::Instant>,
 ) -> bool {
-    idle.as_mut().reset(tokio::time::Instant::now() + READ_TIMEOUT);
+    let idle_until = tokio::time::Instant::now() + READ_TIMEOUT;
+    idle.as_mut().reset(deadline.map_or(idle_until, |d| d.min(idle_until)));
     tokio::select! {
         read = stream.read(read_buffer) => match read {
             Ok(n) if n > 0 => {
@@ -709,17 +723,48 @@ mod tests {
 
 
     #[tokio::test(start_paused = true)]
-    async fn idle_timer_restarts_on_every_read() {
-        // Pieces 20 s apart: 40 s in total, but never 30 s without a read.
+    async fn idle_timer_restarts_on_every_body_read() {
+        // Body pieces 20 s apart: 40 s in total, but never 30 s without a read.
+        let (mut client, server) = tokio::io::duplex(1024);
+        let task = tokio::spawn(serve(server, peer(), None, false, Echo));
+        client.write_all(b"POST /slow HTTP/1.1\r\nContent-Length: 6\r\nConnection: close\r\n\r\nab").await.unwrap();
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        client.write_all(b"cd").await.unwrap();
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        client.write_all(b"ef").await.unwrap();
+        let out = read_to_end(&mut client).await;
+        assert!(out.contains("uri=/slow body=abcdef"), "{out}");
+        assert!(task.await.unwrap().is_ok());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_head_trickled_past_the_head_deadline_gets_408() {
+        // Pieces 20 s apart never trip the idle timeout, but the head as a
+        // whole must arrive within REQUEST_HEAD_TIMEOUT.
         let (mut client, server) = tokio::io::duplex(1024);
         let task = tokio::spawn(serve(server, peer(), None, false, Hello));
         client.write_all(b"GET /slow HTTP/1.1\r\n").await.unwrap();
         tokio::time::sleep(Duration::from_secs(20)).await;
         client.write_all(b"Host: x\r\n").await.unwrap();
         tokio::time::sleep(Duration::from_secs(20)).await;
-        client.write_all(b"Connection: close\r\n\r\n").await.unwrap();
-        let out = read_until_count(&mut client, "hello", 1).await;
-        assert!(out.starts_with("HTTP/1.1 200"), "{out}");
+        let _ = client.write_all(b"\r\n").await;
+        let out = read_to_end(&mut client).await;
+        assert!(out.starts_with("HTTP/1.1 408"), "{out}");
+        assert!(task.await.unwrap().is_ok());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn waiting_for_the_next_request_is_not_a_head_timeout() {
+        // 25 s idle between keep-alive requests: only the idle timeout applies.
+        let (mut client, server) = tokio::io::duplex(1024);
+        let task = tokio::spawn(serve(server, peer(), None, false, Hello));
+        client.write_all(b"GET /a HTTP/1.1\r\nHost: x\r\n\r\n").await.unwrap();
+        let first = read_until_count(&mut client, "hello", 1).await;
+        assert!(first.starts_with("HTTP/1.1 200"));
+        tokio::time::sleep(Duration::from_secs(25)).await;
+        client.write_all(b"GET /b HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").await.unwrap();
+        let second = read_until_count(&mut client, "hello", 1).await;
+        assert!(second.starts_with("HTTP/1.1 200"), "{second}");
         assert!(task.await.unwrap().is_ok());
     }
 

@@ -189,6 +189,7 @@ Fixed limits that apply whatever the configuration:
 | Header list, HTTP/2 and HTTP/3 | 64 KiB | stream reset |
 | Concurrent streams per HTTP/2 connection | 250 | stream refused |
 | Idle time between reads | 30 s | connection closed |
+| Whole request head, from its first byte (HTTP/1.1) | 30 s | `408 Request Timeout` |
 | TLS handshake | 10 s | connection closed |
 
 The request body limit is `max_body_size_in_bytes` above. On HTTP/1.1, bodies

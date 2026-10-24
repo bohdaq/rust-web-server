@@ -50,6 +50,12 @@ use crate::symbol::SYMBOL;
 use crate::thread_pool::ThreadPool;
 
 #[cfg(not(target_arch = "wasm32"))]
+/// Longest time from the first byte of a request head to its end (nginx's
+/// `client_header_timeout`). The idle timeout alone restarts on every read,
+/// so a client sending one byte every few seconds could hold a connection
+/// for weeks with a 64 KiB head.
+pub const REQUEST_HEAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 pub struct Server {}
 #[cfg(not(target_arch = "wasm32"))]
 impl Server {
@@ -173,10 +179,24 @@ impl Server {
     /// request head longer than [`framing::MAX_HEAD_SIZE`]. The connection is
     /// closed after it: the rest of the oversized head is still unread.
     pub fn header_fields_too_large_response() -> Vec<u8> {
-        let message = format!(
-            "431 Request Header Fields Too Large: the request head exceeds {} bytes",
-            framing::MAX_HEAD_SIZE
-        );
+        Server::closing_error_response(
+            STATUS_CODE_REASON_PHRASE.n431_request_header_fields_too_large,
+            format!("431 Request Header Fields Too Large: the request head exceeds {} bytes", framing::MAX_HEAD_SIZE),
+        )
+    }
+
+    /// Builds a `408 Request Timeout` raw response for a client that started
+    /// a request head but didn't finish it within [`REQUEST_HEAD_TIMEOUT`].
+    /// The connection is closed after it.
+    pub fn request_timeout_response() -> Vec<u8> {
+        Server::closing_error_response(
+            STATUS_CODE_REASON_PHRASE.n408_request_timeout,
+            format!("408 Request Timeout: the request head took longer than {} s", REQUEST_HEAD_TIMEOUT.as_secs()),
+        )
+    }
+
+    /// A plain-text error response with `Connection: close`.
+    fn closing_error_response(status: &'static crate::response::StatusCodeReasonPhrase, message: String) -> Vec<u8> {
         let error_request = Request {
             method: METHOD.get.to_string(),
             request_uri: "".to_string(),
@@ -196,11 +216,7 @@ impl Server {
 
         let mut header_list = Header::get_header_list(&error_request);
         header_list.push(Header { name: Header::_CONNECTION.to_string(), value: "close".to_string() });
-        let error_response: Response = Response::get_response(
-            STATUS_CODE_REASON_PHRASE.n431_request_header_fields_too_large,
-            Some(header_list),
-            Some(vec![content_range])
-        );
+        let error_response: Response = Response::get_response(status, Some(header_list), Some(vec![content_range]));
 
         Response::generate_response(error_response, error_request)
     }
@@ -272,7 +288,11 @@ impl Server {
         let mut read_buffer = vec![0u8; request_allocation_size as usize];
 
         'session: loop {
-            // Read until the request head is complete — it may span several reads.
+            // Read until the request head is complete — it may span several
+            // reads, but must finish within REQUEST_HEAD_TIMEOUT of its first
+            // byte (checked after each read; every read is itself bounded by
+            // the socket's read timeout).
+            let mut head_started: Option<std::time::Instant> = None;
             let head_len = loop {
                 framing::skip_leading_empty_lines(&mut pending);
                 match framing::scan_head(&pending) {
@@ -284,10 +304,19 @@ impl Server {
                     }
                     framing::HeadScan::Incomplete => {}
                 }
+                if !pending.is_empty() && head_started.is_none() {
+                    head_started = Some(std::time::Instant::now());
+                }
                 match stream.read(&mut read_buffer) {
                     // timeout or client closed — normal end of keep-alive session
                     Ok(0) | Err(_) => break None,
                     Ok(n) => pending.extend_from_slice(&read_buffer[..n]),
+                }
+                let started = *head_started.get_or_insert_with(std::time::Instant::now);
+                if started.elapsed() > REQUEST_HEAD_TIMEOUT && framing::scan_head(&pending) == framing::HeadScan::Incomplete {
+                    let _ = stream.write_all(&Server::request_timeout_response());
+                    let _ = stream.flush();
+                    return Err("request head timed out".to_string());
                 }
             };
             let Some(head_len) = head_len else { break };
