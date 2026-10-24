@@ -1143,7 +1143,7 @@ JSON by default in the `rws` binary (`RWS_CONFIG_LOG_FORMAT=json`); `combined` g
 
 ### Performance
 
-Benchmarked against Caddy 2.11 and nginx (with open_file_cache) on one 4-CPU runner (`oha`, 64 keep-alive connections, no compression; `bench/run.sh`, `.github/workflows/bench.yml`): static 1 KiB — rws 49.4k req/s, Caddy 18.6k, nginx 82.0k; static 1 MiB — 8.9k / 2.4k / 10.1k; reverse proxy 1 KiB — 27.8k / 13.4k / 34.2k. Peak memory rws 9–13 MiB, Caddy 67–71, nginx 24. On 10 cores rws ≈ nginx in all three. Fast path: open-file cache, quick requests on the event loop (`runs_inline`), async proxying for plain-HTTP routes (`execute_async`), `sendfile`, one idle timer per connection, cached `ServerConfig::current()`. Docs: https://rws8.tech/reference/benchmarks/
+Benchmarked against Caddy 2.11 and nginx (with open_file_cache) on one 4-CPU runner (`oha`, 64 keep-alive connections, no compression; `bench/run.sh`, `.github/workflows/bench.yml`): static 1 KiB — rws 70.2k req/s, Caddy 19.1k, nginx 83.6k; static 1 MiB — 9.6k / 2.4k / 10.3k; reverse proxy 1 KiB — 31.6k / 14.0k / 35.0k. CPU per request rws 28 / 219 / 58 µs, nginx 24 / 205 / 46. Peak memory rws 9–13 MiB, Caddy 68–75, nginx 23–24. On 10 cores rws ≈ nginx in all three. Fast path: open-file cache (files ≤ 64 KiB served from memory), one write per response, quick requests on the event loop (`runs_inline`), async proxying for plain-HTTP routes (`execute_async`), `sendfile`, one idle timer per connection, cached `ServerConfig::current()`. Docs: https://rws8.tech/reference/benchmarks/
 
 ### Hot config reload
 

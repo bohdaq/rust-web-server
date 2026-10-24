@@ -111,7 +111,7 @@ Routing with path parameters, typed extractors, one `Middleware` trait for every
 - **No hyper, no Tower, no Axum.** HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS, range requests, JWT, and the ACME client are implemented in this crate. HTTP/2 and HTTP/3 framing use the widely deployed `h2` and `quinn`/`h3` crates, and TLS uses `rustls` — no OpenSSL.
 - **Config and code share one engine.** Everything the TOML file does is a type you can use from Rust, so moving from configuration to code doesn't mean switching tools.
 - **Tested against the real world.** CI fuzzes every parser that sees untrusted input, checks HTTP/2 conformance with h2spec, and runs the ACME flow end to end against Let's Encrypt's test CA on every push. Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
-- **Fast.** 2–3.7× faster than Caddy, close to nginx, and the smallest memory footprint of the three — see [Performance](#performance).
+- **Fast.** 2.3–3.9× faster than Caddy, close to nginx, and the smallest memory footprint of the three — see [Performance](#performance).
 - **SemVer since v1.** Frequent releases (currently v17) are additive; see [releases](https://github.com/bohdaq/rust-web-server/releases) for the changelog.
 
 ## Performance
@@ -123,14 +123,14 @@ the load generator on the same machine: `oha`, 64 keep-alive connections,
 
 | Scenario | rws | Caddy 2.11 | nginx |
 |---|---:|---:|---:|
-| Static file, 1 KiB | 49,405 (3.4 ms) | 18,647 (13.4 ms) | **82,035** (3.0 ms) |
-| Static file, 1 MiB | 8,926 (14.8 ms) | 2,420 (123 ms) | **10,117** (14.6 ms) |
-| Reverse proxy, 1 KiB | 27,790 (5.0 ms) | 13,418 (14.3 ms) | **34,176** (4.4 ms) |
-| Peak memory | **9–13 MiB** | 67–71 MiB | 24 MiB |
+| Static file, 1 KiB | 70,227 (2.4 ms) | 19,084 (13.1 ms) | **83,591** (3.1 ms) |
+| Static file, 1 MiB | 9,567 (13.8 ms) | 2,444 (120 ms) | **10,255** (14.4 ms) |
+| Reverse proxy, 1 KiB | 31,591 (4.6 ms) | 13,958 (13.5 ms) | **34,990** (4.4 ms) |
+| Peak memory | **9–13 MiB** | 68–75 MiB | 23–24 MiB |
 
-`rws` is 2–3.7× faster than Caddy, with a p99 at nginx's level and the
-smallest memory footprint of the three. nginx leads by 12% on large files,
-19% on proxying and 40% on small files on this 4-CPU runner; on a 10-core
+`rws` is 2.3–3.9× faster than Caddy, with a p99 at nginx's level and the
+smallest memory footprint of the three. nginx leads by 7% on large files,
+11% on proxying and 19% on small files on this 4-CPU runner; on a 10-core
 machine `rws` matches it in all three. Shared CI runners are noisy, so
 compare servers within a run, not across runs. Reproduce it with
 [`bench/run.sh`](bench/run.sh) or the manual
