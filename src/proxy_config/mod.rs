@@ -1198,18 +1198,26 @@ impl DynamicProxy {
     }
 
     /// The same as [`Application::execute`], without blocking a thread while
-    /// the backend answers: plain-HTTP backends only (`self.tls` is false).
+    /// the backend answers, for HTTP and HTTPS backends alike.
     #[cfg(feature = "http2")]
     pub(crate) async fn execute_async(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
         let prepared = match self.prepare(request, conn) {
             Ok(p) => p,
             Err(response) => return Ok(response),
         };
+        let tls = self.tls.then(|| match &self.trust {
+            Some(trust) => trust.async_tls(),
+            None => crate::proxy::async_upstream::AsyncTls {
+                config: crate::proxy::tls_client_config(),
+                pool: crate::proxy::async_upstream::default_tls_pool(),
+            },
+        });
         let result = crate::proxy::async_upstream::forward(
             &prepared.request,
             &conn.client.ip,
             &prepared.host,
             prepared.port,
+            tls,
             self.connect_timeout,
             self.read_timeout,
         )
@@ -1219,7 +1227,7 @@ impl DynamicProxy {
 
     /// Whether [`execute_async`](Self::execute_async) can serve this proxy.
     pub(crate) fn supports_async(&self) -> bool {
-        cfg!(feature = "http2") && !self.tls
+        cfg!(feature = "http2")
     }
 }
 

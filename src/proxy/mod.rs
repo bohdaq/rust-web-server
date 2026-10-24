@@ -569,6 +569,9 @@ pub struct UpstreamTls {
     config: Arc<rustls::ClientConfig>,
     #[cfg(any(feature = "http-client", feature = "http2"))]
     pool: &'static Pool<TlsStream>,
+    /// Connections for the non-blocking forwarder, made with `config`.
+    #[cfg(feature = "http2")]
+    async_pool: &'static Pool<async_upstream::AsyncTlsStream>,
 }
 
 impl UpstreamTls {
@@ -589,7 +592,12 @@ impl UpstreamTls {
                 roots.add(cert).map_err(|e| format!("invalid CA certificate in '{path}': {e}"))?;
             }
             let config = Arc::new(crate::tls_client_builder().with_root_certificates(roots).with_no_client_auth());
-            Ok(UpstreamTls { config, pool: tls_pool_for_ca(path) })
+            Ok(UpstreamTls {
+                config,
+                pool: tls_pool_for_ca(path),
+                #[cfg(feature = "http2")]
+                async_pool: async_tls_pool_for_ca(path),
+            })
         }
         #[cfg(not(any(feature = "http-client", feature = "http2")))]
         Err(format!("tls_ca_file '{path}': HTTPS backends need the http2 or http-client feature"))
@@ -604,7 +612,12 @@ impl UpstreamTls {
             let config = Arc::new(
                 crate::tls_client_builder().with_root_certificates(rustls::RootCertStore::empty()).with_no_client_auth(),
             );
-            UpstreamTls { config, pool: tls_pool_for_ca(&format!("reject-all:{label}")) }
+            UpstreamTls {
+                config,
+                pool: tls_pool_for_ca(&format!("reject-all:{label}")),
+                #[cfg(feature = "http2")]
+                async_pool: async_tls_pool_for_ca(&format!("reject-all:{label}")),
+            }
         }
         #[cfg(not(any(feature = "http-client", feature = "http2")))]
         {
@@ -613,11 +626,30 @@ impl UpstreamTls {
         }
     }
 
+    /// How the non-blocking forwarder reaches these backends.
+    #[cfg(feature = "http2")]
+    pub(crate) fn async_tls(&self) -> async_upstream::AsyncTls {
+        async_upstream::AsyncTls { config: Arc::clone(&self.config), pool: self.async_pool }
+    }
+
     /// The client configuration (for health checks).
     #[cfg(any(feature = "http-client", feature = "http2"))]
     pub(crate) fn client_config(&self) -> Arc<rustls::ClientConfig> {
         Arc::clone(&self.config)
     }
+}
+
+/// One non-blocking connection pool per CA file, for the life of the process
+/// (a reload that keeps the same file keeps its warm connections).
+#[cfg(feature = "http2")]
+fn async_tls_pool_for_ca(path: &str) -> &'static Pool<async_upstream::AsyncTlsStream> {
+    static POOLS: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, &'static Pool<async_upstream::AsyncTlsStream>>>,
+    > = std::sync::OnceLock::new();
+    let mut pools = POOLS.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    pools
+        .entry(path.to_string())
+        .or_insert_with(|| Box::leak(Box::new(Pool::new(POOL_MAX_IDLE, Duration::from_secs(60)))))
 }
 
 /// One pool per CA file, for the life of the process.
@@ -715,13 +747,6 @@ pub(crate) fn tls_client_config() -> Arc<rustls::ClientConfig> {
         let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
         Arc::new(crate::tls_client_builder().with_root_certificates(roots).with_no_client_auth())
     }))
-}
-
-/// Connect to an `https://` backend. The handshake itself runs on the first
-/// write, bounded by the exchange's read/write timeouts.
-#[cfg(any(feature = "http-client", feature = "http2"))]
-fn connect_tls(host: &str, port: u16, connect_timeout: Duration) -> Result<TlsStream, String> {
-    connect_tls_with(tls_client_config(), host, port, connect_timeout)
 }
 
 #[cfg(any(feature = "http-client", feature = "http2"))]

@@ -45,12 +45,12 @@ An unrecognized or empty `strategy` value falls back to `round_robin`.
 
 ### Performance
 
-A proxy route to a plain-HTTP upstream with no `[route.middleware]` and no
-global `[middleware]` is forwarded without blocking a thread: the request waits
-for the backend on its connection's own task, over pooled keep-alive
-connections. Routes with middleware, and HTTPS upstreams, use a thread from
-the blocking pool for the round trip — still pooled, slower under heavy
-concurrency. See [Benchmarks](/reference/benchmarks/).
+A proxy route with no `[route.middleware]` and no global `[middleware]` is
+forwarded without blocking a thread — HTTP and HTTPS upstreams alike,
+including `tls_ca_file` ones: the request waits for the backend on its
+connection's own task, over pooled keep-alive connections. Routes with
+middleware use a thread from the blocking pool for the round trip — still
+pooled, slower under heavy concurrency. See [Benchmarks](/reference/benchmarks/).
 
 ### TLS (HTTPS) upstreams
 

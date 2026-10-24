@@ -59,7 +59,7 @@ fn body(response: &crate::response::Response) -> Vec<u8> {
 }
 
 async fn fwd(port: u16, request: &Request) -> Result<crate::response::Response, String> {
-    forward(request, "10.0.0.1", "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2)).await
+    forward(request, "10.0.0.1", "127.0.0.1", port, None, Duration::from_secs(2), Duration::from_secs(2)).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -154,12 +154,12 @@ async fn plain_proxy_routes_are_served_async() {
 }
 
 #[test]
-fn routes_with_middleware_or_tls_keep_the_blocking_path() {
+fn routes_with_middleware_keep_the_blocking_path_tls_routes_do_not() {
     use crate::application::Application;
     let with_mw = proxy_app("  [route.middleware]\n  rate_limit = { max_requests = 5 }", "127.0.0.1:9");
     assert!(with_mw.execute_async(&get("/api/x"), &conn()).is_none());
     let tls = proxy_app("", "https://127.0.0.1:9");
-    assert!(tls.execute_async(&get("/api/x"), &conn()).is_none());
+    assert!(tls.execute_async(&get("/api/x"), &conn()).is_some());
 }
 
 #[test]
@@ -180,4 +180,79 @@ fn middleware_stacks_offer_async_only_when_every_layer_passes_through() {
     assert!(passing.execute_async(&get("/api/x"), &conn()).is_some());
     let limited = WithMiddleware::new(app).wrap(crate::middleware::RateLimitLayer);
     assert!(limited.execute_async(&get("/api/x"), &conn()).is_none());
+}
+
+
+// ── HTTPS backends on the async path ──────────────────────────────────────────
+
+fn tls_to(config: Arc<rustls::ClientConfig>, pool: &'static crate::proxy::Pool<super::AsyncTlsStream>) -> super::AsyncTls {
+    super::AsyncTls { config, pool }
+}
+
+fn fresh_tls_pool() -> &'static crate::proxy::Pool<super::AsyncTlsStream> {
+    Box::leak(Box::new(crate::proxy::Pool::new(8, Duration::from_secs(60))))
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tls_connections_are_pooled() {
+    let (port, config, accepted, _) = crate::proxy::tests::tls_backend_with_pem(OK, 100);
+    let pool = fresh_tls_pool();
+    for _ in 0..5 {
+        let response = forward(&get("/"), "10.0.0.1", "localhost", port, Some(tls_to(Arc::clone(&config), pool)), Duration::from_secs(2), Duration::from_secs(2))
+            .await
+            .unwrap();
+        assert_eq!(b"hello".to_vec(), body(&response));
+    }
+    assert_eq!(1, accepted.load(Ordering::SeqCst), "5 HTTPS requests, 1 handshake");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_chunked_tls_response_is_streamed_through_the_channel() {
+    const CHUNKED: &[u8] = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
+    let (port, config, _, _) = crate::proxy::tests::tls_backend_with_pem(CHUNKED, 1);
+    let mut response = forward(&get("/"), "10.0.0.1", "localhost", port, Some(tls_to(config, fresh_tls_pool())), Duration::from_secs(2), Duration::from_secs(2))
+        .await
+        .unwrap();
+    let mut pipe = response.stream_pipe.take().expect("streamed");
+    let raw = tokio::task::spawn_blocking(move || {
+        let mut raw = Vec::new();
+        let _ = pipe.read_to_end(&mut raw);
+        raw
+    })
+    .await
+    .unwrap();
+    assert!(raw.starts_with(b"5\r\nhello\r\n0\r\n"), "{:?}", String::from_utf8_lossy(&raw));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_untrusted_tls_backend_is_an_error() {
+    // Self-signed, checked against the WebPKI roots.
+    let (port, _, _, _) = crate::proxy::tests::tls_backend_with_pem(OK, 1);
+    let webpki = tls_to(crate::proxy::tls_client_config(), fresh_tls_pool());
+    assert!(forward(&get("/"), "10.0.0.1", "localhost", port, Some(webpki), Duration::from_secs(2), Duration::from_secs(2)).await.is_err());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_tls_ca_file_route_is_served_async() {
+    use crate::application::Application;
+    let (port, _, _, pem) = crate::proxy::tests::tls_backend_with_pem(OK, 100);
+    let ca = crate::test_env::TempPath::new("async_private_ca.pem");
+    std::fs::write(ca.as_str(), pem).unwrap();
+    let config = crate::proxy_config::ProxyConfig::from_str(&format!(r#"
+[[upstream]]
+name        = "internal"
+backends    = ["https://localhost:{port}"]
+tls_ca_file = "{}"
+
+[[route]]
+  [route.match]
+  path = "/api/*"
+  [route.action]
+  type     = "proxy"
+  upstream = "internal"
+"#, ca.as_str()));
+    let app = crate::proxy_config::builder::build(config).0;
+    let (request, connection) = (get("/api/x"), conn());
+    let response = app.execute_async(&request, &connection).expect("async path").await.unwrap();
+    assert_eq!(b"hello".to_vec(), body(&response));
 }

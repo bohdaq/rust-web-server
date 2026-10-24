@@ -899,7 +899,7 @@ fn tls_backend(response: &'static [u8], responses_per_conn: usize) -> (u16, Arc<
 
 /// [`tls_backend`] that also returns the backend certificate as PEM.
 #[cfg(feature = "http2")]
-fn tls_backend_with_pem(response: &'static [u8], responses_per_conn: usize) -> (u16, Arc<rustls::ClientConfig>, Arc<AtomicU32>, String) {
+pub(crate) fn tls_backend_with_pem(response: &'static [u8], responses_per_conn: usize) -> (u16, Arc<rustls::ClientConfig>, Arc<AtomicU32>, String) {
     let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
     let cert_pem = certified.cert.pem();
     let cert_der = rustls::pki_types::CertificateDer::from(certified.cert.der().to_vec());
