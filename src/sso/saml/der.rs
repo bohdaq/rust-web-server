@@ -2,11 +2,10 @@
 //! X.509 certificate — not a general ASN.1 parser.
 //!
 //! SAML IdP metadata embeds the signing certificate as raw base64 DER
-//! (`<ds:X509Certificate>`). To get from that to an [`rsa::RsaPublicKey`]
-//! we only need to locate the `subjectPublicKeyInfo` field inside
-//! `Certificate.tbsCertificate` — `rsa::pkcs8::DecodePublicKey` (already a
-//! transitive capability of the `rsa` crate this crate already depends on
-//! for JWKS verification) parses that slice directly. Full X.509 parsing
+//! (`<ds:X509Certificate>`). To get from that to a
+//! [`crate::rsa_key::RsaPublicKey`] we only need to locate the
+//! `subjectPublicKeyInfo` field inside `Certificate.tbsCertificate` —
+//! `RsaPublicKey::from_public_key_der` parses that slice. Full X.509 parsing
 //! (extensions, name constraints, validity, etc.) is not needed and not
 //! implemented — this module's only job is walking past the DER fields
 //! that come *before* the public key.

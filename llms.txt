@@ -259,7 +259,7 @@ let mcp = App::new().mcp("my-server", "1.0.0")
 | `http-client` | HTTPS for outbound `Client` | `rustls`, `webpki-roots` |
 | `serde` | `Json<T>` extractor/responder via `serde_json` | `serde`, `serde_json` |
 | `auth` | `BasicAuthLayer`, `JwtLayer`, `ForwardAuthLayer`, `build_jwt`/`verify_jwt` (HS256) | `hmac`, `sha2` |
-| `auth-asymmetric` | `JwtLayer::rs256`/`::es256`, `verify_jwt_rs256`/`verify_jwt_es256` (implies `auth`) | `rsa`, `p256`, `rand_core` |
+| `auth-asymmetric` | `JwtLayer::rs256`/`::es256`, `verify_jwt_rs256`/`verify_jwt_es256` (implies `auth`); RSA verification in-crate (`rsa_key::RsaPublicKey`) | `p256`, `rand_core` |
 | `macros` | `#[get]`, `#[derive(FromRequest)]`, `#[derive(Validate)]`, `#[derive(Config)]`, `routes!` | `rws-macros` |
 | `acme` | Automatic HTTPS via Let's Encrypt / any ACME CA; `[acme]` config section (implies `http2`; in prebuilt binaries) | `rcgen`, `aws-lc-rs` |
 | `tera` | Tera HTML template engine (Jinja2/Django syntax) | `tera`, `serde`, `serde_json` |
@@ -268,7 +268,7 @@ let mcp = App::new().mcp("my-server", "1.0.0")
 | `model-mysql` | Async ORM backed by MySQL (implies `http2`); combinable with the other two `model-*` features (see `Backend`) | `sqlx` |
 | `crypto` | `hash_password`/`verify_password` (Argon2id), `generate_token` (CSPRNG), `signed_cookie`/`verify_signed_cookie` (HMAC-SHA256), `encrypted_cookie`/`decrypt_cookie` (AES-256-GCM) | `argon2`, `rand_core`, `hmac`, `sha2`, `aes-gcm` |
 | `csrf` | `CsrfLayer` + `CsrfToken` — double-submit cookie CSRF protection | `rand_core` |
-| `sso` | `OidcAuth` middleware, PKCE, RS256/ES256 JWT via JWKS, provider presets | `rsa`, `p256`, `sha2`, `serde`, `serde_json` |
+| `sso` | `OidcAuth` middleware, PKCE, RS256/ES256 JWT via JWKS, provider presets | `p256`, `sha2`, `serde`, `serde_json` |
 | `sso-server` | `AuthServer` — OAuth 2.0 Authorization Server (HS256 token issuer); implies `sso` + `auth` | (none beyond `sso`/`auth`) |
 | `sso-saml` | `SamlSp` — SAML 2.0 Service Provider, ACS handler, RSA-SHA256 XML signature verification; implies `sso` | (none — hand-rolled XML parser, not quick-xml) |
 | `webhook` | `verify_webhook_signature`, `WebhookProvider` (GitHub/Shopify/Stripe HMAC verification) | `hmac`, `sha2` |
@@ -2203,7 +2203,7 @@ let www_router = Router::new().with_host("www.example.com").get("/", home_handle
 - IP filtering — `IpFilter::allow([…])` / `.deny([…])`; IPv4 and IPv6, CIDR
 - Config validation — `rws --check[=<file>] [--format=json]` / `config_check::check_file(path) -> ConfigReport` (`.render(path)`, `.render_json(path)`); unknown keys, bad values, unloadable TLS files, undeclared upstreams, unset auth secrets, duplicate virtual hosts, CORS origins with a path or no scheme, a missing `spa_fallback` file; exit 1 on errors
 - JWT HS256 — `auth` module; constant-time HMAC
-- JWT RS256/ES256 without a JWKS endpoint — `JwtLayer::rs256`/`::es256`; static PEM public key, `auth-asymmetric` feature
+- JWT RS256/ES256 without a JWKS endpoint — `JwtLayer::rs256`/`::es256`; static PEM public key, `auth-asymmetric` feature. RSA verification is in-crate (`rsa_key::RsaPublicKey`, 2048–8192-bit keys) — no `rsa` crate, so RUSTSEC-2023-0071 doesn't apply
 - Forward-auth to an external service — `auth::forward::ForwardAuthLayer`; fails closed (502) if the auth service is unreachable
 - JWT RS256/ES256 — `sso::JwksCache`; signature + expiry + aud + iss validated
 - Webhook signature verification — `webhook::verify_webhook_signature`; GitHub/Shopify/Stripe HMAC-SHA256, constant-time compare, Stripe replay-window timestamp check

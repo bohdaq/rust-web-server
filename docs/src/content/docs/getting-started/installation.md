@@ -100,7 +100,7 @@ cargo build --release --no-default-features --features http1
 | `model-mysql` | ORM backend for MySQL / MariaDB | `mysql` |
 | `crypto` | Argon2id password hashing | `argon2`, `rand_core` |
 | `csrf` | CSRF token generation and validation | `rand_core` |
-| `sso` | OAuth 2.0 / OIDC SSO support (RSA + ECDSA signing, outbound HTTPS) | `rsa`, `p256`, `sha2`, `rand_core`, `serde`, `serde_json`, `http-client` |
+| `sso` | OAuth 2.0 / OIDC SSO support (RSA + ECDSA signing, outbound HTTPS) | `p256`, `sha2`, `rand_core`, `serde`, `serde_json`, `http-client` |
 
 :::note[Combining features]
 Features compose freely. For example, to build HTTP/2 + TLS + JSON + SQLite:

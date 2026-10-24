@@ -11,11 +11,8 @@ use std::sync::Mutex;
 
 use p256::ecdsa::signature::Verifier as EcVerifier;
 use p256::ecdsa::{Signature as EcSignature, VerifyingKey as EcVerifyingKey};
-use rsa::pkcs1v15::VerifyingKey as RsaVerifyingKey;
-use rsa::signature::Verifier as RsaVerifier;
-use rsa::{BigUint, RsaPublicKey};
+use crate::rsa_key::RsaPublicKey;
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
 
 use crate::http_client::Client;
 
@@ -185,17 +182,11 @@ impl JwksCache {
         for entry in candidates {
             match (&entry.key, alg) {
                 (CachedKey::Rsa { n, e }, "RS256") => {
-                    let pub_key = RsaPublicKey::new(
-                        BigUint::from_bytes_be(n),
-                        BigUint::from_bytes_be(e),
-                    )
-                    .map_err(|err| SsoError(format!("invalid RSA key: {err}")))?;
-                    let vk = RsaVerifyingKey::<Sha256>::new(pub_key);
-                    use rsa::pkcs1v15::Signature as RsaSig;
-                    if let Ok(sig) = RsaSig::try_from(signature) {
-                        if vk.verify(message, &sig).is_ok() {
-                            return Ok(true);
-                        }
+                    // A key we can't use (e.g. under 2048 bits) is skipped,
+                    // not fatal: another key in the set may match.
+                    let Ok(pub_key) = RsaPublicKey::from_components(n, e) else { continue };
+                    if pub_key.verify_pkcs1v15_sha256(message, signature) {
+                        return Ok(true);
                     }
                 }
                 (CachedKey::Ec { x, y }, "ES256") => {

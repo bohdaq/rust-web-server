@@ -139,6 +139,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `#[derive(Validate)]` | `macros` (proc-macro) | Derive `Validate` from `#[validate(...)]` field annotations. Validators: `length(min,max)`, `range(min,max)`, `email`, `required`, `url`. Requires `features = ["macros"]`. |
 | `ReverseProxy` | `proxy` | Middleware that forwards requests to HTTP backends with round-robin load balancing and automatic failover. Returns `502` when all backends fail. Reuses idle TCP connections via the built-in `ConnPool`. SSE (`text/event-stream`), chunked AI token streams, and large downloads (`Content-Length > 1 MB`) are forwarded without buffering via `Response::stream_pipe`. `.with_circuit_breaker(Arc<dyn circuit_breaker::Breaker>)` auto-wires a circuit breaker: an `Open` backend is skipped with no dial attempt, and every outcome is recorded automatically — no manual `is_available`/`record_success`/`record_failure` calls needed. |
 | `RateLimiter::retry_after` / `RateLimiter::limits` | `rate_limit` | Seconds a rejected client should wait (the window length; sent as `Retry-After` on every `429` from `RateLimitLayer` and per-route limits), and the current `(max_requests, window_secs)`. |
+| `rsa_key::RsaPublicKey` | `rsa_key` (`auth-asymmetric` / `sso`) | RSA public key from PEM (`BEGIN PUBLIC KEY` / `BEGIN RSA PUBLIC KEY`), DER (SPKI / PKCS#1) or JWK components; `.verify_pkcs1v15_sha256(message, signature)` (RS256, rsa-sha256). In-crate, no `rsa` crate; 2048–8192-bit keys. Replaces `rsa::RsaPublicKey` in `verify_jwt_rs256` and `SamlIdpMetadata.signing_key` (18.0.0). |
 | `UpstreamTls` / `ReverseProxy::tls_ca_file` | `proxy` | Trust the CA certificates in a PEM file for `https://` backends **instead of** the WebPKI roots (private CA / self-signed). Config: `[[upstream]] tls_ca_file`; health checks use the same roots; an unloadable file fails closed (502). |
 | `ConnPool` / `Pool<S>` | `proxy` | Per-backend HTTP/1.1 connection pool (`ConnPool = Pool<TcpStream>`; `https://` backends use an internal `Pool` of TLS streams, so TLS connections are reused too). `ConnPool::new(max_idle, idle_timeout)` or `ConnPool::new_default()`. Share across proxy instances with `Arc<ConnPool>` via `ReverseProxy::with_pool()`. Config-driven proxy routes, `CanaryLayer` and the ingress proxy share a process-wide pool (64 idle connections per backend). A pooled connection the backend has already closed is retried once on a fresh connection for idempotent methods (GET, HEAD, OPTIONS, PUT, DELETE) — never for POST/PATCH, which may already have been processed. |
 | `RewriteLayer` | `rewrite` | Composable request/response rewriting middleware: request header add/replace/remove, URI set/strip-prefix/add-prefix, response header add/replace/remove, status override, body byte find-and-replace. `.request_uri_regex_rewrite(pattern, replacement)` (requires `features = ["rewrite-regex"]`) rewrites the URI by regex, nginx `rewrite`-directive style, with `$1`/`${name}` capture expansion; returns `Result<Self, regex::Error>`. |
@@ -213,7 +214,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `AuthServer` / `AuthServerConfig` | `sso-server` | `rws` as its own OAuth 2.0 Authorization Server (Middleware). Intercepts `POST /oauth/token` (`client_credentials`, `authorization_code` + PKCE, `refresh_token` grants), `GET /oauth/authorize`, `GET /.well-known/openid-configuration`, `GET /.well-known/jwks.json`. Signs tokens with HS256 via `auth::build_jwt` (not RSA/EC — see `src/sso/server.rs` docs), so `jwks.json` always returns an empty key set. `/oauth/authorize` trusts an existing app session (configurable key, default `"user_id"`) rather than a built-in login page; redirects to a configurable `login_url` (default `/login`) if absent. |
 | `ClientStore` / `OAuthClient` / `GrantType` | `sso-server` | Registry of OAuth 2.0 clients for `AuthServer`. `ClientStore::new().add(OAuthClient{...}).get(client_id)`. `OAuthClient.client_secret: Option<String>` (`None` = public/PKCE-only client). No `::from_env()` — client secrets belong in code or a secret store. |
 | `SamlSp` / `SamlConfig` | `sso-saml` | SAML 2.0 Service Provider (Middleware). Intercepts `GET /saml/metadata`, `GET /saml/login`, `POST /saml/acs`, `GET /saml/logout`. Verifies `RSA-SHA256` XML signatures byte-exact (not full C14N — see `src/sso/saml/assertion.rs` docs), rejects multi-`Assertion` documents (XSW mitigation) and `EncryptedAssertion`. `AuthnRequest`s use HTTP-POST binding, unsigned. Logout is local-only (no IdP `LogoutRequest`). |
-| `SamlIdpMetadata` | `sso-saml` | Parsed IdP metadata: `entity_id`, `sso_url`, `signing_key: RsaPublicKey`. `::from_file(path)` / `::from_url(url)` / `::from_str(xml)`. |
+| `SamlIdpMetadata` | `sso-saml` | Parsed IdP metadata: `entity_id`, `sso_url`, `signing_key: rsa_key::RsaPublicKey`. `::from_file(path)` / `::from_url(url)` / `::from_str(xml)`. |
 | `AttributeMap` / `SamlClaims` | `sso-saml` | `AttributeMap::new().map(saml_attribute_name, field)` translates IdP attribute names into `SamlClaims { name_id, attributes: HashMap<String,String> }` — not `OidcClaims` (no `groups` field to hold the design sketch's own example mapping). `SamlSp::claims(req)`/`::name_id()`/`::attr(req, field)` read the injected claims. |
 | `Mailer` | `mailer` (requires `mailer` feature; STARTTLS/SMTPS additionally require `http-client` or `http2`) | SMTP mailer. `Mailer::from_env()` reads `RWS_SMTP_HOST/PORT/USER/PASSWORD/FROM/TLS/TIMEOUT_MS`. `mailer.send(&email)` opens a TCP connection, negotiates TLS (STARTTLS or SMTPS), authenticates with `AUTH PLAIN`, and delivers the message. Three TLS modes: `SmtpTls::None` (plain, port 25), `SmtpTls::Starttls` (default, port 587), `SmtpTls::Smtps` (implicit TLS, port 465). |
 | `Email` / `EmailBuilder` | `mailer` | RFC 5322 email builder. `Email::builder().to(addr).subject(s).text(body).html(body).cc(addr).bcc(addr).reply_to(addr).build()`. Validates that at least one `To:` address, a subject, and a body (text or HTML) are provided. Generates `multipart/alternative` when both text and HTML are set. |
@@ -5083,4 +5084,27 @@ let app = App::new().wrap(proxy.path_prefix("/billing"));
 In `rws.config.toml` the same setting is `tls_ca_file` on an `[[upstream]]`;
 health checks use it too, and a CA file that can't be loaded makes the
 upstream answer `502` instead of trusting public CAs.
+
+### 89. Verifying an RS256 token with a key you already have
+
+`rsa_key::RsaPublicKey` (`auth-asymmetric` or `sso` feature) loads an RSA
+public key from PEM, DER or a JWK's `n`/`e`, and verifies RS256 / rsa-sha256
+signatures — in-crate, without the `rsa` crate:
+
+```rust
+use rust_web_server::auth::verify_jwt_rs256;
+use rust_web_server::rsa_key::RsaPublicKey;
+
+let key = RsaPublicKey::from_public_key_pem(&std::fs::read_to_string("issuer.pub.pem")?)?;
+if let Some(claims) = verify_jwt_rs256(&token, &key) {
+    println!("sub = {:?}", claims.sub);
+}
+
+// Or verify any RSASSA-PKCS1-v1_5 / SHA-256 signature directly:
+let ok = key.verify_pkcs1v15_sha256(b"message", &signature);
+```
+
+Upgrading from 17.x: `verify_jwt_rs256` and `SamlIdpMetadata.signing_key` used
+`rsa::RsaPublicKey`; build an `rsa_key::RsaPublicKey` instead
+(`from_public_key_pem`, `from_public_key_der`, or `from_components(n, e)`).
 

@@ -3,10 +3,12 @@
 [advisories]
 ignore = [
     # RUSTSEC-2023-0071 (rsa, "Marvin Attack"): timing side channel in RSA
-    # *private-key* operations (decryption/signing). No fixed rsa release
-    # exists. rws only uses rsa::RsaPublicKey for RS256 signature
-    # verification (sso::jwks, auth-asymmetric JwtLayer, sso::saml) —
-    # RsaPrivateKey appears only in tests, to mint fixtures — so the
-    # vulnerable code path is never reached in production builds.
+    # *private-key* operations; no fixed rsa release exists. rws itself no
+    # longer depends on rsa (RS256 / SAML verification is in-crate,
+    # src/rsa_key). It remains in Cargo.lock only through sqlx-mysql (the
+    # optional `model-mysql` feature), which uses it to encrypt a password
+    # with the MySQL server's *public* key (caching_sha2_password over a
+    # non-TLS connection) — no private-key operation, so not exploitable.
+    # Drop this when sqlx-mysql moves off rsa 0.9.
     "RUSTSEC-2023-0071",
 ]

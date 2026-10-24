@@ -20,6 +20,7 @@ cargo install cargo-fuzz
 | `url` | `URL::parse_request_target` | request targets |
 | `jwt` | `auth::verify_jwt` | bearer tokens |
 | `saml_xml` | the SAML XML parser (via `fuzz_api`) | `POST /saml/acs`, unauthenticated |
+| `rsa_key` | RSA key parsing (DER, PEM, JWK) and RS256 / rsa-sha256 verification | IdP metadata, JWKS, SAML `SignatureValue` |
 | `config_file` | `rws.config.toml` settings loader | operator files |
 | `proxy_config` | proxy route parser | operator files |
 

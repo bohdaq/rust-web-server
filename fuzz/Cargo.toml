@@ -100,3 +100,9 @@ name = "http1_framing"
 path = "fuzz_targets/http1_framing.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "rsa_key"
+path = "fuzz_targets/rsa_key.rs"
+test = false
+doc = false

@@ -53,9 +53,7 @@
 
 use std::collections::HashMap;
 
-use rsa::pkcs1v15::{Signature as RsaSignature, VerifyingKey};
-use rsa::signature::Verifier;
-use rsa::RsaPublicKey;
+use crate::rsa_key::RsaPublicKey;
 use sha2::{Digest, Sha256};
 
 use super::metadata::decode_base64_flexible;
@@ -219,14 +217,11 @@ fn verify_signature(raw_xml: &str, assertion: &XmlNode, idp_signing_key: &RsaPub
         .map(|n| n.text.clone())
         .ok_or_else(|| SsoError("Signature is missing SignatureValue".into()))?;
     let signature_bytes = decode_base64_flexible(&signature_value_b64)?;
-    let rsa_signature = RsaSignature::try_from(signature_bytes.as_slice())
-        .map_err(|e| SsoError(format!("malformed SignatureValue: {e}")))?;
 
-    let verifying_key = VerifyingKey::<Sha256>::new(idp_signing_key.clone());
     let signed_info_bytes = raw_xml[signed_info.start..signed_info.end].as_bytes();
-    verifying_key
-        .verify(signed_info_bytes, &rsa_signature)
-        .map_err(|_| SsoError("SignatureValue does not verify against the IdP's signing certificate".into()))?;
+    if !idp_signing_key.verify_pkcs1v15_sha256(signed_info_bytes, &signature_bytes) {
+        return Err(SsoError("SignatureValue does not verify against the IdP's signing certificate".into()));
+    }
 
     Ok(())
 }

@@ -443,24 +443,20 @@ mod jwks_tests {
 
     /// RSA key generation is slow (~100ms+); share one 2048-bit key across
     /// every RS256 test rather than generating a fresh one each time.
-    fn rsa_key() -> &'static rsa::RsaPrivateKey {
-        static KEY: OnceLock<rsa::RsaPrivateKey> = OnceLock::new();
-        KEY.get_or_init(|| rsa::RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap())
+    fn rsa_key() -> &'static crate::rsa_key::test_support::TestRsaKey {
+        static KEY: OnceLock<crate::rsa_key::test_support::TestRsaKey> = OnceLock::new();
+        KEY.get_or_init(crate::rsa_key::test_support::TestRsaKey::generate)
     }
 
     pub(super) fn rsa_jwk_json(kid: &str) -> String {
-        use rsa::traits::PublicKeyParts;
         let pub_key = rsa_key().to_public_key();
-        let n = base64url_encode(&pub_key.n().to_bytes_be());
-        let e = base64url_encode(&pub_key.e().to_bytes_be());
+        let n = base64url_encode(pub_key.modulus());
+        let e = base64url_encode(&pub_key.exponent_bytes());
         format!(r#"{{"kty":"RSA","kid":"{kid}","n":"{n}","e":"{e}"}}"#)
     }
 
     pub(super) fn sign_rs256(message: &[u8]) -> Vec<u8> {
-        use rsa::pkcs1v15::SigningKey;
-        use rsa::signature::{SignatureEncoding, Signer};
-        let signing_key = SigningKey::<sha2::Sha256>::new(rsa_key().clone());
-        signing_key.sign(message).to_bytes().to_vec()
+        rsa_key().sign_sha256(message)
     }
 
     #[test]

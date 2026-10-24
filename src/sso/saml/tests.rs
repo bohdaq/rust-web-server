@@ -21,16 +21,16 @@ use crate::request::{Request, METHOD};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::{Address, ConnectionInfo};
 use crate::session::SessionStore;
-use rsa::pkcs8::{DecodePublicKey, EncodePublicKey};
-use rsa::RsaPublicKey;
+use crate::rsa_key::RsaPublicKey;
+use crate::rsa_key::test_support::TestRsaKey;
 use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // ── shared RSA test key + fake X.509 wrapper ────────────────────────────────
 
-fn idp_key() -> &'static rsa::RsaPrivateKey {
-    static KEY: OnceLock<rsa::RsaPrivateKey> = OnceLock::new();
-    KEY.get_or_init(|| rsa::RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap())
+fn idp_key() -> &'static TestRsaKey {
+    static KEY: OnceLock<TestRsaKey> = OnceLock::new();
+    KEY.get_or_init(TestRsaKey::generate)
 }
 
 fn der_len(n: usize) -> Vec<u8> {
@@ -67,7 +67,7 @@ fn der_small_integer(n: u8) -> Vec<u8> {
 /// `extract_subject_public_key_info` only needs to skip them by TLV
 /// length, not interpret their contents.
 fn fake_cert_der(pub_key: &RsaPublicKey) -> Vec<u8> {
-    let spki = pub_key.to_public_key_der().unwrap().as_bytes().to_vec();
+    let spki = pub_key.to_public_key_der();
     let tbs = der_sequence(&[
         der_small_integer(1),  // serialNumber
         der_sequence(&[]),     // signature AlgorithmIdentifier
@@ -278,11 +278,8 @@ fn build_signed_response(opts: &SignedResponseOptions) -> String {
         r##"<ds:SignedInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/><ds:Reference URI="#{assertion_id}"><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><ds:DigestValue>{digest_b64}</ds:DigestValue></ds:Reference></ds:SignedInfo>"##
     );
 
-    use rsa::pkcs1v15::SigningKey;
-    use rsa::signature::{SignatureEncoding, Signer};
-    let signing_key = SigningKey::<sha2::Sha256>::new(idp_key().clone());
-    let signature = signing_key.sign(signed_info.as_bytes());
-    let signature_b64 = super::base64_standard_encode(&signature.to_bytes());
+    let signature = idp_key().sign_sha256(signed_info.as_bytes());
+    let signature_b64 = super::base64_standard_encode(&signature);
 
     let signature_xml = format!(
         r#"<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">{signed_info}<ds:SignatureValue>{signature_b64}</ds:SignatureValue></ds:Signature>"#
@@ -351,7 +348,7 @@ fn assertion_tampered_name_id_fails_digest_check() {
 #[test]
 fn assertion_signed_by_different_key_fails() {
     let xml_str = build_signed_response(&default_opts());
-    let other_key = rsa::RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap();
+    let other_key = TestRsaKey::generate();
     let result = parse_and_verify(&xml_str, IDP_ENTITY, &other_key.to_public_key(), SP_ENTITY, ACS_URL, Some(REQUEST_ID), unix_now());
     assert!(result.is_err());
 }

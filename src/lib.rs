@@ -65,6 +65,9 @@ pub mod blocklist;
 pub mod cache;
 pub mod config_reload;
 pub mod config_check;
+/// RSA public keys and RS256 / rsa-sha256 signature verification (no `rsa` crate).
+#[cfg(any(feature = "auth-asymmetric", feature = "sso"))]
+pub mod rsa_key;
 pub mod server_config;
 pub mod feature;
 pub mod maintenance;

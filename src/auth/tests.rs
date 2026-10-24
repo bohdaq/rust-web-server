@@ -5,7 +5,6 @@ use crate::auth::{
 };
 use sha2::{Digest, Sha256};
 use crate::core::New;
-use crate::error::IntoResponse;
 use crate::header::Header;
 use crate::http::VERSION;
 use crate::middleware::{Middleware, WithMiddleware};
@@ -208,7 +207,6 @@ fn basic_auth_password_with_colon() {
 
 #[test]
 fn basic_auth_via_middleware_stack() {
-    use crate::app::App;
     let app = WithMiddleware::new(OkApp).wrap(
         BasicAuthLayer::new(|user, pass| user == "a" && pass == "b"),
     );
@@ -261,10 +259,8 @@ mod asymmetric_jwt {
     use crate::auth::{verify_jwt_es256, verify_jwt_rs256};
     use p256::ecdsa::signature::Signer as EcSigner;
     use p256::ecdsa::{Signature as EcSignature, SigningKey as EcSigningKey, VerifyingKey as EcVerifyingKey};
-    use rsa::pkcs1v15::SigningKey as RsaSigningKey;
-    use rsa::pkcs8::EncodePublicKey as RsaEncodePublicKey;
-    use rsa::signature::{SignatureEncoding, Signer as RsaSigner};
-    use rsa::{RsaPrivateKey, RsaPublicKey};
+    use crate::rsa_key::RsaPublicKey;
+    use crate::rsa_key::test_support::TestRsaKey as RsaPrivateKey;
     use std::sync::OnceLock;
 
     // RSA keygen (2048-bit) is real cryptographic work, not instantaneous —
@@ -272,7 +268,7 @@ mod asymmetric_jwt {
     fn rsa_keypair() -> &'static (RsaPrivateKey, RsaPublicKey) {
         static KEYPAIR: OnceLock<(RsaPrivateKey, RsaPublicKey)> = OnceLock::new();
         KEYPAIR.get_or_init(|| {
-            let priv_key = RsaPrivateKey::new(&mut rand_core::OsRng, 2048).expect("RSA keygen");
+            let priv_key = RsaPrivateKey::generate();
             let pub_key = priv_key.to_public_key();
             (priv_key, pub_key)
         })
@@ -304,9 +300,8 @@ mod asymmetric_jwt {
         let header = base64url_encode(br#"{"alg":"RS256","typ":"JWT"}"#);
         let payload = base64url_encode(claims_json.as_bytes());
         let message = format!("{}.{}", header, payload);
-        let signing_key = RsaSigningKey::<Sha256>::new(priv_key.clone());
-        let signature = signing_key.sign(message.as_bytes());
-        format!("{}.{}", message, base64url_encode(&signature.to_vec()))
+        let signature = priv_key.sign_sha256(message.as_bytes());
+        format!("{}.{}", message, base64url_encode(&signature))
     }
 
     fn build_jwt_es256(claims_json: &str, signing_key: &EcSigningKey) -> String {
@@ -318,7 +313,7 @@ mod asymmetric_jwt {
     }
 
     fn rsa_public_key_pem(pub_key: &RsaPublicKey) -> String {
-        pub_key.to_public_key_pem(Default::default()).expect("PEM encode")
+        pub_key.to_public_key_pem()
     }
 
     fn ec_public_key_pem(pub_key: &EcVerifyingKey) -> String {
@@ -339,7 +334,7 @@ mod asymmetric_jwt {
     #[test]
     fn verify_jwt_rs256_wrong_key_returns_none() {
         let (priv_key, _) = rsa_keypair();
-        let other_priv = RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap();
+        let other_priv = RsaPrivateKey::generate();
         let other_pub = other_priv.to_public_key();
         let token = build_jwt_rs256(r#"{"sub":"u"}"#, priv_key);
         assert!(verify_jwt_rs256(&token, &other_pub).is_none());
@@ -456,7 +451,7 @@ mod asymmetric_jwt {
     #[test]
     fn jwt_layer_rs256_wrong_key_returns_401() {
         let (priv_key, _) = rsa_keypair();
-        let other_priv = RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap();
+        let other_priv = RsaPrivateKey::generate();
         let other_pub = other_priv.to_public_key();
         let layer = JwtLayer::rs256(&rsa_public_key_pem(&other_pub)).unwrap();
         let token = build_jwt_rs256(r#"{"sub":"u"}"#, priv_key);

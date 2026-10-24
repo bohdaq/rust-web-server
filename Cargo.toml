@@ -56,7 +56,7 @@ http-client = ["dep:rustls", "dep:webpki-roots"]
 acme   = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs"]
 serde  = ["dep:serde", "dep:serde_json"]
 auth   = ["dep:hmac", "dep:sha2"]
-auth-asymmetric = ["auth", "dep:rsa", "dep:p256", "dep:rand_core"]  # RS256/ES256 in JwtLayer; reuses the sso feature's rsa/p256 deps
+auth-asymmetric = ["auth", "dep:p256", "dep:rand_core"]  # RS256 (in-crate rsa_key) / ES256 (p256) in JwtLayer
 macros = ["dep:rws-macros"]
 tera   = ["dep:tera", "dep:serde", "dep:serde_json"]
 model-sqlite   = ["dep:sqlx", "sqlx/sqlite",   "sqlx/runtime-tokio", "http2"]
@@ -65,7 +65,7 @@ model-mysql    = ["dep:sqlx", "sqlx/mysql",    "sqlx/runtime-tokio-rustls", "htt
 crypto = ["dep:argon2", "dep:rand_core", "dep:hmac", "dep:sha2", "dep:aes-gcm"]
 csrf   = ["dep:rand_core"]
 mailer = []  # plain SMTP; STARTTLS/SMTPS additionally requires http-client or http2
-sso    = ["dep:rsa", "dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:serde_json", "http-client"]
+sso    = ["dep:p256", "dep:sha2", "dep:rand_core", "dep:serde", "dep:serde_json", "http-client"]
 sso-server = ["sso", "auth"]  # AuthServer: rws as its own OAuth 2.0 token issuer; reuses auth's HS256 build_jwt/verify_jwt (see src/sso/server.rs docs for why not RSA/EC)
 sso-saml   = ["sso"]  # SamlSp: SAML 2.0 Service Provider; no new deps — hand-rolled XML parser, not quick-xml (see src/sso/saml/mod.rs docs)
 jobs   = []  # in-memory JobQueue; PersistentJobQueue additionally requires a model-* feature
@@ -100,7 +100,6 @@ serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 hmac  = { version = "0.12", optional = true }
 sha2  = { version = "0.10", features = ["oid"], optional = true }
-rsa       = { version = "0.9", optional = true }
 p256      = { version = "0.14", features = ["ecdsa"], optional = true }
 aws-lc-rs = { version = "1", optional = true }
 rws-macros = { path = "rws-macros", version = "17", optional = true }
@@ -127,6 +126,8 @@ tokio = { version = "1", features = ["test-util", "macros", "rt"] }
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 # Self-signed certificates for the in-process HTTP/3 test (src/h3_handler/tests.rs).
 rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }
+# RSA keys and signatures for tests of rsa_key (src/rsa_key/test_support.rs).
+aws-lc-rs = "1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 webpki-roots = { version = "1.0.11", optional = true }

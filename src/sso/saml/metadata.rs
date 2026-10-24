@@ -1,7 +1,6 @@
 //! IdP metadata: entity ID, SSO endpoint, and signing certificate.
 
-use rsa::pkcs8::DecodePublicKey;
-use rsa::RsaPublicKey;
+use crate::rsa_key::RsaPublicKey;
 
 use super::der::extract_subject_public_key_info;
 use super::xml;

@@ -314,19 +314,15 @@ fn finish_asymmetric_verification(header_str: &str, expected_alg: &str, payload_
 /// a header `alg` other than `"RS256"`, signature mismatch, or an expired
 /// `exp` claim.
 #[cfg(feature = "auth-asymmetric")]
-pub fn verify_jwt_rs256(token: &str, public_key: &rsa::RsaPublicKey) -> Option<Claims> {
-    use rsa::pkcs1v15::{Signature as RsaSignature, VerifyingKey as RsaVerifyingKey};
-    use rsa::signature::Verifier;
-
+pub fn verify_jwt_rs256(token: &str, public_key: &crate::rsa_key::RsaPublicKey) -> Option<Claims> {
     let (header_b64, payload_b64, sig_b64) = split_jwt(token)?;
     let header_str = String::from_utf8(base64_decode(header_b64)?).ok()?;
 
     let message = format!("{}.{}", header_b64, payload_b64);
     let signature = base64_decode(sig_b64)?;
-
-    let verifying_key = RsaVerifyingKey::<Sha256>::new(public_key.clone());
-    let sig = RsaSignature::try_from(signature.as_slice()).ok()?;
-    verifying_key.verify(message.as_bytes(), &sig).ok()?;
+    if !public_key.verify_pkcs1v15_sha256(message.as_bytes(), &signature) {
+        return None;
+    }
 
     finish_asymmetric_verification(&header_str, "RS256", payload_b64)
 }
@@ -523,7 +519,7 @@ pub struct JwtLayer {
 enum JwtVerifier {
     Hs256(Vec<u8>),
     #[cfg(feature = "auth-asymmetric")]
-    Rs256(Box<rsa::RsaPublicKey>),
+    Rs256(Box<crate::rsa_key::RsaPublicKey>),
     #[cfg(feature = "auth-asymmetric")]
     Es256(Box<p256::ecdsa::VerifyingKey>),
 }
@@ -536,9 +532,10 @@ impl JwtLayer {
 
     /// Create a layer that verifies RS256 JWTs against an RSA public key.
     ///
-    /// `public_key_pem` must be in SubjectPublicKeyInfo PEM format (the
-    /// `-----BEGIN PUBLIC KEY-----` block produced by, e.g.,
-    /// `openssl rsa -in key.pem -pubout` or `openssl req -pubkey`).
+    /// `public_key_pem` is a `-----BEGIN PUBLIC KEY-----` block
+    /// (SubjectPublicKeyInfo — `openssl rsa -in key.pem -pubout`,
+    /// `openssl req -pubkey`) or a `-----BEGIN RSA PUBLIC KEY-----` (PKCS#1)
+    /// block; 2048–8192-bit keys.
     ///
     /// # Errors
     ///
@@ -546,8 +543,7 @@ impl JwtLayer {
     /// public key.
     #[cfg(feature = "auth-asymmetric")]
     pub fn rs256(public_key_pem: &str) -> Result<Self, String> {
-        use rsa::pkcs8::DecodePublicKey;
-        let key = rsa::RsaPublicKey::from_public_key_pem(public_key_pem)
+        let key = crate::rsa_key::RsaPublicKey::from_public_key_pem(public_key_pem)
             .map_err(|e| format!("invalid RSA public key: {e}"))?;
         Ok(JwtLayer { verifier: JwtVerifier::Rs256(Box::new(key)) })
     }

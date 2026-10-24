@@ -103,7 +103,7 @@ async fn main() {
 }
 ```
 
-Routing with path parameters, typed extractors, one `Middleware` trait for everything (auth, rate limiting, caching, tracing, the reverse proxy itself), WebSocket, SSE, an MCP server, an async ORM, background jobs, object storage, a mailer, and OAuth/OIDC/SAML login. See [DEVELOPER.md](DEVELOPER.md) for 88 runnable use cases.
+Routing with path parameters, typed extractors, one `Middleware` trait for everything (auth, rate limiting, caching, tracing, the reverse proxy itself), WebSocket, SSE, an MCP server, an async ORM, background jobs, object storage, a mailer, and OAuth/OIDC/SAML login. See [DEVELOPER.md](DEVELOPER.md) for 89 runnable use cases.
 
 ## Why rws
 
@@ -241,7 +241,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - HTTP/1.1 request framing — request heads up to 64 KiB across any number of reads (`431` beyond) and within 30 s of their first byte (`408` beyond — a client trickling bytes can't hold a connection), pipelined requests, chunked request bodies; a request with both `Content-Length` and `Transfer-Encoding` or conflicting lengths is rejected (`400`) so a proxy in front can't be desynced (request smuggling)
 - `Expect: 100-continue` (HTTP/1.1) — sends the `100 Continue` interim response before reading the body, so large uploads aren't sent needlessly ahead of a `413`/`417` rejection
 - CORS — configurable origins, methods, headers; updated live via `SIGHUP`
-- Auth — `BasicAuthLayer` (HTTP Basic), `JwtLayer` (HS256 Bearer), `ForwardAuthLayer` (delegate to an external auth service, Traefik/nginx `auth_request` style) (`auth` feature); `JwtLayer::rs256`/`::es256` (RS256/ES256 against a static public key, no JWKS needed) (`auth-asymmetric` feature)
+- Auth — `BasicAuthLayer` (HTTP Basic), `JwtLayer` (HS256 Bearer), `ForwardAuthLayer` (delegate to an external auth service, Traefik/nginx `auth_request` style) (`auth` feature); `JwtLayer::rs256`/`::es256` (RS256/ES256 against a static public key, no JWKS needed; RSA verified in-crate, no `rsa` crate) (`auth-asymmetric` feature)
 - IP filter — `IpFilter::allow([...])` / `deny([...])`; exact IPv4/IPv6 addresses and CIDR ranges
 - CSRF — double-submit cookie, `SameSite=Strict`, constant-time compare (`csrf` feature)
 - Password hashing — Argon2id + CSPRNG token generation (`crypto` feature)
@@ -395,7 +395,7 @@ Binary is at `target/release/rws`. MSRV is 1.88.
 ## Further reading
 
 - [CONFIGURE](CONFIGURE.md) — all configuration options (env vars, config file, CLI flags)
-- [DEVELOPER](DEVELOPER.md) — building blocks reference and 88 use-case examples
+- [DEVELOPER](DEVELOPER.md) — building blocks reference and 89 use-case examples
 - [FAQ](FAQ.md) — common problems and solutions
 - [spec/PROXY_SERVER_CONFIG.md](spec/PROXY_SERVER_CONFIG.md) — annotated proxy config reference
 - [spec/AI_ADOPTION.md](spec/AI_ADOPTION.md) — AI adoption strategy

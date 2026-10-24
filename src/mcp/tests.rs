@@ -2294,24 +2294,20 @@ mod oauth_tests {
     use crate::sso::OidcProvider;
     use std::sync::OnceLock;
 
-    fn rsa_key() -> &'static rsa::RsaPrivateKey {
-        static KEY: OnceLock<rsa::RsaPrivateKey> = OnceLock::new();
-        KEY.get_or_init(|| rsa::RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap())
+    fn rsa_key() -> &'static crate::rsa_key::test_support::TestRsaKey {
+        static KEY: OnceLock<crate::rsa_key::test_support::TestRsaKey> = OnceLock::new();
+        KEY.get_or_init(crate::rsa_key::test_support::TestRsaKey::generate)
     }
 
     fn rsa_jwk_json(kid: &str) -> String {
-        use rsa::traits::PublicKeyParts;
         let pub_key = rsa_key().to_public_key();
-        let n = crate::sso::pkce::base64url_encode(&pub_key.n().to_bytes_be());
-        let e = crate::sso::pkce::base64url_encode(&pub_key.e().to_bytes_be());
+        let n = crate::sso::pkce::base64url_encode(pub_key.modulus());
+        let e = crate::sso::pkce::base64url_encode(&pub_key.exponent_bytes());
         format!(r#"{{"kty":"RSA","kid":"{kid}","n":"{n}","e":"{e}"}}"#)
     }
 
     fn sign_rs256(message: &[u8]) -> Vec<u8> {
-        use rsa::pkcs1v15::SigningKey;
-        use rsa::signature::{SignatureEncoding, Signer};
-        let signing_key = SigningKey::<sha2::Sha256>::new(rsa_key().clone());
-        signing_key.sign(message).to_bytes().to_vec()
+        rsa_key().sign_sha256(message)
     }
 
     fn build_jwt(header: &str, payload: &str) -> String {
@@ -2399,7 +2395,7 @@ mod oauth_tests {
         let jwks_url = start_fake_jwks_server(&rsa_jwk_json("key1"));
         let client = TestClient::new(oauth_server(&jwks_url));
         // Sign with a *different* key than the one published at jwks_url.
-        let other_key = rsa::RsaPrivateKey::new(&mut rand_core::OsRng, 2048).unwrap();
+        let other_key = crate::rsa_key::test_support::TestRsaKey::generate();
         let claims = format!(
             r#"{{"sub":"user1","iss":"https://idp.example.com","aud":"my-client-id","exp":{},"iat":{}}}"#,
             unix_now() + 3600,
@@ -2409,10 +2405,7 @@ mod oauth_tests {
         let h = crate::sso::pkce::base64url_encode(header.as_bytes());
         let p = crate::sso::pkce::base64url_encode(claims.as_bytes());
         let message = format!("{h}.{p}");
-        use rsa::pkcs1v15::SigningKey;
-        use rsa::signature::{SignatureEncoding, Signer};
-        let signing_key = SigningKey::<sha2::Sha256>::new(other_key);
-        let sig = signing_key.sign(message.as_bytes()).to_bytes().to_vec();
+        let sig = other_key.sign_sha256(message.as_bytes());
         let token = format!("{message}.{}", crate::sso::pkce::base64url_encode(&sig));
 
         let resp = client.post("/mcp")

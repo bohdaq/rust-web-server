@@ -12,7 +12,7 @@ rust-web-server = { version = "17", features = ["auth"] }
 rust-web-server = { version = "17", features = ["auth-asymmetric"] }
 ```
 
-The `auth` feature pulls in `hmac` and `sha2` (RustCrypto) as additional dependencies. `auth-asymmetric` additionally pulls in `rsa` and `p256` (also RustCrypto) — the same crates the `sso` feature uses, without the rest of `sso`'s OAuth/OIDC/JWKS machinery.
+The `auth` feature pulls in `hmac` and `sha2` (RustCrypto) as additional dependencies. `auth-asymmetric` additionally pulls in `p256` (also RustCrypto) for ES256; RS256 is verified in-crate (`rust_web_server::rsa_key::RsaPublicKey`), with no `rsa` crate.
 
 ## HTTP Basic Auth
 
@@ -219,10 +219,17 @@ If a handler also needs the decoded claims, call the standalone verify functions
 
 ```rust
 use rust_web_server::auth::{verify_jwt_rs256, verify_jwt_es256};
+use rust_web_server::rsa_key::RsaPublicKey;
 
+let rsa_public_key = RsaPublicKey::from_public_key_pem(PEM)?;   // or from_components(n, e)
 let claims = verify_jwt_rs256(&token, &rsa_public_key).unwrap();
 let claims = verify_jwt_es256(&token, &ec_public_key).unwrap();
 ```
+
+RSA keys are 2048–8192 bits. Since 18.0.0 RSA verification is implemented
+in-crate (`rust_web_server::rsa_key`) rather than with the `rsa` crate, whose
+RUSTSEC-2023-0071 advisory has no fixed release; `verify_jwt_rs256` takes an
+`rsa_key::RsaPublicKey`.
 
 :::note[When to use `sso::JwksCache` instead]
 `JwtLayer::rs256`/`::es256` pin a single static public key at construction time. Use `sso::JwksCache` when the signing key can rotate and you need to fetch current keys from a live JWKS URL (`.well-known/jwks.json`), keyed by `kid` — the right fit for a full OIDC identity provider, not a service-to-service integration with one known signer.
