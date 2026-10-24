@@ -54,8 +54,10 @@ serial() {
 }
 
 # ── Pebble ────────────────────────────────────────────────────────────────────
+# exec: the recorded PID must be Pebble itself, not a wrapping subshell,
+# or cleanup leaves Pebble running.
 (cd "$PEBBLE_SRC" && PEBBLE_AUTHZREUSE=0 PEBBLE_VA_NOSLEEP=1 PEBBLE_WFE_NONCEREJECT=0 \
-  "$PEBBLE" -config test/config/pebble-config.json > "$WORK/pebble.log" 2>&1) &
+  exec "$PEBBLE" -config test/config/pebble-config.json > "$WORK/pebble.log" 2>&1) &
 PIDS+=($!)
 wait_for "$WORK/pebble.log" "ACME directory available" 30 || fail "pebble did not start"
 
