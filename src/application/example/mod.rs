@@ -8,6 +8,8 @@ use crate::request::{Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
 
+// Kept as documentation of the smallest possible Application impl.
+#[allow(dead_code)]
 #[derive(Copy, Clone)]
 pub struct App {}
 

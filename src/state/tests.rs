@@ -61,7 +61,10 @@ fn state_accessible_in_get_handler() {
         value: "hello".to_string(),
         counter: std::sync::atomic::AtomicU32::new(0),
     })
-    .get("/greet", |_req, _params, _conn, state| ok_text(&state.value));
+    .get("/greet", |_req, _params, _conn, state| {
+        state.counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        ok_text(&state.value)
+    });
 
     let resp = app.execute(&get("/greet"), &conn()).unwrap();
     assert_eq!(200, resp.status_code);
