@@ -341,16 +341,18 @@ impl Request {
                 break;
             }
 
-            let mut header = Header { name: "".to_string(), value: "".to_string() };
+            // The request line is not a header. (This used to push an empty
+            // `Header { name: "", value: "" }` for it, which the reverse proxy
+            // forwarded as a malformed ": " line — nginx answers 400.)
             if !is_first_iteration {
-                header = Request::parse_http_request_header_string(&string);
+                let header = Request::parse_http_request_header_string(&string);
                 if header.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH) {
                     // A client-supplied value: reject garbage (RFC 9112 §6.3) instead of panicking.
                     let _: usize = header.value.trim().parse()
                         .map_err(|_| format!("invalid Content-Length: {:?}", header.value))?;
                 }
+                request.headers.push(header);
             }
-            request.headers.push(header);
             iteration_number += 1;
         }
 

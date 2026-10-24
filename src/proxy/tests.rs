@@ -807,3 +807,13 @@ fn proxy_relays_upstream_404_with_a_non_standard_reason_phrase() {
     let resp = proxy.handle(&get("/missing"), &conn(), &App::new()).unwrap();
     assert_eq!(404, resp.status_code);
 }
+
+#[test]
+fn proxied_request_has_no_empty_header_line() {
+    // Strict backends (nginx) answer 400 to a ": " header line.
+    let req = crate::request::Request::parse(b"GET /api/1k.bin HTTP/1.1\r\nHost: a\r\nAccept: */*\r\n\r\n").unwrap();
+    assert!(req.headers.iter().all(|h| !h.name.is_empty()), "request line parsed as a header");
+    let out = String::from_utf8(crate::proxy::build_request(&req, "127.0.0.1:9000", "10.0.0.1", true)).unwrap();
+    assert!(!out.contains("\r\n: "), "{out:?}");
+    assert!(out.starts_with("GET /api/1k.bin HTTP/1.1\r\nHost: 127.0.0.1:9000\r\nAccept: */*\r\n"), "{out:?}");
+}

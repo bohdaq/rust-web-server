@@ -301,7 +301,8 @@ pub(crate) fn build_request(
     );
     for h in &request.headers {
         let lower = h.name.to_lowercase();
-        if HOP_BY_HOP.contains(&lower.as_str()) || lower == "host" {
+        // An empty name would be sent as a malformed ": value" line.
+        if lower.is_empty() || HOP_BY_HOP.contains(&lower.as_str()) || lower == "host" {
             continue;
         }
         let _ = write!(out, "{}: {}\r\n", h.name, h.value);
@@ -973,7 +974,8 @@ where
     builder = builder.header("host", &backend.host);
     for h in &request.headers {
         let lower = h.name.to_lowercase();
-        if HOP_BY_HOP.contains(&lower.as_str()) || lower == "host" {
+        // An empty name would be sent as a malformed ": value" line.
+        if lower.is_empty() || HOP_BY_HOP.contains(&lower.as_str()) || lower == "host" {
             continue;
         }
         builder = builder.header(&h.name, &h.value);

@@ -163,21 +163,22 @@ where
     Ok(())
 }
 
-/// Run the (synchronous) `Application` on tokio's blocking pool — file reads
-/// and upstream proxying must never occupy an async worker thread, where a
-/// handful of slow requests would stall every connection. Used by the
+/// Run the (synchronous) `Application` off the async scheduler — file reads
+/// and upstream proxying must never hold an async worker thread hostage,
+/// where a handful of slow requests would stall every connection. Used by the
 /// HTTP/1.1, HTTP/2 and HTTP/3 handlers alike. A handler panic is returned
 /// as an error, costing that one request.
 pub(crate) async fn execute_blocking<A: Application + Send + 'static>(
     app: A,
     request: Request,
     connection: ConnectionInfo,
-) -> Result<(Request, Result<Response, String>), tokio::task::JoinError> {
+) -> Result<(Request, Result<Response, String>), String> {
     tokio::task::spawn_blocking(move || {
         let result = app.execute(&request, &connection);
         (request, result)
     })
     .await
+    .map_err(|e| e.to_string())
 }
 
 async fn write_and_flush<S: AsyncWrite + Unpin>(stream: &mut S, bytes: &[u8]) {
@@ -308,6 +309,17 @@ mod tests {
         client.write_all(b"GET /panic HTTP/1.1\r\nHost: x\r\n\r\n").await.unwrap();
         let result = task.await.unwrap();
         assert!(result.unwrap_err().contains("panicked"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn multi_thread_runtime_serves_and_survives_handler_panics() {
+        // The rws binary runs a multi-threaded runtime.
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let task = tokio::spawn(serve(server, peer(), None, false, Hello));
+        client.write_all(b"GET /a HTTP/1.1\r\nHost: x\r\n\r\n").await.unwrap();
+        assert!(read_until_count(&mut client, "hello", 1).await.starts_with("HTTP/1.1 200"));
+        client.write_all(b"GET /panic HTTP/1.1\r\nHost: x\r\n\r\n").await.unwrap();
+        assert!(task.await.unwrap().unwrap_err().contains("panicked"));
     }
 
     #[tokio::test]
