@@ -336,7 +336,7 @@ impl Server {
             // RFC 9110 §10.1.1 `Expect` — the only expectation this server
             // understands is `100-continue`; anything else fails fast with a
             // final status instead of reading a body we can't act on.
-            let expects_continue = match request.get_header(Header::_EXPECT.to_string()) {
+            let expects_continue = match request.header(Header::_EXPECT) {
                 Some(h) if h.value.trim().eq_ignore_ascii_case("100-continue") => true,
                 Some(h) => {
                     let raw_response = Server::expectation_failed_response(format!(
@@ -416,7 +416,7 @@ impl Server {
             }
 
             let keep_alive = {
-                let conn_hdr = request.get_header(Header::_CONNECTION.to_string());
+                let conn_hdr = request.header(Header::_CONNECTION);
                 match conn_hdr {
                     Some(h) => h.value.to_lowercase() != "close",
                     None => request.http_version == VERSION.http_1_1,

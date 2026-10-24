@@ -100,7 +100,7 @@ impl Controller for StaticResourceController {
 
                 let mut status_code_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok;
 
-                let does_request_include_range_header = request.get_header(Header::_RANGE.to_string()).is_some();
+                let does_request_include_range_header = request.header(Header::_RANGE).is_some();
                 if does_request_include_range_header {
                     status_code_reason_phrase = STATUS_CODE_REASON_PHRASE.n206_partial_content;
                 }
@@ -136,7 +136,7 @@ impl Controller for StaticResourceController {
                     let file_size = metadata(&static_filepath).map(|m| m.len()).unwrap_or(0);
                     let etag_value = format!("\"{}-{}\"", modified_date_time, file_size);
 
-                    let if_none_match = request.get_header(Header::_IF_NONE_MATCH.to_string());
+                    let if_none_match = request.header(Header::_IF_NONE_MATCH);
                     if let Some(inm) = if_none_match {
                         if inm.value == etag_value || inm.value == "*" {
                             response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
@@ -150,7 +150,7 @@ impl Controller for StaticResourceController {
 
                     // Stream large files (> 8 MB) without loading into memory, unless it's
                     // a range request (which needs precise byte slicing from the loaded body).
-                    let is_range_request = request.get_header(Header::_RANGE.to_string()).is_some();
+                    let is_range_request = request.header(Header::_RANGE).is_some();
                     if file_size > StaticResourceController::STREAM_THRESHOLD && !is_range_request {
                         let mime = MimeType::detect_mime_type(&static_filepath);
                         response.headers.push(Header {
@@ -236,7 +236,7 @@ impl StaticResourceController {
 
                 let mut status_code_reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok;
 
-                let does_request_include_range_header = request.get_header(Header::_RANGE.to_string()).is_some();
+                let does_request_include_range_header = request.header(Header::_RANGE).is_some();
                 if does_request_include_range_header {
                     status_code_reason_phrase = STATUS_CODE_REASON_PHRASE.n206_partial_content;
                 }
@@ -260,7 +260,7 @@ impl StaticResourceController {
                     let file_size = metadata(&static_filepath).map(|m| m.len()).unwrap_or(0);
                     let etag_value = format!("\"{}-{}\"", modified_date_time, file_size);
 
-                    let if_none_match = request.get_header(Header::_IF_NONE_MATCH.to_string());
+                    let if_none_match = request.header(Header::_IF_NONE_MATCH);
                     if let Some(inm) = if_none_match {
                         if inm.value == etag_value || inm.value == "*" {
                             response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
@@ -272,7 +272,7 @@ impl StaticResourceController {
 
                     response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
 
-                    let is_range_request = request.get_header(Header::_RANGE.to_string()).is_some();
+                    let is_range_request = request.header(Header::_RANGE).is_some();
                     if file_size > StaticResourceController::STREAM_THRESHOLD && !is_range_request {
                         let mime = MimeType::detect_mime_type(&static_filepath);
                         response.headers.push(Header {
@@ -334,7 +334,7 @@ impl StaticResourceController {
         if request.method != METHOD.get && request.method != METHOD.head {
             return None;
         }
-        if request.get_header(Header::_RANGE.to_string()).is_some() {
+        if request.header(Header::_RANGE).is_some() {
             return None;
         }
         let path = URL::parse_request_target(&request.request_uri).ok()?.path;
@@ -352,7 +352,7 @@ impl StaticResourceController {
         let etag_value = format!("\"{}-{}\"", modified, state.len);
         response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.to_string(), value: modified.to_string() });
         let not_modified = request
-            .get_header(Header::_IF_NONE_MATCH.to_string())
+            .header(Header::_IF_NONE_MATCH)
             .map_or(false, |inm| inm.value == etag_value || inm.value == "*");
         response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
         if not_modified {
@@ -430,7 +430,7 @@ impl StaticResourceController {
                         value: "bytes=0-".to_string()
                     };
 
-                    let boxed_header = request.get_header(Header::_RANGE.to_string());
+                    let boxed_header = request.header(Header::_RANGE);
                     if boxed_header.is_some() {
                         range_header = boxed_header.unwrap();
                     }
@@ -460,7 +460,7 @@ impl StaticResourceController {
                         value: "bytes=0-".to_string()
                     };
 
-                    let boxed_header = request.get_header(Header::_RANGE.to_string());
+                    let boxed_header = request.header(Header::_RANGE);
                     if boxed_header.is_some() {
                         range_header = boxed_header.unwrap();
                     }
@@ -490,7 +490,7 @@ impl StaticResourceController {
                         value: "bytes=0-".to_string()
                     };
 
-                    let boxed_header = request.get_header(Header::_RANGE.to_string());
+                    let boxed_header = request.header(Header::_RANGE);
                     if boxed_header.is_some() {
                         range_header = boxed_header.unwrap();
                     }
@@ -519,7 +519,7 @@ impl StaticResourceController {
                             value: "bytes=0-".to_string()
                         };
 
-                        let boxed_header = request.get_header(Header::_RANGE.to_string());
+                        let boxed_header = request.header(Header::_RANGE);
                         if boxed_header.is_some() {
                             range_header = boxed_header.unwrap();
                         }
@@ -561,7 +561,7 @@ impl StaticResourceController {
                     value: "bytes=0-".to_string()
                 };
 
-                let boxed_header = request.get_header(Header::_RANGE.to_string());
+                let boxed_header = request.header(Header::_RANGE);
                 if boxed_header.is_some() {
                     range_header = boxed_header.unwrap();
                 }

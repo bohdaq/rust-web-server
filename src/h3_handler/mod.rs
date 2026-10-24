@@ -128,7 +128,7 @@ async fn handle_stream(
     };
 
     let (rws_request, result) =
-        match crate::server::http1_async::execute_request(app, rws_request, connection).await {
+        match crate::server::http1_async::execute_request(app, rws_request, &connection).await {
             Ok(done) => done,
             Err(e) => {
                 eprintln!("Handler panicked on H3 stream: {}", e);

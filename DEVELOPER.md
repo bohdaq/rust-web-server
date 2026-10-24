@@ -107,6 +107,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `Middleware` / `WithMiddleware` | `middleware` | Composable middleware pipeline wrapping any `Application`. Use `App::new().wrap(layer)` or `AppWithState::wrap(layer)`. `Middleware::runs_inline` (default `false`) declares a layer non-blocking; a stack runs inline only if every layer and the inner app do. |
 | `Application::execute_async` / `AsyncResponse` | `application` | (`http2`) An optional async version of `execute` for a request; the async servers await it on the connection's task instead of holding a blocking-pool thread. The config-driven proxy uses it for plain-HTTP routes without middleware. `Middleware::is_passthrough` (default `false`) lets a stack offer it when a layer does nothing for the request. |
 | `Request::is_supported_method` / `HTTP::is_supported_version` | `request` / `http` | Case-insensitive checks without building `method_list()`/`version_list()`. |
+| `Request::header(name)` / `Response::header(name)` | `request` / `response` | Case-insensitive header lookup by `&str`, without allocating (`get_header(String)` remains and delegates to it). |
 | `Router::matches` | `router` | `true` if `handle()` would run a handler for the request, without running it. |
 | `server_config::invalidate()` / `ServerConfig::current()` | `server_config` | Per-request configuration snapshot (see `ServerConfig`). |
 | `RateLimitLayer` | `middleware` | Built-in middleware that enforces the global rate limiter per client IP |

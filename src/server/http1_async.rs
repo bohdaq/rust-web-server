@@ -65,6 +65,14 @@ where
     let idle = tokio::time::sleep(READ_TIMEOUT);
     tokio::pin!(idle);
 
+    // The same for every request on this connection: built once.
+    let connection = ConnectionInfo {
+        client: Address { ip: peer_addr.ip().to_string(), port: peer_addr.port() as i32 },
+        server: Address { ip: server_ip, port: server_port },
+        request_size: request_allocation_size,
+        sni_hostname,
+    };
+
     'session: loop {
         // Read until the request head is complete — it may span several reads,
         // but must finish within REQUEST_HEAD_TIMEOUT of its first byte.
@@ -108,7 +116,7 @@ where
         };
 
         // RFC 9110 §10.1.1: only `100-continue` is understood.
-        let expects_continue = match request.get_header(Header::_EXPECT.to_string()) {
+        let expects_continue = match request.header(Header::_EXPECT) {
             Some(h) if h.value.trim().eq_ignore_ascii_case("100-continue") => true,
             Some(h) => {
                 let raw = Server::expectation_failed_response(format!(
@@ -180,19 +188,12 @@ where
             }
         }
 
-        let keep_alive = match request.get_header(Header::_CONNECTION.to_string()) {
+        let keep_alive = match request.header(Header::_CONNECTION) {
             Some(h) => !h.value.eq_ignore_ascii_case("close"),
             None => request.http_version == VERSION.http_1_1,
         };
 
-        let connection = ConnectionInfo {
-            client: Address { ip: peer_addr.ip().to_string(), port: peer_addr.port() as i32 },
-            server: Address { ip: server_ip.clone(), port: server_port },
-            request_size: request_allocation_size,
-            sni_hostname: sni_hostname.clone(),
-        };
-
-        let (request, result) = execute_request(app.clone(), request, connection)
+        let (request, result) = execute_request(app.clone(), request, &connection)
             .await
             .map_err(|e| format!("request handler panicked: {}", e))?;
 
@@ -254,24 +255,27 @@ where
 /// [`execute_blocking`]. The blocking-pool handoff (a shared lock and two
 /// cross-thread wake-ups) cost more than serving a small file. A panic is
 /// caught either way and costs only this request.
+///
+/// `connection` is borrowed: it's built once per connection, and only the
+/// blocking-pool path needs an owned copy.
 pub(crate) async fn execute_request<A: Application + Send + 'static>(
     app: A,
     request: Request,
-    connection: ConnectionInfo,
+    connection: &ConnectionInfo,
 ) -> Result<(Request, Result<Response, String>), String> {
-    let async_result = match app.execute_async(&request, &connection) {
+    let async_result = match app.execute_async(&request, connection) {
         Some(future) => Some(CatchUnwind(future).await?),
         None => None,
     };
     if let Some(result) = async_result {
         return Ok((request, result));
     }
-    if app.runs_inline(&request, &connection) {
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.execute(&request, &connection)))
+    if app.runs_inline(&request, connection) {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.execute(&request, connection)))
             .map_err(panic_message)?;
         return Ok((request, result));
     }
-    execute_blocking(app, request, connection).await
+    execute_blocking(app, request, connection.clone()).await
 }
 
 /// Polls a boxed future, turning a panic into an error (one request lost,
@@ -672,7 +676,7 @@ mod tests {
         let here = std::thread::current().id();
         for (inline, expect_here) in [(true, true), (false, false)] {
             let probe = ThreadProbe { inline, ran_on: Default::default() };
-            let (_, result) = execute_request(probe.clone(), probe_request("/"), probe_connection()).await.unwrap();
+            let (_, result) = execute_request(probe.clone(), probe_request("/"), &probe_connection()).await.unwrap();
             assert!(result.is_ok());
             let ran_on = probe.ran_on.lock().unwrap().unwrap();
             assert_eq!(ran_on == here, expect_here, "inline = {inline}");
@@ -682,7 +686,7 @@ mod tests {
     #[tokio::test]
     async fn inline_handler_panic_is_caught() {
         let probe = ThreadProbe { inline: true, ran_on: Default::default() };
-        let err = execute_request(probe, probe_request("/panic"), probe_connection()).await.unwrap_err();
+        let err = execute_request(probe, probe_request("/panic"), &probe_connection()).await.unwrap_err();
         assert!(err.contains("inline handler bug"), "{err}");
     }
 

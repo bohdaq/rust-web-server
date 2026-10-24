@@ -18,8 +18,12 @@ pub struct Part {
 
 impl Part {
     pub fn get_header(&self, name: String) -> Option<&Header> {
-        let header =  self.headers.iter().find(|x| x.name.to_lowercase() == name.to_lowercase());
-        header
+        self.header(&name)
+    }
+
+    /// The first header named `name` (case-insensitive), without allocating.
+    pub fn header(&self, name: &str) -> Option<&Header> {
+        self.headers.iter().find(|h| h.name.eq_ignore_ascii_case(name))
     }
 }
 

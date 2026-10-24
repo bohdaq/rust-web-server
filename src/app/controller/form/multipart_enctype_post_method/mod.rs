@@ -28,7 +28,7 @@ impl Controller for FormMultipartEnctypePostMethodController {
             Ok(path) if path == "/form-multipart-enctype-post-method" => {}
             _ => return false,
         }
-        match request.get_header(Header::_CONTENT_TYPE.to_string()) {
+        match request.header(Header::_CONTENT_TYPE) {
             Some(content_type) => StringExt::filter_ascii_control_characters(&content_type.value.to_lowercase())
                 .starts_with(FormMultipartEnctypePostMethodController::MULTIPART_FORM_DATA_CONTENT_TYPE),
             None => false,
@@ -43,7 +43,7 @@ impl Controller for FormMultipartEnctypePostMethodController {
         // here is the list of parts, as an example here it is printed in the response body
 
         // content-type is already checked in is_matching_request, no additional checks
-        let content_type = _request.get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+        let content_type = _request.header(Header::_CONTENT_TYPE).unwrap();
 
         let boxed_boundary = FormMultipartData::extract_boundary(&content_type.value);
         if boxed_boundary.is_err() {
@@ -83,7 +83,7 @@ impl Controller for FormMultipartEnctypePostMethodController {
 
         let mut formatted_list : Vec<String> = vec![];
         for part in part_list.into_iter() {
-            let boxed_content_disposition_header = part.get_header(Header::_CONTENT_DISPOSITION.to_string());
+            let boxed_content_disposition_header = part.header(Header::_CONTENT_DISPOSITION);
             if boxed_content_disposition_header.is_none() {
                 response.status_code = *STATUS_CODE_REASON_PHRASE.n400_bad_request.status_code;
                 response.reason_phrase = STATUS_CODE_REASON_PHRASE.n400_bad_request.reason_phrase.to_string();
@@ -141,7 +141,7 @@ impl FormMultipartEnctypePostMethodController {
     pub const MULTIPART_FORM_DATA_CONTENT_TYPE: &'static str = "multipart/form-data; boundary=";
 
     pub fn is_matching_request(request: &Request) -> bool {
-        let boxed_content_type = request.get_header(Header::_CONTENT_TYPE.to_string());
+        let boxed_content_type = request.header(Header::_CONTENT_TYPE);
         if boxed_content_type.is_none() {
             eprintln!("unable to get content-type header for {} {}", request.method, request.request_uri);
             return false;
@@ -177,7 +177,7 @@ impl FormMultipartEnctypePostMethodController {
         // here is the list of parts, as an example here it is printed in the response body
 
         // content-type is already checked in is_matching_request, no additional checks
-        let content_type = _request.get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+        let content_type = _request.header(Header::_CONTENT_TYPE).unwrap();
 
         let boxed_boundary = FormMultipartData::extract_boundary(&content_type.value);
         if boxed_boundary.is_err() {
@@ -217,7 +217,7 @@ impl FormMultipartEnctypePostMethodController {
 
         let mut formatted_list : Vec<String> = vec![];
         for part in part_list.into_iter() {
-            let boxed_content_disposition_header = part.get_header(Header::_CONTENT_DISPOSITION.to_string());
+            let boxed_content_disposition_header = part.header(Header::_CONTENT_DISPOSITION);
             if boxed_content_disposition_header.is_none() {
                 response.status_code = *STATUS_CODE_REASON_PHRASE.n400_bad_request.status_code;
                 response.reason_phrase = STATUS_CODE_REASON_PHRASE.n400_bad_request.reason_phrase.to_string();

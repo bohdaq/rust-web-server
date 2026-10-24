@@ -54,13 +54,20 @@ pub const METHOD: Method = Method {
 impl Request {
     pub const _ERROR_UNABLE_TO_PARSE_METHOD_AND_REQUEST_URI_AND_HTTP_VERSION: &'static str = "Unable to parse method, request uri and http version";
 
+    /// The first header named `name` (case-insensitive). Prefer
+    /// [`Request::header`], which needs no `String`.
     pub fn get_header(&self, name: String) -> Option<&Header> {
-        let header =  self.headers.iter().find(|x| x.name.to_lowercase() == name.to_lowercase());
-        header
+        self.header(&name)
+    }
+
+    /// The first header named `name`, compared case-insensitively without
+    /// allocating (this used to lowercase every header name on every lookup).
+    pub fn header(&self, name: &str) -> Option<&Header> {
+        self.headers.iter().find(|h| h.name.eq_ignore_ascii_case(name))
     }
 
     pub fn get_domain(&self) -> Result<Option<String>, String> {
-        let boxed_host = &self.get_header(Header::_HOST.to_string());
+        let boxed_host = &self.header(Header::_HOST);
         if boxed_host.is_none() {
             return Ok(None);
         }
@@ -82,7 +89,7 @@ impl Request {
     }
 
     pub fn get_port(&self) -> Result<Option<i128>, String> {
-        let boxed_host = &self.get_header(Header::_HOST.to_string());
+        let boxed_host = &self.header(Header::_HOST);
         if boxed_host.is_none() {
             return Ok(None);
         }

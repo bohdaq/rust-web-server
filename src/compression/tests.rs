@@ -154,3 +154,28 @@ fn already_encoded_responses_are_not_compressed_again() {
     assert_eq!(response.headers.iter().filter(|h| h.name.eq_ignore_ascii_case("content-encoding")).count(), 1);
     assert_eq!(response.content_range_list[0].body, body.as_bytes());
 }
+
+
+fn request_accepting(value: &str) -> Request {
+    let mut r = make_request_with_gzip();
+    r.headers = vec![Header { name: Header::_ACCEPT_ENCODING.to_string(), value: value.to_string() }];
+    r
+}
+
+#[test]
+fn accept_encoding_is_parsed_per_coding() {
+    let html = "<p>compress me</p>".repeat(64);
+    for (value, expect) in [("GZIP", true), ("br, gzip;q=0.5", true), ("gzip;q=0", false), ("gzip; q=0.0", false), ("x-gzip-not", false), ("br", false)] {
+        let mut response = make_response(html.as_bytes(), MimeType::TEXT_HTML);
+        apply_gzip(&request_accepting(value), &mut response);
+        assert_eq!(expect, is_gzipped(&response), "Accept-Encoding: {value}");
+    }
+}
+
+#[test]
+fn content_type_match_ignores_case() {
+    let html = "<p>compress me</p>".repeat(64);
+    let mut response = make_response(html.as_bytes(), "Text/HTML; charset=utf-8");
+    apply_gzip(&make_request_with_gzip(), &mut response);
+    assert!(is_gzipped(&response));
+}

@@ -27,6 +27,12 @@ pub struct Header {
     pub value: String,
 }
 
+/// Headers every built-in response carries, around the per-request `Date`.
+struct FixedHeaders {
+    before_date: Vec<Header>,
+    after_date: Vec<Header>,
+}
+
 impl Header {
 
     pub fn as_string(&self) -> String {
@@ -166,48 +172,49 @@ impl Header {
         request: &Request,
         config: &crate::server_config::ServerConfig,
     ) -> Vec<Header> {
-        let cors_vary = Cors::get_vary_header_value();
-        let mut vary_value = vec![cors_vary];
-
+        // CORS depends on the request and the date changes; everything else
+        // depends only on the CSP setting, so it's built once per CSP value
+        // and cloned (joining the client-hint and Vary lists per request was
+        // a measurable share of a small response's CPU).
+        let fixed = Header::fixed_headers(&config.csp);
         let mut header_list = Cors::get_headers_from_config(request, config);
-
-        let client_hint_header = ClientHint::get_accept_client_hints_header();
-        header_list.push(client_hint_header);
-
-        let critical_client_hint_header = ClientHint::get_critical_client_hints_header();
-        header_list.push(critical_client_hint_header);
-
-        let client_hint_vary = ClientHint::get_vary_header_value();
-        vary_value.push(client_hint_vary);
-
-        header_list.push(Header {
-            name: Header::_VARY.to_string(),
-            value: vary_value.join(", "),
-        });
-
-        header_list.push(Header::get_x_content_type_options_header());
-        header_list.push(Header::get_accept_ranges_header());
-        header_list.push(Header::get_x_frame_options_header());
+        header_list.reserve(fixed.before_date.len() + 1 + fixed.after_date.len());
+        header_list.extend(fixed.before_date.iter().cloned());
         header_list.push(Header::get_date_iso_8601_header());
-        header_list.push(Header::get_no_cache_header());
-
-        header_list.push(Header {
-            name: Header::_REFERRER_POLICY.to_string(),
-            value: Header::_REFERRER_POLICY_VALUE_DEFAULT.to_string(),
-        });
-        header_list.push(Header {
-            name: Header::_PERMISSIONS_POLICY.to_string(),
-            value: Header::_PERMISSIONS_POLICY_VALUE_DEFAULT.to_string(),
-        });
-
-        if !config.csp.is_empty() {
-            header_list.push(Header {
-                name: Header::_CONTENT_SECURITY_POLICY.to_string(),
-                value: config.csp.clone(),
-            });
-        }
-
+        header_list.extend(fixed.after_date.iter().cloned());
         header_list
+    }
+
+    /// The request-independent part of [`Header::get_header_list_with_config`]
+    /// for a CSP value, cached for the last CSP seen.
+    fn fixed_headers(csp: &str) -> std::sync::Arc<FixedHeaders> {
+        use std::sync::{Arc, RwLock};
+        static CACHE: RwLock<Option<(String, Arc<FixedHeaders>)>> = RwLock::new(None);
+        if let Some((cached_csp, fixed)) = CACHE.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            if cached_csp == csp {
+                return Arc::clone(fixed);
+            }
+        }
+        let vary = [Cors::get_vary_header_value(), ClientHint::get_vary_header_value()].join(", ");
+        let before_date = vec![
+            ClientHint::get_accept_client_hints_header(),
+            ClientHint::get_critical_client_hints_header(),
+            Header { name: Header::_VARY.to_string(), value: vary },
+            Header::get_x_content_type_options_header(),
+            Header::get_accept_ranges_header(),
+            Header::get_x_frame_options_header(),
+        ];
+        let mut after_date = vec![
+            Header::get_no_cache_header(),
+            Header { name: Header::_REFERRER_POLICY.to_string(), value: Header::_REFERRER_POLICY_VALUE_DEFAULT.to_string() },
+            Header { name: Header::_PERMISSIONS_POLICY.to_string(), value: Header::_PERMISSIONS_POLICY_VALUE_DEFAULT.to_string() },
+        ];
+        if !csp.is_empty() {
+            after_date.push(Header { name: Header::_CONTENT_SECURITY_POLICY.to_string(), value: csp.to_string() });
+        }
+        let fixed = Arc::new(FixedHeaders { before_date, after_date });
+        *CACHE.write().unwrap_or_else(|e| e.into_inner()) = Some((csp.to_string(), Arc::clone(&fixed)));
+        fixed
     }
 
     /// Build the standard response header list, reading CORS and CSP settings

@@ -104,7 +104,8 @@ impl OpenFile {
         Ok(body)
     }
 
-    /// The open file.
+    /// The open file (for `sendfile`).
+    #[cfg_attr(not(feature = "http2"), allow(dead_code))]
     pub(crate) fn file(&self) -> &File {
         &self.file
     }

@@ -46,8 +46,17 @@ pub fn apply_gzip(request: &Request, response: &mut Response) {
     }
 
     let accepts_gzip = request
-        .get_header(Header::_ACCEPT_ENCODING.to_string())
-        .map(|h| h.value.to_lowercase().contains("gzip"))
+        .header(Header::_ACCEPT_ENCODING)
+        .map(|h| h.value.split(',').any(|coding| {
+            // `gzip`, optionally with parameters; `q=0` means "not acceptable".
+            let mut parts = coding.split(';');
+            let name_ok = parts.next().unwrap_or("").trim().eq_ignore_ascii_case("gzip");
+            let refused = parts.any(|p| {
+                let p = p.trim();
+                p.len() >= 2 && p[..2].eq_ignore_ascii_case("q=") && p[2..].trim().parse::<f32>().is_ok_and(|q| q == 0.0)
+            });
+            name_ok && !refused
+        }))
         .unwrap_or(false);
 
     if !accepts_gzip {
@@ -57,10 +66,12 @@ pub fn apply_gzip(request: &Request, response: &mut Response) {
     let content_type = response
         .content_range_list
         .first()
-        .map(|cr| cr.content_type.to_lowercase())
+        .map(|cr| cr.content_type.as_str())
         .unwrap_or_default();
 
-    let is_compressible = COMPRESSIBLE.iter().any(|mime| content_type.starts_with(mime));
+    let is_compressible = COMPRESSIBLE.iter().any(|mime| {
+        content_type.len() >= mime.len() && content_type.as_bytes()[..mime.len()].eq_ignore_ascii_case(mime.as_bytes())
+    });
     if !is_compressible {
         return;
     }

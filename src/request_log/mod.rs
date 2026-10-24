@@ -20,6 +20,7 @@
 mod tests;
 
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -41,49 +42,79 @@ pub struct LogEntry {
     pub latency_ms: u64,
 }
 
-/// Ring buffer of recent requests.
+/// Shards in a [`RequestLog`]. Each thread appends to its own shard, so
+/// concurrent requests don't contend for one lock (a single global mutex
+/// here was the top lock wait under load).
+const SHARDS: usize = 16;
+
+/// Ring buffer of recent requests, sharded by thread; entries carry a global
+/// sequence number so readers can merge the shards in order. Each shard keeps
+/// up to `capacity` entries and readers keep the newest `capacity` overall —
+/// exactly what one ring buffer held, since the newest `capacity` entries
+/// overall are always among the newest `capacity` of their own shard.
 pub struct RequestLog {
-    entries: Mutex<VecDeque<LogEntry>>,
+    shards: Vec<Mutex<VecDeque<(u64, LogEntry)>>>,
     capacity: usize,
+    sequence: AtomicU64,
+}
+
+/// This thread's shard index, assigned round-robin on first use.
+fn shard_index() -> usize {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    thread_local! {
+        static INDEX: usize = NEXT.fetch_add(1, Ordering::Relaxed) % SHARDS;
+    }
+    INDEX.with(|i| *i)
 }
 
 impl RequestLog {
     fn new(capacity: usize) -> Self {
         RequestLog {
-            entries: Mutex::new(VecDeque::with_capacity(capacity)),
-            capacity,
+            shards: (0..SHARDS).map(|_| Mutex::new(VecDeque::new())).collect(),
+            capacity: capacity.max(1),
+            sequence: AtomicU64::new(0),
         }
     }
 
     fn push(&self, entry: LogEntry) {
-        let mut guard = self.entries.lock().unwrap();
-        if guard.len() >= self.capacity {
-            guard.pop_front();
+        let seq = self.sequence.fetch_add(1, Ordering::Relaxed);
+        let mut shard = self.shards[shard_index()].lock().unwrap_or_else(|e| e.into_inner());
+        if shard.len() >= self.capacity {
+            shard.pop_front();
         }
-        guard.push_back(entry);
+        shard.push_back((seq, entry));
+    }
+
+    /// The newest `capacity` entries (oldest first) that match `keep`.
+    fn merged(&self, keep: impl Fn(&LogEntry) -> bool) -> Vec<LogEntry> {
+        let mut all: Vec<(u64, LogEntry)> = Vec::new();
+        for shard in &self.shards {
+            let shard = shard.lock().unwrap_or_else(|e| e.into_inner());
+            all.extend(shard.iter().cloned());
+        }
+        all.sort_unstable_by_key(|(seq, _)| *seq);
+        let skip = all.len().saturating_sub(self.capacity);
+        all.into_iter().skip(skip).map(|(_, e)| e).filter(|e| keep(e)).collect()
     }
 
     /// Return up to `n` most recent entries (newest last).
     pub fn recent(&self, n: usize) -> Vec<LogEntry> {
-        let guard = self.entries.lock().unwrap();
-        let skip = guard.len().saturating_sub(n);
-        guard.iter().skip(skip).cloned().collect()
+        let all = self.merged(|_| true);
+        let skip = all.len().saturating_sub(n);
+        all.into_iter().skip(skip).collect()
     }
 
     /// Return up to `n` most recent entries with a 4xx or 5xx status.
     pub fn recent_errors(&self, n: usize) -> Vec<LogEntry> {
-        let guard = self.entries.lock().unwrap();
-        let errors: Vec<LogEntry> = guard.iter()
-            .filter(|e| e.status >= 400)
-            .cloned()
-            .collect();
+        let errors = self.merged(|e| e.status >= 400);
         let skip = errors.len().saturating_sub(n);
         errors.into_iter().skip(skip).collect()
     }
 
     /// Total number of entries currently held.
     pub fn len(&self) -> usize {
-        self.entries.lock().unwrap().len()
+        let held: usize = self.shards.iter().map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).len()).sum();
+        held.min(self.capacity)
     }
 
     pub fn is_empty(&self) -> bool {

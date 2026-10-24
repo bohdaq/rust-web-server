@@ -210,7 +210,7 @@ fn unix_now() -> u64 {
 /// Extract the raw token string from `Authorization: Bearer <token>`.
 /// Returns `None` if the header is absent or does not start with `Bearer `.
 pub fn extract_bearer_token(request: &Request) -> Option<String> {
-    let h = request.get_header(Header::_AUTHORIZATION.to_string())?;
+    let h = request.header(Header::_AUTHORIZATION)?;
     h.value.strip_prefix("Bearer ").map(str::to_string)
 }
 
@@ -463,7 +463,7 @@ impl<F: Fn(&str, &str) -> bool + Send + Sync + 'static> Middleware for BasicAuth
             r
         };
 
-        let Some(header) = request.get_header(Header::_AUTHORIZATION.to_string()) else {
+        let Some(header) = request.header(Header::_AUTHORIZATION) else {
             return Ok(challenge());
         };
         let Some(encoded) = header.value.strip_prefix("Basic ") else {

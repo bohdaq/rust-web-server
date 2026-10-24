@@ -795,6 +795,11 @@ impl Response {
         self._get_header(name)
     }
 
+    /// The first header named `name` (case-insensitive), without allocating.
+    pub fn header(&self, name: &str) -> Option<&Header> {
+        self.headers.iter().find(|h| h.name.eq_ignore_ascii_case(name))
+    }
+
     pub fn parse(response_vec_u8: &[u8]) -> Result<Response, String> {
         let total_bytes : i32 = response_vec_u8.len() as i32;
         let bytes_read = 0;
@@ -882,9 +887,9 @@ impl Response {
                 // if response does not contain Content-Type, it will be defaulted to APPLICATION_OCTET_STREAM
                 let mut content_type = MimeType::APPLICATION_OCTET_STREAM;
 
-                let boxed_content_type = response.get_header(Header::_CONTENT_TYPE.to_string());
+                let boxed_content_type = response.header(Header::_CONTENT_TYPE);
                 if boxed_content_type.is_some() {
-                    let content_type_header = response.get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+                    let content_type_header = response.header(Header::_CONTENT_TYPE).unwrap();
                     content_type = content_type_header.value.as_str();
                     is_multipart = Response::_is_multipart_byteranges_content_type(&content_type_header);
                 }
@@ -892,7 +897,7 @@ impl Response {
 
                 if is_multipart {
                     let content_range_list : Vec<ContentRange> = vec![];
-                    let boxed_content_type = response.get_header(Header::_CONTENT_TYPE.to_string());
+                    let boxed_content_type = response.header(Header::_CONTENT_TYPE);
                     if boxed_content_type.is_none() {
                         return Err("Content-Type is missing".to_string());
                     }

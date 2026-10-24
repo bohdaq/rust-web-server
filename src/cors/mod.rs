@@ -26,7 +26,7 @@ impl Cors {
 
     pub fn allow_all(request: &Request) -> Result<Vec<Header>, Error> {
         let mut headers : Vec<Header> = vec![];
-        let origin = request.get_header(Header::_ORIGIN.to_string());
+        let origin = request.header(Header::_ORIGIN);
         if origin.is_some() {
             let allow_origin = Header {
                 name: Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string(),
@@ -42,7 +42,7 @@ impl Cors {
 
             let is_options = request.method == METHOD.options;
             if is_options {
-                let method = request.get_header(Header::_ACCESS_CONTROL_REQUEST_METHOD.to_string());
+                let method = request.header(Header::_ACCESS_CONTROL_REQUEST_METHOD);
                 if method.is_some() {
                     let allow_method = Header {
                         name: Header::_ACCESS_CONTROL_ALLOW_METHODS.to_string(),
@@ -51,7 +51,7 @@ impl Cors {
                     headers.push(allow_method);
                 }
 
-                let access_control_request_headers = request.get_header(Header::_ACCESS_CONTROL_REQUEST_HEADERS.to_string());
+                let access_control_request_headers = request.header(Header::_ACCESS_CONTROL_REQUEST_HEADERS);
                 if access_control_request_headers.is_some() {
                     let request_headers = access_control_request_headers.unwrap();
                     let allow_headers = Header {
@@ -83,7 +83,7 @@ impl Cors {
         let mut headers : Vec<Header> = vec![];
 
         let allow_origins = cors.allow_origins.join(",");
-        let boxed_origin = request.get_header(Header::_ORIGIN.to_string());
+        let boxed_origin = request.header(Header::_ORIGIN);
 
         if boxed_origin.is_none() {
             return Ok(headers)
@@ -159,7 +159,7 @@ impl Cors {
     fn process_using_config(request: &Request, config: &ServerConfig) -> Result<Vec<Header>, Error> {
         let mut headers: Vec<Header> = vec![];
 
-        let boxed_origin = request.get_header(Header::_ORIGIN.to_string());
+        let boxed_origin = request.header(Header::_ORIGIN);
         if boxed_origin.is_none() {
             return Ok(headers);
         }

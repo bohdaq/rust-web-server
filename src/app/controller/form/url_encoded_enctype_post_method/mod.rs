@@ -13,7 +13,7 @@ pub struct FormUrlEncodedEnctypePostMethodController;
 
 impl Controller for FormUrlEncodedEnctypePostMethodController {
     fn is_matching(request: &Request, _connection: &ConnectionInfo) -> bool {
-        let boxed_content_type = request.get_header(Header::_CONTENT_TYPE.to_string());
+        let boxed_content_type = request.header(Header::_CONTENT_TYPE);
         if boxed_content_type.is_none() { return false; }
 
         let content_type_header = boxed_content_type.unwrap();
@@ -75,7 +75,7 @@ impl FormUrlEncodedEnctypePostMethodController {
     pub const FORM_URL_ENCODED_CONTENT_TYPE: &'static str = "application/x-www-form-urlencoded";
 
     pub fn is_matching_request(request: &Request) -> bool {
-        let boxed_content_type = request.get_header(Header::_CONTENT_TYPE.to_string());
+        let boxed_content_type = request.header(Header::_CONTENT_TYPE);
         if boxed_content_type.is_none() { return false; }
 
         let content_type_header = boxed_content_type.unwrap();

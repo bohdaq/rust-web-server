@@ -27,10 +27,10 @@ fn parse() {
     assert_eq!(&response.reason_phrase, STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase);
     assert_eq!(&response.http_version, VERSION.http_1_1);
 
-    let host_header : &Header = response.get_header(Header::_HOST.to_string()).unwrap();
+    let host_header : &Header = response.header(Header::_HOST).unwrap();
     assert_eq!(host_header.value, "localhost");
 
-    let content_type_header : &Header = response.get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+    let content_type_header : &Header = response.header(Header::_CONTENT_TYPE).unwrap();
     assert_eq!(content_type_header.value, "multipart/byteranges; boundary=dfgksjdfgk");
 
     let body : Vec<ContentRange> = response.content_range_list;
