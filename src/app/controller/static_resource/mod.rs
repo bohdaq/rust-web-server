@@ -370,7 +370,7 @@ impl StaticResourceController {
             return Some(response);
         }
 
-        let body = file.read_all(state.len).ok()?;
+        let body = file.contents(&state).ok()?;
         response.content_range_list = vec![Range::get_content_range(body, mime)];
         Some(response)
     }

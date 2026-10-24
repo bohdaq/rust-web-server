@@ -30,6 +30,9 @@ use crate::server::{framing, Address, ConnectionInfo, Server, REQUEST_HEAD_TIMEO
 /// keep-alive connection) and for each read of a request body.
 pub(crate) const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Bodies up to this size are copied behind the head and written in one call.
+const COALESCE_LIMIT: usize = 64 * 1024;
+
 /// Longest wait for a TLS handshake to complete after the TCP accept.
 pub(crate) const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -223,9 +226,17 @@ where
                 write_streaming(&mut stream, response, request).await?;
             }
         } else {
-            let (head, body) = Response::generate_response_parts(response, request);
-            stream.write_all(&head).await.map_err(|e| e.to_string())?;
-            stream.write_all(&body).await.map_err(|e| e.to_string())?;
+            let (mut head, body) = Response::generate_response_parts(response, request);
+            // One write — one syscall, one TCP segment — for a small response:
+            // with TCP_NODELAY on, writing head and body separately sent two
+            // segments and doubled the client's receive work.
+            if body.len() <= COALESCE_LIMIT {
+                head.extend_from_slice(&body);
+                stream.write_all(&head).await.map_err(|e| e.to_string())?;
+            } else {
+                stream.write_all(&head).await.map_err(|e| e.to_string())?;
+                stream.write_all(&body).await.map_err(|e| e.to_string())?;
+            }
             stream.flush().await.map_err(|e| e.to_string())?;
         }
 
@@ -404,13 +415,15 @@ async fn write_file_zero_copy<S: AsyncWrite + Unpin + SendfileSocket>(
     if stream.sendfile_socket().is_none() {
         return Ok(false);
     }
-    let Ok(file) = std::fs::File::open(&path) else { return Ok(false) };
+    // The static controller's open-file cache usually already holds this
+    // file open: reuse that handle instead of opening it again by path.
+    let Some(file) = crate::app::controller::static_resource::open_file_cache::open(&path, true) else {
+        return Ok(false);
+    };
 
     let (head, _) = Server::stream_file_head(std::mem::replace(response, Response::new()));
-    stream.write_all(&head).await.map_err(|e| e.to_string())?;
-    stream.flush().await.map_err(|e| e.to_string())?;
     let socket = stream.sendfile_socket().expect("checked above");
-    sendfile::send_file(socket, &file, len).await.map_err(|e| e.to_string())?;
+    sendfile::send_file(socket, &head, file.file(), len).await.map_err(|e| e.to_string())?;
     Ok(true)
 }
 

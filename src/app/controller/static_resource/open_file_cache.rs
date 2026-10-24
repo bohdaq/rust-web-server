@@ -13,6 +13,7 @@
 //! Unix only; elsewhere every request opens the file.
 
 use std::fs::File;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
@@ -21,11 +22,35 @@ use std::time::{Duration, Instant};
 pub(crate) const CAPACITY: usize = 128;
 const SHARDS: usize = 8;
 
+/// Files up to this size also have their contents cached.
+pub(crate) const MAX_CACHED_FILE: u64 = 64 * 1024;
+/// Total cached contents across all entries.
+pub(crate) const CONTENTS_BUDGET: usize = 8 * 1024 * 1024;
+/// Bytes of contents currently cached.
+static CONTENTS_BYTES: AtomicUsize = AtomicUsize::new(0);
+
 /// An open regular file.
 pub(crate) struct OpenFile {
     file: File,
     #[cfg(unix)]
     identity: (u64, u64), // (device, inode)
+    /// For cache entries: the file's bytes as of `(len, modified)`, so a
+    /// request for an unchanged small file costs no read at all.
+    cache_contents: bool,
+    contents: RwLock<Option<CachedContents>>,
+}
+
+struct CachedContents {
+    len: u64,
+    modified: u128,
+    bytes: Arc<[u8]>,
+}
+
+impl Drop for OpenFile {
+    fn drop(&mut self) {
+        let held = self.contents.get_mut().map(|c| c.as_ref().map_or(0, |c| c.bytes.len())).unwrap_or(0);
+        CONTENTS_BYTES.fetch_sub(held, Ordering::Relaxed);
+    }
 }
 
 /// Size and modification time of an [`OpenFile`] right now.
@@ -45,7 +70,43 @@ impl OpenFile {
             #[cfg(unix)]
             identity: identity(&md),
             file,
+            cache_contents: false,
+            contents: RwLock::new(None),
         })
+    }
+
+    /// The whole file as of `state` (from [`OpenFile::state`]): the cached
+    /// bytes when the size and modification time still match, otherwise a
+    /// fresh read — which is cached for next time if the file is small and
+    /// the budget allows. An edit is therefore served at once.
+    pub(crate) fn contents(&self, state: &FileState) -> std::io::Result<Vec<u8>> {
+        if let Some(cached) = self.contents.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            if cached.len == state.len && cached.modified == state.modified {
+                return Ok(cached.bytes.to_vec());
+            }
+        }
+        let body = self.read_all(state.len)?;
+        if self.cache_contents && state.len <= MAX_CACHED_FILE && settled(state.modified) {
+            let mut slot = self.contents.write().unwrap_or_else(|e| e.into_inner());
+            let released = slot.as_ref().map_or(0, |c| c.bytes.len());
+            let wanted = body.len();
+            // Reserve within the budget, counting what this entry gives back.
+            let reserved = CONTENTS_BYTES
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |held| {
+                    let after = held - released + wanted;
+                    (after <= CONTENTS_BUDGET).then_some(after)
+                })
+                .is_ok();
+            if reserved {
+                *slot = Some(CachedContents { len: state.len, modified: state.modified, bytes: Arc::from(body.as_slice()) });
+            }
+        }
+        Ok(body)
+    }
+
+    /// The open file.
+    pub(crate) fn file(&self) -> &File {
+        &self.file
     }
 
     /// Current size and modification time (`fstat`).
@@ -72,6 +133,19 @@ impl OpenFile {
             Ok(body)
         }
     }
+}
+
+/// Contents are cached only for a file last modified at least this long ago:
+/// on a filesystem with coarse timestamps, a same-size edit within the same
+/// tick wouldn't change `(len, modified)`, so a freshly written file is read
+/// on every request until it settles (git's "racy" index entries, same fix).
+const SETTLE: std::time::Duration = std::time::Duration::from_secs(2);
+
+fn settled(modified_nanos: u128) -> bool {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    now.saturating_sub(modified_nanos) >= SETTLE.as_nanos()
 }
 
 fn modified_nanos(md: &std::fs::Metadata) -> u128 {
@@ -156,7 +230,9 @@ fn open_with(path: &str, follow_symlinks: bool, valid_for: Duration) -> Option<A
         shard.write().unwrap_or_else(|e| e.into_inner()).retain(|(p, _)| p != path);
     }
 
-    let fresh = Arc::new(open_uncached(path, follow_symlinks)?);
+    let mut opened = open_uncached(path, follow_symlinks)?;
+    opened.cache_contents = true;
+    let fresh = Arc::new(opened);
     let mut entries = shard.write().unwrap_or_else(|e| e.into_inner());
     entries.retain(|(p, _)| p != path);
     if entries.len() >= CAPACITY / SHARDS {
@@ -300,6 +376,48 @@ mod tests {
         let a = open_with(path.as_str(), true, Duration::ZERO).unwrap();
         let b = open_with(path.as_str(), true, Duration::ZERO).unwrap();
         assert!(!Arc::ptr_eq(&a, &b));
+    }
+
+    #[test]
+    fn small_file_contents_are_cached_until_the_file_changes() {
+        let path = TempPath::new("ofc_contents.txt");
+        std::fs::write(path.as_str(), b"v1").unwrap();
+        // Backdate it: contents are cached only for settled files.
+        let old = std::time::SystemTime::now() - Duration::from_secs(60);
+        std::fs::File::options().write(true).open(path.as_str()).unwrap().set_modified(old).unwrap();
+        let file = open_with(path.as_str(), true, LONG).unwrap();
+        let state = file.state().unwrap();
+        assert_eq!(file.contents(&state).unwrap(), b"v1");
+        assert!(file.contents.read().unwrap().is_some(), "cached after the first read");
+        assert_eq!(file.contents(&state).unwrap(), b"v1");
+
+        // Edit in place: size and mtime change, so the next request rereads.
+        std::fs::write(path.as_str(), b"version 2").unwrap();
+        let state = file.state().unwrap();
+        assert_eq!(file.contents(&state).unwrap(), b"version 2");
+    }
+
+    #[test]
+    fn freshly_written_files_are_not_cached_yet() {
+        let path = TempPath::new("ofc_fresh.txt");
+        std::fs::write(path.as_str(), b"new").unwrap();
+        let file = open_with(path.as_str(), true, LONG).unwrap();
+        let state = file.state().unwrap();
+        assert_eq!(file.contents(&state).unwrap(), b"new");
+        assert!(file.contents.read().unwrap().is_none(), "modified < 2 s ago: read every time");
+    }
+
+    #[test]
+    fn large_files_and_uncached_handles_keep_no_contents() {
+        let path = TempPath::new("ofc_large.bin");
+        std::fs::write(path.as_str(), vec![7u8; MAX_CACHED_FILE as usize + 1]).unwrap();
+        let file = open_with(path.as_str(), true, LONG).unwrap();
+        let state = file.state().unwrap();
+        assert_eq!(file.contents(&state).unwrap().len(), MAX_CACHED_FILE as usize + 1);
+        assert!(file.contents.read().unwrap().is_none());
+
+        let small = OpenFile::from_file(File::open(path.as_str()).unwrap()).unwrap();
+        assert!(!small.cache_contents, "only cache entries keep contents");
     }
 
     #[test]

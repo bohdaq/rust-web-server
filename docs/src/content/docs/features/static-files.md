@@ -34,9 +34,16 @@ curl http://localhost:7878/index.html # same file, explicit path
   several `stat`s and a `close`. Size and modification time are read on every
   request, so a file edited in place is served correctly at once; a file
   replaced by a new one (a rename) or deleted is noticed within the second.
-  At most 128 files are held open.
+  At most 128 files are held open. Files up to 64 KiB also have their
+  contents kept in memory (8 MiB in total), checked against the size and
+  modification time on every request, so an unchanged small file costs no
+  read; a file modified in the last two seconds is always read fresh.
+- **One write per response.** A small response's head and body leave in one
+  system call and one TCP segment.
 - **Downloads use `sendfile`** over plain HTTP on Linux and macOS: the kernel
-  copies the file to the socket.
+  copies the file to the socket, with the response head in the same segment
+  (`TCP_CORK` on Linux, `sendfile`'s header vector on macOS) and the open
+  file handle reused rather than reopened.
 - **Static files and health checks run on the event loop**, without a hand-off
   to a thread pool.
 
