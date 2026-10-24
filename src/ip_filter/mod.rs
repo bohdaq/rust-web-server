@@ -1,10 +1,10 @@
 //! IP address allowlist and denylist middleware.
 //!
 //! [`IpFilter`] inspects the client IP from [`crate::server::ConnectionInfo`]
-//! and either allows or blocks the request based on a list of IPv4 addresses
-//! or CIDR ranges. IPv6 addresses are not matched by any rule; their handling
-//! depends on the filter mode — they are blocked in allow mode and passed in
-//! deny mode.
+//! and either allows or blocks the request based on a list of IPv4 or IPv6
+//! addresses and CIDR ranges. An IPv4 rule also matches the same client
+//! connecting over a dual-stack socket as an IPv4-mapped IPv6 address
+//! (`::ffff:1.2.3.4`).
 //!
 //! - **Allow mode** — only listed addresses/ranges pass; all others get `403 Forbidden`.
 //! - **Deny mode** — listed addresses/ranges get `403 Forbidden`; all others pass.
@@ -22,7 +22,7 @@
 //!
 //! // Block a known-bad address range.
 //! let app = App::new()
-//!     .wrap(IpFilter::deny(["1.2.3.4", "5.6.7.0/24"]));
+//!     .wrap(IpFilter::deny(["1.2.3.4", "5.6.7.0/24", "2001:db8::/32"]));
 //! ```
 
 #[cfg(test)]
@@ -39,16 +39,19 @@ enum FilterMode {
     Deny,
 }
 
+/// An address range in IPv6 space; IPv4 rules are stored IPv4-mapped
+/// (`::ffff:0:0/96`), so one comparison covers both families.
 struct IpRange {
-    network: u32,
-    mask: u32,
+    network: u128,
+    mask: u128,
 }
 
-/// Middleware that filters requests by client IPv4 address.
+/// Middleware that filters requests by client IP address.
 ///
 /// Constructed via [`IpFilter::allow`] or [`IpFilter::deny`]. Each entry
-/// may be an exact address (`"1.2.3.4"`) or a CIDR range (`"10.0.0.0/8"`).
-/// Malformed entries are silently skipped.
+/// may be an exact address (`"1.2.3.4"`, `"2001:db8::1"`) or a CIDR range
+/// (`"10.0.0.0/8"`, `"2001:db8::/32"`). Malformed entries are skipped; check
+/// them with [`is_valid_entry`] (`rws --check` does).
 pub struct IpFilter {
     mode: FilterMode,
     ranges: Vec<IpRange>,
@@ -89,12 +92,16 @@ impl IpFilter {
     }
 
     fn matches(&self, ip: &str) -> bool {
-        let ip_u32 = match parse_ipv4(ip) {
-            Some(v) => v,
-            None => return false,
-        };
-        self.ranges.iter().any(|r| (ip_u32 & r.mask) == r.network)
+        match parse_ip(ip) {
+            Some(addr) => self.ranges.iter().any(|r| (addr & r.mask) == r.network),
+            None => false,
+        }
     }
+}
+
+/// `true` if `entry` is an address or CIDR range [`IpFilter`] understands.
+pub fn is_valid_entry(entry: &str) -> bool {
+    IpRange::parse(entry).is_some()
 }
 
 impl Middleware for IpFilter {
@@ -116,30 +123,32 @@ impl Middleware for IpFilter {
 
 impl IpRange {
     fn parse(entry: &str) -> Option<Self> {
-        if let Some(slash) = entry.find('/') {
-            let network_str = &entry[..slash];
-            let prefix_len: u8 = entry[slash + 1..].parse().ok()?;
-            if prefix_len > 32 {
-                return None;
+        let entry = entry.trim();
+        let (addr, prefix_len) = match entry.split_once('/') {
+            Some((addr, len)) => {
+                let len: u32 = len.parse().ok()?;
+                let is_v4 = addr.parse::<std::net::Ipv4Addr>().is_ok();
+                let max = if is_v4 { 32 } else { 128 };
+                if len > max {
+                    return None;
+                }
+                (addr, if is_v4 { len + 96 } else { len })
             }
-            let raw = parse_ipv4(network_str)?;
-            let mask = if prefix_len == 0 { 0u32 } else { !0u32 << (32 - prefix_len) };
-            Some(IpRange { network: raw & mask, mask })
-        } else {
-            let addr = parse_ipv4(entry)?;
-            Some(IpRange { network: addr, mask: !0u32 })
-        }
+            None => (entry, 128),
+        };
+        let network = parse_ip(addr)?;
+        let mask = if prefix_len == 0 { 0 } else { !0u128 << (128 - prefix_len) };
+        Some(IpRange { network: network & mask, mask })
     }
 }
 
-fn parse_ipv4(s: &str) -> Option<u32> {
-    let mut parts = s.split('.');
-    let a: u8 = parts.next()?.parse().ok()?;
-    let b: u8 = parts.next()?.parse().ok()?;
-    let c: u8 = parts.next()?.parse().ok()?;
-    let d: u8 = parts.next()?.parse().ok()?;
-    if parts.next().is_some() {
-        return None;
+/// An IPv4 or IPv6 address as a number in IPv6 space (IPv4 → `::ffff:a.b.c.d`).
+/// A zone suffix (`fe80::1%eth0`) is ignored.
+fn parse_ip(s: &str) -> Option<u128> {
+    let s = s.trim().trim_start_matches('[').trim_end_matches(']');
+    let s = s.split('%').next()?;
+    match s.parse::<std::net::IpAddr>().ok()? {
+        std::net::IpAddr::V4(v4) => Some(u128::from(v4.to_ipv6_mapped())),
+        std::net::IpAddr::V6(v6) => Some(u128::from(v6)),
     }
-    Some(u32::from_be_bytes([a, b, c, d]))
 }

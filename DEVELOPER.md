@@ -119,7 +119,9 @@ The crate exposes its core types so you can compose them in your own server or t
 | `verify_webhook_signature` / `WebhookProvider` | `webhook` | Verifies inbound webhook HMAC signatures. `WebhookProvider::GitHub` (`X-Hub-Signature-256: sha256=<hex>`), `::Shopify` (`X-Shopify-Hmac-Sha256: <base64>`), `::Stripe` (`Stripe-Signature: t=<ts>,v1=<hex>[,v1=...]`, default 300s replay tolerance). Requires `features = ["webhook"]`. |
 | `verify_github_signature` / `verify_shopify_signature` / `verify_stripe_signature` / `verify_stripe_signature_with_tolerance` | `webhook` | Per-provider verification functions backing `verify_webhook_signature` — call directly when the provider is known at the call site. `_with_tolerance` overrides Stripe's default `STRIPE_DEFAULT_TOLERANCE_SECS` (300s) timestamp window. Requires `features = ["webhook"]`. |
 | `build_jwt` / `verify_jwt` / `Claims` | `auth` | Sign and verify HS256 JWTs; `Claims` exposes `sub`, `exp`, and raw JSON payload. |
-| `IpFilter` | `ip_filter` | Allow/deny middleware keyed on client IPv4 address or CIDR range. `IpFilter::allow([...])` passes only listed addresses; `IpFilter::deny([...])` blocks them. |
+| `IpFilter` | `ip_filter` | Allow/deny middleware keyed on client IPv4 or IPv6 address or CIDR range (IPv4 rules also match IPv4-mapped `::ffff:a.b.c.d` clients). `IpFilter::allow([...])` passes only listed addresses; `IpFilter::deny([...])` blocks them. `ip_filter::is_valid_entry(entry)` tells whether an entry parses (malformed entries are skipped). |
+| `config_check::check_file` / `check_str` / `ConfigReport` | `config_check` | `rws --check[=<file>]`: validates `rws.config.toml` without starting the server — unknown keys, wrongly typed values, unloadable TLS files, ACME mistakes, proxy routes pointing at undeclared upstreams, unset auth secrets. `ConfigReport { errors, warnings }`, `.is_ok()`, `.render(path)`. |
+| `ProxyConfig::validate(&mut ConfigReport)` | `proxy_config` | Semantic checks of the proxy sections (also printed at startup by `build_from_file`). |
 | `RequestIdLayer` / `RequestId` | `request_id` | Correlation-ID middleware. Echoes an incoming `X-Request-Id` unchanged, or generates one (`generate_request_id()`, UUID-v4-shaped, not crypto-random) — either way it's injected into the request (readable by handlers) and set on the response. `.header(name)` overrides the header name. `RequestId` (in `extract`) is a `FromRequest` convenience for reading it. |
 | `routes!` | `macros` | Declarative routing macro — builds `AppWithState`, `AsyncAppWithState`, or `Router` from a `METHOD "path" => handler` table. |
 | `OpenApiConfig` / `build_spec` | `openapi` (requires `openapi` feature) | OpenAPI 3.0 schema generation. `AppWithState::openapi(config)` / `AsyncAppWithState::openapi(config)` add `GET /openapi.json` (generated spec) and `GET /docs` (Swagger UI via CDN) covering every route registered so far. Scope: paths, methods, path parameters (`:name`/`*name` → `{name}`) — no request/response body schemas, since Rust has no runtime type reflection to extract them from `#[derive(Validate)]`/serde types. |
@@ -4900,3 +4902,39 @@ Three real limitations worth knowing before relying on this, all confirmed again
 3. Filesystem access requires an explicit host grant (`wasmtime serve --dir HOST_DIR::.`) — without it, static-file serving silently falls back to `rws`'s embedded default pages for every path, with no error.
 
 All three are documented in detail in `spec/WASM_SHIM.md`.
+
+### 83. Validating `rws.config.toml` before a deploy — `rws --check`
+
+`rws --check` reads the configuration the server would load (`RWS_CONFIG_FILE`,
+else `./rws.config.toml`), prints every problem it finds and exits `0` (no
+errors) or `1` — run it in CI or before a restart, like `nginx -t`:
+
+```bash
+rws --check                       # the file rws would load
+rws --check=/etc/rws/prod.toml    # a specific file
+```
+
+```text
+error: [route.action] upsteam: unknown key — ignored
+error: route 'api': upstream 'missing' is not a declared [[upstream]]
+error: route 'api': auth secret env var 'API_TOKEN' is unset or empty; the route answers 503 until it is set
+warning: [acme] without http_redirect_port: nothing answers the HTTP-01 challenge on port 80; set http_redirect_port = 80
+rws.config.toml: 3 errors, 1 warning
+```
+
+The same checks are available as a library call, e.g. in a test that keeps a
+deployment's config honest:
+
+```rust
+use rust_web_server::config_check;
+
+#[test]
+fn production_config_is_valid() {
+    let report = config_check::check_file("deploy/rws.config.toml");
+    assert!(report.is_ok(), "{}", report.render("deploy/rws.config.toml"));
+}
+```
+
+Auth secrets and certificate files are checked in the current environment, so
+run it where the server runs (or with the same environment variables set).
+

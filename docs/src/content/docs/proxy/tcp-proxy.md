@@ -61,8 +61,9 @@ Activate `TcpProxy` from `rws.config.toml` using a `[[tcp_proxy]]` section:
 
 ```toml
 [[tcp_proxy]]
-bind = "0.0.0.0:5432"
-backends = ["db-primary:5432", "db-replica:5432"]
+name               = "postgres"
+listen             = "0.0.0.0:5432"
+backends           = ["db-primary:5432", "db-replica:5432"]
 connect_timeout_ms = 3000
 ```
 

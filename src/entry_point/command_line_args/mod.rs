@@ -52,6 +52,8 @@ fn help_text() -> String {
         let hint = argument._hint.unwrap_or_default();
         text.push_str(&format!("  {:<44} {}\n  {:<44} [env: {}]\n", flag, hint, "", argument.environment_variable));
     }
+    text.push_str("      --check[=<file>]                         Validate rws.config.toml (or <file>) and exit:\n");
+    text.push_str("                                               0 if it has no errors, 1 otherwise\n");
     text.push_str("  -V, --version                                Print version and exit\n");
     text.push_str("      --help                                   Print this help and exit\n\n");
     text.push_str("Docs: https://rws8.tech\n");

@@ -119,14 +119,14 @@ fn deny_cidr_ip_outside_range_passes() {
 
 #[test]
 fn allow_mode_ipv6_client_is_blocked() {
-    // IPv6 addresses are not matched; allow mode blocks them.
+    // IPv4 rules don't match native IPv6 clients.
     assert_eq!(403, status(IpFilter::allow(["192.168.0.0/16"]), "::1"));
     assert_eq!(403, status(IpFilter::allow(["0.0.0.0/0"]), "2001:db8::1"));
 }
 
 #[test]
 fn deny_mode_ipv6_client_passes() {
-    // IPv6 addresses are not matched; deny mode lets them through.
+    // IPv4 rules don't match native IPv6 clients.
     assert_eq!(200, status(IpFilter::deny(["1.2.3.4"]), "::1"));
 }
 
@@ -191,4 +191,30 @@ fn stacked_allow_and_deny() {
     // 8.8.8.8 is blocked by the allowlist before even reaching the denylist.
     let resp = app.execute(&get("/"), &conn("8.8.8.8")).unwrap();
     assert_eq!(403, resp.status_code);
+}
+
+#[test]
+fn ipv6_exact_and_cidr_rules_match() {
+    assert_eq!(200, status(IpFilter::allow(["::1"]), "::1"));
+    assert_eq!(200, status(IpFilter::allow(["2001:db8::/32"]), "2001:db8:1234::7"));
+    assert_eq!(403, status(IpFilter::allow(["2001:db8::/32"]), "2001:db9::1"));
+    assert_eq!(403, status(IpFilter::deny(["2001:db8::/32"]), "2001:db8::1"));
+    assert_eq!(200, status(IpFilter::deny(["2001:db8::/32"]), "2001:db9::1"));
+}
+
+#[test]
+fn ipv4_rule_matches_an_ipv4_mapped_client() {
+    // A dual-stack socket reports IPv4 clients as ::ffff:a.b.c.d.
+    assert_eq!(403, status(IpFilter::deny(["10.0.0.0/8"]), "::ffff:10.1.2.3"));
+    assert_eq!(200, status(IpFilter::allow(["10.0.0.0/8"]), "::ffff:10.1.2.3"));
+}
+
+#[test]
+fn is_valid_entry_accepts_both_families_and_rejects_junk() {
+    for ok in ["1.2.3.4", "10.0.0.0/8", "0.0.0.0/0", "::1", "2001:db8::/32", " 192.168.0.1 "] {
+        assert!(super::is_valid_entry(ok), "{ok}");
+    }
+    for bad in ["", "1.2.3", "10.0.0.0/33", "2001:db8::/129", "example.com", "1.2.3.4/x"] {
+        assert!(!super::is_valid_entry(bad), "{bad}");
+    }
 }

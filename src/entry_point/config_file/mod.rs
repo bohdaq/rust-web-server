@@ -33,28 +33,38 @@ pub const SETTINGS_WITHOUT_FLAG: &[&str] = &[
 
 /// Tables (and their sub-tables) read by `proxy_config`'s own parser, not
 /// mapped to `RWS_CONFIG_*` variables.
-const PROXY_TABLES: &[&str] = &["route", "upstream", "tcp_proxy", "udp_proxy", "ws_proxy"];
+const PROXY_TABLES: &[&str] = &["route", "upstream", "tcp_proxy", "udp_proxy", "ws_proxy", "middleware"];
 
 /// `[[virtual_host]]` fields, set as `RWS_CONFIG_VIRTUAL_HOST_<n>_<FIELD>`.
 const VIRTUAL_HOST_FIELDS: &[&str] = &["DOMAIN", "CERT_FILE", "KEY_FILE"];
 
-/// Apply every setting in a `rws.config.toml` document to the process
-/// environment. `prefix` is the table the document starts in (normally empty).
+/// The settings of a `rws.config.toml` document, resolved to the
+/// `RWS_CONFIG_*` variables they set — without touching the environment.
+#[derive(Debug, Default, PartialEq)]
+pub struct ConfigSettings {
+    /// `(RWS_CONFIG_* name, value)` in file order.
+    pub settings: Vec<(String, String)>,
+    /// Keys no setting answers to, as `key` or `[table] key`.
+    pub unknown: Vec<String>,
+}
+
+/// Resolve every setting in a `rws.config.toml` document. `prefix` is the
+/// table the document starts in (normally empty).
 ///
 /// Top-level keys and keys in plain `[tables]` map to `RWS_CONFIG_<TABLE>_<KEY>`
 /// (`[cors] allow_all` → `RWS_CONFIG_CORS_ALLOW_ALL`); each `[[virtual_host]]`
 /// block maps to `RWS_CONFIG_VIRTUAL_HOST_<n>_*`. Strings keep their exact
 /// contents (spaces, quotes inside them); arrays become comma-separated lists.
-/// Unknown keys are reported on stderr instead of being ignored silently.
-pub fn read_config_file(
+/// Proxy tables (`[[route]]`, `[[upstream]]`, …) are left to `proxy_config`.
+pub fn collect_settings(
     cursor: Cursor<&[u8]>,
-    prefix: String) -> Result<bool, String> {
+    prefix: String) -> Result<ConfigSettings, String> {
 
     let mut table = prefix;
     // Index of the current [[array-table]] entry, per array-table name.
     let mut array_table_counters: HashMap<String, usize> = HashMap::new();
     let mut array_index: Option<usize> = None;
-    let mut flag_arguments: Vec<String> = vec![];
+    let mut resolved = ConfigSettings::default();
     let flags = CommandLineArgument::get_command_line_arg_list();
 
     for line in cursor.lines() {
@@ -91,28 +101,43 @@ pub fn read_config_file(
             let field = key.to_ascii_uppercase();
             if VIRTUAL_HOST_FIELDS.contains(&field.as_str()) {
                 let name = format!("RWS_CONFIG_VIRTUAL_HOST_{}_{}", array_index.unwrap_or(0), field);
-                set_setting(&name, &value);
+                resolved.settings.push((name, value));
             } else {
-                warn_unknown(&table, key);
+                resolved.unknown.push(qualified_key(&table, key));
             }
             continue;
         }
 
         let path = if table.is_empty() { key.to_string() } else { format!("{}_{}", table.replace('.', "_"), key) };
         let long_form = path.replace('_', "-");
-        if flags.iter().any(|f| f.long_form == long_form) {
-            flag_arguments.push(format!("--{}={}", long_form, value));
+        if let Some(flag) = flags.iter().find(|f| f.long_form == long_form) {
+            resolved.settings.push((flag.environment_variable.clone(), value));
             continue;
         }
         let name = format!("RWS_CONFIG_{}", path.to_ascii_uppercase());
         if SETTINGS_WITHOUT_FLAG.contains(&name.as_str()) {
-            set_setting(&name, &value);
+            resolved.settings.push((name, value));
         } else {
-            warn_unknown(&table, key);
+            resolved.unknown.push(qualified_key(&table, key));
         }
     }
-    CommandLineArgument::_parse(flag_arguments, flags);
 
+    Ok(resolved)
+}
+
+/// Apply every setting in a `rws.config.toml` document to the process
+/// environment (see [`collect_settings`]). Unknown keys are reported on
+/// stderr instead of being ignored silently.
+pub fn read_config_file(
+    cursor: Cursor<&[u8]>,
+    prefix: String) -> Result<bool, String> {
+    let resolved = collect_settings(cursor, prefix)?;
+    for (name, value) in &resolved.settings {
+        set_setting(name, value);
+    }
+    for key in &resolved.unknown {
+        eprintln!("    Warning: unknown setting '{}' in rws.config.toml — ignored", key);
+    }
     Ok(true)
 }
 
@@ -126,9 +151,8 @@ fn set_setting(name: &str, value: &str) {
     println!("    Set env variable '{}' to value '{}'", name, value);
 }
 
-fn warn_unknown(table: &str, key: &str) {
-    let qualified = if table.is_empty() { key.to_string() } else { format!("[{}] {}", table, key) };
-    eprintln!("    Warning: unknown setting '{}' in rws.config.toml — ignored", qualified);
+fn qualified_key(table: &str, key: &str) -> String {
+    if table.is_empty() { key.to_string() } else { format!("[{}] {}", table, key) }
 }
 
 /// Drop a trailing `# comment`, ignoring `#` inside quoted strings.

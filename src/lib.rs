@@ -64,6 +64,7 @@ pub mod macros;
 pub mod blocklist;
 pub mod cache;
 pub mod config_reload;
+pub mod config_check;
 pub mod server_config;
 pub mod feature;
 pub mod maintenance;

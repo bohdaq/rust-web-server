@@ -60,9 +60,10 @@ Activate `UdpProxy` from `rws.config.toml` with a `[[udp_proxy]]` section:
 
 ```toml
 [[udp_proxy]]
-bind = "0.0.0.0:53"
-backends = ["dns1.internal:53", "dns2.internal:53"]
-read_timeout_ms = 500
+name             = "dns"
+listen           = "0.0.0.0:53"
+backends         = ["dns1.internal:53", "dns2.internal:53"]
+reply_timeout_ms = 500
 ```
 
 Multiple `[[udp_proxy]]` sections are supported — each starts an independent listener.

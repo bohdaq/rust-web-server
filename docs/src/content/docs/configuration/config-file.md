@@ -16,6 +16,30 @@ proxy routes):
 RWS_CONFIG_FILE=/etc/rws/prod.toml rws
 ```
 
+### Check the file before you deploy
+
+`rws --check` validates the configuration without starting the server and
+exits `0` if it has no errors, `1` otherwise — like `nginx -t`:
+
+```bash
+rws --check                       # the file rws would load
+rws --check=/etc/rws/prod.toml    # a specific file
+```
+
+```text
+error: [route.action] upsteam: unknown key — ignored
+error: route 'api': upstream 'missing' is not a declared [[upstream]]
+warning: [acme] without http_redirect_port: nothing answers the HTTP-01 challenge on port 80; set http_redirect_port = 80
+rws.config.toml: 2 errors, 1 warning
+```
+
+It reports unknown keys anywhere in the file, values of the wrong type,
+certificate and key files that are missing or don't load, ACME mistakes,
+proxy routes that point at undeclared upstreams, unknown action types, IP
+filter entries that aren't addresses, and auth secrets that aren't set.
+Secrets and files are checked in the current environment, so run it where the
+server runs. Proxy problems are also printed when the server starts.
+
 ### How keys map to settings
 
 Every setting has an `RWS_CONFIG_*` environment variable. In the file, a key's

@@ -443,11 +443,18 @@ async fn start_acme() {
 }
 
 /// `rws --version` / `rws --help`: print and exit before binding any socket.
+/// `rws --check[=<file>]`: validate the configuration, exit 0 if it has no
+/// errors, 1 otherwise.
 fn exit_if_informational_flag() {
     let args: Vec<String> = std::env::args().collect();
     if let Some(output) = rust_web_server::entry_point::command_line_args::informational_flag_output(&args) {
         print!("{output}");
         std::process::exit(0);
+    }
+    if let Some(path) = rust_web_server::config_check::check_target_from_args(&args) {
+        let report = rust_web_server::config_check::check_file(&path);
+        print!("{}", report.render(&path));
+        std::process::exit(if report.is_ok() { 0 } else { 1 });
     }
 }
 

@@ -13,8 +13,18 @@ use crate::proxy_config::{
 
 /// Build a `ConfigDrivenApp` from `rws.config.toml` and spawn L4/WS proxy
 /// threads. Returns the app and a list of background thread handles.
+/// Problems `ProxyConfig::validate` finds are printed first (the same
+/// findings `rws --check` reports).
 pub fn build_from_file() -> (ConfigDrivenApp, Vec<std::thread::JoinHandle<()>>) {
     let config = ProxyConfig::load();
+    let mut report = crate::config_check::ConfigReport::default();
+    config.validate(&mut report);
+    for e in &report.errors {
+        eprintln!("[proxy_config] ERROR: {e}");
+    }
+    for w in &report.warnings {
+        eprintln!("[proxy_config] Warning: {w}");
+    }
     build(config)
 }
 
@@ -190,7 +200,7 @@ pub fn build(config: ProxyConfig) -> (ConfigDrivenApp, Vec<std::thread::JoinHand
         handles.push(h);
     }
 
-    (ConfigDrivenApp::new(compiled), handles)
+    (ConfigDrivenApp::new(compiled, config.global_middleware.clone()), handles)
 }
 
 /// Wrap `handler` with the middleware layers described by `mw`, innermost
@@ -206,7 +216,7 @@ pub fn build(config: ProxyConfig) -> (ConfigDrivenApp, Vec<std::thread::JoinHand
 ///      request this route will reject outright doesn't pay for a timeout
 ///      wrapper (which runs its target on a background thread) or engage
 ///      any other layer at all
-fn apply_middleware(
+pub(crate) fn apply_middleware(
     handler: Arc<dyn crate::application::Application + Send + Sync>,
     mw: &MiddlewareConfig,
 ) -> Arc<dyn crate::application::Application + Send + Sync> {

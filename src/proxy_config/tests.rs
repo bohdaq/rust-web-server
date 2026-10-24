@@ -1896,3 +1896,71 @@ fn from_str_survives_a_lone_quote_value() {
     // Found by fuzzing: `J='` sliced s[1..0] and panicked.
     let _ = ProxyConfig::from_str("J='\nK=\"\n[[route]]\npath = '\n");
 }
+
+#[test]
+fn inline_middleware_tables_are_parsed() {
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+  [route.match]
+  path = "/api/*"
+  [route.action]
+  type = "respond"
+  [route.middleware]
+  rate_limit = { max_requests = 500, window_secs = 60 }
+  auth = { type = "bearer", token_env = "API_TOKEN" }
+  ip_filter = { allow = ["10.0.0.0/8"] }
+  cache = { ttl_secs = 30 }
+"#);
+    let mw = &cfg.routes[0].middleware;
+    let rl = mw.rate_limit.as_ref().expect("inline rate_limit");
+    assert_eq!((rl.max_requests, rl.window_secs), (500, 60));
+    assert!(matches!(mw.auth, Some(crate::proxy_config::AuthConfig::Bearer { ref token_env }) if token_env == "API_TOKEN"));
+    assert_eq!(mw.ip_allow, vec!["10.0.0.0/8".to_string()]);
+    assert_eq!(mw.cache.as_ref().expect("inline cache").ttl_secs, 30);
+}
+
+#[test]
+fn inline_bearer_auth_protects_the_route() {
+    // The short form the docs show: this used to be parsed as no auth at all.
+    std::env::set_var("RWSTEST_PROXY_BEARER_INLINE", "inline-token");
+    let cfg = ProxyConfig::from_str(r#"
+[[route]]
+  [route.match]
+  path = "/secret"
+  [route.action]
+  type = "respond"
+  body = "secret"
+  [route.middleware]
+  auth = { type = "bearer", token_env = "RWSTEST_PROXY_BEARER_INLINE" }
+"#);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    assert_eq!(app.execute(&make_request("GET", "/secret"), &conn).unwrap().status_code, 401);
+    let mut authorized = make_request("GET", "/secret");
+    authorized.headers.push(crate::header::Header { name: "Authorization".to_string(), value: "Bearer inline-token".to_string() });
+    assert_eq!(app.execute(&authorized, &conn).unwrap().status_code, 200);
+}
+
+#[test]
+fn global_middleware_applies_to_routes_and_the_fallback() {
+    let cfg = ProxyConfig::from_str(r#"
+[middleware]
+ip_filter = { deny = ["10.0.0.0/8"] }
+
+[[route]]
+  [route.match]
+  path = "/api"
+  [route.action]
+  type = "respond"
+  body = "api"
+"#);
+    assert_eq!(cfg.global_middleware.ip_deny, vec!["10.0.0.0/8".to_string()]);
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let app = app.with_config(crate::server_config::ServerConfig::default());
+    let blocked = make_conn("10.1.2.3");
+    let allowed = make_conn("192.0.2.1");
+    assert_eq!(app.execute(&make_request("GET", "/api"), &blocked).unwrap().status_code, 403);
+    assert_eq!(app.execute(&make_request("GET", "/healthz"), &blocked).unwrap().status_code, 403);
+    assert_eq!(app.execute(&make_request("GET", "/api"), &allowed).unwrap().status_code, 200);
+    assert_eq!(app.execute(&make_request("GET", "/healthz"), &allowed).unwrap().status_code, 200);
+}

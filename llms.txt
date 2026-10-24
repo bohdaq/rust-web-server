@@ -887,7 +887,7 @@ Relationships: `HasMany<T>`, `HasOne<T>`, `BelongsTo<O>` — explicit `.load(&po
 | `BasicAuthLayer<F>` | `auth` | HTTP Basic; closure `(user, pass) -> bool`; 401 on failure. `::from_htpasswd_file(path)` loads plain-text/`{SHA256}` entries from a file. |
 | `JwtLayer` | `auth` | HS256 Bearer token; 401 on invalid. `::rs256`/`::es256` (RS256/ES256 against a static PEM public key) require `auth-asymmetric` |
 | `ForwardAuthLayer` | `auth::forward` | Delegates the allow/deny decision to an external HTTP service; 2xx copies configured headers through, other statuses pass the auth response through verbatim, unreachable → 502 |
-| `IpFilter` | `ip_filter` | Allow or deny by IPv4/CIDR; 403 on block |
+| `IpFilter` | `ip_filter` | Allow or deny by IPv4/IPv6 address or CIDR; 403 on block; `ip_filter::is_valid_entry` |
 | `CsrfLayer` | `csrf` | Double-submit cookie; 403 on mismatch for POST/PUT/PATCH/DELETE |
 | `OidcAuth` | `sso` | OAuth2/OIDC auth; redirects unauthenticated users to `/auth/login` |
 | `AuthServer` | `sso-server` | `rws` as its own OAuth 2.0 Authorization Server; intercepts `/oauth/token`, `/oauth/authorize`, `/.well-known/*`; HS256 tokens |
@@ -1240,7 +1240,7 @@ Route action types: `proxy`, `grpc`, `static`, `redirect`, `respond`, `mcp`.
 Action settings (`upstream`, `status`, `body`, `location`, timeouts, ...) may sit directly under
 `[route.action]` next to `type` (short form) or in a nested `[route.action.<type>]` table; when a key
 appears in both, the nested table wins.
-Per-route middleware: `rate_limit`, `cache`, `auth`, `ip_allow`/`ip_deny`, `rewrite`, `timeout_ms`, `max_body_size`.
+Per-route middleware: `rate_limit`, `cache`, `auth`, `ip_allow`/`ip_deny`, `rewrite`, `timeout_ms`, `max_body_size`. Inline tables (`rate_limit = { max_requests = 500 }`) and sub-tables (`[route.middleware.rate_limit]`) are equivalent. A top-level `[middleware]` table (same keys) wraps every request — matched routes and the static-file fallback. Validate with `rws --check`.
 Upstream load-balancing strategies: `round_robin` (default), `random`, `ip_hash` (sticky per client IP), `least_connections`.
 
 `auth` types (`[route.middleware.auth]`):
@@ -2188,7 +2188,8 @@ let www_router = Router::new().with_host("www.example.com").get("/", home_handle
 - HTTP/1.1 request framing (`server::framing`, internal) — heads up to 64 KiB (`MAX_HEAD_SIZE`, same as the HTTP/2/3 header-list limit) may span reads, `431` beyond; pipelined requests are kept in a per-connection buffer; chunked request bodies are decoded (`ChunkedBody`, counted against the max body size); `Content-Length` + `Transfer-Encoding`, conflicting `Content-Length`s, or a non-`chunked` coding → `400` (anti request smuggling); a body cut short by the client is never dispatched
 - `Expect: 100-continue` (HTTP/1.1 only) — server sends `100 Continue` before reading the body; a size-limit 413 or an unsupported `Expect` value's 417 is sent instead, without reading the body at all
 - mTLS — set `RWS_CONFIG_TLS_CLIENT_CA_FILE`
-- IP filtering — `IpFilter::allow([…])` / `.deny([…])`
+- IP filtering — `IpFilter::allow([…])` / `.deny([…])`; IPv4 and IPv6, CIDR
+- Config validation — `rws --check[=<file>]` / `config_check::check_file(path) -> ConfigReport`; unknown keys, bad values, unloadable TLS files, undeclared upstreams, unset auth secrets; exit 1 on errors
 - JWT HS256 — `auth` module; constant-time HMAC
 - JWT RS256/ES256 without a JWKS endpoint — `JwtLayer::rs256`/`::es256`; static PEM public key, `auth-asymmetric` feature
 - Forward-auth to an external service — `auth::forward::ForwardAuthLayer`; fails closed (502) if the auth service is unreachable

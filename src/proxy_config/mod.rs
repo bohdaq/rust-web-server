@@ -28,6 +28,7 @@
 pub mod parser;
 pub mod health;
 pub mod builder;
+pub mod validate;
 
 #[cfg(test)]
 mod tests;
@@ -743,10 +744,21 @@ impl RouteMatcher {
 
 /// An `Application` that routes requests based on a parsed `ProxyConfig`.
 ///
-/// `Clone` is cheap: `routes` is an `Arc<Vec<...>>` (pointer copy), and
-/// `fallback` is `App`, itself cheap to clone (an `Option<Arc<ServerConfig>>`).
+/// `Clone` is cheap: every field is an `Arc` or `App` (itself an
+/// `Option<Arc<ServerConfig>>`).
 #[derive(Clone)]
 pub struct ConfigDrivenApp {
+    dispatch: RouteDispatch,
+    /// The top-level `[middleware]` table, applied around every request —
+    /// matched routes and the fallback alike.
+    global_middleware: Arc<MiddlewareConfig>,
+    /// `dispatch` wrapped in the global middleware; `None` when there is none.
+    entry: Option<Arc<dyn Application + Send + Sync>>,
+}
+
+/// First-match routing over the compiled routes, then the fallback.
+#[derive(Clone)]
+struct RouteDispatch {
     routes: Arc<Vec<CompiledRoute>>,
     /// Fallback for unmatched requests — handles /healthz, /readyz, /metrics,
     /// static files, and the 404 controller. Reads `RWS_CONFIG_*` env vars
@@ -755,13 +767,45 @@ pub struct ConfigDrivenApp {
     fallback: App,
 }
 
-impl ConfigDrivenApp {
-    pub(crate) fn new(routes: Vec<CompiledRoute>) -> Self {
-        use crate::core::New;
-        ConfigDrivenApp {
-            routes: Arc::new(routes),
-            fallback: App::new(),
+impl Application for RouteDispatch {
+    fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
+        for route in self.routes.iter() {
+            if route.matcher.matches(request, conn) {
+                return route.handler.execute(request, conn);
+            }
         }
+        self.fallback.execute(request, conn)
+    }
+}
+
+impl MiddlewareConfig {
+    /// `true` when no layer is configured.
+    pub fn is_empty(&self) -> bool {
+        self.rate_limit.is_none() && self.cache.is_none() && self.auth.is_none()
+            && self.rewrite_request.is_empty() && self.rewrite_response.is_empty()
+            && self.ip_allow.is_empty() && self.ip_deny.is_empty()
+            && self.timeout_ms.is_none() && self.max_body_size.is_none()
+    }
+}
+
+impl ConfigDrivenApp {
+    pub(crate) fn new(routes: Vec<CompiledRoute>, global_middleware: MiddlewareConfig) -> Self {
+        use crate::core::New;
+        let mut app = ConfigDrivenApp {
+            dispatch: RouteDispatch { routes: Arc::new(routes), fallback: App::new() },
+            global_middleware: Arc::new(global_middleware),
+            entry: None,
+        };
+        app.rebuild_entry();
+        app
+    }
+
+    fn rebuild_entry(&mut self) {
+        self.entry = if self.global_middleware.is_empty() {
+            None
+        } else {
+            Some(builder::apply_middleware(arc_app(self.dispatch.clone()), &self.global_middleware))
+        };
     }
 
     /// Pin the fallback [`App`] (used for any request none of the
@@ -780,19 +824,18 @@ impl ConfigDrivenApp {
     /// let app = app.with_config(ServerConfig::default());
     /// ```
     pub fn with_config(mut self, config: ServerConfig) -> Self {
-        self.fallback = App::with_config(config);
+        self.dispatch.fallback = App::with_config(config);
+        self.rebuild_entry();
         self
     }
 }
 
 impl Application for ConfigDrivenApp {
     fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
-        for route in self.routes.iter() {
-            if route.matcher.matches(request, conn) {
-                return route.handler.execute(request, conn);
-            }
+        match &self.entry {
+            Some(entry) => entry.execute(request, conn),
+            None => self.dispatch.execute(request, conn),
         }
-        self.fallback.execute(request, conn)
     }
 }
 

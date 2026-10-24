@@ -218,7 +218,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - `Expect: 100-continue` (HTTP/1.1) — sends the `100 Continue` interim response before reading the body, so large uploads aren't sent needlessly ahead of a `413`/`417` rejection
 - CORS — configurable origins, methods, headers; updated live via `SIGHUP`
 - Auth — `BasicAuthLayer` (HTTP Basic), `JwtLayer` (HS256 Bearer), `ForwardAuthLayer` (delegate to an external auth service, Traefik/nginx `auth_request` style) (`auth` feature); `JwtLayer::rs256`/`::es256` (RS256/ES256 against a static public key, no JWKS needed) (`auth-asymmetric` feature)
-- IP filter — `IpFilter::allow([...])` / `deny([...])`; exact IPv4 and CIDR ranges
+- IP filter — `IpFilter::allow([...])` / `deny([...])`; exact IPv4/IPv6 addresses and CIDR ranges
 - CSRF — double-submit cookie, `SameSite=Strict`, constant-time compare (`csrf` feature)
 - Password hashing — Argon2id + CSPRNG token generation (`crypto` feature)
 - Signed and encrypted cookies — `signed_cookie` (HMAC-SHA256, tamper-evident) and `encrypted_cookie` (AES-256-GCM, confidential) (`crypto` feature)

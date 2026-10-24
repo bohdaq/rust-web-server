@@ -93,16 +93,19 @@ pub fn parse(toml: &str) -> SectionMap {
             let raw_val = line[eq + 1..].trim().to_string();
 
             if raw_val.starts_with('{') {
-                // Inline table: expand into sub-keys
+                // Inline table: `rate_limit = { max_requests = 5 }` is the
+                // sub-table `[<section>.rate_limit]`, exactly as in TOML. (It
+                // used to become a `rate_limit.max_requests` key in the parent
+                // section, which nothing reads — inline auth, rate limits and
+                // IP filters were silently ignored.)
                 let inner = &raw_val[1..raw_val.rfind('}').unwrap_or(raw_val.len())];
+                let sub_section = if current_section.is_empty() { key.clone() } else { format!("{}.{}", current_section, key) };
+                let entries = map.entry(sub_section).or_default();
                 for part in split_inline_table(inner) {
                     if let Some(ieq) = part.find('=') {
-                        let ik = part[..ieq].trim();
+                        let ik = part[..ieq].trim().to_string();
                         let iv = parse_value(part[ieq + 1..].trim());
-                        let subkey = format!("{}.{}", key, ik);
-                        map.entry(current_section.clone())
-                            .or_default()
-                            .push((subkey, iv));
+                        entries.push((ik, iv));
                     }
                 }
             } else {
