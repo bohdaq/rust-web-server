@@ -105,6 +105,8 @@ The crate exposes its core types so you can compose them in your own server or t
 | `WebSocket` / `Frame` | `websocket` | RFC 6455 WebSocket handshake, frame read/write; SHA-1 and base64 built in |
 | `AppWithState<S>` | `state` | State-aware application with built-in dynamic routing; state shared via `Arc<S>`. Use `App::with_state(S)` as the entry point. `.with_config(ServerConfig)` pins the fallback `App` (for requests none of this app's routes match) to explicit CORS/CSP settings instead of reading `RWS_CONFIG_*` env vars per request — mirrors `App::with_config`. |
 | `Middleware` / `WithMiddleware` | `middleware` | Composable middleware pipeline wrapping any `Application`. Use `App::new().wrap(layer)` or `AppWithState::wrap(layer)`. `Middleware::runs_inline` (default `false`) declares a layer non-blocking; a stack runs inline only if every layer and the inner app do. |
+| `Application::execute_async` / `AsyncResponse` | `application` | (`http2`) An optional async version of `execute` for a request; the async servers await it on the connection's task instead of holding a blocking-pool thread. The config-driven proxy uses it for plain-HTTP routes without middleware. `Middleware::is_passthrough` (default `false`) lets a stack offer it when a layer does nothing for the request. |
+| `Request::is_supported_method` / `HTTP::is_supported_version` | `request` / `http` | Case-insensitive checks without building `method_list()`/`version_list()`. |
 | `Router::matches` | `router` | `true` if `handle()` would run a handler for the request, without running it. |
 | `server_config::invalidate()` / `ServerConfig::current()` | `server_config` | Per-request configuration snapshot (see `ServerConfig`). |
 | `RateLimitLayer` | `middleware` | Built-in middleware that enforces the global rate limiter per client IP |
@@ -5021,4 +5023,41 @@ Return `true` only for work that never waits on a database, the network or
 a lock held across I/O — on the event loop, that would stall every
 connection on the same worker thread. Wrapped in middleware, the request
 runs inline only if every layer opts in too (`Middleware::runs_inline`).
+
+### 87. An application that waits without holding a thread
+
+`execute` is synchronous, so the async servers run it on a blocking-pool
+thread — which then sits idle while the handler waits on the network. An
+`Application` that has an async way to answer a request can offer it with
+`execute_async` (`http2` feature); the server awaits it on the connection's
+own task and falls back to `execute` when it returns `None`:
+
+```rust
+use rust_web_server::application::{Application, AsyncResponse};
+use rust_web_server::request::Request;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::server::ConnectionInfo;
+
+#[derive(Clone)]
+struct Slow;
+
+impl Application for Slow {
+    fn execute(&self, _request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
+        std::thread::sleep(std::time::Duration::from_millis(50)); // blocks a pool thread
+        Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "done"))
+    }
+
+    fn execute_async<'a>(&'a self, _request: &'a Request, _connection: &'a ConnectionInfo) -> Option<AsyncResponse<'a>> {
+        Some(Box::pin(async {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await; // holds no thread
+            Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "done"))
+        }))
+    }
+}
+```
+
+Wrapped in middleware, the async path is offered only if every layer passes
+the request through unchanged (`Middleware::is_passthrough`); otherwise
+`execute` runs as before. The config-driven proxy uses this for plain-HTTP
+routes without middleware.
 

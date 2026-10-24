@@ -24,6 +24,8 @@
 //! ```
 
 pub mod pool;
+#[cfg(feature = "http2")]
+pub(crate) mod async_upstream;
 
 #[cfg(test)]
 mod tests;
@@ -661,6 +663,16 @@ fn exchange<S: UpstreamIo>(
     };
     let header_lower = std::str::from_utf8(&header_bytes).unwrap_or("").to_ascii_lowercase();
 
+    if response_has_no_body(&request.method, &header_lower) {
+        if !header_lower.lines().any(|l| l.starts_with("connection:") && l.contains("close")) {
+            pool.release(key, stream);
+        }
+        return match Response::parse(&header_bytes) {
+            Ok(response) => Exchange::Done(normalize_upstream_response(response)),
+            Err(e) => Exchange::Failed(e),
+        };
+    }
+
     if should_stream_response(&header_lower) {
         // Streaming path — pipe bytes straight to the client; the connection
         // can't be reused while the body is in flight.
@@ -725,6 +737,14 @@ fn read_response_head<S: Read>(stream: &mut S, tmp: &mut [u8]) -> Result<(Vec<u8
             return Ok((buf, body_prefix));
         }
     }
+}
+
+/// RFC 9112 §6.3: a response to HEAD, and any 1xx, 204 or 304 response, ends
+/// with its head — whatever `Content-Length` says (for HEAD it describes the
+/// GET body). Waiting for that body hung until the read timeout (a 502).
+pub(crate) fn response_has_no_body(method: &str, header_lower: &str) -> bool {
+    let status = header_lower.split_whitespace().nth(1).unwrap_or("");
+    method.eq_ignore_ascii_case("HEAD") || status.starts_with('1') || status == "204" || status == "304"
 }
 
 /// Returns `true` when the response should be streamed rather than buffered.

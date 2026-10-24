@@ -2046,3 +2046,33 @@ fn reload_keeps_a_pinned_fallback_config() {
     let fallback = app.execute(&make_request("GET", "/healthz"), &make_conn("127.0.0.1")).unwrap();
     assert_eq!(fallback.status_code, 200);
 }
+
+#[cfg(feature = "http2")]
+#[test]
+fn an_undeclared_https_upstream_is_reached_over_tls() {
+    // `upstream = "https://host:port"` without an [[upstream]] block used to
+    // be dialled in plain HTTP. Record the first byte the backend receives:
+    // 0x16 is a TLS handshake record.
+    use std::io::Read;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut first = [0u8; 1];
+            let _ = stream.read_exact(&mut first);
+            let _ = tx.send(first[0]);
+        }
+    });
+    let cfg = ProxyConfig::from_str(&format!(r#"
+[[route]]
+  [route.action]
+  type     = "proxy"
+  upstream = "https://127.0.0.1:{port}"
+  connect_timeout_ms = 2000
+  read_timeout_ms    = 2000
+"#));
+    let (app, _) = crate::proxy_config::builder::build(cfg);
+    let _ = app.execute(&make_request("GET", "/"), &make_conn("127.0.0.1"));
+    assert_eq!(0x16, rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap());
+}

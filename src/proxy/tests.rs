@@ -1011,3 +1011,20 @@ fn reverse_proxy_uses_tls_for_https_backends() {
     let _ = proxy.handle(&get("/"), &conn(), &App::new());
     assert_eq!(0x16, rx.recv_timeout(Duration::from_secs(5)).unwrap());
 }
+
+#[test]
+fn head_response_with_content_length_is_not_waited_on() {
+    // A HEAD response's Content-Length describes the GET body; none follows.
+    let (port, accepted) = keepalive_backend("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n", 2);
+    let pool = ConnPool::new(8, Duration::from_secs(60));
+    let mut head = get("/");
+    head.method = METHOD.head.to_string();
+    let started = std::time::Instant::now();
+    let response = crate::proxy::forward_pooled(&pool, &head, "10.0.0.1", "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2)).unwrap();
+    assert_eq!(200, response.status_code);
+    assert!(started.elapsed() < Duration::from_secs(1), "waited {:?} for a body", started.elapsed());
+    // The connection is still usable for the next request.
+    let again = crate::proxy::forward_pooled(&pool, &head, "10.0.0.1", "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2)).unwrap();
+    assert_eq!(200, again.status_code);
+    assert_eq!(1, accepted.load(AtOrd::Relaxed));
+}

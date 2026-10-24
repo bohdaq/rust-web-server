@@ -43,6 +43,15 @@ strategy    = "round_robin"                       # "round_robin" | "random" | "
 
 An unrecognized or empty `strategy` value falls back to `round_robin`.
 
+### Performance
+
+A proxy route to a plain-HTTP upstream with no `[route.middleware]` and no
+global `[middleware]` is forwarded without blocking a thread: the request waits
+for the backend on its connection's own task, over pooled keep-alive
+connections. Routes with middleware, and HTTPS upstreams, use a thread from
+the blocking pool for the round trip — still pooled, slower under heavy
+concurrency. See [Benchmarks](/reference/benchmarks/).
+
 ### TLS (HTTPS) upstreams
 
 Prefix backend addresses with `https://` to connect over TLS. Certificate verification uses the WebPKI root store (same CA bundle as browsers). TLS connections are kept alive and reused, like plain ones — one handshake per connection, not per request — and large or chunked responses are streamed.

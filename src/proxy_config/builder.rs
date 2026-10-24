@@ -75,6 +75,8 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
     for route in &config.routes {
         let matcher = RouteMatcher::from_match_config(&route.match_);
 
+        let mut async_proxy: Option<Arc<DynamicProxy>> = None;
+
         // Build the action handler (base application)
         let base_handler: Arc<dyn crate::application::Application + Send + Sync> =
             match &route.action {
@@ -93,11 +95,11 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                             Arc::new(RwLock::new(vec![upstream.clone()]))
                         });
                     let upstream_cfg = config.upstreams.iter().find(|u| u.name == *upstream);
-                    let upstream_tls = upstream_cfg.map(|u| u.tls).unwrap_or(false);
+                    let upstream_tls = upstream_cfg.map_or_else(|| upstream.starts_with("https://"), |u| u.tls);
                     let upstream_strategy = upstream_cfg
                         .map(|u| u.strategy.clone())
                         .unwrap_or_else(|| "round_robin".to_string());
-                    arc_app(DynamicProxy::new(
+                    let proxy = Arc::new(DynamicProxy::new(
                         live,
                         *connect_timeout_ms,
                         *read_timeout_ms,
@@ -105,7 +107,11 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                         add_path_prefix.clone(),
                         upstream_tls,
                         upstream_strategy,
-                    ))
+                    ));
+                    if proxy.supports_async() && route.middleware.is_empty() {
+                        async_proxy = Some(Arc::clone(&proxy));
+                    }
+                    proxy
                 }
 
                 ActionConfig::Redirect { location, status } => {
@@ -128,7 +134,7 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                         .cloned()
                         .unwrap_or_else(|| Arc::new(RwLock::new(vec![upstream.clone()])));
                     let upstream_cfg = config.upstreams.iter().find(|u| u.name == *upstream);
-                    let upstream_tls = upstream_cfg.map(|u| u.tls).unwrap_or(false);
+                    let upstream_tls = upstream_cfg.map_or_else(|| upstream.starts_with("https://"), |u| u.tls);
                     let upstream_strategy = upstream_cfg
                         .map(|u| u.strategy.clone())
                         .unwrap_or_else(|| "round_robin".to_string());
@@ -144,7 +150,7 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
         // Wrap the base handler with middleware layers
         let handler = apply_middleware(base_handler, &route.middleware);
 
-        compiled.push(CompiledRoute { matcher, handler });
+        compiled.push(CompiledRoute { matcher, handler, async_proxy });
     }
     compiled
 }

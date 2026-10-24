@@ -2573,6 +2573,14 @@ impl Application for McpServer {
             None => App::is_inline_request(request),
         }
     }
+
+    #[cfg(feature = "http2")]
+    fn execute_async<'a>(&'a self, request: &'a Request, connection: &'a ConnectionInfo) -> Option<crate::application::AsyncResponse<'a>> {
+        if request.request_uri == self.path || request.request_uri.starts_with("/.well-known/") {
+            return None;
+        }
+        self.fallback.as_ref()?.execute_async(request, connection)
+    }
 }
 
 // ── public helper ─────────────────────────────────────────────────────────────

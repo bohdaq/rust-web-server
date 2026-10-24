@@ -159,6 +159,24 @@ leaving it out is always safe. The built-in in-memory layers
 `LogLayer`, `BlocklistLayer`, `MaintenanceLayer`) opt in; user route handlers,
 proxy routes and MCP calls never run inline.
 
+### Passing requests through (`is_passthrough`)
+
+Some applications can answer a request asynchronously (`Application::execute_async`,
+`http2` feature) — the config-driven proxy does, for plain-HTTP routes without
+middleware, so it waits for the backend without holding a thread. A middleware
+stack can only offer that path if none of its layers needs to run. A layer
+that does nothing for a given request — a rate limit that isn't configured, a
+filter that doesn't apply — says so with `is_passthrough`:
+
+```rust
+fn is_passthrough(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+    !self.enabled
+}
+```
+
+Default `false`: the request then takes the usual synchronous path through
+every layer.
+
 ### Short-circuit example
 
 Return a response without calling `next` to block the request:

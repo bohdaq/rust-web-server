@@ -236,18 +236,44 @@ pub(crate) async fn execute_request<A: Application + Send + 'static>(
     request: Request,
     connection: ConnectionInfo,
 ) -> Result<(Request, Result<Response, String>), String> {
+    let async_result = match app.execute_async(&request, &connection) {
+        Some(future) => Some(CatchUnwind(future).await?),
+        None => None,
+    };
+    if let Some(result) = async_result {
+        return Ok((request, result));
+    }
     if app.runs_inline(&request, &connection) {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.execute(&request, &connection)))
-            .map_err(|panic| {
-                panic
-                    .downcast_ref::<&str>()
-                    .map(|s| s.to_string())
-                    .or_else(|| panic.downcast_ref::<String>().cloned())
-                    .unwrap_or_else(|| "panic".to_string())
-            })?;
+            .map_err(panic_message)?;
         return Ok((request, result));
     }
     execute_blocking(app, request, connection).await
+}
+
+/// Polls a boxed future, turning a panic into an error (one request lost,
+/// not the connection task).
+struct CatchUnwind<F>(F);
+
+impl<F: std::future::Future + Unpin> std::future::Future for CatchUnwind<F> {
+    type Output = Result<F::Output, String>;
+
+    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+        let inner = &mut self.0;
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| std::pin::Pin::new(inner).poll(cx))) {
+            Ok(std::task::Poll::Ready(output)) => std::task::Poll::Ready(Ok(output)),
+            Ok(std::task::Poll::Pending) => std::task::Poll::Pending,
+            Err(panic) => std::task::Poll::Ready(Err(panic_message(panic))),
+        }
+    }
+}
+
+fn panic_message(panic: Box<dyn std::any::Any + Send>) -> String {
+    panic
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| panic.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "panic".to_string())
 }
 
 /// Run the (synchronous) `Application` off the async scheduler — file reads

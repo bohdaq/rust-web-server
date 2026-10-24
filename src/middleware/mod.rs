@@ -110,6 +110,14 @@ pub trait Middleware: Send + Sync {
     fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
         false
     }
+
+    /// `true` when `handle` would do nothing for `request` but call `next`
+    /// (e.g. a rate limit that isn't configured). A [`WithMiddleware`] stack
+    /// offers the inner application's `execute_async` only if every layer
+    /// passes the request through. Default `false`.
+    fn is_passthrough(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        false
+    }
 }
 
 /// An [`Application`] that applies a stack of [`Middleware`] layers before
@@ -156,6 +164,15 @@ impl<A: Application> Application for WithMiddleware<A> {
 
     fn runs_inline(&self, request: &Request, connection: &ConnectionInfo) -> bool {
         self.layers.iter().all(|l| l.runs_inline(request, connection)) && self.inner.runs_inline(request, connection)
+    }
+
+    #[cfg(feature = "http2")]
+    fn execute_async<'a>(&'a self, request: &'a Request, connection: &'a ConnectionInfo) -> Option<crate::application::AsyncResponse<'a>> {
+        if self.layers.iter().all(|l| l.is_passthrough(request, connection)) {
+            self.inner.execute_async(request, connection)
+        } else {
+            None
+        }
     }
 }
 

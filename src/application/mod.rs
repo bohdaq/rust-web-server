@@ -35,4 +35,21 @@ pub trait Application {
     fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
         false
     }
+
+    /// An asynchronous version of [`execute`] for this request, when the
+    /// application has one: the async servers await it on the connection's
+    /// task instead of tying up a blocking-pool thread while it waits (the
+    /// config-driven proxy uses this to wait for a backend without holding a
+    /// thread). `None` (the default) means "use `execute`". Wrappers return
+    /// `Some` only when they add no synchronous work of their own.
+    ///
+    /// [`execute`]: Application::execute
+    #[cfg(feature = "http2")]
+    fn execute_async<'a>(&'a self, _request: &'a Request, _connection: &'a ConnectionInfo) -> Option<AsyncResponse<'a>> {
+        None
+    }
 }
+
+/// The future [`Application::execute_async`] returns.
+#[cfg(feature = "http2")]
+pub type AsyncResponse<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, String>> + Send + 'a>>;

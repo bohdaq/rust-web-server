@@ -643,6 +643,11 @@ pub(crate) struct CompiledRoute {
     pub(crate) matcher: RouteMatcher,
     /// Shared, type-erased handler. `Arc` makes `Clone` cheap (pointer copy).
     pub(crate) handler: Arc<dyn Application + Send + Sync>,
+    /// The route's proxy when it can be served without blocking a thread
+    /// (plain-HTTP upstream, no route middleware) — see
+    /// [`DynamicProxy::execute_async`].
+    #[cfg_attr(not(feature = "http2"), allow(dead_code))]
+    pub(crate) async_proxy: Option<Arc<DynamicProxy>>,
 }
 
 /// Matching criteria for a single route.
@@ -958,6 +963,20 @@ impl Application for ConfigDrivenApp {
             && !generation.dispatch.routes.iter().any(|r| r.matcher.matches(request, conn))
             && App::is_inline_request(request)
     }
+
+    /// A request for a proxy route with a plain-HTTP upstream and no
+    /// middleware (route or global) waits for the backend without holding
+    /// a thread.
+    #[cfg(feature = "http2")]
+    fn execute_async<'a>(&'a self, request: &'a Request, conn: &'a ConnectionInfo) -> Option<crate::application::AsyncResponse<'a>> {
+        let generation = self.current();
+        if generation.entry.is_some() {
+            return None;
+        }
+        let route = generation.dispatch.routes.iter().find(|r| r.matcher.matches(request, conn))?;
+        let proxy = Arc::clone(route.async_proxy.as_ref()?);
+        Some(Box::pin(async move { proxy.execute_async(request, conn).await }))
+    }
 }
 
 // ── NullApp ────────────────────────────────────────────────────────────────────
@@ -1115,16 +1134,22 @@ impl Drop for ConnectionGuard {
     }
 }
 
-impl Application for DynamicProxy {
-    fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
-        let backend = match self.next_backend(&conn.client.ip) {
-            Some(b) => b,
-            None => {
-                return Ok(bad_gateway());
-            }
-        };
+/// A request ready to send: the chosen backend and the (possibly rewritten)
+/// request. Holding it keeps the backend's least-connections count raised.
+struct Prepared<'a> {
+    host: String,
+    port: u16,
+    request: std::borrow::Cow<'a, Request>,
+    _guard: Option<ConnectionGuard>,
+}
 
-        let _connection_guard = if self.strategy == LoadBalanceStrategy::LeastConnections {
+impl DynamicProxy {
+    /// Pick a backend and apply the path rewriting; `Err` is the response to
+    /// send instead (no live backend, unparsable backend address).
+    fn prepare<'a>(&self, request: &'a Request, conn: &ConnectionInfo) -> Result<Prepared<'a>, Response> {
+        let backend = self.next_backend(&conn.client.ip).ok_or_else(bad_gateway)?;
+
+        let guard = if self.strategy == LoadBalanceStrategy::LeastConnections {
             let counter = self.connection_counter(&backend);
             counter.fetch_add(1, Ordering::Relaxed);
             Some(ConnectionGuard { counter })
@@ -1132,15 +1157,11 @@ impl Application for DynamicProxy {
             None
         };
 
-        let (host, port, _) = match crate::proxy_config::health::parse_backend_url(&backend) {
-            Some(t) => t,
-            None => return Ok(bad_gateway()),
-        };
+        let (host, port, _) = crate::proxy_config::health::parse_backend_url(&backend).ok_or_else(bad_gateway)?;
 
         // Apply path rewriting if configured
-        let mut req_clone;
-        let effective_request = if self.strip_prefix.is_some() || self.add_prefix.is_some() {
-            req_clone = request.clone();
+        let request = if self.strip_prefix.is_some() || self.add_prefix.is_some() {
+            let mut req_clone = request.clone();
             if let Some(ref sp) = self.strip_prefix {
                 if let Some(stripped) = req_clone.request_uri.strip_prefix(sp.as_str()) {
                     req_clone.request_uri = if stripped.is_empty() || !stripped.starts_with('/') {
@@ -1153,19 +1174,55 @@ impl Application for DynamicProxy {
             if let Some(ref ap) = self.add_prefix {
                 req_clone.request_uri = format!("{}{}", ap, req_clone.request_uri);
             }
-            &req_clone
+            std::borrow::Cow::Owned(req_clone)
         } else {
-            request
+            std::borrow::Cow::Borrowed(request)
+        };
+
+        Ok(Prepared { host, port, request, _guard: guard })
+    }
+
+    /// The same as [`Application::execute`], without blocking a thread while
+    /// the backend answers: plain-HTTP backends only (`self.tls` is false).
+    #[cfg(feature = "http2")]
+    pub(crate) async fn execute_async(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
+        let prepared = match self.prepare(request, conn) {
+            Ok(p) => p,
+            Err(response) => return Ok(response),
+        };
+        let result = crate::proxy::async_upstream::forward(
+            &prepared.request,
+            &conn.client.ip,
+            &prepared.host,
+            prepared.port,
+            self.connect_timeout,
+            self.read_timeout,
+        )
+        .await;
+        Ok(result.unwrap_or_else(|_| bad_gateway()))
+    }
+
+    /// Whether [`execute_async`](Self::execute_async) can serve this proxy.
+    pub(crate) fn supports_async(&self) -> bool {
+        cfg!(feature = "http2") && !self.tls
+    }
+}
+
+impl Application for DynamicProxy {
+    fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
+        let prepared = match self.prepare(request, conn) {
+            Ok(p) => p,
+            Err(response) => return Ok(response),
         };
 
         // Pooled keep-alive connections to the backend, TLS or not (a fresh
         // connection per request halved throughput vs. Caddy/nginx).
         let result = crate::proxy::forward_upstream(
             crate::proxy::shared_pool(),
-            effective_request,
+            &prepared.request,
             &conn.client.ip,
-            &host,
-            port,
+            &prepared.host,
+            prepared.port,
             self.tls,
             self.connect_timeout,
             self.read_timeout,
