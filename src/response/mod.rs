@@ -2,6 +2,8 @@
 mod tests;
 #[cfg(test)]
 mod example;
+#[cfg(test)]
+mod reference_parser;
 
 use crate::ext::decimal::Decimal;
 use std::io;
@@ -551,9 +553,15 @@ impl Response {
     }
 
     pub fn _parse_http_version_status_code_reason_phrase_string(http_version_status_code_reason_phrase: &str) -> Result<(String, i16, String), String> {
-        let truncated = StringExt::truncate_new_line_carriage_return(http_version_status_code_reason_phrase);
+        let line = without_cr_lf(http_version_status_code_reason_phrase);
+        let (http_version, status_code, reason_phrase) = Response::status_line_parts(&line)?;
+        Ok((http_version.to_string(), status_code, reason_phrase.to_string()))
+    }
 
-        let boxed_split = truncated.split_once(SYMBOL.whitespace);
+    /// `HTTP-version SP status-code [SP reason-phrase]`, CR/LF already
+    /// removed, borrowed from `line`.
+    fn status_line_parts(line: &str) -> Result<(&str, i16, &str), String> {
+        let boxed_split = line.split_once(SYMBOL.whitespace);
         if boxed_split.is_none() {
             return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string())
         }
@@ -577,7 +585,7 @@ impl Response {
             _ => return Err(Response::_ERROR_UNABLE_TO_PARSE_HTTP_VERSION_STATUS_CODE.to_string()),
         };
 
-        return Ok((http_version.to_string(), status_code_i16, reason_phrase.to_string()))
+        Ok((http_version, status_code_i16, reason_phrase))
     }
 
     pub fn _parse_http_response_header_string(header_string: &str) -> Header {
@@ -876,130 +884,73 @@ impl Response {
         _content_length: usize,
         total_bytes: i32,
         mut bytes_read: i32) -> Result<(), String> {
-        // A loop, not tail recursion (which Rust doesn't guarantee to
-        // eliminate): one stack frame per header line let a backend sending
-        // thousands of header lines overflow the stack and abort the process.
+        // One pass over the input: each line is a slice of it (this used to
+        // copy every line into a Vec and then a String, and strip CR/LF with
+        // two `str::replace` allocations per header), and only the values
+        // kept are allocated. A loop, not recursion: one stack frame per
+        // header line let a backend overflow the stack.
+        let input: &[u8] = cursor.get_ref();
         loop {
-
-            let mut buffer = vec![];
-            let boxed_read = cursor.read_until(b'\n', &mut buffer);
-            if boxed_read.is_err() {
-                let message = format!("unable to parse raw response via cursor {}", boxed_read.err().unwrap());
-                return Err(message);
-            }
-            let bytes_offset = boxed_read.unwrap();
-            bytes_read = bytes_read + bytes_offset as i32;
-            if bytes_read == total_bytes {
-                // end of stream
-            }
-            let mut buffer_as_u8_array: &[u8] = &buffer;
-            let boxed_string = String::from_utf8(Vec::from(buffer_as_u8_array));
-            if boxed_string.is_err() {
-                let message = boxed_string.err().unwrap().to_string();
-                return Err(message);
-            }
-            let string = boxed_string.unwrap();
+            let start = (cursor.position() as usize).min(input.len());
+            let rest = &input[start..];
+            let line_len = rest.iter().position(|&b| b == b'\n').map_or(rest.len(), |i| i + 1);
+            cursor.set_position((start + line_len) as u64);
+            bytes_read += line_len as i32;
+            let line = std::str::from_utf8(&rest[..line_len]).map_err(|e| e.to_string())?;
 
             let is_first_iteration = iteration_number == 0;
-            let new_line_char_found = bytes_offset != 0;
-            let current_string_is_empty = string.trim().len() == 0;
+            let new_line_char_found = line_len != 0;
+            let current_string_is_empty = line.trim().is_empty();
 
             if is_first_iteration {
-                let boxed_http_version_status_code_reason_phrase = Response::_parse_http_version_status_code_reason_phrase_string(&string);
-                if boxed_http_version_status_code_reason_phrase.is_err() {
-                    let message = boxed_http_version_status_code_reason_phrase.err().unwrap();
-                    return Err(message);
-                }
-
-                let (http_version, status_code, reason_phrase) = boxed_http_version_status_code_reason_phrase.unwrap();
-
-                response.http_version = http_version;
+                let status_line = without_cr_lf(line);
+                let (http_version, status_code, reason_phrase) = Response::status_line_parts(&status_line)?;
+                response.http_version = http_version.to_string();
                 response.status_code = status_code;
-                response.reason_phrase = reason_phrase;
+                response.reason_phrase = reason_phrase.to_string();
             }
 
             if current_string_is_empty {
-                let mut is_multipart = false;
                 // if response does not contain Content-Type, it will be defaulted to APPLICATION_OCTET_STREAM
-                let mut content_type = MimeType::APPLICATION_OCTET_STREAM;
-
-                let boxed_content_type = response.header(Header::_CONTENT_TYPE);
-                if boxed_content_type.is_some() {
-                    let content_type_header = response.header(Header::_CONTENT_TYPE).unwrap();
-                    content_type = content_type_header.value.as_str();
-                    is_multipart = Response::_is_multipart_byteranges_content_type(&content_type_header);
-                }
-
+                let content_type_header = response.header(Header::_CONTENT_TYPE);
+                let is_multipart = content_type_header.map_or(false, Response::_is_multipart_byteranges_content_type);
 
                 if is_multipart {
-                    let content_range_list : Vec<ContentRange> = vec![];
-                    let boxed_content_type = response.header(Header::_CONTENT_TYPE);
-                    if boxed_content_type.is_none() {
-                        return Err("Content-Type is missing".to_string());
-                    }
-                    let content_type = boxed_content_type.unwrap();
-                    let boxed_boundary = FormMultipartData::extract_boundary(content_type.value.as_str());
-                    if boxed_boundary.is_err() {
-                        return Err("unable to extract boundary from Content-Type".to_string());
-                    }
-                    let boundary = boxed_boundary.unwrap();
-
+                    let content_type = response.header(Header::_CONTENT_TYPE).ok_or("Content-Type is missing")?;
+                    let boundary = FormMultipartData::extract_boundary(content_type.value.as_str())
+                        .map_err(|_| "unable to extract boundary from Content-Type".to_string())?;
                     let is_opening_boundary_read = false;
-                    let boxed_content_range_list =
-                        Range::parse_multipart_body_with_boundary(
-                            cursor,
-                            content_range_list,
-                            boundary,
-                            total_bytes,
-                            bytes_read,
-                            is_opening_boundary_read);
-                    if boxed_content_range_list.is_err() {
-                        let message = boxed_content_range_list.err().unwrap();
-                        return Err(message);
-                    }
-
-                    response.content_range_list = boxed_content_range_list.unwrap();
+                    response.content_range_list = Range::parse_multipart_body_with_boundary(
+                        cursor,
+                        vec![],
+                        boundary,
+                        total_bytes,
+                        bytes_read,
+                        is_opening_boundary_read)?;
                 } else {
-                    buffer = vec![];
-                    let boxed_read = cursor.read_to_end(&mut buffer);
-                    if boxed_read.is_err() {
-                        let message = boxed_read.err().unwrap().to_string();
-                        return Err(message);
-                    }
-                    let bytes_offset = boxed_read.unwrap();
-                    bytes_read = bytes_read + bytes_offset as i32;
-                    if bytes_read == total_bytes {
-                        // end of stream
-                    }
-
-                    buffer_as_u8_array = &buffer;
-
+                    let content_type = content_type_header.map_or(MimeType::APPLICATION_OCTET_STREAM, |h| h.value.as_str());
+                    let start = (cursor.position() as usize).min(input.len());
+                    let body = input[start..].to_vec();
+                    cursor.set_position(input.len() as u64);
                     let content_range = ContentRange {
                         unit: Range::BYTES.to_string(),
                         range: Range {
                             start: 0,
-                            end: buffer_as_u8_array.len() as u64
+                            end: body.len() as u64
                         },
-                        size: buffer_as_u8_array.len().to_string(),
-                        body: Vec::from(buffer_as_u8_array),
-                        content_type: content_type.to_string()
+                        size: Decimal::new(body.len() as u128).as_str().to_string(),
+                        content_type: content_type.to_string(),
+                        body,
                     };
                     response.content_range_list = vec![content_range];
-
-
                 }
 
                 return Ok(());
             }
 
-            if new_line_char_found && !current_string_is_empty {
+            if new_line_char_found {
                 if !is_first_iteration {
-                    let boxed_header = Response::parse_http_response_header_string(&string);
-                    if boxed_header.is_err() {
-                        let message = boxed_header.err().unwrap();
-                        return Err(message);
-                    }
-                    let header = boxed_header.unwrap();
+                    let header = Response::parse_http_response_header_string(line)?;
                     if header.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH) {
                         // An upstream-supplied value: reject garbage instead of panicking.
                         let _: usize = header.value.trim().parse()
@@ -1008,26 +959,21 @@ impl Response {
                     response.headers.push(header);
                 }
 
-            iteration_number += 1;
-        } else {
-            return Err("unable to parse".to_string());
-        }
+                iteration_number += 1;
+            } else {
+                return Err("unable to parse".to_string());
+            }
         }
     }
 
     pub fn parse_http_response_header_string(header_string: &str) -> Result<Header, String> {
-        let header_parts: Option<(&str, &str)> = header_string.split_once(Header::NAME_VALUE_SEPARATOR);
-        if header_parts.is_none() {
-            let message = format!("unable to parse header: {}", header_string);
-            return Err(message);
+        match split_name_value(header_string) {
+            Some((header_name, raw_header_value)) => Ok(Header {
+                name: header_name.to_string(),
+                value: without_cr_lf(raw_header_value).into_owned(),
+            }),
+            None => Err(format!("unable to parse header: {}", header_string)),
         }
-        let (header_name, raw_header_value) = header_parts.unwrap();
-        let header_value = StringExt::truncate_new_line_carriage_return(&raw_header_value);
-
-        Ok(Header {
-            name: header_name.to_string(),
-            value: header_value.to_string()
-        })
     }
 }
 
@@ -1043,4 +989,29 @@ impl New for Response {
             stream_pipe: None,
         }
     }
+}
+/// `s` with every CR and LF removed — borrowed when they only end the line.
+fn without_cr_lf(s: &str) -> std::borrow::Cow<'_, str> {
+    let trimmed = s.strip_suffix('\n').unwrap_or(s);
+    let trimmed = trimmed.strip_suffix('\r').unwrap_or(trimmed);
+    if trimmed.contains(['\r', '\n']) {
+        std::borrow::Cow::Owned(StringExt::truncate_new_line_carriage_return(s))
+    } else {
+        std::borrow::Cow::Borrowed(trimmed)
+    }
+}
+
+/// `line` split at its first `": "` — what `split_once(": ")` returns,
+/// without a substring searcher.
+fn split_name_value(line: &str) -> Option<(&str, &str)> {
+    let bytes = line.as_bytes();
+    let mut from = 0;
+    while let Some(offset) = bytes[from..].iter().position(|&b| b == b':') {
+        let colon = from + offset;
+        if bytes.get(colon + 1) == Some(&b' ') {
+            return Some((&line[..colon], &line[colon + 2..]));
+        }
+        from = colon + 1;
+    }
+    None
 }

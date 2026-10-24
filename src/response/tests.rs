@@ -631,3 +631,96 @@ fn set_status_and_empty() {
     let empty = Response::empty();
     assert_eq!(0, empty.http_version.capacity() + empty.reason_phrase.capacity() + empty.headers.capacity());
 }
+
+/// `Response::parse` (single pass) against the parser it replaced, kept
+/// verbatim in `reference_parser.rs`: same fields or the same error, for a
+/// corpus of upstream heads and deterministic mutations of each.
+#[test]
+fn response_parse_matches_the_reference_parser() {
+    fn summary(result: &Result<crate::response::Response, String>) -> String {
+        match result {
+            Err(e) => format!("Err({e})"),
+            Ok(r) => {
+                let mut s = format!("{:?} {} {:?}\n", r.http_version, r.status_code, r.reason_phrase);
+                for h in &r.headers {
+                    s.push_str(&format!("{:?}={:?}\n", h.name, h.value));
+                }
+                for cr in &r.content_range_list {
+                    s.push_str(&format!("[{} {}-{} {} {:?} {:?}]\n", cr.unit, cr.range.start, cr.range.end, cr.size, cr.content_type, cr.body));
+                }
+                s
+            }
+        }
+    }
+    let corpus: Vec<&[u8]> = vec![
+        b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello",
+        b"HTTP/1.1 404 File not found\r\nServer: x\r\n\r\n",
+        b"HTTP/1.1 204\r\n\r\n",
+        b"HTTP/1.0 599 \r\nX:  two spaces \r\n\r\nbody\r\nmore",
+        b"HTTP/1.1 200 OK\nLF-Only: yes\n\nbody",
+        b"HTTP/1.1 200 OK\r\nNo-Separator\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nName:\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nName: \r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nA:b: c\r\nD::  e\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nX: mid\rcr\r\n\r\n",
+        b"HTTP/1.1 200 O\rK\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nContent-Length: nope\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\ncontent-length:  7 \r\n\r\n1234567",
+        b"HTTP/1.1 200 OK\r\nX: y",
+        b"HTTP/1.1 200 OK",
+        b"HTTP/1.1 200 OK\r\n \t \r\nafter-blank",
+        b"HTTP/2 200 OK\r\n\r\n",
+        b"HTTP/1.1 20 OK\r\n\r\n",
+        b"HTTP/1.1 099 OK\r\n\r\n",
+        b"HTTP/1.1 -10 OK\r\n\r\n",
+        b"HTTP/1.1  200 OK\r\n\r\n",
+        b"HTTP/9.9 200 OK\r\n\r\n",
+        b"\r\n\r\n",
+        b"",
+        b"HTTP/1.1 200 OK\r\nX: \xff\xfe\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nX: \xc3\xa9t\xc3\xa9\r\n\r\n\xff\x00binary",
+        b"HTTP/1.1 206 Partial Content\r\nContent-Type: multipart/byteranges; boundary=XX\r\n\r\n--XX\r\nContent-Type: text/plain\r\nContent-Range: bytes 0-1/10\r\n\r\nab\r\n--XX\r\nContent-Type: text/plain\r\nContent-Range: bytes 8-9/10\r\n\r\nij\r\n--XX--\r\n",
+        b"HTTP/1.1 206 Partial Content\r\nContent-Type: multipart/byteranges\r\n\r\n--XX\r\n",
+        b"HTTP/1.1 206 Partial Content\r\ncontent-type: multipart/byteranges; boundary=XX\r\n\r\n--XX\r\nnot-a-header\r\n\r\nab\r\n--XX--\r\n",
+        b"HTTP/1.1 200 OK\r\nContent-Type: a\r\ncontent-type: b\r\n\r\nx",
+    ];
+    // xorshift, so the mutations are the same on every run.
+    let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut next = move || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; seed };
+    let interesting = [b'\r', b'\n', b' ', b':', b'\t', 0xff, 0xc3, b'0', b'-'];
+    let mut checked = 0;
+    for input in &corpus {
+        let mut cases = vec![input.to_vec()];
+        for _ in 0..200 {
+            let mut m = input.to_vec();
+            for _ in 0..1 + next() % 3 {
+                let r = next();
+                match r % 3 {
+                    0 if !m.is_empty() => { let i = (r >> 8) as usize % m.len(); m[i] = interesting[(r >> 32) as usize % interesting.len()]; }
+                    1 => { let i = (r >> 8) as usize % (m.len() + 1); m.insert(i, interesting[(r >> 32) as usize % interesting.len()]); }
+                    _ if !m.is_empty() => { let i = (r >> 8) as usize % m.len(); m.remove(i); }
+                    _ => {}
+                }
+            }
+            cases.push(m);
+        }
+        for case in cases {
+            let ours = crate::response::Response::parse(&case);
+            let reference = super::reference_parser::parse(&case);
+            assert_eq!(summary(&reference), summary(&ours), "input {:?}", String::from_utf8_lossy(&case));
+            checked += 1;
+        }
+    }
+    assert!(checked > 5000);
+}
+
+#[test]
+fn split_name_value_and_without_cr_lf() {
+    use crate::response::{split_name_value, without_cr_lf};
+    for line in ["a: b", "a:b: c", "a:", ": x", "a :  b", "no", "", "a::  b", "é: ü"] {
+        assert_eq!(line.split_once(": "), split_name_value(line), "{line:?}");
+    }
+    for s in ["abc\r\n", "abc\n", "abc\r", "abc", "a\rb\r\n", "a\nb", "\r\n", "", "abc\r\r\n"] {
+        assert_eq!(s.replace('\r', "").replace('\n', ""), without_cr_lf(s), "{s:?}");
+    }
+}
