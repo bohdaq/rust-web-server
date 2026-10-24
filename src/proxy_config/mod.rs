@@ -40,6 +40,7 @@ use crate::app::App;
 use crate::application::Application;
 use crate::core::New;
 use crate::request::Request;
+use crate::header::Header;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
 use crate::server_config::ServerConfig;
@@ -1466,7 +1467,13 @@ impl crate::middleware::Middleware for PerRouteRateLimit {
         if self.0.check(&conn.client.ip) {
             next.execute(request, conn)
         } else {
-            Ok(AppError::TooManyRequests.into_response())
+            let mut response = AppError::TooManyRequests.into_response();
+            let retry_after = self.0.retry_after(&conn.client.ip);
+            response.headers.push(Header {
+                name: Header::_RETRY_AFTER.to_string(),
+                value: retry_after.to_string(),
+            });
+            Ok(response)
         }
     }
 }

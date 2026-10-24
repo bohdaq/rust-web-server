@@ -74,6 +74,14 @@ let left = limiter.remaining("192.168.1.1");
 // X-RateLimit-Remaining: {left}
 ```
 
+### `retry_after(key) -> u64`
+
+Seconds a rejected `key` should wait before trying again. The window length — a safe upper bound, since the oldest request in the window may expire sooner. The two 429 paths (`RateLimitLayer` and `PerRouteRateLimit`) attach it to every rejection:
+
+```
+Retry-After: {window_secs}
+```
+
 ### `set_limits(max_requests, window_secs)`
 
 Updates the limits on a live limiter without a restart. Called automatically by `config_reload::reload()` on `SIGHUP`.

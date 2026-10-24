@@ -87,6 +87,14 @@ impl RateLimiter {
         }
     }
 
+    /// Seconds a rejected `key` should wait before trying again.
+    ///
+    /// The window length, a safe upper bound: the oldest request in the
+    /// window may expire sooner, which only makes the client retry early.
+    pub fn retry_after(&self, _key: &str) -> u64 {
+        self.window_secs.load(Ordering::Relaxed)
+    }
+
     /// Number of remaining requests `key` may make within the current window.
     pub fn remaining(&self, key: &str) -> u32 {
         let now = Instant::now();
@@ -209,6 +217,12 @@ impl RedisRateLimiter {
 
     fn max(&self) -> u32 {
         self.max_requests.load(Ordering::Relaxed)
+    }
+
+    /// Seconds a rejected `key` should wait before trying again: the window
+    /// length, a safe upper bound.
+    pub fn retry_after(&self, _key: &str) -> u64 {
+        self.window_secs.load(Ordering::Relaxed)
     }
 
     fn redis_key(key: &str) -> Vec<u8> {

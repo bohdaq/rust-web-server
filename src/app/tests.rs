@@ -326,4 +326,31 @@ mod builder_tests {
         let resp = app.execute(&get("/healthz"), &conn()).unwrap();
         assert_ne!(429, resp.status_code);
     }
+
+    // issue #22: a rejected request carries Retry-After naming the window.
+    // RateLimitLayer reads the process-wide limiter, so the test drives it
+    // through set_limits with an IP of its own.
+    #[test]
+    fn rate_limit_429_carries_retry_after_within_the_window() {
+        let ip = "203.0.113.77";
+        crate::rate_limit::global().set_limits(1, 30);
+        crate::rate_limit::global().check(ip); // burn the one allowed request
+        let app = App::new().wrap(RateLimitLayer);
+        let conn = ConnectionInfo {
+            client: Address { ip: ip.to_string(), port: 0 },
+            server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+            request_size: 16000,
+            sni_hostname: None,
+        };
+        let resp = app.execute(&get("/healthz"), &conn).unwrap();
+        assert_eq!(429, resp.status_code);
+        let header = resp
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("Retry-After"))
+            .unwrap_or_else(|| panic!("no Retry-After header in {:?}", resp.headers));
+        let seconds: u64 = header.value.parse().expect("Retry-After must be an integer");
+        assert!(seconds > 0, "Retry-After must be positive");
+        assert!(seconds <= 30, "Retry-After must not exceed the window");
+    }
 }

@@ -47,6 +47,7 @@ use std::sync::Arc;
 use crate::application::Application;
 use crate::request::Request;
 use crate::response::Response;
+use crate::header::Header;
 use crate::server::ConnectionInfo;
 
 /// Built-in middleware that enforces the process-wide rate limit
@@ -78,7 +79,13 @@ impl Middleware for RateLimitLayer {
         if crate::rate_limit::global().check(&connection.client.ip) {
             next.execute(request, connection)
         } else {
-            Ok(AppError::TooManyRequests.into_response())
+            let mut response = AppError::TooManyRequests.into_response();
+            let retry_after = crate::rate_limit::global().retry_after(&connection.client.ip);
+            response.headers.push(Header {
+                name: Header::_RETRY_AFTER.to_string(),
+                value: retry_after.to_string(),
+            });
+            Ok(response)
         }
     }
 
