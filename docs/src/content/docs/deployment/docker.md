@@ -8,14 +8,14 @@ description: Build and run rust-web-server in a minimal Docker container using m
 Every release publishes a multi-arch image (linux/amd64, linux/arm64) to
 [Docker Hub](https://hub.docker.com/r/bohdaq/rws) as `bohdaq/rws` and to the
 GitHub Container Registry as `ghcr.io/bohdaq/rws`, tagged with the full
-version (`17.112.0`), the major version (`17`), and `latest`:
+version (`17.113.0`), the major version (`17`), and `latest`:
 
 ```bash
 # Serve the current directory
 docker run -p 7878:7878 -v "$PWD:/srv:ro" bohdaq/rws
 
 # Pin a version (recommended in production)
-docker run -p 7878:7878 -v "$PWD:/srv:ro" bohdaq/rws:17.112.0
+docker run -p 7878:7878 -v "$PWD:/srv:ro" bohdaq/rws:17.113.0
 ```
 
 The image is `gcr.io/distroless/static-debian12:nonroot` plus the static musl `rws` binary (about 12 MB) — no shell, no package manager, runs as a non-root user. The working directory is `/srv`: mount static content there, or put an `rws.config.toml` there to run as a config-driven proxy. Configure with `RWS_CONFIG_*` environment variables, e.g. `-e RWS_CONFIG_PORT=8080`. Each release image is started and checked (`/healthz`, the served page, `--version`) before it's published.

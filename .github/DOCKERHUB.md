@@ -7,7 +7,7 @@ file. **[Docs](https://rws8.tech) · [GitHub](https://github.com/bohdaq/rust-web
 
 - **Small:** a static binary on [distroless](https://github.com/GoogleContainerTools/distroless), runs as a non-root user, about 12 MB.
 - **Multi-arch:** `linux/amd64` and `linux/arm64` (Apple Silicon, Raspberry Pi, Graviton).
-- **Tags:** `latest`, the major version (`17`), and every release (`17.112.0`). Pin a full version in production.
+- **Tags:** `latest`, the major version (`17`), and every release (`17.113.0`). Pin a full version in production.
 
 ## Serve a folder
 
