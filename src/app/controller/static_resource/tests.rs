@@ -803,3 +803,31 @@ fn fast_path_declines_directories_and_options() {
     let file = ServedFile::new("opts.txt", 10);
     assert!(StaticResourceController::serve_regular_file(&static_request(METHOD.options, &file.0, vec![]), &mut Response::new()).is_none());
 }
+
+#[test]
+fn is_matching_only_for_get_head_options_on_origin_form_targets() {
+    let connection_info = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+        sni_hostname: None,
+    };
+    let request = |method: &str, uri: &str| Request {
+        method: method.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+
+    for method in [METHOD.get, METHOD.head, METHOD.options] {
+        assert!(StaticResourceController::is_matching(&request(method, "/static/test.json"), &connection_info), "{}", method);
+        assert!(StaticResourceController::is_matching(&request(method, "/static/test.json?x=1#f"), &connection_info), "{}", method);
+    }
+    for method in [METHOD.post, METHOD.put, METHOD.delete] {
+        assert!(!StaticResourceController::is_matching(&request(method, "/static/test.json"), &connection_info), "{}", method);
+    }
+    assert!(!StaticResourceController::is_matching(&request(METHOD.get, "/"), &connection_info));
+    assert!(!StaticResourceController::is_matching(&request(METHOD.options, "*"), &connection_info));
+    assert!(!StaticResourceController::is_matching(&request(METHOD.get, "/static/no-such-file.json"), &connection_info));
+}

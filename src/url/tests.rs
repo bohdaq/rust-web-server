@@ -188,3 +188,20 @@ fn parse_splits_every_component() {
     assert!(c.authority.is_none());
     assert_eq!("someone@example.com", c.path);
 }
+
+// ── request_target_path (borrowed path of an origin-form target) ─────────────
+
+#[test]
+fn request_target_path_matches_parse_request_target() {
+    for target in ["/", "/a", "/a/b.html", "/a?x=1", "/a?x=1#f", "/a#f?x", "/?", "/#", "/a%20b?c", "//double", "/a?b?c"] {
+        let parsed = URL::parse_request_target(target).unwrap().path;
+        assert_eq!(Some(parsed.as_str()), URL::request_target_path(target), "target {:?}", target);
+    }
+}
+
+#[test]
+fn request_target_path_rejects_non_origin_form() {
+    assert_eq!(None, URL::request_target_path("*"));
+    assert_eq!(None, URL::request_target_path(""));
+    assert_eq!(None, URL::request_target_path("http://example.com/a"));
+}

@@ -27,14 +27,6 @@ impl DirectoryListingAssetsController {
     pub const CSS_FILEPATH: &'static str = "rws-directory-listing.css";
     pub const JS_FILEPATH: &'static str = "rws-directory-listing.js";
 
-    fn css_path() -> String {
-        format!("/{}", Self::CSS_FILEPATH)
-    }
-
-    fn js_path() -> String {
-        format!("/{}", Self::JS_FILEPATH)
-    }
-
     fn serve(filepath: &'static str, embedded: &'static [u8], mime_type: &str, mut response: Response) -> Response {
         response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
@@ -65,12 +57,13 @@ impl DirectoryListingAssetsController {
 
 impl Controller for DirectoryListingAssetsController {
     fn is_matching(request: &Request, _connection: &ConnectionInfo) -> bool {
+        // Compared without building "/<path>" strings: asked for every request.
         request.method == METHOD.get
-            && (request.request_uri == Self::css_path() || request.request_uri == Self::js_path())
+            && matches!(request.request_uri.strip_prefix('/'), Some(p) if p == Self::CSS_FILEPATH || p == Self::JS_FILEPATH)
     }
 
     fn process(request: &Request, response: Response, _connection: &ConnectionInfo) -> Response {
-        if request.request_uri == Self::css_path() {
+        if request.request_uri.strip_prefix('/') == Some(Self::CSS_FILEPATH) {
             let embedded = include_bytes!("directory_listing.css");
             Self::serve(Self::CSS_FILEPATH, embedded, MimeType::TEXT_CSS, response)
         } else {

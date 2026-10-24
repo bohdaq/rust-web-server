@@ -5,6 +5,7 @@ use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::symbol::SYMBOL;
+use crate::url::URL;
 use crate::entry_point::get_request_allocation_size;
 use crate::server::ConnectionInfo;
 
@@ -18,16 +19,9 @@ pub struct FileUploadInitiateController;
 
 impl Controller for FileUploadInitiateController {
     fn is_matching(request: &Request, _connection: &ConnectionInfo) -> bool {
-        let boxed_path = request.get_uri_path();
-        if boxed_path.is_err() {
-            let message = format!("unable to get path {} {} {}", request.method, request.request_uri, boxed_path.err().unwrap());
-            eprintln!("{}", message);
-            return false
-        }
-
-        let path = boxed_path.unwrap();
-
-        path == "/file-upload/initiate" && request.method == METHOD.post
+        // Asked for every request: method first, then the path without a URL parse.
+        request.method == METHOD.post
+            && URL::request_target_path(&request.request_uri) == Some("/file-upload/initiate")
     }
 
     fn process(_request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {

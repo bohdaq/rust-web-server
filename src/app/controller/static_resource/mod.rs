@@ -19,26 +19,25 @@ pub struct StaticResourceController;
 
 impl Controller for StaticResourceController {
     fn is_matching(request: &Request, _connection: &ConnectionInfo) -> bool {
-        // Only origin-form targets name a file ("*" and anything a caller
-        // built by hand don't); URL::parse below expects "http://localhost/...".
-        if !request.request_uri.starts_with('/') {
+        // Every branch below answers "no" for other methods and for "/":
+        // check that before touching the filesystem.
+        let is_get = request.method == METHOD.get;
+        let is_head = request.method == METHOD.head;
+        let is_options = request.method == METHOD.options;
+
+        let is_matching_method = (is_get || is_head || is_options) && (request.request_uri != SYMBOL.slash);
+        if !is_matching_method {
             return false;
         }
-        let url = request.request_uri.to_string();
 
-        let boxed_url_components = URL::parse_request_target(&url);
-        if boxed_url_components.is_err() {
-            let message = boxed_url_components.as_ref().err().unwrap().to_string();
-            // unfallable
-            println!("unexpected error, {}", message);
-        }
+        // Only origin-form targets name a file ("*" and anything a caller
+        // built by hand don't).
+        let path = match URL::request_target_path(&request.request_uri) {
+            Some(path) => path,
+            None => return false,
+        };
 
-        let components = boxed_url_components.unwrap();
-
-        let os_specific_separator : String = FileExt::get_path_separator();
-        let os_specific_path = &components.path.replace(SYMBOL.slash, os_specific_separator.as_str());
-
-        let boxed_static_filepath = static_fs_path(&os_specific_path);
+        let boxed_static_filepath = static_fs_path(&os_specific_path(path));
         if boxed_static_filepath.is_err() {
             return false
         }
@@ -59,22 +58,17 @@ impl Controller for StaticResourceController {
             }
         }
 
-        let is_get = request.method == METHOD.get;
-        let is_head = request.method == METHOD.head;
-        let is_options = request.method == METHOD.options;
-
-        let is_matching_method = (is_get || is_head || is_options) && (request.request_uri != SYMBOL.slash);
-
         if is_file || is_directory {
-            is_matching_method
+            true
         } else {
             // check if file with same name and .html extension exists
             if !static_filepath.ends_with(".html") {
                 let html_suffix = ".html";
-                let html_file = [&components.path.replace(SYMBOL.slash, &FileExt::get_path_separator()), html_suffix].join(SYMBOL.empty_string);
+                let mut html_file = os_specific_path(path).into_owned();
+                html_file.push_str(html_suffix);
                 if let Ok(html_static_filepath) = static_fs_path(&html_file) {
                     if File::open(&html_static_filepath).is_ok() {
-                        return is_matching_method;
+                        return true;
                     }
                 }
             }
@@ -83,7 +77,7 @@ impl Controller for StaticResourceController {
             // for a GET/HEAD request that doesn't look like a missed static asset and
             // isn't under an excluded prefix. Returns false (unchanged prior behavior)
             // whenever the fallback isn't configured or doesn't apply.
-            is_matching_method && spa_fallback_url_path(&components.path).is_some()
+            spa_fallback_url_path(path).is_some()
         }
 
     }
@@ -337,8 +331,8 @@ impl StaticResourceController {
         if request.header(Header::_RANGE).is_some() {
             return None;
         }
-        let path = URL::parse_request_target(&request.request_uri).ok()?.path;
-        let fs_path = static_fs_path(&path.replace(SYMBOL.slash, &FileExt::get_path_separator())).ok()?;
+        let path = URL::request_target_path(&request.request_uri)?;
+        let fs_path = static_fs_path(&os_specific_path(path)).ok()?;
         // A symlink whose own name has no recognizable type goes to the
         // general path, which takes the type from the link target: such names
         // are opened with O_NOFOLLOW, so a symlink simply fails to open.
@@ -839,7 +833,21 @@ pub(crate) fn working_directory() -> &'static str {
 /// `FileExt::get_static_filepath` without the per-call `current_dir()`:
 /// the working directory followed by `path`.
 pub(crate) fn static_fs_path(path: &str) -> Result<String, String> {
-    Ok(format!("{}{}", working_directory(), path))
+    let working_directory = working_directory();
+    let mut fs_path = String::with_capacity(working_directory.len() + path.len());
+    fs_path.push_str(working_directory);
+    fs_path.push_str(path);
+    Ok(fs_path)
+}
+
+/// A URL path with `/` turned into the OS path separator — borrowed (no
+/// copy) where the separator is `/`.
+pub(crate) fn os_specific_path(path: &str) -> std::borrow::Cow<'_, str> {
+    if std::path::MAIN_SEPARATOR == '/' {
+        std::borrow::Cow::Borrowed(path)
+    } else {
+        std::borrow::Cow::Owned(path.replace('/', std::path::MAIN_SEPARATOR_STR))
+    }
 }
 
 /// `FileExt::file_modified_utc` (nanoseconds since the Unix epoch) from a

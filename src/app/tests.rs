@@ -366,3 +366,38 @@ mod builder_tests {
         assert!(seconds <= 30, "Retry-After must not exceed the window");
     }
 }
+
+#[test]
+fn builtin_controllers_match_path_without_query_where_they_always_did() {
+    use crate::app::controller::file::initiate::FileUploadInitiateController;
+    use crate::app::controller::form::get_method::FormGetMethodController;
+    use crate::app::controller::directory_listing::DirectoryListingAssetsController;
+    use crate::controller::Controller;
+    let conn = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+        request_size: 16000,
+        sni_hostname: None,
+    };
+    let request = |method: &str, uri: &str| Request {
+        method: method.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+
+    // These two compare the parsed path: a query or fragment doesn't matter.
+    assert!(FormGetMethodController::is_matching(&request(METHOD.get, "/form-get-method?a=1"), &conn));
+    assert!(FormGetMethodController::is_matching(&request(METHOD.get, "/form-get-method#x"), &conn));
+    assert!(!FormGetMethodController::is_matching(&request(METHOD.post, "/form-get-method"), &conn));
+    assert!(!FormGetMethodController::is_matching(&request(METHOD.get, "/form-get-method/"), &conn));
+    assert!(!FormGetMethodController::is_matching(&request(METHOD.get, "*"), &conn));
+    assert!(FileUploadInitiateController::is_matching(&request(METHOD.post, "/file-upload/initiate?x"), &conn));
+    assert!(!FileUploadInitiateController::is_matching(&request(METHOD.get, "/file-upload/initiate"), &conn));
+    assert!(!FileUploadInitiateController::is_matching(&request(METHOD.post, "*"), &conn));
+
+    // The directory-listing assets compare the whole target.
+    assert!(!DirectoryListingAssetsController::is_matching(&request(METHOD.get, "/rws-directory-listing.css?v=1"), &conn));
+    assert!(!DirectoryListingAssetsController::is_matching(&request(METHOD.get, "rws-directory-listing.css"), &conn));
+}

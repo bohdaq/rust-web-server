@@ -47,6 +47,17 @@ impl URL {
         }
         parse_url(&format!("http://localhost{}", target))
     }
+
+    /// The path of an origin-form request target — everything before the
+    /// first `?` or `#` — borrowed, without parsing or allocating. Same value
+    /// as [`URL::parse_request_target`]`(target)?.path`; `None` for a target
+    /// that isn't origin-form. For per-request matching on hot paths.
+    pub(crate) fn request_target_path(target: &str) -> Option<&str> {
+        if !target.starts_with('/') {
+            return None;
+        }
+        Some(&target[..target.find(['?', '#']).unwrap_or(target.len())])
+    }
 }
 
 /// RFC 3986 parse of `scheme:[//authority]path[?query][#fragment]` into

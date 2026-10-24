@@ -6,20 +6,15 @@ use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
 use crate::symbol::SYMBOL;
+use crate::url::URL;
 
 pub struct FormGetMethodController;
 
 impl Controller for FormGetMethodController {
     fn is_matching(request: &Request, _connection: &ConnectionInfo) -> bool {
-        let boxed_path = request.get_uri_path();
-        if boxed_path.is_err() {
-            let message = format!("unable to get path {}", boxed_path.err().unwrap());
-            eprintln!("{}", message);
-            return false
-        }
-
-        let path = boxed_path.unwrap();
-        path == "/form-get-method" && request.method == METHOD.get
+        // Asked for every request: method first, then the path without a URL parse.
+        request.method == METHOD.get
+            && URL::request_target_path(&request.request_uri) == Some("/form-get-method")
     }
 
     fn process(_request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
