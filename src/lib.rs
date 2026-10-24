@@ -246,5 +246,34 @@ pub mod fuzz_api {
     pub fn saml_xml_parse(xml: &str) {
         let _ = crate::sso::saml::xml_parse_for_fuzzing(xml);
     }
+
+    /// HTTP/1.1 request framing (`server::framing`) over a raw connection
+    /// buffer: head detection, body framing, and the chunked body decoder,
+    /// fed in two pieces split at the first byte to mimic separate reads.
+    pub fn http1_framing(data: &[u8]) {
+        use crate::server::framing::{self, BodyFraming, ChunkedBody, HeadScan};
+        let mut pending = data.to_vec();
+        framing::skip_leading_empty_lines(&mut pending);
+        let HeadScan::Complete(head_len) = framing::scan_head(&pending) else { return };
+        assert!(head_len <= pending.len() && head_len <= framing::MAX_HEAD_SIZE);
+        let Ok(request) = crate::request::Request::parse(&pending[..head_len]) else { return };
+        let body = &pending[head_len..];
+        if let Ok(BodyFraming::Chunked) = framing::body_framing(&request) {
+            let split = data.first().map_or(0, |&b| b as usize).min(body.len());
+            let mut decoder = ChunkedBody::new(1 << 20);
+            let mut buffer = body[..split].to_vec();
+            for next in [&body[split..], &[][..]] {
+                match decoder.feed(&buffer) {
+                    Ok((consumed, _)) => {
+                        assert!(consumed <= buffer.len());
+                        buffer.drain(..consumed);
+                    }
+                    Err(_) => return,
+                }
+                buffer.extend_from_slice(next);
+            }
+            assert!(decoder.body.len() <= 1 << 20);
+        }
+    }
 }
 

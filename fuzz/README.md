@@ -11,6 +11,7 @@ cargo install cargo-fuzz
 | Target | Parser | Input comes from |
 |---|---|---|
 | `http_request` | `Request::parse` | any client |
+| `http1_framing` | HTTP/1.1 head detection, body framing, chunked request bodies (via `fuzz_api`) | any client |
 | `http_response` | `Response::parse` | proxied backends |
 | `range` | `Range::parse_range_in_content_range`, `Content-Range` | clients / backends |
 | `json` | `JSON::parse_as_properties`, `JSONProperty::parse` | request bodies |

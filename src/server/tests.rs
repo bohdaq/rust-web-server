@@ -1797,3 +1797,78 @@ fn write_chunked_file_with_known_length_sends_raw_body_not_chunked() {
     assert!(!raw.to_ascii_lowercase().contains("transfer-encoding"), "{raw}");
     assert!(raw.ends_with("\r\n\r\nhello raw"), "{raw:?}");
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Request framing: heads spanning reads, pipelining, chunked bodies, limits
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Answers `uri=<uri> body=<body>` so a test can see how the request was framed.
+#[derive(Clone)]
+struct EchoFraming;
+
+impl crate::application::Application for EchoFraming {
+    fn execute(&self, request: &Request, _connection: &crate::server::ConnectionInfo) -> Result<crate::response::Response, String> {
+        let text = format!("uri={} body={}", request.request_uri, String::from_utf8_lossy(&request.body));
+        Ok(crate::response::Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &text))
+    }
+}
+
+#[test]
+fn framing_request_head_larger_than_one_read_is_served() {
+    // A 30 KB cookie, delivered in 4 KB reads: used to be cut off at the first read.
+    let mut raw = b"GET /big HTTP/1.1\r\nHost: x\r\nCookie: ".to_vec();
+    raw.extend(std::iter::repeat(b'c').take(30_000));
+    raw.extend_from_slice(b"\r\nConnection: close\r\n\r\n");
+    let reads: Vec<Vec<u8>> = raw.chunks(4096).map(|c| c.to_vec()).collect();
+    let mut stream = SequentialMockStream::new(reads);
+    Server::process(&mut stream, make_connection(), EchoFraming).unwrap();
+    let written = String::from_utf8_lossy(&stream.written);
+    assert!(written.starts_with("HTTP/1.1 200") && written.contains("uri=/big"), "{written}");
+}
+
+#[test]
+fn framing_request_head_over_the_limit_gets_431() {
+    let mut raw = b"GET / HTTP/1.1\r\nCookie: ".to_vec();
+    raw.extend(std::iter::repeat(b'c').take(crate::server::framing::MAX_HEAD_SIZE));
+    let reads: Vec<Vec<u8>> = raw.chunks(16000).map(|c| c.to_vec()).collect();
+    let mut stream = SequentialMockStream::new(reads);
+    assert!(Server::process(&mut stream, make_connection(), EchoFraming).is_err());
+    let written = String::from_utf8_lossy(&stream.written);
+    assert!(written.starts_with("HTTP/1.1 431"), "{written}");
+}
+
+#[test]
+fn framing_pipelined_requests_in_one_read_are_all_served() {
+    let raw = b"POST /a HTTP/1.1\r\nContent-Length: 3\r\n\r\nabcGET /b HTTP/1.1\r\nConnection: close\r\n\r\n".to_vec();
+    let mut stream = SequentialMockStream::new(vec![raw]);
+    Server::process(&mut stream, make_connection(), EchoFraming).unwrap();
+    let written = String::from_utf8_lossy(&stream.written);
+    assert!(written.contains("uri=/a body=abc"), "{written}");
+    assert!(written.contains("uri=/b body="), "{written}");
+}
+
+#[test]
+fn framing_chunked_request_body_is_decoded() {
+    let raw = b"POST /c HTTP/1.1\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\nhello\r\n".to_vec();
+    let rest = b"6\r\n world\r\n0\r\n\r\n".to_vec();
+    let mut stream = SequentialMockStream::new(vec![raw, rest]);
+    Server::process(&mut stream, make_connection(), EchoFraming).unwrap();
+    let written = String::from_utf8_lossy(&stream.written);
+    assert!(written.contains("uri=/c body=hello world"), "{written}");
+}
+
+#[test]
+fn framing_content_length_with_transfer_encoding_is_rejected() {
+    let raw = b"POST / HTTP/1.1\r\nContent-Length: 3\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n".to_vec();
+    let mut stream = SequentialMockStream::new(vec![raw]);
+    assert!(Server::process(&mut stream, make_connection(), EchoFraming).is_err());
+    assert!(String::from_utf8_lossy(&stream.written).starts_with("HTTP/1.1 400"));
+}
+
+#[test]
+fn framing_body_cut_short_is_not_dispatched() {
+    let raw = b"POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\nabc".to_vec();
+    let mut stream = SequentialMockStream::new(vec![raw]);
+    Server::process(&mut stream, make_connection(), EchoFraming).unwrap();
+    assert!(stream.written.is_empty(), "{}", String::from_utf8_lossy(&stream.written));
+}

@@ -140,6 +140,24 @@ max_half_open_probes   = 1
 
 See [Environment Variables](/configuration/env-vars/) for what each one does.
 
+## Request limits
+
+Fixed limits that apply whatever the configuration:
+
+| Limit | Value | Over the limit |
+|---|---|---|
+| Request head (request line + headers), HTTP/1.1 | 64 KiB | `431 Request Header Fields Too Large` |
+| Header list, HTTP/2 and HTTP/3 | 64 KiB | stream reset |
+| Concurrent streams per HTTP/2 connection | 250 | stream refused |
+| Idle time between reads | 30 s | connection closed |
+| TLS handshake | 10 s | connection closed |
+
+The request body limit is `max_body_size_in_bytes` above. On HTTP/1.1, bodies
+may be sent with `Content-Length` or `Transfer-Encoding: chunked`; a request
+that carries both, or two different `Content-Length` values, is rejected with
+`400` so `rws` and a proxy in front of it can never disagree about where a
+request ends.
+
 ## `[[virtual_host]]`
 
 Repeat this section for each domain that needs its own TLS certificate. The SNI

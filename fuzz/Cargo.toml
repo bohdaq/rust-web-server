@@ -94,3 +94,9 @@ path = "fuzz_targets/proxy_config.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "http1_framing"
+path = "fuzz_targets/http1_framing.rs"
+test = false
+doc = false

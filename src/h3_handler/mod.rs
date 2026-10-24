@@ -272,3 +272,6 @@ async fn send_error_response(
     let _ = stream.send_response(response).await;
     let _ = stream.finish().await;
 }
+
+#[cfg(test)]
+mod tests;

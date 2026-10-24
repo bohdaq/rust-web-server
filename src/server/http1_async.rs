@@ -22,7 +22,7 @@ use crate::http::VERSION;
 use crate::log::Log;
 use crate::request::Request;
 use crate::response::Response;
-use crate::server::{Address, ConnectionInfo, Server};
+use crate::server::{framing, Address, ConnectionInfo, Server};
 
 /// Longest wait for a client to send a request head (or the next request on a
 /// keep-alive connection) and for each read of a request body.
@@ -49,18 +49,35 @@ where
     let request_allocation_size = get_request_allocation_size();
     let max_body_size = crate::entry_point::get_max_body_size();
 
-    loop {
-        let mut buffer = vec![0u8; request_allocation_size as usize];
-        let n = match tokio::time::timeout(READ_TIMEOUT, stream.read(&mut buffer)).await {
-            Ok(Ok(n)) if n > 0 => n,
-            // Closed, read error, or idle past the timeout: end of the session.
-            _ => break,
-        };
+    // Bytes read but not consumed yet: the rest of a request head, a body, or
+    // the next pipelined request. See `super::framing`.
+    let mut pending: Vec<u8> = Vec::new();
+    let mut read_buffer = vec![0u8; request_allocation_size as usize];
 
-        // Trim to the bytes actually read — the zero-padded rest of `buffer`
-        // would otherwise become trailing NUL bytes in the body.
-        let mut request = match Request::parse(&buffer[..n]) {
-            Ok(r) => r,
+    'session: loop {
+        // Read until the request head is complete — it may span several reads.
+        let head_len = loop {
+            framing::skip_leading_empty_lines(&mut pending);
+            match framing::scan_head(&pending) {
+                framing::HeadScan::Complete(n) => break Some(n),
+                framing::HeadScan::TooLarge => {
+                    write_and_flush(&mut stream, &Server::header_fields_too_large_response()).await;
+                    return Err("request head too large".to_string());
+                }
+                framing::HeadScan::Incomplete => {}
+            }
+            if !read_more(&mut stream, &mut read_buffer, &mut pending).await {
+                // Closed, read error, or idle past the timeout: end of the session.
+                break None;
+            }
+        };
+        let Some(head_len) = head_len else { break };
+
+        let parsed = Request::parse(&pending[..head_len])
+            .and_then(|request| framing::body_framing(&request).map(|f| (request, f)));
+        pending.drain(..head_len);
+        let (mut request, body_framing) = match parsed {
+            Ok(parsed) => parsed,
             Err(message) => {
                 write_and_flush(&mut stream, &Server::bad_request_response(message.clone())).await;
                 return Err(message);
@@ -80,28 +97,63 @@ where
             None => false,
         };
 
-        // A body longer than the first read keeps arriving in later reads.
-        if let Some(declared_len) = request
-            .get_header(Header::_CONTENT_LENGTH.to_string())
-            .and_then(|h| h.value.trim().parse::<u64>().ok())
-        {
-            if max_body_size > 0 && declared_len > max_body_size {
-                let raw = Server::payload_too_large_response(format!(
-                    "413 Payload Too Large: declared Content-Length {} exceeds the {} byte limit",
-                    declared_len, max_body_size
-                ));
-                write_and_flush(&mut stream, &raw).await;
-                break;
-            }
-            if expects_continue && stream.write_all(&Server::continue_response()).await.is_err() {
-                break;
-            }
-            while (request.body.len() as u64) < declared_len {
-                let mut more = vec![0u8; request_allocation_size as usize];
-                match tokio::time::timeout(READ_TIMEOUT, stream.read(&mut more)).await {
-                    Ok(Ok(k)) if k > 0 => request.body.extend_from_slice(&more[..k]),
-                    _ => break, // closed early or stalled: proceed with the short body
+        match body_framing {
+            framing::BodyFraming::None => {}
+            framing::BodyFraming::Length(declared_len) => {
+                if max_body_size > 0 && declared_len > max_body_size {
+                    let raw = Server::payload_too_large_response(format!(
+                        "413 Payload Too Large: declared Content-Length {} exceeds the {} byte limit",
+                        declared_len, max_body_size
+                    ));
+                    write_and_flush(&mut stream, &raw).await;
+                    break;
                 }
+                if expects_continue
+                    && (pending.len() as u64) < declared_len
+                    && stream.write_all(&Server::continue_response()).await.is_err()
+                {
+                    break;
+                }
+                while (pending.len() as u64) < declared_len {
+                    if !read_more(&mut stream, &mut read_buffer, &mut pending).await {
+                        break 'session; // closed or stalled mid-body
+                    }
+                }
+                request.body = pending.drain(..declared_len as usize).collect();
+            }
+            framing::BodyFraming::Chunked => {
+                if expects_continue
+                    && pending.is_empty()
+                    && stream.write_all(&Server::continue_response()).await.is_err()
+                {
+                    break;
+                }
+                let mut decoder = framing::ChunkedBody::new(max_body_size);
+                loop {
+                    match decoder.feed(&pending) {
+                        Ok((consumed, done)) => {
+                            pending.drain(..consumed);
+                            if done {
+                                break;
+                            }
+                        }
+                        Err(framing::ChunkError::TooLarge) => {
+                            let raw = Server::payload_too_large_response(format!(
+                                "413 Payload Too Large: chunked body exceeds the {} byte limit", max_body_size
+                            ));
+                            write_and_flush(&mut stream, &raw).await;
+                            break 'session;
+                        }
+                        Err(framing::ChunkError::Malformed(message)) => {
+                            write_and_flush(&mut stream, &Server::bad_request_response(message.clone())).await;
+                            return Err(message);
+                        }
+                    }
+                    if !read_more(&mut stream, &mut read_buffer, &mut pending).await {
+                        break 'session;
+                    }
+                }
+                request.body = decoder.body;
             }
         }
 
@@ -179,6 +231,18 @@ pub(crate) async fn execute_blocking<A: Application + Send + 'static>(
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+/// One read (bounded by [`READ_TIMEOUT`]) appended to `pending`. `false` when
+/// the peer closed, the read failed, or it timed out.
+async fn read_more<S: AsyncRead + Unpin>(stream: &mut S, read_buffer: &mut [u8], pending: &mut Vec<u8>) -> bool {
+    match tokio::time::timeout(READ_TIMEOUT, stream.read(read_buffer)).await {
+        Ok(Ok(n)) if n > 0 => {
+            pending.extend_from_slice(&read_buffer[..n]);
+            true
+        }
+        _ => false,
+    }
 }
 
 async fn write_and_flush<S: AsyncWrite + Unpin>(stream: &mut S, bytes: &[u8]) {
@@ -373,4 +437,66 @@ mod tests {
             std::io::Read::read_to_end(&mut self, out).unwrap();
         }
     }
+
+    #[derive(Clone)]
+    struct Echo;
+
+    impl Application for Echo {
+        fn execute(&self, request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
+            let text = format!("uri={} body={}", request.request_uri, String::from_utf8_lossy(&request.body));
+            Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &text))
+        }
+    }
+
+    async fn read_to_end(client: &mut tokio::io::DuplexStream) -> String {
+        let mut out = Vec::new();
+        client.read_to_end(&mut out).await.unwrap();
+        String::from_utf8_lossy(&out).to_string()
+    }
+
+    #[tokio::test]
+    async fn large_request_head_spanning_reads_is_served() {
+        let (mut client, server) = tokio::io::duplex(1024);
+        let task = tokio::spawn(serve(server, peer(), None, false, Echo));
+        let mut raw = b"GET /big HTTP/1.1\r\nCookie: ".to_vec();
+        raw.extend(std::iter::repeat(b'c').take(40_000));
+        raw.extend_from_slice(b"\r\nConnection: close\r\n\r\n");
+        let writer = tokio::spawn(async move {
+            client.write_all(&raw).await.unwrap();
+            client
+        });
+        let mut client = writer.await.unwrap();
+        let out = read_to_end(&mut client).await;
+        assert!(out.starts_with("HTTP/1.1 200") && out.contains("uri=/big"), "{out}");
+        assert!(task.await.unwrap().is_ok());
+    }
+
+    #[tokio::test]
+    async fn oversized_request_head_gets_431() {
+        let (mut client, server) = tokio::io::duplex(256 * 1024);
+        let task = tokio::spawn(serve(server, peer(), None, false, Echo));
+        let mut raw = b"GET / HTTP/1.1\r\nCookie: ".to_vec();
+        raw.extend(std::iter::repeat(b'c').take(framing::MAX_HEAD_SIZE + 10));
+        client.write_all(&raw).await.unwrap();
+        let out = read_to_end(&mut client).await;
+        assert!(out.starts_with("HTTP/1.1 431"), "{out}");
+        assert!(task.await.unwrap().is_err());
+    }
+
+    #[tokio::test]
+    async fn pipelined_and_chunked_requests_are_framed() {
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let task = tokio::spawn(serve(server, peer(), None, false, Echo));
+        client.write_all(
+            b"POST /a HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc\
+              POST /b HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nhi\r\n0\r\n\r\n\
+              GET /c HTTP/1.1\r\nConnection: close\r\n\r\n",
+        ).await.unwrap();
+        let out = read_to_end(&mut client).await;
+        assert!(out.contains("uri=/a body=abc"), "{out}");
+        assert!(out.contains("uri=/b body=hi"), "{out}");
+        assert!(out.contains("uri=/c body="), "{out}");
+        assert!(task.await.unwrap().is_ok());
+    }
+
 }

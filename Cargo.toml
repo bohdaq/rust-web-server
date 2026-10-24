@@ -121,6 +121,10 @@ tokio = { version = "1", features = ["test-util", "macros", "rt"] }
 # instead of rustls. http2/http3/acme (which also use rustls) were already
 # unsupported on wasm32 regardless, since tokio's rt-multi-thread requires
 # real OS threads.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+# Self-signed certificates for the in-process HTTP/3 test (src/h3_handler/tests.rs).
+rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 webpki-roots = { version = "1.0.11", optional = true }
 rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "tls12", "logging", "std"], optional = true }

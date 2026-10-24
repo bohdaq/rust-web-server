@@ -1,0 +1,13 @@
+POST /c HTTP/1.1
+Host: x
+Transfer-Encoding: chunked
+
+5
+hello
+6;ext=1
+ world
+0
+X-T: y
+
+GET / HTTP/1.1
+

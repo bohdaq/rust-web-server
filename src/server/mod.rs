@@ -6,6 +6,7 @@ mod example;
 pub(crate) mod http1_async;
 #[cfg(feature = "http2")]
 pub(crate) mod body_stream;
+pub(crate) mod framing;
 
 // The TCP/thread-pool accept loop below (`Server::setup`/`run`/`process`/…) needs
 // `std::net::TcpListener` and OS threads, neither available on `wasm32-wasip2`.
@@ -166,6 +167,42 @@ impl Server {
         Response::generate_response(error_response, error_request)
     }
 
+    /// Builds a `431 Request Header Fields Too Large` raw response for a
+    /// request head longer than [`framing::MAX_HEAD_SIZE`]. The connection is
+    /// closed after it: the rest of the oversized head is still unread.
+    pub fn header_fields_too_large_response() -> Vec<u8> {
+        let message = format!(
+            "431 Request Header Fields Too Large: the request head exceeds {} bytes",
+            framing::MAX_HEAD_SIZE
+        );
+        let error_request = Request {
+            method: METHOD.get.to_string(),
+            request_uri: "".to_string(),
+            http_version: "".to_string(),
+            headers: vec![],
+            body: vec![],
+        };
+
+        let size = message.chars().count() as u64;
+        let content_range = ContentRange {
+            unit: Range::BYTES.to_string(),
+            range: Range { start: 0, end: size },
+            size: size.to_string(),
+            body: Vec::from(message.as_bytes()),
+            content_type: MimeType::TEXT_PLAIN.to_string(),
+        };
+
+        let mut header_list = Header::get_header_list(&error_request);
+        header_list.push(Header { name: Header::_CONNECTION.to_string(), value: "close".to_string() });
+        let error_response: Response = Response::get_response(
+            STATUS_CODE_REASON_PHRASE.n431_request_header_fields_too_large,
+            Some(header_list),
+            Some(vec![content_range])
+        );
+
+        Response::generate_response(error_response, error_request)
+    }
+
     /// Builds the `100 Continue` interim response (RFC 9110 §15.2.1) — no
     /// headers, no body, just the status line. Sent immediately after parsing
     /// a request with `Expect: 100-continue`, before reading its body, so the
@@ -227,24 +264,40 @@ impl Server {
 
         let max_body_size = crate::entry_point::get_max_body_size();
 
-        loop {
-            let mut buffer = vec![0; request_allocation_size as usize];
-            let boxed_read = stream.read(&mut buffer);
-            let n = match boxed_read {
-                // timeout or client closed — normal end of keep-alive session
-                Err(_) => break,
-                Ok(0) => break,
-                Ok(n) => n,
-            };
+        // Bytes read from the connection but not consumed yet: the rest of a
+        // request head, a body, or the next pipelined request.
+        let mut pending: Vec<u8> = Vec::new();
+        let mut read_buffer = vec![0u8; request_allocation_size as usize];
 
-            // Trim to the bytes actually read — passing the zero-padded rest of
-            // `buffer` to Request::parse would append trailing NUL bytes to the body.
-            let mut request = match Request::parse(&buffer[..n]) {
-                Ok(r) => r,
+        'session: loop {
+            // Read until the request head is complete — it may span several reads.
+            let head_len = loop {
+                framing::skip_leading_empty_lines(&mut pending);
+                match framing::scan_head(&pending) {
+                    framing::HeadScan::Complete(n) => break Some(n),
+                    framing::HeadScan::TooLarge => {
+                        let _ = stream.write_all(&Server::header_fields_too_large_response());
+                        let _ = stream.flush();
+                        return Err("request head too large".to_string());
+                    }
+                    framing::HeadScan::Incomplete => {}
+                }
+                match stream.read(&mut read_buffer) {
+                    // timeout or client closed — normal end of keep-alive session
+                    Ok(0) | Err(_) => break None,
+                    Ok(n) => pending.extend_from_slice(&read_buffer[..n]),
+                }
+            };
+            let Some(head_len) = head_len else { break };
+
+            let parsed = Request::parse(&pending[..head_len])
+                .and_then(|request| framing::body_framing(&request).map(|f| (request, f)));
+            pending.drain(..head_len);
+            let (mut request, body_framing) = match parsed {
+                Ok(parsed) => parsed,
                 Err(message) => {
-                    let raw_response = Server::bad_request_response(message.clone());
-                    let boxed_stream = stream.write(raw_response.borrow());
-                    if boxed_stream.is_ok() { stream.flush().unwrap(); }
+                    let _ = stream.write_all(&Server::bad_request_response(message.clone()));
+                    let _ = stream.flush();
                     return Err(message);
                 }
             };
@@ -258,46 +311,76 @@ impl Server {
                     let raw_response = Server::expectation_failed_response(format!(
                         "417 Expectation Failed: unsupported Expect value '{}'", h.value.trim()
                     ));
-                    let boxed_stream = stream.write(raw_response.borrow());
-                    if boxed_stream.is_ok() { stream.flush().unwrap(); }
+                    let _ = stream.write_all(&raw_response);
+                    let _ = stream.flush();
                     break;
                 }
                 None => false,
             };
 
-            // If Content-Length declares more body than this one read delivered,
-            // keep reading until it's fully received — a single `request_allocation_size`
-            // read is not big enough for bodies larger than that buffer.
-            if let Some(declared_len) = request
-                .get_header(Header::_CONTENT_LENGTH.to_string())
-                .and_then(|h| h.value.trim().parse::<u64>().ok())
-            {
-                if max_body_size > 0 && declared_len > max_body_size {
-                    let raw_response = Server::payload_too_large_response(format!(
-                        "413 Payload Too Large: declared Content-Length {} exceeds the {} byte limit",
-                        declared_len, max_body_size
-                    ));
-                    let boxed_stream = stream.write(raw_response.borrow());
-                    if boxed_stream.is_ok() { stream.flush().unwrap(); }
-                    break;
-                }
-
-                // Tell the client to go ahead and send the body now, before we
-                // block waiting for it below.
-                if expects_continue {
-                    let raw_response = Server::continue_response();
-                    match stream.write(raw_response.borrow()) {
-                        Ok(_) => stream.flush().unwrap(),
-                        Err(_) => break,
+            match body_framing {
+                framing::BodyFraming::None => {}
+                framing::BodyFraming::Length(declared_len) => {
+                    if max_body_size > 0 && declared_len > max_body_size {
+                        let raw_response = Server::payload_too_large_response(format!(
+                            "413 Payload Too Large: declared Content-Length {} exceeds the {} byte limit",
+                            declared_len, max_body_size
+                        ));
+                        let _ = stream.write_all(&raw_response);
+                        let _ = stream.flush();
+                        break;
                     }
-                }
 
-                while (request.body.len() as u64) < declared_len {
-                    let mut more = vec![0u8; request_allocation_size as usize];
-                    match stream.read(&mut more) {
-                        Ok(0) | Err(_) => break, // peer closed early; proceed with the short body
-                        Ok(k) => request.body.extend_from_slice(&more[..k]),
+                    // Tell the client to go ahead and send the body now, before we
+                    // block waiting for it below.
+                    if expects_continue && (pending.len() as u64) < declared_len {
+                        if stream.write_all(&Server::continue_response()).and_then(|_| stream.flush()).is_err() {
+                            break;
+                        }
                     }
+
+                    while (pending.len() as u64) < declared_len {
+                        match stream.read(&mut read_buffer) {
+                            Ok(0) | Err(_) => break 'session, // closed or stalled mid-body
+                            Ok(k) => pending.extend_from_slice(&read_buffer[..k]),
+                        }
+                    }
+                    request.body = pending.drain(..declared_len as usize).collect();
+                }
+                framing::BodyFraming::Chunked => {
+                    if expects_continue && pending.is_empty() {
+                        if stream.write_all(&Server::continue_response()).and_then(|_| stream.flush()).is_err() {
+                            break;
+                        }
+                    }
+
+                    let mut decoder = framing::ChunkedBody::new(max_body_size);
+                    loop {
+                        match decoder.feed(&pending) {
+                            Ok((consumed, done)) => {
+                                pending.drain(..consumed);
+                                if done { break; }
+                            }
+                            Err(framing::ChunkError::TooLarge) => {
+                                let raw_response = Server::payload_too_large_response(format!(
+                                    "413 Payload Too Large: chunked body exceeds the {} byte limit", max_body_size
+                                ));
+                                let _ = stream.write_all(&raw_response);
+                                let _ = stream.flush();
+                                break 'session;
+                            }
+                            Err(framing::ChunkError::Malformed(message)) => {
+                                let _ = stream.write_all(&Server::bad_request_response(message.clone()));
+                                let _ = stream.flush();
+                                return Err(message);
+                            }
+                        }
+                        match stream.read(&mut read_buffer) {
+                            Ok(0) | Err(_) => break 'session,
+                            Ok(k) => pending.extend_from_slice(&read_buffer[..k]),
+                        }
+                    }
+                    request.body = decoder.body;
                 }
             }
 
