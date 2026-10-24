@@ -6,9 +6,14 @@ use std::time::{Duration, Instant};
 const DEFAULT_MAX_IDLE: usize = 8;
 const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// Per-backend HTTP/1.1 connection pool.
+/// Per-backend HTTP/1.1 connection pool of plain TCP connections — the pool
+/// `ReverseProxy::with_pool` takes. (HTTPS backends use an internal
+/// `Pool` of TLS streams.)
+pub type ConnPool = Pool<TcpStream>;
+
+/// Per-backend HTTP/1.1 connection pool, generic over the connection type.
 ///
-/// Holds idle `TcpStream` connections keyed by `"host:port"`.  When a
+/// Holds idle connections keyed by `"host:port"`.  When a
 /// backend responds with `Connection: keep-alive` (or the HTTP/1.1 default),
 /// the stream is returned here and reused for the next request to the same
 /// backend, eliminating the TCP-handshake cost and reducing ephemeral-port
@@ -31,21 +36,21 @@ const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 /// let _proxy = ReverseProxy::new(["http://backend:8080"])
 ///     .with_pool(Arc::clone(&pool));
 /// ```
-pub struct ConnPool {
-    inner: Mutex<HashMap<String, VecDeque<PoolEntry>>>,
+pub struct Pool<S> {
+    inner: Mutex<HashMap<String, VecDeque<PoolEntry<S>>>>,
     max_idle: usize,
     idle_timeout: Duration,
 }
 
-struct PoolEntry {
-    stream: TcpStream,
+struct PoolEntry<S> {
+    stream: S,
     added: Instant,
 }
 
-impl ConnPool {
+impl<S> Pool<S> {
     /// Create a pool with the given per-backend idle limit and idle timeout.
     pub fn new(max_idle: usize, idle_timeout: Duration) -> Self {
-        ConnPool {
+        Pool {
             inner: Mutex::new(HashMap::new()),
             max_idle,
             idle_timeout,
@@ -61,7 +66,7 @@ impl ConnPool {
     ///
     /// Stale entries (older than `idle_timeout`) are discarded automatically.
     /// Returns `None` if no usable connection is available.
-    pub fn acquire(&self, key: &str) -> Option<TcpStream> {
+    pub fn acquire(&self, key: &str) -> Option<S> {
         let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let queue = map.get_mut(key)?;
         let now = Instant::now();
@@ -78,7 +83,7 @@ impl ConnPool {
     ///
     /// If the backend slot is already at `max_idle`, the stream is dropped
     /// (the TCP connection closes) rather than exceeding the limit.
-    pub fn release(&self, key: &str, stream: TcpStream) {
+    pub fn release(&self, key: &str, stream: S) {
         let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let queue = map.entry(key.to_string()).or_default();
         if queue.len() < self.max_idle {

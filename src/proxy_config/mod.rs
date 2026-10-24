@@ -1148,36 +1148,18 @@ impl Application for DynamicProxy {
             request
         };
 
-        let result = if self.tls {
-            #[cfg(any(feature = "http-client", feature = "http2"))]
-            {
-                crate::proxy::proxy_https1(
-                    effective_request,
-                    &conn.client.ip,
-                    &host,
-                    port,
-                    self.connect_timeout,
-                    self.read_timeout,
-                )
-            }
-            #[cfg(not(any(feature = "http-client", feature = "http2")))]
-            {
-                eprintln!("[proxy] HTTPS upstream requires http-client or http2 feature");
-                Err("TLS upstream not supported in this build".to_string())
-            }
-        } else {
-            // Pooled keep-alive connections to the backend (a fresh TCP
-            // connection per request halved throughput vs. Caddy/nginx).
-            crate::proxy::forward_pooled(
-                crate::proxy::shared_pool(),
-                effective_request,
-                &conn.client.ip,
-                &host,
-                port,
-                self.connect_timeout,
-                self.read_timeout,
-            )
-        };
+        // Pooled keep-alive connections to the backend, TLS or not (a fresh
+        // connection per request halved throughput vs. Caddy/nginx).
+        let result = crate::proxy::forward_upstream(
+            crate::proxy::shared_pool(),
+            effective_request,
+            &conn.client.ip,
+            &host,
+            port,
+            self.tls,
+            self.connect_timeout,
+            self.read_timeout,
+        );
 
         match result {
             Ok(r) => Ok(r),

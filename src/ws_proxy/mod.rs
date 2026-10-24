@@ -269,14 +269,13 @@ impl WsProxy {
         #[cfg(any(feature = "http-client", feature = "http2"))]
         {
             use rustls::pki_types::ServerName;
-            use rustls::ClientConfig;
             use std::sync::Arc;
 
             let root_store = rustls::RootCertStore::from_iter(
                 webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
             );
             let config = Arc::new(
-                ClientConfig::builder()
+                crate::tls_client_builder()
                     .with_root_certificates(root_store)
                     .with_no_client_auth(),
             );

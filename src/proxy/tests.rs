@@ -884,3 +884,130 @@ fn forward_pooled_does_not_replay_a_post_on_a_stale_connection() {
     assert!(fwd(&post("/")).is_err());
     assert_eq!(1, accepted.load(AtOrd::Relaxed), "no second connection for the POST");
 }
+
+// ── HTTPS backends: pooled TLS connections ────────────────────────────────────
+
+/// A keep-alive HTTPS backend with a fresh self-signed certificate for
+/// `localhost`. Each request gets `response`; `responses_per_conn` requests
+/// are served per connection before it is closed. Returns (port, client TLS
+/// config trusting the certificate, connections accepted).
+#[cfg(feature = "http2")]
+fn tls_backend(response: &'static [u8], responses_per_conn: usize) -> (u16, Arc<rustls::ClientConfig>, Arc<AtomicU32>) {
+    let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+    let cert_der = rustls::pki_types::CertificateDer::from(certified.cert.der().to_vec());
+    let key_der = rustls::pki_types::PrivateKeyDer::try_from(certified.signing_key.serialize_der()).unwrap();
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let server_config = Arc::new(
+        rustls::ServerConfig::builder_with_provider(Arc::clone(&provider))
+            .with_safe_default_protocol_versions().unwrap()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert_der.clone()], key_der)
+            .unwrap(),
+    );
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(cert_der).unwrap();
+    let client_config = Arc::new(
+        rustls::ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions().unwrap()
+            .with_root_certificates(roots)
+            .with_no_client_auth(),
+    );
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let accepted = Arc::new(AtomicU32::new(0));
+    let accepted2 = Arc::clone(&accepted);
+    thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            accepted2.fetch_add(1, AtOrd::Relaxed);
+            let server_config = Arc::clone(&server_config);
+            thread::spawn(move || {
+                let conn = rustls::ServerConnection::new(server_config).unwrap();
+                let mut tls = rustls::StreamOwned::new(conn, stream);
+                let mut buf = [0u8; 4096];
+                for _ in 0..responses_per_conn {
+                    let mut head = Vec::new();
+                    while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                        match tls.read(&mut buf) {
+                            Ok(0) | Err(_) => return,
+                            Ok(n) => head.extend_from_slice(&buf[..n]),
+                        }
+                    }
+                    if tls.write_all(response).and_then(|_| tls.flush()).is_err() {
+                        return;
+                    }
+                }
+                tls.conn.send_close_notify();
+                let _ = tls.flush();
+            });
+        }
+    });
+    (port, client_config, accepted)
+}
+
+#[cfg(feature = "http2")]
+fn forward_tls(pool: &crate::proxy::Pool<super::TlsStream>, config: &Arc<rustls::ClientConfig>, port: u16, request: &Request) -> Result<crate::response::Response, String> {
+    super::forward_via(pool, request, "10.0.0.1", "localhost", port, Duration::from_secs(5), || {
+        super::connect_tls_with(Arc::clone(config), "localhost", port, Duration::from_secs(2))
+    })
+}
+
+#[cfg(feature = "http2")]
+#[test]
+fn https_backend_connections_are_pooled() {
+    let (port, config, accepted) = tls_backend(KEEPALIVE_RESPONSE.as_bytes(), 100);
+    let pool = crate::proxy::Pool::new(8, Duration::from_secs(60));
+    for _ in 0..5 {
+        let response = forward_tls(&pool, &config, port, &get("/")).unwrap();
+        assert_eq!(200, response.status_code);
+    }
+    assert_eq!(1, accepted.load(AtOrd::Relaxed), "5 sequential HTTPS requests, 1 TLS handshake");
+    assert_eq!(1, pool.idle_count());
+}
+
+#[cfg(feature = "http2")]
+#[test]
+fn https_backend_stale_connection_is_retried_for_get_only() {
+    let (port, config, accepted) = tls_backend(KEEPALIVE_RESPONSE.as_bytes(), 1);
+    let pool = crate::proxy::Pool::new(8, Duration::from_secs(60));
+    assert_eq!(200, forward_tls(&pool, &config, port, &get("/")).unwrap().status_code);
+    thread::sleep(Duration::from_millis(50));
+    assert_eq!(200, forward_tls(&pool, &config, port, &get("/")).unwrap().status_code);
+    assert_eq!(2, accepted.load(AtOrd::Relaxed));
+    thread::sleep(Duration::from_millis(50));
+    assert!(forward_tls(&pool, &config, port, &post("/")).is_err());
+    assert_eq!(2, accepted.load(AtOrd::Relaxed), "no new connection for the POST");
+}
+
+#[cfg(feature = "http2")]
+#[test]
+fn https_backend_chunked_response_is_streamed() {
+    const CHUNKED: &[u8] = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
+    let (port, config, _) = tls_backend(CHUNKED, 1);
+    let pool = crate::proxy::Pool::new(8, Duration::from_secs(60));
+    let mut response = forward_tls(&pool, &config, port, &get("/")).unwrap();
+    let mut pipe = response.stream_pipe.take().expect("chunked responses are streamed");
+    let mut raw = Vec::new();
+    let _ = pipe.read_to_end(&mut raw);
+    assert!(raw.starts_with(b"5\r\nhello\r\n0\r\n"), "{:?}", String::from_utf8_lossy(&raw));
+}
+
+#[cfg(feature = "http2")]
+#[test]
+fn reverse_proxy_uses_tls_for_https_backends() {
+    // Used to send plain HTTP to https:// backends. Record the first byte the
+    // backend receives: 0x16 is a TLS handshake record, b'G' would be "GET".
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (tx, rx) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut first = [0u8; 1];
+            let _ = stream.read_exact(&mut first);
+            let _ = tx.send(first[0]);
+        }
+    });
+    let proxy = ReverseProxy::new([format!("https://127.0.0.1:{}", port)]);
+    let _ = proxy.handle(&get("/"), &conn(), &App::new());
+    assert_eq!(0x16, rx.recv_timeout(Duration::from_secs(5)).unwrap());
+}

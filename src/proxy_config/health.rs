@@ -129,13 +129,12 @@ fn check_backend(backend: &str, path: &str, timeout: Duration) -> bool {
 #[cfg(any(feature = "http-client", feature = "http2"))]
 fn check_via_tls(stream: TcpStream, host: &str, req: &[u8]) -> bool {
     use rustls::pki_types::ServerName;
-    use rustls::ClientConfig;
     use std::sync::Arc;
 
     let root_store =
         rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let config = Arc::new(
-        ClientConfig::builder()
+        crate::tls_client_builder()
             .with_root_certificates(root_store)
             .with_no_client_auth(),
     );

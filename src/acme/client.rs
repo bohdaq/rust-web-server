@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio_rustls::rustls::{self, ClientConfig, RootCertStore};
+use tokio_rustls::rustls::{self, RootCertStore};
 use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::TlsConnector;
 
@@ -73,7 +73,7 @@ impl AcmeHttpClient {
         {
             add_extra_roots(&mut root_store, ca_file.trim())?;
         }
-        let config = ClientConfig::builder()
+        let config = crate::tls_client_builder()
             .with_root_certificates(root_store)
             .with_no_client_auth();
         Ok(AcmeHttpClient {

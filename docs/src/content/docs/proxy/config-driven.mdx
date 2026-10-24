@@ -45,7 +45,7 @@ An unrecognized or empty `strategy` value falls back to `round_robin`.
 
 ### TLS (HTTPS) upstreams
 
-Prefix backend addresses with `https://` to connect over TLS. Certificate verification uses the system WebPKI root store (same CA bundle as browsers).
+Prefix backend addresses with `https://` to connect over TLS. Certificate verification uses the WebPKI root store (same CA bundle as browsers). TLS connections are kept alive and reused, like plain ones — one handshake per connection, not per request — and large or chunked responses are streamed.
 
 ```toml
 [[upstream]]

@@ -80,7 +80,7 @@ pub(crate) fn build_client_config(ca_pem: &str) -> Result<Arc<ClientConfig>, Str
         store.add(cert).map_err(|e| format!("invalid CA certificate: {e}"))?;
     }
     Ok(Arc::new(
-        ClientConfig::builder()
+        crate::tls_client_builder()
             .with_root_certificates(store)
             .with_no_client_auth(),
     ))

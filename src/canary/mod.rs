@@ -339,33 +339,16 @@ impl CanaryLayer {
             return Err("CanaryLayer: no backends in rotation".to_string());
         }
         for (host, port, tls) in &candidates {
-            let result = if *tls {
-                #[cfg(any(feature = "http-client", feature = "http2"))]
-                {
-                    crate::proxy::proxy_https1(
-                        request,
-                        &connection.client.ip,
-                        host,
-                        *port,
-                        self.connect_timeout,
-                        self.read_timeout,
-                    )
-                }
-                #[cfg(not(any(feature = "http-client", feature = "http2")))]
-                {
-                    Err("CanaryLayer: TLS backend requires the http-client or http2 feature".to_string())
-                }
-            } else {
-                crate::proxy::forward_pooled(
-                    crate::proxy::shared_pool(),
-                    request,
-                    &connection.client.ip,
-                    host,
-                    *port,
-                    self.connect_timeout,
-                    self.read_timeout,
-                )
-            };
+            let result = crate::proxy::forward_upstream(
+                crate::proxy::shared_pool(),
+                request,
+                &connection.client.ip,
+                host,
+                *port,
+                *tls,
+                self.connect_timeout,
+                self.read_timeout,
+            );
             if let Ok(resp) = result {
                 return Ok(resp);
             }

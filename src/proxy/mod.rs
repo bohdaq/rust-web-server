@@ -34,7 +34,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-pub use pool::ConnPool;
+pub use pool::{ConnPool, Pool};
 
 use crate::application::Application;
 use crate::core::New;
@@ -216,12 +216,13 @@ impl ReverseProxy {
         connection: &ConnectionInfo,
         backend: &Backend,
     ) -> Result<Response, String> {
-        forward_pooled(
+        forward_upstream(
             &self.pool,
             request,
             &connection.client.ip,
             &backend.host,
             backend.port,
+            backend.tls,
             self.connect_timeout,
             self.read_timeout,
         )
@@ -288,8 +289,8 @@ pub(crate) fn build_request(
 ///
 /// `buf[header_end..]` may already contain some body bytes that arrived in
 /// the same read as the headers.  Returns the fully decoded body.
-fn decode_chunked(
-    stream: &mut TcpStream,
+fn decode_chunked<S: Read>(
+    stream: &mut S,
     buf: &[u8],
     header_end: usize,
     tmp: &mut [u8],
@@ -320,13 +321,24 @@ fn decode_chunked(
         raw.drain(..crlf + 2); // consume "<size>\r\n"
 
         if chunk_size == 0 {
-            // Last chunk — consume the trailing CRLF ("0\r\n\r\n" → trailing "\r\n" still pending).
-            while raw.len() < 2 {
-                let n = stream.read(tmp).map_err(|e| e.to_string())?;
-                if n == 0 {
+            // Last chunk: skip trailer fields up to the empty line that ends
+            // the message. Leaving any of it unread would corrupt the next
+            // response on a pooled connection.
+            loop {
+                let line_end = loop {
+                    if let Some(p) = raw.windows(2).position(|w| w == b"\r\n") {
+                        break p;
+                    }
+                    let n = stream.read(tmp).map_err(|e| e.to_string())?;
+                    if n == 0 {
+                        return Err("chunked: premature EOF in trailer".to_string());
+                    }
+                    raw.extend_from_slice(&tmp[..n]);
+                };
+                raw.drain(..line_end + 2);
+                if line_end == 0 {
                     break;
                 }
-                raw.extend_from_slice(&tmp[..n]);
             }
             break;
         }
@@ -360,109 +372,6 @@ fn rewrite_as_content_length(buf: &mut Vec<u8>, header_end: usize, decoded: &[u8
     }
     let _ = write!(buf, "Content-Length: {}\r\n\r\n", decoded.len());
     buf.extend_from_slice(decoded);
-}
-
-/// Read a whole response from a connection that sent `Connection: close`
-/// (`proxy_https1`); plain-HTTP upstreams use the pooled `forward_pooled`.
-#[cfg(any(feature = "http-client", feature = "http2"))]
-pub(crate) fn read_response_from<R: Read>(stream: &mut R) -> Result<Vec<u8>, String> {
-    let mut buf: Vec<u8> = Vec::with_capacity(8192);
-    let mut tmp = [0u8; 4096];
-
-    let header_end = loop {
-        let n = stream.read(&mut tmp).map_err(|e| e.to_string())?;
-        if n == 0 {
-            return if buf.is_empty() {
-                Err("backend closed connection without sending a response".to_string())
-            } else {
-                Ok(buf)
-            };
-        }
-        buf.extend_from_slice(&tmp[..n]);
-        if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
-            break pos + 4;
-        }
-    };
-
-    let content_length = std::str::from_utf8(&buf[..header_end])
-        .unwrap_or("")
-        .lines()
-        .find_map(|line| {
-            line.to_lowercase()
-                .starts_with("content-length:")
-                .then(|| line.splitn(2, ':').nth(1)?.trim().parse::<usize>().ok())
-                .flatten()
-        });
-
-    match content_length {
-        Some(len) => {
-            while buf.len() < header_end + len {
-                let n = stream.read(&mut tmp).map_err(|e| e.to_string())?;
-                if n == 0 {
-                    break;
-                }
-                buf.extend_from_slice(&tmp[..n]);
-            }
-        }
-        None => loop {
-            let n = stream.read(&mut tmp).map_err(|e| e.to_string())?;
-            if n == 0 {
-                break;
-            }
-            buf.extend_from_slice(&tmp[..n]);
-        },
-    }
-
-    Ok(buf)
-}
-
-/// Forward a single HTTPS/1.1 request to `host:port` over TLS and return the
-/// response. Requires the `http-client` or `http2` feature (both bring in
-/// `rustls` + `webpki-roots`).
-#[cfg(any(feature = "http-client", feature = "http2"))]
-pub(crate) fn proxy_https1(
-    request: &Request,
-    client_ip: &str,
-    host: &str,
-    port: u16,
-    connect_timeout: Duration,
-    read_timeout: Duration,
-) -> Result<Response, String> {
-    use rustls::pki_types::ServerName;
-    use rustls::ClientConfig;
-    use std::net::ToSocketAddrs;
-    use std::sync::Arc;
-
-    let addr_str = format!("{}:{}", host, port);
-    let sock_addr = addr_str
-        .to_socket_addrs()
-        .map_err(|e| format!("DNS lookup for {} failed: {}", addr_str, e))?
-        .next()
-        .ok_or_else(|| format!("no address resolved for {}", addr_str))?;
-
-    let stream = TcpStream::connect_timeout(&sock_addr, connect_timeout)
-        .map_err(|e| format!("connect to {} failed: {}", addr_str, e))?;
-    stream.set_read_timeout(Some(read_timeout)).map_err(|e| e.to_string())?;
-    stream.set_write_timeout(Some(Duration::from_secs(10))).map_err(|e| e.to_string())?;
-
-    let root_store =
-        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    let config = Arc::new(
-        ClientConfig::builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth(),
-    );
-    let server_name = ServerName::try_from(host.to_string())
-        .map_err(|e| format!("invalid upstream hostname '{}': {}", host, e))?;
-    let conn = rustls::ClientConnection::new(config, server_name).map_err(|e| e.to_string())?;
-    let mut tls = rustls::StreamOwned::new(conn, stream);
-
-    let req_bytes = build_request(request, host, client_ip, false);
-    tls.write_all(&req_bytes)
-        .map_err(|e| format!("write to upstream failed: {}", e))?;
-
-    let resp_bytes = read_response_from(&mut tls)?;
-    Response::parse(&resp_bytes).map(normalize_upstream_response)
 }
 
 /// Headers rws regenerates for a buffered body, plus hop-by-hop headers
@@ -562,16 +471,58 @@ pub(crate) fn shared_pool() -> &'static ConnPool {
     POOL.get_or_init(|| ConnPool::new(POOL_MAX_IDLE, Duration::from_secs(60)))
 }
 
-/// Forward `request` to `host:port` over HTTP/1.1 — the shared building
-/// block of `ReverseProxy`, config-driven proxy routes, `canary`, and
-/// `ingress` — reusing an idle pooled
-/// connection when there is one and returning the connection to `pool`
-/// after a complete, reusable response.
-///
-/// A backend may close an idle keep-alive connection at any moment, so a
-/// pooled connection that fails before *any* response byte arrives is
-/// retried once on a fresh connection — but only for idempotent methods
-/// (RFC 9110 §9.2.2): the request may already have reached the backend.
+/// A backend connection the pooled forwarder drives: plain TCP, or TLS
+/// over TCP for `https://` backends.
+pub(crate) trait UpstreamIo: Read + Write + Send + 'static {
+    fn set_io_timeouts(&self, read: Duration, write: Duration) -> std::io::Result<()>;
+}
+
+impl UpstreamIo for TcpStream {
+    fn set_io_timeouts(&self, read: Duration, write: Duration) -> std::io::Result<()> {
+        self.set_read_timeout(Some(read))?;
+        self.set_write_timeout(Some(write))
+    }
+}
+
+#[cfg(any(feature = "http-client", feature = "http2"))]
+pub(crate) type TlsStream = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
+
+#[cfg(any(feature = "http-client", feature = "http2"))]
+impl UpstreamIo for TlsStream {
+    fn set_io_timeouts(&self, read: Duration, write: Duration) -> std::io::Result<()> {
+        self.sock.set_io_timeouts(read, write)
+    }
+}
+
+/// Forward `request` to an HTTP or HTTPS backend at `host:port`, over a
+/// pooled keep-alive connection either way: plain backends use `plain_pool`,
+/// TLS backends the process-wide TLS pool (one handshake per connection, not
+/// per request). The single entry point for `ReverseProxy`, config-driven
+/// routes, `canary` and `ingress`.
+pub(crate) fn forward_upstream(
+    plain_pool: &ConnPool,
+    request: &Request,
+    client_ip: &str,
+    host: &str,
+    port: u16,
+    tls: bool,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
+    if tls {
+        #[cfg(any(feature = "http-client", feature = "http2"))]
+        return forward_via(shared_tls_pool(), request, client_ip, host, port, read_timeout, || {
+            connect_tls(host, port, connect_timeout)
+        });
+        #[cfg(not(any(feature = "http-client", feature = "http2")))]
+        return Err("HTTPS backends need the http2 or http-client feature, which this build doesn't include".to_string());
+    }
+    forward_pooled(plain_pool, request, client_ip, host, port, connect_timeout, read_timeout)
+}
+
+/// Forward `request` to `host:port` over plain HTTP/1.1, reusing an idle
+/// connection from `pool` when there is one and returning the connection to
+/// `pool` after a complete, reusable response.
 pub(crate) fn forward_pooled(
     pool: &ConnPool,
     request: &Request,
@@ -581,6 +532,24 @@ pub(crate) fn forward_pooled(
     connect_timeout: Duration,
     read_timeout: Duration,
 ) -> Result<Response, String> {
+    forward_via(pool, request, client_ip, host, port, read_timeout, || connect_tcp(host, port, connect_timeout))
+}
+
+/// The pooled request/response cycle, for any connection type.
+///
+/// A backend may close an idle keep-alive connection at any moment, so a
+/// pooled connection that fails before *any* response byte arrives is
+/// retried once on a fresh connection — but only for idempotent methods
+/// (RFC 9110 §9.2.2): the request may already have reached the backend.
+fn forward_via<S: UpstreamIo>(
+    pool: &Pool<S>,
+    request: &Request,
+    client_ip: &str,
+    host: &str,
+    port: u16,
+    read_timeout: Duration,
+    connect: impl Fn() -> Result<S, String>,
+) -> Result<Response, String> {
     let key = format!("{}:{}", host, port);
     if let Some(stream) = pool.acquire(&key) {
         match exchange(pool, &key, stream, request, host, client_ip, read_timeout) {
@@ -589,18 +558,68 @@ pub(crate) fn forward_pooled(
             Exchange::NoResponse(e) | Exchange::Failed(e) => return Err(e),
         }
     }
-    let sock_addr = key
-        .to_socket_addrs()
-        .map_err(|e| format!("DNS lookup for {} failed: {}", key, e))?
-        .next()
-        .ok_or_else(|| format!("no address resolved for {}", key))?;
-    let stream = TcpStream::connect_timeout(&sock_addr, connect_timeout)
-        .map_err(|e| format!("connect to {} failed: {}", key, e))?;
-    let _ = stream.set_nodelay(true);
+    let stream = connect()?;
     match exchange(pool, &key, stream, request, host, client_ip, read_timeout) {
         Exchange::Done(response) => Ok(response),
         Exchange::NoResponse(e) | Exchange::Failed(e) => Err(e),
     }
+}
+
+/// Connect to the first address of `host:port` that accepts. `localhost`
+/// resolves to `::1` before `127.0.0.1` on many systems; a backend listening
+/// on IPv4 only must still be reachable by name.
+fn connect_tcp(host: &str, port: u16, connect_timeout: Duration) -> Result<TcpStream, String> {
+    let key = format!("{}:{}", host, port);
+    let addrs: Vec<_> = key
+        .to_socket_addrs()
+        .map_err(|e| format!("DNS lookup for {} failed: {}", key, e))?
+        .collect();
+    let mut last_error = format!("no address resolved for {}", key);
+    for addr in addrs {
+        match TcpStream::connect_timeout(&addr, connect_timeout) {
+            Ok(stream) => {
+                let _ = stream.set_nodelay(true);
+                return Ok(stream);
+            }
+            Err(e) => last_error = format!("connect to {} ({}) failed: {}", key, addr, e),
+        }
+    }
+    Err(last_error)
+}
+
+/// The process-wide pool of TLS connections to `https://` backends.
+#[cfg(any(feature = "http-client", feature = "http2"))]
+fn shared_tls_pool() -> &'static Pool<TlsStream> {
+    static POOL: std::sync::OnceLock<Pool<TlsStream>> = std::sync::OnceLock::new();
+    POOL.get_or_init(|| Pool::new(POOL_MAX_IDLE, Duration::from_secs(60)))
+}
+
+/// TLS client settings for backends: the Mozilla root store, no client
+/// certificate. Built once — parsing the root store per request was a large
+/// part of the per-request cost of HTTPS upstreams.
+#[cfg(any(feature = "http-client", feature = "http2"))]
+fn tls_client_config() -> Arc<rustls::ClientConfig> {
+    static CONFIG: std::sync::OnceLock<Arc<rustls::ClientConfig>> = std::sync::OnceLock::new();
+    Arc::clone(CONFIG.get_or_init(|| {
+        let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+        Arc::new(crate::tls_client_builder().with_root_certificates(roots).with_no_client_auth())
+    }))
+}
+
+/// Connect to an `https://` backend. The handshake itself runs on the first
+/// write, bounded by the exchange's read/write timeouts.
+#[cfg(any(feature = "http-client", feature = "http2"))]
+fn connect_tls(host: &str, port: u16, connect_timeout: Duration) -> Result<TlsStream, String> {
+    connect_tls_with(tls_client_config(), host, port, connect_timeout)
+}
+
+#[cfg(any(feature = "http-client", feature = "http2"))]
+fn connect_tls_with(config: Arc<rustls::ClientConfig>, host: &str, port: u16, connect_timeout: Duration) -> Result<TlsStream, String> {
+    let tcp = connect_tcp(host, port, connect_timeout)?;
+    let server_name = rustls::pki_types::ServerName::try_from(host.to_string())
+        .map_err(|e| format!("invalid upstream hostname '{}': {}", host, e))?;
+    let conn = rustls::ClientConnection::new(config, server_name).map_err(|e| e.to_string())?;
+    Ok(rustls::StreamOwned::new(conn, tcp))
 }
 
 fn is_idempotent(method: &str) -> bool {
@@ -616,19 +635,16 @@ enum Exchange {
 
 /// One request/response on `stream`. A fully read, keep-alive response puts
 /// the connection back in `pool`; a streamed response keeps it until done.
-fn exchange(
-    pool: &ConnPool,
+fn exchange<S: UpstreamIo>(
+    pool: &Pool<S>,
     key: &str,
-    mut stream: TcpStream,
+    mut stream: S,
     request: &Request,
     host: &str,
     client_ip: &str,
     read_timeout: Duration,
 ) -> Exchange {
-    if let Err(e) = stream
-        .set_read_timeout(Some(read_timeout))
-        .and_then(|_| stream.set_write_timeout(Some(Duration::from_secs(10))))
-    {
+    if let Err(e) = stream.set_io_timeouts(read_timeout, Duration::from_secs(10)) {
         return Exchange::Failed(e.to_string());
     }
     // keep_alive = true: ask the backend to hold the connection open.
@@ -690,7 +706,7 @@ enum HeadError {
     Partial(String),
 }
 
-fn read_response_head(stream: &mut TcpStream, tmp: &mut [u8]) -> Result<(Vec<u8>, Vec<u8>), HeadError> {
+fn read_response_head<S: Read>(stream: &mut S, tmp: &mut [u8]) -> Result<(Vec<u8>, Vec<u8>), HeadError> {
     let mut buf: Vec<u8> = Vec::with_capacity(4096);
     loop {
         let n = match stream.read(tmp) {
@@ -772,8 +788,8 @@ fn parse_status_and_headers(header_bytes: &[u8]) -> Result<Response, String> {
 /// `header_bytes` ends with `\r\n\r\n`; `body_prefix` holds any body bytes
 /// that arrived in the same TCP read.  Handles all three body mechanisms
 /// (chunked, content-length, read-to-EOF).  Returns `(full_response_bytes, can_reuse)`.
-fn read_response_from_partial(
-    stream: &mut TcpStream,
+fn read_response_from_partial<S: Read>(
+    stream: &mut S,
     header_bytes: Vec<u8>,
     body_prefix: Vec<u8>,
     tmp: &mut [u8],
@@ -821,7 +837,6 @@ struct Backend {
     port: u16,
     /// Whether the upstream connection should use TLS.
     /// Set when the URL scheme is `https://`, `h2s://`, or `grpcs://`.
-    #[cfg_attr(not(feature = "http2"), allow(dead_code))]
     tls: bool,
 }
 
@@ -982,14 +997,13 @@ async fn forward_h2_async(
 
     if backend.tls {
         use rustls::pki_types::ServerName;
-        use rustls::ClientConfig;
         use std::sync::Arc;
         use tokio_rustls::TlsConnector;
 
         let root_store = rustls::RootCertStore::from_iter(
             webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
         );
-        let mut config = ClientConfig::builder()
+        let mut config = crate::tls_client_builder()
             .with_root_certificates(root_store)
             .with_no_client_auth();
         // Advertise h2 via ALPN so the server selects HTTP/2.

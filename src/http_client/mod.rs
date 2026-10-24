@@ -482,12 +482,11 @@ fn tls_connect(
     tcp: TcpStream,
 ) -> Result<rustls::StreamOwned<rustls::ClientConnection, TcpStream>, HttpClientError> {
     use rustls::pki_types::ServerName;
-    use rustls::ClientConfig;
 
     let root_store =
         rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let config = Arc::new(
-        ClientConfig::builder()
+        crate::tls_client_builder()
             .with_root_certificates(root_store)
             .with_no_client_auth(),
     );
@@ -888,14 +887,13 @@ mod async_impl {
         stream: tokio::net::TcpStream,
     ) -> Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>, HttpClientError> {
         use rustls::pki_types::ServerName;
-        use rustls::ClientConfig;
         use tokio_rustls::TlsConnector;
 
         let root_store = rustls::RootCertStore::from_iter(
             webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
         );
         let config = Arc::new(
-            ClientConfig::builder()
+            crate::tls_client_builder()
                 .with_root_certificates(root_store)
                 .with_no_client_auth(),
         );

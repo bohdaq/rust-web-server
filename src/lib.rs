@@ -193,6 +193,19 @@ pub mod h3_handler;
 #[cfg(test)]
 mod stack_depth_tests;
 
+/// A rustls client-config builder with this crate's crypto provider
+/// (aws-lc-rs) named explicitly. `rustls::ClientConfig::builder()` uses the
+/// process-wide default provider and panics when none is installed and more
+/// than one is compiled in — which happens as soon as any dependency enables
+/// rustls's `ring` backend (e.g. sqlx). Every outbound TLS client in the
+/// crate starts here.
+#[cfg(all(any(feature = "http-client", feature = "http2"), not(target_arch = "wasm32")))]
+pub(crate) fn tls_client_builder() -> rustls::ConfigBuilder<rustls::ClientConfig, rustls::WantsVerifier> {
+    rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
+        .with_safe_default_protocol_versions()
+        .expect("aws-lc-rs supports rustls's default protocol versions")
+}
+
 #[cfg(test)]
 pub mod test_env {
     use std::sync::{Mutex, OnceLock};

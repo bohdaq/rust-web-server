@@ -503,13 +503,13 @@ fn smtp_tls_connect(
     host: &str,
 ) -> Result<rustls::StreamOwned<rustls::ClientConnection, TcpStream>, MailerError> {
     use std::sync::Arc;
-    use rustls::{pki_types::ServerName, ClientConfig, ClientConnection};
+    use rustls::{pki_types::ServerName, ClientConnection};
 
     let root_store = rustls::RootCertStore::from_iter(
         webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
     );
     let config = Arc::new(
-        ClientConfig::builder()
+        crate::tls_client_builder()
             .with_root_certificates(root_store)
             .with_no_client_auth(),
     );
