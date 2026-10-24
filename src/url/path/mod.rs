@@ -16,9 +16,12 @@ pub struct Part {
 }
 
 impl Display for Part {
-    fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
-        println!("{:?} {:?} {:?} {:?}", &self.is_static, &self.name, &self.value, &self.static_pattern);
-        Ok(())
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:?} {:?} {:?} {:?}",
+            &self.is_static, &self.name, &self.value, &self.static_pattern
+        )
     }
 }
 
@@ -117,11 +120,8 @@ impl UrlPath {
 
         let mut url_path = _path.to_string();
         let number_of_parts = parts.len();
-        println!("number_of_parts, {}", number_of_parts);
-
         for (index, part) in parts.iter().enumerate() {
             let part = part;
-            println!("1, {}", part);
             let is_there_next_part = index < number_of_parts - 1;
             if part.is_static {
                 let static_pattern = part.static_pattern.clone().unwrap();
@@ -144,11 +144,8 @@ impl UrlPath {
                     let _part = part.clone();
                     populated_parts.push(_part);
 
-                    println!("2, {}", part);
-
                 } else {
                     let next_part = parts.get(index + 1).unwrap();
-                    println!("3, {}", part);
                     let delimiter = next_part.static_pattern.clone().unwrap().chars().next().unwrap();
                     let occurence = url_path.find(delimiter);
                     if occurence.is_none() {
@@ -162,13 +159,9 @@ impl UrlPath {
                         value: Some(token.clone()),
                         static_pattern: None,
                     };
-                    println!("4, {}", part);
-
                     populated_parts.push(_part.clone());
 
                     url_path = url_path.chars().skip(occurence_place).collect();
-
-                    println!("123")
                 }
             }
         }
@@ -177,8 +170,6 @@ impl UrlPath {
     }
 
     pub fn extract(_path: &str, _pattern: &str) -> Result<HashMap<String, String>, String> {
-        //TODO
-
         let boxed_parts = UrlPath::extract_parts_from_pattern(_pattern);
         if boxed_parts.is_err() {
             return Err(boxed_parts.err().unwrap());
@@ -191,13 +182,10 @@ impl UrlPath {
         let mut previous_part: Option<Part> = None;
         let number_of_parts = parts.len();
         for (index, part) in parts.iter().enumerate() {
-            println!("path: {:?}", path);
-            println!("part: {:?} {:?} {:?}", part.name, part.value, part.static_pattern);
 
             if part.is_static {
                 if previous_part.is_some() {
                     let unboxed_previous_part = previous_part.clone().unwrap();
-                    println!("previous_part: {:?} {:?} {:?}", unboxed_previous_part.name, unboxed_previous_part.value, unboxed_previous_part.static_pattern);
 
                     // read until first char of static pattern
                     // add to map
@@ -207,28 +195,22 @@ impl UrlPath {
 
                     for char in path.clone().chars() {
                         if char == first_char_to_stop {
-                            println!("found {:?}", char);
                             // read the rest of static pattern
                             break;
                         } else {
                             let removed_char = path.remove(0);
                             buffer.push(removed_char);
-                            println!("removed char: {:?}", removed_char);
                         }
                     }
                     let token : String = buffer.iter().collect();
-                    println!("dynamic part {:?}", token);
                     let mut processed_part = previous_part.clone().unwrap();
                     processed_part.value = Some(token);
                     resulting_parts.push(processed_part.clone());
-                    println!("{:?}", processed_part)
                 } else {
                     // read the rest of static pattern
                 }
 
                 let static_pattern = part.static_pattern.clone().unwrap();
-                // println!("static pattern {:?}", static_pattern);
-                // println!("path {:?}", path);
                 path = path.strip_prefix(static_pattern.as_str()).unwrap().to_string();
             } else {
                 // continue, unless the part is last,
@@ -236,11 +218,9 @@ impl UrlPath {
                 if number_of_parts == index + 1 {
                     // let mut buffer = vec![];
 
-                    // println!("!path {:?}", path);
                     let mut processed_part = part.clone();
                     processed_part.value = Some(path.clone());
                     resulting_parts.push(processed_part.clone());
-                    println!("{:?}", processed_part)
                 }
 
             }

@@ -249,3 +249,17 @@ fn extract_v5() {
     let number_of_params = resulting_map.len();
     assert_eq!(0, number_of_params);
 }
+// issue #21: the named-segment code path printed debug output to stdout; it
+// is covered here so matching and extraction keep working silently.
+#[test]
+fn is_matching_and_extract_named_segment_are_silent_and_correct() {
+    let pattern = "/users/[[id]]/posts/[[post_id]]";
+    let path = "/users/42/posts/seven";
+
+    assert!(UrlPath::is_matching(path, pattern).unwrap());
+
+    let params = UrlPath::extract(path, pattern).unwrap();
+    assert_eq!(2, params.len());
+    assert_eq!(Some(&"42".to_string()), params.get("id"));
+    assert_eq!(Some(&"seven".to_string()), params.get("post_id"));
+}
