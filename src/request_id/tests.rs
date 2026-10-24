@@ -1,7 +1,7 @@
 use crate::application::Application;
 use crate::core::New;
 use crate::http::VERSION;
-use crate::middleware::{Middleware, WithMiddleware};
+use crate::middleware::WithMiddleware;
 use crate::request::{METHOD, Request};
 use crate::request_id::{generate_request_id, RequestIdLayer, DEFAULT_HEADER};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};

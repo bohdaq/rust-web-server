@@ -5,11 +5,9 @@ use crate::app::App;
 use crate::application::Application;
 use crate::core::New;
 use crate::http::VERSION;
-use crate::mime_type::MimeType;
 use crate::middleware::{Middleware, WithMiddleware};
-use crate::range::Range;
 use crate::request::{METHOD, Request};
-use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+use crate::response::Response;
 use crate::server::{Address, ConnectionInfo};
 
 fn conn() -> ConnectionInfo {

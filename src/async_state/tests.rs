@@ -11,7 +11,6 @@ use crate::mime_type::MimeType;
 use crate::range::Range;
 use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
-use crate::router::PathParams;
 use crate::server::{Address, ConnectionInfo};
 use crate::server_config::ServerConfig;
 

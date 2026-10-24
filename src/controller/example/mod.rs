@@ -7,8 +7,11 @@ use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
 use crate::symbol::SYMBOL;
 
+// Kept as documentation of the smallest possible Controller impl.
+#[allow(dead_code)]
 pub struct IndexController;
 
+#[allow(dead_code)]
 impl IndexController {
     pub const INDEX_FILEPATH: &'static str = "index.html";
 }

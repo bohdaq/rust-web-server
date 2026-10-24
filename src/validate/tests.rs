@@ -187,7 +187,11 @@ fn validated_422_body_is_json_with_errors_key() {
 #[test]
 fn validated_extraction_error_returns_400_not_422() {
     // BodyText fails on invalid UTF-8 before validation even runs
+    // The wrapped body is never read here; the extractor only proves that
+    // invalid UTF-8 is refused before any validation runs.
+    #[allow(dead_code)]
     struct MustBeUtf8(String);
+
 
     impl FromRequest for MustBeUtf8 {
         fn from_request(req: &Request) -> Result<Self, Response> {
