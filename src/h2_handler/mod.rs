@@ -80,7 +80,7 @@ async fn handle_stream(
     respond: h2::server::SendResponse<Bytes>,
     connection: ConnectionInfo,
     peer_addr: std::net::SocketAddr,
-    app: impl Application,
+    app: impl Application + Send + 'static,
 ) {
     let method = request.method().to_string();
     let uri = request
@@ -128,7 +128,16 @@ async fn handle_stream(
         body,
     };
 
-    let rws_response = match app.execute(&rws_request, &connection) {
+    let (rws_request, result) =
+        match crate::server::http1_async::execute_blocking(app, rws_request, connection).await {
+            Ok(done) => done,
+            Err(e) => {
+                eprintln!("Handler panicked on H2 stream: {}", e);
+                send_error_response(respond, StatusCode::INTERNAL_SERVER_ERROR);
+                return;
+            }
+        };
+    let rws_response = match result {
         Ok(r) => r,
         Err(message) => {
             eprintln!("App error on H2 stream: {}", message);
@@ -144,10 +153,21 @@ async fn handle_stream(
 
     Log::log_access(&rws_request, &rws_response, &peer_addr);
 
-    send_h2_response(respond, rws_response);
+    let is_head = rws_request.method == crate::request::METHOD.head;
+    send_h2_response(respond, rws_response, is_head).await;
 }
 
-fn send_h2_response(mut respond: h2::server::SendResponse<Bytes>, mut rws_response: Response) {
+async fn send_h2_response(
+    mut respond: h2::server::SendResponse<Bytes>,
+    mut rws_response: Response,
+    is_head: bool,
+) {
+    // stream_file / stream_pipe bodies: produced in chunks, sent below.
+    let mut streamed_body = crate::server::body_stream::spawn_producer(&mut rws_response);
+    if is_head {
+        streamed_body = None;
+    }
+
     // Promote Content-Type, Content-Length (and Content-Range on 206) from content_range_list
     // into response headers, mirroring what Response::generate_response() does for HTTP/1.1.
     if rws_response.content_range_list.len() == 1 {
@@ -196,7 +216,7 @@ fn send_h2_response(mut respond: h2::server::SendResponse<Bytes>, mut rws_respon
     }
 
     let body = Response::generate_body(rws_response.content_range_list);
-    let end_stream = body.is_empty();
+    let end_stream = (body.is_empty() || is_head) && streamed_body.is_none();
 
     let h2_response = match builder.body(()) {
         Ok(r) => r,
@@ -208,7 +228,25 @@ fn send_h2_response(mut respond: h2::server::SendResponse<Bytes>, mut rws_respon
 
     match respond.send_response(h2_response, end_stream) {
         Ok(mut send_stream) => {
-            if !body.is_empty() {
+            if let Some(mut chunks) = streamed_body {
+                while let Some(chunk) = chunks.recv().await {
+                    let chunk = match chunk {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("H2 streaming body error: {}", e);
+                            send_stream.send_reset(h2::Reason::INTERNAL_ERROR);
+                            return;
+                        }
+                    };
+                    if let Err(e) = send_with_flow_control(&mut send_stream, Bytes::from(chunk)).await {
+                        eprintln!("H2 send data error: {}", e);
+                        return;
+                    }
+                }
+                if let Err(e) = send_stream.send_data(Bytes::new(), true) {
+                    eprintln!("H2 send data error: {}", e);
+                }
+            } else if !end_stream {
                 if let Err(e) = send_stream.send_data(Bytes::from(body), true) {
                     eprintln!("H2 send data error: {}", e);
                 }
@@ -216,6 +254,29 @@ fn send_h2_response(mut respond: h2::server::SendResponse<Bytes>, mut rws_respon
         }
         Err(e) => eprintln!("H2 send response error: {}", e),
     }
+}
+
+/// Send `data` within the peer's flow-control window: reserve capacity, wait
+/// until some is granted, send that much, repeat. Without this, `send_data`
+/// buffers everything — a whole large file — in memory.
+async fn send_with_flow_control(
+    send_stream: &mut h2::SendStream<Bytes>,
+    mut data: Bytes,
+) -> Result<(), String> {
+    while !data.is_empty() {
+        send_stream.reserve_capacity(data.len());
+        let granted = match std::future::poll_fn(|cx| send_stream.poll_capacity(cx)).await {
+            Some(Ok(n)) => n,
+            Some(Err(e)) => return Err(e.to_string()),
+            None => return Err("stream closed".to_string()),
+        };
+        if granted == 0 {
+            continue;
+        }
+        let part = data.split_to(granted.min(data.len()));
+        send_stream.send_data(part, false).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 fn send_error_response(mut respond: h2::server::SendResponse<Bytes>, status: StatusCode) {

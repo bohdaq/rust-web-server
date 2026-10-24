@@ -2,6 +2,10 @@
 pub mod tests;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod example;
+#[cfg(feature = "http2")]
+pub(crate) mod http1_async;
+#[cfg(feature = "http2")]
+pub(crate) mod body_stream;
 
 // The TCP/thread-pool accept loop below (`Server::setup`/`run`/`process`/…) needs
 // `std::net::TcpListener` and OS threads, neither available on `wasm32-wasip2`.
@@ -335,7 +339,8 @@ impl Server {
                 }
             } else {
                 let raw_response = Response::generate_response(response, request);
-                if let Err(e) = stream.write(raw_response.borrow()) {
+                // write_all: a single write() may accept only part of a large response.
+                if let Err(e) = stream.write_all(raw_response.borrow()) {
                     return Err(e.to_string());
                 }
                 stream.flush().unwrap();
@@ -781,7 +786,8 @@ impl Server {
 
         if cert_path.is_empty() || key_path.is_empty() {
             println!("No TLS certificate configured — serving plain HTTP/1.1.");
-            tokio::task::block_in_place(|| Server::run(listener, pool, app));
+            drop(pool);
+            Server::run_plain(listener, app).await;
             return;
         }
 
@@ -810,8 +816,14 @@ impl Server {
                             let acceptor = tls_acceptor.clone();
                             let app = app.clone();
                             tokio::spawn(async move {
-                                match acceptor.accept(tcp_stream).await {
-                                    Ok(tls_stream) => {
+                                let handshake = tokio::time::timeout(
+                                    http1_async::TLS_HANDSHAKE_TIMEOUT,
+                                    acceptor.accept(tcp_stream),
+                                );
+                                match handshake.await {
+                                    Err(_) => {} // client never finished the handshake
+                                    Ok(Err(e)) => eprintln!("TLS handshake failed: {}", e),
+                                    Ok(Ok(tls_stream)) => {
                                         let server_conn = tls_stream.get_ref().1;
                                         let sni = server_conn.server_name().map(|s| s.to_string());
                                         let protocol = server_conn
@@ -828,15 +840,16 @@ impl Server {
                                                 }
                                             }
                                             _ => {
-                                                if let Err(e) =
-                                                    Server::process_h1_tls(tls_stream, peer_addr, sni, app).await
-                                                {
+                                                crate::metrics::connection_open();
+                                                let result = http1_async::serve(tls_stream, peer_addr, sni, true, app).await;
+                                                crate::metrics::connection_close();
+                                                if let Err(e) = result {
+                                                    crate::metrics::record_error();
                                                     eprintln!("H1 TLS error: {}", e);
                                                 }
                                             }
                                         }
                                     }
-                                    Err(e) => eprintln!("TLS handshake failed: {}", e),
                                 }
                             });
                         }
@@ -860,6 +873,57 @@ impl Server {
                         tls_acceptor = new_acceptor;
                         println!("[TLS] Certificates reloaded ({} virtual hosts).", vhosts.len());
                     }
+                }
+            }
+        }
+    }
+
+    /// Plain-HTTP accept loop of the async builds (used by `run_tls` when no
+    /// certificate is configured): one tokio task per connection via
+    /// `http1_async::serve`, so idle or slow clients can't exhaust a thread
+    /// pool. An accept error (e.g. out of file descriptors) backs off briefly
+    /// and keeps serving instead of ending the loop.
+    pub async fn run_plain(listener: TcpListener, app: impl Application + Send + 'static + Clone) {
+        listener
+            .set_nonblocking(true)
+            .expect("failed to set TCP listener to non-blocking");
+        let tokio_listener = tokio::net::TcpListener::from_std(listener)
+            .expect("failed to convert TCP listener to tokio");
+
+        loop {
+            tokio::select! {
+                result = tokio_listener.accept() => {
+                    match result {
+                        Ok((tcp_stream, peer_addr)) => {
+                            let app = app.clone();
+                            tokio::spawn(async move {
+                                crate::metrics::connection_open();
+                                let result = http1_async::serve(tcp_stream, peer_addr, None, false, app).await;
+                                crate::metrics::connection_close();
+                                if let Err(e) = result {
+                                    crate::metrics::record_error();
+                                    eprintln!("{}", e);
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            eprintln!("TCP accept error: {}", e);
+                            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                        }
+                    }
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+                    println!("\nShutting down gracefully (SIGINT).");
+                    break;
+                }
+                _ = sigterm() => {
+                    crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+                    println!("\nShutting down gracefully (SIGTERM).");
+                    break;
+                }
+                _ = sighup() => {
+                    crate::config_reload::reload();
                 }
             }
         }
@@ -992,136 +1056,6 @@ impl Server {
         let _ = stream.write_all(response.as_bytes()).await;
     }
 
-    async fn process_h1_tls(
-        mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
-        peer_addr: std::net::SocketAddr,
-        sni_hostname: Option<String>,
-        app: impl Application,
-    ) -> Result<(), String> {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let (server_ip, server_port, _) = get_ip_port_thread_count();
-        let request_allocation_size = get_request_allocation_size();
-
-        let mut buffer = vec![0u8; request_allocation_size as usize];
-        let n = match stream.read(&mut buffer).await {
-            Ok(n) => n,
-            Err(e) => {
-                let raw = Server::bad_request_response(e.to_string());
-                let _ = stream.write_all(&raw).await;
-                return Ok(());
-            }
-        };
-
-        // Trim to the bytes actually read — passing the zero-padded rest of
-        // `buffer` to Request::parse would append trailing NUL bytes to the body.
-        let mut request = match Request::parse(&buffer[..n]) {
-            Ok(r) => r,
-            Err(message) => {
-                let raw = Server::bad_request_response(message);
-                let _ = stream.write_all(&raw).await;
-                return Ok(());
-            }
-        };
-
-        // RFC 9110 §10.1.1 `Expect` — the only expectation this server
-        // understands is `100-continue`; anything else fails fast with a
-        // final status instead of reading a body we can't act on.
-        let expects_continue = match request.get_header(Header::_EXPECT.to_string()) {
-            Some(h) if h.value.trim().eq_ignore_ascii_case("100-continue") => true,
-            Some(h) => {
-                let raw = Server::expectation_failed_response(format!(
-                    "417 Expectation Failed: unsupported Expect value '{}'", h.value.trim()
-                ));
-                let _ = stream.write_all(&raw).await;
-                return Ok(());
-            }
-            None => false,
-        };
-
-        // If Content-Length declares more body than this one read delivered,
-        // keep reading until it's fully received — a single `request_allocation_size`
-        // read is not big enough for bodies larger than that buffer.
-        if let Some(declared_len) = request
-            .get_header(Header::_CONTENT_LENGTH.to_string())
-            .and_then(|h| h.value.trim().parse::<u64>().ok())
-        {
-            let max_body_size = crate::entry_point::get_max_body_size();
-            if max_body_size > 0 && declared_len > max_body_size {
-                let raw = Server::payload_too_large_response(format!(
-                    "413 Payload Too Large: declared Content-Length {} exceeds the {} byte limit",
-                    declared_len, max_body_size
-                ));
-                let _ = stream.write_all(&raw).await;
-                return Ok(());
-            }
-
-            // Tell the client to go ahead and send the body now, before we
-            // block waiting for it below.
-            if expects_continue {
-                let raw = Server::continue_response();
-                if stream.write_all(&raw).await.is_err() {
-                    return Ok(());
-                }
-            }
-
-            while (request.body.len() as u64) < declared_len {
-                let mut more = vec![0u8; request_allocation_size as usize];
-                match stream.read(&mut more).await {
-                    Ok(0) | Err(_) => break, // peer closed early; proceed with the short body
-                    Ok(k) => request.body.extend_from_slice(&more[..k]),
-                }
-            }
-        }
-
-        let connection = ConnectionInfo {
-            client: Address {
-                ip: peer_addr.ip().to_string(),
-                port: peer_addr.port() as i32,
-            },
-            server: Address {
-                ip: server_ip,
-                port: server_port,
-            },
-            request_size: request_allocation_size,
-            sni_hostname,
-        };
-
-        let mut response = match app.execute(&request, &connection) {
-            Ok(r) => r,
-            Err(message) => {
-                let raw = Server::bad_request_response(message);
-                let _ = stream.write_all(&raw).await;
-                return Ok(());
-            }
-        };
-
-        crate::metrics::record_request();
-        crate::compression::apply_gzip(&request, &mut response);
-        response.headers.push(Header::get_hsts_header());
-
-        #[cfg(feature = "http3")]
-        response.headers.push(Header {
-            name: Header::_ALT_SVC.to_string(),
-            value: format!("h3=\":{}\"", server_port),
-        });
-        #[cfg(not(feature = "http3"))]
-        response.headers.push(Header {
-            name: Header::_ALT_SVC.to_string(),
-            value: format!("h2=\":{}\"", server_port),
-        });
-
-        Log::log_access(&request, &response, &peer_addr);
-
-        let raw = Response::generate_response(response, request);
-        stream
-            .write_all(&raw)
-            .await
-            .map_err(|e| e.to_string())?;
-        stream.flush().await.map_err(|e| e.to_string())?;
-
-        Ok(())
-    }
 }
 
 #[cfg(feature = "http3")]

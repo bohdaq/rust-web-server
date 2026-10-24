@@ -80,7 +80,7 @@ async fn handle_stream(
     mut stream: h3::server::RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>,
     connection: ConnectionInfo,
     peer_addr: std::net::SocketAddr,
-    app: impl Application,
+    app: impl Application + Send + 'static,
 ) {
     let method = request.method().to_string();
     let uri = request
@@ -127,7 +127,16 @@ async fn handle_stream(
         body,
     };
 
-    let rws_response = match app.execute(&rws_request, &connection) {
+    let (rws_request, result) =
+        match crate::server::http1_async::execute_blocking(app, rws_request, connection).await {
+            Ok(done) => done,
+            Err(e) => {
+                eprintln!("Handler panicked on H3 stream: {}", e);
+                send_error_response(stream, StatusCode::INTERNAL_SERVER_ERROR).await;
+                return;
+            }
+        };
+    let rws_response = match result {
         Ok(r) => r,
         Err(message) => {
             eprintln!("App error on H3 stream: {}", message);
@@ -143,13 +152,22 @@ async fn handle_stream(
 
     Log::log_access(&rws_request, &rws_response, &peer_addr);
 
-    send_h3_response(stream, rws_response).await;
+    let is_head = rws_request.method == crate::request::METHOD.head;
+    send_h3_response(stream, rws_response, is_head).await;
 }
 
 async fn send_h3_response(
     mut stream: h3::server::RequestStream<h3_quinn::BidiStream<Bytes>, Bytes>,
     mut rws_response: Response,
+    is_head: bool,
 ) {
+    // stream_file / stream_pipe bodies: produced in chunks, sent below.
+    let streamed_body = if is_head {
+        None
+    } else {
+        crate::server::body_stream::spawn_producer(&mut rws_response)
+    };
+
     // Promote Content-Type, Content-Length (and Content-Range on 206) from content_range_list into headers,
     // mirroring what Response::generate_response() does for HTTP/1.1.
     if rws_response.content_range_list.len() == 1 {
@@ -210,11 +228,28 @@ async fn send_h3_response(
         return;
     }
 
-    let body = Response::generate_body(rws_response.content_range_list);
-    if !body.is_empty() {
-        if let Err(e) = stream.send_data(Bytes::from(body)).await {
-            eprintln!("H3 send data error: {}", e);
-            return;
+    if let Some(mut chunks) = streamed_body {
+        // send_data awaits QUIC flow control, so memory stays bounded.
+        while let Some(chunk) = chunks.recv().await {
+            let chunk = match chunk {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("H3 streaming body error: {}", e);
+                    return;
+                }
+            };
+            if let Err(e) = stream.send_data(Bytes::from(chunk)).await {
+                eprintln!("H3 send data error: {}", e);
+                return;
+            }
+        }
+    } else {
+        let body = Response::generate_body(rws_response.content_range_list);
+        if !body.is_empty() && !is_head {
+            if let Err(e) = stream.send_data(Bytes::from(body)).await {
+                eprintln!("H3 send data error: {}", e);
+                return;
+            }
         }
     }
 

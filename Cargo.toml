@@ -108,6 +108,10 @@ rand_core = { version = "0.6", features = ["getrandom"], optional = true }
 aes-gcm   = { version = "0.10", optional = true }
 regex     = { version = "1", optional = true }
 
+[dev-dependencies]
+# test-util: tokio::time::pause for timeout tests (src/server/http1_async.rs).
+tokio = { version = "1", features = ["test-util", "macros", "rt"] }
+
 # rustls's own "aws-lc-rs" crypto-backend feature compiles C/asm (aws-lc-sys)
 # that doesn't build for wasm32-wasip2 — moved to a native-only target table
 # so enabling `http-client` (and therefore `sso`/`secrets`/`storage-s3`/

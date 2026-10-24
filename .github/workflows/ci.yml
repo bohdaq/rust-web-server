@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, h2spec]
+        check: [acme-pebble, h2spec, slow-clients]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -83,6 +83,9 @@ jobs:
           gh release download v2.6.0 --repo summerwind/h2spec --pattern 'h2spec_linux_amd64.tar.gz' --dir "$RUNNER_TEMP"
           tar xzf "$RUNNER_TEMP/h2spec_linux_amd64.tar.gz" -C "$RUNNER_TEMP"
           ci/e2e/h2spec.sh target/debug/rws "$RUNNER_TEMP/h2spec"
+      - name: Idle / slow clients can't starve the server
+        if: matrix.check == 'slow-clients'
+        run: ci/e2e/slow_clients.sh target/debug/rws
 
   # Every parser that sees untrusted input — see fuzz/README.md. 30 s per
   # target on push; 10 minutes each in the weekly scheduled run.
