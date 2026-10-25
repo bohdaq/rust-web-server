@@ -488,7 +488,10 @@ async fn write_file_inline<S: AsyncWrite + Unpin>(
 
     let (head, _) = Server::stream_file_head(std::mem::replace(response, Response::new()));
     stream.write_all(&head).await.map_err(|e| e.to_string())?;
-    let mut buffer = vec![0u8; INLINE_FILE_CHUNK.min(len as usize)];
+    let chunk = INLINE_FILE_CHUNK.min(len as usize);
+    let mut backing = vec![0u8; chunk + 4096];
+    let start = mid_page_offset(backing.as_ptr());
+    let buffer = &mut backing[start..start + chunk];
     let mut offset = 0u64;
     while offset < len {
         let want = buffer.len().min((len - offset) as usize);
@@ -502,6 +505,17 @@ async fn write_file_inline<S: AsyncWrite + Unpin>(
     }
     stream.flush().await.map_err(|e| e.to_string())?;
     Ok(true)
+}
+
+/// Where in an allocation at `base` a buffer handed to rustls should
+/// start: half a page from a page boundary. rustls copies each 16 KiB record
+/// of plaintext into a fresh buffer 5 bytes past its start; with our buffer
+/// page-aligned too, source and destination are 5 bytes apart modulo 4 KiB,
+/// which AMD Zen 3's `rep movsb` (glibc's memcpy at that size) runs at
+/// 2.8 instead of 40 GB/s — two thirds of a 1 MiB TLS download's CPU on the
+/// EPYC 7763 benchmark runners. Half a page apart is fast on every CPU.
+fn mid_page_offset(base: *const u8) -> usize {
+    (2048 + 4096 - (base as usize % 4096)) % 4096
 }
 
 #[cfg(not(unix))]
@@ -766,6 +780,15 @@ mod tests {
             rest = &rest[head_end + content.len()..];
         }
         assert!(rest.is_empty(), "{} trailing bytes", rest.len());
+    }
+
+    #[test]
+    fn inline_file_buffer_starts_mid_page() {
+        for base in [0usize, 1, 5, 2048, 4095, 4096, 12_345] {
+            let start = super::mid_page_offset(base as *const u8);
+            assert!(start < 4096);
+            assert_eq!(2048, (base + start) % 4096, "base {base}");
+        }
     }
 
     /// A file shorter than the promised `Content-Length` ends the
