@@ -241,36 +241,29 @@ async fn send_h2_response(
     let status = StatusCode::from_u16(rws_response.status_code as u16)
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
 
-    let mut builder = http::Response::builder().status(status);
-
-    for header in &rws_response.headers {
+    // Sized once; names and values moved or borrowed rather than copied —
+    // building the map from `from_bytes`/`from_str` was an allocation or two
+    // per header, about 30 per response.
+    let mut headers = http::HeaderMap::with_capacity(rws_response.headers.len());
+    for header in std::mem::take(&mut rws_response.headers) {
         if FORBIDDEN_H2_RESPONSE_HEADERS.iter().any(|f| header.name.eq_ignore_ascii_case(f)) {
             continue;
         }
-        match (
-            http::header::HeaderName::from_bytes(header.name.as_bytes()),
-            http::header::HeaderValue::from_str(&header.value),
-        ) {
-            (Ok(name), Ok(mut value)) => {
-                if changes_every_response(&header.name) {
-                    value.set_sensitive(true);
-                }
-                builder = builder.header(name, value);
+        let sensitive = changes_every_response(&header.name);
+        if let (Some(name), Some(mut value)) = (h2_header_name(header.name), h2_header_value(header.value)) {
+            if sensitive {
+                value.set_sensitive(true);
             }
-            _ => {}
+            headers.append(name, value);
         }
     }
 
     let body = Response::generate_body(rws_response.content_range_list);
     let end_stream = (body.is_empty() || is_head) && streamed_body.is_none();
 
-    let h2_response = match builder.body(()) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Failed to build H2 response: {}", e);
-            return;
-        }
-    };
+    let mut h2_response = http::Response::new(());
+    *h2_response.status_mut() = status;
+    *h2_response.headers_mut() = headers;
 
     match respond.send_response(h2_response, end_stream) {
         Ok(mut send_stream) => {
@@ -319,6 +312,50 @@ fn changes_every_response(name: &str) -> bool {
     .any(|volatile| name.eq_ignore_ascii_case(volatile))
 }
 
+/// An rws header name as an `http` one: a borrowed (`&'static`) name is
+/// parsed once per thread (up to 64 of them) and cloned after that — a
+/// standard name is a table entry, a custom one shares its lower-cased
+/// bytes instead of copying them again; an owned name is parsed as before.
+/// `None` for an invalid name.
+fn h2_header_name(name: std::borrow::Cow<'static, str>) -> Option<http::header::HeaderName> {
+    use std::cell::RefCell;
+    thread_local! {
+        static PARSED: RefCell<Vec<(&'static str, http::header::HeaderName)>> = const { RefCell::new(Vec::new()) };
+    }
+    const PARSED_CAP: usize = 64;
+    match name {
+        std::borrow::Cow::Borrowed(name) => {
+            let cached = PARSED.with(|c| {
+                c.borrow().iter().find(|(n, _)| std::ptr::eq(*n, name)).map(|(_, h)| h.clone())
+            });
+            if cached.is_some() {
+                return cached;
+            }
+            let parsed = http::header::HeaderName::from_bytes(name.as_bytes()).ok()?;
+            PARSED.with(|c| {
+                let mut c = c.borrow_mut();
+                if c.len() < PARSED_CAP {
+                    c.push((name, parsed.clone()));
+                }
+            });
+            Some(parsed)
+        }
+        std::borrow::Cow::Owned(name) => http::header::HeaderName::from_bytes(name.as_bytes()).ok(),
+    }
+}
+
+/// An rws header value as an `http` one, validated the same way
+/// (`HeaderValue::from_str`'s rules: visible ASCII, space, tab, obs-text),
+/// without copying: a `&'static str` is wrapped, a `String`'s buffer moved.
+/// `None` for an invalid value.
+fn h2_header_value(value: std::borrow::Cow<'static, str>) -> Option<http::header::HeaderValue> {
+    let bytes = match value {
+        std::borrow::Cow::Borrowed(v) => Bytes::from_static(v.as_bytes()),
+        std::borrow::Cow::Owned(v) => Bytes::from(v),
+    };
+    http::header::HeaderValue::from_maybe_shared(bytes).ok()
+}
+
 /// Send `data` within the peer's flow-control window: reserve capacity, wait
 /// until some is granted, send that much, repeat. Without this, `send_data`
 /// buffers everything — a whole large file — in memory.
@@ -348,4 +385,37 @@ fn send_error_response(mut respond: h2::server::SendResponse<Bytes>, status: Sta
         Err(_) => return,
     };
     let _ = respond.send_response(response, true);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{h2_header_name, h2_header_value};
+    use std::borrow::Cow;
+
+    #[test]
+    fn header_names_match_from_bytes_and_borrowed_ones_are_reused() {
+        for name in ["Content-Type", "Date-Unix-Epoch-Nanos", "x-custom"] {
+            let expected = http::header::HeaderName::from_bytes(name.as_bytes()).unwrap();
+            assert_eq!(expected, h2_header_name(Cow::Borrowed(name)).unwrap());
+            // Second time from the per-thread cache: same result.
+            assert_eq!(expected, h2_header_name(Cow::Borrowed(name)).unwrap());
+            assert_eq!(expected, h2_header_name(Cow::Owned(name.to_string())).unwrap());
+        }
+        assert!(h2_header_name(Cow::Borrowed("bad name")).is_none());
+        assert!(h2_header_name(Cow::Owned(String::new())).is_none());
+    }
+
+    #[test]
+    fn header_values_follow_from_str_rules() {
+        for value in ["nosniff", "a\tb", "caf\u{e9}", "", "  spaced  "] {
+            let expected = http::header::HeaderValue::from_str(value).ok();
+            assert_eq!(expected, h2_header_value(Cow::Borrowed(value)), "{value:?}");
+            assert_eq!(expected, h2_header_value(Cow::Owned(value.to_string())), "{value:?}");
+        }
+        for bad in ["line\nbreak", "cr\r", "nul\0", "del\u{7f}"] {
+            assert!(http::header::HeaderValue::from_str(bad).is_err());
+            assert!(h2_header_value(Cow::Borrowed(bad)).is_none(), "{bad:?}");
+            assert!(h2_header_value(Cow::Owned(bad.to_string())).is_none(), "{bad:?}");
+        }
+    }
 }
