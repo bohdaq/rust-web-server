@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 use std::fs::{File, metadata};
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::io::{BufReader, Read};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use file_ext::FileExt;
 use crate::header::Header;

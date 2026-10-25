@@ -494,14 +494,14 @@ impl Server {
         let status = [
             response.http_version.clone(),
             response.status_code.to_string(),
-            response.reason_phrase.clone(),
+            Header::single_line(&response.reason_phrase).into_owned(),
         ].join(SYMBOL.whitespace);
 
         let mut headers_str = SYMBOL.new_line_carriage_return.to_string();
         for header in &response.headers {
-            headers_str.push_str(&header.name);
+            headers_str.push_str(&Header::single_line(&header.name));
             headers_str.push_str(Header::NAME_VALUE_SEPARATOR);
-            headers_str.push_str(&header.value);
+            headers_str.push_str(&Header::single_line(&header.value));
             headers_str.push_str(SYMBOL.new_line_carriage_return);
         }
         let head = format!("{}{}{}", status, headers_str, SYMBOL.new_line_carriage_return);
@@ -540,14 +540,14 @@ impl Server {
         let status = [
             response.http_version.clone(),
             response.status_code.to_string(),
-            response.reason_phrase.clone(),
+            Header::single_line(&response.reason_phrase).into_owned(),
         ].join(SYMBOL.whitespace);
 
         let mut head = format!("{}\r\n", status);
         for header in &response.headers {
-            head.push_str(&header.name);
+            head.push_str(&Header::single_line(&header.name));
             head.push_str(Header::NAME_VALUE_SEPARATOR);
-            head.push_str(&header.value);
+            head.push_str(&Header::single_line(&header.value));
             head.push_str(SYMBOL.new_line_carriage_return);
         }
         head.push_str(SYMBOL.new_line_carriage_return);

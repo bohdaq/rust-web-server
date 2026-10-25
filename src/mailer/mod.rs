@@ -449,6 +449,13 @@ fn smtp_deliver<S: Read + Write>(
     from: &str,
     email: &Email,
 ) -> Result<(), MailerError> {
+    // An address goes into an SMTP command line: one with CR, LF or angle
+    // brackets could end the command and inject others (#47).
+    for addr in std::iter::once(&from.to_string()).chain(email.to.iter()).chain(email.cc.iter()).chain(email.bcc.iter()) {
+        if !smtp_address_ok(addr) {
+            return Err(MailerError::Build(format!("invalid email address: {:?}", addr)));
+        }
+    }
     conn.cmd(&format!("MAIL FROM:<{from}>"))?;
     conn.expect(250)?;
 
@@ -520,6 +527,11 @@ fn smtp_tls_connect(
     Ok(rustls::StreamOwned::new(conn, tcp))
 }
 
+/// An address that can go into `MAIL FROM:<…>` / `RCPT TO:<…>` as is.
+pub(crate) fn smtp_address_ok(addr: &str) -> bool {
+    !addr.is_empty() && !addr.contains(['\r', '\n', '<', '>', '\0'])
+}
+
 // ── RFC 5322 message builder ───────────────────────────────────────────────────
 
 /// Build a minimal RFC 5322 message string (headers + blank line + body).
@@ -527,14 +539,17 @@ fn smtp_tls_connect(
 pub(crate) fn build_message(from: &str, email: &Email) -> String {
     let mut msg = String::new();
 
-    msg.push_str(&format!("From: {from}\r\n"));
-    msg.push_str(&format!("To: {}\r\n", email.to.join(", ")));
+    // Header values on one line each (#47): a CR/LF in a subject or
+    // address would start a new header (Bcc: injection).
+    use crate::header::Header;
+    msg.push_str(&format!("From: {}\r\n", Header::single_line(from)));
+    msg.push_str(&format!("To: {}\r\n", Header::single_line(&email.to.join(", "))));
     if !email.cc.is_empty() {
-        msg.push_str(&format!("Cc: {}\r\n", email.cc.join(", ")));
+        msg.push_str(&format!("Cc: {}\r\n", Header::single_line(&email.cc.join(", "))));
     }
-    msg.push_str(&format!("Subject: {}\r\n", email.subject));
+    msg.push_str(&format!("Subject: {}\r\n", Header::single_line(&email.subject)));
     if let Some(ref rt) = email.reply_to {
-        msg.push_str(&format!("Reply-To: {rt}\r\n"));
+        msg.push_str(&format!("Reply-To: {}\r\n", Header::single_line(rt)));
     }
     msg.push_str("MIME-Version: 1.0\r\n");
 

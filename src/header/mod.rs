@@ -151,6 +151,19 @@ impl Header {
 
     pub const NAME_VALUE_SEPARATOR: &'static str = ": ";
 
+    /// `s` safe to write on one header line: CR and LF become spaces
+    /// (borrowed when there are none). Every HTTP/1.1 writer passes header
+    /// names, values and the reason phrase through it, so a value carrying
+    /// user input (a redirect target, an upstream header) can't end the line
+    /// and inject headers or a second response (#47).
+    pub fn single_line(s: &str) -> std::borrow::Cow<'_, str> {
+        if s.contains(['\r', '\n']) {
+            std::borrow::Cow::Owned(s.replace(['\r', '\n'], " "))
+        } else {
+            std::borrow::Cow::Borrowed(s)
+        }
+    }
+
     pub const _DO_NOT_STORE_CACHE: &'static str = "no-store, no-cache, private, max-age=0, must-revalidate, proxy-revalidate";
 
 
