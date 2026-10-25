@@ -86,3 +86,19 @@ fn entries_from_many_threads_merge_in_order_and_respect_capacity() {
         assert!(mine.windows(2).all(|w| w[0] < w[1]), "thread {t}: {mine:?}");
     }
 }
+
+// Once a shard is full its oldest entry is reused in place: the values
+// must be the new ones, the order oldest-first, the size bounded.
+#[test]
+fn full_shard_reuses_the_oldest_entry() {
+    let log = RequestLog::new(3);
+    for i in 0..10u64 {
+        log.record(i, if i % 2 == 0 { "GET" } else { "POST" }, &format!("/p{i}"), 200 + i as i16, "10.0.0.9", i);
+    }
+    let recent = log.recent(10);
+    assert_eq!(3, recent.len());
+    let paths: Vec<&str> = recent.iter().map(|e| e.path.as_str()).collect();
+    assert_eq!(vec!["/p7", "/p8", "/p9"], paths);
+    assert_eq!(("POST", 207, 7, 7), (recent[0].method.as_str(), recent[0].status, recent[0].timestamp, recent[0].latency_ms));
+    assert_eq!("GET", recent[1].method);
+}

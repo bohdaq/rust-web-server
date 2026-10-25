@@ -24,6 +24,7 @@
 #[cfg(test)]
 mod tests;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use crate::application::Application;
@@ -36,11 +37,15 @@ use crate::server::ConnectionInfo;
 /// A thread-safe list of blocked IPv4 addresses.
 pub struct Blocklist {
     denied: Mutex<Vec<String>>,
+    /// `denied.len()`, kept under its lock: with nothing blocked (the usual
+    /// case) `is_blocked` takes no lock — it was a process-wide mutex taken
+    /// on every request by `BlocklistLayer`.
+    count: AtomicUsize,
 }
 
 impl Blocklist {
     fn new() -> Self {
-        Blocklist { denied: Mutex::new(Vec::new()) }
+        Blocklist { denied: Mutex::new(Vec::new()), count: AtomicUsize::new(0) }
     }
 
     /// Add `ip` to the blocklist. No-op if already present.
@@ -49,15 +54,21 @@ impl Blocklist {
         if !guard.iter().any(|e| e == ip) {
             guard.push(ip.to_string());
         }
+        self.count.store(guard.len(), Ordering::Relaxed);
     }
 
     /// Remove `ip` from the blocklist. No-op if not present.
     pub fn unblock(&self, ip: &str) {
-        self.denied.lock().unwrap().retain(|e| e != ip);
+        let mut guard = self.denied.lock().unwrap();
+        guard.retain(|e| e != ip);
+        self.count.store(guard.len(), Ordering::Relaxed);
     }
 
     /// `true` if `ip` is currently blocked.
     pub fn is_blocked(&self, ip: &str) -> bool {
+        if self.count.load(Ordering::Relaxed) == 0 {
+            return false;
+        }
         self.denied.lock().unwrap().iter().any(|e| e == ip)
     }
 
@@ -68,7 +79,9 @@ impl Blocklist {
 
     /// Remove all entries.
     pub fn clear(&self) {
-        self.denied.lock().unwrap().clear();
+        let mut guard = self.denied.lock().unwrap();
+        guard.clear();
+        self.count.store(0, Ordering::Relaxed);
     }
 }
 

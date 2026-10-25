@@ -41,3 +41,21 @@ fn clear() {
     bl.clear();
     assert!(bl.list().is_empty());
 }
+
+// is_blocked skips the lock while nothing is blocked; the count must
+// follow every change.
+#[test]
+fn lock_free_empty_check_tracks_block_unblock_and_clear() {
+    let list = Blocklist::new();
+    assert!(!list.is_blocked("10.0.0.1"));
+    list.block("10.0.0.1");
+    list.block("10.0.0.1");
+    list.block("10.0.0.2");
+    assert!(list.is_blocked("10.0.0.1") && list.is_blocked("10.0.0.2"));
+    list.unblock("10.0.0.1");
+    assert!(!list.is_blocked("10.0.0.1") && list.is_blocked("10.0.0.2"));
+    list.clear();
+    assert!(!list.is_blocked("10.0.0.2"));
+    list.block("10.0.0.3");
+    assert!(list.is_blocked("10.0.0.3"));
+}

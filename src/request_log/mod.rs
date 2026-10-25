@@ -76,12 +76,39 @@ impl RequestLog {
         }
     }
 
+    #[cfg(test)]
     fn push(&self, entry: LogEntry) {
+        self.record(entry.timestamp, &entry.method, &entry.path, entry.status, &entry.client_ip, entry.latency_ms);
+    }
+
+    /// Append one entry. A full shard reuses its oldest entry's strings, so
+    /// the steady state (every request once `capacity` is reached) allocates
+    /// nothing — it was three `String`s allocated and three freed per request.
+    fn record(&self, timestamp: u64, method: &str, path: &str, status: i16, client_ip: &str, latency_ms: u64) {
         let seq = self.sequence.fetch_add(1, Ordering::Relaxed);
         let mut shard = self.shards[shard_index()].lock().unwrap_or_else(|e| e.into_inner());
-        if shard.len() >= self.capacity {
-            shard.pop_front();
-        }
+        let entry = if shard.len() >= self.capacity {
+            shard.pop_front().map(|(_, mut old)| {
+                for (field, value) in [(&mut old.method, method), (&mut old.path, path), (&mut old.client_ip, client_ip)] {
+                    field.clear();
+                    field.push_str(value);
+                }
+                old.timestamp = timestamp;
+                old.status = status;
+                old.latency_ms = latency_ms;
+                old
+            })
+        } else {
+            None
+        };
+        let entry = entry.unwrap_or_else(|| LogEntry {
+            timestamp,
+            method: method.to_string(),
+            path: path.to_string(),
+            status,
+            client_ip: client_ip.to_string(),
+            latency_ms,
+        });
         shard.push_back((seq, entry));
     }
 
@@ -151,16 +178,8 @@ impl Middleware for LogLayer {
             Ok(r) => r.status_code,
             Err(_) => 500,
         };
-        let path = request.request_uri.split('?').next().unwrap_or(&request.request_uri).to_string();
-
-        global().push(LogEntry {
-            timestamp: now_secs(),
-            method: request.method.clone(),
-            path,
-            status,
-            client_ip: connection.client.ip.clone(),
-            latency_ms,
-        });
+        let path = request.request_uri.split('?').next().unwrap_or(&request.request_uri);
+        global().record(now_secs(), &request.method, path, status, &connection.client.ip, latency_ms);
 
         result
     }

@@ -28,7 +28,7 @@
 mod tests;
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -103,6 +103,11 @@ impl CacheStore {
 #[derive(Clone)]
 pub struct CacheLayer {
     store: Arc<Mutex<CacheStore>>,
+    /// `store`'s entry count, kept after every change under its lock: an
+    /// empty cache (nothing cacheable seen yet — e.g. static files, sent
+    /// `no-cache`) costs a request no key and no lock. The lock was shared
+    /// by every worker and taken on every GET.
+    stored: Arc<AtomicUsize>,
     hits: Arc<AtomicU64>,
     misses: Arc<AtomicU64>,
     capacity: usize,
@@ -117,6 +122,7 @@ impl CacheLayer {
     pub fn memory(capacity: usize) -> Self {
         CacheLayer {
             store: Arc::new(Mutex::new(CacheStore::new())),
+            stored: Arc::new(AtomicUsize::new(0)),
             hits: Arc::new(AtomicU64::new(0)),
             misses: Arc::new(AtomicU64::new(0)),
             capacity,
@@ -146,6 +152,7 @@ impl CacheLayer {
         let mut guard = self.store.lock().unwrap();
         guard.entries.clear();
         guard.order.clear();
+        self.stored.store(0, Ordering::Relaxed);
     }
 
     /// Set the time-to-live for cached entries.
@@ -268,11 +275,11 @@ impl Middleware for CacheLayer {
             return next.execute(request, connection);
         }
 
-        let key = self.cache_key(request);
         let bypass = Self::request_bypasses_cache(request);
 
-        if !bypass {
+        if !bypass && self.stored.load(Ordering::Relaxed) > 0 {
             // Check for a valid cache hit.
+            let key = self.cache_key(request);
             let guard = self.store().lock().unwrap();
             if let Some(entry) = guard.get(&key, self.ttl) {
                 self.hits.fetch_add(1, Ordering::Relaxed);
@@ -285,6 +292,7 @@ impl Middleware for CacheLayer {
         let response = next.execute(request, connection)?;
 
         if self.response_is_cacheable(request, &response) {
+            let key = self.cache_key(request);
             let mut guard = self.store().lock().unwrap();
             guard.purge_expired(self.ttl);
             guard.insert(
@@ -292,6 +300,7 @@ impl Middleware for CacheLayer {
                 CachedEntry { response: response.clone(), inserted_at: Instant::now() },
                 self.capacity,
             );
+            self.stored.store(guard.entries.len(), Ordering::Relaxed);
         }
 
         Ok(response)
