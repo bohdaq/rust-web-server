@@ -291,3 +291,34 @@ fn current_user_never_fails_and_needs_no_external_program() {
     // Must work in images without `whoami` (distroless) — never empty.
     assert!(!Log::current_user().trim().is_empty());
 }
+
+#[test]
+fn json_and_combined_lines_escape_and_format_exactly() {
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+    use crate::range::Range;
+    let request = Request {
+        method: "GET".to_string(),
+        request_uri: "/a\"b\\c\nd\re?q=1".to_string(),
+        http_version: "HTTP/1.1".to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+    let mut response = crate::response::Response::get_response(crate::response::STATUS_CODE_REASON_PHRASE.n200_ok, None, Some(vec![Range::get_content_range(vec![b'x'; 1234], "text/plain".to_string())]));
+    let v4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 7)), 5555);
+    let json = Log::json(&request, &response, &v4);
+    let time_end = json.find("\",\"remote_addr\"").unwrap();
+    assert_eq!(
+        format!("{}\",\"remote_addr\":\"10.0.0.7\",\"method\":\"GET\",\"path\":\"/a\\\"b\\\\c\\nd\\re?q=1\",\"protocol\":\"HTTP/1.1\",\"status\":200,\"bytes\":1234}}", &json[..time_end]),
+        json
+    );
+    assert!(json.starts_with("{\"time\":\"20") && json[9..time_end].ends_with('Z'), "{json}");
+
+    let v6 = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 1);
+    let combined = Log::combined(&request, &response, &v6);
+    assert!(combined.starts_with("::1 - - ["), "{combined}");
+    assert!(combined.ends_with("] \"GET /a\"b\\c\nd\re?q=1 HTTP/1.1\" 200 1234"), "{combined}");
+    response.content_range_list.clear();
+    response.status_code = 304;
+    assert!(Log::combined(&request, &response, &v6).ends_with("\" 304 -"));
+    assert!(Log::json(&request, &response, &v6).ends_with("\"status\":304,\"bytes\":0}"));
+}

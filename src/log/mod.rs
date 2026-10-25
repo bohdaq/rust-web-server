@@ -6,6 +6,7 @@ use crate::response::Response;
 
 #[cfg(test)]
 mod tests;
+pub(crate) mod access_sink;
 
 /// Logging helpers for access logs and server info.
 ///
@@ -144,45 +145,59 @@ impl Log {
     /// Enable with `RWS_CONFIG_LOG_FORMAT=json`. Useful for log aggregators
     /// (Loki, Fluentd, Datadog) that ingest JSON from pod stdout.
     pub fn json(request: &Request, response: &Response, peer_addr: &SocketAddr) -> String {
-        use std::time::{SystemTime, UNIX_EPOCH};
+        let mut line = Vec::with_capacity(160);
+        Log::write_json(&mut line, request, response, peer_addr);
+        bytes_to_string(line)
+    }
 
-        let body_size: usize = response.content_range_list.iter()
-            .map(|cr| cr.body.len())
-            .sum();
-
-        let secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        let timestamp = Log::format_iso8601(secs);
-
-        fn escape(s: &str) -> String {
-            s.replace('\\', "\\\\")
-             .replace('"', "\\\"")
-             .replace('\n', "\\n")
-             .replace('\r', "\\r")
-        }
-
-        format!(
-            "{{\"time\":\"{}\",\"remote_addr\":\"{}\",\"method\":\"{}\",\"path\":\"{}\",\"protocol\":\"{}\",\"status\":{},\"bytes\":{}}}",
-            timestamp,
-            peer_addr.ip(),
-            escape(&request.method),
-            escape(&request.request_uri),
-            escape(&request.http_version),
-            response.status_code,
-            body_size,
-        )
+    /// [`Log::json`] appended to `out`, without intermediate strings.
+    fn write_json(out: &mut Vec<u8>, request: &Request, response: &Response, peer_addr: &SocketAddr) {
+        use std::io::Write;
+        let body_size: usize = response.content_range_list.iter().map(|cr| cr.body.len()).sum();
+        out.extend_from_slice(b"{\"time\":\"");
+        with_timestamps(|iso, _| out.extend_from_slice(iso.as_bytes()));
+        out.extend_from_slice(b"\",\"remote_addr\":\"");
+        let _ = write!(out, "{}", peer_addr.ip());
+        out.extend_from_slice(b"\",\"method\":\"");
+        push_json_escaped(out, &request.method);
+        out.extend_from_slice(b"\",\"path\":\"");
+        push_json_escaped(out, &request.request_uri);
+        out.extend_from_slice(b"\",\"protocol\":\"");
+        push_json_escaped(out, &request.http_version);
+        out.extend_from_slice(b"\",\"status\":");
+        let _ = write!(out, "{}", response.status_code);
+        out.extend_from_slice(b",\"bytes\":");
+        out.extend_from_slice(crate::ext::decimal::Decimal::new(body_size as u128).as_str().as_bytes());
+        out.push(b'}');
     }
 
     /// Writes one access log line to stdout using the format configured by
     /// `RWS_CONFIG_LOG_FORMAT` (`"combined"` or `"json"`). Call this instead of
     /// `Log::combined` so that format selection is centralised.
+    ///
+    /// Lines are buffered per thread and written by a background thread every
+    /// 100 ms (and when a thread's buffer passes 32 KiB, when the thread
+    /// exits, and at process exit); [`Log::flush_access_log`] writes them now.
     pub fn log_access(request: &Request, response: &Response, peer_addr: &SocketAddr) {
-        if let Some(line) = Log::access_log_line(request, response, peer_addr) {
-            println!("{}", line);
+        let config = crate::server_config::ServerConfig::current();
+        let format = &config.log_format;
+        if format.eq_ignore_ascii_case("off") || format.eq_ignore_ascii_case("none") {
+            return;
         }
+        let json = format == "json";
+        access_sink::write_line(|out| {
+            if json {
+                Log::write_json(out, request, response, peer_addr)
+            } else {
+                Log::write_combined(out, request, response, peer_addr)
+            }
+        });
+    }
+
+    /// Write out the buffered access-log lines now (they're otherwise written
+    /// within 100 ms) — e.g. before exiting without returning from `main`.
+    pub fn flush_access_log() {
+        access_sink::flush();
     }
 
     /// The access-log line for `RWS_CONFIG_LOG_FORMAT`: `json` (the `rws`
@@ -215,30 +230,32 @@ impl Log {
     /// Returns a Combined Log Format (CLF) line for one request/response pair:
     /// `IP - - [DD/Mon/YYYY:HH:MM:SS +0000] "METHOD URI VERSION" STATUS SIZE`
     pub fn combined(request: &Request, response: &Response, peer_addr: &SocketAddr) -> String {
-        use std::time::{SystemTime, UNIX_EPOCH};
+        let mut line = Vec::with_capacity(128);
+        Log::write_combined(&mut line, request, response, peer_addr);
+        bytes_to_string(line)
+    }
 
-        let body_size: usize = response.content_range_list.iter()
-            .map(|cr| cr.body.len())
-            .sum();
-
-        let secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        let timestamp = Log::format_clf_timestamp(secs);
-
-        let body_str = if body_size > 0 { body_size.to_string() } else { "-".to_string() };
-
-        format!("{} - - [{}] \"{} {} {}\" {} {}",
-            peer_addr.ip(),
-            timestamp,
-            request.method,
-            request.request_uri,
-            request.http_version,
-            response.status_code,
-            body_str,
-        )
+    /// [`Log::combined`] appended to `out`, without intermediate strings.
+    fn write_combined(out: &mut Vec<u8>, request: &Request, response: &Response, peer_addr: &SocketAddr) {
+        use std::io::Write;
+        let body_size: usize = response.content_range_list.iter().map(|cr| cr.body.len()).sum();
+        let _ = write!(out, "{}", peer_addr.ip());
+        out.extend_from_slice(b" - - [");
+        with_timestamps(|_, clf| out.extend_from_slice(clf.as_bytes()));
+        out.extend_from_slice(b"] \"");
+        out.extend_from_slice(request.method.as_bytes());
+        out.push(b' ');
+        out.extend_from_slice(request.request_uri.as_bytes());
+        out.push(b' ');
+        out.extend_from_slice(request.http_version.as_bytes());
+        out.extend_from_slice(b"\" ");
+        let _ = write!(out, "{}", response.status_code);
+        out.push(b' ');
+        if body_size > 0 {
+            out.extend_from_slice(crate::ext::decimal::Decimal::new(body_size as u128).as_str().as_bytes());
+        } else {
+            out.push(b'-');
+        }
     }
 
     fn format_clf_timestamp(secs: u64) -> String {
@@ -271,4 +288,40 @@ impl Log {
         let thread_count = format!("Spawned {} thread(s) to handle incoming requests\n", thread_count);
         [url, thread_count].join("")
     }
+}
+/// The current second's ISO 8601 and Combined Log Format timestamps,
+/// formatted at most once per second per thread.
+fn with_timestamps(use_them: impl FnOnce(&str, &str)) {
+    use std::cell::RefCell;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    thread_local! {
+        static CACHED: RefCell<(u64, String, String)> = const { RefCell::new((u64::MAX, String::new(), String::new())) };
+    }
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    CACHED.with(|cached| {
+        let mut cached = cached.borrow_mut();
+        if cached.0 != secs {
+            *cached = (secs, Log::format_iso8601(secs), Log::format_clf_timestamp(secs));
+        }
+        use_them(&cached.1, &cached.2);
+    });
+}
+
+/// `s` JSON-escaped as the access log always did it: backslash, double
+/// quote, newline and carriage return.
+fn push_json_escaped(out: &mut Vec<u8>, s: &str) {
+    for b in s.bytes() {
+        match b {
+            b'\\' => out.extend_from_slice(b"\\\\"),
+            b'"' => out.extend_from_slice(b"\\\""),
+            b'\n' => out.extend_from_slice(b"\\n"),
+            b'\r' => out.extend_from_slice(b"\\r"),
+            _ => out.push(b),
+        }
+    }
+}
+
+/// A line built only from `&str` pieces is UTF-8.
+fn bytes_to_string(bytes: Vec<u8>) -> String {
+    String::from_utf8(bytes).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
 }

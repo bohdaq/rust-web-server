@@ -87,7 +87,7 @@ The crate exposes its core types so you can compose them in your own server or t
 | `FormMultipartData` | `body::multipart_form_data` | Parse `multipart/form-data` uploads |
 | `FormUrlEncoded` | `body::form_urlencoded` | Parse `application/x-www-form-urlencoded` bodies |
 | `URL` | `url` | Parse and build URLs; percent-encode/decode |
-| `Log` | `log` | Combined Log Format access log lines |
+| `Log` | `log` | Access log lines — `Log::json` / `Log::combined` return one line; `Log::log_access` buffers it per thread (written within 100 ms, at thread exit and process exit); `Log::flush_access_log()` writes the buffers now |
 | `CookieJar` | `cookie` | Parse the `Cookie` request header into individual cookies |
 | `SetCookie` | `cookie` | Build `Set-Cookie` response header values with all RFC 6265 attributes |
 | `signed_cookie` / `verify_signed_cookie` | `cookie` (requires `crypto` feature) | HMAC-SHA256 tamper-evident cookie value: `"<value>.<hex-signature>"`. Value stays plain-text/readable by the client; verification fails closed (`None`) on any tampering or wrong secret. |

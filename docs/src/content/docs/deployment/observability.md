@@ -82,10 +82,22 @@ This format is compatible with GoAccess, AWStats, and most log-analysis tools.
 Set `RWS_CONFIG_LOG_FORMAT=json` (via environment variable, `rws.config.toml`, or CLI flag) to switch to newline-delimited JSON:
 
 ```json
-{"time":"2026-07-02T12:00:00Z","method":"GET","path":"/healthz","status":200,"bytes":2,"client":"127.0.0.1"}
+{"time":"2026-07-02T12:00:00Z","remote_addr":"127.0.0.1","method":"GET","path":"/healthz","protocol":"HTTP/1.1","status":200,"bytes":2}
 ```
 
 JSON logs are well-suited for ingestion by Loki, Fluentd, Datadog, and other structured-log collectors.
+
+### Buffered writes
+
+Access-log lines are buffered per worker thread and written to stdout by a
+background thread every 100 ms — at once when a thread's buffer passes
+32 KiB, when a thread exits, and when the process exits normally (including
+a graceful shutdown on `SIGTERM`/`SIGINT`). Writing each line with its own
+`write` under the process-wide stdout lock cost about a sixth of a small
+request's CPU. A line can therefore appear up to 100 ms after its request;
+lines from one thread keep their order, and every line carries its own
+timestamp. Code that ends the process some other way can call
+`Log::flush_access_log()` first.
 
 ### Log aggregation in Kubernetes
 
