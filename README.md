@@ -111,7 +111,7 @@ Routing with path parameters, typed extractors, one `Middleware` trait for every
 - **No hyper, no Tower, no Axum.** HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS, range requests, JWT, and the ACME client are implemented in this crate. The HTTP/2 server is rws's own too (checked with h2spec and fuzzing); HTTP/3 uses the widely deployed `quinn`/`h3` crates, and TLS uses `rustls` — no OpenSSL.
 - **Config and code share one engine.** Everything the TOML file does is a type you can use from Rust, so moving from configuration to code doesn't mean switching tools.
 - **Tested against the real world.** CI fuzzes every parser that sees untrusted input, checks HTTP/2 conformance with h2spec, and runs the ACME flow end to end against Let's Encrypt's test CA on every push. Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
-- **Fast.** 2.5–5.1× faster than Caddy, and less CPU per request than nginx for static files, proxying, HTTPS and access-logged traffic — see [Performance](#performance).
+- **Fast.** 2.5–5.4× faster than Caddy, and less CPU per request than nginx for static files, proxying, HTTP/2, HTTPS and access-logged traffic — see [Performance](#performance).
 - **SemVer.** Breaking changes only in a major version — see the [CHANGELOG](CHANGELOG.md).
 
 ## Performance
@@ -123,18 +123,20 @@ the load generator on the same machine: `oha`, 64 keep-alive connections,
 
 | Scenario | rws | Caddy 2.11 | nginx |
 |---|---:|---:|---:|
-| Static file, 1 KiB | **95,728** (**1.6 ms**) | 18,897 (13.1 ms) | 82,218 (3.0 ms) |
-| Static file, 1 MiB | 9,508 (**14.4 ms**) | 2,419 (124 ms) | **9,874** (14.5 ms) |
-| Reverse proxy, 1 KiB | **34,732** (**3.8 ms**) | 13,774 (13.8 ms) | 34,424 (4.4 ms) |
-| CPU per request (1 KiB / 1 MiB / proxy) | **16.6** / **211** / **44.4** µs | 151 / 1,177 / 187 µs | 25.0 / 213 / 46.6 µs |
-| Peak memory | 34–38 MiB | 68–72 MiB | **23–24 MiB** |
+| Static file, 1 KiB | **99,393** (**1.6 ms**) | 18,399 (13.8 ms) | 81,016 (3.1 ms) |
+| Static file, 1 MiB | 9,413 (**14.1 ms**) | 2,438 (124 ms) | **10,029** (14.3 ms) |
+| Reverse proxy, 1 KiB | **34,076** (**3.9 ms**) | 13,693 (13.9 ms) | 33,975 (4.5 ms) |
+| HTTP/2, 1 KiB | **67,700** (**2.3 ms**) | 13,527 (14.1 ms) | 51,542 (4.3 ms) |
+| CPU per request (1 KiB / 1 MiB / proxy / HTTP/2) | **16.5** / **211** / **45.5** / **26.5** µs | 154 / 1,185 / 190 / 217 µs | 24.7 / 212 / 47.5 / 37.2 µs |
+| Peak memory | 33–62 MiB | 66–111 MiB | **23–42 MiB** |
 
-`rws` is 2.5–5.1× faster than Caddy and has the lowest p99 of the three in
+`rws` is 2.5–5.4× faster than Caddy and has the lowest p99 of the three in
 every scenario. It needs less CPU per request than nginx for small files
-(−34%), large files (−1%), proxying (−5%), access-logged traffic (−27%),
-HTTPS (−23%) and gzip (a hundredth); nginx is ahead over HTTP/2 (+23%) and,
-slightly, for large files over TLS (+6%). Release builds use the mimalloc
-allocator: about 5% less CPU, but more memory than nginx (build without the
+(−33%), proxying (−4%), HTTP/2 (−29%, with its own HTTP/2 server), HTTPS
+(−23%), access-logged traffic (−27%) and gzip (a hundredth), and about the
+same for large files; nginx is ahead only for large files over TLS (+9% in
+this run, rws ahead on faster runners). Release builds use the mimalloc
+allocator: less CPU, but more memory than nginx (build without the
 `mimalloc` feature for ~9 MiB) — see the
 [benchmarks page](https://rws8.tech/reference/benchmarks/). Shared CI runners are noisy, so
 compare servers within a run, not across runs. Reproduce it with
