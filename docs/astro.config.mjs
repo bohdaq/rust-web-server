@@ -165,6 +165,8 @@ export default defineConfig({
           items: [
             { label: 'API Reference', link: '/reference/api/' },
             { label: 'Troubleshooting', link: '/reference/troubleshooting/' },
+            { label: 'Migrating to 18.0', link: '/reference/migrating-18/' },
+            { label: 'Architecture', link: '/reference/architecture/' },
             { label: 'Benchmarks',    link: '/reference/benchmarks/' },
             { label: 'Roadmap',       link: '/reference/roadmap/' },
           ],
