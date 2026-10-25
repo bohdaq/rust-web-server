@@ -12,6 +12,7 @@ at https://rws8.tech); API docs are rustdoc.
 | [KAFKA_ROADMAP.md](KAFKA_ROADMAP.md) | Kafka integration plan (unbuilt) |
 | [WASM_SHIM.md](WASM_SHIM.md) | `wasm32-wasip2` guest component (mostly shipped) |
 | [DOCS_REORG.md](DOCS_REORG.md) | Documentation reorganization (2026-10) |
+| [WEBSITE.md](WEBSITE.md) | Plan for a marketing front on the docs site |
 | [archive/](archive/) | Finished or superseded plans, kept for history |
 
 When a plan is done, move it to `archive/` and drop its items from `ROADMAP.md`.
