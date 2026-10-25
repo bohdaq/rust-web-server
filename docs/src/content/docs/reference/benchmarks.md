@@ -88,9 +88,9 @@ On a 10-core Mac (same tools and configuration, `oha` on the same machine):
   more for large files (`sendfile` on both — the kernel does that work).
   `rws` has the lower p99 in every scenario but large files. This run used
   the fastest runner type GitHub assigns, where nginx also serves 6–8% more
-  plain-HTTP requests per second; on the AMD EPYC runners `rws` led every
-  scenario, in CPU and in requests per second (e.g. runs 40206635514,
-  40208022203). The load generator shares the runner's 4 CPUs, so the
+  plain-HTTP requests per second; on the AMD EPYC runners `rws` needed less
+  CPU than nginx in every scenario and served more requests per second in
+  all but large files (e.g. run 40206635514). The load generator shares the runner's 4 CPUs, so the
   CPU/request column is the comparison to read.
 - **Memory:** release builds allocate with mimalloc, which costs about 5%
   less CPU per request than the system allocator but holds more memory —
