@@ -16,6 +16,10 @@ on:
         description: Record a perf profile of rws (lowers its throughput)
         type: boolean
         default: false
+      extended:
+        description: Also gzip, access-log, HTTPS, HTTP/2 and large-file-over-TLS scenarios
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -54,6 +58,7 @@ jobs:
         run: |
           RWS=target/release/rws OHA="$RUNNER_TEMP/oha-linux-amd64" CADDY="$RUNNER_TEMP/caddy" \
             NGINX="$(command -v nginx)" DURATION="${{ inputs.duration }}s" \
+            EXTENDED="${{ inputs.extended && '1' || '' }}" \
             PERF_DIR="${{ inputs.profile && 'perf' || '' }}" bench/run.sh
           {
             echo "## rws vs Caddy vs nginx"

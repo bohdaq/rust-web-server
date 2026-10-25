@@ -94,6 +94,15 @@ serves as the shared backend for every proxy under test. `DURATION` (default
 `15s`) and `CONNECTIONS` (default `64`) tune the load. The script prints a
 Markdown table and writes `bench-results.md` and `bench-results.json`.
 
+`EXTENDED=1` (on by default in the workflow) adds the paths real deployments
+hit that the three scenarios above leave out, each with equivalent settings
+on every server: `text-gzip` (a 26 KiB JavaScript file with
+`Accept-Encoding: gzip`, gzip level 6 everywhere), `log-1k` (an access log
+written to a file), `https-1k` and `h2-1k` (TLS over HTTP/1.1 and HTTP/2),
+and `https-1m` (a 1 MiB file over TLS, where `sendfile` doesn't apply). The
+script makes a self-signed certificate with `openssl`, and skips a TLS
+scenario for an nginx built without its ssl or http2 module.
+
 ## Profile
 
 To see where `rws` spends its CPU, run the workflow with **profile** checked:
