@@ -360,8 +360,12 @@ async fn write_streaming<S: AsyncWrite + Unpin>(
     request: Request,
 ) -> Result<(), String> {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(8);
+    // Written chunks go back to the producer for reuse: a fresh 64 KiB Vec
+    // per chunk, freed on another thread, kept the allocator handing out new
+    // pages — page faults and zeroing were an eighth of a TLS download's CPU.
+    let (recycle_tx, recycle_rx) = std::sync::mpsc::channel::<Vec<u8>>();
     let writer = tokio::task::spawn_blocking(move || {
-        let mut sink = ChannelWriter(tx);
+        let mut sink = ChannelWriter { chunks: tx, recycled: recycle_rx };
         if let Some(reader) = response.stream_pipe.take() {
             Server::pipe_stream(&mut sink, response, request, reader)
         } else {
@@ -382,6 +386,7 @@ async fn write_streaming<S: AsyncWrite + Unpin>(
             client_error = Some(e.to_string());
             break;
         }
+        let _ = recycle_tx.send(chunk);
     }
     drop(rx);
 
@@ -430,12 +435,19 @@ async fn write_file_zero_copy<S: AsyncWrite + Unpin + SendfileSocket>(
 }
 
 /// `std::io::Write` that hands each buffer to the async writer task.
-struct ChannelWriter(tokio::sync::mpsc::Sender<Vec<u8>>);
+struct ChannelWriter {
+    chunks: tokio::sync::mpsc::Sender<Vec<u8>>,
+    /// Buffers the connection task has written, for reuse.
+    recycled: std::sync::mpsc::Receiver<Vec<u8>>,
+}
 
 impl Write for ChannelWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0
-            .blocking_send(buf.to_vec())
+        let mut chunk = self.recycled.try_recv().unwrap_or_default();
+        chunk.clear();
+        chunk.extend_from_slice(buf);
+        self.chunks
+            .blocking_send(chunk)
             .map_err(|_| std::io::Error::new(std::io::ErrorKind::BrokenPipe, "client connection closed"))?;
         Ok(buf.len())
     }
@@ -449,6 +461,24 @@ impl Write for ChannelWriter {
 mod tests {
     use super::*;
     use crate::response::STATUS_CODE_REASON_PHRASE;
+
+    #[test]
+    fn channel_writer_reuses_returned_buffers() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(8);
+        let (recycle_tx, recycle_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+        let mut writer = ChannelWriter { chunks: tx, recycled: recycle_rx };
+        writer.write_all(&[1u8; 1000]).unwrap();
+        let first = rx.blocking_recv().unwrap();
+        assert_eq!(vec![1u8; 1000], first);
+        let address = first.as_ptr();
+        recycle_tx.send(first).unwrap();
+        writer.write_all(&[2u8; 10]).unwrap();
+        let second = rx.blocking_recv().unwrap();
+        assert_eq!(vec![2u8; 10], second, "contents are replaced, not appended");
+        assert_eq!(address, second.as_ptr(), "the returned buffer is reused");
+        drop(rx);
+        assert!(writer.write_all(b"x").is_err(), "a closed connection fails the producer");
+    }
 
     #[derive(Clone)]
     struct Hello;
