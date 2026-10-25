@@ -164,3 +164,14 @@ Valuable, but blocked on an upstream dependency or waiting for a user who needs 
 - **Semantic caching, guardrails and billing** in an LLM proxy — plugin territory.
 - **ROS 2 / MQTT / CoAP bridges, Arrow / Parquet, `SqliteRateLimiter`** — dropped from the old roadmap; no demand evidence.
 - Moved to [IDEAS.md](IDEAS.md): Kafka, GraphQL, a native gRPC server, `Csv<T>` and content negotiation, demo apps.
+
+## Performance research — replacing tokio on the serving path
+
+Not scheduled: research first, and only worth building if it shows a clear win.
+
+- **#51** **A per-core event loop instead of tokio for the HTTP/1.1 and HTTP/2 serving path** — one `epoll` loop per core over its own `SO_REUSEPORT` socket (nginx's worker model), with handlers that may block still sent to a thread pool, and tokio kept for proxy upstreams, ACME, HTTP/3 and the async APIs unless the research says otherwise.
+  - *Why:* on the fastest (Intel) benchmark runners nginx serves 6–8% more plain-HTTP requests per second although rws needs less CPU per request (run 40209996636). Profiles put the remainder in tokio's scheduler: idle workers park and are woken by futex (about 2 wake-ups per proxied request), which adds latency on fast CPUs. The opt-in `RWS_CONFIG_RUNTIME=per-core` (one `current_thread` runtime per core) narrows the gap there — proxy −4% CPU, +12% requests per second, small files +16% (run 40242045036) — but costs 5–17% more CPU per request on slower runners, so it stays opt-in.
+  - *Research questions:* how much of tokio's per-request cost (wakers, task polling, timer wheel, I/O driver registration) a hand-written loop removes; whether a `current_thread` runtime with tuned `event_interval` gets the same; how `io_uring` compares to `epoll`; what it would take to keep `Application`/`Middleware` unchanged and TLS (rustls) working without `tokio-rustls`.
+  - *Cost:* large — a second I/O stack to maintain next to tokio's, for a gain of a few percent on one class of hardware. Measure with the same-run A/B (`base_ref`, `base_runtime`) before committing to it.
+
+**Done when (research):** a prototype serving static files and the proxy route, benchmarked in the same run against the shared and per-core tokio runtimes on fast and slow runners, with a decision recorded here.
