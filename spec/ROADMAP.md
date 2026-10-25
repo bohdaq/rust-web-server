@@ -2,7 +2,7 @@
 
 Open work as a sequence of releases. Items come from a review of the code, the competitors (Caddy, nginx, HAProxy, Traefik, Envoy, Pingora, Ferron), the Rust framework landscape, the MCP/AI ecosystem and standards changes (2026-10-25).
 
-Minor releases are additive; anything breaking waits for a major (19.0). Each release has a theme, a set of items and exit criteria — it ships when the criteria are met, not on a date. Deadline-driven work comes first: Let's Encrypt's default certificate lifetime drops to 64 days on 10 Feb 2027, so 18.0 must ship well before then.
+Every breaking change is collected into 18.0 (the "Breaking changes" milestone before it); after 18.0, minor releases are additive and anything breaking waits for 19.0. Each release has a theme, a set of items and exit criteria — it ships when the criteria are met, not on a date. Deadline-driven work comes first: Let's Encrypt's default certificate lifetime drops to 64 days on 10 Feb 2027, so 18.0 must ship well before then.
 
 Unordered ideas live in [IDEAS.md](IDEAS.md); finished plans in [archive/](archive/). Item numbers are stable references (`#N`), not an order.
 
@@ -21,6 +21,17 @@ From the 2026-10-25 security review. Patches the released 17.113.0 (branch off t
 
 **Done when:** a regression test per fix; the reproductions from the review fail against the patched binary; 17.113.1 published (crates.io, GitHub release, Docker Hub / GHCR, Homebrew) with a GitHub security advisory; the same fixes merged to `main`.
 
+## 18.0.0 milestone — Breaking changes
+
+All of 18.0's breaking changes land together, on `main` before 18.0.0 is tagged, so users migrate once and every later 18.x release stays additive. The changes already on `main` (Header `Cow` fields, default response headers, `rsa_key`) are listed under 18.0.0 below; this milestone adds the one still to build.
+
+- **#31** **Streaming request bodies** — an upload API and multipart straight to storage (`Request.body` is a `Vec<u8>` today).
+- **#30** **WebSocket permessage-deflate, then WebSocket over HTTP/2 and HTTP/3** (RFC 8441 / RFC 9220 extended CONNECT) — not breaking itself, but it builds on the streaming body type, so it follows #31 (it can ship in an 18.x release if 18.0 needs to go out first).
+
+**Breaking:** `Request.body` becomes a streaming body type, with a buffered helper (`body_bytes()`) for handlers that want the whole body.
+
+**Done when:** a multi-GB upload streamed to S3 at constant memory; existing handlers ported through the buffered helper; the migration page covers it.
+
 ## 18.0.0 — Correct and current
 
 The breaking release already on `main` (Header `Cow` fields, new default headers, in-crate RSA, the per-request CPU work), plus the fixes that can't wait: certificate renewal that survives Let's Encrypt's shorter lifetimes, an MCP server that speaks a current protocol, and the first signed, SBOM-carrying release.
@@ -33,7 +44,7 @@ The breaking release already on `main` (Header `Cow` fields, new default headers
 - **#6** **HTTP/2 DoS limits** — confirm the h2 version carries the MadeYouReset fix (CVE-2025-8671); set and test reset-rate, pending-accept-reset, CONTINUATION and header/idle timeouts (only two h2 limits are set in `src/h2_handler/mod.rs`).
 - **#12** **Doc and benchmark truth** — mark `ctx.sample()`, roots and `logging/setLevel` as deprecated by MCP 2026-07-28; verify MCP SSE over HTTP/2 and HTTP/3 at runtime; re-run the HTTP/2 benchmark (the published 53.6k vs nginx 86.4k req/s predates the h2 work).
 
-**Breaking:** Already on `main` — see [CHANGELOG.md](../CHANGELOG.md) and [Migrating to 18.0](../docs/src/content/docs/reference/migrating-18.md). New: `acme.renew_before_days` stops being the renewal trigger (ARI decides; the setting becomes a fallback); MCP clients announcing 2025-06-18 or later can no longer send JSON-RPC batches.
+**Breaking:** Already on `main` — see [CHANGELOG.md](../CHANGELOG.md) and [Migrating to 18.0](../docs/src/content/docs/reference/migrating-18.md). New: `acme.renew_before_days` stops being the renewal trigger (ARI decides; the setting becomes a fallback); MCP clients announcing 2025-06-18 or later can no longer send JSON-RPC batches. Plus the streaming request body from the milestone above.
 
 **Done when:** CI green on all feature sets, h2spec 146/146, ACME e2e against Pebble with ARI, MCP server passing the official conformance scenarios for 2025-11-25, a fresh benchmark run, release artifacts signed with an SBOM and provenance attestation, migration page updated.
 
@@ -132,17 +143,6 @@ Change a running server without editing files, and extend it without recompiling
 
 **Done when:** Admin API authenticated by default and covered by `rws --check` and e2e tests; a WASM plugin example that rewrites a header, with a CPU/memory limit test.
 
-## 19.0.0 — Streaming bodies
-
-The next breaking release: request bodies stop being a `Vec<u8>`, which unlocks uploads straight to storage and WebSocket over HTTP/2 and HTTP/3. It is also where MCP features deprecated by 2026-07-28 (sampling, roots, logging, the GET stream) can go, once their 12-month runway ends (July 2027).
-
-- **#31** **Streaming request bodies** — an upload API and multipart straight to storage (`Request.body` is a `Vec<u8>` today).
-- **#30** **WebSocket permessage-deflate, then WebSocket over HTTP/2 and HTTP/3** (RFC 8441 / RFC 9220 extended CONNECT).
-
-**Breaking:** `Request.body` becomes a streaming body type (with a buffered helper); deprecated MCP 2025 features removed.
-
-**Done when:** A multi-GB upload streamed to S3 at constant memory; WebSocket over HTTP/2 (RFC 8441) verified with a browser; migration page for 19.0.
-
 ## Unscheduled
 
 Valuable, but blocked on an upstream dependency or waiting for a user who needs it. Picked into a release when that changes.
@@ -156,10 +156,11 @@ Valuable, but blocked on an upstream dependency or waiting for a user who needs 
 - **#38** **103 Early Hints and compression dictionaries** — Early Hints from config or upstream `Link` headers (RFC 8297); `dcb` / `dcz` dictionary compression (RFC 9842, Pingora).
 - **#39** **Request mirroring, backend drain, disk cache with a purge API** — Traefik and Envoy have mirroring and drain; the cache is in-memory today.
 
-## Not planned
+## Not planned (for 18.x)
 
 - **HTTP/2 and HTTP/3 server push** — browsers dropped it.
 - **OCSP stapling for Let's Encrypt certificates** — Let's Encrypt [ended OCSP](https://letsencrypt.org/2024/12/05/ending-ocsp.html) in August 2025.
+- **Removing the MCP features deprecated by 2026-07-28** (sampling, roots, logging, the GET stream) — not before their 12-month runway ends in July 2027, so in 19.0 at the earliest.
 - **Semantic caching, guardrails and billing** in an LLM proxy — plugin territory.
 - **ROS 2 / MQTT / CoAP bridges, Arrow / Parquet, `SqliteRateLimiter`** — dropped from the old roadmap; no demand evidence.
 - Moved to [IDEAS.md](IDEAS.md): Kafka, GraphQL, a native gRPC server, `Csv<T>` and content negotiation, demo apps.
