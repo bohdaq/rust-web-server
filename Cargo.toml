@@ -93,7 +93,7 @@ http = { version = "1", optional = true }
 # Not quinn's default "rustls-ring": two rustls crypto providers in one build
 # make rustls::ClientConfig::builder() panic ("Could not automatically
 # determine the process-level CryptoProvider") for every outbound TLS client.
-quinn = { version = "0.11", default-features = false, features = ["log", "runtime-tokio", "rustls-aws-lc-rs", "bloom"], optional = true }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "bloom"], optional = true }
 h3 = { version = "0.0.8", optional = true }
 h3-quinn = { version = "0.0.10", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
