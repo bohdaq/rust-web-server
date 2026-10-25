@@ -18,20 +18,49 @@ release build (`--features "acme auth"`), Caddy 2.11.7, nginx from Ubuntu with
 
 | Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | CPU/request (µs) | Peak memory (MiB) |
 |---|---|---:|---:|---:|---:|---:|
-| Static file, 1 KiB | rws | 141,677 | 0.41 | 1.06 | 11.0 | 8.9 |
-| | Caddy | 38,812 | 1.17 | 7.16 | 70.4 | 67.5 |
-| | nginx | 145,701 | 0.25 | 3.20 | 13.2 | 23.7 |
-| Static file, 1 MiB | rws | 14,657 | 4.10 | 9.65 | 146.3 | 9.1 |
-| | Caddy | 3,753 | 11.90 | 82.21 | 699.4 | 76.2 |
-| | nginx | 15,180 | 3.90 | 10.22 | 140.1 | 23.7 |
-| Reverse proxy, 1 KiB | rws | 58,610 | 1.03 | 2.71 | 26.4 | 13.7 |
-| | Caddy | 26,966 | 1.92 | 8.48 | 89.8 | 66.7 |
-| | nginx | 61,521 | 0.92 | 3.01 | 25.4 | 24.5 |
+| Static file, 1 KiB | rws | 125,681 | 0.47 | 1.24 | 13.9 | 8.6 |
+| | Caddy | 27,752 | 1.89 | 8.52 | 103.7 | 67.7 |
+| | nginx | 128,364 | 0.48 | 1.46 | 15.8 | 23.6 |
+| Static file, 1 MiB | rws | 12,574 | 4.56 | 10.74 | 153.6 | 8.8 |
+| | Caddy | 3,295 | 14.96 | 88.13 | 864.5 | 71.9 |
+| | nginx | 13,112 | 4.47 | 11.08 | 150.5 | 23.7 |
+| Reverse proxy, 1 KiB | rws | 49,330 | 1.22 | 2.93 | 33.2 | 13.5 |
+| | Caddy | 20,928 | 2.65 | 9.37 | 122.1 | 69.8 |
+| | nginx | 52,012 | 1.13 | 3.14 | 31.3 | 24.9 |
 
 CPU/request is the server's user + system CPU time over the run (including
 worker processes) divided by the requests it served.
 
 Every request in every scenario returned `200 OK`.
+
+### Extended scenarios
+
+The same run, with the extended scenarios (`EXTENDED=1`, see
+[Reproduce](#reproduce)):
+
+| Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | CPU/request (µs) | Peak memory (MiB) |
+|---|---|---:|---:|---:|---:|---:|
+| 26 KiB JS file, gzip | rws | 109,065 | 0.53 | 1.44 | 16.2 | 13.6 |
+| | Caddy | 8,282 | 5.12 | 40.43 | 419.0 | 115.7 |
+| | nginx | 2,030 | 20.84 | 98.46 | 1,860.1 | 28.1 |
+| Static 1 KiB, access log on | rws | 111,760 | 0.51 | 1.45 | 16.0 | 9.8 |
+| | Caddy | 23,304 | 2.07 | 11.76 | 130.7 | 64.8 |
+| | nginx | 118,475 | 0.53 | 1.53 | 18.3 | 23.5 |
+| Static 1 KiB, HTTPS | rws | 96,517 | 0.58 | 1.62 | 18.5 | 15.7 |
+| | Caddy | 36,869 | 1.53 | 6.67 | 76.2 | 123.6 |
+| | nginx | 102,849 | 0.46 | 2.66 | 20.2 | 43.1 |
+| Static 1 KiB, HTTP/2 | rws | 53,579 | 1.10 | 3.01 | 43.2 | 18.5 |
+| | Caddy | 20,169 | 2.76 | 9.19 | 144.8 | 68.9 |
+| | nginx | 86,367 | 0.59 | 3.22 | 22.4 | 43.8 |
+| Static 1 MiB, HTTPS | rws | 2,257 | 26.11 | 38.71 | 828.7 | 29.6 |
+| | Caddy | 2,223 | 26.51 | 71.09 | 1,102.1 | 68.3 |
+| | nginx | 2,407 | 24.29 | 62.78 | 906.5 | 44.9 |
+
+`rws` compresses a static text file once per version and serves the cached
+result; nginx and Caddy compress on every request, which is why the gzip row
+differs by two orders of magnitude (level 6 everywhere). HTTP/2 is the
+scenario where nginx clearly leads: `rws` runs each HTTP/2 request on its
+own task, beside the connection's.
 
 On a 10-core Mac (same tools and configuration, `oha` on the same machine):
 1 KiB static — rws 107k, nginx 100k; 1 MiB static — 9.8k vs 9.4k; proxy —
@@ -39,13 +68,14 @@ On a 10-core Mac (same tools and configuration, `oha` on the same machine):
 
 ## Reading the numbers
 
-- **Against Caddy:** `rws` serves 3.7× (small) to 3.9× (large) as many file
-  requests and 2.2× as many proxied requests per second, using a sixth to a
-  third of the CPU per request, with a p99 three to eight times lower and
+- **Against Caddy:** `rws` serves 3.8× (large) to 4.5× (small) as many file
+  requests and 2.4× as many proxied requests per second, using a seventh to
+  a quarter of the CPU per request, with a p99 three to eight times lower and
   about an eighth of the memory.
-- **Against nginx:** within 3% on small files, 4% on large files and 5% on
-  proxying. On small files `rws` needs 17% less CPU per request; on large
-  files and proxying 4% more. `rws` has the lower p99 in every scenario and
+- **Against nginx:** within 2% on small files, 4% on large files and 5% on
+  proxying. On small files `rws` needs 12% less CPU per request; on large
+  files 2% and proxying 6% more. With gzip, an access log or HTTPS it needs
+  less CPU per request than nginx; over HTTP/2, about twice as much. `rws` has the lower p99 in every scenario and
   about a third of the memory. The load generator shares the runner's 4
   CPUs, so the server that needs the least CPU per request wins there — the
   CPU/request column is the gap.
