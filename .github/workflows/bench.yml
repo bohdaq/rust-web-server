@@ -20,6 +20,9 @@ on:
         description: Also gzip, access-log, HTTPS, HTTP/2 and large-file-over-TLS scenarios
         type: boolean
         default: true
+      rws_workers:
+        description: tokio worker threads for rws (TOKIO_WORKER_THREADS; empty = one per CPU)
+        default: ""
 
 permissions:
   contents: read
@@ -58,7 +61,7 @@ jobs:
         run: |
           RWS=target/release/rws OHA="$RUNNER_TEMP/oha-linux-amd64" CADDY="$RUNNER_TEMP/caddy" \
             NGINX="$(command -v nginx)" DURATION="${{ inputs.duration }}s" \
-            EXTENDED="${{ inputs.extended && '1' || '' }}" \
+            EXTENDED="${{ inputs.extended && '1' || '' }}" RWS_WORKERS="${{ inputs.rws_workers }}" \
             PERF_DIR="${{ inputs.profile && 'perf' || '' }}" bench/run.sh
           {
             echo "## rws vs Caddy vs nginx"

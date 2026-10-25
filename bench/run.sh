@@ -53,6 +53,10 @@ DURATION="${DURATION:-15s}"
 CONNECTIONS="${CONNECTIONS:-64}"
 PERF_DIR="${PERF_DIR:-}"
 EXTENDED="${EXTENDED:-}"
+# RWS_WORKERS=<n> runs rws with n tokio worker threads (TOKIO_WORKER_THREADS)
+# instead of one per CPU.
+RWS_WORKERS="${RWS_WORKERS:-}"
+[ -n "$RWS_WORKERS" ] && export TOKIO_WORKER_THREADS="$RWS_WORKERS"
 PERF="${PERF:-perf}"
 [ -n "$PERF_DIR" ] && mkdir -p "$PERF_DIR" && PERF_DIR="$(cd "$PERF_DIR" && pwd)"
 
