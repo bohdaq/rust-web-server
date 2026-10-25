@@ -123,7 +123,7 @@ let app = App::new()
         .read_timeout_ms(60_000));
 ```
 
-`.read_timeout_ms()` is accepted but not applied by the HTTP/2 forwarder today — only the connect timeout bounds an upstream call.
+`.read_timeout_ms()` (default 30 s) bounds each wait for the upstream — the TLS and HTTP/2 handshakes, the response head and every body frame — so a backend that goes silent gets a `502`, while a slow response that keeps sending isn't cut off.
 
 Supported backend URL schemes for `H2ReverseProxy`:
 

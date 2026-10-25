@@ -753,6 +753,28 @@ async fn h2_reverse_proxy_does_not_panic_under_current_thread_runtime() {
     assert_eq!(502, response.status_code, "unreachable backend should yield 502, not a panic");
 }
 
+/// A backend that accepts and then says nothing used to hang the request
+/// forever: `read_timeout_ms` was stored but never applied to the h2 client.
+#[cfg(feature = "http2")]
+#[test]
+fn h2_reverse_proxy_applies_read_timeout_to_a_silent_backend() {
+    use crate::proxy::H2ReverseProxy;
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        // Hold the accepted socket open without writing a byte.
+        let _held: Vec<_> = listener.incoming().take(1).collect();
+        std::thread::sleep(std::time::Duration::from_secs(10));
+    });
+
+    let proxy = H2ReverseProxy::new(vec![format!("h2://127.0.0.1:{}", port)]).read_timeout_ms(200);
+    let started = std::time::Instant::now();
+    let response = proxy.handle(&get("/"), &conn(), &App::new()).unwrap();
+    assert_eq!(502, response.status_code);
+    assert!(started.elapsed() < std::time::Duration::from_secs(5), "took {:?}", started.elapsed());
+}
+
 // ── upstream response normalization ───────────────────────────────────────────
 
 /// Python's http.server shape: HTTP/1.0, lowercase "Content-type".
@@ -1107,4 +1129,39 @@ fn pool_release_respects_max_idle_per_key_and_acquire_returns_streams() {
     assert_eq!(Some(2), pool.acquire("a:1"));
     assert_eq!(None, pool.acquire("a:1"));
     assert_eq!(Some(4), pool.acquire("b:2"));
+}
+
+// HeadFacts (one pass over the raw head) must agree with the helpers that
+// scan a lower-cased copy.
+#[test]
+fn head_facts_agree_with_the_lowercase_scans() {
+    use crate::proxy::{response_has_no_body, should_stream_response, HeadFacts};
+    let heads: Vec<&[u8]> = vec![
+        b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: keep-alive\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nCONTENT-LENGTH: 2000000\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\ncontent-length: nope\r\nContent-Length: 7\r\n\r\n",
+        b"HTTP/1.1 204 No Content\r\nConnection: Close\r\n\r\n",
+        b"HTTP/1.1 304 Not Modified\r\n\r\n",
+        b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nContent-Type: Text/Event-Stream; charset=utf-8\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, CHUNKED\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nconnection: keep-alive, close\r\nX-Connection: close\r\n\r\n",
+        b"HTTP/1.1 200 OK\nContent-Length: 3\nConnection:close\n\n",
+        b"HTTP/1.1\r\n204 x\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nX: \xc3\xa9t\xc3\xa9\r\nContent-Length: 1\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nX: \xff\r\nContent-Length: 1\r\n\r\n",
+        b"",
+    ];
+    for head in heads {
+        let lower = std::str::from_utf8(head).unwrap_or("").to_ascii_lowercase();
+        let facts = HeadFacts::scan(head);
+        let label = String::from_utf8_lossy(head);
+        for method in ["GET", "HEAD", "head"] {
+            assert_eq!(response_has_no_body(method, &lower), facts.no_body(method), "{label:?} {method}");
+        }
+        assert_eq!(should_stream_response(&lower), facts.should_stream(), "{label:?}");
+        assert_eq!(lower.lines().any(|l| l.starts_with("connection:") && l.contains("close")), facts.connection_close, "{label:?}");
+        let content_length: Option<usize> = lower.lines().find_map(|l| l.strip_prefix("content-length:")?.trim().parse().ok());
+        assert_eq!(content_length, facts.content_length, "{label:?}");
+    }
 }

@@ -195,7 +195,9 @@ impl DbPool {
 
     /// Run a closure in a transaction.
     ///
-    /// The transaction is committed automatically on `Ok` and rolled back on `Err`.
+    /// The closure owns the transaction: call `tx.commit()` before returning
+    /// `Ok`. A transaction that isn't committed — the closure returns `Err`,
+    /// or `Ok` without committing — is dropped, which rolls it back.
     ///
     /// ```rust,no_run
     /// # #[cfg(feature = "model-sqlite")]
@@ -205,6 +207,7 @@ impl DbPool {
     /// let pool = DbPool::memory().await?;
     /// let result = pool.transaction(|mut tx| async move {
     ///     tx.execute("INSERT INTO t (v) VALUES (?)", &[Value::Text("hi".into())]).await?;
+    ///     tx.commit().await?;
     ///     Ok(42i32)
     /// }).await?;
     /// assert_eq!(42, result);

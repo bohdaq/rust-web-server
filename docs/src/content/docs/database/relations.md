@@ -5,32 +5,28 @@ description: Load related records with async HasMany, HasOne, and BelongsTo help
 
 The ORM provides three relationship helpers: `HasMany<T>`, `HasOne<O>`, and `BelongsTo<O>`. Each holds the information needed to load related records on demand. There is no lazy loading — you call `.load(&pool).await` explicitly when you want the data.
 
+Relation helpers are not fields of a model: `#[derive(Model)]` maps every field to a column, and a `HasMany` field has no column. Build the helper from a loaded record instead — a small method per relation keeps the call site readable.
+
 ## HasMany
 
-`HasMany<T>` represents a one-to-many relationship from an owner to a collection of child records. The child table has a foreign key column that holds the owner's primary key.
+`HasMany<T>` represents a one-to-many relationship from an owner to a collection of child records. The child table has a foreign key column that holds the owner's primary key. Construct it with the owner's primary key value and the foreign key column name on the child table:
 
 ```rust
 use rust_web_server::model::relation::HasMany;
 use rust_web_server::model::Value;
+use rust_web_server::Model;
 
+#[derive(Model, Debug, Clone, Default)]
+#[table(name = "users")]
 pub struct User {
+    #[primary_key(auto_increment)]
     pub id: i64,
     pub name: String,
-    // Declares the relationship — stores owner PK + FK column name
-    pub posts: HasMany<Post>,
 }
-```
 
-Construct the helper with the owner's primary key value and the foreign key column name on the child table:
-
-```rust
 impl User {
-    pub fn new(id: i64, name: String) -> Self {
-        User {
-            posts: HasMany::new(Value::Int(id), "user_id"),
-            id,
-            name,
-        }
+    pub fn posts(&self) -> HasMany<Post> {
+        HasMany::new(Value::Int(self.id), "user_id")
     }
 }
 ```
@@ -38,10 +34,7 @@ impl User {
 Load the related records by calling `.load(&pool).await`:
 
 ```rust
-let pool = DbPool::from_env().await?;
-let user = /* fetch user */;
-
-let posts: Vec<Post> = user.posts.load(&pool).await?;
+let posts: Vec<Post> = user.posts().load(&pool).await?;
 ```
 
 Under the hood this issues: `SELECT * FROM posts WHERE user_id = ?`.
@@ -52,26 +45,15 @@ Under the hood this issues: `SELECT * FROM posts WHERE user_id = ?`.
 
 ```rust
 use rust_web_server::model::relation::HasOne;
-use rust_web_server::model::Value;
-
-pub struct User {
-    pub id: i64,
-    pub name: String,
-    pub profile: HasOne<Profile>,
-}
 
 impl User {
-    pub fn new(id: i64, name: String) -> Self {
-        User {
-            profile: HasOne::new(Value::Int(id), "user_id"),
-            id,
-            name,
-        }
+    pub fn profile(&self) -> HasOne<Profile> {
+        HasOne::new(Value::Int(self.id), "user_id")
     }
 }
 
 // Loading
-let profile: Option<Profile> = user.profile.load(&pool).await?;
+let profile: Option<Profile> = user.profile().load(&pool).await?;
 ```
 
 Under the hood: `SELECT * FROM profiles WHERE user_id = ? LIMIT 1`.
@@ -82,28 +64,24 @@ Under the hood: `SELECT * FROM profiles WHERE user_id = ? LIMIT 1`.
 
 ```rust
 use rust_web_server::model::relation::BelongsTo;
-use rust_web_server::model::Value;
 
+#[derive(Model, Debug, Clone, Default)]
+#[table(name = "posts")]
 pub struct Post {
+    #[primary_key(auto_increment)]
     pub id: i64,
     pub title: String,
     pub user_id: i64,
-    pub user: BelongsTo<User>,
 }
 
 impl Post {
-    pub fn new(id: i64, title: String, user_id: i64) -> Self {
-        Post {
-            user: BelongsTo::new(Value::Int(user_id)),
-            id,
-            title,
-            user_id,
-        }
+    pub fn user(&self) -> BelongsTo<User> {
+        BelongsTo::new(Value::Int(self.user_id))
     }
 }
 
 // Loading
-let author: Option<User> = post.user.load(&pool).await?;
+let author: Option<User> = post.user().load(&pool).await?;
 ```
 
 Under the hood: `SELECT * FROM users WHERE id = ? LIMIT 1`.
@@ -112,25 +90,23 @@ Under the hood: `SELECT * FROM users WHERE id = ? LIMIT 1`.
 
 ```rust
 use rust_web_server::model::{DbPool, Value};
-use rust_web_server::model::relation::{HasMany, BelongsTo};
 
 let pool = DbPool::from_env().await?;
 
 // Load a user
-let rows = pool.query_raw("SELECT * FROM users WHERE id = ? LIMIT 1", &[Value::Int(1)]).await?;
-let row = rows.into_iter().next().unwrap();
-let user = User {
-    id: row.get::<i64>("id")?,
-    name: row.get::<String>("name")?,
-    posts: HasMany::new(Value::Int(row.get::<i64>("id")?), "user_id"),
-};
+let user: User = pool
+    .query::<User>("SELECT * FROM users WHERE id = ? LIMIT 1", &[Value::Int(1)])
+    .await?
+    .into_iter()
+    .next()
+    .expect("user 1");
 
 // Load that user's posts — one extra query
-let posts: Vec<Post> = user.posts.load(&pool).await?;
+let posts: Vec<Post> = user.posts().load(&pool).await?;
 
 // Load the author of a post — one extra query
 if let Some(post) = posts.first() {
-    let author: Option<User> = post.user.load(&pool).await?;
+    let author: Option<User> = post.user().load(&pool).await?;
 }
 ```
 

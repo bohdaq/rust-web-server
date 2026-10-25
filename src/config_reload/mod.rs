@@ -2,8 +2,10 @@
 //!
 //! Re-reads `rws.config.toml` without restarting the server. Non-binding
 //! settings — those that would require a new TCP socket (IP, port,
-//! thread count) or a new TLS acceptor (cert/key paths) — are logged as
+//! thread count) or a different default TLS cert/key path — are logged as
 //! ignored. All other settings take effect on the next incoming request.
+//! On TLS builds a `SIGHUP` also rebuilds the TLS acceptor, so renewed
+//! certificate files and changed `[[virtual_host]]` entries are picked up.
 //!
 //! # Triggering a reload
 //!
@@ -32,7 +34,7 @@
 //! |---------|-----|
 //! | IP / Port | Bound socket cannot be moved |
 //! | Thread count | Thread pool is fixed at startup |
-//! | TLS cert / key | TLS acceptor is built once at startup |
+//! | Default TLS cert / key *path* | `run_tls` keeps the startup paths (the files themselves are re-read on `SIGHUP`) |
 //! | `[[tcp_proxy]]` / `[[udp_proxy]]` / `[[ws_proxy]]` | Bound listener sockets |
 
 #[cfg(test)]

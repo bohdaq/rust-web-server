@@ -76,7 +76,7 @@ pub enum LoadBalancing {
 /// `Via` are added to every forwarded request.
 ///
 /// Idle connections are pooled and reused across requests (up to
-/// [`ConnPool::new_default`] limits: 8 idle per backend, 60-second timeout).
+/// 64 idle per backend, 60-second timeout).
 /// This eliminates per-request TCP handshake overhead and ephemeral-port
 /// exhaustion.  Use [`ReverseProxy::with_pool`] to share a pool across
 /// multiple proxy instances or to tune pool parameters.
@@ -180,7 +180,7 @@ impl ReverseProxy {
         Ok(self)
     }
 
-    /// Set the maximum number of idle connections per backend (default: 8).
+    /// Set the maximum number of idle connections per backend (default: 64).
     pub fn max_idle_conns(mut self, n: usize) -> Self {
         self.pool = Arc::new(ConnPool::new(n, Duration::from_secs(60)));
         self
@@ -932,6 +932,72 @@ pub(crate) fn should_stream_response(header_lower: &str) -> bool {
     is_sse || is_chunked || is_large
 }
 
+/// What the forwarders need from an upstream response head, found in one
+/// case-insensitive pass over the raw bytes — the same answers as
+/// [`response_has_no_body`], [`should_stream_response`] and the
+/// `connection:` / `content-length:` scans over a lower-cased copy, without
+/// making that copy.
+#[cfg_attr(not(feature = "http2"), allow(dead_code))]
+pub(crate) struct HeadFacts {
+    /// The second whitespace-separated token of the head (the status code).
+    pub(crate) status_no_body: bool,
+    pub(crate) sse: bool,
+    pub(crate) chunked: bool,
+    /// The first `content-length:` value that parses.
+    pub(crate) content_length: Option<usize>,
+    pub(crate) connection_close: bool,
+}
+
+#[cfg_attr(not(feature = "http2"), allow(dead_code))]
+impl HeadFacts {
+    pub(crate) fn scan(head: &[u8]) -> HeadFacts {
+        let text = std::str::from_utf8(head).unwrap_or("");
+        let status = text.split_whitespace().nth(1).unwrap_or("");
+        let mut facts = HeadFacts {
+            status_no_body: status.starts_with('1') || status == "204" || status == "304",
+            sse: false,
+            chunked: false,
+            content_length: None,
+            connection_close: false,
+        };
+        for line in text.lines() {
+            if let Some(value) = strip_prefix_ignore_ascii_case(line, "content-type:") {
+                facts.sse |= contains_ignore_ascii_case(value, "text/event-stream");
+            } else if let Some(value) = strip_prefix_ignore_ascii_case(line, "transfer-encoding:") {
+                facts.chunked |= contains_ignore_ascii_case(value, "chunked");
+            } else if let Some(value) = strip_prefix_ignore_ascii_case(line, "content-length:") {
+                if facts.content_length.is_none() {
+                    facts.content_length = value.trim().parse().ok();
+                }
+            } else if let Some(value) = strip_prefix_ignore_ascii_case(line, "connection:") {
+                facts.connection_close |= contains_ignore_ascii_case(value, "close");
+            }
+        }
+        facts
+    }
+
+    /// [`response_has_no_body`].
+    pub(crate) fn no_body(&self, method: &str) -> bool {
+        method.eq_ignore_ascii_case("HEAD") || self.status_no_body
+    }
+
+    /// [`should_stream_response`].
+    pub(crate) fn should_stream(&self) -> bool {
+        self.sse || self.chunked || self.content_length.is_some_and(|n| n > STREAM_THRESHOLD)
+    }
+}
+
+fn strip_prefix_ignore_ascii_case<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
+    let bytes = line.as_bytes();
+    // `prefix` is ASCII, so a byte match ends on a char boundary.
+    (bytes.len() >= prefix.len() && bytes[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes()))
+        .then(|| &line[prefix.len()..])
+}
+
+fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
+    haystack.as_bytes().windows(needle.len()).any(|w| w.eq_ignore_ascii_case(needle.as_bytes()))
+}
+
 /// Parse the status line and headers from raw header bytes (ending at `\r\n\r\n`).
 fn parse_status_and_headers(header_bytes: &[u8]) -> Result<Response, String> {
     let s = std::str::from_utf8(header_bytes)
@@ -1154,14 +1220,14 @@ fn try_backend_h2(
     client_ip: &str,
     backend: &Backend,
     connect_timeout: Duration,
-    _read_timeout: Duration,
+    read_timeout: Duration,
 ) -> Result<Response, String> {
     // `block_on_isolated` works on any tokio runtime flavor (including
     // `current_thread`, unlike `tokio::task::block_in_place`, which requires
     // `multi_thread` and panics otherwise) and doesn't pull a worker thread
     // out of a shared pool; it also works with no runtime at all (HTTP/1.1
     // thread pool), unlike the previous implementation, which just gave up.
-    crate::async_bridge::block_on_isolated(|| forward_h2_async(request, client_ip, backend, connect_timeout))
+    crate::async_bridge::block_on_isolated(|| forward_h2_async(request, client_ip, backend, connect_timeout, read_timeout))
 }
 
 #[cfg(feature = "http2")]
@@ -1170,6 +1236,7 @@ async fn forward_h2_async(
     client_ip: &str,
     backend: &Backend,
     connect_timeout: Duration,
+    read_timeout: Duration,
 ) -> Result<Response, String> {
     let addr = format!("{}:{}", backend.host, backend.port);
     let tcp = tokio::time::timeout(
@@ -1197,14 +1264,23 @@ async fn forward_h2_async(
         let server_name = ServerName::try_from(backend.host.as_str())
             .map_err(|e| format!("invalid upstream hostname '{}': {}", backend.host, e))?
             .to_owned();
-        let tls_stream = connector
-            .connect(server_name, tcp)
-            .await
+        let tls_stream = within(read_timeout, &addr, connector.connect(server_name, tcp))
+            .await?
             .map_err(|e| format!("h2 proxy: TLS handshake with {} failed: {}", addr, e))?;
-        send_h2_request(request, client_ip, backend, tls_stream).await
+        send_h2_request(request, client_ip, backend, tls_stream, read_timeout).await
     } else {
-        send_h2_request(request, client_ip, backend, tcp).await
+        send_h2_request(request, client_ip, backend, tcp, read_timeout).await
     }
+}
+
+/// Await `f`, failing after `limit` — the h2 counterpart of a socket read
+/// timeout, applied to each wait for the upstream (handshake, response head,
+/// every body frame), so a slow but progressing response isn't cut off.
+#[cfg(feature = "http2")]
+async fn within<F: std::future::Future>(limit: Duration, addr: &str, f: F) -> Result<F::Output, String> {
+    tokio::time::timeout(limit, f)
+        .await
+        .map_err(|_| format!("h2 proxy: {} sent nothing for {} ms", addr, limit.as_millis()))
 }
 
 /// Drive the h2 client handshake + request/response over any async I/O stream.
@@ -1217,6 +1293,7 @@ async fn send_h2_request<T>(
     client_ip: &str,
     backend: &Backend,
     stream: T,
+    read_timeout: Duration,
 ) -> Result<Response, String>
 where
     T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
@@ -1226,8 +1303,8 @@ where
 
     let addr = format!("{}:{}", backend.host, backend.port);
 
-    let (send_req, conn) = h2::client::handshake(stream)
-        .await
+    let (send_req, conn) = within(read_timeout, &addr, h2::client::handshake(stream))
+        .await?
         .map_err(|e| format!("h2 proxy: handshake with {} failed: {}", addr, e))?;
 
     tokio::spawn(async move {
@@ -1256,7 +1333,7 @@ where
     let end_of_stream = body_bytes.is_empty();
     let http_req = builder.body(()).map_err(|e| e.to_string())?;
 
-    let mut send_req = send_req.ready().await.map_err(|e| e.to_string())?;
+    let mut send_req = within(read_timeout, &addr, send_req.ready()).await?.map_err(|e| e.to_string())?;
     let (resp_future, mut req_body) = send_req
         .send_request(http_req, end_of_stream)
         .map_err(|e| e.to_string())?;
@@ -1264,7 +1341,7 @@ where
         req_body.send_data(body_bytes, true).map_err(|e| e.to_string())?;
     }
 
-    let resp = resp_future.await.map_err(|e| e.to_string())?;
+    let resp = within(read_timeout, &addr, resp_future).await?.map_err(|e| e.to_string())?;
     let (parts, mut body) = resp.into_parts();
 
     let content_type = parts
@@ -1275,7 +1352,7 @@ where
         .to_string();
 
     let mut body_bytes: Vec<u8> = Vec::new();
-    while let Some(chunk) = body.data().await {
+    while let Some(chunk) = within(read_timeout, &addr, body.data()).await? {
         body_bytes.extend_from_slice(&chunk.map_err(|e| e.to_string())?);
     }
 

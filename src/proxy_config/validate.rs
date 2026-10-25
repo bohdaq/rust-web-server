@@ -268,7 +268,7 @@ fn validate_middleware(label: &str, mw: &MiddlewareConfig, report: &mut ConfigRe
 
     for entry in mw.ip_allow.iter().chain(&mw.ip_deny) {
         if !crate::ip_filter::is_valid_entry(entry) {
-            report.error(format!("{label}: ip_filter entry '{entry}' is not an IPv4 address or CIDR range — ignored"));
+            report.error(format!("{label}: ip_filter entry '{entry}' is not an IP address or CIDR range — ignored"));
         }
     }
     if !mw.ip_allow.is_empty() && !mw.ip_deny.is_empty() {
