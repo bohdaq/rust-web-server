@@ -10,6 +10,11 @@
 //! - Method: **GET only**; all other methods bypass the cache.
 //! - Status: 2xx responses (200, 201, 203, 204, 206, …).
 //! - Response `Cache-Control: no-store` or `private` — **not** cached.
+//! - Private or partial requests — `Authorization`, `Cookie` or `Range` — skip
+//!   the cache entirely (no lookup, no store): their responses may differ per
+//!   user or cover only part of the resource.
+//! - Responses that set a cookie (`Set-Cookie`) or stream their body
+//!   (`stream_file` / `stream_pipe`, not held in memory) are **not** cached.
 //! - Request `Cache-Control: no-cache` — cache is bypassed, handler is called,
 //!   but the fresh response **is** stored (revalidation).
 //!
@@ -199,9 +204,28 @@ impl CacheLayer {
         })
     }
 
+    /// `true` for a request whose response may be private to the client
+    /// (credentials, cookies) or partial (`Range`): never answered from, nor
+    /// stored in, the shared cache (#49).
+    fn request_is_private(request: &Request) -> bool {
+        request.headers.iter().any(|h| {
+            h.name.eq_ignore_ascii_case(Header::_AUTHORIZATION)
+                || h.name.eq_ignore_ascii_case(Header::_COOKIE)
+                || h.name.eq_ignore_ascii_case(Header::_RANGE)
+        })
+    }
+
     /// `true` when the response may be stored in the cache.
     fn response_is_cacheable(response: &Response) -> bool {
         if response.status_code < 200 || response.status_code >= 300 {
+            return false;
+        }
+        // A streamed body isn't held in the response: a stored copy would
+        // replay an empty body. A cookie-setting response is per client.
+        if response.stream_file.is_some() || response.stream_pipe.is_some() {
+            return false;
+        }
+        if response.headers.iter().any(|h| h.name.eq_ignore_ascii_case(Header::_SET_COOKIE)) {
             return false;
         }
         !response.headers.iter().any(|h| {
@@ -239,8 +263,8 @@ impl Middleware for CacheLayer {
         connection: &ConnectionInfo,
         next: &dyn Application,
     ) -> Result<Response, String> {
-        // Only cache GET requests.
-        if request.method != METHOD.get {
+        // Only cache GET requests, and never private or partial ones.
+        if request.method != METHOD.get || Self::request_is_private(request) {
             return next.execute(request, connection);
         }
 

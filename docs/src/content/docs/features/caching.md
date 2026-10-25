@@ -58,6 +58,9 @@ Without `.vary_by_header`, all requests to the same URI share a single cache ent
 | Response status 3xx, 4xx, 5xx | No |
 | Response `Cache-Control: no-store` | No |
 | Response `Cache-Control: private` | No |
+| Request with `Authorization`, `Cookie` or `Range` | No — bypasses cache entirely (the response may be per user or partial; since 17.113.1) |
+| Response with `Set-Cookie` | No (since 17.113.1) |
+| Streamed response (`stream_file` / `stream_pipe`) | No — the body isn't held in memory (since 17.113.1) |
 | Request `Cache-Control: no-cache` | Bypass hit, call handler, **store** fresh response |
 
 ## Cache key

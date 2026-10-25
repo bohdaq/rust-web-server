@@ -297,3 +297,63 @@ fn cache_is_per_layer_instance() {
     layer_b.handle(&get("/"), &conn(), &app).unwrap();
     assert_eq!(2, app.call_count());
 }
+
+// ── #49: never cache private responses ───────────────────────────────────────
+
+/// Answers with whatever identifies the caller (Cookie or Authorization),
+/// and sets a cookie or streams a file when asked to.
+struct WhoAmI;
+
+impl Application for WhoAmI {
+    fn execute(&self, request: &Request, _c: &ConnectionInfo) -> Result<Response, String> {
+        let who = request.headers.iter()
+            .find(|h| h.name.eq_ignore_ascii_case("Cookie") || h.name.eq_ignore_ascii_case("Authorization"))
+            .map(|h| h.value.clone())
+            .unwrap_or_else(|| "anonymous".to_string());
+        let mut response = ok_response();
+        response.content_range_list = vec![Range::get_content_range(who.into_bytes(), "text/plain".to_string())];
+        if request.request_uri == "/login" {
+            response.headers.push(Header { name: "Set-Cookie".to_string(), value: "session=alice".to_string() });
+        }
+        if request.request_uri == "/download" {
+            response.content_range_list.clear();
+            response.stream_file = Some("/tmp/whatever".to_string());
+        }
+        Ok(response)
+    }
+}
+
+fn body(response: &Response) -> String {
+    response.content_range_list.first().map(|c| String::from_utf8_lossy(&c.body).to_string()).unwrap_or_default()
+}
+
+#[test]
+fn a_response_for_one_user_is_not_served_to_another() {
+    let cache = CacheLayer::memory(100).ttl(60);
+    for header in ["Cookie", "Authorization"] {
+        let alice = get_with_header("/me", header, "alice");
+        assert_eq!("alice", body(&cache.handle(&alice, &conn(), &WhoAmI).unwrap()));
+        // Bob, without credentials, must not get Alice's page.
+        assert_eq!("anonymous", body(&cache.handle(&get("/me"), &conn(), &WhoAmI).unwrap()));
+        let bob = get_with_header("/me", header, "bob");
+        assert_eq!("bob", body(&cache.handle(&bob, &conn(), &WhoAmI).unwrap()));
+    }
+}
+
+#[test]
+fn cookie_setting_partial_and_streamed_responses_are_not_stored() {
+    let cache = CacheLayer::memory(100).ttl(60);
+    let _ = cache.handle(&get("/login"), &conn(), &WhoAmI).unwrap();
+    let again = cache.handle(&get("/login"), &conn(), &WhoAmI).unwrap();
+    assert!(again.headers.iter().all(|h| h.name != "Age"), "Set-Cookie response came from the cache");
+
+    let _ = cache.handle(&get("/download"), &conn(), &WhoAmI).unwrap();
+    let again = cache.handle(&get("/download"), &conn(), &WhoAmI).unwrap();
+    assert!(again.headers.iter().all(|h| h.name != "Age"), "streamed response came from the cache");
+    assert!(again.stream_file.is_some());
+
+    // A Range request neither reads nor fills the cache.
+    let _ = cache.handle(&get_with_header("/part", "Range", "bytes=0-1"), &conn(), &WhoAmI).unwrap();
+    let plain = cache.handle(&get("/part"), &conn(), &WhoAmI).unwrap();
+    assert!(plain.headers.iter().all(|h| h.name != "Age"), "a Range response filled the cache");
+}
