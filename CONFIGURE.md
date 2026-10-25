@@ -144,6 +144,7 @@ ip                     = '0.0.0.0'
 | `RWS_CONFIG_CORS_MAX_AGE` | `cors_max_age` | `--cors-max-age` / `-g` | `86400` | Preflight cache duration (seconds) |
 | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` | `request_allocation_size_in_bytes` | `--request-allocation-size-in-bytes` / `-r` | `10000` | Read chunk size per request (bytes); larger bodies span several reads |
 | `RWS_CONFIG_CSP` | `csp` | — | `default-src 'self'` | `Content-Security-Policy` header value; set to empty string to disable |
+| `RWS_CONFIG_OPEN_FILE_CACHE_STRICT` | `open_file_cache_strict` | — | `true` | `false`: reuse a static file's size/mtime check for `open_file_cache_secs` instead of an `fstat` per request (edits in place may be served stale that long) |
 | `RWS_CONFIG_STATIC_CACHE_CONTROL` | `static_cache_control` | — | `no-cache` | `Cache-Control` for static files (revalidated with ETag / Last-Modified); empty = the `no-store` default |
 | `RWS_CONFIG_CLIENT_HINTS` | `client_hints` | — | `false` | Send `Accept-CH`, `Critical-CH` and the hints in `Vary` on every response |
 | `RWS_CONFIG_LOG_FORMAT` | `log_format` | — | `json` | Access log format: `json` (structured JSON for log aggregators), `combined` (CLF), or `off` / `none` (no access log) |

@@ -42,6 +42,9 @@ pub(crate) struct OpenFile {
     /// request for an unchanged small file costs no read at all.
     cache_contents: bool,
     contents: RwLock<Option<CachedContents>>,
+    /// For cache entries with `RWS_CONFIG_OPEN_FILE_CACHE_STRICT=false`: the
+    /// last `fstat` result and when it was taken, reused within [`valid_for`].
+    last_state: RwLock<Option<(Instant, u64, u128)>>,
     /// For cache entries: the gzip-compressed bytes as of `(len, modified)`
     /// — compressing a text file on every request cost ~80× serving it.
     gzipped: RwLock<Option<CachedGzip>>,
@@ -105,6 +108,7 @@ impl OpenFile {
             file,
             cache_contents: false,
             contents: RwLock::new(None),
+            last_state: RwLock::new(None),
             gzipped: RwLock::new(None),
         })
     }
@@ -162,8 +166,29 @@ impl OpenFile {
         &self.file
     }
 
-    /// Current size and modification time (`fstat`).
+    /// Current size and modification time: one `fstat` — or, with
+    /// `RWS_CONFIG_OPEN_FILE_CACHE_STRICT=false`, the last one if it is
+    /// younger than [`valid_for`] (nginx's `open_file_cache_valid`: an edit in
+    /// place may then be served stale for up to that long).
     pub(crate) fn state(&self) -> Option<FileState> {
+        self.state_with(strict(), valid_for())
+    }
+
+    fn state_with(&self, strict: bool, valid_for: Duration) -> Option<FileState> {
+        if strict || !self.cache_contents {
+            return self.fstat();
+        }
+        if let Some((at, len, modified)) = *self.last_state.read().unwrap_or_else(|e| e.into_inner()) {
+            if at.elapsed() < valid_for {
+                return Some(FileState { len, modified });
+            }
+        }
+        let state = self.fstat()?;
+        *self.last_state.write().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), state.len, state.modified));
+        Some(state)
+    }
+
+    fn fstat(&self) -> Option<FileState> {
         #[cfg(all(target_os = "linux", any(feature = "http1", feature = "http2")))]
         {
             fstat_state(&self.file)
@@ -262,6 +287,16 @@ fn shard_for(path: &str) -> &'static Shard {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     path.hash(&mut hasher);
     &shards()[(hasher.finish() as usize) % SHARDS]
+}
+
+/// `false` reuses a cached file's last size and modification time for
+/// [`valid_for`] instead of an `fstat` per request. Read once from
+/// `RWS_CONFIG_OPEN_FILE_CACHE_STRICT` (default `true`).
+pub(crate) fn strict() -> bool {
+    static STRICT: OnceLock<bool> = OnceLock::new();
+    *STRICT.get_or_init(|| {
+        !std::env::var("RWS_CONFIG_OPEN_FILE_CACHE_STRICT").is_ok_and(|v| v.trim().eq_ignore_ascii_case("false"))
+    })
 }
 
 /// How long an entry is trusted before it's revalidated; zero = cache off.
@@ -576,5 +611,19 @@ mod tests {
             Gzipped::Smaller(_) => assert!(shrinks),
             Gzipped::NotSmaller => assert!(!shrinks),
         }
+    }
+
+    #[test]
+    fn non_strict_state_reuses_the_last_fstat_within_the_window() {
+        let path = old_text_file("ofc_trust.txt", "12345");
+        let file = open_with(path.as_str(), true, LONG).unwrap();
+        let first = file.state_with(false, LONG).unwrap();
+        assert_eq!(5, first.len);
+        std::fs::write(path.as_str(), "1234567890").unwrap();
+        // Trusted: the cached size, without an fstat.
+        assert_eq!(5, file.state_with(false, LONG).unwrap().len);
+        // Strict (the default) sees the edit at once; so does an expired window.
+        assert_eq!(10, file.state_with(true, LONG).unwrap().len);
+        assert_eq!(10, file.state_with(false, Duration::ZERO).unwrap().len);
     }
 }

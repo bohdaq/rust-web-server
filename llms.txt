@@ -1188,6 +1188,7 @@ RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES   default: 10000 (per-read chunk siz
 RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES   default: 0 (unlimited); 413 before buffering when exceeded
 RWS_CONFIG_SPA_FALLBACK          default: unset (disabled); e.g. "index.html" — see "SPA fallback" section
 RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES   default: unset; comma-separated, e.g. "/api,/healthz"
+RWS_CONFIG_OPEN_FILE_CACHE_STRICT   default: true — false reuses a static file's fstat for open_file_cache_secs (nginx open_file_cache_valid; edits may be stale that long)
 RWS_CONFIG_STATIC_CACHE_CONTROL  default: "no-cache" (18.0.0) — Cache-Control for static files; "" = the no-store default
 RWS_CONFIG_CLIENT_HINTS          default: false (18.0.0) — send Accept-CH / Critical-CH and the hints in Vary
 RWS_CONFIG_OPEN_FILE_CACHE_SECS  default: 1 — open-file cache revalidation interval; 0 = off (Unix only)
