@@ -47,6 +47,33 @@ let content_type: Option<&Header> = request.get_header("Content-Type".to_string(
 let domain: Option<String> = request.get_domain().unwrap();
 ```
 
+`request.header(name)` is the allocation-free variant of `get_header`: it takes a `&str` and also matches case-insensitively.
+
+```rust
+use rust_web_server::header::Header;
+
+match request.header(Header::_AUTHORIZATION) {
+    Some(h) => println!("Authorization: {}", h.value),
+    None    => { /* not present */ }
+}
+```
+
+### Client address
+
+`ConnectionInfo`, passed to every controller and handler, carries the peer address. `peer_addr()` returns it as a `std::net::SocketAddr`; the raw `client.ip` / `client.port` fields are also public:
+
+```rust
+fn process(_request: &Request, response: Response, connection: &ConnectionInfo) -> Response {
+    if let Some(addr) = connection.peer_addr() {
+        println!("request from {}", addr);   // e.g. "127.0.0.1:54321"
+    }
+    println!("ip={} port={}", connection.client.ip, connection.client.port);
+    response
+}
+```
+
+This is the TCP peer. Behind a load balancer it is the balancer's address; `X-Forwarded-For` is not consulted.
+
 ## Response
 
 `Response` is defined in `src/response/mod.rs`:
@@ -109,6 +136,24 @@ let error_response = Response::text(STATUS_CODE_REASON_PHRASE.n400_bad_request, 
 ```
 
 `Response::json` takes already-serialized bytes, so it has no dependency on the `serde` feature — build `bytes` with `serde_json::to_vec(&value)?` or hand-rolled JSON. See [JSON](/building-apps/json/) for the `serde`-backed `Json<T>` extractor/responder, which serializes a typed value for you in one call.
+
+### Redirects
+
+Set a 3xx status and a `Location` header:
+
+```rust
+use rust_web_server::header::Header;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+fn process(_request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
+    response.status_code = *STATUS_CODE_REASON_PHRASE.n301_moved_permanently.status_code;
+    response.reason_phrase = STATUS_CODE_REASON_PHRASE.n301_moved_permanently.reason_phrase.to_string();
+    response.headers.push(Header::new(Header::_LOCATION, "https://example.com/new-path"));
+    response
+}
+```
+
+`n302_found`, `n303_see_other`, `n307_temporary_redirect` and `n308_permanent_redirect` work the same way.
 
 ### Streaming large files
 
@@ -200,7 +245,13 @@ MimeType::TEXT_JAVASCRIPT           // "text/javascript"
 // ... and many more
 ```
 
-Use `MimeType::detect_mime_type(filepath)` to derive the MIME type from a file extension at runtime.
+Use `MimeType::detect_mime_type(filepath)` to derive the MIME type from a file extension at runtime:
+
+```rust
+let mime = MimeType::detect_mime_type("/assets/app.wasm");   // "application/wasm"
+let mime = MimeType::detect_mime_type("/styles/main.css");   // "text/css"
+let mime = MimeType::detect_mime_type("/data/feed.json");    // "application/json"
+```
 
 ## Range::get_content_range
 

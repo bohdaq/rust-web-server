@@ -23,6 +23,12 @@ Both re-parse `rws.config.toml`, update process environment variables, apply the
 
 Request handling reads settings from a cached snapshot (`ServerConfig::current()`), not from the environment on every request; a reload rebuilds it, so changes apply from the next request. A library user who changes an `RWS_CONFIG_*` variable with `std::env::set_var` calls `rust_web_server::server_config::invalidate()` afterwards for the same effect.
 
+Each reload prints a confirmation line:
+
+```text
+Config reloaded — cors_allow_all=false rate_limit=1000/60 log_format=json
+```
+
 ## What reloads without restart
 
 | Setting | Env var |
@@ -32,7 +38,10 @@ Request handling reads settings from a cached snapshot (`ServerConfig::current()
 | Rate-limit window (seconds) | `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS` |
 | Log format (`json` / `combined` / `off`) | `RWS_CONFIG_LOG_FORMAT` |
 | Request allocation size | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
-| TLS certificates (http2+ builds) | `RWS_CONFIG_TLS_CERT_FILE`, `RWS_CONFIG_TLS_KEY_FILE` |
+| Max body size (applies to new connections) | `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` |
+| Client hints, static `Cache-Control` | `RWS_CONFIG_CLIENT_HINTS`, `RWS_CONFIG_STATIC_CACHE_CONTROL` |
+| SPA fallback | `RWS_CONFIG_SPA_FALLBACK`, `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES` |
+| TLS certificates (http2+ builds) | cert/key files re-read from `RWS_CONFIG_TLS_CERT_FILE`, `RWS_CONFIG_TLS_KEY_FILE` and every virtual host; the paths themselves are fixed at startup |
 | Tera templates (`tera` feature) | re-read from the directory passed to `template::init()` — see [Templates: hot reload](/building-apps/templates/#hot-reload) |
 | Proxy routes, upstreams, health checks, `[middleware]` | `[[route]]`, `[[upstream]]`, `[middleware]` in `rws.config.toml` — see below |
 
@@ -57,7 +66,9 @@ typo never takes the proxy down:
 
 Otherwise the new routes take effect for the next request, requests already
 in progress finish on the old ones, health checkers for the old upstreams stop
-and new ones start. A reload of an unchanged file does nothing.
+and new ones start. A reload of an unchanged file does nothing. To reload from
+your own code, see
+[Reloading without a restart](/proxy/config-driven/#reloading-without-a-restart).
 
 ## What requires a restart
 

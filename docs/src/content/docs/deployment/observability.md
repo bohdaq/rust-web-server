@@ -87,6 +87,17 @@ Set `RWS_CONFIG_LOG_FORMAT=combined` (via environment variable or `rws.config.to
 
 This format is compatible with GoAccess, AWStats, and most log-analysis tools.
 
+To produce the same line yourself — in your own middleware or a custom server loop — call `Log::combined`:
+
+```rust
+use rust_web_server::log::Log;
+
+// request: &Request, response: &Response, peer_addr: &SocketAddr
+let line = Log::combined(&request, &response, &peer_addr);
+println!("{}", line);
+// 192.168.1.1 - - [29/Jun/2026:14:23:05 +0000] "GET /index.html HTTP/1.1" 200 1234
+```
+
 `RWS_CONFIG_LOG_FORMAT=off` writes no access log at all.
 
 ### Buffered writes

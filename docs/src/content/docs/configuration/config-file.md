@@ -44,6 +44,21 @@ filter entries that aren't addresses, and auth secrets that aren't set.
 Secrets and files are checked in the current environment, so run it where the
 server runs. Proxy problems are also printed when the server starts.
 
+The same checks are a library call, e.g. in a test that keeps a deployment's
+config honest:
+
+```rust
+use rust_web_server::config_check;
+
+#[test]
+fn production_config_is_valid() {
+    let report = config_check::check_file("deploy/rws.config.toml");
+    assert!(report.is_ok(), "{}", report.render("deploy/rws.config.toml"));
+}
+```
+
+`report.render_json(path)` gives the `--format=json` output.
+
 ### How keys map to settings
 
 Every setting has an `RWS_CONFIG_*` environment variable. In the file, a key's

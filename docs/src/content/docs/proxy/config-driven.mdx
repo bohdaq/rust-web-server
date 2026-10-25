@@ -226,6 +226,8 @@ max_requests = 100    # requests allowed per window (default: 1000)
 window_secs  = 60     # sliding window size in seconds (default: 60)
 ```
 
+Any sub-table can also be written inline under `[route.middleware]` — `rate_limit = { max_requests = 100, window_secs = 60 }` is the same as the `[route.middleware.rate_limit]` table above.
+
 #### Authentication
 
 Three `type`s, all under `[route.middleware.auth]`:
@@ -334,6 +336,15 @@ max_body_size = 65536   # 413 if this route's request body exceeds 64 KiB
 
 `0`/absent means no route-specific limit. This is a *stricter, additional* cap on top of the global `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (see [Forms & Uploads](/building-apps/forms-uploads/#size-limits)) — not a substitute for it. It's checked after this route has already been matched, which means the body was necessarily already read in full to build the `Request` that route matching itself required; use it to keep one route (e.g. a small JSON API) stricter than the global ceiling a separate upload route needs, not as protection against unbounded memory use — the global limit is what already provides that, for every route.
 
+The limit is the outermost layer of the route — checked before `timeout_ms`, auth and the rest — and a rejected request gets:
+
+```text
+HTTP/1.1 413 Payload Too Large
+Content-Type: text/plain
+
+request body of 100000 bytes exceeds this route's 65536-byte limit
+```
+
 ## L4 proxy sections
 
 ### `[[tcp_proxy]]` — raw TCP tunnel
@@ -382,6 +393,41 @@ Middleware that applies to every request goes in a top-level `[middleware]` sect
 max_requests = 500
 window_secs  = 60
 ```
+
+## Using it from Rust
+
+The `rws` binary wires this up automatically. An application embedding the crate can build the same proxy from the config file:
+
+```rust
+use rust_web_server::proxy_config::{build_from_file, ProxyConfig};
+
+if ProxyConfig::is_proxy_mode() {
+    // `app` is a ConfigDrivenApp (Application + Clone); `_listeners` are the
+    // [[tcp_proxy]] / [[udp_proxy]] / [[ws_proxy]] threads.
+    let (app, _listeners) = build_from_file();
+    // pass `app` to Server::run / run_tls / run_quic
+}
+```
+
+### Reloading without a restart
+
+`SIGHUP` and `POST /admin/config/reload` reload `[[route]]`, `[[upstream]]` and `[middleware]` — see [Hot Reload](/features/hot-reload/#reloading-proxy-routes). An embedding application can drive the same reload itself, e.g. from its own admin endpoint or a file watcher:
+
+```rust
+use rust_web_server::proxy_config::{build_from_file, ReloadOutcome};
+
+let (app, _listeners) = build_from_file();
+let reloader = app.clone();          // clones share the live routes
+
+// later, after rws.config.toml changed:
+match reloader.reload_from_str(&std::fs::read_to_string("rws.config.toml")?) {
+    Ok(ReloadOutcome::Reloaded { routes, warnings }) => println!("{routes} routes live; {warnings:?}"),
+    Ok(ReloadOutcome::Unchanged) => {}
+    Err(report) => eprintln!("kept the running routes:\n{}", report.render("rws.config.toml")),
+}
+```
+
+A file with errors never replaces the running routes. `[[tcp_proxy]]`, `[[udp_proxy]]` and `[[ws_proxy]]` listeners are bound once at startup; a reload that changes them returns a warning. To run your own code on every reload, register a hook with `config_reload::on_reload(|| ...)`.
 
 ## Full annotated example
 

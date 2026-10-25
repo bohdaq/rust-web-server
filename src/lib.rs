@@ -294,3 +294,8 @@ pub mod fuzz_api {
     }
 }
 
+
+/// Compiles the README's Rust example as a doctest, so it can't drift from the API.
+#[cfg(all(doctest, feature = "http3"))]
+#[doc = include_str!("../README.md")]
+pub struct ReadmeDoctests;

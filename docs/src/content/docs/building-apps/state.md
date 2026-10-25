@@ -46,6 +46,8 @@ fn handler(
 
 Handlers receive an immutable `&S` reference. The state type `S` itself is never cloned per-request — only the `Arc<S>` wrapping it is cloned once at registration time.
 
+Outside a handler — for example in a test — `app.state()` returns the same `&S`.
+
 ## routes! macro with state
 
 The `routes!` macro works with any builder that has the `.get()` / `.post()` etc. methods, including `AppWithState`:

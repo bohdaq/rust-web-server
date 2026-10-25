@@ -55,6 +55,7 @@ export default defineConfig({
             { label: 'JSON',                  link: '/building-apps/json/' },
             { label: 'Cookies',               link: '/building-apps/cookies/' },
             { label: 'Async Handlers',        link: '/building-apps/async-handlers/' },
+            { label: 'HTTP Client',           link: '/building-apps/http-client/' },
             { label: 'HTML Templates',        link: '/building-apps/templates/' },
             { label: 'Dependency Injection',  link: '/building-apps/dependency-injection/' },
           ],

@@ -44,6 +44,16 @@ IpFilter::deny([
 ])
 ```
 
+### Combining both
+
+Stack two filters to allow a network but carve out one address inside it — a request must pass every layer:
+
+```rust
+let app = App::new()
+    .wrap(IpFilter::allow(["10.0.0.0/8"]))
+    .wrap(IpFilter::deny(["10.0.0.99"]));
+```
+
 ## Entry formats
 
 Each entry in the list is an exact IPv4 or IPv6 address, or a CIDR range:

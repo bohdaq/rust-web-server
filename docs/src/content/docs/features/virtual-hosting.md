@@ -104,6 +104,48 @@ let www_router = Router::new()
     .get("/", |_req, _params, _conn| { /* ... */ });
 ```
 
+`router.handle(request, connection)` returns `None` when the host or path
+doesn't match, so an `Application` can try each domain's router in turn and
+fall through to the built-in `App` (static files, `/healthz`, …):
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::application::Application;
+use rust_web_server::core::New;
+use rust_web_server::request::Request;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::router::Router;
+use rust_web_server::server::ConnectionInfo;
+
+pub struct VhostApp {
+    example: Router,
+    other: Router,
+    fallback: App,
+}
+
+impl VhostApp {
+    pub fn new() -> Self {
+        VhostApp {
+            example: Router::new().with_host("example.com").get("/", |_req, _p, _c| {
+                Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "example.com home")
+            }),
+            other: Router::new().with_host("other.com").get("/", |_req, _p, _c| {
+                Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "other.com home")
+            }),
+            fallback: App::new(),
+        }
+    }
+}
+
+impl Application for VhostApp {
+    fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
+        if let Some(r) = self.example.handle(request, connection) { return Ok(r); }
+        if let Some(r) = self.other.handle(request, connection)   { return Ok(r); }
+        self.fallback.execute(request, connection)
+    }
+}
+```
+
 ## Hot reload
 
 Send `SIGHUP` (or `POST /admin/config/reload`) to hot-reload all virtual host

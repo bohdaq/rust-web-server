@@ -81,7 +81,7 @@ rust-web-server = "17"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
-```rust
+```rust,no_run
 use rust_web_server::prelude::*;
 
 fn hello(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &()) -> Response {
@@ -162,7 +162,7 @@ with this crate's own. Point your assistant at:
 - **[llms-full.txt](llms-full.txt)** — every docs page in one file, for pasting into a chat or system prompt
 - **[CLAUDE.md](CLAUDE.md)** — architecture and conventions; Claude Code reads it automatically inside this repo
 
-```
+```text
 I'm building on the rust-web-server (rws) crate. Read
 https://raw.githubusercontent.com/bohdaq/rust-web-server/main/llms-full.txt
 then build a REST API with GET/POST /todos backed by SQLite (model-sqlite),

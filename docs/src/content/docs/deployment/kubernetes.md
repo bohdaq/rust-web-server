@@ -110,6 +110,14 @@ spec:
             secretName: rws-tls
 ```
 
+Every `RWS_CONFIG_*` variable can come from a ConfigMap or Secret. Settings that name a file, such as `RWS_CONFIG_TLS_CERT_FILE`, take a path, so mount the Secret as a volume (as above) rather than putting its contents in the variable:
+
+```yaml
+envFrom:
+  - configMapRef:
+      name: rws-config   # e.g. RWS_CONFIG_LOG_FORMAT, RWS_CONFIG_THREAD_COUNT
+```
+
 ## Service YAML
 
 ```yaml
@@ -185,7 +193,7 @@ spec:
 
 ## Structured logging for Kubernetes
 
-Set `RWS_CONFIG_LOG_FORMAT=json` to emit access logs in JSON format. Kubernetes log aggregators (Fluentd, Fluent Bit, Vector) can then parse and index each field:
+Access logs are JSON by default (`RWS_CONFIG_LOG_FORMAT=json`, or `log_format = 'json'` in `rws.config.toml`; `combined` gives Combined Log Format, `off`/`none` disables the access log). Kubernetes log aggregators (Fluentd, Fluent Bit, Vector) can then parse and index each field:
 
 ```json
 {"time":"2026-07-02T12:00:00Z","remote_addr":"10.0.0.1","method":"GET","path":"/api/users","protocol":"HTTP/1.1","status":200,"bytes":1024}
@@ -197,6 +205,6 @@ Set `RWS_CONFIG_LOG_FORMAT=json` to emit access logs in JSON format. Kubernetes 
 
 ## Prometheus scraping
 
-With `prometheus.io/scrape: "true"` annotation on the pod, a standard Prometheus installation scrapes `GET /metrics` automatically. The endpoint returns server-wide counters and — if `MetricsLayer` is enabled — per-route histograms in Prometheus text format.
+With `prometheus.io/scrape: "true"` annotation on the pod, a standard Prometheus installation scrapes `GET /metrics` automatically. The endpoint returns server-wide counters and — if `MetricsLayer` is enabled — per-route histograms in Prometheus text format. Circuit-breaker state (`rws_circuit_breaker_state{backend}`) is included automatically. The full metric list is on the [Metrics](/features/metrics/) page.
 
 See the [Observability](/deployment/observability) page for example Grafana queries.

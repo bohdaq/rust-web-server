@@ -184,7 +184,9 @@ Two independent knobs apply to request bodies:
 - **`RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES`** (default `10000`) — the size of each individual socket read. Bodies larger than this are accumulated across multiple reads automatically as long as the request declares `Content-Length`; this is a buffer-chunking size, not a hard cap on upload size.
 - **`RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`** (default `0`, unlimited) — the actual maximum accepted body size. When set, a request whose declared `Content-Length` exceeds it is rejected with `413 Payload Too Large` **before** any of its body is read off the socket, and the connection is closed rather than kept alive.
 
-For an upload endpoint, set `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` to the largest file you intend to accept; leave it at `0` if uploads are already bounded some other way (e.g. a reverse proxy in front of `rws`).
+For an upload endpoint, set `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` to the largest file you intend to accept; leave it at `0` if uploads are already bounded some other way (e.g. a reverse proxy in front of `rws`). On HTTP/2 and HTTP/3 the cap is checked as `DATA` frames arrive, so an oversized body gets `413` as soon as it crosses the limit.
+
+The limit is global: routes are matched only after the whole request, body included, has been read, so no per-route limit can run before buffering. For one route that must be stricter, the config-driven proxy has [`[route.middleware] max_body_size`](/proxy/config-driven/), and a `Router`/`AppWithState` handler can check `request.body.len()` and return `AppError::PayloadTooLarge`. Both run after the body is in memory, so they protect that route's logic, not server memory.
 
 :::note[Streaming uploads]
 The multipart parser reads the entire body into memory before returning — `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` bounds *how much* memory that can consume, but handlers still see the whole body at once rather than incrementally. For very large files, consider streaming the upload to disk at the TCP layer or using an object-storage pre-signed URL workflow and directing the client to upload directly.

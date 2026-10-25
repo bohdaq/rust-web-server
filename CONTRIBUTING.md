@@ -42,9 +42,11 @@ CI also runs, on every push:
   `config_reload::reload()` — must start with
   `let _g = crate::test_env::lock();`. Tests of CORS/CSP headers can avoid
   that with `App::with_config(ServerConfig { … })`.
-- **Docs ship with the code.** A user-visible change updates `README.md`,
-  `llms.txt`, `DEVELOPER.md` (building-blocks table and a use case) and the
-  matching page under `docs/src/content/docs/`. `CLAUDE.md` describes the
+- **Docs ship with the code.** A user-visible change updates the matching
+  page under `docs/src/content/docs/` (a new public type also gets a row in
+  `reference/api.md` and rustdoc), adds a `CHANGELOG.md` entry, and
+  regenerates `llms.txt` with `python3 ci/gen_llms.py`; `python3
+  ci/check_docs.py` checks links and settings. `CLAUDE.md` describes the
   architecture in more depth than this file.
 - **No new HTTP dependencies.** HTTP/1.1 parsing, routing, JSON, WebSocket and
   the ACME client are written in-crate on purpose; HTTP/2 and HTTP/3 use `h2`

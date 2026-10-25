@@ -62,6 +62,47 @@ let server = App::new()
 `App::new().mcp(name, version)` is equivalent to `McpServer::new(name, version)` with the built-in `App` automatically wired as the fallback. Both forms pass directly to `Server::run`.
 :::
 
+`AppWithState` and `WithMiddleware` have the same `.mcp()` method, so MCP can sit on top of your own routes — the dispatch chain is `McpServer` → your routes → the built-in controllers:
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::mcp::McpContent;
+use rust_web_server::request::Request;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::router::PathParams;
+use rust_web_server::routes;
+use rust_web_server::server::{ConnectionInfo, Server};
+
+#[derive(Clone)]
+struct State { version: &'static str }
+
+fn get_version(_req: &Request, _p: &PathParams, _c: &ConnectionInfo, _s: &State) -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    r
+}
+
+let http = routes! {
+    App::with_state(State { version: "1.0.0" }),
+    GET "/api/version" => get_version,
+};
+
+let mut mcp = http.mcp("my-app", "1.0.0");
+if let Ok(token) = std::env::var("MCP_TOKEN") {
+    mcp = mcp.require_bearer(token);
+}
+let app = mcp.tool(
+    "server_version",
+    "Return the running server version",
+    r#"{"type":"object"}"#,
+    |_| Ok(McpContent::json(r#"{"version":"1.0.0"}"#)),
+);
+
+let (listener, pool) = Server::setup().unwrap();
+Server::run(listener, pool, app);
+```
+
 ## MCP endpoint
 
 All JSON-RPC 2.0 messages travel over `POST /mcp`. The endpoint handles the full MCP lifecycle:

@@ -2,9 +2,9 @@
 
 # Demo Apps TODO — rws v17.56.0+
 
-A set of standalone reference applications, each a complete deployable thing built around one persona rather than a feature checklist. Together they exercise every building block listed in `README.md`'s "What's in the box" and every `## Use Case` in `DEVELOPER.md`, so a newcomer can find "the app that looks like mine" and read working code instead of piecing features together from isolated snippets.
+A set of standalone reference applications, each a complete deployable thing built around one persona rather than a feature checklist. Together they exercise every feature on the docs site's [All Features](https://rws8.tech/getting-started/features/) page, so a newcomer can find "the app that looks like mine" and read working code instead of piecing features together from isolated snippets.
 
-Each app should live under `examples/<name>/` as its own `Cargo.toml` depending on `rust-web-server` with the feature flags it needs, plus a `README.md` explaining what it demonstrates and how to run it. Every app must follow the same four-artifact rule as the main crate (tests, `DEVELOPER.md` cross-link, README/llms.txt mention, docs page) — see `CLAUDE.md`.
+Each app should live under `examples/<name>/` as its own `Cargo.toml` depending on `rust-web-server` with the feature flags it needs, plus a `README.md` explaining what it demonstrates and how to run it. Every app must follow the same rule as the main crate (tests, a docs page, a CHANGELOG entry) — see `CLAUDE.md`.
 
 Ordered by priority: Tier 1 covers the widest surface area and the strongest "look what this can do" story; Tier 2 is infra-layer / config-only and cheaper to build since most of it requires no Rust code.
 
@@ -74,4 +74,4 @@ Ordered by priority: Tier 1 covers the widest surface area and the strongest "lo
 
 ## Cross-reference
 
-Each app, once built, should get a row in `DEVELOPER.md`'s building-blocks table pointing to it as the canonical example, plus a link from the relevant `docs/` page (`building-apps/`, `proxy/`, `database/`, `deployment/`) — see the "Required for every change" checklist in `CLAUDE.md`.
+Each app, once built, should get a link from the relevant `docs/` page (`building-apps/`, `proxy/`, `database/`, `deployment/`) — see the "Required for every change" checklist in `CLAUDE.md`.

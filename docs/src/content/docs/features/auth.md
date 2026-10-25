@@ -231,6 +231,24 @@ in-crate (`rust_web_server::rsa_key`) rather than with the `rsa` crate, whose
 RUSTSEC-2023-0071 advisory has no fixed release; `verify_jwt_rs256` takes an
 `rsa_key::RsaPublicKey`.
 
+`RsaPublicKey` loads a key with `from_public_key_pem` (`BEGIN PUBLIC KEY` or
+`BEGIN RSA PUBLIC KEY`), `from_public_key_der` (SPKI), `from_pkcs1_der`, or
+`from_components(n, e)` (a JWK's `n`/`e`). It also verifies any
+RSASSA-PKCS1-v1_5 / SHA-256 signature directly, not just a JWT:
+
+```rust
+use rust_web_server::rsa_key::RsaPublicKey;
+
+let key = RsaPublicKey::from_public_key_pem(&std::fs::read_to_string("issuer.pub.pem")?)?;
+let ok: bool = key.verify_pkcs1v15_sha256(b"message", &signature);
+```
+
+:::note[Upgrading from 17.x]
+`verify_jwt_rs256` and `SamlIdpMetadata.signing_key` used `rsa::RsaPublicKey`.
+Build an `rsa_key::RsaPublicKey` instead (`from_public_key_pem`,
+`from_public_key_der`, or `from_components(n, e)`).
+:::
+
 :::note[When to use `sso::JwksCache` instead]
 `JwtLayer::rs256`/`::es256` pin a single static public key at construction time. Use `sso::JwksCache` when the signing key can rotate and you need to fetch current keys from a live JWKS URL (`.well-known/jwks.json`), keyed by `kid` — the right fit for a full OIDC identity provider, not a service-to-service integration with one known signer.
 :::
@@ -298,3 +316,30 @@ htpasswd_file = ".htpasswd"
 ```
 
 See [Config-Driven Proxy](/proxy/config-driven/) for the full `[route.middleware]` reference. Auth config fails closed: an unset/empty `token_env`/`secret_env`, a missing `htpasswd_file`, or a build without the `auth` feature makes that route answer `503 Service Unavailable` (with an error in the startup log) instead of serving it unprotected. Other routes keep working. Bearer tokens are compared in constant time.
+
+## Password hashing (`crypto` feature)
+
+The `crypto` feature (independent of `auth`) adds Argon2id password hashing and secure random tokens:
+
+```toml
+[dependencies]
+rust-web-server = { version = "17", features = ["crypto"] }
+```
+
+```rust
+use rust_web_server::crypto::{hash_password, verify_password, generate_token};
+
+// At registration: store the returned PHC string ($argon2id$v=19$...) as-is.
+// The random salt is embedded in it, so no separate salt column is needed.
+let hash = hash_password("hunter2")?;
+
+// At login: constant-time comparison; Err only when `hash` isn't a valid PHC string.
+if !verify_password(&submitted_password, &hash)? {
+    // return 401
+}
+
+// Password-reset tokens, email verification codes, API keys:
+let reset_token = generate_token(32); // 32 random bytes -> 64-char lowercase hex
+```
+
+All three live in `rust_web_server::crypto`; errors are `CryptoError`. Use at least 16 bytes for tokens and 32 bytes for high-value secrets such as API keys.

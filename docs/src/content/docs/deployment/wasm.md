@@ -37,6 +37,27 @@ curl http://127.0.0.1:8080/
 
 The build output (`rws_wasm_shim.wasm`) is already a valid WASM component on this target — no separate `wasm-tools component new` step is needed.
 
+The adapter is a small `Guest::handle` implementation (full version in `rws-wasm-shim/src/lib.rs`):
+
+```rust
+use wasip2::exports::http::incoming_handler::Guest;
+use wasip2::http::types::{IncomingRequest, ResponseOutparam};
+use rust_web_server::app::App;
+use rust_web_server::application::Application;
+use rust_web_server::core::New;
+
+wasip2::http::proxy::export!(Shim);
+struct Shim;
+
+impl Guest for Shim {
+    fn handle(request: IncomingRequest, response_out: ResponseOutparam) {
+        // translate `request` into a rust_web_server::request::Request,
+        // call App::new().execute(&request, &connection), and write the
+        // Response back through `response_out`.
+    }
+}
+```
+
 ## What runs inside the guest
 
 Only the parts of `rust-web-server` that don't touch a socket or spawn a thread are compiled for `wasm32-wasip2` — everything else is behind `#[cfg(not(target_arch = "wasm32"))]`. This list grew substantially past the initial "core only" slice — outbound HTTP now works, which unblocks everything built on top of it:

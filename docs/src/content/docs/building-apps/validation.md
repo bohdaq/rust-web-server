@@ -43,6 +43,8 @@ impl Validate for Payload {
 }
 ```
 
+The checks behind the derive's `email` and `url` validators are public, so a manual implementation can reuse them: `rust_web_server::validate::is_email(&self.email)` and `rust_web_server::validate::is_url(&self.homepage)`.
+
 ## `ValidationErrors`
 
 `ValidationErrors` accumulates every failing field so the caller sees all problems at once.

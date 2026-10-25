@@ -94,6 +94,18 @@ rws_route_duration_seconds_sum{method="GET",path="/api/users"} 47.231000000
 rws_route_duration_seconds_count{method="GET",path="/api/users"} 9413
 ```
 
+### Behaviour notes
+
+- A handler that returns `Err` is recorded with status `500`.
+- The per-route section is absent from `/metrics` until at least one route has been observed.
+- `metrics::record_route(method, path, status, elapsed_secs)` records a request directly, for custom instrumentation without `MetricsLayer`:
+
+```rust
+use rust_web_server::metrics;
+
+metrics::record_route("GET", "/jobs/run", 200, 0.042);
+```
+
 ## Circuit breaker state
 
 `rws_circuit_breaker_state{backend}` is included automatically — no `MetricsLayer` or other opt-in needed — for every backend known to [`circuit_breaker::global()`](/proxy/circuit-breaker/):

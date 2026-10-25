@@ -139,3 +139,13 @@ jobs:
       - run: npm ci
       - run: npm audit --audit-level=moderate
       - run: npm run build
+
+  docs-check:
+    name: docs links, settings and llms.txt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Links between pages, links to repo files, every RWS_CONFIG_* on env-vars.md
+      - run: python3 ci/check_docs.py
+      # llms.txt / llms-full.txt are generated from docs/ — fails when not regenerated
+      - run: python3 ci/gen_llms.py --check

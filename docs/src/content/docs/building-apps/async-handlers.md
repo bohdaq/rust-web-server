@@ -121,6 +121,63 @@ Path pattern syntax is identical to the synchronous router: `:name` matches a si
 
 In both cases, the call site sees a synchronous `Result<Response, String>`. You do not need to think about this bridge when writing handlers.
 
+## Custom `Application`s: event loop and async path
+
+If you implement `Application` yourself, two optional methods control where the async servers run a request.
+
+**`runs_inline`** — the servers hand every request to the blocking pool by default. A request that is quick and never waits can skip that handoff (the built-in `App` does this for static files and health checks):
+
+```rust
+use rust_web_server::application::Application;
+use rust_web_server::request::Request;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::server::ConnectionInfo;
+
+#[derive(Clone)]
+struct Ping;
+
+impl Application for Ping {
+    fn execute(&self, _request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
+        Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "pong"))
+    }
+
+    // In-memory, no I/O: safe to run on the event loop.
+    fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
+}
+```
+
+Return `true` only for work that never waits on a database, the network or a lock held across I/O — on the event loop that would stall every connection on the same worker thread. Behind middleware, the request runs inline only if every layer opts in too ([`Middleware::runs_inline`](/building-apps/middleware/#running-on-the-event-loop-runs_inline)).
+
+**`execute_async`** (`http2` feature) — `execute` is synchronous, so a blocking-pool thread sits idle while it waits on the network. An application with an async way to answer can offer it; the server awaits it on the connection's own task and falls back to `execute` when it returns `None`:
+
+```rust
+use rust_web_server::application::{Application, AsyncResponse};
+use rust_web_server::request::Request;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+use rust_web_server::server::ConnectionInfo;
+
+#[derive(Clone)]
+struct Slow;
+
+impl Application for Slow {
+    fn execute(&self, _request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
+        std::thread::sleep(std::time::Duration::from_millis(50)); // blocks a pool thread
+        Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "done"))
+    }
+
+    fn execute_async<'a>(&'a self, _request: &'a Request, _connection: &'a ConnectionInfo) -> Option<AsyncResponse<'a>> {
+        Some(Box::pin(async {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await; // holds no thread
+            Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "done"))
+        }))
+    }
+}
+```
+
+Behind middleware, the async path is offered only if every layer passes the request through unchanged ([`Middleware::is_passthrough`](/building-apps/middleware/#passing-requests-through-is_passthrough)); otherwise `execute` runs as before. The config-driven proxy uses this for plain-HTTP routes without middleware. `AsyncAppWithState` itself does not use `execute_async` — its handlers go through the bridge above.
+
 ## Unmatched routes fall through
 
 Routes that do not match any registered pattern are forwarded to the built-in `App` controller chain (static files, health checks, metrics, etc.). You only need to register handlers for your application routes.

@@ -20,6 +20,21 @@ main.rs
 
 The connection handler calls `app.execute(request, connection)` where `app` is any value that implements the `Application` trait. `execute` is synchronous and may block (read files, call a database or upstream): the server runs it on tokio's blocking thread pool, so a slow handler never stalls other connections. Requests for which `Application::runs_inline` returns `true` (the built-in `App`'s GET/HEAD — health, metrics, static files) skip that handoff and run directly on the event loop; see [Middleware](/building-apps/middleware/#running-on-the-event-loop-runs_inline). (The `http1`-only build has no async runtime; there each connection is served by `Server::process()` on a fixed-size worker thread pool.) The three routing styles differ only in how you implement or compose that `Application`.
 
+`Server::setup()` reads the IP, port and thread count from the layered configuration (defaults → env vars → `rws.config.toml` → CLI args; see [Configuration](/configuration/overview/)) and returns the bound listener plus a thread pool. The async builds then pass your app to `Server::run_tls` (see [Quick Start](/getting-started/quick-start/)); the `http1`-only build uses the blocking `Server::run`:
+
+```rust
+use rust_web_server::server::Server;
+
+fn main() {
+    let (listener, pool) = match Server::setup() {
+        Ok(v) => v,
+        Err(e) => { eprintln!("{}", e); return; }
+    };
+    let app = MyApp::new();          // any type implementing Application + Clone
+    Server::run(listener, pool, app);
+}
+```
+
 ## Three ways to add routes
 
 ### 1. Controller trait

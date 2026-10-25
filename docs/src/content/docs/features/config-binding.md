@@ -106,6 +106,20 @@ impl FromEnvStr for LogLevel {
 }
 ```
 
+## Low-level helpers
+
+The functions the derive expands to are public, for reading a single value without a struct (no `#[derive]` needed):
+
+```rust
+use rust_web_server::config_binding::{load_optional, load_required, load_with_default};
+
+let port: u16 = load_with_default("APP_PORT", "8080")?;
+let db: String = load_required("DATABASE_URL")?;
+let debug: Option<bool> = load_optional("APP_DEBUG")?;
+```
+
+Each returns `Result<_, String>` with the same error messages as `load()`.
+
 ## Complete example
 
 ```rust

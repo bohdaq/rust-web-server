@@ -166,4 +166,4 @@ fn list_items(_: &Request, _: &PathParams, _: &ConnectionInfo, _: &Db) -> Respon
 }
 ```
 
-See [DEVELOPER.md](https://github.com/bohdaq/rust-web-server/blob/main/DEVELOPER.md) for the full building-blocks reference and a combined example with `routes!`.
+See the [API reference](/reference/api/) for the full list of public types.
