@@ -6,6 +6,21 @@ Minor releases are additive; anything breaking waits for a major (19.0). Each re
 
 Unordered ideas live in [IDEAS.md](IDEAS.md); finished plans in [archive/](archive/). Item numbers are stable references (`#N`), not an order.
 
+## 17.113.1 — Security patch
+
+From the 2026-10-25 security review. Patches the released 17.113.0 (branch off the `17.113.0` tag, no 18.0 changes), then the same fixes go to `main` for 18.0. Ships first, before anything else on this list.
+
+- **#43** **Static files stay inside the web root** — resolve the request path, refuse `..` segments, and require the resolved path (after symlinks) to stay under the root; directory listings likewise. Stop serving dot-files and dot-directories (`.git/`, `.env`) by default.
+- **#44** **`/mcp` needs a token** — with `MCP_TOKEN` unset or empty the built-in MCP tools are not mounted (or answer `401`); check `Origin`, accept only `application/json`, and put `/mcp` behind the blocklist, maintenance and rate-limit layers.
+- **#45** **Private keys out of the web root** — ACME writes its certificate key and account key outside the served directory (a state directory, as the Docker image's `/data`), with `0600` permissions; refuse to serve `*.pem` / `*.key` and `rws.config.toml`.
+- **#46** **Byte-range limits** — cap the number of ranges per request, merge overlapping ones, and fall back to a full `200` response past the cap (RFC 9110 §14.2 allows ignoring a `Range`).
+- **#47** **No CR/LF in header values** — the HTTP/1.1, HTTP/2 and HTTP/3 writers and the mailer reject or strip CR/LF in header values (redirect targets, `return_to`, subjects, recipients).
+- **#48** **Proxy: interim responses** — a `1xx` from the upstream is not the final response; read past it before returning the connection to the pool, in both forwarders. Otherwise one client's response can be delivered to another.
+- **#49** **CacheLayer: never cache private responses** — skip requests carrying `Authorization` or `Cookie`, responses with `Set-Cookie`, and streamed responses (their body isn't stored). The default binary wraps its app in `CacheLayer`.
+- **#50** **Proxy routes match a normalized path** — percent-decoding of unreserved characters, dot segments and repeated slashes resolved before matching (and the same path sent upstream), host matching case-insensitive, so per-route auth, IP filters and rate limits can't be skipped through a catch-all route.
+
+**Done when:** a regression test per fix; the reproductions from the review fail against the patched binary; 17.113.1 published (crates.io, GitHub release, Docker Hub / GHCR, Homebrew) with a GitHub security advisory; the same fixes merged to `main`.
+
 ## 18.0.0 — Correct and current
 
 The breaking release already on `main` (Header `Cow` fields, new default headers, in-crate RSA, the per-request CPU work), plus the fixes that can't wait: certificate renewal that survives Let's Encrypt's shorter lifetimes, an MCP server that speaks a current protocol, and the first signed, SBOM-carrying release.
