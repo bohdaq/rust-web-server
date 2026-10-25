@@ -5243,7 +5243,10 @@ Range requests follow RFC 9110 over HTTP/1.1, HTTP/2, and HTTP/3: `bytes=2-5`,
 open-ended `bytes=7-`, suffix `bytes=-500`, and multiple ranges get
 `206 Partial Content` with an exact `Content-Range` (`bytes 7-9/10`); a range
 ending past the file is clamped to its last byte; a range starting past the
-end gets `416`. Full `200` responses carry no `Content-Range`.
+end gets `416`. Full `200` responses carry no `Content-Range`. Overlapping
+ranges are merged (and then sorted); more than 16 ranges are answered with
+the whole file as one range, so a response never holds more than the file
+(17.113.1).
 
 ```bash
 mkdir www && echo "<h1>Hello</h1>" > www/index.html
@@ -8552,8 +8555,10 @@ Without `.vary_by_header`, all requests to the same URI share a single cache ent
 | Response `Cache-Control: no-store` | No |
 | Response `Cache-Control: private` | No |
 | Response `Cache-Control: no-cache` (static files by default) | No — it may only be reused after revalidation, which this cache doesn't do |
-| Request has a `Range` header | Not stored — a `206` is a slice, not the resource |
 | Response `Vary` names a request header that isn't in the key | Not stored — unless it changed nothing: `Origin` without `Access-Control-Allow-Origin`, or `Accept-Encoding` with an unencoded body. `Vary: *` is never stored |
+| Request with `Authorization`, `Cookie` or `Range` | No — bypasses cache entirely (the response may be per user or partial; since 17.113.1) |
+| Response with `Set-Cookie` | No (since 17.113.1) |
+| Streamed response (`stream_file` / `stream_pipe`) | No — the body isn't held in memory (since 17.113.1) |
 | Request `Cache-Control: no-cache` | Bypass hit, call handler, **store** fresh response |
 
 ## Cache key
