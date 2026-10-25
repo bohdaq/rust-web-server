@@ -24,6 +24,11 @@ Files larger than 256 KiB are streamed from disk with an exact
 uses a few MiB. The static root is the working directory `rws` was started
 in.
 
+Only files inside the root are served: a path with a `..` segment is refused
+(`404`), and so is a symlink in the root that points outside it. Files and
+directories whose name starts with `.` (`.git/`, `.env`) are not served unless
+`RWS_CONFIG_SERVE_DOTFILES=true`; `.well-known/` always is (17.113.1).
+
 Range requests follow RFC 9110 over HTTP/1.1, HTTP/2, and HTTP/3: `bytes=2-5`,
 open-ended `bytes=7-`, suffix `bytes=-500`, and multiple ranges get
 `206 Partial Content` with an exact `Content-Range` (`bytes 7-9/10`); a range

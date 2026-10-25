@@ -379,6 +379,11 @@ fn still_current(_path: &str, _cached: &OpenFile, _follow_symlinks: bool) -> boo
 }
 
 fn open_uncached(path: &str, follow_symlinks: bool) -> Option<OpenFile> {
+    // Nothing outside the web root, even through a symlink (#43); checked
+    // here, once per open, rather than per request.
+    if !super::inside_root(path) {
+        return None;
+    }
     let file = if follow_symlinks { File::open(path).ok()? } else { open_no_follow(path)? };
     OpenFile::from_file(file)
 }
@@ -422,7 +427,7 @@ mod tests {
 
     #[test]
     fn a_hit_reuses_the_open_handle() {
-        let path = TempPath::new("ofc_hit.txt");
+        let path = TempPath::new_in_cwd("ofc_hit.txt");
         std::fs::write(path.as_str(), b"hello").unwrap();
         let first = open_with(path.as_str(), true, LONG).unwrap();
         let second = open_with(path.as_str(), true, LONG).unwrap();
@@ -434,7 +439,7 @@ mod tests {
 
     #[test]
     fn an_edit_in_place_is_read_immediately_even_if_the_size_changes() {
-        let path = TempPath::new("ofc_edit.txt");
+        let path = TempPath::new_in_cwd("ofc_edit.txt");
         std::fs::write(path.as_str(), b"one").unwrap();
         let cached = open_with(path.as_str(), true, LONG).unwrap();
         std::fs::write(path.as_str(), b"three!").unwrap();
@@ -445,8 +450,8 @@ mod tests {
 
     #[test]
     fn a_replaced_file_is_reopened_after_revalidation() {
-        let path = TempPath::new("ofc_replaced.txt");
-        let tmp = TempPath::new("ofc_replaced.tmp");
+        let path = TempPath::new_in_cwd("ofc_replaced.txt");
+        let tmp = TempPath::new_in_cwd("ofc_replaced.tmp");
         std::fs::write(path.as_str(), b"old").unwrap();
         let old = open_with(path.as_str(), true, Duration::from_millis(1)).unwrap();
         // Replace by rename: a new inode at the same path.
@@ -460,7 +465,7 @@ mod tests {
 
     #[test]
     fn a_deleted_file_is_dropped_after_revalidation() {
-        let path = TempPath::new("ofc_deleted.txt");
+        let path = TempPath::new_in_cwd("ofc_deleted.txt");
         std::fs::write(path.as_str(), b"x").unwrap();
         assert!(open_with(path.as_str(), true, Duration::from_millis(1)).is_some());
         std::fs::remove_file(path.as_str()).unwrap();
@@ -470,7 +475,7 @@ mod tests {
 
     #[test]
     fn directories_and_missing_files_are_not_opened() {
-        let dir = TempPath::new("ofc_dir");
+        let dir = TempPath::new_in_cwd("ofc_dir");
         std::fs::create_dir_all(&*dir).unwrap();
         assert!(open_with(dir.as_str(), true, LONG).is_none());
         std::fs::remove_dir(&*dir).unwrap();
@@ -480,8 +485,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn symlinks_are_refused_without_follow() {
-        let target = TempPath::new("ofc_target.txt");
-        let link = TempPath::new("ofc_link");
+        let target = TempPath::new_in_cwd("ofc_target.txt");
+        let link = TempPath::new_in_cwd("ofc_link");
         std::fs::write(target.as_str(), b"t").unwrap();
         std::os::unix::fs::symlink(target.as_str(), link.as_str()).unwrap();
         assert!(open_with(link.as_str(), false, LONG).is_none());
@@ -490,7 +495,7 @@ mod tests {
 
     #[test]
     fn zero_validity_disables_caching() {
-        let path = TempPath::new("ofc_off.txt");
+        let path = TempPath::new_in_cwd("ofc_off.txt");
         std::fs::write(path.as_str(), b"x").unwrap();
         let a = open_with(path.as_str(), true, Duration::ZERO).unwrap();
         let b = open_with(path.as_str(), true, Duration::ZERO).unwrap();
@@ -499,7 +504,7 @@ mod tests {
 
     #[test]
     fn small_file_contents_are_cached_until_the_file_changes() {
-        let path = TempPath::new("ofc_contents.txt");
+        let path = TempPath::new_in_cwd("ofc_contents.txt");
         std::fs::write(path.as_str(), b"v1").unwrap();
         // Backdate it: contents are cached only for settled files.
         let old = std::time::SystemTime::now() - Duration::from_secs(60);
@@ -518,7 +523,7 @@ mod tests {
 
     #[test]
     fn freshly_written_files_are_not_cached_yet() {
-        let path = TempPath::new("ofc_fresh.txt");
+        let path = TempPath::new_in_cwd("ofc_fresh.txt");
         std::fs::write(path.as_str(), b"new").unwrap();
         let file = open_with(path.as_str(), true, LONG).unwrap();
         let state = file.state().unwrap();
@@ -528,7 +533,7 @@ mod tests {
 
     #[test]
     fn large_files_and_uncached_handles_keep_no_contents() {
-        let path = TempPath::new("ofc_large.bin");
+        let path = TempPath::new_in_cwd("ofc_large.bin");
         std::fs::write(path.as_str(), vec![7u8; MAX_CACHED_FILE as usize + 1]).unwrap();
         let file = open_with(path.as_str(), true, LONG).unwrap();
         let state = file.state().unwrap();
@@ -541,7 +546,7 @@ mod tests {
 
     #[test]
     fn capacity_is_bounded() {
-        let paths: Vec<TempPath> = (0..CAPACITY * 2).map(|i| TempPath::new(&format!("ofc_cap_{i}.txt"))).collect();
+        let paths: Vec<TempPath> = (0..CAPACITY * 2).map(|i| TempPath::new_in_cwd(&format!("ofc_cap_{i}.txt"))).collect();
         for p in &paths {
             std::fs::write(p.as_str(), b"x").unwrap();
             open_with(p.as_str(), true, LONG).unwrap();
@@ -552,7 +557,7 @@ mod tests {
 
     #[test]
     fn state_matches_std_metadata_including_nanoseconds_and_pre_epoch_times() {
-        let path = TempPath::new("ofc_state.txt");
+        let path = TempPath::new_in_cwd("ofc_state.txt");
         std::fs::write(path.as_str(), b"12345").unwrap();
         let file = File::open(path.as_str()).unwrap();
         for mtime in [
@@ -570,7 +575,7 @@ mod tests {
     }
 
     fn old_text_file(name: &str, text: &str) -> TempPath {
-        let path = TempPath::new(name);
+        let path = TempPath::new_in_cwd(name);
         std::fs::write(path.as_str(), text).unwrap();
         File::options().write(true).open(path.as_str()).unwrap()
             .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(1_767_222_000)).unwrap();
@@ -599,7 +604,7 @@ mod tests {
 
     #[test]
     fn gzipped_reports_a_file_gzip_does_not_shrink() {
-        let path = TempPath::new("ofc_gzip_random.txt");
+        let path = TempPath::new_in_cwd("ofc_gzip_random.txt");
         let noise: Vec<u8> = (0..4096u32).map(|i| (i.wrapping_mul(2654435761) >> 13) as u8).collect();
         std::fs::write(path.as_str(), &noise).unwrap();
         File::options().write(true).open(path.as_str()).unwrap()

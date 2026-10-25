@@ -795,7 +795,7 @@ mod tests {
     /// connection with an error rather than sending a short body as complete.
     #[tokio::test]
     async fn sized_file_that_shrank_ends_the_connection() {
-        let file = crate::test_env::TempPath::new("http1_async_shrank.bin");
+        let file = crate::test_env::TempPath::new_in_cwd("http1_async_shrank.bin");
         std::fs::write(&*file, vec![7u8; 1000]).unwrap();
 
         let (mut client, server) = tokio::io::duplex(16 * 1024);

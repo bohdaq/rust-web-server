@@ -193,6 +193,7 @@ static_cache_control    = "no-cache" # RWS_CONFIG_STATIC_CACHE_CONTROL: Cache-Co
 client_hints            = false      # RWS_CONFIG_CLIENT_HINTS: send Accept-CH / Critical-CH
 tls_client_ca_file      = "/etc/rws/clients-ca.pem"  # RWS_CONFIG_TLS_CLIENT_CA_FILE: require client certs (mTLS)
 template_dir            = "templates"            # RWS_CONFIG_TEMPLATE_DIR
+serve_dotfiles          = false        # RWS_CONFIG_SERVE_DOTFILES: serve .git/, .env, … (.well-known/ always)
 spa_fallback            = "index.html"   # RWS_CONFIG_SPA_FALLBACK: file served for client-side routes
 spa_fallback_exclude_prefixes = ["/api"]   # RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES
 

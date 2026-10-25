@@ -229,6 +229,12 @@ pub mod test_env {
             TempPath(std::env::temp_dir().join(format!("rws_test_{}_{}", std::process::id(), name)))
         }
 
+        /// The same in the working directory (the static-file root), for
+        /// tests that need a file the server would serve.
+        pub fn new_in_cwd(name: &str) -> Self {
+            TempPath(std::env::current_dir().expect("working directory").join(format!("rws_test_{}_{}", std::process::id(), name)))
+        }
+
         pub fn as_str(&self) -> &str {
             self.0.to_str().expect("temp dir path is UTF-8")
         }
@@ -243,7 +249,12 @@ pub mod test_env {
 
     impl Drop for TempPath {
         fn drop(&mut self) {
-            if self.0.is_dir() {
+            // A symlink is removed itself, never followed (a test may link
+            // to a system directory).
+            let is_link = std::fs::symlink_metadata(&self.0).is_ok_and(|m| m.file_type().is_symlink());
+            if is_link {
+                let _ = std::fs::remove_file(&self.0);
+            } else if self.0.is_dir() {
                 let _ = std::fs::remove_dir_all(&self.0);
             } else {
                 let _ = std::fs::remove_file(&self.0);
