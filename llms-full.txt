@@ -361,6 +361,7 @@ cargo build --release --no-default-features --features http1
 | `auth-asymmetric` | RS256 / ES256 in `JwtLayer` (in-crate RSA verification) | `auth`, `p256`, `rand_core` |
 | `macros` | `#[derive(Model)]`, `#[derive(FromRequest)]`, `#[derive(Validate)]`, `#[derive(Config)]`, `#[get]`/`#[post]`/… route attributes | `rws-macros` |
 | `acme` | Automatic TLS certificate provisioning (ACME/Let's Encrypt) | `http2`, `rcgen`, `aws-lc-rs`, … |
+| `mimalloc` | The `rws` binary allocates with mimalloc v3 (about 5% less CPU per request than glibc's allocator; more memory under load); release binaries and images have it. The library never sets a global allocator | `mimalloc` |
 | `tera` | Tera template engine integration | `tera`, `serde`, `serde_json` |
 | `model-sqlite` | Async ORM backend for SQLite | `http2`, `sqlx` (sqlite) |
 | `model-postgres` | Async ORM backend for PostgreSQL | `http2`, `sqlx` (postgres) |

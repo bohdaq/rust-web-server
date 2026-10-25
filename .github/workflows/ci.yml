@@ -61,7 +61,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: e2e
-      - run: cargo build --bin rws --features "acme auth"
+      - run: cargo build --bin rws --features "acme auth mimalloc"
       - name: ACME against Pebble (Let's Encrypt's test CA)
         if: matrix.check == 'acme-pebble'
         env:

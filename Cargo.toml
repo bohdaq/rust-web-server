@@ -58,6 +58,9 @@ serde  = ["dep:serde", "dep:serde_json"]
 auth   = ["dep:hmac", "dep:sha2"]
 auth-asymmetric = ["auth", "dep:p256", "dep:rand_core"]  # RS256 (in-crate rsa_key) / ES256 (p256) in JwtLayer
 macros = ["dep:rws-macros"]
+# The `rws` binary allocates with mimalloc instead of the system allocator
+# (the library never sets a global allocator).
+mimalloc = ["dep:mimalloc"]
 tera   = ["dep:tera", "dep:serde", "dep:serde_json"]
 model-sqlite   = ["dep:sqlx", "sqlx/sqlite",   "sqlx/runtime-tokio", "http2"]
 model-postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/runtime-tokio-rustls", "http2"]
@@ -79,6 +82,7 @@ secrets = ["dep:hmac", "dep:sha2", "http-client"]  # secrets::resolve(): vault:/
 
 [dependencies]
 ctrlc = { version = "3", optional = true }
+mimalloc = { version = "0.1", optional = true, default-features = false, features = ["v3"] }
 libc = { version = "0.2", optional = true }
 file-ext = "12.0.0"
 flate2 = "1"

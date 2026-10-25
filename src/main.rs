@@ -1,3 +1,13 @@
+/// The `mimalloc` feature: the binary allocates with mimalloc (v3) — less
+/// CPU per request than glibc's allocator (most of what's left of the
+/// per-request cost in user space is allocation), more so on musl. Its
+/// defaults hold freed memory for a second; purging at once
+/// (`MIMALLOC_PURGE_DELAY=0`) uses less memory under large TLS downloads but
+/// re-faults pages: 70 faults per 1 MiB request, up to 50% more CPU.
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use rust_web_server::app::App;
 use rust_web_server::blocklist::{self, BlocklistLayer};
 use rust_web_server::cache::CacheLayer;

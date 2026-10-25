@@ -128,8 +128,9 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build
-        # acme: automatic HTTPS; auth: JWT / basic auth in config-driven routes.
-        run: cargo build --release --bin rws --features "acme auth" --target ${{ matrix.target }}
+        # acme: automatic HTTPS; auth: JWT / basic auth in config-driven routes;
+        # mimalloc: the allocator (musl's own is much slower than glibc's).
+        run: cargo build --release --bin rws --features "acme auth mimalloc" --target ${{ matrix.target }}
 
       - name: Package
         shell: bash

@@ -28,6 +28,7 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - `[[upstream]] tls_ca_file` / `ReverseProxy::tls_ca_file`: trust a private CA for `https://` upstreams.
 - Inline tables in `rws.config.toml` settings (`rate_limit = { max_requests = 5 }`).
 - `RWS_CONFIG_OPEN_FILE_CACHE_STRICT=false`: reuse a cached file's metadata for the cache window instead of checking it per request.
+- `mimalloc` feature: the `rws` binary allocates with mimalloc v3; release binaries and images are built with it — 4–6% less CPU per request, at a larger memory footprint (about 34 MiB under load instead of 9; up to ~120 MiB serving large files over TLS). Build without the feature for the smaller footprint.
 
 ### Fixed
 
