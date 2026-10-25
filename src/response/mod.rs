@@ -709,14 +709,10 @@ impl Response {
     }
 
     pub fn _is_multipart_byteranges_content_type(content_type: &Header) -> bool {
-        let multipart_byteranges =
-            [
-                Range::MULTIPART,
-                SYMBOL.slash,
-                Range::BYTERANGES
-            ].join("");
-        let is_multipart_byteranges = content_type.value.starts_with(&multipart_byteranges);
-        is_multipart_byteranges
+        // Asked of every parsed (e.g. every proxied) response: no join.
+        content_type.value.strip_prefix(Range::MULTIPART)
+            .and_then(|rest| rest.strip_prefix(SYMBOL.slash))
+            .is_some_and(|rest| rest.starts_with(Range::BYTERANGES))
     }
 
 
@@ -864,7 +860,9 @@ impl Response {
             http_version: "".to_string(),
             status_code: 0,
             reason_phrase: "".to_string(),
-            headers: vec![],
+            // Typical upstream heads have 6–16 headers: grown 1→2→4→8→16
+            // this was four allocations per proxied response.
+            headers: Vec::with_capacity(16),
             content_range_list: vec![],
             stream_file: None,
             stream_pipe: None,

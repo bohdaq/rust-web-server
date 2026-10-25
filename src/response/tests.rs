@@ -20,6 +20,18 @@ fn check_is_multipart_byteranges_content_type() {
 
     let is_multipart = Response::_is_multipart_byteranges_content_type(&content_type);
     assert_eq!(true, is_multipart);
+
+    for (value, expected) in [
+        ("multipart/byteranges", true),
+        ("multipart/form-data; boundary=x", false),
+        ("multipart", false),
+        ("text/multipart/byteranges", false),
+        ("Multipart/byteranges", false), // case-sensitive, as before
+        ("", false),
+    ] {
+        let header = Header { name: Header::_CONTENT_TYPE.into(), value: value.into() };
+        assert_eq!(expected, Response::_is_multipart_byteranges_content_type(&header), "{value:?}");
+    }
 }
 
 #[test]

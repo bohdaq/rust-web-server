@@ -184,3 +184,20 @@ fn middleware_sees_request_method_and_uri() {
     let app = WithMiddleware::new(App::new()).wrap(AssertMiddleware);
     app.execute(&get("/healthz"), &conn()).unwrap();
 }
+
+#[test]
+fn clones_share_the_layer_list_and_wrapping_a_clone_leaves_the_original_alone() {
+    let calls = Arc::new(AtomicU32::new(0));
+    let base = WithMiddleware::new(App::new()).wrap(CountingMiddleware { count: Arc::clone(&calls) });
+    let copy = base.clone();
+    assert!(Arc::ptr_eq(&base.layers, &copy.layers), "a clone must not copy the layers");
+
+    let wider = copy.wrap(CountingMiddleware { count: Arc::clone(&calls) });
+    assert_eq!(1, base.layers.len());
+    assert_eq!(2, wider.layers.len());
+
+    let _ = base.execute(&get("/healthz"), &conn());
+    assert_eq!(1, calls.load(Ordering::SeqCst));
+    let _ = wider.execute(&get("/healthz"), &conn());
+    assert_eq!(3, calls.load(Ordering::SeqCst));
+}

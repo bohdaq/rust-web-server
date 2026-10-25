@@ -134,18 +134,22 @@ pub trait Middleware: Send + Sync {
 /// runs first on the request path and last on the response path.
 pub struct WithMiddleware<A> {
     inner: A,
-    layers: Vec<Arc<dyn Middleware>>,
+    /// Built once; shared by every clone (the servers clone the app per
+    /// request, so a `Vec` here was an allocation per request).
+    layers: Arc<[Arc<dyn Middleware>]>,
 }
 
 impl<A: Application> WithMiddleware<A> {
     /// Wrap `app` with no initial middleware.
     pub fn new(app: A) -> Self {
-        WithMiddleware { inner: app, layers: Vec::new() }
+        WithMiddleware { inner: app, layers: Arc::new([]) }
     }
 
     /// Add a middleware layer. Layers run in registration order.
     pub fn wrap(mut self, layer: impl Middleware + 'static) -> Self {
-        self.layers.push(Arc::new(layer));
+        let mut layers = self.layers.to_vec();
+        layers.push(Arc::new(layer));
+        self.layers = layers.into();
         self
     }
 }
@@ -160,7 +164,7 @@ impl<A: Application + Send + Sync + Clone + 'static> WithMiddleware<A> {
 
 impl<A: Clone> Clone for WithMiddleware<A> {
     fn clone(&self) -> Self {
-        WithMiddleware { inner: self.inner.clone(), layers: self.layers.clone() }
+        WithMiddleware { inner: self.inner.clone(), layers: Arc::clone(&self.layers) }
     }
 }
 
