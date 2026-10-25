@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 use std::fs::{File, metadata};
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::io::{BufReader, Read};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use file_ext::FileExt;
 use crate::header::Header;
@@ -189,129 +189,27 @@ fn check_range_response_is_ok_single_part() {
 fn get_right_content_range_of_a_file() {
     let image_path = "/static/content.png";
     let static_filepath = FileExt::get_static_filepath(image_path).unwrap();
-    let md = metadata(&static_filepath).unwrap();
-    let file_size = md.len();
+    let file_size = metadata(&static_filepath).unwrap().len();
+    let whole = std::fs::read(&static_filepath).unwrap();
 
-    let header = Header {
-        name: Header::_RANGE.into(),
-        value: "bytes=200-1000, 1200-1400, 2000-2300, 11000-, -500, 0-, 0-1".into()
-    };
+    // Disjoint ranges come back as requested, in order.
+    let header = Header { name: Header::_RANGE.into(), value: "bytes=1200-1400, 200-1000, 2000-2300".into() };
+    let list: Vec<ContentRange> = Range::get_content_range_list(image_path, &header).unwrap();
+    let got: Vec<(u64, u64)> = list.iter().map(|c| (c.range.start, c.range.end)).collect();
+    assert_eq!(vec![(1200, 1400), (200, 1000), (2000, 2300)], got);
+    for c in &list {
+        assert_eq!(c.content_type, MimeType::IMAGE_PNG);
+        assert_eq!(c.size.parse::<u64>().unwrap(), file_size);
+        assert_eq!(c.unit, Range::BYTES);
+        assert_eq!(&whole[c.range.start as usize..=c.range.end as usize], &c.body[..]);
+    }
 
-    let content_range_list : Vec<ContentRange> = Range::get_content_range_list(image_path, &header).unwrap();
-
-    let start = 200;
-    let end = 1000;
-    let content_range = content_range_list.get(0).unwrap();
-    assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
-    assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, Range::BYTES);
-    assert_eq!(content_range.range.start, start);
-    assert_eq!(content_range.range.end, end);
-    let file = File::open(&static_filepath).unwrap();
-    let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start)).unwrap();
-    let buff_length = (end - start) + 1;
-    let mut buffer = Vec::new();
-    reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
-    assert_eq!(content_range.body, buffer);
-
-
-    let start = 1200;
-    let end = 1400;
-    let content_range = content_range_list.get(1).unwrap();
-    assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
-    assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, Range::BYTES);
-    assert_eq!(content_range.range.start, start);
-    assert_eq!(content_range.range.end, end);
-    let file = File::open(&static_filepath).unwrap();
-    let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start)).unwrap();
-    let buff_length = (end - start) + 1;
-    let mut buffer = Vec::new();
-    reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
-    assert_eq!(content_range.body, buffer);
-
-    let start = 2000;
-    let end = 2300;
-    let content_range = content_range_list.get(2).unwrap();
-    assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
-    assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, Range::BYTES);
-    assert_eq!(content_range.range.start, start);
-    assert_eq!(content_range.range.end, end);
-    let file = File::open(&static_filepath).unwrap();
-    let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start)).unwrap();
-    let buff_length = (end - start) + 1;
-    let mut buffer = Vec::new();
-    reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
-    assert_eq!(content_range.body, buffer);
-
-    let start = 11000;
-    let end = file_size - 1;
-    let content_range = content_range_list.get(3).unwrap();
-    assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
-    assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, Range::BYTES);
-    assert_eq!(content_range.range.start, start);
-    assert_eq!(content_range.range.end, end);
-    let file = File::open(&static_filepath).unwrap();
-    let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start)).unwrap();
-    let buff_length = (end - start) + 1;
-    let mut buffer = Vec::new();
-    reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
-    assert_eq!(content_range.body, buffer);
-
-    let content_range = content_range_list.get(4).unwrap();
-    assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
-    assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, Range::BYTES);
-    let start = file_size - 500;
-    let end = file_size - 1;
-    assert_eq!(content_range.range.start, start);
-    assert_eq!(content_range.range.end, end);
-    let file = File::open(&static_filepath).unwrap();
-    let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start)).unwrap();
-    let buff_length = (end - start) + 1;
-    let mut buffer = Vec::new();
-    reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
-    assert_eq!(content_range.body, buffer);
-
-    let start = 0;
-    let end = file_size - 1;
-    let content_range = content_range_list.get(5).unwrap();
-    assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
-    assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, Range::BYTES);
-    assert_eq!(content_range.range.start, start);
-    assert_eq!(content_range.range.end, end);
-    let file = File::open(&static_filepath).unwrap();
-    let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start)).unwrap();
-    let buff_length = (end - start) + 1;
-    let mut buffer = Vec::new();
-    reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
-    assert_eq!(content_range.body, buffer);
-
-
-    let start = 0;
-    let end = 1;
-    let content_range = content_range_list.get(6).unwrap();
-    assert_eq!(content_range.content_type, MimeType::IMAGE_PNG);
-    assert_eq!(content_range.size.parse::<u64>().unwrap(), file_size);
-    assert_eq!(content_range.unit, Range::BYTES);
-    assert_eq!(content_range.range.start, start);
-    assert_eq!(content_range.range.end, end);
-    let file = File::open(&static_filepath).unwrap();
-    let mut reader = BufReader::new(file);
-    reader.seek(SeekFrom::Start(start)).unwrap();
-    let buff_length = (end - start) + 1;
-    let mut buffer = Vec::new();
-    reader.take(buff_length).read_to_end(&mut buffer).expect("Unable to read");
-    assert_eq!(content_range.body, buffer);
+    // Overlapping ranges (`0-` covers the rest) are merged (#46): one part.
+    let header = Header { name: Header::_RANGE.into(), value: "bytes=200-1000, 1200-1400, 2000-2300, 11000-, -500, 0-, 0-1".into() };
+    let list: Vec<ContentRange> = Range::get_content_range_list(image_path, &header).unwrap();
+    assert_eq!(1, list.len());
+    assert_eq!((0, file_size - 1), (list[0].range.start, list[0].range.end));
+    assert_eq!(whole, list[0].body);
 }
 
 #[test]
@@ -704,4 +602,38 @@ fn static_file_range_requests_end_to_end() {
     let clamped = client.get("/static/content.png").header("Range", &format!("bytes=0-{}", size + 100)).send();
     assert_eq!(206, clamped.status());
     assert_eq!(Some(format!("bytes 0-{}/{}", size - 1, size).as_str()), clamped.header("Content-Range"));
+}
+
+// ── #46: byte-range limits ───────────────────────────────────────────────────
+
+#[test]
+fn many_overlapping_ranges_cost_one_copy_of_the_file() {
+    let file = crate::test_env::TempPath::new("range_flood.bin");
+    let content: Vec<u8> = (0..10_000u32).map(|i| (i % 251) as u8).collect();
+    std::fs::write(&*file, &content).unwrap();
+    // `bytes=0-,0-,…` used to read the whole file once per range.
+    let header = format!("bytes={}", vec!["0-"; 2_000].join(","));
+    let list = Range::parse_content_range(file.as_str(), content.len() as u64, &header).unwrap();
+    assert_eq!(1, list.len());
+    assert_eq!(content, list[0].body);
+}
+
+#[test]
+fn ranges_are_sorted_merged_and_capped() {
+    let r = |start, end| Range { start, end };
+    // With an overlap: sorted, overlapping ones merged (adjacent ones stay).
+    let merged = Range::coalesce(vec![r(50, 59), r(0, 9), r(10, 19), r(55, 70)], 100);
+    assert_eq!(vec![(0, 9), (10, 19), (50, 70)], merged.iter().map(|r| (r.start, r.end)).collect::<Vec<_>>());
+    // Without one: exactly as requested, order included.
+    let as_asked = Range::coalesce(vec![r(50, 59), r(0, 9)], 100);
+    assert_eq!(vec![(50, 59), (0, 9)], as_asked.iter().map(|r| (r.start, r.end)).collect::<Vec<_>>());
+    // Disjoint ranges up to the cap stay parts.
+    let sixteen: Vec<Range> = (0..16).map(|i| r(i * 10, i * 10 + 1)).collect();
+    assert_eq!(16, Range::coalesce(sixteen, 1000).len());
+    // Past the cap: the whole file as one range.
+    let seventeen: Vec<Range> = (0..17).map(|i| r(i * 10, i * 10 + 1)).collect();
+    let whole = Range::coalesce(seventeen, 1000);
+    assert_eq!(vec![(0, 999)], whole.iter().map(|r| (r.start, r.end)).collect::<Vec<_>>());
+    // One range is left alone.
+    assert_eq!(vec![(5, 9)], Range::coalesce(vec![r(5, 9)], 100).iter().map(|r| (r.start, r.end)).collect::<Vec<_>>());
 }

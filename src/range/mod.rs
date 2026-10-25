@@ -159,11 +159,16 @@ impl Range {
 
         let raw_bytes = boxed_raw_bytes.unwrap();
 
-        let bytes: Vec<&str> = raw_bytes.split(SYMBOL.comma).collect();
-        for byte in bytes {
-            let boxed_range = Range::parse_range_in_content_range(filelength, byte);
-            if boxed_range.is_ok() {
-                let range = boxed_range.unwrap();
+        // Every range is parsed before any byte is read, then overlapping or
+        // adjacent ones are merged and too many become the whole file (#46):
+        // `bytes=0-,0-,0-,…` read the file into memory once per range.
+        let mut ranges: Vec<Range> = Vec::new();
+        for byte in raw_bytes.split(SYMBOL.comma) {
+            ranges.push(Range::parse_range_in_content_range(filelength, byte)?);
+        }
+        let ranges = Range::coalesce(ranges, filelength);
+        for range in ranges {
+            {
                 let boxed_read = FileExt::read_file_partially(filepath, range.start, range.end);
                 if boxed_read.is_ok() {
 
@@ -184,12 +189,42 @@ impl Range {
                     };
                     return Err(error)
                 }
-            } else {
-                let error : Error = boxed_range.err().unwrap();
-                return Err(error);
             }
         }
         Ok(content_range_list)
+    }
+
+    /// The most ranges served as parts; more become one range of the whole
+    /// file (RFC 9110 §14.2 lets a server coalesce or ignore ranges).
+    pub const MAX_RANGES: usize = 16;
+
+    /// `ranges` (inclusive ends) as served: kept as requested when none
+    /// overlap; otherwise sorted with the overlapping ones merged — so a
+    /// response never holds more bytes than the file has; and more than
+    /// [`MAX_RANGES`](Self::MAX_RANGES) parts become the whole file.
+    pub fn coalesce(ranges: Vec<Range>, filelength: u64) -> Vec<Range> {
+        if ranges.len() <= 1 {
+            return ranges;
+        }
+        let mut sorted = ranges.clone();
+        sorted.sort_by_key(|r| r.start);
+        let overlapping = sorted.windows(2).any(|w| w[1].start <= w[0].end);
+        let merged = if overlapping {
+            let mut merged: Vec<Range> = Vec::with_capacity(sorted.len());
+            for r in sorted {
+                match merged.last_mut() {
+                    Some(last) if r.start <= last.end => last.end = last.end.max(r.end),
+                    _ => merged.push(r),
+                }
+            }
+            merged
+        } else {
+            ranges
+        };
+        if merged.len() > Range::MAX_RANGES {
+            return vec![Range { start: 0, end: filelength.saturating_sub(1) }];
+        }
+        merged
     }
 
     pub fn get_content_range_list(request_uri: &str, range: &Header) -> Result<Vec<ContentRange>, Error> {
