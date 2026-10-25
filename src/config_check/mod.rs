@@ -220,7 +220,8 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     report.error(format!("{key} = {value:?}: not a whole number"));
                 }
             }
-            Config::RWS_CONFIG_CORS_ALLOW_ALL | Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS | Config::RWS_CONFIG_ACME_STAGING => {
+            Config::RWS_CONFIG_CORS_ALLOW_ALL | Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS | Config::RWS_CONFIG_ACME_STAGING
+            | "RWS_CONFIG_SERVE_DOTFILES" => {
                 if !matches!(value.to_ascii_lowercase().as_str(), "true" | "false") {
                     report.error(format!("{key} = {value:?}: expected true or false"));
                 }

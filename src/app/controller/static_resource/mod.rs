@@ -54,6 +54,10 @@ impl Controller for StaticResourceController {
         let mut is_file = open_file_cache::is_cached_file(&static_filepath);
         if !is_file {
             if let Ok(md) = metadata(&static_filepath) {
+                // Cached files were checked when opened; the rest here.
+                if !inside_root(&static_filepath) {
+                    return false;
+                }
                 is_directory = md.is_dir();
                 is_file = md.is_file();
             }
@@ -207,7 +211,7 @@ impl StaticResourceController {
         let static_filepath = boxed_static_filepath.unwrap();
 
         let boxed_md = metadata(&static_filepath);
-        if boxed_md.is_err() {
+        if boxed_md.is_err() || !inside_root(&static_filepath) {
             return false
         }
 
@@ -393,9 +397,12 @@ impl StaticResourceController {
         let os_specific_separator : String = FileExt::get_path_separator();
         let os_specific_path = &components.path.replace(SYMBOL.slash, os_specific_separator.as_str());
 
-        let boxed_static_filepath = static_fs_path(&os_specific_path);
-
-        let static_filepath = boxed_static_filepath.unwrap();
+        let static_filepath = match static_fs_path(&os_specific_path) {
+            Ok(path) => path,
+            Err(message) => {
+                return Err(Error { status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n404_not_found, message });
+            }
+        };
 
         let mut content_range_list = Vec::new();
 
@@ -837,9 +844,55 @@ pub(crate) fn working_directory() -> &'static str {
 }
 
 /// `FileExt::get_static_filepath` without the per-call `current_dir()`:
-/// the working directory followed by `path`.
+/// the working directory followed by `path` — refused (`Err`) when `path`
+/// could leave the web root or names a hidden file (#43):
+///
+/// - a `..` segment (`/../etc/passwd`): served before 17.113.1;
+/// - a segment starting with `.` (`.git/`, `.env`), except `.well-known`,
+///   unless `RWS_CONFIG_SERVE_DOTFILES=true`.
+///
+/// A symlink inside the root may still point outside it; [`inside_root`]
+/// checks the resolved path where files are opened.
 pub(crate) fn static_fs_path(path: &str) -> Result<String, String> {
+    check_request_path(path)?;
     Ok(format!("{}{}", working_directory(), path))
+}
+
+/// The segment rules of [`static_fs_path`], on a path using `/` or the
+/// platform separator.
+pub(crate) fn check_request_path(path: &str) -> Result<(), String> {
+    for segment in path.split(['/', '\\']) {
+        if segment == ".." {
+            return Err("path leaves the web root".to_string());
+        }
+        if segment.starts_with('.') && segment != "." && segment != ".well-known" && !serve_dotfiles() {
+            return Err("hidden files are not served".to_string());
+        }
+        if segment.contains('\0') {
+            return Err("invalid path".to_string());
+        }
+    }
+    Ok(())
+}
+
+/// `RWS_CONFIG_SERVE_DOTFILES` (default `false`), read once.
+fn serve_dotfiles() -> bool {
+    static SERVE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *SERVE.get_or_init(|| {
+        std::env::var("RWS_CONFIG_SERVE_DOTFILES").is_ok_and(|v| v.trim().eq_ignore_ascii_case("true"))
+    })
+}
+
+/// `true` when `fs_path` exists and, symlinks resolved, lies inside the web
+/// root (the working directory). A symlink in the root pointing outside it
+/// (`assets -> /etc`) is not followed out (#43). One `realpath`: done where
+/// a file is opened, not per request on the cached fast path.
+pub(crate) fn inside_root(fs_path: &str) -> bool {
+    static ROOT: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+    let Some(root) = ROOT.get_or_init(|| std::fs::canonicalize(working_directory()).ok()) else {
+        return false;
+    };
+    std::fs::canonicalize(fs_path).is_ok_and(|resolved| resolved.starts_with(root))
 }
 
 /// `FileExt::file_modified_utc` (nanoseconds since the Unix epoch) from a

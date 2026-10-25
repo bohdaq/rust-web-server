@@ -158,6 +158,7 @@ open_file_cache_secs    = 1          # RWS_CONFIG_OPEN_FILE_CACHE_SECS: reuse op
 csp                     = "default-src 'self'"   # RWS_CONFIG_CSP: Content-Security-Policy header
 tls_client_ca_file      = "/etc/rws/clients-ca.pem"  # RWS_CONFIG_TLS_CLIENT_CA_FILE: require client certs (mTLS)
 template_dir            = "templates"            # RWS_CONFIG_TEMPLATE_DIR
+serve_dotfiles          = false        # RWS_CONFIG_SERVE_DOTFILES: serve .git/, .env, … (.well-known/ always)
 spa_fallback            = "index.html"   # RWS_CONFIG_SPA_FALLBACK: file served for client-side routes
 spa_fallback_exclude_prefixes = ["/api"]   # RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES
 

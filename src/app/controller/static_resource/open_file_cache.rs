@@ -184,6 +184,11 @@ fn still_current(_path: &str, _cached: &OpenFile, _follow_symlinks: bool) -> boo
 }
 
 fn open_uncached(path: &str, follow_symlinks: bool) -> Option<OpenFile> {
+    // Nothing outside the web root, even through a symlink (#43); checked
+    // here, once per open, rather than per request.
+    if !super::inside_root(path) {
+        return None;
+    }
     let file = if follow_symlinks { File::open(path).ok()? } else { open_no_follow(path)? };
     OpenFile::from_file(file)
 }
@@ -227,7 +232,7 @@ mod tests {
 
     #[test]
     fn a_hit_reuses_the_open_handle() {
-        let path = TempPath::new("ofc_hit.txt");
+        let path = TempPath::new_in_cwd("ofc_hit.txt");
         std::fs::write(path.as_str(), b"hello").unwrap();
         let first = open_with(path.as_str(), true, LONG).unwrap();
         let second = open_with(path.as_str(), true, LONG).unwrap();
@@ -239,7 +244,7 @@ mod tests {
 
     #[test]
     fn an_edit_in_place_is_read_immediately_even_if_the_size_changes() {
-        let path = TempPath::new("ofc_edit.txt");
+        let path = TempPath::new_in_cwd("ofc_edit.txt");
         std::fs::write(path.as_str(), b"one").unwrap();
         let cached = open_with(path.as_str(), true, LONG).unwrap();
         std::fs::write(path.as_str(), b"three!").unwrap();
@@ -250,8 +255,8 @@ mod tests {
 
     #[test]
     fn a_replaced_file_is_reopened_after_revalidation() {
-        let path = TempPath::new("ofc_replaced.txt");
-        let tmp = TempPath::new("ofc_replaced.tmp");
+        let path = TempPath::new_in_cwd("ofc_replaced.txt");
+        let tmp = TempPath::new_in_cwd("ofc_replaced.tmp");
         std::fs::write(path.as_str(), b"old").unwrap();
         let old = open_with(path.as_str(), true, Duration::from_millis(1)).unwrap();
         // Replace by rename: a new inode at the same path.
@@ -265,7 +270,7 @@ mod tests {
 
     #[test]
     fn a_deleted_file_is_dropped_after_revalidation() {
-        let path = TempPath::new("ofc_deleted.txt");
+        let path = TempPath::new_in_cwd("ofc_deleted.txt");
         std::fs::write(path.as_str(), b"x").unwrap();
         assert!(open_with(path.as_str(), true, Duration::from_millis(1)).is_some());
         std::fs::remove_file(path.as_str()).unwrap();
@@ -275,7 +280,7 @@ mod tests {
 
     #[test]
     fn directories_and_missing_files_are_not_opened() {
-        let dir = TempPath::new("ofc_dir");
+        let dir = TempPath::new_in_cwd("ofc_dir");
         std::fs::create_dir_all(&*dir).unwrap();
         assert!(open_with(dir.as_str(), true, LONG).is_none());
         std::fs::remove_dir(&*dir).unwrap();
@@ -285,8 +290,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn symlinks_are_refused_without_follow() {
-        let target = TempPath::new("ofc_target.txt");
-        let link = TempPath::new("ofc_link");
+        let target = TempPath::new_in_cwd("ofc_target.txt");
+        let link = TempPath::new_in_cwd("ofc_link");
         std::fs::write(target.as_str(), b"t").unwrap();
         std::os::unix::fs::symlink(target.as_str(), link.as_str()).unwrap();
         assert!(open_with(link.as_str(), false, LONG).is_none());
@@ -295,7 +300,7 @@ mod tests {
 
     #[test]
     fn zero_validity_disables_caching() {
-        let path = TempPath::new("ofc_off.txt");
+        let path = TempPath::new_in_cwd("ofc_off.txt");
         std::fs::write(path.as_str(), b"x").unwrap();
         let a = open_with(path.as_str(), true, Duration::ZERO).unwrap();
         let b = open_with(path.as_str(), true, Duration::ZERO).unwrap();
@@ -304,7 +309,7 @@ mod tests {
 
     #[test]
     fn capacity_is_bounded() {
-        let paths: Vec<TempPath> = (0..CAPACITY * 2).map(|i| TempPath::new(&format!("ofc_cap_{i}.txt"))).collect();
+        let paths: Vec<TempPath> = (0..CAPACITY * 2).map(|i| TempPath::new_in_cwd(&format!("ofc_cap_{i}.txt"))).collect();
         for p in &paths {
             std::fs::write(p.as_str(), b"x").unwrap();
             open_with(p.as_str(), true, LONG).unwrap();

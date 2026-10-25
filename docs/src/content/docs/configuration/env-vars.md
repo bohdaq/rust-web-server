@@ -20,6 +20,7 @@ order.
 | `RWS_CONFIG_PORT` | `7878` | integer | TCP port the server listens on. |
 | `RWS_CONFIG_THREAD_COUNT` | `200` | integer | Size of the worker thread pool (synchronous HTTP/1.1 build only). |
 | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` | `10000` | integer | Size in bytes of each individual socket read. Bodies larger than this are accumulated across multiple reads automatically (as long as `Content-Length` is present) — this tunes read-syscall chunk size, not the maximum accepted body size. |
+| `RWS_CONFIG_SERVE_DOTFILES` | `false` | boolean | Serve files and directories whose name starts with `.` (`.git/`, `.env`). Off by default since 17.113.1; `.well-known/` is always served. Read at startup. |
 | `RWS_CONFIG_OPEN_FILE_CACHE_SECS` | `1` | integer | How long an open static file is reused before its path is checked again (like nginx's `open_file_cache`). `0` turns the cache off. Edits in place are always served correctly; a replaced or deleted file is noticed within this many seconds. At most 128 files are held open. Read at startup; Unix only. |
 | `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` | `0` | integer | Maximum accepted request body size in bytes. `0` means unlimited. When set, a request whose `Content-Length` exceeds this is rejected with `413 Payload Too Large` before any body bytes are read, and the connection is closed. Applies to HTTP/1.1, HTTP/2, and HTTP/3. |
 

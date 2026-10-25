@@ -803,3 +803,51 @@ fn fast_path_declines_directories_and_options() {
     let file = ServedFile::new("opts.txt", 10);
     assert!(StaticResourceController::serve_regular_file(&static_request(METHOD.options, &file.0, vec![]), &mut Response::new()).is_none());
 }
+
+
+// ── #43: static files stay inside the web root ───────────────────────────────
+
+fn static_status(uri: &str) -> i16 {
+    use crate::application::Application;
+    let request = Request { method: "GET".into(), request_uri: uri.to_string(), http_version: "HTTP/1.1".into(), headers: vec![], body: vec![] };
+    let conn = ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None };
+    crate::app::App::new().execute(&request, &conn).unwrap().status_code
+}
+
+#[test]
+fn dot_dot_segments_cannot_leave_the_web_root() {
+    // `/../<root dir name>/Cargo.toml` leaves the root and comes back in:
+    // it was served (200); any `..` is refused now.
+    let name = std::env::current_dir().unwrap().file_name().unwrap().to_string_lossy().to_string();
+    assert_eq!(404, static_status(&format!("/../{}/Cargo.toml", name)));
+    assert_eq!(404, static_status("/src/../Cargo.toml"));
+    assert_eq!(404, static_status("/../../../../../../etc/passwd"));
+    assert_eq!(200, static_status("/Cargo.toml"));
+}
+
+#[test]
+fn hidden_files_are_not_served_but_well_known_is() {
+    assert_eq!(404, static_status("/.gitignore"));
+    assert!(super::check_request_path("/.git/config").is_err());
+    assert!(super::check_request_path("/a/.env").is_err());
+    assert!(super::check_request_path("/.well-known/security.txt").is_ok());
+    assert!(super::check_request_path("/./index.html").is_ok());
+    assert!(super::check_request_path("/a\\..\\b").is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlink_out_of_the_root_is_not_followed() {
+    let link = crate::test_env::TempPath::new_in_cwd("rws_test_escape_link");
+    std::os::unix::fs::symlink("/etc", &*link).unwrap();
+    let name = link.file_name().unwrap().to_string_lossy().to_string();
+    assert_eq!(404, static_status(&format!("/{}/hostname", name)));
+    assert_eq!(404, static_status(&format!("/{}/passwd", name)));
+    assert!(!super::inside_root(&format!("{}/{}/passwd", super::working_directory(), name)));
+    // A link that stays inside the root is still served.
+    let inside = crate::test_env::TempPath::new_in_cwd("rws_test_inside_link.toml");
+    std::os::unix::fs::symlink("Cargo.toml", &*inside).unwrap();
+    let inside_name = inside.file_name().unwrap().to_string_lossy().to_string();
+    assert_eq!(200, static_status(&format!("/{}", inside_name)));
+}
+
