@@ -111,7 +111,7 @@ Routing with path parameters, typed extractors, one `Middleware` trait for every
 - **No hyper, no Tower, no Axum.** HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS, range requests, JWT, and the ACME client are implemented in this crate. The HTTP/2 server is rws's own too (checked with h2spec and fuzzing); HTTP/3 uses the widely deployed `quinn`/`h3` crates, and TLS uses `rustls` — no OpenSSL.
 - **Config and code share one engine.** Everything the TOML file does is a type you can use from Rust, so moving from configuration to code doesn't mean switching tools.
 - **Tested against the real world.** CI fuzzes every parser that sees untrusted input, checks HTTP/2 conformance with h2spec, and runs the ACME flow end to end against Let's Encrypt's test CA on every push. Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
-- **Fast.** 2.6–5× faster than Caddy, and less CPU per request than nginx in every benchmark scenario — see [Performance](#performance).
+- **Fast.** Up to 5× faster than Caddy, and less CPU per request than nginx in every benchmark scenario — see [Performance](#performance).
 - **SemVer.** Breaking changes only in a major version — see the [CHANGELOG](CHANGELOG.md).
 
 ## Performance
@@ -131,7 +131,7 @@ the load generator on the same machine: `oha`, 64 keep-alive connections,
 | CPU per request (1 KiB / 1 MiB / proxy / HTTP/2 / 1 MiB HTTPS) | **16.9** / **210** / **44.6** / **27.4** / **924** µs | 154 / 1,195 / 191 / 216 / 1,484 µs | 25.1 / 216 / 47.1 / 37.9 / 1,640 µs |
 | Peak memory | 34–66 MiB | 66–109 MiB | **23–42 MiB** |
 
-`rws` is 2.6–5.2× faster than Caddy and has the lowest p99 of the three in
+`rws` is 2.6–5.2× faster than Caddy (1.1× for large files over HTTPS) and has the lowest p99 of the three in
 every scenario. It needs less CPU per request than nginx in every scenario:
 small files −33%, large files −3%, proxying −5%, HTTP/2 −28%, HTTPS −23%,
 large files over HTTPS −44%, access-logged traffic −29%, gzip a hundredth —
