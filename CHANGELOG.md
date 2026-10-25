@@ -47,7 +47,11 @@ response (`writev` for large bodies, `sendfile` with the head in the same
 segment); header lists, dates and numbers built without allocation; request
 and upstream-response heads parsed in one pass; HTTPS upstreams forwarded
 without blocking a thread; access log buffered per thread (flushed every
-100 ms). Details: [Benchmarks](https://rws8.tech/reference/benchmarks/).
+100 ms). Files over TLS are read on the connection's task (13% less CPU and
+about half the memory for large downloads), HTTP/2 response headers are no
+longer copied into the `h2` header map (5–8% less CPU), and release builds
+allocate with mimalloc (4–6% less CPU, more memory). Details:
+[Benchmarks](https://rws8.tech/reference/benchmarks/).
 
 ## 17.113.0 — 2026-10-24
 
