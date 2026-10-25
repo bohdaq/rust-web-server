@@ -1,3 +1,12 @@
+//! Byte ranges (RFC 9110 §14) and response bodies.
+//!
+//! A response body is a `Vec<`[`ContentRange`]`>`: one entry for a normal
+//! response, several for `multipart/byteranges`. [`Range`] is a start and an
+//! **inclusive** end byte. `Range::get_content_range_of_a_file` and
+//! `Range::get_content_range` build a `ContentRange` for a whole file or a byte
+//! buffer with its MIME type; `parse_range_in_content_range` turns a `Range`
+//! request header into the requested slices.
+
 #[cfg(test)]
 mod tests;
 

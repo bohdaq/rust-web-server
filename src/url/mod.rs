@@ -1,3 +1,11 @@
+//! URL helpers: percent encoding (`URL::percent_encode` / `percent_decode`),
+//! query strings (`URL::build_query` / `parse_query`) and whole URLs
+//! (`URL::build` / `parse`, a panic-free RFC 3986 parser).
+//! `URL::parse_request_target` gives a request's path and query without
+//! inventing a scheme and host. Percent encoding is what lets a query value
+//! carry a space (`%20`), `=` (`%3D`) or `&` (`%26`). Examples:
+//! `src/url/example/`.
+
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

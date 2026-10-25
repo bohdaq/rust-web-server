@@ -1,3 +1,6 @@
+//! Base64 encoding and decoding of byte arrays (standard alphabet).
+//! See the tests in this module for usage.
+
 use std::collections::HashMap;
 use crate::symbol::SYMBOL;
 

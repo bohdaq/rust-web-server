@@ -1,3 +1,16 @@
+//! Controllers: one unit of request handling for [`App`](crate::app::App).
+//!
+//! A [`Controller`] answers two questions: `is_matching(request, connection)` —
+//! does this request belong to me? — and `process(request, response, connection)`
+//! — produce the response. `App::execute` asks each built-in controller in order
+//! and uses the first match. `is_matching` runs for every request, so keep it
+//! cheap and silent (check the method before the path).
+//!
+//! The server can't recover from errors inside a controller, so `process` must
+//! turn failures into a response itself (e.g. a `500`). `src/controller/example/`
+//! has an `IndexController` that serves `index.html` from the working directory,
+//! falling back to a page compiled into the binary with `include_bytes!`.
+
 #[cfg(test)]
 mod example;
 

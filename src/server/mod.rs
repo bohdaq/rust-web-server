@@ -1,3 +1,13 @@
+//! The listeners and connection loops.
+//!
+//! [`Server::setup`] binds the listener (and, in the `http1` build, creates the
+//! thread pool); then [`Server::run`] (`http1`), `run_tls` (TLS with HTTP/2 via
+//! ALPN, or plain HTTP/1.1 without a certificate), `run_quic` (HTTP/3) and
+//! `run_redirect` (HTTP → HTTPS) accept connections, parse requests and hand
+//! them to your [`Application`](crate::application::Application).
+//! [`ConnectionInfo`] carries the client and server addresses and the TLS SNI
+//! name. Examples: `src/server/example/`.
+
 #[cfg(all(test, not(target_arch = "wasm32")))]
 pub mod tests;
 #[cfg(all(test, not(target_arch = "wasm32")))]

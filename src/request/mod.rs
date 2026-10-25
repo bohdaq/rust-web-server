@@ -1,3 +1,14 @@
+//! HTTP requests: [`Request`] and its parser.
+//!
+//! [`Request::parse`] turns a request head (`GET /path HTTP/1.1`, header lines,
+//! blank line) into a `Request`; `generate` writes one back to bytes (used by the
+//! proxy and tests). The request target is normalized during parsing: origin-form
+//! is kept, absolute-form reduced to its path, `*` kept, anything else rejected.
+//! Look headers up with `request.header(name)` (case-insensitive, no
+//! allocation). `get_query`, `get_path`, `get_domain` and `get_port` read the URL
+//! parts; the domain and port come from the `Host` header, not the socket.
+//! Examples: `src/request/example/`.
+
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

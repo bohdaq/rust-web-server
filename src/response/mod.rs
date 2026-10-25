@@ -1,3 +1,14 @@
+//! HTTP responses: [`Response`], its writers and the upstream-response parser.
+//!
+//! A response has a status, headers and a body as a list of
+//! [`ContentRange`](crate::range::ContentRange)s (one, or several for a
+//! `multipart/byteranges` range response), or a `stream_file` / `stream_pipe`
+//! for bodies too large to buffer. `Response::json` / `Response::text` build the
+//! common cases. The writers (`generate_response`, `generate_response_parts`,
+//! …) add `Content-Type`, `Content-Length` and `Content-Range`;
+//! [`Response::parse`] reads a raw upstream response (used by the proxy).
+//! Examples: `src/response/example/`.
+
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

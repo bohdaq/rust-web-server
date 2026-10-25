@@ -1,3 +1,7 @@
+//! JSON objects: parse `{ … }` into a struct (`parse_json`) and serialize it
+//! back (`to_json_string`) through the [`FromJSON`](crate::json::object::FromJSON) /
+//! [`ToJSON`](crate::json::object::ToJSON) traits. See `tests/example_multi_nested_object`.
+
 use std::io;
 use std::io::{BufRead, Read};
 use crate::ext::string_ext::StringExt;

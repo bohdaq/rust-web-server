@@ -1,3 +1,9 @@
+//! JSON arrays: parse `[ … ]` into `Vec<T>` and back. For a struct type,
+//! implement [`New`](crate::core::New), [`FromJSON`](crate::json::object::FromJSON) and
+//! [`ToJSON`](crate::json::object::ToJSON), then call `from_json_list` / `to_json_list`.
+//! Scalar arrays (integers, floats, strings, booleans, nulls) have their own
+//! helpers in the submodules.
+
 use std::io;
 use std::io::Read;
 use crate::symbol::SYMBOL;

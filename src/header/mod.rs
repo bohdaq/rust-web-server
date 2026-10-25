@@ -1,3 +1,14 @@
+//! HTTP header fields.
+//!
+//! A [`Header`] is a name and a value, both `Cow<'static, str>`: build the
+//! standard ones from the `Header::_X` name constants and `&'static str` values
+//! (borrowed, no allocation), other values from a `String` with
+//! [`Header::new`]. Read a field through deref (`&*h.value`). [`Header::parse`]
+//! turns a `Name: value` line into a `Header`; `generate` does the reverse.
+//!
+//! Header text must be UTF-8 without control characters. Examples:
+//! `src/header/example/`.
+
 use std::borrow::Cow;
 use crate::client_hint::ClientHint;
 use crate::cors::Cors;

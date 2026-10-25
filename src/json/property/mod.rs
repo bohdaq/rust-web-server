@@ -1,3 +1,6 @@
+//! One JSON property: [`JSONProperty`] (name and type) and [`JSONValue`] (the
+//! parsed value — string, bool, object, array, `i128`, `f64` or null).
+
 use crate::json::{JSON_TYPE};
 use std::fmt::{Display, Formatter};
 use crate::core::New;

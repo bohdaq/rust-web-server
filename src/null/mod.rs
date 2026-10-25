@@ -1,3 +1,7 @@
+//! [`Null`]: a value representing JSON `null`, with `FromStr` (failing with
+//! [`ParseNullError`]), `Display`, `Clone`, `Debug`, `PartialEq` and
+//! [`New`](crate::core::New).
+
 #[cfg(test)]
 mod tests;
 

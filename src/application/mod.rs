@@ -1,3 +1,17 @@
+//! Application: the type a server runs for every request.
+//!
+//! An [`Application`] gets each parsed [`Request`](crate::request::Request) and its
+//! [`ConnectionInfo`](crate::server::ConnectionInfo) and returns a
+//! [`Response`](crate::response::Response) (or an error message). The server runs
+//! it on many threads, so it must be `Clone + Send + 'static`.
+//!
+//! The built-in [`App`](crate::app::App) is one: it starts from a `501` response
+//! with the default headers and walks a list of
+//! [`Controller`](crate::controller::Controller)s, each checking whether it
+//! matches and, if so, filling in the response. Most code uses `App`,
+//! [`Router`](crate::router::Router) or `App::with_state` instead of implementing
+//! this trait directly; see `src/application/example/` for a hand-written one.
+
 use crate::request::Request;
 use crate::response::Response;
 use crate::server::ConnectionInfo;
