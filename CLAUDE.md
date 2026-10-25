@@ -147,7 +147,7 @@ Request framing for both HTTP/1.1 loops (`Server::process` and the async `http1_
 
 ### Routing / controller dispatch
 
-`App` (in `src/app/mod.rs`) implements the `Application` trait (`src/application/mod.rs`). `Application::execute` returns `Result<Response, String>`. `App::execute` walks a hardcoded list of `if Controller::is_matching(...)` checks and calls the first matching controller's `process()`. Controllers are checked in declaration order.
+`App` (in `src/app/mod.rs`) implements the `Application` trait (`src/application/mod.rs`). `Application::execute` returns `Result<Response, String>`. `App::execute` walks a hardcoded list of `if Controller::is_matching(...)` checks and calls the first matching controller's `process()`. Controllers are checked in declaration order. Static files come after every built-in: `App::execute` first tries `StaticResourceController::serve_regular_file` (it only succeeds for a regular file, so `is_matching` would have matched) and otherwise asks `is_matching` and calls `process_general` (the same as `process` without that fast path) — so a static GET builds its path and looks up the open-file cache once, not twice.
 
 The `Controller` trait (`src/controller/mod.rs`) has two methods:
 - `is_matching(request, connection) -> bool`

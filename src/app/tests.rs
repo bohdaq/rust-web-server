@@ -401,3 +401,42 @@ fn builtin_controllers_match_path_without_query_where_they_always_did() {
     assert!(!DirectoryListingAssetsController::is_matching(&request(METHOD.get, "/rws-directory-listing.css?v=1"), &conn));
     assert!(!DirectoryListingAssetsController::is_matching(&request(METHOD.get, "rws-directory-listing.css"), &conn));
 }
+
+#[test]
+fn static_files_after_builtins_fast_and_general_paths() {
+    let request = |method: &str, uri: &str, headers: Vec<Header>| Request {
+        method: method.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers,
+        body: vec![],
+    };
+    let app = App::with_config(ServerConfig::default());
+    let conn = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+        request_size: 16000,
+        sni_hostname: None,
+    };
+
+    // Built-in routes still win.
+    let health = app.execute(&request("GET", "/healthz", vec![]), &conn).unwrap();
+    assert_eq!(200, health.status_code);
+    assert!(health.header(Header::_ETAG).is_none());
+
+    // A regular file: the one-pass path (ETag, body).
+    let full = app.execute(&request("GET", "/static/test.json", vec![]), &conn).unwrap();
+    assert_eq!(200, full.status_code);
+    assert!(full.header(Header::_ETAG).is_some());
+    assert_eq!(1, full.content_range_list.len());
+
+    // Range and OPTIONS decline the fast path and still match the file.
+    let partial = app.execute(&request("GET", "/static/test.json", vec![Header::new(Header::_RANGE, "bytes=0-1")]), &conn).unwrap();
+    assert_eq!(206, partial.status_code);
+    let options = app.execute(&request("OPTIONS", "/static/test.json", vec![]), &conn).unwrap();
+    assert_eq!(204, options.status_code);
+
+    // A directory goes to the general path; a missing file to 404.
+    assert_eq!(200, app.execute(&request("GET", "/static/", vec![]), &conn).unwrap().status_code);
+    assert_eq!(404, app.execute(&request("GET", "/static/missing.json", vec![]), &conn).unwrap().status_code);
+}

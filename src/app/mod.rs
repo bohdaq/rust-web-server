@@ -179,14 +179,27 @@ impl Application for App {
             entry::<ReadyController>(),
             entry::<MetricsController>(),
             entry::<FaviconController>(),
-            entry::<StaticResourceController>(),
-            entry::<NotFoundController>(),
         ];
 
         for c in &controllers {
             if (c.is_matching)(request, connection) {
                 return Ok((c.process)(request, response, connection));
             }
+        }
+
+        // Static files, after every built-in route. A GET/HEAD of a regular
+        // file is answered in one pass — StaticResourceController::is_matching
+        // would build the path and look the file up, only for process to do
+        // both again; serving one implies is_matching would have said yes.
+        let mut response = response;
+        if let Some(served) = StaticResourceController::serve_regular_file(request, &mut response) {
+            return Ok(served);
+        }
+        if StaticResourceController::is_matching(request, connection) {
+            return Ok(StaticResourceController::process_general(request, response));
+        }
+        if NotFoundController::is_matching(request, connection) {
+            return Ok(NotFoundController::process(request, response, connection));
         }
 
         Ok(response)

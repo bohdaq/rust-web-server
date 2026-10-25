@@ -87,6 +87,15 @@ impl Controller for StaticResourceController {
         if let Some(served) = StaticResourceController::serve_regular_file(request, &mut response) {
             return served;
         }
+        StaticResourceController::process_general(request, response)
+    }
+}
+
+impl StaticResourceController {
+    /// [`Controller::process`] minus the [`Self::serve_regular_file`] fast
+    /// path: directories, `.html` resolution, ranges, OPTIONS, symlinks with
+    /// an untyped name, the SPA fallback. For a caller that already tried it.
+    pub(crate) fn process_general(request: &Request, mut response: Response) -> Response {
         let boxed_content_range_list = StaticResourceController::process_static_resources(&request);
         if boxed_content_range_list.is_ok() {
             let content_range_list = boxed_content_range_list.unwrap();
@@ -325,7 +334,7 @@ impl StaticResourceController {
     /// the requested name. `None` = not applicable; the general path handles
     /// it (directories, `.html` resolution, ranges, OPTIONS, symlinks whose
     /// name has no known type).
-    fn serve_regular_file(request: &Request, response: &mut Response) -> Option<Response> {
+    pub(crate) fn serve_regular_file(request: &Request, response: &mut Response) -> Option<Response> {
         if request.method != METHOD.get && request.method != METHOD.head {
             return None;
         }
