@@ -34,7 +34,7 @@ pub(crate) const SUPPORTED: bool = cfg!(any(target_os = "linux", target_os = "ma
 /// Send `head` followed by `len` bytes of `file` from offset 0 to `socket`,
 /// waiting for the socket to become writable between calls. The head shares
 /// a TCP segment with the start of the file rather than going out alone:
-/// on Linux under `TCP_CORK` (nginx's `tcp_nopush`), on macOS as
+/// on Linux with the head sent `MSG_MORE` (like `TCP_CORK`, nginx's `tcp_nopush`), on macOS as
 /// `sendfile`'s header vector. Fails if the file is shorter than `len` (it
 /// shrank after `Content-Length` was sent).
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -42,14 +42,16 @@ pub(crate) async fn send_file(socket: &tokio::net::TcpStream, head: &[u8], file:
     use std::os::unix::io::AsRawFd;
     let (file_fd, socket_fd) = (file.as_raw_fd(), socket.as_raw_fd());
 
-    #[cfg(target_os = "linux")]
-    let _cork = Cork::new(socket_fd);
+    // The head goes out with MSG_MORE: the kernel holds it until the file
+    // bytes join it (what TCP_CORK did, without two setsockopt calls per
+    // response). An empty body sends the head as is.
     #[cfg(target_os = "linux")]
     let mut head_left: &[u8] = {
+        let more = len > 0;
         let mut rest = head;
         while !rest.is_empty() {
             socket.writable().await?;
-            match socket.try_write(rest) {
+            match socket.try_io(tokio::io::Interest::WRITABLE, || send_head(socket_fd, rest, more)) {
                 Ok(n) => rest = &rest[n..],
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
                 Err(e) => return Err(e),
@@ -87,38 +89,17 @@ pub(crate) async fn send_file(_socket: &tokio::net::TcpStream, _head: &[u8], _fi
     Err(io::Error::new(io::ErrorKind::Unsupported, "sendfile is not available on this platform"))
 }
 
-/// `TCP_CORK` for the lifetime of the value: partial segments are held back
-/// until uncorked, so the response head and the first file bytes leave
-/// together. Dropping it uncorks, which flushes.
+/// `send(2)` of (part of) the response head, with `MSG_MORE` when file
+/// bytes follow.
 #[cfg(target_os = "linux")]
-struct Cork(i32);
-
-#[cfg(target_os = "linux")]
-impl Cork {
-    fn new(fd: i32) -> Cork {
-        set_cork(fd, 1);
-        Cork(fd)
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl Drop for Cork {
-    fn drop(&mut self) {
-        set_cork(self.0, 0);
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn set_cork(fd: i32, on: libc::c_int) {
-    // SAFETY: a valid socket descriptor and a pointer to a local int.
-    unsafe {
-        libc::setsockopt(
-            fd,
-            libc::IPPROTO_TCP,
-            libc::TCP_CORK,
-            &on as *const libc::c_int as *const libc::c_void,
-            std::mem::size_of::<libc::c_int>() as libc::socklen_t,
-        );
+fn send_head(fd: i32, head: &[u8], more: bool) -> io::Result<usize> {
+    let flags = libc::MSG_NOSIGNAL | if more { libc::MSG_MORE } else { 0 };
+    // SAFETY: a valid socket descriptor and a live buffer of `head.len()` bytes.
+    let sent = unsafe { libc::send(fd, head.as_ptr() as *const libc::c_void, head.len(), flags) };
+    if sent < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(sent as usize)
     }
 }
 
@@ -197,6 +178,28 @@ mod tests {
         let received = reader.await.unwrap();
         assert!(received.starts_with(b"HEAD\r\n\r\n"), "head first");
         assert!(received[8..] == content[..], "received bytes differ from the file");
+    }
+
+    /// An empty body: the head must leave at once, not wait for file bytes
+    /// that never come (MSG_MORE would hold it for the kernel's 200 ms).
+    #[tokio::test]
+    async fn an_empty_file_sends_its_head_at_once() {
+        if !SUPPORTED {
+            return;
+        }
+        let path = crate::test_env::TempPath::new("sendfile_empty.bin");
+        std::fs::write(path.as_str(), b"").unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let mut client = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+        let file = File::open(path.as_str()).unwrap();
+        send_file(&server, b"HEAD\r\n\r\n", &file, 0).await.unwrap();
+        // The connection stays open: only an immediate send arrives in time.
+        let mut head = [0u8; 8];
+        tokio::time::timeout(std::time::Duration::from_millis(100), client.read_exact(&mut head)).await.unwrap().unwrap();
+        assert_eq!(b"HEAD\r\n\r\n", &head);
+        drop(server);
     }
 
     #[tokio::test]
