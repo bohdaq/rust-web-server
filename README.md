@@ -123,15 +123,16 @@ the load generator on the same machine: `oha`, 64 keep-alive connections,
 
 | Scenario | rws | Caddy 2.11 | nginx |
 |---|---:|---:|---:|
-| Static file, 1 KiB | 70,227 (2.4 ms) | 19,084 (13.1 ms) | **83,591** (3.1 ms) |
-| Static file, 1 MiB | 9,567 (13.8 ms) | 2,444 (120 ms) | **10,255** (14.4 ms) |
-| Reverse proxy, 1 KiB | 31,591 (4.6 ms) | 13,958 (13.5 ms) | **34,990** (4.4 ms) |
-| Peak memory | **9–13 MiB** | 68–75 MiB | 23–24 MiB |
+| Static file, 1 KiB | 141,677 (**1.1 ms**) | 38,812 (7.2 ms) | **145,701** (3.2 ms) |
+| Static file, 1 MiB | 14,657 (**9.7 ms**) | 3,753 (82 ms) | **15,180** (10.2 ms) |
+| Reverse proxy, 1 KiB | 58,610 (**2.7 ms**) | 26,966 (8.5 ms) | **61,521** (3.0 ms) |
+| CPU per request (1 KiB / 1 MiB / proxy) | **11.0** / 146 / 26.4 µs | 70.4 / 699 / 89.8 µs | 13.2 / **140** / **25.4** µs |
+| Peak memory | **9–14 MiB** | 67–76 MiB | 24–25 MiB |
 
-`rws` is 2.3–3.9× faster than Caddy, with a p99 at nginx's level and the
-smallest memory footprint of the three. nginx leads by 7% on large files,
-11% on proxying and 19% on small files on this 4-CPU runner; on a 10-core
-machine `rws` matches it in all three. Shared CI runners are noisy, so
+`rws` is 2.2–3.9× faster than Caddy and within 3–5% of nginx, with the
+lowest p99 of the three in every scenario and the smallest memory
+footprint. On small files it needs 17% less CPU per request than nginx; on
+large files and proxying 4% more. Shared CI runners are noisy, so
 compare servers within a run, not across runs. Reproduce it with
 [`bench/run.sh`](bench/run.sh) or the manual
 [Benchmark workflow](.github/workflows/bench.yml).

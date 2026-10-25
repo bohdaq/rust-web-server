@@ -18,15 +18,15 @@ release build (`--features "acme auth"`), Caddy 2.11.7, nginx from Ubuntu with
 
 | Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | CPU/request (µs) | Peak memory (MiB) |
 |---|---|---:|---:|---:|---:|---:|
-| Static file, 1 KiB | rws | 120,745 | 0.48 | 1.33 | 14.0 | 8.4 |
-| | Caddy | 27,447 | 1.89 | 8.79 | 104.6 | 68.8 |
-| | nginx | 118,305 | 0.28 | 3.29 | 16.4 | 23.8 |
-| Static file, 1 MiB | rws | 12,418 | 4.66 | 10.82 | 153.5 | 8.8 |
-| | Caddy | 3,165 | 14.79 | 93.91 | 876.1 | 72.7 |
-| | nginx | 13,088 | 4.55 | 11.19 | 148.3 | 23.8 |
-| Reverse proxy, 1 KiB | rws | 48,269 | 1.27 | 2.87 | 33.8 | 13.2 |
-| | Caddy | 20,743 | 2.66 | 9.63 | 124.3 | 67.1 |
-| | nginx | 51,558 | 1.15 | 3.06 | 31.5 | 25.0 |
+| Static file, 1 KiB | rws | 141,677 | 0.41 | 1.06 | 11.0 | 8.9 |
+| | Caddy | 38,812 | 1.17 | 7.16 | 70.4 | 67.5 |
+| | nginx | 145,701 | 0.25 | 3.20 | 13.2 | 23.7 |
+| Static file, 1 MiB | rws | 14,657 | 4.10 | 9.65 | 146.3 | 9.1 |
+| | Caddy | 3,753 | 11.90 | 82.21 | 699.4 | 76.2 |
+| | nginx | 15,180 | 3.90 | 10.22 | 140.1 | 23.7 |
+| Reverse proxy, 1 KiB | rws | 58,610 | 1.03 | 2.71 | 26.4 | 13.7 |
+| | Caddy | 26,966 | 1.92 | 8.48 | 89.8 | 66.7 |
+| | nginx | 61,521 | 0.92 | 3.01 | 25.4 | 24.5 |
 
 CPU/request is the server's user + system CPU time over the run (including
 worker processes) divided by the requests it served.
@@ -39,16 +39,16 @@ On a 10-core Mac (same tools and configuration, `oha` on the same machine):
 
 ## Reading the numbers
 
-- **Against Caddy:** `rws` serves 3.9× (large) to 4.4× (small) as many file
-  requests and 2.3× as many proxied requests per second, using a seventh to a
-  quarter of the CPU per request, with a p99 three to nine times lower and
+- **Against Caddy:** `rws` serves 3.7× (small) to 3.9× (large) as many file
+  requests and 2.2× as many proxied requests per second, using a sixth to a
+  third of the CPU per request, with a p99 three to eight times lower and
   about an eighth of the memory.
-- **Against nginx:** on small files `rws` is 2% ahead and needs 15% less CPU
-  per request; nginx leads by 5% on large files and 7% on proxying (3–7% less
-  CPU per request). `rws` has the lower p99 in every scenario and about a
-  third of the memory. The load generator shares the runner's 4 CPUs, so the
-  server that needs the least CPU per request wins there — the CPU/request
-  column is the gap.
+- **Against nginx:** within 3% on small files, 4% on large files and 5% on
+  proxying. On small files `rws` needs 17% less CPU per request; on large
+  files and proxying 4% more. `rws` has the lower p99 in every scenario and
+  about a third of the memory. The load generator shares the runner's 4
+  CPUs, so the server that needs the least CPU per request wins there — the
+  CPU/request column is the gap.
 - Shared CI runners are noisy: absolute numbers vary by a factor of two
   between runs. Compare servers within one run, not numbers across runs.
 - Compression matters: with `Accept-Encoding: gzip` sent and only `rws`
@@ -73,6 +73,11 @@ On a 10-core Mac (same tools and configuration, `oha` on the same machine):
   same segment (`TCP_CORK` on Linux, `sendfile`'s header vector on macOS).
 - **Configuration is a cached snapshot**, not read from the environment on
   every request; a reload replaces it.
+- **Few allocations per request.** The standard response headers are
+  borrowed `&'static str`s (`Header` fields are `Cow<'static, str>`), so
+  attaching them copies nothing; request heads and upstream response heads
+  are parsed in one pass over the bytes; numbers are formatted on the stack;
+  the file check is one `fstat`.
 
 ## Reproduce
 
