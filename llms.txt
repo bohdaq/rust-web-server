@@ -2269,7 +2269,7 @@ src/canary/             — CanaryLayer smooth-weighted-round-robin traffic spli
 src/circuit_breaker/    — CircuitBreaker, RedisCircuitBreaker (persistent), RetryLayer, Breaker trait
                           (ReverseProxy auto-wiring), max_half_open_probes cap, all_states() (metrics)
 src/client_hint/        — Client Hints header parsing
-src/compression/        — gzip for text bodies ≥ 512 B (MIN_COMPRESS_SIZE); skips pre-encoded responses and bodies gzip doesn't shrink; static files ≤ 256 KiB compressed once per version (open-file cache)
+src/compression/        — gzip for text bodies ≥ 512 B (MIN_COMPRESS_SIZE); skips pre-encoded responses and bodies gzip doesn't shrink; static files ≤ 1 MiB compressed once per version (open-file cache), even above the 256 KiB sendfile threshold
 src/config_binding/     — FromEnvStr, load_required/load_with_default/load_optional (used by #[derive(Config)])
 src/config_check/       — rws --check: ConfigReport, check_file, check_str
 src/config_reload/      — hot-reload logic; ConfigSnapshot

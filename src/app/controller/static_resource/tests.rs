@@ -893,3 +893,23 @@ fn if_modified_since_answers_304_unless_if_none_match_is_present() {
     let options = via_app(&static_request(METHOD.options, &file.0, vec![ims("Fri, 01 Jan 2027 00:00:00 GMT")]), ServerConfig::default());
     assert_eq!(204, options.status_code);
 }
+
+#[test]
+fn large_compressible_file_is_gzipped_for_gzip_clients_and_streamed_otherwise() {
+    use crate::server_config::ServerConfig;
+    let file = ServedFile::new("large.js", (StaticResourceController::STREAM_THRESHOLD + 10_000) as usize);
+    let fs = format!("{}{}", crate::app::controller::static_resource::working_directory(), file.0);
+    std::fs::File::options().write(true).open(&fs).unwrap()
+        .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_767_222_000)).unwrap();
+
+    let gzip = via_app(&static_request(METHOD.get, &file.0, vec![Header::new(Header::_ACCEPT_ENCODING, "gzip")]), ServerConfig::default());
+    assert_eq!(200, gzip.status_code);
+    assert!(gzip.stream_file.is_none());
+    assert_eq!("gzip", gzip.header(Header::_CONTENT_ENCODING).unwrap().value);
+    let plain = std::fs::read(&fs).unwrap();
+    assert_eq!(crate::compression::gzip(&plain).unwrap(), gzip.content_range_list[0].body);
+
+    let identity = via_app(&static_request(METHOD.get, &file.0, vec![]), ServerConfig::default());
+    assert!(identity.stream_file.is_some(), "no gzip: sendfile as before");
+    assert!(identity.header(Header::_CONTENT_ENCODING).is_none());
+}

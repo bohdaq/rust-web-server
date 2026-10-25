@@ -44,7 +44,7 @@ Binary formats (images, audio, video, fonts, archives) are not compressed becaus
 ## Static files are compressed once
 
 A static file is compressed once per version, not on every request: the
-open-file cache keeps the gzip form of each file up to 256 KiB next to its
+open-file cache keeps the gzip form of each file up to 1 MiB next to its
 contents, keyed by the file's size and modification time, within the same
 8 MiB memory budget. An edit is picked up at once (the size or time
 changes); a file modified less than 2 seconds ago isn't cached yet, as for
@@ -59,9 +59,11 @@ per response.
 ## Large file streaming
 
 Static files larger than **256 KiB** are sent without being read into memory
-— `sendfile(2)` over plain HTTP, chunked otherwise (`response.stream_file`).
-They never pass through the in-memory `ContentRange` list, so `apply_gzip`
-is not called for them: clients receive the file uncompressed.
+— `sendfile(2)` over plain HTTP, chunked otherwise (`response.stream_file`)
+— except that a client accepting gzip gets a compressible file of up to
+**1 MiB** gzip-compressed from the cache (a 330 KiB JavaScript bundle went
+out as 80 KiB, at less CPU than sending it whole). Larger files, and every
+large file for a client without gzip, are sent uncompressed.
 
 :::note[Range requests]
 Byte-range requests (`Range: bytes=N-M`) always bypass chunked streaming and receive the slice directly. Gzip compression applies normally to range responses when the content type is compressible.

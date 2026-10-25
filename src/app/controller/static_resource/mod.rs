@@ -357,14 +357,19 @@ impl StaticResourceController {
         // from the cached compressed form (what apply_gzip would produce,
         // made once per file version instead of per request).
         let wants_gzip = !not_modified
-            && state.len <= StaticResourceController::STREAM_THRESHOLD
+            && state.len <= open_file_cache::MAX_GZIPPED_FILE
             && state.len >= crate::compression::MIN_COMPRESS_SIZE as u64
             && crate::compression::is_compressible(mime)
             && crate::compression::accepts_gzip(request);
         // Everything that can fail happens before `response` is taken: on
         // `None` the general path carries on with it.
+        // A body of None means: stream the file (sendfile over plain TCP).
+        // Compressible files up to MAX_GZIPPED_FILE (above the streaming
+        // threshold too) go to gzip clients compressed — a JS bundle of a few
+        // hundred KiB used to be sent uncompressed.
         let mut gzipped = false;
-        let body = if not_modified || state.len > StaticResourceController::STREAM_THRESHOLD {
+        let large = state.len > StaticResourceController::STREAM_THRESHOLD;
+        let body = if not_modified {
             None
         } else if wants_gzip {
             match file.gzipped(&state).ok()? {
@@ -372,8 +377,11 @@ impl StaticResourceController {
                     gzipped = true;
                     Some(bytes.to_vec())
                 }
+                open_file_cache::Gzipped::NotSmaller if large => None,
                 open_file_cache::Gzipped::NotSmaller => Some(file.contents(&state).ok()?),
             }
+        } else if large {
+            None
         } else {
             Some(file.contents(&state).ok()?)
         };
@@ -389,14 +397,14 @@ impl StaticResourceController {
         }
         response.set_status(STATUS_CODE_REASON_PHRASE.n200_ok);
 
-        if state.len > StaticResourceController::STREAM_THRESHOLD {
+        let Some(body) = body else {
             response.headers.push(Header { name: Header::_CONTENT_TYPE.into(), value: mime.to_string().into() });
             response.headers.push(Header { name: Header::_CONTENT_LENGTH.into(), value: len.as_str().to_string().into() });
             response.stream_file = Some(fs_path);
             return Some(response);
-        }
+        };
 
-        response.content_range_list = vec![Range::get_content_range(body.unwrap_or_default(), mime.to_string())];
+        response.content_range_list = vec![Range::get_content_range(body, mime.to_string())];
         if gzipped {
             crate::compression::mark_gzipped(&mut response);
         }

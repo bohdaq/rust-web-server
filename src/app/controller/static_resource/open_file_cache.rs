@@ -28,10 +28,10 @@ pub(crate) const MAX_CACHED_FILE: u64 = 64 * 1024;
 pub(crate) const CONTENTS_BUDGET: usize = 8 * 1024 * 1024;
 /// Bytes of contents currently cached (plain and gzipped, together).
 static CONTENTS_BYTES: AtomicUsize = AtomicUsize::new(0);
-/// Files up to this size also have their gzip-compressed form cached — the
-/// static path's streaming threshold: anything bigger goes out with
-/// `sendfile`, uncompressed.
-pub(crate) const MAX_GZIPPED_FILE: u64 = 256 * 1024;
+/// Files up to this size also have their gzip-compressed form cached (and a
+/// gzip client gets it even above the streaming threshold); anything bigger
+/// goes out with `sendfile`, uncompressed.
+pub(crate) const MAX_GZIPPED_FILE: u64 = 1024 * 1024;
 
 /// An open regular file.
 pub(crate) struct OpenFile {
