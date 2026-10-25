@@ -844,7 +844,7 @@ fn exchange<S: UpstreamIo>(
     }
 
     let mut tmp = [0u8; 4096];
-    let (header_bytes, body_prefix) = match read_response_head(&mut stream, &mut tmp) {
+    let (header_bytes, body_prefix) = match read_final_response_head(&mut stream, &mut tmp) {
         Ok(head) => head,
         Err(HeadError::NothingReceived(e)) => return Exchange::NoResponse(e),
         Err(HeadError::Partial(e)) => return Exchange::Failed(e),
@@ -907,24 +907,64 @@ enum HeadError {
 }
 
 fn read_response_head<S: Read>(stream: &mut S, tmp: &mut [u8]) -> Result<(Vec<u8>, Vec<u8>), HeadError> {
-    let mut buf: Vec<u8> = Vec::with_capacity(4096);
-    loop {
-        let n = match stream.read(tmp) {
-            Ok(n) => n,
-            Err(e) if buf.is_empty() => return Err(HeadError::NothingReceived(e.to_string())),
-            Err(e) => return Err(HeadError::Partial(e.to_string())),
-        };
-        if n == 0 {
-            let msg = "backend closed connection before headers were complete".to_string();
-            return Err(if buf.is_empty() { HeadError::NothingReceived(msg) } else { HeadError::Partial(msg) });
+    read_response_head_from(stream, tmp, Vec::with_capacity(4096), false)
+}
+
+/// The final response head: interim `1xx` heads (`100 Continue`,
+/// `103 Early Hints`, …) are read past (RFC 9110 §15.2). Returning one as
+/// the response left the real response in the connection, and once pooled
+/// the next request — possibly another client's — received it.
+fn read_final_response_head<S: Read>(stream: &mut S, tmp: &mut [u8]) -> Result<(Vec<u8>, Vec<u8>), HeadError> {
+    let (mut head, mut rest) = read_response_head(stream, tmp)?;
+    let mut interim = 0;
+    while is_interim_response(&head) {
+        interim += 1;
+        if interim > MAX_INTERIM_RESPONSES {
+            return Err(HeadError::Partial("too many interim (1xx) responses from the backend".to_string()));
         }
-        buf.extend_from_slice(&tmp[..n]);
+        (head, rest) = read_response_head_from(stream, tmp, rest, true)?;
+    }
+    Ok((head, rest))
+}
+
+/// Read until a complete head is in `buf` (which may already hold bytes
+/// that followed a previous head). `received` — bytes already came from this
+/// response, so a failure is never "nothing received".
+fn read_response_head_from<S: Read>(
+    stream: &mut S,
+    tmp: &mut [u8],
+    mut buf: Vec<u8>,
+    received: bool,
+) -> Result<(Vec<u8>, Vec<u8>), HeadError> {
+    loop {
         if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
             let body_prefix = buf[pos + 4..].to_vec();
             buf.truncate(pos + 4);
             return Ok((buf, body_prefix));
         }
+        let nothing = buf.is_empty() && !received;
+        let n = match stream.read(tmp) {
+            Ok(n) => n,
+            Err(e) if nothing => return Err(HeadError::NothingReceived(e.to_string())),
+            Err(e) => return Err(HeadError::Partial(e.to_string())),
+        };
+        if n == 0 {
+            let msg = "backend closed connection before headers were complete".to_string();
+            return Err(if nothing { HeadError::NothingReceived(msg) } else { HeadError::Partial(msg) });
+        }
+        buf.extend_from_slice(&tmp[..n]);
     }
+}
+
+/// Interim responses tolerated before the final one.
+pub(crate) const MAX_INTERIM_RESPONSES: usize = 16;
+
+/// An interim (1xx) response head other than `101 Switching Protocols`
+/// (which ends the HTTP exchange): the final response follows it.
+pub(crate) fn is_interim_response(head: &[u8]) -> bool {
+    let line_end = head.iter().position(|b| *b == b'\r' || *b == b'\n').unwrap_or(head.len());
+    let status = head[..line_end].split(|b| *b == b' ').nth(1).unwrap_or(&[]);
+    status.len() == 3 && status.iter().all(u8::is_ascii_digit) && status[0] == b'1' && status != b"101"
 }
 
 /// RFC 9112 §6.3: a response to HEAD, and any 1xx, 204 or 304 response, ends

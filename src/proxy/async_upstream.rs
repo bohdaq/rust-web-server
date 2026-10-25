@@ -23,7 +23,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use super::{
-    build_request, is_idempotent, parse_status_and_headers, HeadFacts,
+    build_request, is_idempotent, is_interim_response, parse_status_and_headers, HeadFacts, MAX_INTERIM_RESPONSES,
     ConcatReader, Pool, POOL_MAX_IDLE,
 };
 use crate::request::Request;
@@ -227,18 +227,28 @@ async fn exchange<S: UpstreamConn>(
     // read, as before) — no zeroed 8 KiB stack buffer copied from each time.
     let mut buf: Vec<u8> = Vec::with_capacity(8192);
 
-    // Response head, bounded by the read timeout as a whole.
+    // The final response head, bounded by the read timeout as a whole.
+    // Interim 1xx heads are dropped (see `read_final_response_head`): taking
+    // one as the response left the real one for the next pooled request.
     let head = tokio::time::timeout(read_timeout, async {
+        let mut interim = 0;
         loop {
-            match read_more(&mut stream, &mut buf).await {
-                Ok(0) => {
-                    return Err((buf.is_empty(), "backend closed connection before headers were complete".to_string()))
-                }
-                Ok(_) => {}
-                Err(e) => return Err((buf.is_empty(), e.to_string())),
-            }
             if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
-                return Ok(pos + 4);
+                if !is_interim_response(&buf[..pos + 4]) {
+                    return Ok(pos + 4);
+                }
+                interim += 1;
+                if interim > MAX_INTERIM_RESPONSES {
+                    return Err((false, "too many interim (1xx) responses from the backend".to_string()));
+                }
+                buf.drain(..pos + 4);
+                continue;
+            }
+            let nothing = buf.is_empty() && interim == 0;
+            match read_more(&mut stream, &mut buf).await {
+                Ok(0) => return Err((nothing, "backend closed connection before headers were complete".to_string())),
+                Ok(_) => {}
+                Err(e) => return Err((nothing, e.to_string())),
             }
         }
     })

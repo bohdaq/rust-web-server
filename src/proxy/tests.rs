@@ -1270,3 +1270,82 @@ fn parse_upstream_matches_parse_then_normalize() {
     }
     assert!(checked > 5000);
 }
+
+// ── #48: interim (1xx) responses from the upstream ───────────────────────────
+
+/// A keep-alive backend on one connection that answers the n-th request
+/// with `responses[n]` (raw bytes, possibly several heads).
+fn scripted_backend(responses: Vec<&'static str>) -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            for response in responses {
+                let mut buf = [0u8; 4096];
+                let mut got = Vec::new();
+                while !got.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match stream.read(&mut buf) {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => got.extend_from_slice(&buf[..n]),
+                    }
+                }
+                let _ = stream.write_all(response.as_bytes());
+            }
+        }
+    });
+    port
+}
+
+const EARLY_HINTS_THEN_A: &str = "HTTP/1.1 103 Early Hints\r\nLink: </a.css>; rel=preload\r\n\r\nHTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 6\r\n\r\nbody-A";
+const PLAIN_B: &str = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 6\r\n\r\nbody-B";
+
+fn body_of(response: &crate::response::Response) -> String {
+    String::from_utf8_lossy(&response.content_range_list.first().map(|c| c.body.clone()).unwrap_or_default()).to_string()
+}
+
+#[test]
+fn sync_forwarder_reads_past_interim_responses_and_keeps_the_pool_in_step() {
+    let port = scripted_backend(vec![EARLY_HINTS_THEN_A, PLAIN_B]);
+    let pool = ConnPool::new(4, Duration::from_secs(30));
+    let t = Duration::from_secs(5);
+    let first = super::forward_upstream(&pool, &get("/a"), "10.0.0.1", "127.0.0.1", port, false, t, t).unwrap();
+    assert_eq!(200, first.status_code);
+    assert_eq!("body-A", body_of(&first));
+    // The second request reuses the pooled connection: it must get B, not
+    // the remainder of the first exchange.
+    let second = super::forward_upstream(&pool, &get("/b"), "10.0.0.1", "127.0.0.1", port, false, t, t).unwrap();
+    assert_eq!(200, second.status_code);
+    assert_eq!("body-B", body_of(&second));
+}
+
+#[cfg(feature = "http2")]
+#[tokio::test]
+async fn async_forwarder_reads_past_interim_responses_and_keeps_the_pool_in_step() {
+    let port = scripted_backend(vec![EARLY_HINTS_THEN_A, PLAIN_B]);
+    let t = Duration::from_secs(5);
+    let first = super::async_upstream::forward(&get("/a"), "10.0.0.1", "127.0.0.1", port, None, t, t).await.unwrap();
+    assert_eq!(200, first.status_code);
+    assert_eq!("body-A", body_of(&first));
+    let second = super::async_upstream::forward(&get("/b"), "10.0.0.1", "127.0.0.1", port, None, t, t).await.unwrap();
+    assert_eq!(200, second.status_code);
+    assert_eq!("body-B", body_of(&second));
+}
+
+#[test]
+fn an_endless_stream_of_interim_responses_is_an_error() {
+    let flood: &'static str = Box::leak("HTTP/1.1 100 Continue\r\n\r\n".repeat(super::MAX_INTERIM_RESPONSES + 2).into_boxed_str());
+    let port = scripted_backend(vec![flood]);
+    let pool = ConnPool::new(4, Duration::from_secs(30));
+    let t = Duration::from_secs(2);
+    assert!(super::forward_upstream(&pool, &get("/"), "10.0.0.1", "127.0.0.1", port, false, t, t).is_err());
+}
+
+#[test]
+fn interim_classification() {
+    assert!(super::is_interim_response(b"HTTP/1.1 100 Continue\r\n\r\n"));
+    assert!(super::is_interim_response(b"HTTP/1.1 103 Early Hints\r\n\r\n"));
+    assert!(!super::is_interim_response(b"HTTP/1.1 101 Switching Protocols\r\n\r\n"));
+    assert!(!super::is_interim_response(b"HTTP/1.1 200 OK\r\n\r\n"));
+    assert!(!super::is_interim_response(b"HTTP/1.1 1\r\n\r\n"));
+    assert!(!super::is_interim_response(b""));
+}

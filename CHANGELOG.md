@@ -62,6 +62,14 @@ than with the `h2` crate), and release builds
 allocate with mimalloc (4–6% less CPU, more memory). Details:
 [Benchmarks](https://rws8.tech/reference/benchmarks/).
 
+## 17.113.1 — security patch
+
+Fixes from the 2026-10-25 security review. Upgrade from 17.113.0.
+
+### Security
+
+- **Proxy: interim responses (#48).** A `1xx` from an upstream (`100 Continue`, `103 Early Hints`) was taken as the final response; the real response stayed in the pooled connection and was delivered to the next request on it — possibly another client's. Both forwarders now read past interim responses (at most 16; `101 Switching Protocols` is still final).
+
 ## 17.113.0 — 2026-10-24
 
 - Proxy: pooled keep-alive upstream connections on every HTTP/1.1 path, pooled HTTPS backends, non-blocking forwarding to plain-HTTP upstreams; hot reload of routes, upstreams and `[middleware]` on `SIGHUP`.
