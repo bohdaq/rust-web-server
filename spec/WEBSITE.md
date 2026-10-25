@@ -76,17 +76,46 @@ Nav (top bar, shared): Home · Why · Playground · Benchmarks · Docs · GitHub
 7. **Footer.** Real links: Docs, GitHub, crates.io, Docker Hub, Homebrew, the
    `llms.txt` for AI tools.
 
+## Brand
+
+The logo is a server rack whose bottom unit breaks into forward-moving shards —
+the speed idea, in the shape. The provided brand assets live in
+`docs/src/assets/brand/`:
+
+- `rws-logo-lockup.png` — the horizontal mark + wordmark lockup (`rust-web-server`
+  over `RWS`), for the nav and hero.
+- `rws-brand-sheet.png` — the full sheet with the three app-icon variants (black,
+  orange, black-split).
+
+Replace these PNGs with SVG before shipping (crisp at any size, theme-tintable);
+the PNGs fix the exact shapes and palette until then.
+
+**Palette** (sampled from the logo):
+
+| Token | Hex | Use |
+|-------|-----|-----|
+| Cream | `#F2EBE3` | light background |
+| Near-black | `#16120F` | text, dark background, the rack |
+| Orange | `#D2551E` | the one accent — the breaking unit, links, buttons |
+| Warm grey | `#6B625C` | muted labels, captions (`RWS` subhead) |
+
 ## Design direction
 
-- **Identity: "systems software, well made."** Dark-first palette built from the
-  existing `logo.svg` colors, one warm accent, a monospace face for all code
-  (most of the page is code), a crisp sans for prose. Deliberately avoid the
-  generic cream-serif-terracotta AI landing look.
+- **Identity from the logo: "systems software with momentum."** The brand is
+  warm-neutral, not a generic dark dashboard — lean into the cream + near-black +
+  single-orange palette above, and carry the "breaking into motion" shard motif
+  as a sparing graphic element (section dividers, the hero, hover states), never
+  as wallpaper. The wordmark is a geometric sans, so the page is sans + mono, not
+  serif — this is the brand's own warm palette, distinct from the generic
+  cream-**serif**-terracotta look to avoid.
 - **Code is the hero typography.** Config and Rust get the same care as
-  headlines — that's what developers come to see.
-- **Motion with restraint.** The typing terminal is the one orchestrated moment;
-  everything else is quiet hover states. Honor `prefers-reduced-motion`.
-- **Theme-aware**, like the docs: both light and dark, tokens only.
+  headlines — that's what developers come to see. A monospace face for all code;
+  a geometric sans matching the wordmark for prose and headings.
+- **Motion with restraint.** The typing terminal and the logo's shard motif are
+  the orchestrated moments; everything else is quiet hover states. Honor
+  `prefers-reduced-motion`.
+- **Theme-aware**, like the docs: light is cream/near-black, dark inverts to
+  near-black ground with the orange holding as the accent; tokens only.
 
 ## New interactive pieces (the only real build work)
 
