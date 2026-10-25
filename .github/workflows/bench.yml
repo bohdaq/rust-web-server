@@ -23,6 +23,9 @@ on:
       rws_workers:
         description: tokio worker threads for rws (TOKIO_WORKER_THREADS; empty = one per CPU)
         default: ""
+      base_workers:
+        description: tokio worker threads for rws-base (with no base_ref, the same build again)
+        default: ""
       base_ref:
         description: Also bench rws built from this ref as "rws-base", in the same run (an A/B on one machine)
         default: ""
@@ -76,6 +79,7 @@ jobs:
             NGINX="$(command -v nginx)" DURATION="${{ inputs.duration }}s" \
             EXTENDED="${{ inputs.extended && '1' || '' }}" RWS_WORKERS="${{ inputs.rws_workers }}" \
             RWS_BASE="${{ inputs.base_ref != '' && format('{0}/base-target/release/rws', runner.temp) || '' }}" \
+            RWS_BASE_WORKERS="${{ inputs.base_workers }}" \
             PERF_DIR="${{ inputs.profile && 'perf' || '' }}" bench/run.sh
           {
             echo "## rws vs Caddy vs nginx"

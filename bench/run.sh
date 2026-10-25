@@ -49,6 +49,10 @@ set -euo pipefail
 
 RWS="${RWS:?set RWS to the rws binary}"
 RWS_BASE="${RWS_BASE:-}"
+# RWS_BASE_WORKERS=<n> runs rws-base with n tokio worker threads; without
+# RWS_BASE it benches the same rws binary again with that many workers.
+RWS_BASE_WORKERS="${RWS_BASE_WORKERS:-}"
+[ -n "$RWS_BASE_WORKERS" ] && [ -z "$RWS_BASE" ] && RWS_BASE="$RWS"
 OHA="${OHA:?set OHA to the oha binary}"
 CADDY="${CADDY:-}"
 NGINX="${NGINX:-}"
@@ -272,7 +276,13 @@ EOF
   fi
 }
 bench_rws rws "$RWS"
-if [ -n "$RWS_BASE" ]; then bench_rws rws-base "$RWS_BASE"; fi
+if [ -n "$RWS_BASE" ]; then
+  if [ -n "$RWS_BASE_WORKERS" ]; then
+    (export TOKIO_WORKER_THREADS="$RWS_BASE_WORKERS"; bench_rws rws-base "$RWS_BASE")
+  else
+    bench_rws rws-base "$RWS_BASE"
+  fi
+fi
 
 # ── Caddy ─────────────────────────────────────────────────────────────────────
 if [ -n "$CADDY" ]; then
