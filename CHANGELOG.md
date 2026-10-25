@@ -17,6 +17,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `Origin` otherwise. Static files send `Cache-Control: no-cache`
   (`RWS_CONFIG_STATIC_CACHE_CONTROL`) instead of `no-store`, plus a standard
   `Last-Modified`; every response has a standard `Date`.
+  `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` and the default
+  CSP are opt-in with `RWS_CONFIG_SECURITY_HEADERS=true` (a CSP set with
+  `RWS_CONFIG_CSP` is always sent), and `Date-Unix-Epoch-Nanos` /
+  `Last-Modified-Unix-Epoch-Nanos` with `RWS_CONFIG_NANOS_HEADERS=true`.
 - **RSA keys:** `auth::verify_jwt_rs256` and `SamlIdpMetadata.signing_key` take
   `rsa_key::RsaPublicKey` (was `rsa::RsaPublicKey`); RSA keys under 2048 bits
   are rejected. The `rsa` crate (RUSTSEC-2023-0071) is no longer a dependency

@@ -186,6 +186,8 @@ max_body_size_in_bytes  = 10485760   # RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: 413 ab
 open_file_cache_secs    = 1          # RWS_CONFIG_OPEN_FILE_CACHE_SECS: reuse open static files this long; 0 = off
 open_file_cache_strict  = true       # RWS_CONFIG_OPEN_FILE_CACHE_STRICT: false = trust size/mtime for that long (no fstat per request)
 csp                     = "default-src 'self'"   # RWS_CONFIG_CSP: Content-Security-Policy header
+security_headers        = true       # RWS_CONFIG_SECURITY_HEADERS: X-Frame-Options, Referrer-Policy, Permissions-Policy, default CSP
+nanos_headers           = false      # RWS_CONFIG_NANOS_HEADERS: Date-/Last-Modified-Unix-Epoch-Nanos
 static_cache_control    = "no-cache" # RWS_CONFIG_STATIC_CACHE_CONTROL: Cache-Control for static files
 client_hints            = false      # RWS_CONFIG_CLIENT_HINTS: send Accept-CH / Critical-CH
 tls_client_ca_file      = "/etc/rws/clients-ca.pem"  # RWS_CONFIG_TLS_CLIENT_CA_FILE: require client certs (mTLS)

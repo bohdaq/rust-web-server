@@ -67,37 +67,55 @@ let headers = Cors::_process(&request, &cors)?;
 
 CORS configuration is re-read on `SIGHUP` (or `POST /admin/config/reload`) without a restart.
 
-## Automatic security headers
+## Security headers
 
-The following headers are added to every response regardless of TLS state:
-
-| Header | Default value |
-|---|---|
-| `X-Content-Type-Options` | `nosniff` |
-| `X-Frame-Options` | `SAMEORIGIN` |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` |
-| `Permissions-Policy` | `geolocation=(), microphone=(), camera=()` |
-| `Content-Security-Policy` | `default-src 'self'` (overridable) |
-
-On TLS connections (HTTPS and HTTP/3) the server additionally sends:
+Every response carries `X-Content-Type-Options: nosniff`. On TLS connections
+(HTTPS and HTTP/3) the server also sends:
 
 ```
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 ```
 
+The other browser-policy headers are opt-in (since 18.0.0 — before that they
+were always sent): set `RWS_CONFIG_SECURITY_HEADERS=true`
+(`security_headers = true` in `rws.config.toml`) and every response also
+carries
+
+| Header | Value |
+|---|---|
+| `X-Frame-Options` | `SAMEORIGIN` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | `geolocation=(), microphone=(), camera=()` |
+| `Content-Security-Policy` | `default-src 'self'` (unless `RWS_CONFIG_CSP` is set) |
+
+They are off by default because most deployments set them per site (or in a
+proxy in front), and each one is work on every response — over HTTP/2 every
+header is HPACK-encoded.
+
 ### Content-Security-Policy
 
-Override the default CSP via `RWS_CONFIG_CSP`:
+Set a policy with `RWS_CONFIG_CSP`; it is sent whether or not
+`RWS_CONFIG_SECURITY_HEADERS` is on:
 
 ```bash
 RWS_CONFIG_CSP="default-src 'self'; script-src 'self' cdn.example.com; img-src *"
 ```
 
-Set the variable to an empty string to suppress the header entirely:
+With `RWS_CONFIG_SECURITY_HEADERS=true`, an empty value suppresses the
+default policy:
 
 ```bash
 RWS_CONFIG_CSP=
 ```
+
+### Nanosecond timestamps
+
+`RWS_CONFIG_NANOS_HEADERS=true` (`nanos_headers = true`) adds
+`Date-Unix-Epoch-Nanos` (the response time in nanoseconds since the Unix
+epoch, per response) and, for static files, `Last-Modified-Unix-Epoch-Nanos`.
+Off by default since 18.0.0: `Date` and `Last-Modified` carry the same
+information to the second, and values that change on every response can't be
+indexed by HTTP/2's header compression.
 
 ## Client Hints
 

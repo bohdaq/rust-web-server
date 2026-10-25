@@ -132,8 +132,8 @@ fn static_file_cors_options_preflight_request_client_hints() {
     assert!(response._get_header(ClientHint::CRITICAL_CLIENT_HINTS.to_string()).is_none());
 
 
-    let x_frame_options = response._get_header(Header::_X_FRAME_OPTIONS.to_string()).unwrap();
-    assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
+    // Opt-in since 18.0.0 (RWS_CONFIG_SECURITY_HEADERS).
+    assert!(response._get_header(Header::_X_FRAME_OPTIONS.to_string()).is_none());
 
     for header in &response.headers {
         println!("{:?}", header);
@@ -183,8 +183,8 @@ fn static_file_cors_off_options_preflight_request_client_hints() {
     assert!(response._get_header(ClientHint::CRITICAL_CLIENT_HINTS.to_string()).is_none());
 
 
-    let x_frame_options = response._get_header(Header::_X_FRAME_OPTIONS.to_string()).unwrap();
-    assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
+    // Opt-in since 18.0.0 (RWS_CONFIG_SECURITY_HEADERS).
+    assert!(response._get_header(Header::_X_FRAME_OPTIONS.to_string()).is_none());
 
     for header in response.headers {
         println!("{:?}", header);

@@ -230,23 +230,26 @@ impl Header {
         // depends only on the CSP setting, so it's built once per CSP value
         // and cloned (joining the client-hint and Vary lists per request was
         // a measurable share of a small response's CPU).
-        let fixed = Header::fixed_headers(&config.csp, config.client_hints);
+        let fixed = Header::fixed_headers(&config.csp, config.client_hints, config.security_headers);
         let mut header_list = Cors::get_headers_from_config(request, config);
         header_list.reserve(fixed.before_date.len() + 2 + fixed.after_date.len());
         header_list.extend(fixed.before_date.iter().cloned());
         header_list.push(Header { name: Header::_DATE.into(), value: crate::http::date::now().into() });
-        header_list.push(Header::get_date_iso_8601_header());
+        if config.nanos_headers {
+            header_list.push(Header::get_date_iso_8601_header());
+        }
         header_list.extend(fixed.after_date.iter().cloned());
         header_list
     }
 
     /// The request-independent part of [`Header::get_header_list_with_config`]
-    /// for a CSP value and client-hint setting, cached for the last seen.
-    fn fixed_headers(csp: &str, client_hints: bool) -> std::sync::Arc<FixedHeaders> {
+    /// for a CSP value, client-hint and security-header setting, cached for
+    /// the last seen.
+    fn fixed_headers(csp: &str, client_hints: bool, security_headers: bool) -> std::sync::Arc<FixedHeaders> {
         use std::sync::{Arc, RwLock};
-        static CACHE: RwLock<Option<(String, bool, Arc<FixedHeaders>)>> = RwLock::new(None);
-        if let Some((cached_csp, cached_hints, fixed)) = CACHE.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
-            if cached_csp == csp && *cached_hints == client_hints {
+        static CACHE: RwLock<Option<(String, bool, bool, Arc<FixedHeaders>)>> = RwLock::new(None);
+        if let Some((cached_csp, cached_hints, cached_security, fixed)) = CACHE.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            if cached_csp == csp && *cached_hints == client_hints && *cached_security == security_headers {
                 return Arc::clone(fixed);
             }
         }
@@ -263,12 +266,15 @@ impl Header {
         before_date.push(Header { name: Header::_VARY.into(), value: vary.into() });
         before_date.push(Header::get_x_content_type_options_header());
         before_date.push(Header::get_accept_ranges_header());
-        before_date.push(Header::get_x_frame_options_header());
-        let mut after_date = vec![
-            Header::get_no_cache_header(),
-            Header { name: Header::_REFERRER_POLICY.into(), value: Header::_REFERRER_POLICY_VALUE_DEFAULT.into() },
-            Header { name: Header::_PERMISSIONS_POLICY.into(), value: Header::_PERMISSIONS_POLICY_VALUE_DEFAULT.into() },
-        ];
+        // Opt-in since 18.0.0 (RWS_CONFIG_SECURITY_HEADERS).
+        if security_headers {
+            before_date.push(Header::get_x_frame_options_header());
+        }
+        let mut after_date = vec![Header::get_no_cache_header()];
+        if security_headers {
+            after_date.push(Header { name: Header::_REFERRER_POLICY.into(), value: Header::_REFERRER_POLICY_VALUE_DEFAULT.into() });
+            after_date.push(Header { name: Header::_PERMISSIONS_POLICY.into(), value: Header::_PERMISSIONS_POLICY_VALUE_DEFAULT.into() });
+        }
         if !csp.is_empty() {
             after_date.push(Header { name: Header::_CONTENT_SECURITY_POLICY.into(), value: csp.to_string().into() });
         }
@@ -277,7 +283,7 @@ impl Header {
         let before_date = before_date.into_iter().map(Header::interned).collect();
         let after_date = after_date.into_iter().map(Header::interned).collect();
         let fixed = Arc::new(FixedHeaders { before_date, after_date });
-        *CACHE.write().unwrap_or_else(|e| e.into_inner()) = Some((csp.to_string(), client_hints, Arc::clone(&fixed)));
+        *CACHE.write().unwrap_or_else(|e| e.into_inner()) = Some((csp.to_string(), client_hints, security_headers, Arc::clone(&fixed)));
         fixed
     }
 

@@ -93,8 +93,21 @@ pub struct ServerConfig {
 
     // ── Security headers ──────────────────────────────────────────────────────
     /// `RWS_CONFIG_CSP` — `Content-Security-Policy` header value. An empty
-    /// string suppresses the header entirely. Default: the framework default CSP.
+    /// string suppresses the header. Unset: `default-src 'self'` when
+    /// [`security_headers`](Self::security_headers) is on, otherwise no header
+    /// (18.0.0; was always `default-src 'self'`).
     pub csp: String,
+    /// `RWS_CONFIG_SECURITY_HEADERS` — send `X-Frame-Options: SAMEORIGIN`,
+    /// `Referrer-Policy` and `Permissions-Policy` on every response (and the
+    /// default CSP, unless `RWS_CONFIG_CSP` is set). Off by default (18.0.0;
+    /// was always on): nginx sends none of them, and over HTTP/2 every header
+    /// costs HPACK work. `X-Content-Type-Options: nosniff` is always sent.
+    pub security_headers: bool,
+    /// `RWS_CONFIG_NANOS_HEADERS` — send `Date-Unix-Epoch-Nanos` and, for
+    /// static files, `Last-Modified-Unix-Epoch-Nanos`. Off by default (18.0.0;
+    /// was always on): they change on every response, so HTTP/2 can't index
+    /// them, and `Date`/`Last-Modified` carry the same information to the second.
+    pub nanos_headers: bool,
     /// `RWS_CONFIG_CLIENT_HINTS` — send `Accept-CH`, `Critical-CH` and the
     /// client hints in `Vary` on every response. Off by default (18.0.0; was
     /// always on): ~700 bytes per response, and `Critical-CH` makes Chromium
@@ -127,7 +140,9 @@ impl Default for ServerConfig {
             cors_allow_headers: Config::RWS_CONFIG_CORS_ALLOW_HEADERS_DEFAULT_VALUE.to_string(),
             cors_expose_headers: Config::RWS_CONFIG_CORS_EXPOSE_HEADERS_DEFAULT_VALUE.to_string(),
             cors_max_age: Config::RWS_CONFIG_CORS_MAX_AGE_DEFAULT_VALUE.to_string(),
-            csp: CSP_DEFAULT.to_string(),
+            csp: String::new(),
+            security_headers: false,
+            nanos_headers: false,
             client_hints: false,
             static_cache_control: STATIC_CACHE_CONTROL_DEFAULT.to_string(),
             log_format: Config::RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE.to_string(),
@@ -153,8 +168,15 @@ impl ServerConfig {
             cors_allow_headers: read(Config::RWS_CONFIG_CORS_ALLOW_HEADERS),
             cors_expose_headers: read(Config::RWS_CONFIG_CORS_EXPOSE_HEADERS),
             cors_max_age: read(Config::RWS_CONFIG_CORS_MAX_AGE),
-            csp: std::env::var("RWS_CONFIG_CSP")
-                .unwrap_or_else(|_| CSP_DEFAULT.to_string()),
+            csp: std::env::var("RWS_CONFIG_CSP").unwrap_or_else(|_| {
+                if read("RWS_CONFIG_SECURITY_HEADERS").eq_ignore_ascii_case("true") {
+                    CSP_DEFAULT.to_string()
+                } else {
+                    String::new()
+                }
+            }),
+            security_headers: read("RWS_CONFIG_SECURITY_HEADERS").eq_ignore_ascii_case("true"),
+            nanos_headers: read("RWS_CONFIG_NANOS_HEADERS").eq_ignore_ascii_case("true"),
             client_hints: read("RWS_CONFIG_CLIENT_HINTS").eq_ignore_ascii_case("true"),
             static_cache_control: std::env::var("RWS_CONFIG_STATIC_CACHE_CONTROL")
                 .unwrap_or_else(|_| STATIC_CACHE_CONTROL_DEFAULT.to_string()),

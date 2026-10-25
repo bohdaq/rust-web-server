@@ -139,7 +139,7 @@ impl StaticResourceController {
                     let file_size = metadata(&static_filepath).map(|m| m.len()).unwrap_or(0);
                     let etag_value = format!("\"{}-{}\"", modified_date_time, file_size);
                     set_static_cache_control(&mut response, &config.static_cache_control);
-                    if push_validators(request, &mut response, modified_date_time, &etag_value) {
+                    if push_validators(request, &mut response, modified_date_time, &etag_value, config.nanos_headers) {
                         response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
                         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
                         response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
@@ -258,7 +258,7 @@ impl StaticResourceController {
                     let file_size = metadata(&static_filepath).map(|m| m.len()).unwrap_or(0);
                     let etag_value = format!("\"{}-{}\"", modified_date_time, file_size);
                     set_static_cache_control(&mut response, &config.static_cache_control);
-                    if push_validators(request, &mut response, modified_date_time, &etag_value) {
+                    if push_validators(request, &mut response, modified_date_time, &etag_value, config.nanos_headers) {
                         response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
                         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
                         response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
@@ -388,7 +388,9 @@ impl StaticResourceController {
 
         let mut response = std::mem::replace(response, Response::empty());
         set_static_cache_control(&mut response, &config.static_cache_control);
-        response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: modified.as_str().to_string().into() });
+        if config.nanos_headers {
+            response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: modified.as_str().to_string().into() });
+        }
         response.headers.push(Header { name: Header::_LAST_MODIFIED.into(), value: crate::http::date::format((state.modified / 1_000_000_000) as u64).into() });
         response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
         if not_modified {
@@ -863,11 +865,13 @@ const DIRECTORY_LISTING_TAIL: &str = concat!(
 /// several syscalls (on macOS it opens "."): the static-file path used to ask
 /// for it four to six times per request. A library user who changes the
 /// working directory after the first request keeps the original root.
-/// Push `Last-Modified-Unix-Epoch-Nanos` and `Last-Modified`, and tell
-/// whether the request's validators say the client's copy is current
-/// ([`is_not_modified`]).
-fn push_validators(request: &Request, response: &mut Response, modified_nanos: u128, etag: &str) -> bool {
-    response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: modified_nanos.to_string().into() });
+/// Push `Last-Modified` (and `Last-Modified-Unix-Epoch-Nanos` with
+/// `nanos_headers`), and tell whether the request's validators say the
+/// client's copy is current ([`is_not_modified`]).
+fn push_validators(request: &Request, response: &mut Response, modified_nanos: u128, etag: &str, nanos_headers: bool) -> bool {
+    if nanos_headers {
+        response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: modified_nanos.to_string().into() });
+    }
     response.headers.push(Header { name: Header::_LAST_MODIFIED.into(), value: crate::http::date::format((modified_nanos / 1_000_000_000) as u64).into() });
     is_not_modified(request, modified_nanos, etag)
 }

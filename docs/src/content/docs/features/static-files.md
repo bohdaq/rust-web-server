@@ -105,7 +105,7 @@ Both are `'self'`-origin `<link>`/`<script src>` references, fully compliant wit
 echo "body { font-family: monospace; }" > rws-directory-listing.css
 ```
 
-If your own CSP is stricter than the default (via `RWS_CONFIG_CSP`) and excludes `'self'` from `style-src`/`script-src`, add an allowance for it or the listing will render unstyled the same way any other same-origin asset would under that policy.
+If you set a CSP (`RWS_CONFIG_CSP`, or the default one via `RWS_CONFIG_SECURITY_HEADERS`) and excludes `'self'` from `style-src`/`script-src`, add an allowance for it or the listing will render unstyled the same way any other same-origin asset would under that policy.
 
 ## SPA fallback
 

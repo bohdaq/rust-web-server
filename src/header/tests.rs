@@ -193,34 +193,64 @@ fn hsts_header() {
 }
 
 #[test]
-fn security_headers_in_header_list() {
-    use crate::request::{METHOD, Request};
-    use crate::http::VERSION;
+fn security_headers_are_opt_in() {
+    use crate::server_config::ServerConfig;
+    let request = crate::request::Request { method: "GET".to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] };
+    let opt_in = [Header::_X_FRAME_OPTIONS, Header::_REFERRER_POLICY, Header::_PERMISSIONS_POLICY, Header::_CONTENT_SECURITY_POLICY, Header::_DATE_UNIX_EPOCH_NANOS];
 
-    let request = Request {
-        method: METHOD.get.to_string(),
-        request_uri: "/".to_string(),
-        http_version: VERSION.http_1_1.to_string(),
-        headers: vec![],
-        body: vec![],
+    // Default (18.0.0): none of them; nosniff and Date always.
+    let defaults = Header::get_header_list_with_config(&request, &ServerConfig::default());
+    for name in opt_in {
+        assert!(!defaults.iter().any(|h| h.name == name), "{name} sent by default");
+    }
+    assert!(defaults.iter().any(|h| h.name == Header::_X_CONTENT_TYPE_OPTIONS));
+    assert!(defaults.iter().any(|h| h.name == Header::_DATE));
+
+    let config = ServerConfig {
+        security_headers: true,
+        nanos_headers: true,
+        csp: Header::_CONTENT_SECURITY_POLICY_VALUE_DEFAULT.to_string(),
+        ..ServerConfig::default()
     };
-
-    let headers = Header::get_header_list(&request);
-    let names: Vec<&str> = headers.iter().map(|h| h.name.as_ref()).collect();
-
-    assert!(names.contains(&Header::_REFERRER_POLICY));
-    assert!(names.contains(&Header::_PERMISSIONS_POLICY));
-    assert!(names.contains(&Header::_CONTENT_SECURITY_POLICY));
-
-    let rp = headers.iter().find(|h| h.name == Header::_REFERRER_POLICY).unwrap();
-    assert_eq!(rp.value, Header::_REFERRER_POLICY_VALUE_DEFAULT);
-
-    let pp = headers.iter().find(|h| h.name == Header::_PERMISSIONS_POLICY).unwrap();
-    assert_eq!(pp.value, Header::_PERMISSIONS_POLICY_VALUE_DEFAULT);
-
-    let csp = headers.iter().find(|h| h.name == Header::_CONTENT_SECURITY_POLICY).unwrap();
-    assert_eq!(csp.value, Header::_CONTENT_SECURITY_POLICY_VALUE_DEFAULT);
+    let headers = Header::get_header_list_with_config(&request, &config);
+    let value = |name: &str| headers.iter().find(|h| h.name == name).map(|h| h.value.to_string());
+    assert_eq!(Some(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN.to_string()), value(Header::_X_FRAME_OPTIONS));
+    assert_eq!(Some(Header::_REFERRER_POLICY_VALUE_DEFAULT.to_string()), value(Header::_REFERRER_POLICY));
+    assert_eq!(Some(Header::_PERMISSIONS_POLICY_VALUE_DEFAULT.to_string()), value(Header::_PERMISSIONS_POLICY));
+    assert_eq!(Some(Header::_CONTENT_SECURITY_POLICY_VALUE_DEFAULT.to_string()), value(Header::_CONTENT_SECURITY_POLICY));
+    assert!(value(Header::_DATE_UNIX_EPOCH_NANOS).is_some_and(|v| v.parse::<u128>().is_ok()));
 }
+
+#[test]
+fn security_headers_setting_brings_the_default_csp_unless_csp_is_set() {
+    let _g = crate::test_env::lock();
+    use crate::server_config::ServerConfig;
+    let saved: Vec<_> = ["RWS_CONFIG_SECURITY_HEADERS", "RWS_CONFIG_CSP", "RWS_CONFIG_NANOS_HEADERS"].iter().map(|k| (*k, std::env::var(k).ok())).collect();
+
+    std::env::remove_var("RWS_CONFIG_CSP");
+    std::env::remove_var("RWS_CONFIG_SECURITY_HEADERS");
+    std::env::remove_var("RWS_CONFIG_NANOS_HEADERS");
+    let off = ServerConfig::from_env();
+    assert!(!off.security_headers && !off.nanos_headers && off.csp.is_empty());
+
+    std::env::set_var("RWS_CONFIG_SECURITY_HEADERS", "true");
+    std::env::set_var("RWS_CONFIG_NANOS_HEADERS", "TRUE");
+    let on = ServerConfig::from_env();
+    assert!(on.security_headers && on.nanos_headers);
+    assert_eq!(Header::_CONTENT_SECURITY_POLICY_VALUE_DEFAULT, on.csp);
+
+    std::env::set_var("RWS_CONFIG_CSP", "");
+    assert_eq!("", ServerConfig::from_env().csp, "an explicit empty CSP still suppresses it");
+    std::env::set_var("RWS_CONFIG_SECURITY_HEADERS", "false");
+    std::env::set_var("RWS_CONFIG_CSP", "default-src 'none'");
+    assert_eq!("default-src 'none'", ServerConfig::from_env().csp, "an explicit CSP is sent without the setting");
+
+    for (k, v) in saved {
+        match v { Some(v) => std::env::set_var(k, v), None => std::env::remove_var(k) }
+    }
+    crate::server_config::invalidate();
+}
+
 #[test]
 fn header_new_borrows_static_strings_and_owns_strings() {
     use std::borrow::Cow;
@@ -240,7 +270,7 @@ fn standard_header_list_is_borrowed_except_date() {
     use crate::server_config::ServerConfig;
     let request = crate::request::Request { method: "GET".to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] };
     for csp in ["", "default-src 'self'", "default-src 'none'"] {
-        let config = ServerConfig { csp: csp.to_string(), ..ServerConfig::default() };
+        let config = ServerConfig { csp: csp.to_string(), security_headers: true, nanos_headers: true, ..ServerConfig::default() };
         let list = Header::get_header_list_with_config(&request, &config);
         assert!(list.len() >= 9);
         for h in &list {

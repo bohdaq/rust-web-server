@@ -44,6 +44,9 @@ case-insensitive lookup that returns `Option<&Header>` without allocating.
 | `Cache-Control` on static files | `no-store, …` | `no-cache` (`RWS_CONFIG_STATIC_CACHE_CONTROL`) |
 | `Last-Modified` on static files | non-standard | standard HTTP date |
 | `Date` | — | on every response |
+| `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` | always | only with `RWS_CONFIG_SECURITY_HEADERS=true` |
+| `Content-Security-Policy` | `default-src 'self'` unless `RWS_CONFIG_CSP` | `RWS_CONFIG_CSP`, or the default with `RWS_CONFIG_SECURITY_HEADERS=true` |
+| `Date-Unix-Epoch-Nanos`, `Last-Modified-Unix-Epoch-Nanos` | always | only with `RWS_CONFIG_NANOS_HEADERS=true` |
 
 What it means:
 
@@ -52,6 +55,13 @@ What it means:
   `RWS_CONFIG_STATIC_CACHE_CONTROL=` (empty). For fingerprinted asset names,
   set something like `public, max-age=31536000, immutable`. Responses from
   your handlers still default to `no-store, …`.
+- **Security headers**: to keep sending `X-Frame-Options`,
+  `Referrer-Policy`, `Permissions-Policy` and the default CSP, set
+  `RWS_CONFIG_SECURITY_HEADERS=true` (`security_headers = true`). A CSP set
+  with `RWS_CONFIG_CSP` is sent either way.
+- **Nanosecond timestamps**: clients that read `Date-Unix-Epoch-Nanos` or
+  `Last-Modified-Unix-Epoch-Nanos` need `RWS_CONFIG_NANOS_HEADERS=true`
+  (`nanos_headers = true`).
 - **Client hints**: if your app reads `Sec-CH-*` request headers, set
   `RWS_CONFIG_CLIENT_HINTS=true` (or `client_hints = true` in
   `rws.config.toml`).

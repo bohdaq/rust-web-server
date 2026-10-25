@@ -829,7 +829,7 @@ curl -X POST http://localhost:7878/admin/config/reload
 | Rate-limit thresholds | `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS`, `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS` |
 | Log format | `RWS_CONFIG_LOG_FORMAT` |
 | Request allocation size | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
-| CSP, client hints, static `Cache-Control` | `RWS_CONFIG_CSP`, `RWS_CONFIG_CLIENT_HINTS`, `RWS_CONFIG_STATIC_CACHE_CONTROL` |
+| Security headers, CSP, client hints, nanosecond timestamps, static `Cache-Control` | `RWS_CONFIG_SECURITY_HEADERS`, `RWS_CONFIG_CSP`, `RWS_CONFIG_CLIENT_HINTS`, `RWS_CONFIG_NANOS_HEADERS`, `RWS_CONFIG_STATIC_CACHE_CONTROL` |
 | Proxy routes and upstreams | `[[route]]`, `[[upstream]]`, `[middleware]` (kept as before if the new file has errors) |
 | Tera templates | re-globbed from `RWS_CONFIG_TEMPLATE_DIR` (`tera` feature) |
 
@@ -927,7 +927,9 @@ order.
 | `RWS_CONFIG_STATIC_CACHE_CONTROL` | `no-cache` | string | `Cache-Control` sent with static files (since 18.0.0; other responses keep `no-store, …`). The default lets browsers keep a file and revalidate it with `If-None-Match` / `If-Modified-Since`, which costs a `304` instead of the whole file. Set e.g. `public, max-age=3600` for assets with versioned names; an empty value sends the `no-store` default for static files too. |
 | `RWS_CONFIG_CLIENT_HINTS` | `false` | boolean | Send `Accept-CH`, `Critical-CH` and the client hints in `Vary` on every response (always on before 18.0.0). Off by default: they add ~700 bytes to every response, and `Critical-CH` makes Chromium retry a request that arrived without the hints. |
 | `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` | `0` | integer | Maximum accepted request body size in bytes. `0` means unlimited. When set, a request whose `Content-Length` exceeds this is rejected with `413 Payload Too Large` before any body bytes are read, and the connection is closed. Applies to HTTP/1.1, HTTP/2, and HTTP/3. |
-| `RWS_CONFIG_CSP` | `default-src 'self'` | string | `Content-Security-Policy` header value. An empty value suppresses the header. |
+| `RWS_CONFIG_CSP` | unset | string | `Content-Security-Policy` header value, sent on every response. Unset: `default-src 'self'` with `RWS_CONFIG_SECURITY_HEADERS=true`, otherwise no header (18.0.0; was always `default-src 'self'`). An empty value suppresses the header. |
+| `RWS_CONFIG_SECURITY_HEADERS` | `false` | boolean | Send `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), microphone=(), camera=()` and the default CSP on every response (always sent before 18.0.0). `X-Content-Type-Options: nosniff` is always sent. |
+| `RWS_CONFIG_NANOS_HEADERS` | `false` | boolean | Send `Date-Unix-Epoch-Nanos` on every response and `Last-Modified-Unix-Epoch-Nanos` on static files (always sent before 18.0.0). |
 | `RWS_CONFIG_SPA_FALLBACK` | `` (empty) | path | File (e.g. `index.html`) served for a `GET`/`HEAD` that matches no file or directory, instead of `404` — for client-side routers. Paths whose last segment contains a `.` still get `404`. Empty disables it. |
 | `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES` | `` (empty) | string | Comma-separated path prefixes (e.g. `/api,/healthz`) that never get the SPA fallback. |
 | `RWS_CONFIG_FILE` | `rws.config.toml` | path | Config file to load (settings and proxy routes) instead of `./rws.config.toml`. |
@@ -1273,6 +1275,8 @@ max_body_size_in_bytes  = 10485760   # RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: 413 ab
 open_file_cache_secs    = 1          # RWS_CONFIG_OPEN_FILE_CACHE_SECS: reuse open static files this long; 0 = off
 open_file_cache_strict  = true       # RWS_CONFIG_OPEN_FILE_CACHE_STRICT: false = trust size/mtime for that long (no fstat per request)
 csp                     = "default-src 'self'"   # RWS_CONFIG_CSP: Content-Security-Policy header
+security_headers        = true       # RWS_CONFIG_SECURITY_HEADERS: X-Frame-Options, Referrer-Policy, Permissions-Policy, default CSP
+nanos_headers           = false      # RWS_CONFIG_NANOS_HEADERS: Date-/Last-Modified-Unix-Epoch-Nanos
 static_cache_control    = "no-cache" # RWS_CONFIG_STATIC_CACHE_CONTROL: Cache-Control for static files
 client_hints            = false      # RWS_CONFIG_CLIENT_HINTS: send Accept-CH / Critical-CH
 tls_client_ca_file      = "/etc/rws/clients-ca.pem"  # RWS_CONFIG_TLS_CLIENT_CA_FILE: require client certs (mTLS)
@@ -5094,37 +5098,55 @@ let headers = Cors::_process(&request, &cors)?;
 
 CORS configuration is re-read on `SIGHUP` (or `POST /admin/config/reload`) without a restart.
 
-## Automatic security headers
+## Security headers
 
-The following headers are added to every response regardless of TLS state:
-
-| Header | Default value |
-|---|---|
-| `X-Content-Type-Options` | `nosniff` |
-| `X-Frame-Options` | `SAMEORIGIN` |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` |
-| `Permissions-Policy` | `geolocation=(), microphone=(), camera=()` |
-| `Content-Security-Policy` | `default-src 'self'` (overridable) |
-
-On TLS connections (HTTPS and HTTP/3) the server additionally sends:
+Every response carries `X-Content-Type-Options: nosniff`. On TLS connections
+(HTTPS and HTTP/3) the server also sends:
 
 ```
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 ```
 
+The other browser-policy headers are opt-in (since 18.0.0 — before that they
+were always sent): set `RWS_CONFIG_SECURITY_HEADERS=true`
+(`security_headers = true` in `rws.config.toml`) and every response also
+carries
+
+| Header | Value |
+|---|---|
+| `X-Frame-Options` | `SAMEORIGIN` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | `geolocation=(), microphone=(), camera=()` |
+| `Content-Security-Policy` | `default-src 'self'` (unless `RWS_CONFIG_CSP` is set) |
+
+They are off by default because most deployments set them per site (or in a
+proxy in front), and each one is work on every response — over HTTP/2 every
+header is HPACK-encoded.
+
 ### Content-Security-Policy
 
-Override the default CSP via `RWS_CONFIG_CSP`:
+Set a policy with `RWS_CONFIG_CSP`; it is sent whether or not
+`RWS_CONFIG_SECURITY_HEADERS` is on:
 
 ```bash
 RWS_CONFIG_CSP="default-src 'self'; script-src 'self' cdn.example.com; img-src *"
 ```
 
-Set the variable to an empty string to suppress the header entirely:
+With `RWS_CONFIG_SECURITY_HEADERS=true`, an empty value suppresses the
+default policy:
 
 ```bash
 RWS_CONFIG_CSP=
 ```
+
+### Nanosecond timestamps
+
+`RWS_CONFIG_NANOS_HEADERS=true` (`nanos_headers = true`) adds
+`Date-Unix-Epoch-Nanos` (the response time in nanoseconds since the Unix
+epoch, per response) and, for static files, `Last-Modified-Unix-Epoch-Nanos`.
+Off by default since 18.0.0: `Date` and `Last-Modified` carry the same
+information to the second, and values that change on every response can't be
+indexed by HTTP/2's header compression.
 
 ## Client Hints
 
@@ -5289,7 +5311,7 @@ Both are `'self'`-origin `<link>`/`<script src>` references, fully compliant wit
 echo "body { font-family: monospace; }" > rws-directory-listing.css
 ```
 
-If your own CSP is stricter than the default (via `RWS_CONFIG_CSP`) and excludes `'self'` from `style-src`/`script-src`, add an allowance for it or the listing will render unstyled the same way any other same-origin asset would under that policy.
+If you set a CSP (`RWS_CONFIG_CSP`, or the default one via `RWS_CONFIG_SECURITY_HEADERS`) and excludes `'self'` from `style-src`/`script-src`, add an allowance for it or the listing will render unstyled the same way any other same-origin asset would under that policy.
 
 ## SPA fallback
 
@@ -17289,6 +17311,9 @@ case-insensitive lookup that returns `Option<&Header>` without allocating.
 | `Cache-Control` on static files | `no-store, …` | `no-cache` (`RWS_CONFIG_STATIC_CACHE_CONTROL`) |
 | `Last-Modified` on static files | non-standard | standard HTTP date |
 | `Date` | — | on every response |
+| `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` | always | only with `RWS_CONFIG_SECURITY_HEADERS=true` |
+| `Content-Security-Policy` | `default-src 'self'` unless `RWS_CONFIG_CSP` | `RWS_CONFIG_CSP`, or the default with `RWS_CONFIG_SECURITY_HEADERS=true` |
+| `Date-Unix-Epoch-Nanos`, `Last-Modified-Unix-Epoch-Nanos` | always | only with `RWS_CONFIG_NANOS_HEADERS=true` |
 
 What it means:
 
@@ -17297,6 +17322,13 @@ What it means:
   `RWS_CONFIG_STATIC_CACHE_CONTROL=` (empty). For fingerprinted asset names,
   set something like `public, max-age=31536000, immutable`. Responses from
   your handlers still default to `no-store, …`.
+- **Security headers**: to keep sending `X-Frame-Options`,
+  `Referrer-Policy`, `Permissions-Policy` and the default CSP, set
+  `RWS_CONFIG_SECURITY_HEADERS=true` (`security_headers = true`). A CSP set
+  with `RWS_CONFIG_CSP` is sent either way.
+- **Nanosecond timestamps**: clients that read `Date-Unix-Epoch-Nanos` or
+  `Last-Modified-Unix-Epoch-Nanos` need `RWS_CONFIG_NANOS_HEADERS=true`
+  (`nanos_headers = true`).
 - **Client hints**: if your app reads `Sec-CH-*` request headers, set
   `RWS_CONFIG_CLIENT_HINTS=true` (or `client_hints = true` in
   `rws.config.toml`).

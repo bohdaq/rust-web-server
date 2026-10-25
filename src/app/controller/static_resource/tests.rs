@@ -875,6 +875,23 @@ fn static_files_are_revalidated_not_uncacheable() {
 }
 
 #[test]
+fn last_modified_nanos_is_opt_in() {
+    use crate::server_config::ServerConfig;
+    let file = served_with_mtime("nanos.txt", 1_767_222_000);
+    // Fast path (plain GET) and general path (Range).
+    for headers in [vec![], vec![Header::new(Header::_RANGE, "bytes=0-9")]] {
+        let response = via_app(&static_request(METHOD.get, &file.0, headers.clone()), ServerConfig::default());
+        assert!(response.header(Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS).is_none(), "{headers:?}");
+        assert!(response.header(Header::_LAST_MODIFIED).is_some());
+
+        let nanos = ServerConfig { nanos_headers: true, ..ServerConfig::default() };
+        let response = via_app(&static_request(METHOD.get, &file.0, headers.clone()), nanos);
+        assert_eq!("1767222000000000000", response.header(Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS).unwrap().value, "{headers:?}");
+        assert!(response.header(Header::_DATE_UNIX_EPOCH_NANOS).is_some());
+    }
+}
+
+#[test]
 fn if_modified_since_answers_304_unless_if_none_match_is_present() {
     use crate::server_config::ServerConfig;
     let file = served_with_mtime("ims.txt", 1_767_222_000);

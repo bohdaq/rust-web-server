@@ -66,7 +66,7 @@ curl -X POST http://localhost:7878/admin/config/reload
 | Rate-limit thresholds | `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS`, `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS` |
 | Log format | `RWS_CONFIG_LOG_FORMAT` |
 | Request allocation size | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
-| CSP, client hints, static `Cache-Control` | `RWS_CONFIG_CSP`, `RWS_CONFIG_CLIENT_HINTS`, `RWS_CONFIG_STATIC_CACHE_CONTROL` |
+| Security headers, CSP, client hints, nanosecond timestamps, static `Cache-Control` | `RWS_CONFIG_SECURITY_HEADERS`, `RWS_CONFIG_CSP`, `RWS_CONFIG_CLIENT_HINTS`, `RWS_CONFIG_NANOS_HEADERS`, `RWS_CONFIG_STATIC_CACHE_CONTROL` |
 | Proxy routes and upstreams | `[[route]]`, `[[upstream]]`, `[middleware]` (kept as before if the new file has errors) |
 | Tera templates | re-globbed from `RWS_CONFIG_TEMPLATE_DIR` (`tera` feature) |
 
