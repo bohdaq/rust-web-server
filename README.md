@@ -137,8 +137,8 @@ nginx it needs less CPU per request in every scenario but one: small files
 requests per second), access-logged traffic (−26%) and gzip (a hundredth),
 the same for proxying, and 4% more for large files. On this runner (the
 fastest type GitHub assigns) nginx serves 6–8% more plain-HTTP requests per
-second; on the AMD EPYC runner types `rws` serves more in all but large
-files. Release builds use the
+second; on the AMD EPYC runner types `rws` serves more in all but the
+large-file scenarios. Release builds use the
 mimalloc allocator: less CPU, but more memory than nginx (build without the
 `mimalloc` feature for ~9 MiB) — see the
 [benchmarks page](https://rws8.tech/reference/benchmarks/). Shared CI runners are noisy, so
