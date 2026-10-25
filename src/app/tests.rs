@@ -463,7 +463,7 @@ fn static_gzip_matches_apply_gzip() {
         // what the connection writer then does — must be a no-op now
         crate::compression::apply_gzip(&request(Some("gzip")), &mut served);
         assert_eq!(expected.content_range_list[0].body, served.content_range_list[0].body);
-        let names = |r: &crate::response::Response| r.headers.iter().filter(|h| h.name != Header::_DATE_UNIX_EPOCH_NANOS).map(|h| format!("{}: {}", h.name, h.value)).collect::<Vec<_>>();
+        let names = |r: &crate::response::Response| r.headers.iter().filter(|h| h.name != Header::_DATE_UNIX_EPOCH_NANOS && h.name != Header::_DATE).map(|h| format!("{}: {}", h.name, h.value)).collect::<Vec<_>>();
         let (mut a, mut b) = (names(&expected), names(&served));
         a.sort(); b.sort();
         assert_eq!(a, b);
