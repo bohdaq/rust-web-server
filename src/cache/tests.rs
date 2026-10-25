@@ -297,3 +297,50 @@ fn cache_is_per_layer_instance() {
     layer_b.handle(&get("/"), &conn(), &app).unwrap();
     assert_eq!(2, app.call_count());
 }
+
+fn with_headers(headers: &[(&str, &str)]) -> Response {
+    let mut r = ok_response();
+    for (name, value) in headers {
+        r.headers.push(Header::new(name.to_string(), value.to_string()));
+    }
+    r
+}
+
+/// Calls the layer twice; how many times the handler ran (1 = cached).
+fn handler_calls(layer: &CacheLayer, request: &Request, response: Response) -> u32 {
+    let app = CountingApp::new(response);
+    layer.handle(request, &conn(), &app).unwrap();
+    layer.handle(request, &conn(), &app).unwrap();
+    app.call_count()
+}
+
+#[test]
+fn response_with_no_cache_is_not_cached_it_needs_revalidation() {
+    let layer = CacheLayer::memory(100).ttl(60);
+    assert_eq!(2, handler_calls(&layer, &get("/"), response_with_cache_control("no-cache")));
+    assert_eq!(1, handler_calls(&layer, &get("/max-age"), response_with_cache_control("public, max-age=60")));
+}
+
+#[test]
+fn range_requests_are_not_stored() {
+    let layer = CacheLayer::memory(100).ttl(60);
+    assert_eq!(2, handler_calls(&layer, &get_with_header("/r", "Range", "bytes=0-1"), ok_response()));
+}
+
+#[test]
+fn vary_on_a_header_outside_the_key_is_not_cached_unless_it_changed_nothing() {
+    let layer = CacheLayer::memory(100).ttl(60);
+    // A gzipped body must not be replayed to a client without gzip...
+    let gzipped = with_headers(&[("Content-Encoding", "gzip"), ("Vary", "Origin, Accept-Encoding")]);
+    assert_eq!(2, handler_calls(&layer, &get("/gz"), gzipped.clone()));
+    // ...unless Accept-Encoding is part of the key.
+    let keyed = CacheLayer::memory(100).ttl(60).vary_by_header("Accept-Encoding");
+    assert_eq!(1, handler_calls(&keyed, &get_with_header("/gz", "Accept-Encoding", "gzip"), gzipped));
+    // An unencoded body is valid for every client.
+    assert_eq!(1, handler_calls(&layer, &get("/plain"), with_headers(&[("Vary", "Origin, Accept-Encoding")])));
+    // A CORS answer for one origin must not go to another.
+    let cors = with_headers(&[("Vary", "Origin"), ("Access-Control-Allow-Origin", "https://a.example")]);
+    assert_eq!(2, handler_calls(&layer, &get("/cors"), cors));
+    assert_eq!(2, handler_calls(&layer, &get("/star"), with_headers(&[("Vary", "*")])));
+    assert_eq!(2, handler_calls(&layer, &get("/ua"), with_headers(&[("Vary", "User-Agent")])));
+}

@@ -25,7 +25,7 @@ Prebuilt binaries for Linux (static, any distro), macOS, and Windows are on [Git
 cd my-site && rws
 ```
 
-Serves the current directory on `http://localhost:7878` — `index.html`, directory listings, ETags, gzip, byte ranges (video seeking, resumable downloads), and an optional SPA fallback for client-side routers. `rws --help` lists every option.
+Serves the current directory on `http://localhost:7878` — `index.html`, directory listings, ETags and browser caching (`304` revalidation), gzip, byte ranges (video seeking, resumable downloads), and an optional SPA fallback for client-side routers. `rws --help` lists every option.
 
 ## Automatic HTTPS
 

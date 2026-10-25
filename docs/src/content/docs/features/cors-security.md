@@ -101,7 +101,9 @@ RWS_CONFIG_CSP=
 
 ## Client Hints
 
-On every response the server advertises the following Client Hints via `Accept-CH` and `Critical-CH`:
+Client hints are opt-in (since 18.0.0): set `RWS_CONFIG_CLIENT_HINTS=true`
+(`client_hints = true` in `rws.config.toml`) and every response advertises
+the following hints via `Accept-CH` and `Critical-CH`:
 
 ```
 Accept-CH: Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List,
@@ -110,7 +112,12 @@ Accept-CH: Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List,
            Sec-CH-Prefers-Color-Scheme
 ```
 
-The hints also appear in the `Vary` header so caches key responses on them. Reading an incoming hint in a handler:
+The hints also appear in the `Vary` header so caches key responses on them.
+They're off by default because they add about 700 bytes to every response,
+and `Critical-CH` makes Chromium retry a request that arrived without them.
+A browser that already sends a hint (`Sec-CH-UA-*` low-entropy hints,
+`Save-Data`) still sends it; reading an incoming hint in a handler works
+either way:
 
 ```rust
 use rust_web_server::client_hint::ClientHint;
@@ -144,5 +151,5 @@ Available hint constants in `ClientHint`:
 | `PREFERS_COLOR_SCHEME` | `Sec-CH-Prefers-Color-Scheme` |
 
 :::note[Vary header]
-The `Vary` response header always includes the full list of Client Hints so HTTP caches serve the correct variant per client capability.
+With client hints on, the `Vary` response header includes the full list of hints so HTTP caches serve the correct variant per client capability; otherwise it is just `Vary: Origin`.
 :::

@@ -58,6 +58,9 @@ Without `.vary_by_header`, all requests to the same URI share a single cache ent
 | Response status 3xx, 4xx, 5xx | No |
 | Response `Cache-Control: no-store` | No |
 | Response `Cache-Control: private` | No |
+| Response `Cache-Control: no-cache` (static files by default) | No — it may only be reused after revalidation, which this cache doesn't do |
+| Request has a `Range` header | Not stored — a `206` is a slice, not the resource |
+| Response `Vary` names a request header that isn't in the key | Not stored — unless it changed nothing: `Origin` without `Access-Control-Allow-Origin`, or `Accept-Encoding` with an unencoded body. `Vary: *` is never stored |
 | Request `Cache-Control: no-cache` | Bypass hit, call handler, **store** fresh response |
 
 ## Cache key

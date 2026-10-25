@@ -176,7 +176,7 @@ response.headers.push(location);
 
 ### get_header_list
 
-`Header::get_header_list(request)` returns the standard set of response headers (CORS, cache control, security headers, client hints) pre-populated from the request context. Call it at the start of a controller's `process` method when building a response from scratch:
+`Header::get_header_list(request)` returns the standard set of response headers (CORS, `Date`, cache control, security headers; client hints only with `RWS_CONFIG_CLIENT_HINTS=true`) pre-populated from the request context. Call it at the start of a controller's `process` method when building a response from scratch:
 
 ```rust
 let mut header_list = Header::get_header_list(request);

@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests;
+pub(crate) mod date;
 
 pub struct Version {
     pub http_0_9: &'static str,

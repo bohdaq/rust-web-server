@@ -9,6 +9,7 @@ use crate::range::{ContentRange, Range};
 use crate::request::{METHOD, Request};
 use crate::response::{Error, Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
+use crate::server_config::ServerConfig;
 use crate::symbol::SYMBOL;
 use crate::url::URL;
 
@@ -84,10 +85,11 @@ impl Controller for StaticResourceController {
     }
 
     fn process(request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
-        if let Some(served) = StaticResourceController::serve_regular_file(request, &mut response) {
+        let config = ServerConfig::current();
+        if let Some(served) = StaticResourceController::serve_regular_file(request, &mut response, &config) {
             return served;
         }
-        StaticResourceController::process_general(request, response)
+        StaticResourceController::process_general(request, response, &config)
     }
 }
 
@@ -95,7 +97,7 @@ impl StaticResourceController {
     /// [`Controller::process`] minus the [`Self::serve_regular_file`] fast
     /// path: directories, `.html` resolution, ranges, OPTIONS, symlinks with
     /// an untyped name, the SPA fallback. For a caller that already tried it.
-    pub(crate) fn process_general(request: &Request, mut response: Response) -> Response {
+    pub(crate) fn process_general(request: &Request, mut response: Response, config: &ServerConfig) -> Response {
         let boxed_content_range_list = StaticResourceController::process_static_resources(&request);
         if boxed_content_range_list.is_ok() {
             let content_range_list = boxed_content_range_list.unwrap();
@@ -134,20 +136,14 @@ impl StaticResourceController {
 
                 if boxed_modified_date_time.is_ok() {
                     let modified_date_time = boxed_modified_date_time.unwrap();
-                    let last_modified_unix_nanos = Header{ name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: modified_date_time.to_string().into() };
-                    response.headers.push(last_modified_unix_nanos);
-
                     let file_size = metadata(&static_filepath).map(|m| m.len()).unwrap_or(0);
                     let etag_value = format!("\"{}-{}\"", modified_date_time, file_size);
-
-                    let if_none_match = request.header(Header::_IF_NONE_MATCH);
-                    if let Some(inm) = if_none_match {
-                        if inm.value == etag_value || inm.value == "*" {
-                            response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
-                            response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
-                            response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
-                            return response;
-                        }
+                    set_static_cache_control(&mut response, &config.static_cache_control);
+                    if push_validators(request, &mut response, modified_date_time, &etag_value) {
+                        response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
+                        response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
+                        response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
+                        return response;
                     }
 
                     response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
@@ -229,7 +225,8 @@ impl StaticResourceController {
     }
 
     pub fn process_request(request: &Request, mut response: Response) -> Response {
-        if let Some(streamed) = StaticResourceController::serve_regular_file(request, &mut response) {
+        let config = ServerConfig::current();
+        if let Some(streamed) = StaticResourceController::serve_regular_file(request, &mut response, &config) {
             return streamed;
         }
         let boxed_content_range_list = StaticResourceController::process_static_resources(&request);
@@ -258,20 +255,14 @@ impl StaticResourceController {
 
                 if boxed_modified_date_time.is_ok() {
                     let modified_date_time = boxed_modified_date_time.unwrap();
-                    let last_modified_unix_nanos = Header{ name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: modified_date_time.to_string().into() };
-                    response.headers.push(last_modified_unix_nanos);
-
                     let file_size = metadata(&static_filepath).map(|m| m.len()).unwrap_or(0);
                     let etag_value = format!("\"{}-{}\"", modified_date_time, file_size);
-
-                    let if_none_match = request.header(Header::_IF_NONE_MATCH);
-                    if let Some(inm) = if_none_match {
-                        if inm.value == etag_value || inm.value == "*" {
-                            response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
-                            response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
-                            response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
-                            return response;
-                        }
+                    set_static_cache_control(&mut response, &config.static_cache_control);
+                    if push_validators(request, &mut response, modified_date_time, &etag_value) {
+                        response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
+                        response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
+                        response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
+                        return response;
                     }
 
                     response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
@@ -334,7 +325,7 @@ impl StaticResourceController {
     /// the requested name. `None` = not applicable; the general path handles
     /// it (directories, `.html` resolution, ranges, OPTIONS, symlinks whose
     /// name has no known type).
-    pub(crate) fn serve_regular_file(request: &Request, response: &mut Response) -> Option<Response> {
+    pub(crate) fn serve_regular_file(request: &Request, response: &mut Response, config: &ServerConfig) -> Option<Response> {
         if request.method != METHOD.get && request.method != METHOD.head {
             return None;
         }
@@ -361,9 +352,7 @@ impl StaticResourceController {
         etag_value.push('-');
         etag_value.push_str(len.as_str());
         etag_value.push('"');
-        let not_modified = request
-            .header(Header::_IF_NONE_MATCH)
-            .map_or(false, |inm| inm.value == etag_value || inm.value == "*");
+        let not_modified = is_not_modified(request, state.modified, &etag_value);
         // A compressible text file for a client that accepts gzip is sent
         // from the cached compressed form (what apply_gzip would produce,
         // made once per file version instead of per request).
@@ -390,7 +379,9 @@ impl StaticResourceController {
         };
 
         let mut response = std::mem::replace(response, Response::empty());
+        set_static_cache_control(&mut response, &config.static_cache_control);
         response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: modified.as_str().to_string().into() });
+        response.headers.push(Header { name: Header::_LAST_MODIFIED.into(), value: crate::http::date::format((state.modified / 1_000_000_000) as u64).into() });
         response.headers.push(Header { name: Header::_ETAG.into(), value: etag_value.into() });
         if not_modified {
             response.set_status(STATUS_CODE_REASON_PHRASE.n304_not_modified);
@@ -864,6 +855,46 @@ const DIRECTORY_LISTING_TAIL: &str = concat!(
 /// several syscalls (on macOS it opens "."): the static-file path used to ask
 /// for it four to six times per request. A library user who changes the
 /// working directory after the first request keeps the original root.
+/// Push `Last-Modified-Unix-Epoch-Nanos` and `Last-Modified`, and tell
+/// whether the request's validators say the client's copy is current
+/// ([`is_not_modified`]).
+fn push_validators(request: &Request, response: &mut Response, modified_nanos: u128, etag: &str) -> bool {
+    response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.into(), value: modified_nanos.to_string().into() });
+    response.headers.push(Header { name: Header::_LAST_MODIFIED.into(), value: crate::http::date::format((modified_nanos / 1_000_000_000) as u64).into() });
+    is_not_modified(request, modified_nanos, etag)
+}
+
+/// RFC 9110 §13.1: `If-None-Match` (the ETag, or `*`) decides when present;
+/// otherwise `If-Modified-Since` for GET/HEAD — the file's modification
+/// second is not after the given date. An unparseable date is ignored.
+fn is_not_modified(request: &Request, modified_nanos: u128, etag: &str) -> bool {
+    if let Some(inm) = request.header(Header::_IF_NONE_MATCH) {
+        return inm.value == etag || inm.value == "*";
+    }
+    if request.method != METHOD.get && request.method != METHOD.head {
+        return false;
+    }
+    request
+        .header(Header::_IF_MODIFIED_SINCE)
+        .and_then(|ims| crate::http::date::parse(&ims.value))
+        .is_some_and(|since| (modified_nanos / 1_000_000_000) as u64 <= since)
+}
+
+/// The static-file `Cache-Control` (`RWS_CONFIG_STATIC_CACHE_CONTROL`) in
+/// place of the default `no-store, …`; an empty setting keeps the default.
+fn set_static_cache_control(response: &mut Response, value: &str) {
+    if value.is_empty() {
+        return;
+    }
+    if let Some(header) = response.headers.iter_mut().find(|h| h.name == Header::_CACHE_CONTROL) {
+        header.value = if value == crate::server_config::STATIC_CACHE_CONTROL_DEFAULT {
+            std::borrow::Cow::Borrowed(crate::server_config::STATIC_CACHE_CONTROL_DEFAULT)
+        } else {
+            std::borrow::Cow::Owned(value.to_string())
+        };
+    }
+}
+
 pub(crate) fn working_directory() -> &'static str {
     static DIR: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     DIR.get_or_init(|| {

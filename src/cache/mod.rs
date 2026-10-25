@@ -199,17 +199,41 @@ impl CacheLayer {
         })
     }
 
-    /// `true` when the response may be stored in the cache.
-    fn response_is_cacheable(response: &Response) -> bool {
+    /// `true` when the response may be stored and replayed as is:
+    /// - a 2xx to a request without `Range` (a 206 is one slice, not the
+    ///   resource);
+    /// - no `Cache-Control: no-store`, `private` or `no-cache` (`no-cache`
+    ///   allows storing only to revalidate before every reuse, which this
+    ///   cache can't do — static files are sent with it by default);
+    /// - every request header its `Vary` names is part of the cache key, or
+    ///   didn't change this response: `Origin` without an
+    ///   `Access-Control-Allow-Origin` in it, `Accept-Encoding` with an
+    ///   unencoded body (valid for every client). Otherwise e.g. a gzipped
+    ///   body would be replayed to a client that didn't ask for gzip.
+    ///   `Vary: *` is never cacheable.
+    fn response_is_cacheable(&self, request: &Request, response: &Response) -> bool {
         if response.status_code < 200 || response.status_code >= 300 {
             return false;
         }
-        !response.headers.iter().any(|h| {
-            if !h.name.eq_ignore_ascii_case(Header::_CACHE_CONTROL) {
-                return false;
+        if request.header(Header::_RANGE).is_some() {
+            return false;
+        }
+        let has = |name: &str| response.headers.iter().any(|h| h.name.eq_ignore_ascii_case(name));
+        let varies_harmlessly = |name: &str| {
+            (name.eq_ignore_ascii_case(Header::_ORIGIN) && !has(Header::_ACCESS_CONTROL_ALLOW_ORIGIN))
+                || (name.eq_ignore_ascii_case(Header::_ACCEPT_ENCODING) && !has(Header::_CONTENT_ENCODING))
+        };
+        response.headers.iter().all(|h| {
+            if h.name.eq_ignore_ascii_case(Header::_CACHE_CONTROL) {
+                let v = h.value.to_ascii_lowercase();
+                !(v.contains("no-store") || v.contains("private") || v.contains("no-cache"))
+            } else if h.name.eq_ignore_ascii_case(Header::_VARY) {
+                h.value.split(',').map(str::trim).filter(|name| !name.is_empty()).all(|name| {
+                    name != "*" && (self.vary_headers.iter().any(|vh| vh.eq_ignore_ascii_case(name)) || varies_harmlessly(name))
+                })
+            } else {
+                true
             }
-            let v = h.value.to_ascii_lowercase();
-            v.contains("no-store") || v.contains("private")
         })
     }
 
@@ -260,7 +284,7 @@ impl Middleware for CacheLayer {
         // Cache miss (or bypass): call the handler.
         let response = next.execute(request, connection)?;
 
-        if Self::response_is_cacheable(&response) {
+        if self.response_is_cacheable(request, &response) {
             let mut guard = self.store().lock().unwrap();
             guard.purge_expired(self.ttl);
             guard.insert(

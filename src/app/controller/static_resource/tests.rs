@@ -799,9 +799,9 @@ fn fast_path_matches_the_general_path() {
 fn fast_path_declines_directories_and_options() {
     let dir = static_request(METHOD.get, "/src/", vec![]);
     let mut response = Response::new();
-    assert!(StaticResourceController::serve_regular_file(&dir, &mut response).is_none());
+    assert!(StaticResourceController::serve_regular_file(&dir, &mut response, &crate::server_config::ServerConfig::default()).is_none());
     let file = ServedFile::new("opts.txt", 10);
-    assert!(StaticResourceController::serve_regular_file(&static_request(METHOD.options, &file.0, vec![]), &mut Response::new()).is_none());
+    assert!(StaticResourceController::serve_regular_file(&static_request(METHOD.options, &file.0, vec![]), &mut Response::new(), &crate::server_config::ServerConfig::default()).is_none());
 }
 
 #[test]
@@ -830,4 +830,66 @@ fn is_matching_only_for_get_head_options_on_origin_form_targets() {
     assert!(!StaticResourceController::is_matching(&request(METHOD.get, "/"), &connection_info));
     assert!(!StaticResourceController::is_matching(&request(METHOD.options, "*"), &connection_info));
     assert!(!StaticResourceController::is_matching(&request(METHOD.get, "/static/no-such-file.json"), &connection_info));
+}
+
+fn served_with_mtime(name: &str, mtime_secs: u64) -> ServedFile {
+    let file = ServedFile::new(name, 100);
+    let fs = format!("{}{}", crate::app::controller::static_resource::working_directory(), file.0);
+    std::fs::File::options().write(true).open(&fs).unwrap()
+        .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(mtime_secs)).unwrap();
+    file
+}
+
+fn via_app(request: &Request, config: crate::server_config::ServerConfig) -> Response {
+    use crate::application::Application;
+    let conn = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        request_size: 0,
+        sni_hostname: None,
+    };
+    crate::app::App::with_config(config).execute(request, &conn).unwrap()
+}
+
+#[test]
+fn static_files_are_revalidated_not_uncacheable() {
+    use crate::server_config::ServerConfig;
+    let file = served_with_mtime("cache.txt", 1_767_222_000);
+    // Range goes through the general path, plain GET through the fast path.
+    for headers in [vec![], vec![Header::new(Header::_RANGE, "bytes=0-9")]] {
+        let response = via_app(&static_request(METHOD.get, &file.0, headers.clone()), ServerConfig::default());
+        assert_eq!("no-cache", response.header(Header::_CACHE_CONTROL).unwrap().value, "{headers:?}");
+        assert_eq!("Wed, 31 Dec 2025 23:00:00 GMT", response.header(Header::_LAST_MODIFIED).unwrap().value);
+
+        let custom = ServerConfig { static_cache_control: "public, max-age=60".to_string(), ..ServerConfig::default() };
+        let response = via_app(&static_request(METHOD.get, &file.0, headers.clone()), custom);
+        assert_eq!("public, max-age=60", response.header(Header::_CACHE_CONTROL).unwrap().value);
+
+        let unset = ServerConfig { static_cache_control: String::new(), ..ServerConfig::default() };
+        let response = via_app(&static_request(METHOD.get, &file.0, headers), unset);
+        assert_eq!(Header::_DO_NOT_STORE_CACHE, response.header(Header::_CACHE_CONTROL).unwrap().value);
+    }
+    // Other responses keep no-store.
+    let health = via_app(&static_request(METHOD.get, "/healthz", vec![]), ServerConfig::default());
+    assert_eq!(Header::_DO_NOT_STORE_CACHE, health.header(Header::_CACHE_CONTROL).unwrap().value);
+}
+
+#[test]
+fn if_modified_since_answers_304_unless_if_none_match_is_present() {
+    use crate::server_config::ServerConfig;
+    let file = served_with_mtime("ims.txt", 1_767_222_000);
+    let get = |headers: Vec<Header>| via_app(&static_request(METHOD.get, &file.0, headers), ServerConfig::default()).status_code;
+    let ims = |v: &str| Header::new(Header::_IF_MODIFIED_SINCE, v.to_string());
+    assert_eq!(304, get(vec![ims("Wed, 31 Dec 2025 23:00:00 GMT")]), "same second");
+    assert_eq!(304, get(vec![ims("Fri, 01 Jan 2027 00:00:00 GMT")]), "later");
+    assert_eq!(200, get(vec![ims("Wed, 31 Dec 2025 22:59:59 GMT")]), "earlier");
+    assert_eq!(200, get(vec![ims("yesterday")]), "unparseable is ignored");
+    // If-None-Match decides when present (RFC 9110 §13.1.3).
+    assert_eq!(200, get(vec![ims("Fri, 01 Jan 2027 00:00:00 GMT"), Header::new(Header::_IF_NONE_MATCH, "\"nope\"")]));
+    assert_eq!(304, get(vec![ims("Wed, 31 Dec 2025 22:00:00 GMT"), Header::new(Header::_IF_NONE_MATCH, "*")]));
+    // The general path (a range request) evaluates it the same way.
+    assert_eq!(304, get(vec![ims("Fri, 01 Jan 2027 00:00:00 GMT"), Header::new(Header::_RANGE, "bytes=0-9")]));
+    // Only GET and HEAD.
+    let options = via_app(&static_request(METHOD.options, &file.0, vec![ims("Fri, 01 Jan 2027 00:00:00 GMT")]), ServerConfig::default());
+    assert_eq!(204, options.status_code);
 }

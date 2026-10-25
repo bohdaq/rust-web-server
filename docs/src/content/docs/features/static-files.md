@@ -5,7 +5,19 @@ description: How rust-web-server serves files from disk, the default directory l
 
 ## Serving files
 
-Any file under the process's working directory is served automatically — no configuration, no routes to register. `StaticResourceController` handles range requests, sets `ETag` / `Last-Modified` headers, negotiates gzip, and streams files larger than 8 MB without loading them fully into memory.
+Any file under the process's working directory is served automatically — no configuration, no routes to register. `StaticResourceController` handles range requests, sets `ETag` / `Last-Modified` headers, negotiates gzip, and streams files larger than 256 KiB without loading them fully into memory.
+
+### Browser caching
+
+Static files are sent with `Cache-Control: no-cache` (since 18.0.0; it was
+`no-store`): the browser keeps the file and asks again on the next use with
+`If-None-Match` (the `ETag`) or `If-Modified-Since` (the `Last-Modified`
+date), and gets a `304 Not Modified` without a body while the file is
+unchanged. `If-None-Match` decides when both are sent (RFC 9110 §13.1.3).
+Set `RWS_CONFIG_STATIC_CACHE_CONTROL` to change it — e.g.
+`public, max-age=31536000, immutable` for files with a content hash in their
+name — or to an empty value for the old `no-store` behavior. Responses from
+your handlers keep `no-store, …` unless they set their own `Cache-Control`.
 
 Files larger than 256 KiB are streamed from disk with an exact
 `Content-Length` instead of being read into memory, so serving a 1 GB file

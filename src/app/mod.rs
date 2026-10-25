@@ -192,11 +192,11 @@ impl Application for App {
         // would build the path and look the file up, only for process to do
         // both again; serving one implies is_matching would have said yes.
         let mut response = response;
-        if let Some(served) = StaticResourceController::serve_regular_file(request, &mut response) {
+        if let Some(served) = StaticResourceController::serve_regular_file(request, &mut response, &config) {
             return Ok(served);
         }
         if StaticResourceController::is_matching(request, connection) {
-            return Ok(StaticResourceController::process_general(request, response));
+            return Ok(StaticResourceController::process_general(request, response, &config));
         }
         if NotFoundController::is_matching(request, connection) {
             return Ok(NotFoundController::process(request, response, connection));

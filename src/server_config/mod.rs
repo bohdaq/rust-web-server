@@ -55,6 +55,8 @@ pub fn invalidate() {
 /// `Header::_CONTENT_SECURITY_POLICY_VALUE_DEFAULT` without creating a
 /// circular import (`server_config` ← `header` ← `cors` ← `server_config`).
 const CSP_DEFAULT: &str = "default-src 'self'";
+/// Default `Cache-Control` for static files: cache, but revalidate.
+pub(crate) const STATIC_CACHE_CONTROL_DEFAULT: &str = "no-cache";
 
 /// All runtime-configurable settings for one server instance.
 ///
@@ -93,6 +95,17 @@ pub struct ServerConfig {
     /// `RWS_CONFIG_CSP` — `Content-Security-Policy` header value. An empty
     /// string suppresses the header entirely. Default: the framework default CSP.
     pub csp: String,
+    /// `RWS_CONFIG_CLIENT_HINTS` — send `Accept-CH`, `Critical-CH` and the
+    /// client hints in `Vary` on every response. Off by default (18.0.0; was
+    /// always on): ~700 bytes per response, and `Critical-CH` makes Chromium
+    /// retry a request that came without the hints.
+    pub client_hints: bool,
+    /// `RWS_CONFIG_STATIC_CACHE_CONTROL` — `Cache-Control` for static files
+    /// (other responses keep `no-store, …`). Default `"no-cache"` (18.0.0; was
+    /// `no-store, …`): browsers keep the file and revalidate it with
+    /// `If-None-Match` / `If-Modified-Since` (a 304). An empty value keeps
+    /// the `no-store` default for static files too.
+    pub static_cache_control: String,
 
     // ── Server internals ──────────────────────────────────────────────────────
     /// `RWS_CONFIG_LOG_FORMAT` — `"json"` or `"combined"`. Default: `"json"`.
@@ -115,6 +128,8 @@ impl Default for ServerConfig {
             cors_expose_headers: Config::RWS_CONFIG_CORS_EXPOSE_HEADERS_DEFAULT_VALUE.to_string(),
             cors_max_age: Config::RWS_CONFIG_CORS_MAX_AGE_DEFAULT_VALUE.to_string(),
             csp: CSP_DEFAULT.to_string(),
+            client_hints: false,
+            static_cache_control: STATIC_CACHE_CONTROL_DEFAULT.to_string(),
             log_format: Config::RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE.to_string(),
             request_allocation_size: *Config::RWS_DEFAULT_REQUEST_ALLOCATION_SIZE_IN_BYTES,
         }
@@ -140,6 +155,9 @@ impl ServerConfig {
             cors_max_age: read(Config::RWS_CONFIG_CORS_MAX_AGE),
             csp: std::env::var("RWS_CONFIG_CSP")
                 .unwrap_or_else(|_| CSP_DEFAULT.to_string()),
+            client_hints: read("RWS_CONFIG_CLIENT_HINTS").eq_ignore_ascii_case("true"),
+            static_cache_control: std::env::var("RWS_CONFIG_STATIC_CACHE_CONTROL")
+                .unwrap_or_else(|_| STATIC_CACHE_CONTROL_DEFAULT.to_string()),
             log_format: read(Config::RWS_CONFIG_LOG_FORMAT),
             request_allocation_size: std::env::var(
                 Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES,

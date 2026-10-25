@@ -166,6 +166,8 @@ log_format              = "json"     # RWS_CONFIG_LOG_FORMAT: "combined" (defaul
 max_body_size_in_bytes  = 10485760   # RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: 413 above this; 0 = unlimited
 open_file_cache_secs    = 1          # RWS_CONFIG_OPEN_FILE_CACHE_SECS: reuse open static files this long; 0 = off
 csp                     = "default-src 'self'"   # RWS_CONFIG_CSP: Content-Security-Policy header
+static_cache_control    = "no-cache" # RWS_CONFIG_STATIC_CACHE_CONTROL: Cache-Control for static files
+client_hints            = false      # RWS_CONFIG_CLIENT_HINTS: send Accept-CH / Critical-CH
 tls_client_ca_file      = "/etc/rws/clients-ca.pem"  # RWS_CONFIG_TLS_CLIENT_CA_FILE: require client certs (mTLS)
 template_dir            = "templates"            # RWS_CONFIG_TEMPLATE_DIR
 spa_fallback            = "index.html"   # RWS_CONFIG_SPA_FALLBACK: file served for client-side routes

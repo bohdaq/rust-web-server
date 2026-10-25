@@ -233,7 +233,7 @@ fn header_new_borrows_static_strings_and_owns_strings() {
 }
 
 // The standard headers are cloned onto every response: all but the
-// per-request Date must be borrowed, so that clone allocates nothing.
+// per-request Date values must be borrowed, so that clone allocates nothing.
 #[test]
 fn standard_header_list_is_borrowed_except_date() {
     use std::borrow::Cow;
@@ -245,7 +245,7 @@ fn standard_header_list_is_borrowed_except_date() {
         assert!(list.len() >= 9);
         for h in &list {
             assert!(matches!(h.name, Cow::Borrowed(_)), "{:?}", h.name);
-            if h.name != Header::_DATE_UNIX_EPOCH_NANOS {
+            if h.name != Header::_DATE_UNIX_EPOCH_NANOS && h.name != Header::_DATE {
                 assert!(matches!(h.value, Cow::Borrowed(_)), "{}: {:?}", h.name, h.value);
             }
         }

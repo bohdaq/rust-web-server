@@ -1177,7 +1177,11 @@ RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES   default: 10000 (per-read chunk siz
 RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES   default: 0 (unlimited); 413 before buffering when exceeded
 RWS_CONFIG_SPA_FALLBACK          default: unset (disabled); e.g. "index.html" — see "SPA fallback" section
 RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES   default: unset; comma-separated, e.g. "/api,/healthz"
+RWS_CONFIG_STATIC_CACHE_CONTROL  default: "no-cache" (18.0.0) — Cache-Control for static files; "" = the no-store default
+RWS_CONFIG_CLIENT_HINTS          default: false (18.0.0) — send Accept-CH / Critical-CH and the hints in Vary
 ```
+
+Default response headers (18.0.0): Vary: Origin, X-Content-Type-Options, Accept-Ranges, X-Frame-Options, Date (IMF-fixdate), Date-Unix-Epoch-Nanos, Cache-Control (no-store, …; static files no-cache), Referrer-Policy, Permissions-Policy, Content-Security-Policy. Static files add ETag, Last-Modified and Last-Modified-Unix-Epoch-Nanos; If-None-Match, else If-Modified-Since, answers 304. CacheLayer never stores no-cache/no-store/private responses, Range requests, or responses whose Vary names a header outside its key (unless that header changed nothing).
 
 In `rws.config.toml` every setting is its variable name minus `RWS_CONFIG_`, as table + key: top-level
 `port = 443`, `[rate_limit] max_requests = 500` (→ `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS`), one

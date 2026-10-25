@@ -125,17 +125,12 @@ fn static_file_cors_options_preflight_request_client_hints() {
     let max_age = response._get_header(Header::_ACCESS_CONTROL_MAX_AGE.to_string()).unwrap();
     assert_eq!(Cors::MAX_AGE, max_age.value);
 
+    // Client hints are opt-in since 18.0.0 (RWS_CONFIG_CLIENT_HINTS).
     let vary_header = response._get_header(Header::_VARY.to_string()).unwrap();
-    assert_eq!(
-        vary_header.value,
-        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory, Upgrade-Insecure-Requests, Sec-CH-Prefers-Reduced-Motion, Sec-CH-Prefers-Color-Scheme"
-    );
+    assert_eq!(vary_header.value, "Origin");
+    assert!(response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).is_none());
+    assert!(response._get_header(ClientHint::CRITICAL_CLIENT_HINTS.to_string()).is_none());
 
-    let client_hints = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).unwrap();
-    assert_eq!(
-        client_hints.value,
-        ClientHint::get_client_hint_list()
-    );
 
     let x_frame_options = response._get_header(Header::_X_FRAME_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
@@ -181,14 +176,12 @@ fn static_file_cors_off_options_preflight_request_client_hints() {
     // No CORS headers should be present (origin not in allowed list)
     assert!(response._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).is_none());
 
+    // Client hints are opt-in since 18.0.0 (RWS_CONFIG_CLIENT_HINTS).
     let vary_header = response._get_header(Header::_VARY.to_string()).unwrap();
-    assert_eq!(
-        vary_header.value,
-        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory, Upgrade-Insecure-Requests, Sec-CH-Prefers-Reduced-Motion, Sec-CH-Prefers-Color-Scheme"
-    );
+    assert_eq!(vary_header.value, "Origin");
+    assert!(response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).is_none());
+    assert!(response._get_header(ClientHint::CRITICAL_CLIENT_HINTS.to_string()).is_none());
 
-    let client_hints = response._get_header(ClientHint::ACCEPT_CLIENT_HINTS.to_string()).unwrap();
-    assert_eq!(client_hints.value, ClientHint::get_client_hint_list());
 
     let x_frame_options = response._get_header(Header::_X_FRAME_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::_X_FRAME_OPTIONS_VALUE_SAME_ORIGIN, x_frame_options.value);
@@ -477,4 +470,36 @@ fn static_gzip_matches_apply_gzip() {
     }
     let refused = app.execute(&request(Some("gzip;q=0")), &conn).unwrap();
     assert!(refused.header(Header::_CONTENT_ENCODING).is_none());
+}
+
+#[test]
+fn client_hints_are_opt_in() {
+    let request = Request {
+        method: METHOD.get.to_string(),
+        request_uri: "/healthz".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+    let conn = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+        request_size: 16000,
+        sni_hostname: None,
+    };
+    let on = App::with_config(ServerConfig { client_hints: true, ..ServerConfig::default() })
+        .execute(&request, &conn).unwrap();
+    assert_eq!(ClientHint::get_client_hint_list(), on.header(ClientHint::ACCEPT_CLIENT_HINTS).unwrap().value);
+    assert_eq!(ClientHint::get_client_hint_list(), on.header(ClientHint::CRITICAL_CLIENT_HINTS).unwrap().value);
+    assert_eq!(
+        "Origin, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Save-Data, Device-Memory, Upgrade-Insecure-Requests, Sec-CH-Prefers-Reduced-Motion, Sec-CH-Prefers-Color-Scheme",
+        on.header(Header::_VARY).unwrap().value
+    );
+
+    let off = App::with_config(ServerConfig::default()).execute(&request, &conn).unwrap();
+    assert!(off.header(ClientHint::ACCEPT_CLIENT_HINTS).is_none());
+    assert!(off.header(ClientHint::CRITICAL_CLIENT_HINTS).is_none());
+    assert_eq!("Origin", off.header(Header::_VARY).unwrap().value);
+    // RFC 9110 §6.6.1: an origin server with a clock sends Date.
+    assert!(crate::http::date::parse(&off.header(Header::_DATE).unwrap().value).is_some());
 }

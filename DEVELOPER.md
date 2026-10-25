@@ -242,6 +242,13 @@ assert_eq!("/new-path", h.value);       // compares with &str directly
 
 `header.value.push_str(..)` becomes `header.value.to_mut().push_str(..)`, and a function that took `&String` should take `&str`.
 
+### Migrating to 18.0.0: default response headers
+
+- **Client hints are opt-in.** `Accept-CH`, `Critical-CH` and the hints in `Vary` are sent only with `RWS_CONFIG_CLIENT_HINTS=true` (`ServerConfig::client_hints`). `Vary` is otherwise `Origin`. They added ~700 bytes to every response, and `Critical-CH` made Chromium retry requests.
+- **Static files are cacheable.** They carry `Cache-Control: no-cache` (`RWS_CONFIG_STATIC_CACHE_CONTROL` / `ServerConfig::static_cache_control`; empty = the old `no-store`), plus a standard `Last-Modified`; `If-Modified-Since` (when there's no `If-None-Match`) answers `304`. Handler responses keep `no-store, …`.
+- **Every response has a standard `Date`** (RFC 9110 §6.6.1), next to `Date-Unix-Epoch-Nanos`.
+- **`CacheLayer` is stricter:** it doesn't store `Cache-Control: no-cache` responses (it can't revalidate), responses to `Range` requests, or responses whose `Vary` names a request header that isn't in its key — unless it changed nothing (`Origin` without `Access-Control-Allow-Origin`, `Accept-Encoding` with an unencoded body). Add `.vary_by_header(..)` for headers your responses really vary on.
+
 ---
 
 ## Use Case Scenarios
