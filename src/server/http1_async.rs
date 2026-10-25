@@ -228,7 +228,9 @@ where
         Log::log_access(&request, &response, &peer_addr);
 
         if response.stream_pipe.is_some() || response.stream_file.is_some() {
-            if !write_file_zero_copy(&mut stream, &mut response, &request).await? {
+            if !write_file_zero_copy(&mut stream, &mut response, &request).await?
+                && !write_file_inline(&mut stream, &mut response, &request).await?
+            {
                 write_streaming(&mut stream, response, request).await?;
             }
         } else {
@@ -448,6 +450,67 @@ async fn write_file_zero_copy<S: AsyncWrite + Unpin + SendfileSocket>(
     let socket = stream.sendfile_socket().expect("checked above");
     sendfile::send_file(socket, &head, file.file(), len).await.map_err(|e| e.to_string())?;
     Ok(true)
+}
+
+/// Chunk size of [`write_file_inline`].
+const INLINE_FILE_CHUNK: usize = 64 * 1024;
+
+/// A `stream_file` GET with a known `Content-Length` where `sendfile`
+/// doesn't apply (TLS): the same head, then the file read on this task, 64
+/// KiB at a time into one buffer, from the open-file cache's handle — the way
+/// nginx serves files without aio. Going through the blocking pool instead
+/// cost a cross-thread hand-off per chunk, and with mimalloc each chunk
+/// freed on another thread than it was allocated on: 1 MiB over TLS took
+/// 20–50% more CPU than nginx's. A read can block this worker on a cold
+/// cache, as it does nginx's. `Ok(false)` when it doesn't apply.
+#[cfg(unix)]
+async fn write_file_inline<S: AsyncWrite + Unpin>(
+    stream: &mut S,
+    response: &mut Response,
+    request: &Request,
+) -> Result<bool, String> {
+    use std::os::unix::fs::FileExt;
+    if response.stream_pipe.is_some() || request.method != crate::request::METHOD.get {
+        return Ok(false);
+    }
+    let Some(path) = response.stream_file.clone() else { return Ok(false) };
+    let Some(len) = response
+        .headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH))
+        .and_then(|h| h.value.trim().parse::<u64>().ok())
+    else {
+        return Ok(false);
+    };
+    let Some(file) = crate::app::controller::static_resource::open_file_cache::open(&path, true) else {
+        return Ok(false);
+    };
+
+    let (head, _) = Server::stream_file_head(std::mem::replace(response, Response::new()));
+    stream.write_all(&head).await.map_err(|e| e.to_string())?;
+    let mut buffer = vec![0u8; INLINE_FILE_CHUNK.min(len as usize)];
+    let mut offset = 0u64;
+    while offset < len {
+        let want = buffer.len().min((len - offset) as usize);
+        let read = file.file().read_at(&mut buffer[..want], offset).map_err(|e| e.to_string())?;
+        if read == 0 {
+            // The file shrank after the head promised `len` bytes.
+            return Err(format!("{}: ended at {} of {} bytes", path, offset, len));
+        }
+        stream.write_all(&buffer[..read]).await.map_err(|e| e.to_string())?;
+        offset += read as u64;
+    }
+    stream.flush().await.map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+#[cfg(not(unix))]
+async fn write_file_inline<S: AsyncWrite + Unpin>(
+    _stream: &mut S,
+    _response: &mut Response,
+    _request: &Request,
+) -> Result<bool, String> {
+    Ok(false)
 }
 
 /// `std::io::Write` that hands each buffer to the async writer task.
@@ -675,6 +738,52 @@ mod tests {
         let mut decoded = Vec::new();
         crate::server::body_stream::ChunkedDecoder::new(&raw[head_end..]).read_to_end_sync(&mut decoded);
         assert_eq!(content, decoded);
+    }
+
+    /// No `sendfile` on this stream (as over TLS): the file is read on the
+    /// connection's task, sent whole, and the connection stays usable.
+    #[tokio::test]
+    async fn sized_file_without_sendfile_is_read_inline_and_keep_alive_continues() {
+        let file = crate::test_env::TempPath::new("http1_async_sized.bin");
+        let content: Vec<u8> = (0..300_000u32).map(|i| (i % 253) as u8).collect();
+        std::fs::write(&*file, &content).unwrap();
+
+        let (mut client, server) = tokio::io::duplex(16 * 1024);
+        let app = SizedFile(file.as_str().to_string(), content.len());
+        let task = tokio::spawn(serve(server, peer(), None, false, app));
+        client.write_all(b"GET /a HTTP/1.1\r\nHost: x\r\n\r\nGET /b HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").await.unwrap();
+        let mut raw = Vec::new();
+        client.read_to_end(&mut raw).await.unwrap();
+        task.await.unwrap().unwrap();
+
+        let mut rest = &raw[..];
+        for _ in 0..2 {
+            let head_end = rest.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+            let head = String::from_utf8_lossy(&rest[..head_end]).to_string();
+            assert!(head.contains("Content-Length: 300000"), "{head}");
+            assert!(!head.contains("Transfer-Encoding"), "{head}");
+            assert_eq!(&content[..], &rest[head_end..head_end + content.len()]);
+            rest = &rest[head_end + content.len()..];
+        }
+        assert!(rest.is_empty(), "{} trailing bytes", rest.len());
+    }
+
+    /// A file shorter than the promised `Content-Length` ends the
+    /// connection with an error rather than sending a short body as complete.
+    #[tokio::test]
+    async fn sized_file_that_shrank_ends_the_connection() {
+        let file = crate::test_env::TempPath::new("http1_async_shrank.bin");
+        std::fs::write(&*file, vec![7u8; 1000]).unwrap();
+
+        let (mut client, server) = tokio::io::duplex(16 * 1024);
+        let task = tokio::spawn(serve(server, peer(), None, false, SizedFile(file.as_str().to_string(), 5000)));
+        client.write_all(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n").await.unwrap();
+        let mut raw = Vec::new();
+        client.read_to_end(&mut raw).await.unwrap();
+        let err = task.await.unwrap().unwrap_err();
+        assert!(err.contains("ended at 1000 of 5000"), "{err}");
+        let head_end = raw.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+        assert_eq!(1000, raw.len() - head_end);
     }
 
     trait ReadToEndSync {
