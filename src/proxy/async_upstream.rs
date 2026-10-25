@@ -23,7 +23,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use super::{
-    build_request, is_idempotent, normalize_upstream_response, parse_status_and_headers, response_has_no_body, should_stream_response,
+    build_request, is_idempotent, normalize_upstream_response, parse_status_and_headers, HeadFacts,
     ConcatReader, Pool, POOL_MAX_IDLE,
 };
 use crate::request::Request;
@@ -247,11 +247,10 @@ async fn exchange<S: UpstreamConn>(
         Ok(Err((false, e))) => return Exchange::Failed(e),
         Err(_) => return Exchange::Failed("backend response timed out".to_string()),
     };
-    let header_lower = std::str::from_utf8(&buf[..header_end]).unwrap_or("").to_ascii_lowercase();
+    let facts = HeadFacts::scan(&buf[..header_end]);
+    let no_body = facts.no_body(&request.method);
 
-    let no_body = response_has_no_body(&request.method, &header_lower);
-
-    if !no_body && should_stream_response(&header_lower) {
+    if !no_body && facts.should_stream() {
         // Streaming: the existing (blocking) writer reads the rest of the
         // body; the connection isn't reused.
         let body_prefix = buf.split_off(header_end);
@@ -268,9 +267,8 @@ async fn exchange<S: UpstreamConn>(
         };
     }
 
-    let connection_close = header_lower.lines().any(|l| l.starts_with("connection:") && l.contains("close"));
-    let content_length: Option<usize> =
-        header_lower.lines().find_map(|l| l.strip_prefix("content-length:")?.trim().parse().ok());
+    let connection_close = facts.connection_close;
+    let content_length = facts.content_length;
 
     let body = tokio::time::timeout(read_timeout, async {
         match content_length {
