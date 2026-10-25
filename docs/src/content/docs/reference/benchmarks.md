@@ -14,7 +14,11 @@ same machine.
 (`--disable-compression`: the Caddy and nginx configs don't compress, and
 `rws` compresses text by default), access logs off everywhere. `rws` is the
 release build (`--features "acme auth"`), Caddy 2.11.7, nginx from Ubuntu with
-`sendfile`, `open_file_cache` and upstream keep-alive enabled.
+`sendfile`, `open_file_cache` and upstream keep-alive enabled. nginx's
+`open_file_cache_valid 1s` trusts a cached file's size and modification time
+for a second; `rws` runs with the equivalent `open_file_cache_strict = false`
+(its default re-checks them with an `fstat` on every request, so an edit in
+place is served at once).
 
 | Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | CPU/request (µs) | Peak memory (MiB) |
 |---|---|---:|---:|---:|---:|---:|

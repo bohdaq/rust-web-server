@@ -9,7 +9,10 @@
 # every server under test. Tunables: DURATION (default 15s), CONNECTIONS (64).
 #
 # Like for like: nginx under test gets open_file_cache (rws caches open
-# files by default, nginx doesn't), and no compression anywhere: oha runs with --disable-compression (no
+# files by default, nginx doesn't) with open_file_cache_valid 1s, so it
+# trusts a cached file's size and mtime for a second; rws gets the same
+# with open_file_cache_strict = false (its default checks with an fstat on
+# every request). No compression anywhere: oha runs with --disable-compression (no
 # Accept-Encoding), since the Caddy and nginx configs below don't compress and
 # rws compresses text by default — otherwise rws alone would be deflating
 # every response.
@@ -218,6 +221,7 @@ mkdir -p "$WORK/rws" && cd "$SITE"
 cat > "$WORK/rws.config.toml" <<'EOF'
 port       = 8081
 log_format = "off"
+open_file_cache_strict = false
 
 [[upstream]]
 name     = "backend"
@@ -237,13 +241,13 @@ RWS_PID=$!; PIDS+=($RWS_PID)
 bench_server rws "$RWS_PID" 8081
 kill "$RWS_PID"
 if [ -n "$EXTENDED" ]; then
-  printf 'port = 8181\nlog_format = "json"\n' > "$WORK/rws-log.toml"
+  printf 'port = 8181\nlog_format = "json"\nopen_file_cache_strict = false\n' > "$WORK/rws-log.toml"
   port_free 8181
   RWS_CONFIG_FILE="$WORK/rws-log.toml" "$RWS" > "$WORK/rws-access.log" 2>&1 &
   RWS_PID=$!; PIDS+=($RWS_PID)
   bench_log_server rws "$RWS_PID" 8181
   kill "$RWS_PID"
-  printf 'port = 8281\nlog_format = "off"\ntls_cert_file = "%s"\ntls_key_file = "%s"\n' "$WORK/cert.pem" "$WORK/key.pem" > "$WORK/rws-tls.toml"
+  printf 'port = 8281\nlog_format = "off"\nopen_file_cache_strict = false\ntls_cert_file = "%s"\ntls_key_file = "%s"\n' "$WORK/cert.pem" "$WORK/key.pem" > "$WORK/rws-tls.toml"
   port_free 8281
   RWS_CONFIG_FILE="$WORK/rws-tls.toml" "$RWS" > "$WORK/rws-tls.log" 2>&1 &
   RWS_PID=$!; PIDS+=($RWS_PID)
