@@ -114,7 +114,7 @@ fn rws_request(request: &http::Request<h2::RecvStream>, body: Vec<u8>) -> Reques
     for (name, value) in request.headers() {
         if let Ok(v) = value.to_str() {
             headers.push(Header {
-                name: name.as_str().to_string().into(),
+                name: Header::name_from(name.as_str()),
                 value: v.to_string().into(),
             });
         }
@@ -217,23 +217,23 @@ async fn send_h2_response(
     if rws_response.content_range_list.len() == 1 {
         let cr = &rws_response.content_range_list[0];
         rws_response.headers.push(crate::header::Header {
-            name: crate::header::Header::_CONTENT_TYPE.to_string().into(),
+            name: crate::header::Header::_CONTENT_TYPE.into(),
             value: cr.content_type.clone().into(),
         });
         let content_range = crate::response::content_range_header_value(rws_response.status_code, cr);
         rws_response.headers.push(crate::header::Header {
-            name: crate::header::Header::_CONTENT_LENGTH.to_string().into(),
-            value: cr.body.len().to_string().into(),
+            name: crate::header::Header::_CONTENT_LENGTH.into(),
+            value: crate::ext::decimal::Decimal::new(cr.body.len() as u128).as_str().to_string().into(),
         });
         if let Some(value) = content_range {
             rws_response.headers.push(crate::header::Header {
-                name: crate::header::Header::_CONTENT_RANGE.to_string().into(),
+                name: crate::header::Header::_CONTENT_RANGE.into(),
                 value: value.into(),
             });
         }
     } else if rws_response.content_range_list.len() > 1 {
         rws_response.headers.push(crate::header::Header {
-            name: crate::header::Header::_CONTENT_TYPE.to_string().into(),
+            name: crate::header::Header::_CONTENT_TYPE.into(),
             value: crate::range::Range::MULTIPART_BYTERANGES_CONTENT_TYPE.into(),
         });
     }
@@ -244,15 +244,17 @@ async fn send_h2_response(
     let mut builder = http::Response::builder().status(status);
 
     for header in &rws_response.headers {
-        let name_lower = header.name.to_lowercase();
-        if FORBIDDEN_H2_RESPONSE_HEADERS.contains(&name_lower.as_str()) {
+        if FORBIDDEN_H2_RESPONSE_HEADERS.iter().any(|f| header.name.eq_ignore_ascii_case(f)) {
             continue;
         }
         match (
             http::header::HeaderName::from_bytes(header.name.as_bytes()),
             http::header::HeaderValue::from_str(&header.value),
         ) {
-            (Ok(name), Ok(value)) => {
+            (Ok(name), Ok(mut value)) => {
+                if changes_every_response(&header.name) {
+                    value.set_sensitive(true);
+                }
                 builder = builder.header(name, value);
             }
             _ => {}
@@ -298,6 +300,23 @@ async fn send_h2_response(
         }
         Err(e) => eprintln!("H2 send response error: {}", e),
     }
+}
+
+/// Headers whose value differs on (nearly) every response. They're sent as
+/// HPACK "never indexed" literals: inserted into the connection's dynamic
+/// table, each one evicted the headers that repeat on every response
+/// (security headers, Cache-Control, Vary …), which then had to be inserted
+/// again — the table churn was the top HTTP/2 cost in the profile.
+fn changes_every_response(name: &str) -> bool {
+    [
+        Header::_DATE,
+        Header::_DATE_UNIX_EPOCH_NANOS,
+        Header::_LAST_MODIFIED,
+        Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS,
+        Header::_ETAG,
+    ]
+    .iter()
+    .any(|volatile| name.eq_ignore_ascii_case(volatile))
 }
 
 /// Send `data` within the peer's flow-control window: reserve capacity, wait
