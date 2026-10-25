@@ -111,7 +111,7 @@ Routing with path parameters, typed extractors, one `Middleware` trait for every
 - **No hyper, no Tower, no Axum.** HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS, range requests, JWT, and the ACME client are implemented in this crate. The HTTP/2 server is rws's own too (checked with h2spec and fuzzing); HTTP/3 uses the widely deployed `quinn`/`h3` crates, and TLS uses `rustls` — no OpenSSL.
 - **Config and code share one engine.** Everything the TOML file does is a type you can use from Rust, so moving from configuration to code doesn't mean switching tools.
 - **Tested against the real world.** CI fuzzes every parser that sees untrusted input, checks HTTP/2 conformance with h2spec, and runs the ACME flow end to end against Let's Encrypt's test CA on every push. Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
-- **Fast.** 2–4× faster than Caddy, and less CPU per request than nginx for small files, HTTP/2, HTTPS and access-logged traffic — see [Performance](#performance).
+- **Fast.** 2.6–5× faster than Caddy, and less CPU per request than nginx in every benchmark scenario — see [Performance](#performance).
 - **SemVer.** Breaking changes only in a major version — see the [CHANGELOG](CHANGELOG.md).
 
 ## Performance
@@ -123,23 +123,23 @@ the load generator on the same machine: `oha`, 64 keep-alive connections,
 
 | Scenario | rws | Caddy 2.11 | nginx |
 |---|---:|---:|---:|
-| Static file, 1 KiB | 153,668 (**1.0 ms**) | 35,444 (8.0 ms) | **166,909** (1.1 ms) |
-| Static file, 1 MiB | 15,305 (9.3 ms) | 4,027 (75 ms) | **16,354** (**9.0 ms**) |
-| Reverse proxy, 1 KiB | 61,311 (**2.6 ms**) | 29,427 (7.9 ms) | **65,415** (2.8 ms) |
-| HTTP/2, 1 KiB | **126,973** (**1.2 ms**) | 28,971 (7.2 ms) | 124,057 (3.3 ms) |
-| 1 MiB over HTTPS | **3,954** (**26 ms**) | 2,959 (58 ms) | 3,338 (46 ms) |
-| CPU per request (1 KiB / 1 MiB / proxy / HTTP/2 / 1 MiB HTTPS) | **9.9** / 142 / **24.1** / **12.7** / **369** µs | 75.5 / 652 / 79.9 / 97.0 / 854 µs | 12.4 / **137** / 24.2 / 14.9 / 668 µs |
-| Peak memory | 33–66 MiB | 67–125 MiB | **24–44 MiB** |
+| Static file, 1 KiB | **96,670** (**1.7 ms**) | 18,592 (13.5 ms) | 81,161 (3.1 ms) |
+| Static file, 1 MiB | 9,511 (**14.0 ms**) | 2,398 (124 ms) | **9,767** (14.1 ms) |
+| Reverse proxy, 1 KiB | **34,260** (**3.9 ms**) | 13,402 (14.2 ms) | 33,942 (4.5 ms) |
+| HTTP/2, 1 KiB | **66,141** (**2.4 ms**) | 13,604 (14.2 ms) | 51,416 (4.5 ms) |
+| 1 MiB over HTTPS | **1,602** (**49 ms**) | 1,460 (108 ms) | 1,311 (101 ms) |
+| CPU per request (1 KiB / 1 MiB / proxy / HTTP/2 / 1 MiB HTTPS) | **16.9** / **210** / **44.6** / **27.4** / **924** µs | 154 / 1,195 / 191 / 216 / 1,484 µs | 25.1 / 216 / 47.1 / 37.9 / 1,640 µs |
+| Peak memory | 34–66 MiB | 66–109 MiB | **23–42 MiB** |
 
-`rws` is 2.1–4.4× faster than Caddy (1.3× for large files over HTTPS). Against
-nginx it needs less CPU per request in every scenario but one: small files
-(−20%), HTTP/2 (−15%), HTTPS (−18%), large files over HTTPS (−45%, 18% more
-requests per second), access-logged traffic (−26%) and gzip (a hundredth),
-the same for proxying, and 4% more for large files. On this runner (the
-fastest type GitHub assigns) nginx serves 6–8% more plain-HTTP requests per
-second; on the AMD EPYC runner types `rws` serves more in all but the
-large-file scenarios. Release builds use the
-mimalloc allocator: less CPU, but more memory than nginx (build without the
+`rws` is 2.6–5.2× faster than Caddy and has the lowest p99 of the three in
+every scenario. It needs less CPU per request than nginx in every scenario:
+small files −33%, large files −3%, proxying −5%, HTTP/2 −28%, HTTPS −23%,
+large files over HTTPS −44%, access-logged traffic −29%, gzip a hundredth —
+and serves more requests per second in all but large plain files (−3%).
+That's on the AMD EPYC runners; on the fastest (Intel) runner type nginx
+keeps a few percent on plain-HTTP throughput, which the opt-in
+`RWS_CONFIG_RUNTIME=per-core` narrows. Release builds use the mimalloc
+allocator: less CPU, but more memory than nginx (build without the
 `mimalloc` feature for ~9 MiB) — see the
 [benchmarks page](https://rws8.tech/reference/benchmarks/). Shared CI runners are noisy, so
 compare servers within a run, not across runs. Reproduce it with

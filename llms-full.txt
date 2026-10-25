@@ -17479,7 +17479,7 @@ without a restart. See [Configuration](/configuration/overview/).
 <https://rws8.tech/reference/benchmarks/>
 
 `rws` is measured against Caddy and nginx on the same machine, with the same
-files and the same load. The numbers below come from one run (40209996636) of the
+files and the same load. The numbers below come from one run (40243377254) of the
 [Benchmark workflow](https://github.com/bohdaq/rust-web-server/blob/main/.github/workflows/bench.yml)
 on a 4-CPU GitHub Actions runner (Linux x86_64), with the load generator on the
 same machine.
@@ -17497,15 +17497,15 @@ place is served at once).
 
 | Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | CPU/request (µs) | Peak memory (MiB) |
 |---|---|---:|---:|---:|---:|---:|
-| Static file, 1 KiB | rws | 153,668 | 0.37 | 0.96 | 9.9 | 33.4 |
-| | Caddy | 35,444 | 1.25 | 8.02 | 75.5 | 69.1 |
-| | nginx | 166,909 | 0.36 | 1.13 | 12.4 | 23.6 |
-| Static file, 1 MiB | rws | 15,305 | 3.99 | 9.28 | 142.0 | 33.4 |
-| | Caddy | 4,027 | 11.26 | 75.06 | 651.6 | 73.4 |
-| | nginx | 16,354 | 4.06 | 8.96 | 137.1 | 23.7 |
-| Reverse proxy, 1 KiB | rws | 61,311 | 0.98 | 2.63 | 24.1 | 35.4 |
-| | Caddy | 29,427 | 1.75 | 7.90 | 79.9 | 69.1 |
-| | nginx | 65,415 | 0.87 | 2.80 | 24.2 | 24.5 |
+| Static file, 1 KiB | rws | 96,670 | 0.61 | 1.65 | 16.9 | 33.5 |
+| | Caddy | 18,592 | 2.73 | 13.49 | 154.4 | 66.1 |
+| | nginx | 81,161 | 0.59 | 3.10 | 25.1 | 23.2 |
+| Static file, 1 MiB | rws | 9,511 | 6.26 | 14.00 | 209.8 | 33.5 |
+| | Caddy | 2,398 | 19.03 | 124.03 | 1,194.7 | 69.4 |
+| | nginx | 9,767 | 6.42 | 14.05 | 216.2 | 23.4 |
+| Reverse proxy, 1 KiB | rws | 34,260 | 1.79 | 3.89 | 44.6 | 35.5 |
+| | Caddy | 13,402 | 4.16 | 14.17 | 190.6 | 66.7 |
+| | nginx | 33,942 | 1.74 | 4.51 | 47.1 | 24.2 |
 
 CPU/request is the server's user + system CPU time over the run (including
 worker processes) divided by the requests it served.
@@ -17519,21 +17519,21 @@ The same run, with the extended scenarios (`EXTENDED=1`, see
 
 | Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | CPU/request (µs) | Peak memory (MiB) |
 |---|---|---:|---:|---:|---:|---:|
-| 26 KiB JS file, gzip | rws | 148,531 | 0.38 | 1.03 | 11.1 | 39.7 |
-| | Caddy | 13,491 | 3.24 | 23.96 | 253.9 | 109.3 |
-| | nginx | 2,599 | 29.17 | 43.31 | 1,145.9 | 27.5 |
-| Static 1 KiB, access log on | rws | 153,129 | 0.37 | 0.98 | 10.7 | 41.6 |
-| | Caddy | 35,015 | 1.08 | 9.28 | 80.5 | 66.9 |
-| | nginx | 142,905 | 0.27 | 2.56 | 14.5 | 23.6 |
-| Static 1 KiB, HTTPS | rws | 143,688 | 0.40 | 1.10 | 11.7 | 47.3 |
-| | Caddy | 60,882 | 0.68 | 5.68 | 44.1 | 124.7 |
-| | nginx | 135,672 | 0.25 | 3.24 | 14.3 | 42.7 |
-| Static 1 KiB, HTTP/2 | rws | 126,973 | 0.44 | 1.18 | 12.7 | 55.3 |
-| | Caddy | 28,971 | 1.87 | 7.20 | 97.0 | 72.1 |
-| | nginx | 124,057 | 0.28 | 3.27 | 14.9 | 43.1 |
-| Static 1 MiB, HTTPS | rws | 3,954 | 14.64 | 26.16 | 368.8 | 65.6 |
-| | Caddy | 2,959 | 19.26 | 57.56 | 853.8 | 70.8 |
-| | nginx | 3,338 | 17.29 | 45.52 | 667.9 | 43.7 |
+| 26 KiB JS file, gzip | rws | 86,327 | 0.69 | 1.87 | 20.9 | 41.8 |
+| | Caddy | 5,729 | 8.51 | 51.96 | 606.3 | 109.2 |
+| | nginx | 1,802 | 35.26 | 71.94 | 2,063.6 | 27.3 |
+| Static 1 KiB, access log on | rws | 88,643 | 0.66 | 1.81 | 20.2 | 41.6 |
+| | Caddy | 15,964 | 2.97 | 18.12 | 191.7 | 65.6 |
+| | nginx | 75,518 | 0.62 | 3.16 | 28.6 | 23.2 |
+| Static 1 KiB, HTTPS | rws | 70,372 | 0.82 | 2.22 | 25.9 | 49.4 |
+| | Caddy | 25,555 | 2.22 | 9.57 | 112.6 | 69.4 |
+| | nginx | 63,752 | 0.75 | 3.75 | 33.5 | 41.7 |
+| Static 1 KiB, HTTP/2 | rws | 66,141 | 0.90 | 2.44 | 27.4 | 63.7 |
+| | Caddy | 13,604 | 4.04 | 14.20 | 216.0 | 66.9 |
+| | nginx | 51,416 | 0.84 | 4.46 | 37.9 | 42.2 |
+| Static 1 MiB, HTTPS | rws | 1,602 | 35.23 | 49.34 | 923.7 | 65.7 |
+| | Caddy | 1,460 | 38.13 | 108.27 | 1,483.6 | 68.0 |
+| | nginx | 1,311 | 45.19 | 101.34 | 1,639.9 | 42.3 |
 
 `rws` compresses a static text file once per version and serves the cached
 result; nginx and Caddy compress on every request, which is why the gzip row
@@ -17553,25 +17553,23 @@ On a 10-core Mac (same tools and configuration, `oha` on the same machine):
 
 ## Reading the numbers
 
-- **Against Caddy:** `rws` serves 3.8× (large) to 4.3× (small) as many file
-  requests, 2.1× as many proxied and 4.4× as many HTTP/2 requests per
-  second, using a third to an eighth of the CPU per request, with a p99
-  three to eight times lower and about half the memory.
-- **Against nginx:** less CPU per request for small files (−20%), with an
-  access log (−26%), over HTTPS (−18%), over HTTP/2 (−15%), for large files
-  over HTTPS (−45%) and with gzip (a hundredth); the same for proxying; 4%
-  more for large files (`sendfile` on both — the kernel does that work).
-  `rws` has the lower p99 in every scenario but large files. This run used
-  the fastest runner type GitHub assigns, where nginx also serves 6–8% more
-  plain-HTTP requests per second. On an AMD EPYC runner (run 40206635514,
-  just before the large-file TLS fix below) `rws` needed less CPU than nginx
-  in every scenario but large files over HTTPS — which that fix then turned
-  into a 35–50% lead — and served more requests per second in all but the
-  two large-file scenarios. The load generator shares the runner's 4 CPUs, so the
-  CPU/request column is the comparison to read.
+- **Against Caddy:** `rws` serves 4.0× (large) to 5.2× (small) as many file
+  requests, 2.6× as many proxied and 4.9× as many HTTP/2 requests per
+  second, using a quarter to a ninth of the CPU per request, with a p99
+  three to nine times lower and about half the memory.
+- **Against nginx:** less CPU per request in every scenario — small files
+  −33%, large files −3%, proxying −5%, HTTP/2 −28%, HTTPS −23%, large files
+  over HTTPS −44%, with an access log −29%, with gzip a hundredth — more
+  requests per second in all but large plain files (−3%), and the lower p99
+  everywhere. This run used an AMD EPYC runner. On the fastest (Intel)
+  runner type nginx keeps 6–8% more plain-HTTP requests per second and
+  about the same CPU for large files and proxying (run 40209996636);
+  `RWS_CONFIG_RUNTIME=per-core` narrows that (run 40242045036). The load
+  generator shares the runner's 4 CPUs, so the CPU/request column is the
+  comparison to read.
 - **Memory:** release builds allocate with mimalloc, which costs about 5%
   less CPU per request than the system allocator but holds more memory —
-  33–66 MiB here, against nginx's 24–44. Built without the `mimalloc`
+  34–66 MiB here, against nginx's 23–42. Built without the `mimalloc`
   feature, `rws` peaks at 9–17 MiB.
 - The gap depends on the runner's hardware; same-run A/Bs (`base_ref`,
   below) are how changes are judged.
