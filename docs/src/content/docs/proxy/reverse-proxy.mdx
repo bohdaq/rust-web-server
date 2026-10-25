@@ -71,18 +71,22 @@ The following headers are never forwarded to the upstream or back to the client,
 - `Proxy-Authenticate`
 - `Proxy-Authorization`
 - `TE`
-- `Trailers`
+- `Trailer`
+- `Proxy-Connection`
 - `Transfer-Encoding`
 - `Upgrade`
+- any header named in the client's `Connection` header
+- `Content-Length` (regenerated from the body that is actually sent)
 
 ### Headers added to forwarded requests
 
 | Header | Value |
 |--------|-------|
-| `X-Forwarded-For` | Client IP from `ConnectionInfo` |
+| `X-Forwarded-For` | Client IP from `ConnectionInfo`, appended to an incoming `X-Forwarded-For` (`203.0.113.7, 10.0.0.1`) — like nginx's `$proxy_add_x_forwarded_for`; only trust the entries your own proxies added |
 | `Via` | `1.1 rws` |
 | `Host` | Backend host (replaces the original `Host` header) |
 | `Connection` | `keep-alive` (pooled path) or `close` (non-pooled callers) |
+| `Content-Length` | Length of the forwarded body (exactly one) |
 
 ## Connection pooling
 

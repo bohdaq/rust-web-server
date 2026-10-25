@@ -69,7 +69,7 @@ const EXCLUDED_PASSTHROUGH_HEADERS: &[&str] = &[
     "proxy-authenticate",
     "proxy-authorization",
     "te",
-    "trailers",
+    "trailer",
     "transfer-encoding",
     "upgrade",
     "content-type",

@@ -48,14 +48,17 @@ use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
 
-// Hop-by-hop headers that must not be forwarded (RFC 7230 §6.1)
+// Hop-by-hop headers that must not be forwarded (RFC 9110 §7.6.1), plus
+// `proxy-connection` (legacy clients). Headers named in `Connection` are
+// dropped too (`connection_listed`).
 const HOP_BY_HOP: &[&str] = &[
     "connection",
     "keep-alive",
     "proxy-authenticate",
     "proxy-authorization",
+    "proxy-connection",
     "te",
-    "trailers",
+    "trailer",
     "transfer-encoding",
     "upgrade",
 ];
@@ -272,14 +275,23 @@ pub(crate) fn build_request(
 ) -> Vec<u8> {
     // One buffer, sized up front and filled with extend_from_slice — no
     // write!/format machinery, no lower-cased copy of each header name.
+    // `Content-Length` is regenerated from the (possibly de-chunked) body and
+    // `X-Forwarded-For` is extended below, so the client's copies are dropped:
+    // two `Content-Length` lines are a protocol error and a desync risk.
+    let connection = request.header(crate::header::Header::_CONNECTION).map(|h| h.value.as_ref());
     let forwarded = |h: &&crate::header::Header| {
         // An empty name would be sent as a malformed ": value" line.
-        !h.name.is_empty() && !is_hop_by_hop_or_host(&h.name)
+        !h.name.is_empty()
+            && !is_hop_by_hop_or_host(&h.name)
+            && !h.name.eq_ignore_ascii_case(crate::header::Header::_CONTENT_LENGTH)
+            && !h.name.eq_ignore_ascii_case("X-Forwarded-For")
+            && !connection.is_some_and(|c| connection_listed(c, &h.name))
     };
+    let prior_xff = request.header("X-Forwarded-For").map(|h| h.value.as_ref()).filter(|v| !v.trim().is_empty());
     let body_len = Decimal::new(request.body.len() as u128);
     let capacity = request.method.len() + request.request_uri.len() + backend_host.len() + 25
         + request.headers.iter().filter(forwarded).map(|h| h.name.len() + h.value.len() + 4).sum::<usize>()
-        + client_ip.len() + 19
+        + client_ip.len() + 19 + prior_xff.map_or(0, |v| v.len() + 2)
         + 13
         + 24
         + if request.body.is_empty() { 0 } else { body_len.as_str().len() + 18 }
@@ -294,7 +306,12 @@ pub(crate) fn build_request(
             out.extend_from_slice(part.as_bytes());
         }
     }
-    for part in ["X-Forwarded-For: ", client_ip, "\r\n", "Via: 1.1 rws\r\n"] {
+    out.extend_from_slice(b"X-Forwarded-For: ");
+    if let Some(prior) = prior_xff {
+        out.extend_from_slice(prior.as_bytes());
+        out.extend_from_slice(b", ");
+    }
+    for part in [client_ip, "\r\n", "Via: 1.1 rws\r\n"] {
         out.extend_from_slice(part.as_bytes());
     }
     if keep_alive {
@@ -323,6 +340,12 @@ fn is_hop_by_hop_or_host(name: &str) -> bool {
         let lower = name.to_lowercase();
         lower == "host" || HOP_BY_HOP.contains(&lower.as_str())
     }
+}
+
+/// Whether `name` is one of the comma-separated tokens of a `Connection`
+/// header value — those headers are hop-by-hop for this connection only.
+fn connection_listed(connection: &str, name: &str) -> bool {
+    connection.split(',').any(|token| token.trim().eq_ignore_ascii_case(name))
 }
 
 /// Decode HTTP/1.1 chunked transfer-encoding from `stream`.

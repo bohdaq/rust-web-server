@@ -1095,9 +1095,37 @@ fn proxied_request_drops_hop_by_hop_and_host_in_any_case() {
         b"POST /a?b=1 HTTP/1.1\r\nHOST: client\r\nConnection: x\r\nKEEP-ALIVE: 5\r\nTe: trailers\r\n\xe2\x84\xaaeep-Alive: 1\r\nX-Kept: v\r\nContent-Length: 3\r\n\r\nabc",
     ).unwrap();
     let out = crate::proxy::build_request(&req, "b:9", "10.0.0.1", false);
-    let expected = "POST /a?b=1 HTTP/1.1\r\nHost: b:9\r\nX-Kept: v\r\nContent-Length: 3\r\n\
+    // The client's Content-Length is regenerated, not forwarded twice.
+    let expected = "POST /a?b=1 HTTP/1.1\r\nHost: b:9\r\nX-Kept: v\r\n\
         X-Forwarded-For: 10.0.0.1\r\nVia: 1.1 rws\r\nConnection: close\r\nContent-Length: 3\r\n\r\nabc";
     assert_eq!(expected, String::from_utf8(out.clone()).unwrap());
+    assert!(out.capacity() - out.len() < 16, "sized up front, not grown: {} of {}", out.len(), out.capacity());
+}
+
+#[test]
+fn proxied_request_has_one_content_length_and_drops_connection_listed_headers() {
+    let req = crate::request::Request::parse(
+        b"POST / HTTP/1.1\r\nHost: a\r\nconnection: X-Secret, keep-alive\r\nX-Secret: s\r\nTrailer: X-Sum\r\n\
+          Proxy-Connection: keep-alive\r\ncontent-length: 2\r\nX-Kept: v\r\n\r\nhi",
+    ).unwrap();
+    let out = String::from_utf8(crate::proxy::build_request(&req, "b:9", "10.0.0.1", true)).unwrap();
+    assert_eq!(1, out.to_ascii_lowercase().matches("content-length:").count(), "{out:?}");
+    assert!(out.contains("Content-Length: 2\r\n"), "{out:?}");
+    for gone in ["X-Secret", "Trailer", "Proxy-Connection"] {
+        assert!(!out.contains(gone), "{gone} forwarded: {out:?}");
+    }
+    assert!(out.contains("X-Kept: v\r\n"), "{out:?}");
+}
+
+#[test]
+fn proxied_request_extends_an_incoming_x_forwarded_for() {
+    let req = crate::request::Request::parse(
+        b"GET / HTTP/1.1\r\nHost: a\r\nx-forwarded-for: 203.0.113.7, 198.51.100.2\r\n\r\n",
+    ).unwrap();
+    let out = crate::proxy::build_request(&req, "b:9", "10.0.0.1", true);
+    let text = String::from_utf8(out.clone()).unwrap();
+    assert_eq!(1, text.to_ascii_lowercase().matches("x-forwarded-for:").count(), "{text:?}");
+    assert!(text.contains("X-Forwarded-For: 203.0.113.7, 198.51.100.2, 10.0.0.1\r\n"), "{text:?}");
     assert!(out.capacity() - out.len() < 16, "sized up front, not grown: {} of {}", out.len(), out.capacity());
 }
 

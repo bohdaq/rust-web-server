@@ -11173,18 +11173,22 @@ The following headers are never forwarded to the upstream or back to the client,
 - `Proxy-Authenticate`
 - `Proxy-Authorization`
 - `TE`
-- `Trailers`
+- `Trailer`
+- `Proxy-Connection`
 - `Transfer-Encoding`
 - `Upgrade`
+- any header named in the client's `Connection` header
+- `Content-Length` (regenerated from the body that is actually sent)
 
 ### Headers added to forwarded requests
 
 | Header | Value |
 |--------|-------|
-| `X-Forwarded-For` | Client IP from `ConnectionInfo` |
+| `X-Forwarded-For` | Client IP from `ConnectionInfo`, appended to an incoming `X-Forwarded-For` (`203.0.113.7, 10.0.0.1`) — like nginx's `$proxy_add_x_forwarded_for`; only trust the entries your own proxies added |
 | `Via` | `1.1 rws` |
 | `Host` | Backend host (replaces the original `Host` header) |
 | `Connection` | `keep-alive` (pooled path) or `close` (non-pooled callers) |
+| `Content-Length` | Length of the forwarded body (exactly one) |
 
 ## Connection pooling
 
@@ -17441,7 +17445,11 @@ same machine.
 (`--disable-compression`: the Caddy and nginx configs don't compress, and
 `rws` compresses text by default), access logs off everywhere. `rws` is the
 release build (`--features "acme auth"`), Caddy 2.11.7, nginx from Ubuntu with
-`sendfile`, `open_file_cache` and upstream keep-alive enabled.
+`sendfile`, `open_file_cache` and upstream keep-alive enabled. nginx's
+`open_file_cache_valid 1s` trusts a cached file's size and modification time
+for a second; `rws` runs with the equivalent `open_file_cache_strict = false`
+(its default re-checks them with an `fstat` on every request, so an edit in
+place is served at once).
 
 | Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | CPU/request (µs) | Peak memory (MiB) |
 |---|---|---:|---:|---:|---:|---:|
