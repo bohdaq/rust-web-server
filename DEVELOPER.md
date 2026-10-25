@@ -89,6 +89,8 @@ script's header describes what it checks.
 `bench/run.sh` compares throughput against Caddy and nginx (also the manual
 `Benchmark` workflow). Judge a performance change with `RWS_BASE=<binary>`
 (workflow input `base_ref`): both builds in one run, on the same machine.
+`RWS_WORKERS=<n>` / `RWS_RUNTIME=per-core` (workflow
+inputs `rws_workers` / `rws_runtime`) bench rws with other runtime settings.
 
 ## Build
 

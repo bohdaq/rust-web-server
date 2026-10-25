@@ -77,6 +77,14 @@ allow_all = "yes"
 }
 
 #[test]
+fn runtime_is_shared_or_per_core() {
+    assert!(check_str("runtime = \"per-core\"\n").errors.is_empty());
+    assert!(check_str("runtime = \"shared\"\n").errors.is_empty());
+    let report = check_str("runtime = \"percore\"\n");
+    assert!(has(&report.errors, "runtime"), "{:?}", report.errors);
+}
+
+#[test]
 fn tls_files_must_come_in_pairs_and_exist() {
     let report = check_str("tls_cert_file = \"cert.pem\"\n");
     assert!(has(&report.errors, "tls_key_file is not"), "{:?}", report.errors);

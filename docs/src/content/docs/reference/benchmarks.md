@@ -180,6 +180,7 @@ workflow a **base_ref** (a branch, tag or commit) and it also builds that
 ref and benches it as `rws-base`, right after `rws`; locally, set
 `RWS_BASE=<binary>`. **base_workers** (`RWS_BASE_WORKERS`) runs `rws-base`
 with that many tokio workers — with no base ref, the same build again — to
-compare worker counts. (Fewer workers than CPUs raises the measured
+compare worker counts, and **base_runtime** (`RWS_BASE_RUNTIME`) does the same
+for `RWS_CONFIG_RUNTIME` (shared or per-core). (Fewer workers than CPUs raises the measured
 requests per second only because the load generator shares the runner's
 CPUs; on a dedicated server one worker per core is right.)

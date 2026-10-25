@@ -227,6 +227,11 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     report.error(format!("{key} = {value:?}: expected true or false"));
                 }
             }
+            "RWS_CONFIG_RUNTIME" => {
+                if !matches!(value.to_ascii_lowercase().as_str(), "shared" | "per-core") {
+                    report.error(format!("{key} = {value:?}: expected \"shared\" or \"per-core\""));
+                }
+            }
             "RWS_CONFIG_LOG_FORMAT" => {
                 if !matches!(value.to_ascii_lowercase().as_str(), "combined" | "json" | "off" | "none") {
                     report.error(format!("{key} = {value:?}: expected \"combined\", \"json\" or \"off\""));

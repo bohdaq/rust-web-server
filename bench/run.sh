@@ -52,7 +52,9 @@ RWS_BASE="${RWS_BASE:-}"
 # RWS_BASE_WORKERS=<n> runs rws-base with n tokio worker threads; without
 # RWS_BASE it benches the same rws binary again with that many workers.
 RWS_BASE_WORKERS="${RWS_BASE_WORKERS:-}"
-[ -n "$RWS_BASE_WORKERS" ] && [ -z "$RWS_BASE" ] && RWS_BASE="$RWS"
+# RWS_BASE_RUNTIME=shared|per-core: the same for rws-base's runtime.
+RWS_BASE_RUNTIME="${RWS_BASE_RUNTIME:-}"
+if [ -z "$RWS_BASE" ] && { [ -n "$RWS_BASE_WORKERS" ] || [ -n "$RWS_BASE_RUNTIME" ]; }; then RWS_BASE="$RWS"; fi
 OHA="${OHA:?set OHA to the oha binary}"
 CADDY="${CADDY:-}"
 NGINX="${NGINX:-}"
@@ -67,6 +69,10 @@ EXTENDED="${EXTENDED:-}"
 # instead of one per CPU.
 RWS_WORKERS="${RWS_WORKERS:-}"
 [ -n "$RWS_WORKERS" ] && export TOKIO_WORKER_THREADS="$RWS_WORKERS"
+# RWS_RUNTIME=per-core runs rws with one single-threaded runtime per worker
+# (RWS_CONFIG_RUNTIME) instead of the shared multi-threaded one.
+RWS_RUNTIME="${RWS_RUNTIME:-}"
+[ -n "$RWS_RUNTIME" ] && export RWS_CONFIG_RUNTIME="$RWS_RUNTIME"
 PERF="${PERF:-perf}"
 [ -n "$PERF_DIR" ] && mkdir -p "$PERF_DIR" && PERF_DIR="$(cd "$PERF_DIR" && pwd)"
 
@@ -277,11 +283,11 @@ EOF
 }
 bench_rws rws "$RWS"
 if [ -n "$RWS_BASE" ]; then
-  if [ -n "$RWS_BASE_WORKERS" ]; then
-    (export TOKIO_WORKER_THREADS="$RWS_BASE_WORKERS"; bench_rws rws-base "$RWS_BASE")
-  else
+  (
+    [ -n "$RWS_BASE_WORKERS" ] && export TOKIO_WORKER_THREADS="$RWS_BASE_WORKERS"
+    [ -n "$RWS_BASE_RUNTIME" ] && export RWS_CONFIG_RUNTIME="$RWS_BASE_RUNTIME"
     bench_rws rws-base "$RWS_BASE"
-  fi
+  )
 fi
 
 # ── Caddy ─────────────────────────────────────────────────────────────────────

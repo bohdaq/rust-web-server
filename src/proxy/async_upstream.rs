@@ -134,9 +134,10 @@ pub(crate) async fn forward(
     read_timeout: Duration,
 ) -> Result<Response, String> {
     let key = format!("{}:{}", host, port);
+    let pooled = crate::server::per_core::pool_key(&key);
     match tls {
         None => {
-            forward_on(pool(), &key, request, host, client_ip, read_timeout, || connect(&key, connect_timeout)).await
+            forward_on(pool(), &pooled, request, host, client_ip, read_timeout, || connect(&key, connect_timeout)).await
         }
         Some(tls) => {
             let connect_tls = || async {
@@ -150,7 +151,7 @@ pub(crate) async fn forward(
                     Err(_) => Err(format!("TLS handshake with {} timed out", key)),
                 }
             };
-            forward_on(tls.pool, &key, request, host, client_ip, read_timeout, connect_tls).await
+            forward_on(tls.pool, &pooled, request, host, client_ip, read_timeout, connect_tls).await
         }
     }
 }

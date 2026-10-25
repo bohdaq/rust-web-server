@@ -18,6 +18,8 @@ pub(crate) mod http1_async;
 pub(crate) mod body_stream;
 #[cfg(feature = "http2")]
 pub(crate) mod sendfile;
+#[cfg(feature = "http2")]
+pub mod per_core;
 pub(crate) mod framing;
 
 // The TCP/thread-pool accept loop below (`Server::setup`/`run`/`process`/…) needs
@@ -850,6 +852,72 @@ impl Address {
     }
 }
 
+/// One accepted TLS connection: handshake (bounded by
+/// `TLS_HANDSHAKE_TIMEOUT`), then HTTP/2 or HTTP/1.1 by ALPN.
+#[cfg(feature = "http2")]
+async fn serve_tls_connection(
+    tcp_stream: tokio::net::TcpStream,
+    peer_addr: std::net::SocketAddr,
+    acceptor: tokio_rustls::TlsAcceptor,
+    app: impl Application + Send + 'static + Clone,
+) {
+    let _ = tcp_stream.set_nodelay(true);
+    let handshake = tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, acceptor.accept(tcp_stream));
+    match handshake.await {
+        Err(_) => {} // client never finished the handshake
+        Ok(Err(e)) => eprintln!("TLS handshake failed: {}", e),
+        Ok(Ok(tls_stream)) => {
+            let server_conn = tls_stream.get_ref().1;
+            let sni = server_conn.server_name().map(|s| s.to_string());
+            let protocol = server_conn.alpn_protocol().map(|p| p.to_vec());
+
+            match protocol.as_deref() {
+                Some(b"h2") => {
+                    if let Err(e) = crate::h2_server::handle_connection(tls_stream, peer_addr, sni, app).await {
+                        eprintln!("H2 connection error: {}", e);
+                    }
+                }
+                _ => {
+                    crate::metrics::connection_open();
+                    let result = http1_async::serve(tls_stream, peer_addr, sni, true, app).await;
+                    crate::metrics::connection_close();
+                    if let Err(e) = result {
+                        crate::metrics::record_error();
+                        eprintln!("H1 TLS error: {}", e);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One accepted plain-HTTP connection.
+#[cfg(feature = "http2")]
+async fn serve_plain_connection(
+    tcp_stream: tokio::net::TcpStream,
+    peer_addr: std::net::SocketAddr,
+    app: impl Application + Send + 'static + Clone,
+) {
+    // Head and body go out as separate writes: don't let Nagle hold the
+    // body back waiting for an ACK.
+    let _ = tcp_stream.set_nodelay(true);
+    crate::metrics::connection_open();
+    let result = http1_async::serve(tcp_stream, peer_addr, None, false, app).await;
+    crate::metrics::connection_close();
+    if let Err(e) = result {
+        crate::metrics::record_error();
+        eprintln!("{}", e);
+    }
+}
+
+/// An accept error (e.g. out of file descriptors): report it and back off
+/// briefly instead of ending the loop.
+#[cfg(feature = "http2")]
+async fn accept_backoff(e: std::io::Error) {
+    eprintln!("TCP accept error: {}", e);
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+}
+
 /// Resolves when SIGTERM is received on Unix, or never on other platforms.
 /// Enables a single `select!` branch to handle both SIGTERM and Ctrl+C.
 #[cfg(feature = "http2")]
@@ -942,6 +1010,39 @@ impl Server {
             }
         };
 
+        #[cfg(unix)]
+        if per_core::enabled() {
+            println!("Listening for TLS connections (HTTP/1.1 + HTTP/2), per-core runtimes...");
+            let (acceptor_tx, acceptor_rx) = tokio::sync::watch::channel(tls_acceptor);
+            let accept_loop = move |listener: tokio::net::TcpListener, mut stop: tokio::sync::watch::Receiver<bool>| {
+                let app = app.clone();
+                let acceptor_rx = acceptor_rx.clone();
+                async move {
+                    loop {
+                        tokio::select! {
+                            result = listener.accept() => match result {
+                                Ok((tcp_stream, peer_addr)) => {
+                                    let acceptor = acceptor_rx.borrow().clone();
+                                    tokio::spawn(serve_tls_connection(tcp_stream, peer_addr, acceptor, app.clone()));
+                                }
+                                Err(e) => accept_backoff(e).await,
+                            },
+                            _ = per_core::stopped(&mut stop) => break,
+                        }
+                    }
+                }
+            };
+            Server::run_per_core(listener, accept_loop, move || {
+                let vhosts = crate::entry_point::get_virtual_hosts();
+                if let Ok(new_acceptor) = create_tls_acceptor_from_vhosts(&vhosts, &cert_path, &key_path) {
+                    let _ = acceptor_tx.send(new_acceptor);
+                    println!("[TLS] Certificates reloaded ({} virtual hosts).", vhosts.len());
+                }
+            })
+            .await;
+            return;
+        }
+
         listener
             .set_nonblocking(true)
             .expect("failed to set TCP listener to non-blocking");
@@ -955,46 +1056,7 @@ impl Server {
                 result = tokio_listener.accept() => {
                     match result {
                         Ok((tcp_stream, peer_addr)) => {
-                            let _ = tcp_stream.set_nodelay(true);
-                            let acceptor = tls_acceptor.clone();
-                            let app = app.clone();
-                            tokio::spawn(async move {
-                                let handshake = tokio::time::timeout(
-                                    http1_async::TLS_HANDSHAKE_TIMEOUT,
-                                    acceptor.accept(tcp_stream),
-                                );
-                                match handshake.await {
-                                    Err(_) => {} // client never finished the handshake
-                                    Ok(Err(e)) => eprintln!("TLS handshake failed: {}", e),
-                                    Ok(Ok(tls_stream)) => {
-                                        let server_conn = tls_stream.get_ref().1;
-                                        let sni = server_conn.server_name().map(|s| s.to_string());
-                                        let protocol = server_conn
-                                            .alpn_protocol()
-                                            .map(|p| p.to_vec());
-
-                                        match protocol.as_deref() {
-                                            Some(b"h2") => {
-                                                if let Err(e) =
-                                                    crate::h2_server::handle_connection(tls_stream, peer_addr, sni, app)
-                                                        .await
-                                                {
-                                                    eprintln!("H2 connection error: {}", e);
-                                                }
-                                            }
-                                            _ => {
-                                                crate::metrics::connection_open();
-                                                let result = http1_async::serve(tls_stream, peer_addr, sni, true, app).await;
-                                                crate::metrics::connection_close();
-                                                if let Err(e) = result {
-                                                    crate::metrics::record_error();
-                                                    eprintln!("H1 TLS error: {}", e);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            });
+                            tokio::spawn(serve_tls_connection(tcp_stream, peer_addr, tls_acceptor.clone(), app.clone()));
                         }
                         Err(e) => eprintln!("TCP accept error: {}", e),
                     }
@@ -1027,6 +1089,28 @@ impl Server {
     /// pool. An accept error (e.g. out of file descriptors) backs off briefly
     /// and keeps serving instead of ending the loop.
     pub async fn run_plain(listener: TcpListener, app: impl Application + Send + 'static + Clone) {
+        #[cfg(unix)]
+        if per_core::enabled() {
+            let accept_loop = move |listener: tokio::net::TcpListener, mut stop: tokio::sync::watch::Receiver<bool>| {
+                let app = app.clone();
+                async move {
+                    loop {
+                        tokio::select! {
+                            result = listener.accept() => match result {
+                                Ok((tcp_stream, peer_addr)) => {
+                                    tokio::spawn(serve_plain_connection(tcp_stream, peer_addr, app.clone()));
+                                }
+                                Err(e) => accept_backoff(e).await,
+                            },
+                            _ = per_core::stopped(&mut stop) => break,
+                        }
+                    }
+                }
+            };
+            Server::run_per_core(listener, accept_loop, || {}).await;
+            return;
+        }
+
         listener
             .set_nonblocking(true)
             .expect("failed to set TCP listener to non-blocking");
@@ -1038,24 +1122,9 @@ impl Server {
                 result = tokio_listener.accept() => {
                     match result {
                         Ok((tcp_stream, peer_addr)) => {
-                            // Head and body go out as separate writes: don't let
-                            // Nagle hold the body back waiting for an ACK.
-                            let _ = tcp_stream.set_nodelay(true);
-                            let app = app.clone();
-                            tokio::spawn(async move {
-                                crate::metrics::connection_open();
-                                let result = http1_async::serve(tcp_stream, peer_addr, None, false, app).await;
-                                crate::metrics::connection_close();
-                                if let Err(e) = result {
-                                    crate::metrics::record_error();
-                                    eprintln!("{}", e);
-                                }
-                            });
+                            tokio::spawn(serve_plain_connection(tcp_stream, peer_addr, app.clone()));
                         }
-                        Err(e) => {
-                            eprintln!("TCP accept error: {}", e);
-                            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                        }
+                        Err(e) => accept_backoff(e).await,
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
@@ -1073,6 +1142,54 @@ impl Server {
                 }
             }
         }
+    }
+
+    /// Per-core mode of `run_tls`/`run_plain` ([`per_core`]): rebinds
+    /// `listener`'s address as one `SO_REUSEPORT` socket per runtime, runs
+    /// `accept_loop` on each, and handles the signals here — SIGINT/SIGTERM
+    /// stop every loop, SIGHUP reloads the config and calls `on_reload`.
+    #[cfg(unix)]
+    async fn run_per_core<F, Fut>(listener: TcpListener, accept_loop: F, on_reload: impl Fn())
+    where
+        F: Fn(tokio::net::TcpListener, tokio::sync::watch::Receiver<bool>) -> Fut + Send + Clone + 'static,
+        Fut: std::future::Future<Output = ()>,
+    {
+        let addr = match listener.local_addr() {
+            Ok(a) => a,
+            Err(e) => return eprintln!("per-core runtimes: {}", e),
+        };
+        // The setup listener has no SO_REUSEPORT, so it can't share the port.
+        drop(listener);
+        let count = per_core::runtime_count();
+        let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
+        let handles = per_core::spawn(addr, count, stop_rx, accept_loop);
+        println!("Started {} per-core runtimes on {}.", handles.len(), addr);
+
+        loop {
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {
+                    crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+                    println!("\nShutting down gracefully (SIGINT).");
+                    break;
+                }
+                _ = sigterm() => {
+                    crate::metrics::SERVER_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+                    println!("\nShutting down gracefully (SIGTERM).");
+                    break;
+                }
+                _ = sighup() => {
+                    crate::config_reload::reload();
+                    on_reload();
+                }
+            }
+        }
+        let _ = stop_tx.send(true);
+        let _ = tokio::task::spawn_blocking(move || {
+            for h in handles {
+                let _ = h.join();
+            }
+        })
+        .await;
     }
 
     /// Binds a plain-HTTP listener on the port in `RWS_CONFIG_HTTP_REDIRECT_PORT` and sends
