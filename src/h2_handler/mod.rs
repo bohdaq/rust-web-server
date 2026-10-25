@@ -47,23 +47,48 @@ pub async fn handle_connection(
         .map_err(|e| format!("H2 handshake failed: {}", e))?;
 
     let (server_ip, server_port, _) = get_ip_port_thread_count();
+    let connection = ConnectionInfo {
+        client: Address {
+            ip: peer_addr.ip().to_string(),
+            port: peer_addr.port() as i32,
+        },
+        server: Address {
+            ip: server_ip,
+            port: server_port,
+        },
+        request_size: 0,
+        sni_hostname,
+    };
 
     while let Some(result) = conn.accept().await {
         match result {
             Ok((request, respond)) => {
-                let connection = ConnectionInfo {
-                    client: Address {
-                        ip: peer_addr.ip().to_string(),
-                        port: peer_addr.port() as i32,
-                    },
-                    server: Address {
-                        ip: server_ip.clone(),
-                        port: server_port,
-                    },
-                    request_size: 0,
-                    sni_hostname: sni_hostname.clone(),
-                };
-                tokio::spawn(handle_stream(request, respond, connection, peer_addr, app.clone()));
+                // A request without a body that the app answers inline
+                // (`Application::runs_inline`: static files, health checks —
+                // never anything that waits) is answered right here, as on
+                // HTTP/1.1. A task per stream, then waking this task to write
+                // the frames, cost about as much as the request itself. The
+                // response is queued on the stream and written by the next
+                // `accept()` poll.
+                if request.body().is_end_stream() {
+                    let rws_request = rws_request(&request, Vec::new());
+                    if app.runs_inline(&rws_request, &connection) {
+                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            app.execute(&rws_request, &connection)
+                        }));
+                        let result = result.map_err(|_| "handler panicked".to_string());
+                        if let Some((respond, response, is_head)) = finish(rws_request, result, respond, peer_addr) {
+                            if response.stream_file.is_some() || response.stream_pipe.is_some() {
+                                // A streamed body waits on flow control: not here.
+                                tokio::spawn(send_h2_response(respond, response, is_head));
+                            } else {
+                                send_h2_response(respond, response, is_head).await;
+                            }
+                        }
+                        continue;
+                    }
+                }
+                tokio::spawn(handle_stream(request, respond, connection.clone(), peer_addr, app.clone()));
             }
             Err(e) => {
                 eprintln!("H2 stream accept error: {}", e);
@@ -75,13 +100,9 @@ pub async fn handle_connection(
     Ok(())
 }
 
-async fn handle_stream(
-    request: http::Request<h2::RecvStream>,
-    respond: h2::server::SendResponse<Bytes>,
-    connection: ConnectionInfo,
-    peer_addr: std::net::SocketAddr,
-    app: impl Application + Send + 'static,
-) {
+/// The rws `Request` for an HTTP/2 request (method, path and query,
+/// headers) with `body`.
+fn rws_request(request: &http::Request<h2::RecvStream>, body: Vec<u8>) -> Request {
     let method = request.method().to_string();
     let uri = request
         .uri()
@@ -89,7 +110,7 @@ async fn handle_stream(
         .map(|pq| pq.as_str().to_string())
         .unwrap_or_else(|| "/".to_string());
 
-    let mut headers: Vec<Header> = Vec::new();
+    let mut headers: Vec<Header> = Vec::with_capacity(request.headers().len());
     for (name, value) in request.headers() {
         if let Ok(v) = value.to_str() {
             headers.push(Header {
@@ -98,6 +119,55 @@ async fn handle_stream(
             });
         }
     }
+
+    Request {
+        method,
+        request_uri: uri,
+        http_version: VERSION.http_2_0.to_string(),
+        headers,
+        body,
+    }
+}
+
+/// After the app has run: errors become a 500 here (`None`); otherwise
+/// metrics, gzip, HSTS and the access log, and what to send.
+fn finish(
+    rws_request: Request,
+    result: Result<Result<Response, String>, String>,
+    respond: h2::server::SendResponse<Bytes>,
+    peer_addr: std::net::SocketAddr,
+) -> Option<(h2::server::SendResponse<Bytes>, Response, bool)> {
+    let mut rws_response = match result {
+        Ok(Ok(r)) => r,
+        Ok(Err(message)) => {
+            eprintln!("App error on H2 stream: {}", message);
+            send_error_response(respond, StatusCode::INTERNAL_SERVER_ERROR);
+            return None;
+        }
+        Err(e) => {
+            eprintln!("Handler panicked on H2 stream: {}", e);
+            send_error_response(respond, StatusCode::INTERNAL_SERVER_ERROR);
+            return None;
+        }
+    };
+    crate::metrics::record_request();
+    crate::compression::apply_gzip(&rws_request, &mut rws_response);
+    rws_response.headers.push(crate::header::Header::get_hsts_header());
+
+    Log::log_access(&rws_request, &rws_response, &peer_addr);
+
+    let is_head = rws_request.method == crate::request::METHOD.head;
+    Some((respond, rws_response, is_head))
+}
+
+async fn handle_stream(
+    request: http::Request<h2::RecvStream>,
+    respond: h2::server::SendResponse<Bytes>,
+    connection: ConnectionInfo,
+    peer_addr: std::net::SocketAddr,
+    app: impl Application + Send + 'static,
+) {
+    let head_only = rws_request(&request, Vec::new());
 
     let max_body_size = crate::entry_point::get_max_body_size();
     let mut body_stream = request.into_body();
@@ -120,41 +190,15 @@ async fn handle_stream(
         }
     }
 
-    let rws_request = Request {
-        method,
-        request_uri: uri,
-        http_version: VERSION.http_2_0.to_string(),
-        headers,
-        body,
+    let rws_request = Request { body, ..head_only };
+
+    let (rws_request, result) = match crate::server::http1_async::execute_request(app, rws_request, &connection).await {
+        Ok((rws_request, result)) => (rws_request, Ok(result)),
+        Err(e) => (Request { method: String::new(), request_uri: String::new(), http_version: String::new(), headers: Vec::new(), body: Vec::new() }, Err(e)),
     };
-
-    let (rws_request, result) =
-        match crate::server::http1_async::execute_request(app, rws_request, &connection).await {
-            Ok(done) => done,
-            Err(e) => {
-                eprintln!("Handler panicked on H2 stream: {}", e);
-                send_error_response(respond, StatusCode::INTERNAL_SERVER_ERROR);
-                return;
-            }
-        };
-    let rws_response = match result {
-        Ok(r) => r,
-        Err(message) => {
-            eprintln!("App error on H2 stream: {}", message);
-            send_error_response(respond, StatusCode::INTERNAL_SERVER_ERROR);
-            return;
-        }
-    };
-
-    let mut rws_response = rws_response;
-    crate::metrics::record_request();
-    crate::compression::apply_gzip(&rws_request, &mut rws_response);
-    rws_response.headers.push(crate::header::Header::get_hsts_header());
-
-    Log::log_access(&rws_request, &rws_response, &peer_addr);
-
-    let is_head = rws_request.method == crate::request::METHOD.head;
-    send_h2_response(respond, rws_response, is_head).await;
+    if let Some((respond, response, is_head)) = finish(rws_request, result, respond, peer_addr) {
+        send_h2_response(respond, response, is_head).await;
+    }
 }
 
 async fn send_h2_response(
