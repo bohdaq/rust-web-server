@@ -24,6 +24,12 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **SPA fallback** — `RWS_CONFIG_SPA_FALLBACK=index.html` serves a fallback file for unmatched routes instead of `404`, for React Router/Vue Router/etc. deep links; opt-in, scoped by an extension heuristic and `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES`
 - **Thread pool** (http1 only) — hand-rolled `ThreadPool`; connection-per-thread; no tokio — `http1`
 - **Tokio async runtime** — used for `http2` and `http3` builds; `http1` is fully synchronous
+- **Request framing** — heads up to 64 KiB across any number of reads (`431` beyond), pipelining, chunked request bodies; `Content-Length` + `Transfer-Encoding` or conflicting lengths are rejected (`400`) so a proxy in front can't be desynced (request smuggling)
+- **`Expect: 100-continue`** — `100 Continue` is sent before the body is read, after the body-size check
+- **Max request body size** — `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` rejects oversized bodies with `413` before buffering, on HTTP/1.1, HTTP/2 and HTTP/3
+- **Outbound HTTP client** — `Client` (sync) and `AsyncClient` (`http2`); HTTPS with `http-client` or `http2`; redirects, `.form()`, `.body_json()`
+- **WebSocket** (RFC 6455) — handshake and frame codec built in
+- **WASM guest component** — `rws-wasm-shim` runs `App`/`Router`/middleware inside a `wasi:http/proxy` component (Wasmtime, Spin, Fastly Compute); see [WASM](/deployment/wasm/)
 
 ---
 
@@ -71,12 +77,18 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **Per-route Bearer auth** — `BearerAuthMiddleware` in config-driven mode; `JwtLayer` in code
 - **Route matching** — host, path prefix, exact path, HTTP method, `Content-Type` prefix; first-match wins
 - **Service discovery** — `BackendPool` with `Static`/`EnvPrefix`/`File`/`Dns`/`DnsSrv` (weighted)/`Consul`/`Docker` (label value as address) sources on a poll loop, plus `EtcdWatch` on a dedicated live watch stream
+- **Circuit breaker + retries** — `CircuitBreaker` (Closed → Open → HalfOpen, capped probes), `RedisCircuitBreaker` (state shared across instances), `RetryLayer` on 502/503/504; `ReverseProxy::with_circuit_breaker`; `rws_circuit_breaker_state` metric
+- **Canary / traffic splitting** — `CanaryLayer` with smooth weighted round-robin, live weight updates, `BackendPool` groups
+- **Kubernetes Ingress** — `KubernetesIngressWatcher` watches the API (Exact/Prefix `pathType`, `ingressClassName`), `.from_service_account()` in-cluster
+- **Private-CA upstreams** — `[[upstream]] tls_ca_file` / `ReverseProxy::tls_ca_file`
+- **Non-blocking proxying** — config routes without middleware forward on the event loop, holding no thread
 
 ---
 
 ## Security
 
 - **`RateLimitLayer`** — sliding-window rate limiter keyed by client IP; global singleton via `rate_limit::global()`; returns `429` when budget exceeded
+- **`RedisRateLimiter`** — fixed-window limiter in Redis for a budget shared across instances
 - **`BasicAuthLayer`** — HTTP Basic authentication middleware — `auth`
 - **`JwtLayer`** — JWT Bearer token validation middleware (HS256) — `auth`; RS256/ES256 against a static public key via `::rs256`/`::es256` — `auth-asymmetric`
 - **`ForwardAuthLayer`** — delegates the allow/deny decision to an external HTTP service (Traefik/nginx `auth_request` style) — `auth`
@@ -106,6 +118,11 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **Structured logging** — `RWS_CONFIG_LOG_FORMAT=json` (default), `combined`, or `off`; hot-reloadable
 - **Config hot reload** — `SIGHUP` or `POST /admin/config/reload` reloads CORS, rate limits, log format, TLS certs; no restart required
 - **Kubernetes-ready** — `/healthz`, `/readyz`, `/metrics` all built in; graceful `SIGTERM` drain; static binary with no system dependencies
+- **`rws --check`** — validates `rws.config.toml` (unknown keys, bad values, TLS files, undeclared upstreams, unset auth secrets) and exits 1 on errors, like `nginx -t`; `--format=json`
+- **Helm chart** — `helm/rws/`
+- **Background scheduler** — fixed-rate, fixed-delay and 6-field cron tasks
+- **Job queue** — `JobQueue` (in-memory) and `PersistentJobQueue` (model-backed); retries with exponential backoff — `jobs`
+- **Email** — `Mailer` over SMTP, STARTTLS or SMTPS; text + HTML — `mailer`
 
 ---
 
@@ -117,8 +134,9 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **Prompt registration** — `.prompt(name, description, handler)`
 - **Bearer auth gate** — `.require_bearer(token)` gates all MCP requests behind a static token
 - **Fallthrough** — `.wrap(app)` passes non-MCP requests to another `Application`
-- **Built-in rws tools** — `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`
+- **20 built-in rws tools** in the binary — config, metrics, routes, cache, rate limits, CORS, static files, reload, maintenance mode, IP blocklist, feature flags, recent requests/errors (see [MCP](/mcp/overview/))
 - **SSE streaming** — `Sse` builder for streaming AI tokens to browser clients
+- **Protocol coverage** — session context (`.tool_with_context`), tool annotations, image/embedded content, JSON-RPC batches, list pagination, `GET /mcp` SSE push, `logging/setLevel`, dynamic registration with `list_changed`, progress, `completion/complete`, cancellation, `resources/subscribe`, server-side sampling, `roots/list`, async tools (`http2`), OAuth (`.require_oauth`, `sso`)
 
 ---
 
@@ -136,6 +154,29 @@ All ORM features require at least one of `model-sqlite`, `model-postgres`, or `m
 - **SQLite** — `sqlx` SQLite driver — `model-sqlite`
 - **PostgreSQL** — `sqlx` Postgres driver — `model-postgres`
 - **MySQL / MariaDB** — `sqlx` MySQL driver — `model-mysql`
+
+---
+
+## Sessions & Cookies
+
+- **`CookieJar` / `SetCookie`** — parse request cookies, write every RFC 6265 attribute
+- **Sessions** — `SessionStore` (in-memory TTL), `DbSessionStore` (model-backed), `RedisSessionStore`
+
+---
+
+## File / Object Storage
+
+- **`Storage` trait** — `put` / `get` / `delete` / `url`; swap backends without touching handlers
+- **`LocalStorage`** — local disk — `storage-local`
+- **`S3Storage`** — AWS S3, Cloudflare R2, MinIO via SigV4; static keys or EKS IRSA / ECS task role / EC2 IMDSv2; no AWS SDK — `storage-s3`
+- **`AzureBlobStorage`** — Shared Key or Managed Identity; no Azure SDK — `storage-azure`
+
+---
+
+## Secrets
+
+- **`secrets::resolve`** — `vault://path#field`, `aws-sm://name[#field]`, `azkv://vault/secret` resolved over HTTPS — `secrets`
+- **Any `RWS_CONFIG_*` can be a reference** — `resolve_env_vars()` runs in `Server::setup()`; a broken reference fails startup instead of running with the literal string
 
 ---
 
