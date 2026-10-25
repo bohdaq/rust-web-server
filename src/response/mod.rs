@@ -886,6 +886,84 @@ impl Response {
         return Ok(response);
     }
 
+    /// [`Response::parse`] and `proxy::normalize_upstream_response` in one
+    /// pass, for a buffered upstream response: the status line is re-emitted
+    /// as HTTP/1.1, headers named in `dropped` (compared ignoring ASCII case)
+    /// are skipped before their value is copied, and every `Content-Type`
+    /// moves onto the body (the first one is its type). A
+    /// `multipart/byteranges` response goes the general way. The result is
+    /// what the two-step path builds (`response_tests::parse_upstream_*`) —
+    /// minus a copy per dropped header, a second scan for `Content-Type`
+    /// and the `retain` that removed them.
+    pub(crate) fn parse_upstream(input: &[u8], dropped: &[&str]) -> Result<Response, String> {
+        let mut response = Response {
+            http_version: crate::http::VERSION.http_1_1.to_string(),
+            status_code: 0,
+            reason_phrase: String::new(),
+            headers: Vec::with_capacity(16),
+            content_range_list: vec![],
+            stream_file: None,
+            stream_pipe: None,
+        };
+        let mut content_type: Option<&str> = None;
+        let mut pos = 0usize;
+        let mut first = true;
+        loop {
+            let rest = &input[pos.min(input.len())..];
+            let line_len = rest.iter().position(|&b| b == b'\n').map_or(rest.len(), |i| i + 1);
+            pos += line_len;
+            let line = std::str::from_utf8(&rest[..line_len]).map_err(|e| e.to_string())?;
+            if first {
+                let status_line = without_cr_lf(line);
+                let (_, status_code, reason_phrase) = Response::status_line_parts(&status_line)?;
+                response.status_code = status_code;
+                response.reason_phrase = reason_phrase.to_string();
+            }
+            if line.trim().is_empty() {
+                if content_type.is_some_and(|ct| ct.starts_with("multipart/byteranges")) {
+                    return Response::parse(input).map(normalized_like_proxy(dropped));
+                }
+                let body = input[pos.min(input.len())..].to_vec();
+                response.content_range_list = vec![ContentRange {
+                    unit: Range::BYTES.to_string(),
+                    range: Range { start: 0, end: body.len() as u64 },
+                    size: Decimal::new(body.len() as u128).as_str().to_string(),
+                    content_type: content_type.unwrap_or(MimeType::APPLICATION_OCTET_STREAM).to_string(),
+                    body,
+                }];
+                return Ok(response);
+            }
+            if line_len == 0 {
+                return Err("unable to parse".to_string());
+            }
+            if !first {
+                let (name, raw_value) = split_name_value(line).ok_or_else(|| format!("unable to parse header: {}", line))?;
+                if name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH) {
+                    let value = without_cr_lf(raw_value);
+                    let _: usize = value.trim().parse().map_err(|_| format!("invalid Content-Length: {:?}", value))?;
+                }
+                if name.eq_ignore_ascii_case(Header::_CONTENT_TYPE) {
+                    if content_type.is_none() {
+                        // Borrowed from `input`; an embedded CR/LF (rare)
+                        // falls back to the general path to stay exact.
+                        match without_cr_lf(raw_value) {
+                            std::borrow::Cow::Borrowed(v) => content_type = Some(v),
+                            std::borrow::Cow::Owned(_) => return Response::parse(input).map(normalized_like_proxy(dropped)),
+                        }
+                    }
+                    continue;
+                }
+                if !dropped.iter().any(|d| name.eq_ignore_ascii_case(d)) {
+                    response.headers.push(Header {
+                        name: Header::name_from(name),
+                        value: without_cr_lf(raw_value).into_owned().into(),
+                    });
+                }
+            }
+            first = false;
+        }
+    }
+
     pub fn parse_raw_response_via_cursor(
         cursor: &mut Cursor<&[u8]>,
         mut iteration_number: usize,
@@ -999,6 +1077,29 @@ impl New for Response {
         }
     }
 }
+/// The general path of [`Response::parse_upstream`]: what
+/// `proxy::normalize_upstream_response` does to a parsed response.
+fn normalized_like_proxy<'a>(dropped: &'a [&'a str]) -> impl FnOnce(Response) -> Response + 'a {
+    move |mut response: Response| {
+        response.http_version.clear();
+        response.http_version.push_str(crate::http::VERSION.http_1_1);
+        let has_body = !response.content_range_list.is_empty();
+        if let [range] = response.content_range_list.as_mut_slice() {
+            if let Some(h) = response.headers.iter().find(|h| h.name.eq_ignore_ascii_case(Header::_CONTENT_TYPE)) {
+                range.content_type.clear();
+                range.content_type.push_str(&h.value);
+            }
+        }
+        response.headers.retain(|h| {
+            if h.name.eq_ignore_ascii_case(Header::_CONTENT_TYPE) {
+                return !has_body;
+            }
+            !dropped.iter().any(|d| h.name.eq_ignore_ascii_case(d))
+        });
+        response
+    }
+}
+
 /// `s` with every CR and LF removed — borrowed when they only end the line.
 fn without_cr_lf(s: &str) -> std::borrow::Cow<'_, str> {
     let trimmed = s.strip_suffix('\n').unwrap_or(s);

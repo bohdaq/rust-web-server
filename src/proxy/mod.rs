@@ -439,7 +439,7 @@ fn rewrite_as_content_length(buf: &mut Vec<u8>, header_end: usize, decoded: &[u8
 
 /// Headers rws regenerates for a buffered body, plus hop-by-hop headers
 /// (RFC 9110 §7.6.1) that must not be forwarded.
-const REGENERATED_OR_HOP_BY_HOP: &[&str] = &[
+pub(crate) const REGENERATED_OR_HOP_BY_HOP: &[&str] = &[
     "content-length", "transfer-encoding", "connection", "keep-alive",
     "proxy-connection", "te", "trailer", "upgrade",
 ];
@@ -855,8 +855,8 @@ fn exchange<S: UpstreamIo>(
         if !header_lower.lines().any(|l| l.starts_with("connection:") && l.contains("close")) {
             pool.release(key, stream);
         }
-        return match Response::parse(&header_bytes) {
-            Ok(response) => Exchange::Done(normalize_upstream_response(response)),
+        return match Response::parse_upstream(&header_bytes, REGENERATED_OR_HOP_BY_HOP) {
+            Ok(response) => Exchange::Done(response),
             Err(e) => Exchange::Failed(e),
         };
     }
@@ -878,8 +878,8 @@ fn exchange<S: UpstreamIo>(
             if reusable {
                 pool.release(key, stream);
             }
-            match Response::parse(&resp_bytes) {
-                Ok(response) => Exchange::Done(normalize_upstream_response(response)),
+            match Response::parse_upstream(&resp_bytes, REGENERATED_OR_HOP_BY_HOP) {
+                Ok(response) => Exchange::Done(response),
                 Err(e) => Exchange::Failed(e),
             }
         }

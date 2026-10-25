@@ -23,7 +23,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use super::{
-    build_request, is_idempotent, normalize_upstream_response, parse_status_and_headers, HeadFacts,
+    build_request, is_idempotent, parse_status_and_headers, HeadFacts,
     ConcatReader, Pool, POOL_MAX_IDLE,
 };
 use crate::request::Request;
@@ -307,8 +307,8 @@ async fn exchange<S: UpstreamConn>(
     if reusable {
         pool.release(key, stream);
     }
-    match Response::parse(&buf) {
-        Ok(response) => Exchange::Done(normalize_upstream_response(response)),
+    match Response::parse_upstream(&buf, super::REGENERATED_OR_HOP_BY_HOP) {
+        Ok(response) => Exchange::Done(response),
         Err(e) => Exchange::Failed(e),
     }
 }

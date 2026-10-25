@@ -1193,3 +1193,80 @@ fn head_facts_agree_with_the_lowercase_scans() {
         assert_eq!(content_length, facts.content_length, "{label:?}");
     }
 }
+
+/// `Response::parse_upstream` must build exactly what the two-step path —
+/// `Response::parse` then `normalize_upstream_response` — builds, on the
+/// response parser's reference corpus and seeded mutations of it.
+#[test]
+fn parse_upstream_matches_parse_then_normalize() {
+    fn summary(result: &Result<crate::response::Response, String>) -> String {
+        match result {
+            Err(e) => format!("Err({e})"),
+            Ok(r) => {
+                let mut s = format!("{:?} {} {:?}\n", r.http_version, r.status_code, r.reason_phrase);
+                for h in &r.headers {
+                    s.push_str(&format!("{:?}={:?}\n", h.name, h.value));
+                }
+                for cr in &r.content_range_list {
+                    s.push_str(&format!("[{} {}-{} {} {:?} {:?}]\n", cr.unit, cr.range.start, cr.range.end, cr.size, cr.content_type, cr.body));
+                }
+                s
+            }
+        }
+    }
+    let corpus: Vec<&[u8]> = vec![
+        b"HTTP/1.1 200 OK\r\nServer: nginx/1.24.0\r\nDate: Sun, 25 Oct 2026 16:00:00 GMT\r\nContent-Type: application/octet-stream\r\nContent-Length: 5\r\nLast-Modified: x\r\nConnection: keep-alive\r\nETag: \"a\"\r\nAccept-Ranges: bytes\r\n\r\nhello",
+        b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello",
+        b"HTTP/1.1 404 File not found\r\nServer: x\r\n\r\n",
+        b"HTTP/1.1 204\r\n\r\n",
+        b"HTTP/1.0 599 \r\nX:  two spaces \r\n\r\nbody\r\nmore",
+        b"HTTP/1.1 200 OK\nLF-Only: yes\nTransfer-Encoding: chunked\n\nbody",
+        b"HTTP/1.1 200 OK\r\nNo-Separator\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nName:\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nA:b: c\r\nD::  e\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nX: mid\rcr\r\nContent-Type: te\rxt\r\n\r\n",
+        b"HTTP/1.1 200 O\rK\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nContent-Length: nope\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\ncontent-length:  7 \r\nKeep-Alive: timeout=5\r\nTE: x\r\nUpgrade: h2c\r\nTrailer: y\r\nProxy-Connection: z\r\n\r\n1234567",
+        b"HTTP/1.1 200 OK\r\nX: y",
+        b"HTTP/1.1 200 OK",
+        b"HTTP/1.1 200 OK\r\n \t \r\nafter-blank",
+        b"HTTP/2 200 OK\r\n\r\n",
+        b"HTTP/1.1 20 OK\r\n\r\n",
+        b"\r\n\r\n",
+        b"",
+        b"HTTP/1.1 200 OK\r\nX: \xff\xfe\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nX: \xc3\xa9t\xc3\xa9\r\n\r\n\xff\x00binary",
+        b"HTTP/1.1 206 Partial Content\r\nContent-Type: multipart/byteranges; boundary=XX\r\nConnection: close\r\n\r\n--XX\r\nContent-Type: text/plain\r\nContent-Range: bytes 0-1/10\r\n\r\nab\r\n--XX\r\nContent-Type: text/plain\r\nContent-Range: bytes 8-9/10\r\n\r\nij\r\n--XX--\r\n",
+        b"HTTP/1.1 206 Partial Content\r\nContent-Type: multipart/byteranges\r\n\r\n--XX\r\n",
+        b"HTTP/1.1 200 OK\r\nContent-Type: a\r\ncontent-type: b\r\nCONNECTION: close\r\n\r\nx",
+        b"HTTP/1.1 304 Not Modified\r\nETag: \"a\"\r\nContent-Type: text/html\r\n\r\n",
+    ];
+    let mut seed: u64 = 0x2545_F491_4F6C_DD1D;
+    let mut next = move || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; seed };
+    let interesting = [b'\r', b'\n', b' ', b':', b'\t', 0xff, 0xc3, b'0', b'-'];
+    let mut checked = 0;
+    for input in &corpus {
+        let mut cases = vec![input.to_vec()];
+        for _ in 0..200 {
+            let mut m = input.to_vec();
+            for _ in 0..1 + next() % 3 {
+                let r = next();
+                match r % 3 {
+                    0 if !m.is_empty() => { let i = (r >> 8) as usize % m.len(); m[i] = interesting[(r >> 32) as usize % interesting.len()]; }
+                    1 => { let i = (r >> 8) as usize % (m.len() + 1); m.insert(i, interesting[(r >> 32) as usize % interesting.len()]); }
+                    _ if !m.is_empty() => { let i = (r >> 8) as usize % m.len(); m.remove(i); }
+                    _ => {}
+                }
+            }
+            cases.push(m);
+        }
+        for case in cases {
+            let fused = crate::response::Response::parse_upstream(&case, super::REGENERATED_OR_HOP_BY_HOP);
+            let two_step = crate::response::Response::parse(&case).map(super::normalize_upstream_response);
+            assert_eq!(summary(&two_step), summary(&fused), "input {:?}", String::from_utf8_lossy(&case));
+            checked += 1;
+        }
+    }
+    assert!(checked > 5000);
+}
