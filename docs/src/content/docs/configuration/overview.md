@@ -127,3 +127,11 @@ paths) read them directly:
 ```rust
 let port = std::env::var("RWS_CONFIG_PORT").unwrap_or_else(|_| "7878".to_string());
 ```
+
+## Memory
+
+`rws` reads each request in chunks of `request_allocation_size_in_bytes`
+(default 10000 bytes); larger bodies span several reads, and
+`max_body_size_in_bytes` caps them (`0` = unlimited). Static files over
+256 KiB are streamed from disk rather than buffered, and so are proxied
+upstream bodies over 1 MB.

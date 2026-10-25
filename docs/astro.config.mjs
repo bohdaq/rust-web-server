@@ -164,6 +164,7 @@ export default defineConfig({
           label: 'Reference',
           items: [
             { label: 'API Reference', link: '/reference/api/' },
+            { label: 'Troubleshooting', link: '/reference/troubleshooting/' },
             { label: 'Benchmarks',    link: '/reference/benchmarks/' },
             { label: 'Roadmap',       link: '/reference/roadmap/' },
           ],
