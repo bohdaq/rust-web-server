@@ -1092,3 +1092,19 @@ fn normalize_upstream_response_moves_content_type_and_drops_regenerated_headers(
     let head = crate::proxy::normalize_upstream_response(crate::response::Response { content_range_list: vec![], ..head });
     assert_eq!(1, head.headers.len());
 }
+
+#[test]
+fn pool_release_respects_max_idle_per_key_and_acquire_returns_streams() {
+    use crate::proxy::pool::Pool;
+    let pool: Pool<u32> = Pool::new(2, Duration::from_secs(30));
+    assert!(pool.acquire("a:1").is_none());
+    pool.release("a:1", 1);
+    pool.release("a:1", 2);
+    pool.release("a:1", 3); // over max_idle for this key: dropped
+    pool.release("b:2", 4);
+    assert_eq!(3, pool.idle_count());
+    assert_eq!(Some(1), pool.acquire("a:1"));
+    assert_eq!(Some(2), pool.acquire("a:1"));
+    assert_eq!(None, pool.acquire("a:1"));
+    assert_eq!(Some(4), pool.acquire("b:2"));
+}

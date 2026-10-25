@@ -54,6 +54,30 @@ impl Header {
         Header { name: name.into(), value: value.into() }
     }
 
+    /// A header name taken from a parsed message: borrowed when it is one
+    /// of the common names spelled exactly as listed (canonical or lower
+    /// case — the forms clients and servers actually send), owned otherwise.
+    /// Same text either way; it only saves the allocation.
+    pub(crate) fn name_from(name: &str) -> Cow<'static, str> {
+        const COMMON: &[&str] = &[
+            "Host", "host", "User-Agent", "user-agent", "Accept", "accept",
+            "Accept-Encoding", "accept-encoding", "Accept-Language", "accept-language",
+            "Connection", "connection", "Content-Type", "content-type",
+            "Content-Length", "content-length", "Date", "date", "Server", "server",
+            "Last-Modified", "last-modified", "ETag", "etag", "Accept-Ranges", "accept-ranges",
+            "Cache-Control", "cache-control", "Cookie", "cookie", "Set-Cookie", "set-cookie",
+            "Referer", "referer", "Origin", "origin", "Authorization", "authorization",
+            "If-None-Match", "if-none-match", "If-Modified-Since", "if-modified-since",
+            "Transfer-Encoding", "transfer-encoding", "Keep-Alive", "keep-alive",
+            "Vary", "vary", "Upgrade-Insecure-Requests", "upgrade-insecure-requests",
+            "X-Forwarded-For", "x-forwarded-for", "Via", "via",
+        ];
+        match COMMON.iter().find(|common| **common == name) {
+            Some(common) => Cow::Borrowed(common),
+            None => Cow::Owned(name.to_string()),
+        }
+    }
+
     pub fn as_string(&self) -> String {
         let formatted = format!("{}: {}", self.name, self.value);
         formatted

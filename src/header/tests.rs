@@ -252,3 +252,19 @@ fn standard_header_list_is_borrowed_except_date() {
         assert_eq!(!csp.is_empty(), list.iter().any(|h| h.name == Header::_CONTENT_SECURITY_POLICY && h.value == csp));
     }
 }
+
+#[test]
+fn name_from_borrows_common_names_in_their_exact_spelling() {
+    use std::borrow::Cow;
+    for name in ["Host", "host", "Content-Type", "content-type", "ETag", "X-Forwarded-For"] {
+        let n = Header::name_from(name);
+        assert!(matches!(n, Cow::Borrowed(_)), "{name}");
+        assert_eq!(name, n);
+    }
+    // Other spellings and unknown names are kept exactly, owned.
+    for name in ["HOST", "Content-type", "X-Custom", "", "host "] {
+        let n = Header::name_from(name);
+        assert!(matches!(n, Cow::Owned(_)), "{name:?}");
+        assert_eq!(name, n);
+    }
+}

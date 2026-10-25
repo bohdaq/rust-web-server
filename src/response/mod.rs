@@ -969,7 +969,7 @@ impl Response {
     pub fn parse_http_response_header_string(header_string: &str) -> Result<Header, String> {
         match split_name_value(header_string) {
             Some((header_name, raw_header_value)) => Ok(Header {
-                name: header_name.to_string().into(),
+                name: Header::name_from(header_name),
                 value: without_cr_lf(raw_header_value).into_owned().into(),
             }),
             None => Err(format!("unable to parse header: {}", header_string)),

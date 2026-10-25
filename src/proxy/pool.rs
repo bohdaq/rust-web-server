@@ -85,7 +85,11 @@ impl<S> Pool<S> {
     /// (the TCP connection closes) rather than exceeding the limit.
     pub fn release(&self, key: &str, stream: S) {
         let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let queue = map.entry(key.to_string()).or_default();
+        // The key is copied only the first time a backend is seen.
+        if !map.contains_key(key) {
+            map.insert(key.to_string(), Default::default());
+        }
+        let Some(queue) = map.get_mut(key) else { return };
         if queue.len() < self.max_idle {
             queue.push_back(PoolEntry { stream, added: Instant::now() });
         }
