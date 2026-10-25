@@ -173,6 +173,29 @@ mod tests {
     }
 
     #[test]
+    fn header_values_cannot_inject_headers() {
+        let email = Email::builder()
+            .to("dest@example.com")
+            .subject("Hello\r\nBcc: victim@example.com")
+            .reply_to("a@example.com\r\nX-Evil: 1")
+            .text("body")
+            .build()
+            .unwrap();
+        let msg = build_message("sender@example.com", &email);
+        let head = msg.split("\r\n\r\n").next().unwrap();
+        assert!(!head.split("\r\n").any(|l| l.starts_with("Bcc:") || l.starts_with("X-Evil:")), "{head}");
+        assert!(head.contains("Subject: Hello  Bcc: victim@example.com"), "{head}");
+    }
+
+    #[test]
+    fn smtp_addresses_with_line_breaks_are_refused() {
+        assert!(crate::mailer::smtp_address_ok("a@example.com"));
+        for bad in ["a@example.com>\r\nRCPT TO:<victim@example.com", "a\n@example.com", "<a@example.com>", ""] {
+            assert!(!crate::mailer::smtp_address_ok(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
     fn build_message_html_only() {
         let email = Email::builder()
             .to("a@b.com")

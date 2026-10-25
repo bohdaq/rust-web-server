@@ -419,10 +419,10 @@ impl Response {
                 body_str.push_str(SYMBOL.hyphen);
                 body_str.push_str(Range::STRING_SEPARATOR);
                 body_str.push_str(SYMBOL.new_line_carriage_return);
-                let content_type = [Header::_CONTENT_TYPE, Header::NAME_VALUE_SEPARATOR, SYMBOL.whitespace, &content_range.content_type.to_string()].join("");
+                let content_type = [Header::_CONTENT_TYPE, Header::NAME_VALUE_SEPARATOR, SYMBOL.whitespace, &Header::single_line(&content_range.content_type)].join("");
                 body_str.push_str(content_type.as_str());
                 body_str.push_str(SYMBOL.new_line_carriage_return);
-                let content_range_header = [Header::_CONTENT_RANGE, Header::NAME_VALUE_SEPARATOR, SYMBOL.whitespace, Range::BYTES, SYMBOL.whitespace, &content_range.range.start.to_string(), SYMBOL.hyphen, &content_range.range.end.to_string(), SYMBOL.slash, &content_range.size].join("");
+                let content_range_header = [Header::_CONTENT_RANGE, Header::NAME_VALUE_SEPARATOR, SYMBOL.whitespace, Range::BYTES, SYMBOL.whitespace, &content_range.range.start.to_string(), SYMBOL.hyphen, &content_range.range.end.to_string(), SYMBOL.slash, &Header::single_line(&content_range.size)].join("");
                 body_str.push_str(content_range_header.as_str());
                 body_str.push_str(SYMBOL.new_line_carriage_return);
                 body_str.push_str(SYMBOL.new_line_carriage_return);
@@ -522,14 +522,14 @@ impl Response {
         head.push(b' ');
         head.extend_from_slice(status_text.as_bytes());
         head.push(b' ');
-        head.extend_from_slice(reason_phrase.as_bytes());
+        head.extend_from_slice(Header::single_line(&reason_phrase).as_bytes());
         head.extend_from_slice(b"\r\n");
         let header_lines = headers.iter().map(|h| (h.name.as_ref(), h.value.as_ref()))
             .chain(extra.iter().filter_map(|(name, value)| value.map(|v| (*name, v))));
         for (name, value) in header_lines {
-            head.extend_from_slice(name.as_bytes());
+            head.extend_from_slice(Header::single_line(name).as_bytes());
             head.extend_from_slice(Header::NAME_VALUE_SEPARATOR.as_bytes());
-            head.extend_from_slice(value.as_bytes());
+            head.extend_from_slice(Header::single_line(value).as_bytes());
             head.extend_from_slice(b"\r\n");
         }
         head.extend_from_slice(b"\r\n");
@@ -822,15 +822,15 @@ impl Response {
         let header_list = response.headers.clone();
         for header in header_list {
             let mut header_string = SYMBOL.empty_string.to_string();
-            header_string.push_str(&header.name);
+            header_string.push_str(&Header::single_line(&header.name));
             header_string.push_str(Header::NAME_VALUE_SEPARATOR);
-            header_string.push_str(&header.value);
+            header_string.push_str(&Header::single_line(&header.value));
             header_string.push_str(SYMBOL.new_line_carriage_return);
             headers_str.push_str(&header_string);
         }
 
         let response_clone = response.clone();
-        let status = [response_clone.http_version, response.status_code.to_string(), response_clone.reason_phrase].join(SYMBOL.whitespace);
+        let status = [response_clone.http_version, response.status_code.to_string(), Header::single_line(&response_clone.reason_phrase).into_owned()].join(SYMBOL.whitespace);
         let response_without_body = format!(
             "{}{}{}",
             status,

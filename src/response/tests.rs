@@ -736,3 +736,38 @@ fn split_name_value_and_without_cr_lf() {
         assert_eq!(s.replace('\r', "").replace('\n', ""), without_cr_lf(s), "{s:?}");
     }
 }
+
+// ── #47: no CR/LF from header values into the HTTP/1.1 head ─────────────────
+
+fn split_attempt() -> Response {
+    let mut response = Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "ok");
+    response.reason_phrase = "OK\r\nX-Injected-Status: 1".to_string();
+    response.headers.push(Header { name: "Location".into(), value: "/next\r\nSet-Cookie: session=evil\r\n\r\nHTTP/1.1 200 OK".into() });
+    response.headers.push(Header { name: "X-Name\r\nX-Injected-Name".into(), value: "v".into() });
+    response
+}
+
+fn head_lines(raw: &[u8]) -> Vec<String> {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.split("\r\n\r\n").next().unwrap_or("").to_string();
+    head.split("\r\n").map(|l| l.to_string()).collect()
+}
+
+#[test]
+fn header_values_cannot_split_the_response() {
+    let request = Request { method: METHOD.get.to_string(), request_uri: "/".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: vec![] };
+    let (head, _) = Response::generate_response_parts(split_attempt(), request.clone());
+    let full = Response::generate_response(split_attempt(), request);
+    for raw in [head, full] {
+        let lines = head_lines(&raw);
+        assert!(!lines.iter().skip(1).any(|l| l.starts_with("Set-Cookie") || l.starts_with("X-Injected") || l.starts_with("HTTP/")), "{lines:?}");
+        assert_eq!(1, lines.iter().filter(|l| l.starts_with("HTTP/")).count(), "{lines:?}");
+        assert!(lines.iter().any(|l| l.starts_with("Location: /next  Set-Cookie: session=evil")), "{lines:?}");
+    }
+}
+
+#[test]
+fn single_line_borrows_clean_values() {
+    assert!(matches!(Header::single_line("plain"), std::borrow::Cow::Borrowed("plain")));
+    assert_eq!("a  b c", Header::single_line("a\r\nb\rc"));
+}
