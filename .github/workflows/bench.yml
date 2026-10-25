@@ -23,6 +23,9 @@ on:
       rws_workers:
         description: tokio worker threads for rws (TOKIO_WORKER_THREADS; empty = one per CPU)
         default: ""
+      base_ref:
+        description: Also bench rws built from this ref as "rws-base", in the same run (an A/B on one machine)
+        default: ""
 
 permissions:
   contents: read
@@ -39,6 +42,14 @@ jobs:
       - run: cargo build --release --bin rws --features "acme auth"
         env:
           RUSTFLAGS: ${{ inputs.profile && '-C force-frame-pointers=yes' || '' }}
+      - name: Build the base ref
+        if: inputs.base_ref != ''
+        env:
+          RUSTFLAGS: ${{ inputs.profile && '-C force-frame-pointers=yes' || '' }}
+          BASE_REF: ${{ inputs.base_ref }}
+        run: |
+          git fetch --no-tags origin "$BASE_REF" && git worktree add "$RUNNER_TEMP/base" FETCH_HEAD
+          cargo build --release --bin rws --features "acme auth" --manifest-path "$RUNNER_TEMP/base/Cargo.toml" --target-dir "$RUNNER_TEMP/base-target"
       - name: Install perf
         if: inputs.profile
         run: |
@@ -62,6 +73,7 @@ jobs:
           RWS=target/release/rws OHA="$RUNNER_TEMP/oha-linux-amd64" CADDY="$RUNNER_TEMP/caddy" \
             NGINX="$(command -v nginx)" DURATION="${{ inputs.duration }}s" \
             EXTENDED="${{ inputs.extended && '1' || '' }}" RWS_WORKERS="${{ inputs.rws_workers }}" \
+            RWS_BASE="${{ inputs.base_ref != '' && format('{0}/base-target/release/rws', runner.temp) || '' }}" \
             PERF_DIR="${{ inputs.profile && 'perf' || '' }}" bench/run.sh
           {
             echo "## rws vs Caddy vs nginx"

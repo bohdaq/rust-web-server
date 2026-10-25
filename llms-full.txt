@@ -17578,7 +17578,8 @@ scenario for an nginx built without its ssl or http2 module.
 
 To see where `rws` spends its CPU, run the workflow with **profile** checked:
 it builds with frame pointers and samples `rws` with `perf` during each
-scenario. The job summary lists the hottest symbols, and the `bench-profile`
+scenario, and nginx's workers too (`nginx-<scenario>` reports; the distro
+nginx has no symbols, but its kernel time is comparable with `rws`'s). The job summary lists the hottest symbols, and the `bench-profile`
 artifact has flat and call-tree reports plus `perf script` output for flame
 graphs (`inferno-collapse-perf | inferno-flamegraph`). Locally, on Linux:
 
@@ -17589,6 +17590,14 @@ perf report -i perf/static-1k.data --no-children
 ```
 
 Sampling slows `rws` down, so take throughput numbers from an unprofiled run.
+
+## Compare two builds
+
+Runner hardware differs from run to run (nginx itself varies threefold), so
+a change can only be judged against its baseline in the same run. Give the
+workflow a **base_ref** (a branch, tag or commit) and it also builds that
+ref and benches it as `rws-base`, right after `rws`; locally, set
+`RWS_BASE=<binary>`.
 
 ---
 

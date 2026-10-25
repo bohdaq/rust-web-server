@@ -38,11 +38,17 @@
 #
 # PERF_DIR=<dir> also records a `perf` profile of rws for each scenario
 # (<dir>/<scenario>.data, sampled at 999 Hz with call graphs; PERF overrides
-# the command, e.g. PERF="sudo perf"). Sampling costs throughput, so don't
+# the command, e.g. PERF="sudo perf"), and of nginx's workers
+# (<dir>/nginx-<scenario>.data). Sampling costs throughput, so don't
 # compare the numbers of a profiled run with an unprofiled one.
+#
+# RWS_BASE=<binary> also benches a second rws build ("rws-base") in the same
+# run, right after the first: an A/B on the same machine, which numbers from
+# separate runs (different runner hardware) can't give.
 set -euo pipefail
 
 RWS="${RWS:?set RWS to the rws binary}"
+RWS_BASE="${RWS_BASE:-}"
 OHA="${OHA:?set OHA to the oha binary}"
 CADDY="${CADDY:-}"
 NGINX="${NGINX:-}"
@@ -62,6 +68,7 @@ PERF="${PERF:-perf}"
 
 abs() { echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; }
 RWS="$(abs "$RWS")"
+[ -n "$RWS_BASE" ] && RWS_BASE="$(abs "$RWS_BASE")"
 OUT_DIR="$(pwd)"
 WORK="$(mktemp -d)"
 SITE="$WORK/site"
@@ -145,6 +152,10 @@ run_load() { # <server-name> <pid> <scenario> <url>
   if [ -n "$PERF_DIR" ] && [ "$name" = rws ]; then
     $PERF record -F 999 -g -p "$pid" -o "$PERF_DIR/$scenario.data" -- sleep "${DURATION%s}" > /dev/null 2>&1 &
     perf_pid=$!
+  elif [ -n "$PERF_DIR" ] && [ "$name" = nginx ]; then
+    # The workers do the work; the master only supervises.
+    $PERF record -F 999 -g -p "$(pgrep -d, -P "$pid")" -o "$PERF_DIR/nginx-$scenario.data" -- sleep "${DURATION%s}" > /dev/null 2>&1 &
+    perf_pid=$!
   fi
   cpu_before=$(cpu_ms "$pid")
   "$OHA" -z "$DURATION" -c "$CONNECTIONS" --no-tui "${OHA_ARGS[@]}" --output-format json "$url" > "$WORK/oha.json" &
@@ -221,8 +232,9 @@ EOF
 fi
 
 # ── rws ───────────────────────────────────────────────────────────────────────
-mkdir -p "$WORK/rws" && cd "$SITE"
-cat > "$WORK/rws.config.toml" <<'EOF'
+bench_rws() { # <name> <binary>
+  mkdir -p "$WORK/rws" && cd "$SITE"
+  cat > "$WORK/rws.config.toml" <<'EOF'
 port       = 8081
 log_format = "off"
 open_file_cache_strict = false
@@ -239,25 +251,28 @@ backends = ["127.0.0.1:9000"]
   type     = "proxy"
   upstream = "backend"
 EOF
-port_free 8081
-RWS_CONFIG_FILE="$WORK/rws.config.toml" "$RWS" > "$WORK/rws.log" 2>&1 &
-RWS_PID=$!; PIDS+=($RWS_PID)
-bench_server rws "$RWS_PID" 8081
-kill "$RWS_PID"
-if [ -n "$EXTENDED" ]; then
-  printf 'port = 8181\nlog_format = "json"\nopen_file_cache_strict = false\n' > "$WORK/rws-log.toml"
-  port_free 8181
-  RWS_CONFIG_FILE="$WORK/rws-log.toml" "$RWS" > "$WORK/rws-access.log" 2>&1 &
+  port_free 8081
+  RWS_CONFIG_FILE="$WORK/rws.config.toml" "$2" > "$WORK/rws.log" 2>&1 &
   RWS_PID=$!; PIDS+=($RWS_PID)
-  bench_log_server rws "$RWS_PID" 8181
-  kill "$RWS_PID"
-  printf 'port = 8281\nlog_format = "off"\nopen_file_cache_strict = false\ntls_cert_file = "%s"\ntls_key_file = "%s"\n' "$WORK/cert.pem" "$WORK/key.pem" > "$WORK/rws-tls.toml"
-  port_free 8281
-  RWS_CONFIG_FILE="$WORK/rws-tls.toml" "$RWS" > "$WORK/rws-tls.log" 2>&1 &
-  RWS_PID=$!; PIDS+=($RWS_PID)
-  bench_tls_server rws "$RWS_PID" 8281
-  kill "$RWS_PID"
-fi
+  bench_server "$1" "$RWS_PID" 8081
+  kill "$RWS_PID"; wait "$RWS_PID" 2>/dev/null || true
+  if [ -n "$EXTENDED" ]; then
+    printf 'port = 8181\nlog_format = "json"\nopen_file_cache_strict = false\n' > "$WORK/rws-log.toml"
+    port_free 8181
+    RWS_CONFIG_FILE="$WORK/rws-log.toml" "$2" > "$WORK/rws-access.log" 2>&1 &
+    RWS_PID=$!; PIDS+=($RWS_PID)
+    bench_log_server "$1" "$RWS_PID" 8181
+    kill "$RWS_PID"; wait "$RWS_PID" 2>/dev/null || true
+    printf 'port = 8281\nlog_format = "off"\nopen_file_cache_strict = false\ntls_cert_file = "%s"\ntls_key_file = "%s"\n' "$WORK/cert.pem" "$WORK/key.pem" > "$WORK/rws-tls.toml"
+    port_free 8281
+    RWS_CONFIG_FILE="$WORK/rws-tls.toml" "$2" > "$WORK/rws-tls.log" 2>&1 &
+    RWS_PID=$!; PIDS+=($RWS_PID)
+    bench_tls_server "$1" "$RWS_PID" 8281
+    kill "$RWS_PID"; wait "$RWS_PID" 2>/dev/null || true
+  fi
+}
+bench_rws rws "$RWS"
+if [ -n "$RWS_BASE" ]; then bench_rws rws-base "$RWS_BASE"; fi
 
 # ── Caddy ─────────────────────────────────────────────────────────────────────
 if [ -n "$CADDY" ]; then

@@ -87,7 +87,8 @@ certs). h2spec: `gh release download v2.6.0 --repo summerwind/h2spec`. Each
 script's header describes what it checks.
 
 `bench/run.sh` compares throughput against Caddy and nginx (also the manual
-`Benchmark` workflow).
+`Benchmark` workflow). Judge a performance change with `RWS_BASE=<binary>`
+(workflow input `base_ref`): both builds in one run, on the same machine.
 
 ## Build
 
