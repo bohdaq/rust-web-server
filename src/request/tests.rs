@@ -829,3 +829,65 @@ fn method_and_version_checks_ignore_case() {
     assert!(crate::http::HTTP::is_supported_version("http/1.1"));
     assert!(!crate::http::HTTP::is_supported_version("HTTP/4.0"));
 }
+
+/// `Request::parse` (single pass) against the parser it replaced, kept
+/// verbatim in `reference_parser.rs`: same fields or the same error, for a
+/// corpus of request heads and deterministic mutations of each.
+#[test]
+fn request_parse_matches_the_reference_parser() {
+    fn summary(result: &Result<crate::request::Request, String>) -> String {
+        match result {
+            Err(e) => format!("Err({e})"),
+            Ok(r) => format!("{:?} {:?} {:?} {:?} {:?}", r.method, r.request_uri, r.http_version, r.headers, r.body),
+        }
+    }
+    let corpus: Vec<&[u8]> = vec![
+        b"GET /a?b=1 HTTP/1.1\r\nHost: x\r\nAccept: */*\r\n\r\n",
+        b"GET / HTTP/1.1\nHost: lf-only\n\nbody",
+        b"POST /p HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc",
+        b"POST /p HTTP/1.1\r\nContent-Length: x3\r\n\r\nabc",
+        b"GET http://example.com/x?y HTTP/1.1\r\nHost: example.com\r\n\r\n",
+        b"OPTIONS * HTTP/1.1\r\n\r\n",
+        b"GET example.com HTTP/1.1\r\n\r\n",
+        b"get /lower HTTP/1.1\r\n\r\n",
+        b"GET /a HTTP/9.9\r\n\r\n",
+        b"GET /a\r\n\r\n",
+        b"GET  /a HTTP/1.1\r\n\r\n",
+        b"",
+        b"\r\n",
+        b"GET /a HTTP/1.1\r\nNo-Colon\r\nA:b\r\nC:  spaced \t\r\nD: x: y\r\n\r\n",
+        b"GET /a HTTP/1.1\r\n \t\r\nafter: blank\r\n\r\n",
+        b"GET /a HTTP/1.1\r\nX: \xff\r\n\r\n",
+        b"GET /\xc3\xa9 HTTP/1.1\r\nX: \xc3\xa9\r\n\r\n\xff\x00",
+        b"GET /a HTTP/1.1\r\nX: y",
+        b"GET /a HTTP/1.1",
+        b"GET /a HTTP/1.1\r\n:\r\n: v\r\n\r\n",
+    ];
+    let mut seed: u64 = 0x2545_F491_4F6C_DD1D;
+    let mut next = move || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; seed };
+    let interesting = [b'\r', b'\n', b' ', b':', b'\t', 0xff, 0xc3, b'0', b'/', b'*'];
+    let mut checked = 0;
+    for input in &corpus {
+        let mut cases = vec![input.to_vec()];
+        for _ in 0..200 {
+            let mut m = input.to_vec();
+            for _ in 0..1 + next() % 3 {
+                let r = next();
+                match r % 3 {
+                    0 if !m.is_empty() => { let i = (r >> 8) as usize % m.len(); m[i] = interesting[(r >> 32) as usize % interesting.len()]; }
+                    1 => { let i = (r >> 8) as usize % (m.len() + 1); m.insert(i, interesting[(r >> 32) as usize % interesting.len()]); }
+                    _ if !m.is_empty() => { let i = (r >> 8) as usize % m.len(); m.remove(i); }
+                    _ => {}
+                }
+            }
+            cases.push(m);
+        }
+        for case in cases {
+            let ours = crate::request::Request::parse(&case);
+            let reference = super::reference_parser::parse(&case);
+            assert_eq!(summary(&reference), summary(&ours), "input {:?}", String::from_utf8_lossy(&case));
+            checked += 1;
+        }
+    }
+    assert!(checked > 4000);
+}
