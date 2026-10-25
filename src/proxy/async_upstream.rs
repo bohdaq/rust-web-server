@@ -222,17 +222,18 @@ async fn exchange<S: UpstreamConn>(
         return Exchange::NoResponse(format!("write to backend failed: {}", e));
     }
 
+    // Reads go straight into `buf`'s spare capacity (at least 8 KiB per
+    // read, as before) — no zeroed 8 KiB stack buffer copied from each time.
     let mut buf: Vec<u8> = Vec::with_capacity(8192);
-    let mut tmp = [0u8; 8192];
 
     // Response head, bounded by the read timeout as a whole.
     let head = tokio::time::timeout(read_timeout, async {
         loop {
-            match stream.read(&mut tmp).await {
+            match read_more(&mut stream, &mut buf).await {
                 Ok(0) => {
                     return Err((buf.is_empty(), "backend closed connection before headers were complete".to_string()))
                 }
-                Ok(n) => buf.extend_from_slice(&tmp[..n]),
+                Ok(_) => {}
                 Err(e) => return Err((buf.is_empty(), e.to_string())),
             }
             if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
@@ -278,11 +279,10 @@ async fn exchange<S: UpstreamConn>(
             }
             Some(len) => {
                 while buf.len() < header_end + len {
-                    let n = stream.read(&mut tmp).await.map_err(|e| e.to_string())?;
+                    let n = read_more(&mut stream, &mut buf).await.map_err(|e| e.to_string())?;
                     if n == 0 {
                         return Err("backend closed connection mid-body".to_string());
                     }
-                    buf.extend_from_slice(&tmp[..n]);
                 }
                 buf.truncate(header_end + len);
                 Ok(!connection_close)
@@ -290,11 +290,10 @@ async fn exchange<S: UpstreamConn>(
             None => {
                 // Delimited by the connection closing.
                 loop {
-                    let n = stream.read(&mut tmp).await.map_err(|e| e.to_string())?;
+                    let n = read_more(&mut stream, &mut buf).await.map_err(|e| e.to_string())?;
                     if n == 0 {
                         return Ok(false);
                     }
-                    buf.extend_from_slice(&tmp[..n]);
                 }
             }
         }
@@ -316,3 +315,11 @@ async fn exchange<S: UpstreamConn>(
 
 #[cfg(test)]
 mod tests;
+
+/// Read once from `stream` into the spare capacity of `buf` (at least 8 KiB
+/// of it); the bytes read, 0 at end of stream.
+async fn read_more<S: tokio::io::AsyncRead + Unpin>(stream: &mut S, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+    use tokio::io::AsyncReadExt;
+    buf.reserve(8192);
+    stream.read_buf(buf).await
+}
