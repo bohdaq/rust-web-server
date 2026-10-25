@@ -1,4 +1,4 @@
-[Read Me](README.md) > WASM Shim Roadmap
+[Read Me](../README.md) > WASM Shim Roadmap
 
 # WASM / `wasm32-wasip2` Shim Roadmap
 

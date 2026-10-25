@@ -120,7 +120,7 @@ Full cron field syntax: `*`, exact value, `*/step`, `N-M` range, `N,M,P` list, a
 
 ## What Rust makes hard
 
-**Dependency injection** — Spring's IoC container relies on reflection, which Rust does not have. The rws approach is a `Container` (`src/di/`) that stores services keyed by `TypeId`. It covers the most common cases: concrete types, trait objects, and named instances. Use `container.into_arc()` with `App::with_state` to share services across handlers. See [Use Case #53 in DEVELOPER.md](../DEVELOPER.md) for full examples.
+**Dependency injection** — Spring's IoC container relies on reflection, which Rust does not have. The rws approach is a `Container` (`src/di/`) that stores services keyed by `TypeId`. It covers the most common cases: concrete types, trait objects, and named instances. Use `container.into_arc()` with `App::with_state` to share services across handlers. See [Use Case #53 in DEVELOPER.md](../../DEVELOPER.md) for full examples.
 
 ```rust
 use std::sync::Arc;

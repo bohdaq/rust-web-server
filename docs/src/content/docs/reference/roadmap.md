@@ -29,4 +29,4 @@ Built-in log-file rotation (by size or time) so the server can write logs to dis
 
 ---
 
-Track progress and open issues at [github.com/bohdaq/rust-web-server](https://github.com/bohdaq/rust-web-server/issues).
+The full ordered list of open work is [`spec/ROADMAP.md`](https://github.com/bohdaq/rust-web-server/blob/main/spec/ROADMAP.md); track progress and open issues at [github.com/bohdaq/rust-web-server](https://github.com/bohdaq/rust-web-server/issues).
