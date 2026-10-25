@@ -188,11 +188,11 @@ spec:
 Set `RWS_CONFIG_LOG_FORMAT=json` to emit access logs in JSON format. Kubernetes log aggregators (Fluentd, Fluent Bit, Vector) can then parse and index each field:
 
 ```json
-{"time":"2026-07-02T12:00:00Z","remote_addr":"10.0.0.1","method":"GET","uri":"/api/users","status":200,"bytes":1024,"duration_ms":3}
+{"time":"2026-07-02T12:00:00Z","remote_addr":"10.0.0.1","method":"GET","path":"/api/users","protocol":"HTTP/1.1","status":200,"bytes":1024}
 ```
 
 :::note[Log to stdout]
-`rust-web-server` writes all access logs to stdout. Let the container runtime and your log aggregator handle collection and rotation — this is the Kubernetes-native approach.
+`rust-web-server` writes all access logs to stdout (buffered per thread, written at least every 100 ms). Let the container runtime and your log aggregator handle collection and rotation — this is the Kubernetes-native approach.
 :::
 
 ## Prometheus scraping

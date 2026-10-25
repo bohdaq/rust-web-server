@@ -14,7 +14,7 @@ Server-wide counters updated by the request loop:
 | Metric | Type | Description |
 |---|---|---|
 | `rws_requests_total` | Counter | Total HTTP requests received |
-| `rws_errors_total` | Counter | Total requests that produced a 5xx response |
+| `rws_errors_total` | Counter | Connections whose handling ended in an error (I/O or application error, or a panicked handler) — not a count of 5xx responses |
 | `rws_active_connections` | Gauge | Number of currently open connections |
 
 ### Per-route metrics with MetricsLayer
@@ -26,7 +26,7 @@ use rust_web_server::app::App;
 use rust_web_server::core::New;
 use rust_web_server::metrics::MetricsLayer;
 
-let app = App::new().wrap(MetricsLayer::new());
+let app = App::new().wrap(MetricsLayer);
 ```
 
 `MetricsLayer` adds:
@@ -67,9 +67,19 @@ rws_circuit_breaker_state == 2
 
 ## Logs
 
-### Combined Log Format (default)
+### JSON structured logs (default)
 
-By default the server writes one line per request to stdout in Apache Combined Log Format (CLF):
+By default the server writes one newline-delimited JSON object per request to stdout:
+
+```json
+{"time":"2026-07-02T12:00:00Z","remote_addr":"127.0.0.1","method":"GET","path":"/healthz","protocol":"HTTP/1.1","status":200,"bytes":2}
+```
+
+JSON logs are well-suited for ingestion by Loki, Fluentd, Datadog, and other structured-log collectors.
+
+### Combined Log Format
+
+Set `RWS_CONFIG_LOG_FORMAT=combined` (via environment variable or `rws.config.toml`) for Apache Combined Log Format (CLF):
 
 ```
 127.0.0.1 - - [02/Jul/2026:12:00:00 +0000] "GET /healthz HTTP/1.1" 200 2
@@ -77,15 +87,7 @@ By default the server writes one line per request to stdout in Apache Combined L
 
 This format is compatible with GoAccess, AWStats, and most log-analysis tools.
 
-### JSON structured logs
-
-Set `RWS_CONFIG_LOG_FORMAT=json` (via environment variable, `rws.config.toml`, or CLI flag) to switch to newline-delimited JSON:
-
-```json
-{"time":"2026-07-02T12:00:00Z","remote_addr":"127.0.0.1","method":"GET","path":"/healthz","protocol":"HTTP/1.1","status":200,"bytes":2}
-```
-
-JSON logs are well-suited for ingestion by Loki, Fluentd, Datadog, and other structured-log collectors.
+`RWS_CONFIG_LOG_FORMAT=off` writes no access log at all.
 
 ### Buffered writes
 
@@ -123,16 +125,20 @@ Access log rotation. Currently, redirect stdout to a log file and use an externa
 ```rust
 use rust_web_server::app::App;
 use rust_web_server::core::New;
-use rust_web_server::otel::{self, ExporterConfig, OtelLayer};
+use rust_web_server::otel::{self, ExporterConfig, OtelLayer, TracingConfig};
 
-otel::setup(ExporterConfig::Otlp {
-    endpoint: "http://tempo:4318".to_string(),
+otel::setup(TracingConfig {
+    service_name: "my-service".to_string(),
+    exporter: ExporterConfig::Otlp {
+        endpoint: "http://tempo:4318".to_string(),
+    },
+    ..TracingConfig::default()
 });
 
-let app = App::new().wrap(OtelLayer::new());
+let app = App::new().wrap(OtelLayer);
 ```
 
-The layer reads the incoming `traceparent` header, creates a child span for each request, and exports completed spans to the configured OTLP endpoint.
+The layer reads the incoming `traceparent` header, creates a span for each request (a child of the caller's span when one was sent), and exports completed spans to the configured OTLP endpoint. Start nested spans inside a request with `otel::span(name)` / `otel::client_span(name)` — see [Distributed Tracing](/features/tracing/#child-spans).
 
 ### Supported backends
 
@@ -154,7 +160,7 @@ let response = Client::new()
 ```
 
 :::caution[Coming Soon]
-Child spans and baggage propagation within a single request (multi-span tracing). Currently one span is created per inbound request.
+Baggage propagation, and spans created automatically for database queries and outbound calls.
 :::
 
 ## Health endpoints

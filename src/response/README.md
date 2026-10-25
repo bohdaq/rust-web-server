@@ -5,7 +5,7 @@
 Response module is designed to convert `Response` struct to raw array of bytes and vice versa.
 
 ### High level HTTP response overview
-Example HTTP Response (1-6 are line numbers, not part of the request):
+Example HTTP Response (1-6 are line numbers, not part of the response):
 
 >1 HTTP/1.1 200 OK
 >
@@ -32,12 +32,12 @@ After `header` goes empty new line. Up to this point all characters have to be [
 
 Body (Response Body Here) is the arbitrary sequence (array) of bytes and goes after previously mentioned empty new line, often referred as payload.
 
-Even though initially HTTP protocol was designed to transfer text based information, request body can be any set of bytes from image, video, audio, etc.
+Even though initially HTTP protocol was designed to transfer text based information, response body can be any set of bytes from image, video, audio, etc.
 
 ### Multipart response
 Response may contain several different parts of the same resource. Such functionality achieved through Range requests. 
 
-Example `multipart/byteranges` HTTP Response (1-15 are line numbers, not part of the request):
+Example `multipart/byteranges` HTTP Response (1-15 are line numbers, not part of the response):
 
 >1 HTTP/1.1 200 OK
 > 
@@ -95,7 +95,7 @@ To parse byte array to [Response](https://github.com/bohdaq/rust-web-server/blob
 Response struct contains common fields representing http response, however, instead
  of the body field there is a list of ContentRange. 
 
-In practice, it means when you work with any response, except for the `multipart/byteranges` Content-Type, the body of the request is contained as a `ContentRange` instance within `content_range_list` field.
+In practice, it means when you work with any response, except for the `multipart/byteranges` Content-Type, the body of the response is contained as a `ContentRange` instance within `content_range_list` field.
 
 When you are working with `multipart/byteranges` response, the `content_range_list` field will contain each individual part of the Range response. 
 

@@ -7,10 +7,10 @@ The migration runner reads `*.sql` files from a directory in lexicographic order
 
 ## How it works
 
-1. `pool.migrate("migrations/").await` creates `_schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT)` if it does not already exist.
+1. `pool.migrate("migrations/").await` creates `_schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)` if it does not already exist.
 2. It reads every `*.sql` file in the directory sorted lexicographically by filename.
 3. Files whose name is already in `_schema_migrations` are skipped.
-4. Each unapplied file is executed inside a `BEGIN` / `COMMIT` transaction. If the file fails, the transaction is rolled back and `migrate` returns `Err` immediately — subsequent files are not attempted.
+4. Each unapplied file is executed inside a `BEGIN` / `COMMIT` transaction, one statement at a time — the file is split on `;`, so a `;` inside a string literal or a trigger/function body breaks it. If the file fails, the transaction is rolled back and `migrate` returns `Err` immediately — subsequent files are not attempted.
 
 ## File naming convention
 
@@ -184,7 +184,8 @@ async fn main() {
         // register routes ...
         ;
 
-    Server::new().run_tls(app).await;
+    let (listener, thread_pool) = Server::setup().expect("server setup");
+    Server::run_tls(listener, thread_pool, app).await;
 }
 ```
 

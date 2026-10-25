@@ -106,20 +106,24 @@ Wrap any application with middleware before handing it to `TestClient`:
 ```rust
 use rust_web_server::app::App;
 use rust_web_server::core::New;
-use rust_web_server::rate_limit::RateLimitLayer;
+use rust_web_server::request_id::RequestIdLayer;
 use rust_web_server::test_client::TestClient;
 
-let app = App::new().wrap(RateLimitLayer::new(5, 60)); // 5 req / 60 s
+let app = App::new().wrap(RequestIdLayer::new());
 let client = TestClient::new(app);
 
-// First five requests succeed
-for _ in 0..5 {
-    assert_eq!(200, client.get("/healthz").send().status());
-}
+// A request without an ID gets a fresh one on the response
+let resp = client.get("/healthz").send();
+assert!(resp.header("x-request-id").is_some());
 
-// Sixth request is rate-limited
-assert_eq!(429, client.get("/healthz").send().status());
+// An incoming ID is echoed back unchanged
+let resp = client.get("/healthz").header("X-Request-Id", "abc-123").send();
+assert_eq!(Some("abc-123"), resp.header("x-request-id"));
 ```
+
+`RateLimitLayer` (in `middleware`) uses the process-wide `rate_limit::global()`
+limiter keyed by client IP, and every `TestClient` request comes from
+`127.0.0.1` — so rate-limit tests share one budget across the whole test run.
 
 ## Complete CRUD test suite
 
@@ -130,6 +134,8 @@ mod tests {
     use rust_web_server::core::New;
     use rust_web_server::test_client::TestClient;
 
+    // `App::new()` has no `/users` routes: build your own app here (and
+    // change the return type) — the `/users` tests below assume it has them.
     fn make_client() -> TestClient<App> {
         TestClient::new(App::new())
     }

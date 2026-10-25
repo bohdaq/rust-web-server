@@ -14,7 +14,7 @@ let mcp = McpServer::new("my-server", "1.0")
     .require_bearer(std::env::var("MCP_TOKEN").expect("MCP_TOKEN not set"));
 ```
 
-Every `POST /mcp` request must include:
+Every request to `/mcp` (`POST`, the `GET` SSE stream and `OPTIONS` alike) must include:
 
 ```
 Authorization: Bearer <token>
@@ -52,7 +52,7 @@ export MCP_TOKEN="$(openssl rand -hex 32)"
 cargo run
 ```
 
-The bundled `rws` binary reads `MCP_TOKEN` automatically when the config file enables the built-in MCP server.
+The bundled `rws` binary always serves its built-in MCP server at `/mcp` (except in config-driven proxy mode) and requires `MCP_TOKEN` as the Bearer token whenever that variable is set.
 
 ## Configuring Claude Desktop
 
@@ -100,7 +100,7 @@ Server::run(listener, pool, mcp);
 
 ## CORS preflight
 
-`OPTIONS /mcp` requests always receive `200 OK` without checking the Bearer token. This allows browser-based MCP clients to complete the CORS preflight before attaching credentials.
+`OPTIONS /mcp` answers `200 OK` with `Allow: GET, POST, OPTIONS` — but only after the auth check: with `.require_bearer()` or `.require_oauth()` configured, a preflight without a valid `Authorization` header gets `401`, like any other request to `/mcp`.
 
 :::note[Multi-user auth]
 `.require_bearer` enforces a single shared token — it is not a per-user authentication mechanism. For per-user access control validating JWT claims against a live IdP, use [`.require_oauth`](#oauth-20-authorization-mcp-2025-03-26) below instead of a custom wrapper. For anything else (e.g. checking a database), implement a custom `Application` wrapper that inspects the `Authorization` header and delegates to `McpServer` only on success:

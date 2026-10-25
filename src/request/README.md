@@ -6,7 +6,7 @@ Request module is designed to convert raw array of bytes to `Request` struct and
 
 ### High level HTTP request overview
 Example HTTP Request (1-4 are line numbers, not part of the request):
->1 HTTP/1.1 GET /static/style.css  
+>1 GET /static/style.css HTTP/1.1  
 > 
 >2 Host: 127.0.0.1:7888
 > 
@@ -14,7 +14,7 @@ Example HTTP Request (1-4 are line numbers, not part of the request):
 > 
 >4 Request Body Here
 
-Where `HTTP/1.1 GET /static/style.css` is request line. It consists of `method` _GET_, `path ` _/static/style.css_ and `HTTP version` _HTTP/1.1 GET_.
+Where `GET /static/style.css HTTP/1.1` is request line. It consists of `method` _GET_, `path ` _/static/style.css_ and `HTTP version` _HTTP/1.1_.
 
 After request line usually comes list of http `headers`, in this example it is _Host: 127.0.0.1:7888_. 
 
@@ -29,7 +29,7 @@ Body (Request Body Here) is the arbitrary sequence (array) of bytes and goes aft
 Even though initially HTTP protocol was designed to transfer text based information, request body can be any set of bytes from image, video, audio, etc.
 
 ### Usage
-To parse byte array to [Request](https://github.com/bohdaq/rust-web-server/blob/main/src/request/mod.rs#L16), simply call [Request::parse](https://github.com/bohdaq/rust-web-server/blob/main/src/request/example/mod.rs#L19) method.
+To parse byte array to [Request](https://github.com/bohdaq/rust-web-server/blob/main/src/request/mod.rs#L18), simply call [Request::parse](https://github.com/bohdaq/rust-web-server/blob/main/src/request/example/mod.rs#L19) method.
 
 To convert request instance to byte array invoke [generate](https://github.com/bohdaq/rust-web-server/blob/main/src/request/example/mod.rs#L82) method.
 
@@ -42,7 +42,7 @@ To retrieve domain from the request invoke [request.get_domain()](https://github
 To get port from the request call [request.get_port()](https://github.com/bohdaq/rust-web-server/blob/b1465a0687bcff1c7376b470d5ca7cb17419aa63/src/request/tests.rs#L427) method on request instance. Port is taken from `Host` header of the request, not from underlying networking. 
 
 #### Links
-- [List of HTTP methods](https://github.com/bohdaq/rust-web-server/blob/main/src/request/mod.rs#L37)
+- [List of HTTP methods](https://github.com/bohdaq/rust-web-server/blob/main/src/request/mod.rs#L44)
 
  Current Topic | Next Topic
 ---------------| ---

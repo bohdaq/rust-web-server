@@ -36,14 +36,14 @@ let app = App::new()
 Chain multiple layers:
 
 ```rust
-use rust_web_server::middleware::MetricsLayer;
+use rust_web_server::metrics::MetricsLayer;
 
 let app = App::new()
     .wrap(RateLimitLayer)  // checked first
     .wrap(MetricsLayer);   // checked second
 ```
 
-`App::with_state(S)` and `Router`-based apps all expose the same `.wrap()` method.
+`App`, `App::with_state(S)` and an already-wrapped `WithMiddleware<A>` expose the same `.wrap()` method; for any other `Application` (e.g. `AsyncAppWithState`), start with `WithMiddleware::new(app).wrap(layer)`.
 
 ## Built-in middleware layers
 
@@ -62,17 +62,20 @@ let app = App::new()
 | `IpFilter` | `ip_filter` | Allow-list or deny-list based on client IP address or CIDR range. |
 | `BlocklistLayer` | `blocklist` | Runtime-updatable IP blocklist; unlike `IpFilter`, the list can be modified without restart. |
 | `CanaryLayer` | `canary` | Routes a configured percentage of traffic to a canary backend. |
-| `RetryLayer` | `circuit_breaker` | Retries failing requests up to a configured limit with backoff. |
+| `RetryLayer` | `circuit_breaker` | Re-dispatches a request whose response status is in the `retry_on` list, up to `max_retries` more times (no backoff). |
 | `CsrfLayer` | `csrf` | CSRF token validation for state-mutating requests. |
 | `LogLayer` | `request_log` | Structured per-request access logging (combined or JSON format). |
 | `MaintenanceLayer` | `maintenance` | Returns `503 Service Unavailable` when maintenance mode is active. |
+| `RequestIdLayer` | `request_id` | Reads or generates a request/correlation ID and echoes it on the request and response (`X-Request-Id` by default). |
+| `ForwardAuthLayer` | `auth::forward` | Delegates the allow/deny decision for every request to an external HTTP auth service. |
 
 ### Quick usage examples
 
 ```rust
 use rust_web_server::app::App;
 use rust_web_server::core::New;
-use rust_web_server::middleware::{RateLimitLayer, MetricsLayer};
+use rust_web_server::middleware::RateLimitLayer;
+use rust_web_server::metrics::MetricsLayer;
 use rust_web_server::ip_filter::IpFilter;
 use rust_web_server::auth::JwtLayer;
 use rust_web_server::request_log::LogLayer;
@@ -80,7 +83,7 @@ use rust_web_server::request_log::LogLayer;
 let app = App::new()
     .wrap(LogLayer)
     .wrap(IpFilter::deny(["1.2.3.4", "10.0.0.0/8"]))
-    .wrap(JwtLayer)
+    .wrap(JwtLayer::new(b"secret".to_vec()))
     .wrap(RateLimitLayer)
     .wrap(MetricsLayer);
 ```

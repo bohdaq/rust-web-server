@@ -28,9 +28,9 @@ fall back to TCP transparently. `main()` runs both listeners concurrently:
 
 ```rust
 tokio::join!(
-    server.run_tls(app.clone()),
-    server.run_quic(app.clone()),
-    server.run_redirect(app.clone()), // optional HTTP→HTTPS redirect
+    Server::run_tls(listener, pool, app.clone()),
+    Server::run_quic(app.clone()),
+    Server::run_redirect(), // optional HTTP→HTTPS redirect
 );
 ```
 
@@ -62,7 +62,7 @@ via `connection.sni_hostname` work the same way for HTTP/3 as for HTTP/2.
 
 ## Alt-Svc advertisement
 
-HTTP/1.1 and HTTP/2 TLS responses include:
+HTTP/1.1 TLS responses include:
 
 ```
 Alt-Svc: h3=":7878"

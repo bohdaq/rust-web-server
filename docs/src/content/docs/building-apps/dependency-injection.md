@@ -212,5 +212,5 @@ Every type registered with `register` or `provide` must implement `Send + Sync +
 container.contains::<EmailService>();           // unnamed registration exists?
 container.contains_named::<u16>("primary");     // named registration exists?
 container.len();                                // total unnamed registrations
-container.is_empty();                           // no registrations at all?
+container.is_empty();                           // no unnamed registrations?
 ```

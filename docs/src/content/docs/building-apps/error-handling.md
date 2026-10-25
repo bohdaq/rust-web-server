@@ -31,6 +31,7 @@ pub enum AppError {
     Conflict(String),           // 409
     UnprocessableEntity(String), // 422
     TooManyRequests,            // 429
+    PayloadTooLarge(String),    // 413
     Internal(String),           // 500
 }
 ```
@@ -135,6 +136,7 @@ fn handler(...) -> Response {
 | `Conflict(msg)` | 409 | `msg` |
 | `UnprocessableEntity(msg)` | 422 | `msg` |
 | `TooManyRequests` | 429 | `"Too Many Requests"` |
+| `PayloadTooLarge(msg)` | 413 | `msg` |
 | `Internal(msg)` | 500 | `msg` |
 
 :::note[Content-Type]

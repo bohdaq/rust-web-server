@@ -111,7 +111,7 @@ Routing with path parameters, typed extractors, one `Middleware` trait for every
 - **No hyper, no Tower, no Axum.** HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS, range requests, JWT, and the ACME client are implemented in this crate. HTTP/2 and HTTP/3 framing use the widely deployed `h2` and `quinn`/`h3` crates, and TLS uses `rustls` — no OpenSSL.
 - **Config and code share one engine.** Everything the TOML file does is a type you can use from Rust, so moving from configuration to code doesn't mean switching tools.
 - **Tested against the real world.** CI fuzzes every parser that sees untrusted input, checks HTTP/2 conformance with h2spec, and runs the ACME flow end to end against Let's Encrypt's test CA on every push. Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
-- **Fast.** 2.3–3.9× faster than Caddy, close to nginx, and the smallest memory footprint of the three — see [Performance](#performance).
+- **Fast.** 2.2–3.9× faster than Caddy, close to nginx, and the smallest memory footprint of the three — see [Performance](#performance).
 - **SemVer since v1.** Frequent releases (currently v17) are additive; see [releases](https://github.com/bohdaq/rust-web-server/releases) for the changelog.
 
 ## Performance
@@ -155,7 +155,7 @@ compare servers within a run, not across runs. Reproduce it with
 Three files make that possible — point your AI tool at them before asking it to build something:
 
 - **[llms.txt](llms.txt)** — a flat, LLM-optimized reference: every public type, middleware, and feature flag, with a runnable snippet for nearly every capability in the crate. This is the file to paste into a chat or system prompt, or fetch directly: `https://raw.githubusercontent.com/bohdaq/rust-web-server/main/llms.txt`.
-- **[DEVELOPER.md](DEVELOPER.md)** — 78 numbered, runnable use cases (`## Use Case #N: Title`). Ask your assistant to follow the closest-matching use case instead of inventing a pattern from scratch.
+- **[DEVELOPER.md](DEVELOPER.md)** — 89 numbered, runnable use cases (`### N. Title`). Ask your assistant to follow the closest-matching use case instead of inventing a pattern from scratch.
 - **[CLAUDE.md](CLAUDE.md)** — architecture, request lifecycle, and coding conventions. Claude Code reads this automatically when working inside this repo.
 
 **Example prompt:**
@@ -260,7 +260,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 
 - Prometheus metrics — `GET /metrics`; `MetricsLayer` adds per-route counters + histograms
 - OpenTelemetry tracing — `OtelLayer`; W3C `traceparent`; stdout or OTLP (Jaeger, Tempo); nested child spans via `otel::span`/`otel::client_span`
-- Access log — Combined Log Format or `RWS_CONFIG_LOG_FORMAT=json`
+- Access log — structured JSON (default) or Combined Log Format (`RWS_CONFIG_LOG_FORMAT=combined`; `off` disables it); buffered per thread, flushed every 100 ms
 - Hot config reload — `SIGHUP` or `POST /admin/config/reload`; no restart required. In proxy mode routes, upstreams and `[middleware]` reload too — validated first, a file with errors leaves the running routes serving
 - `rws --check` — validates `rws.config.toml` (unknown keys, bad values, TLS files, undeclared upstreams, unset auth secrets, duplicate virtual hosts, CORS origins that can never match, a missing SPA fallback file) and exits 1 on errors, like `nginx -t`; `--format=json` for CI and editors
 - Graceful shutdown — SIGTERM drains connections; `/readyz` returns `503` during drain

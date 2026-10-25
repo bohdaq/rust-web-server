@@ -71,7 +71,6 @@ let name: String       = row.get::<String>("name")?;
 let age: i64           = row.get::<i64>("age")?;
 let score: f64         = row.get::<f64>("score")?;
 let verified: bool     = row.get::<bool>("verified")?;
-let avatar: Vec<u8>    = row.get::<Vec<u8>>("avatar")?;
 let bio: Option<String> = row.get::<Option<String>>("bio")?;
 ```
 
@@ -101,7 +100,7 @@ let params = &[
 
 ## The `FromColumn` trait
 
-Built-in `FromColumn` implementations cover `i16`, `i32`, `i64`, `u32`, `u64`, `f32`, `f64`, `bool`, `String`, `Vec<u8>`, and `Option<T>` for any `T: FromColumn`.
+Built-in `FromColumn` implementations cover `i16`, `i32`, `i64`, `u32`, `u64`, `f32`, `f64`, `bool`, `String`, and `Option<T>` for any `T: FromColumn` (there is none for `Vec<u8>`; read a `Value::Bytes` column through a newtype with its own `FromColumn` impl).
 
 Implement it for custom types to enable `row.get::<MyType>("col")`:
 
@@ -112,7 +111,7 @@ use rust_web_server::model::{FromColumn, Value, DbError};
 pub enum UserRole { Admin, Member, Guest }
 
 impl FromColumn for UserRole {
-    fn from_column(v: &Value) -> Result<Self, DbError> {
+    fn from_column(v: Value) -> Result<Self, DbError> {
         match v {
             Value::Text(s) => match s.as_str() {
                 "admin"  => Ok(UserRole::Admin),

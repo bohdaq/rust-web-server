@@ -9,7 +9,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 
 ## Server / Protocol
 
-- **HTTP/1.1** — keep-alive, chunked transfer encoding, gzip compression, ETags, range requests, 30-second per-connection read timeout
+- **HTTP/1.1** — keep-alive, chunked transfer encoding, gzip compression, ETags, range requests, 30-second idle read timeout, 30 s to receive a whole request head (`408`)
 - **HTTP/2** — ALPN negotiation, full multiplexing, forbidden-header stripping, `Alt-Svc` advertisement — `http2`
 - **HTTP/3 / QUIC** — UDP listener via `quinn`, `h3` + `h3-quinn`, QUIC connection-level SNI — `http3` *(default)*
 - **TLS** — `rustls` with `aws-lc-rs` crypto backend; no system OpenSSL dependency; FIPS-compatible — `http2`
@@ -19,8 +19,8 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **ACME / automatic TLS** — automatic certificate provisioning compatible with Let's Encrypt — `acme`
 - **Hot reload** — `SIGHUP` (or `POST /admin/config/reload`) reloads CORS rules, rate limits, log format, and TLS certs without restarting — `http2`
 - **Graceful shutdown** — `SIGINT` / `SIGTERM` drain in-flight requests before exit; `SERVER_READY` flag cleared on shutdown
-- **Gzip compression** — applied automatically based on `Accept-Encoding`; configurable minimum size
-- **Static file serving** — a directory with no `index.html` renders a dark/light-adaptive directory listing page by default; chunked file streaming for large files; ETag + `Last-Modified` caching headers
+- **Gzip compression** — applied automatically based on `Accept-Encoding` to text bodies of at least 512 bytes (`compression::MIN_COMPRESS_SIZE`)
+- **Static file serving** — a directory with no `index.html` renders a dark/light-adaptive directory listing page by default; files over 256 KiB streamed (`sendfile(2)` on plain TCP); ETag + `Last-Modified` with `304` revalidation, `Cache-Control: no-cache` by default (`RWS_CONFIG_STATIC_CACHE_CONTROL`)
 - **SPA fallback** — `RWS_CONFIG_SPA_FALLBACK=index.html` serves a fallback file for unmatched routes instead of `404`, for React Router/Vue Router/etc. deep links; opt-in, scoped by an extension heuristic and `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES`
 - **Thread pool** (http1 only) — hand-rolled `ThreadPool`; connection-per-thread; no tokio — `http1`
 - **Tokio async runtime** — used for `http2` and `http3` builds; `http1` is fully synchronous
@@ -39,6 +39,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **Typed errors** — `AppError` enum (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`, `Internal`) with `IntoResponse` trait
 - **`Middleware` trait** — `handle(request, connection, next) -> Result<Response, String>`; compose via `.wrap(layer)`
 - **`WithMiddleware<A>`** — wraps any `Application`; layers applied in push order (first-pushed is outermost)
+- **JSON (de)serialization** — `serde` / `serde_json` integration (e.g. `http_client::Response::json::<T>()`) — `serde`
 - **Tera templates** — render `.html` templates with a `serde_json::Value` context via `tera::render` — `tera`
 - **In-process test client** — `TestClient::new(app)` dispatches requests without opening a TCP socket; use in unit and integration tests
 - **WebSocket** — RFC 6455 handshake and frame codec built in; no third-party WebSocket library
@@ -47,6 +48,8 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **Background job queue** — `JobQueue` (in-memory) or `PersistentJobQueue` (crash-safe, model-backed); retry with exponential backoff — `jobs`
 - **File / object storage** — `Storage` trait; `LocalStorage` (disk), `S3Storage` (AWS S3, R2, MinIO via AWS SigV4, no SDK), or `AzureBlobStorage` (Azure Blob via Shared Key/Managed Identity, no SDK) — `storage-local` / `storage-s3` / `storage-azure`
 - **OpenAPI / Swagger** — `.openapi(OpenApiConfig)` generates `GET /openapi.json` + `GET /docs` (Swagger UI) from registered routes — `openapi`
+- **Email / SMTP** — `mailer` module, plain SMTP; STARTTLS/SMTPS also needs `http-client` or `http2` — `mailer`
+- **Outbound HTTP client** — `http_client::Client` (always compiled for plain HTTP); HTTPS without the server TLS stack — `http-client`
 - **Per-route timeouts** — `with_timeout`/`with_timeout_state`/`with_timeout_async` wrap a handler with its own deadline; `TimeoutLayer` for a whole app; config-driven proxy's `timeout_ms`
 - **Request ID middleware** — `RequestIdLayer` injects/echoes `X-Request-Id` on every request and response; `RequestId` extractor to read it
 
@@ -62,8 +65,8 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **`WsProxy`** — standalone WebSocket proxy; relays raw bytes after upgrade handshake
 - **Config-driven proxy mode** — `rws.config.toml` with `[[upstream]]` + `[[route]]` sections; no code required
 - **Health checking** — per-upstream background health checker; dead backends removed automatically; configurable thresholds and intervals
-- **Load balancing** — atomic round-robin across live backends
-- **`RewriteLayer`** — rewrite request headers, URI, and response headers / body / status code per route
+- **Load balancing** — `round_robin`, `random`, `ip_hash`, or `least_connections` across live backends
+- **`RewriteLayer`** — rewrite request headers, URI, and response headers / body / status code per route; regex URI rewrites via `request_uri_regex_rewrite` — `rewrite-regex`
 - **Per-route rate limiting** — `PerRouteRateLimit` in config-driven mode; `RateLimitLayer` in code
 - **Per-route Bearer auth** — `BearerAuthMiddleware` in config-driven mode; `JwtLayer` in code
 - **Route matching** — host, path prefix, exact path, HTTP method, `Content-Type` prefix; first-match wins
@@ -74,13 +77,17 @@ This page is a single-page reference for everything the crate ships. Items that 
 ## Security
 
 - **`RateLimitLayer`** — sliding-window rate limiter keyed by client IP; global singleton via `rate_limit::global()`; returns `429` when budget exceeded
-- **`BasicAuthLayer`** — HTTP Basic authentication middleware
+- **`BasicAuthLayer`** — HTTP Basic authentication middleware — `auth`
 - **`JwtLayer`** — JWT Bearer token validation middleware (HS256) — `auth`; RS256/ES256 against a static public key via `::rs256`/`::es256` — `auth-asymmetric`
 - **`ForwardAuthLayer`** — delegates the allow/deny decision to an external HTTP service (Traefik/nginx `auth_request` style) — `auth`
 - **`IpFilter`** — allowlist / denylist middleware keyed by client IP
 - **`crypto`** — Argon2id password hashing and verification; `signed_cookie`/`verify_signed_cookie` (HMAC-SHA256) and `encrypted_cookie`/`decrypt_cookie` (AES-256-GCM) — `crypto`
 - **CSRF tokens** — secure random token generation and validation — `csrf`
-- **SSO / OAuth 2.0 / OIDC** — RSA and ECDSA signing, outbound HTTPS token exchange — `sso`
+- **SSO / OAuth 2.0 / OIDC** — `OidcAuth` login flow, RS256/ES256 `id_token` verification via JWKS, outbound HTTPS token exchange — `sso`
+- **OAuth 2.0 Authorization Server** — `AuthServer`: rws issues its own HS256 tokens (`/oauth/token`, `/oauth/authorize`) — `sso-server`
+- **SAML 2.0 Service Provider** — `SamlSp`: metadata, login, ACS, logout — `sso-saml`
+- **Webhook verification** — `verify_webhook_signature` for GitHub, Shopify, Stripe — `webhook`
+- **Secrets manager references** — `secrets::resolve()` for `vault://`, `aws-sm://`, `azkv://` — `secrets`
 - **CORS** — built-in CORS controller; configurable origins, methods, and headers; hot-reloadable
 - **mTLS** — mutual TLS client certificate verification — `http2`
 - **No OpenSSL** — TLS via `rustls` + `aws-lc-rs`; fully static binaries
@@ -96,7 +103,7 @@ This page is a single-page reference for everything the crate ships. Items that 
 - **Global metrics** — `record_request()`, `record_error()`, `connection_open()` / `connection_close()` counters
 - **`OtelLayer`** — OpenTelemetry trace propagation middleware
 - **`CacheLayer`** — response caching middleware
-- **Structured logging** — `RWS_CONFIG_LOG_FORMAT=combined` (default) or `json`; hot-reloadable
+- **Structured logging** — `RWS_CONFIG_LOG_FORMAT=json` (default), `combined`, or `off`; hot-reloadable
 - **Config hot reload** — `SIGHUP` or `POST /admin/config/reload` reloads CORS, rate limits, log format, TLS certs; no restart required
 - **Kubernetes-ready** — `/healthz`, `/readyz`, `/metrics` all built in; graceful `SIGTERM` drain; static binary with no system dependencies
 
@@ -117,19 +124,18 @@ This page is a single-page reference for everything the crate ships. Items that 
 
 ## Database / ORM
 
-All ORM features require exactly one of `model-sqlite`, `model-postgres`, or `model-mysql`.
+All ORM features require at least one of `model-sqlite`, `model-postgres`, or `model-mysql` (async, backed by `sqlx`; several can be compiled in, pick one with `RWS_DB_BACKEND`).
 
 - **`#[derive(Model)]`** — generates `impl Model`, `Struct::repository()`, `Struct::query()` — `macros`
 - **Table and column mapping** — `#[table(name = "…")]`, `#[column(name = "…")]`, `#[primary_key]`, `#[primary_key(auto_increment)]`, `#[ignore]`
-- **`DbConnection`** — `execute`, `query_rows`, `begin`, `commit`, `rollback`, `transaction(closure)`, `query::<T>`, `migrate`
-- **`DbPool`** — pre-created connection pool; `Mutex<Vec<DbConnection>>`; `PooledConnection` returned to pool on `Drop`
-- **`Repository<T, ID>`** — `save` (INSERT or UPDATE by primary key), `find_by_id`, `find_all`, `delete`
-- **`QueryBuilder`** — fluent `where_eq`, `fetch_all`, `fetch_one`, `count`, `delete`, `update`; placeholder tokens auto-converted to `?` (SQLite/MySQL) or `$N` (PostgreSQL)
+- **`DbPool`** — async `sqlx` pool: `execute`, `query_rows`, `query::<T>`, `query_raw`, `begin` (→ `DbTransaction` with `commit`/`rollback`), `transaction(closure)`, `migrate`
+- **`Repository<T, ID>`** — `save` (INSERT or UPDATE by primary key), `save_all`, `find_by_id`, `find_all`, `delete_by_id`, `delete_all_by_id`, `count`, `exists_by_id`
+- **`QueryBuilder`** — fluent `where_eq`, `filter`, `order_by`, `limit`, `offset`, `paginate`, `fetch_all`, `fetch_one`, `count`, `delete`, `update`; placeholder tokens auto-converted to `?` (SQLite/MySQL) or `$N` (PostgreSQL)
 - **Migrations** — reads `*.sql` files in lexicographic order; `_schema_migrations` table tracks applied versions; each migration wrapped in a transaction
-- **Relations** — `HasMany<T>`, `HasOne<O>`, `BelongsTo<O>` with explicit `.load(&mut conn)`; no lazy loading, no hidden N+1 queries
-- **SQLite** — bundled `libsqlite3`; no system dependency — `model-sqlite`
-- **PostgreSQL** — `postgres` client — `model-postgres`
-- **MySQL / MariaDB** — `mysql` client — `model-mysql`
+- **Relations** — `HasMany<T>`, `HasOne<O>`, `BelongsTo<O>` with explicit `.load(&pool)`; no lazy loading, no hidden N+1 queries
+- **SQLite** — `sqlx` SQLite driver — `model-sqlite`
+- **PostgreSQL** — `sqlx` Postgres driver — `model-postgres`
+- **MySQL / MariaDB** — `sqlx` MySQL driver — `model-mysql`
 
 ---
 

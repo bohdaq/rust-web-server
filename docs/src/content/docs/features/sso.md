@@ -87,6 +87,8 @@ let cfg = OidcConfig::keycloak(
 let cfg = OidcConfig::discover("https://provider.example.com", "id", "secret", "https://example.com/auth/callback")?;
 ```
 
+Chain `.scopes([...])` or `.post_login_redirect(path)` to override the defaults (`openid email profile` — `read:user user:email` for GitHub — and `/`).
+
 ## Authorization-code + PKCE flow
 
 ```

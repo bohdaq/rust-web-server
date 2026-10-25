@@ -163,9 +163,9 @@ use rust_web_server::body::form_urlencoded::FormUrlEncoded;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn login(req: &Request) -> Response {
-    let form = FormUrlEncoded::parse(&req.body);
-    let username = form.get("username").unwrap_or("");
-    let password = form.get("password").unwrap_or("");
+    let form = FormUrlEncoded::parse(req.body.clone()).unwrap_or_default();
+    let username = form.get("username").map(String::as_str).unwrap_or("");
+    let password = form.get("password").map(String::as_str).unwrap_or("");
 
     if username != "admin" || password != "s3cret" {
         let mut r = Response::new();
@@ -205,7 +205,7 @@ use rust_web_server::app::App;
 use rust_web_server::auth::JwtLayer;
 use rust_web_server::core::New;
 
-// public_key_pem is SubjectPublicKeyInfo PEM, e.g.:
+// public_key_pem is SubjectPublicKeyInfo PEM (RS256 also accepts PKCS#1 `BEGIN RSA PUBLIC KEY`), e.g.:
 //   openssl rsa -in key.pem -pubout   (RS256)
 //   openssl ec  -in key.pem -pubout   (ES256)
 let app = App::new().wrap(JwtLayer::rs256(&rsa_public_key_pem).expect("invalid RSA public key"));
@@ -271,7 +271,7 @@ No new Cargo dependency — `ForwardAuthLayer` reuses the existing `crate::http_
 
 ## No-code auth in the config-driven proxy
 
-`rws.config.toml`'s `[route.middleware.auth]` wires directly into `JwtLayer` and `BasicAuthLayer` — no Rust code required. Both need the `auth` feature enabled at build time (`cargo build --features auth`, or the full-featured default build).
+`rws.config.toml`'s `[route.middleware.auth]` wires directly into `JwtLayer` and `BasicAuthLayer` — no Rust code required. Both need the `auth` feature enabled at build time (`cargo build --features auth`; the default build doesn't include it).
 
 ```toml
 [[route]]

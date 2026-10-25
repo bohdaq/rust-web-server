@@ -97,7 +97,7 @@ ca_file   = "/etc/rws/internal-root.pem"
 ## Configuration reference
 
 Every setting can go in the `[acme]` section of `rws.config.toml`, on the
-command line (`--acme-domains=...`), or in the environment.
+command line (`--acme-domains=...`; not the last three), or in the environment.
 
 | `[acme]` key | Environment variable | Default | Description |
 |---|---|---|---|
@@ -109,9 +109,9 @@ command line (`--acme-domains=...`), or in the environment.
 | `challenge_port` | `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port the CA connects to for HTTP-01 |
 | `cert_path` | `RWS_CONFIG_ACME_CERT_PATH` | `tls_cert_file`, else `cert.pem` | Where the certificate chain is stored |
 | `key_path` | `RWS_CONFIG_ACME_KEY_PATH` | `tls_key_file`, else `key.pem` | Where the certificate key is stored |
-| — | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | `30` | Renew when fewer than this many days remain |
-| — | `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` | `43200` | Seconds between expiry checks |
-| — | `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `acme_account.key` | Where the ACME account key is stored |
+| `renew_before_days` | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | `30` | Renew when fewer than this many days remain |
+| `renew_check_interval_secs` | `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` | `43200` | Seconds between expiry checks |
+| `account_key_path` | `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `acme_account.key` | Where the ACME account key is stored |
 
 Top-level `http_redirect_port` (`RWS_CONFIG_HTTP_REDIRECT_PORT`) starts the
 HTTP → HTTPS redirect listener; set it to the challenge port (80) in

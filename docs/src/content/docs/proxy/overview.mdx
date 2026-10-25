@@ -42,12 +42,14 @@ Add `rust-web-server` as a dependency and compose the proxy middleware stack in 
 use rust_web_server::app::App;
 use rust_web_server::core::New;
 use rust_web_server::proxy::ReverseProxy;
+use rust_web_server::server::Server;
 
 let app = App::new()
     .wrap(ReverseProxy::new(["http://backend:3000"])
         .path_prefix("/api"));
 
-Server::new().run(app);
+let (listener, pool) = Server::setup().unwrap();
+Server::run(listener, pool, app); // async builds: Server::run_tls(listener, pool, app).await
 ```
 
 **Best for:** services that need custom routing logic, per-request auth, conditional proxying, or tight integration with application code.
@@ -62,7 +64,8 @@ Server::new().run(app);
 | L4 TCP / UDP / WS proxies | Yes (config sections) | Yes (standalone structs) |
 | Path rewriting | Yes (`strip_path_prefix`, `add_path_prefix`) | Yes (`RewriteLayer`) |
 | Per-route rate limiting | Yes | Yes (`RateLimitLayer`) |
-| Bearer auth | Yes (token from env var) | Yes (`JwtLayer`, `BasicAuthLayer`) |
+| Auth | Yes (bearer token from env var, JWT, htpasswd basic) | Yes (`JwtLayer`, `BasicAuthLayer`) |
+| Response caching | Yes (`[route.middleware.cache]`) | Yes (`CacheLayer`) |
 | gRPC | Yes (`type = "grpc"`) | Yes (`GrpcProxy`, requires `http2` feature) |
 | Canary / traffic splitting | No (planned) | Yes (`CanaryLayer`) |
 | Service discovery | No (planned) | Yes (`BackendPool`) |
@@ -76,7 +79,7 @@ At startup `main()` calls `ProxyConfig::is_proxy_mode()`, which reads `rws.confi
 
 - [Config-Driven Proxy](/proxy/config-driven/) — full `rws.config.toml` reference
 - [Reverse Proxy](/proxy/reverse-proxy/) — `ReverseProxy` middleware API
-- [Load Balancing](/proxy/load-balancing/) — round-robin and planned strategies
+- [Load Balancing](/proxy/load-balancing/) — round-robin, random, IP-hash and least-connections
 - [Health Checks](/proxy/health-checks/) — automatic backend health monitoring
 - [Circuit Breaker](/proxy/circuit-breaker/) — failure isolation and retry
 - [Canary](/proxy/canary/) — weighted traffic splitting

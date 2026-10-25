@@ -150,7 +150,7 @@ let www_router = Router::new()
 
 ## Attribute macros
 
-The `macros` feature also adds `#[get("/path")]`, `#[post("/path")]`, etc. — annotate a handler function directly instead of listing it separately in a `routes!` table or a `.get()` builder call:
+The `macros` feature also adds `#[get("/path")]`, `#[post("/path")]`, `#[put]`, `#[patch]`, `#[delete]` and the generic `#[route(GET, "/path")]`. They only add a `Route: METHOD /path` doc comment and leave the function unchanged — you still register the handler with `routes!` or a `.get()` builder call:
 
 ```toml
 # Cargo.toml

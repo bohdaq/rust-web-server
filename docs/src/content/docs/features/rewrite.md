@@ -141,10 +141,10 @@ Byte-level find-and-replace across all response body content ranges. Uses a line
 `RewriteLayer` implements `Middleware` and stacks with all other middleware layers. Layers are applied in push order (first `.wrap()` call is outermost):
 
 ```rust
-use rust_web_server::rate_limit::RateLimitLayer;
+use rust_web_server::middleware::RateLimitLayer;
 
 let app = App::new()
-    .wrap(RateLimitLayer::global())      // outermost — checked first
+    .wrap(RateLimitLayer)                // outermost — checked first
     .wrap(
         RewriteLayer::new()
             .request_uri_strip_prefix("/api")
@@ -172,7 +172,7 @@ let rewrite = RewriteLayer::new()
 
 let app = App::new()
     .wrap(rewrite)
-    .wrap(ReverseProxy::new("http://127.0.0.1:9000"));
+    .wrap(ReverseProxy::new(["http://127.0.0.1:9000"]));
 ```
 
 :::note[Rule ordering]

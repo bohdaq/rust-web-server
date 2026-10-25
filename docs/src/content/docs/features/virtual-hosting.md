@@ -67,8 +67,9 @@ pub fn create_tls_acceptor_from_vhosts(
 ) -> Result<TlsAcceptor, String>
 ```
 
-The same function is used for both HTTP/2 (TCP/TLS) and HTTP/3 (QUIC) listeners,
-so virtual hosting works transparently across all protocols.
+HTTP/3 (QUIC) uses the same `SniCertResolver` via
+`create_quinn_server_config_from_vhosts()`, so virtual hosting works
+transparently across all protocols.
 
 ## Reading the SNI hostname in handlers
 
@@ -94,12 +95,12 @@ to requests whose SNI hostname (TLS) or `Host` header (plain HTTP) matches:
 ```rust
 use rust_web_server::router::Router;
 
-let mut api_router = Router::new();
-api_router.with_host("api.example.com")
+let api_router = Router::new()
+    .with_host("api.example.com")
     .get("/v1/users", |_req, _params, _conn| { /* ... */ });
 
-let mut www_router = Router::new();
-www_router.with_host("example.com")
+let www_router = Router::new()
+    .with_host("example.com")
     .get("/", |_req, _params, _conn| { /* ... */ });
 ```
 

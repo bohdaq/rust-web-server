@@ -75,7 +75,7 @@ If `env` is omitted the field name is uppercased (`pool_size` → `POOL_SIZE`), 
 |---|---|---|
 | `field: T` with `default` | parse `default` value | parse env var |
 | `field: T` without `default` | `Err` — required | parse env var |
-| `field: Option<T>` | `Ok(None)` | parse env var, wrap in `Some` |
+| `field: Option<T>` | `Ok(None)` (also when empty) | parse env var, wrap in `Some` |
 
 ## `FromEnvStr` trait
 
@@ -178,7 +178,7 @@ cargo run
 ```
 
 :::note[Error messages]
-`load()` returns `Err` on the first failure with a message like `` `APP_DB_HOST`: required env var `APP_DB_HOST` is not set `` or `` `APP_PORT`: invalid digit found in string ``. Check the message to identify which variable caused the problem.
+`load()` returns `Err` on the first failure with a message like `` required env var `APP_DB_HOST` is not set `` or `` `APP_PORT`: invalid digit found in string ``. Check the message to identify which variable caused the problem.
 :::
 
 :::note[No config file]

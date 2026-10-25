@@ -179,7 +179,7 @@ let app = App::new()
 ```
 
 :::note[Dynamic re-wiring]
-`ReverseProxy` holds its backend list at construction time. For fully dynamic routing, read `pool.backends()` inside a custom controller or middleware on each request and call `proxy_http1` directly from `rust_web_server::proxy`.
+`ReverseProxy` holds its backend list at construction time. For fully dynamic routing, use `CanaryLayer::with_pools(vec![WeightedPool::new(pool, 1)])` — it reads `pool.backends()` on every request (see [Canary](/proxy/canary/#dynamic-backends-via-backendpool)).
 :::
 
 ## Poll interval

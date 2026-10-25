@@ -23,6 +23,9 @@ overrides `RWS_CONFIG_PORT=8888` in the environment.
 
 ## How startup loading works
 
+`Server::setup()` first calls `set_default_values()`, which gives the core
+settings (IP, port, thread count, request allocation size, CORS, TLS paths, …)
+their compiled-in default when no environment variable is set. Then
 `bootstrap()` in `src/entry_point/mod.rs` runs three steps in order:
 
 ```rust
@@ -31,9 +34,10 @@ override_environment_variables_from_config(None); // step 2: apply rws.config.to
 override_environment_variables_from_command_line_args(); // step 3: apply CLI flags
 ```
 
-After all three steps, any `RWS_CONFIG_*` variable that was never set by any
-source gets its compiled-in default value. From that point on, the server reads
-configuration exclusively through `std::env::var("RWS_CONFIG_*")`.
+Settings without a default there fall back to the default in the code that
+reads them. Per-request settings (CORS, CSP, client hints, static
+`Cache-Control`, log format, …) are read through `ServerConfig::current()`, a
+snapshot rebuilt only after something writes `RWS_CONFIG_*`.
 
 The config file path can be overridden at the OS level:
 
@@ -62,6 +66,9 @@ curl -X POST http://localhost:7878/admin/config/reload
 | Rate-limit thresholds | `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS`, `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS` |
 | Log format | `RWS_CONFIG_LOG_FORMAT` |
 | Request allocation size | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
+| CSP, client hints, static `Cache-Control` | `RWS_CONFIG_CSP`, `RWS_CONFIG_CLIENT_HINTS`, `RWS_CONFIG_STATIC_CACHE_CONTROL` |
+| Proxy routes and upstreams | `[[route]]`, `[[upstream]]`, `[middleware]` (kept as before if the new file has errors) |
+| Tera templates | re-globbed from `RWS_CONFIG_TEMPLATE_DIR` (`tera` feature) |
 
 On TLS builds, `SIGHUP` also rebuilds the `TlsAcceptor` from the updated
 certificate files for all virtual hosts — no restart needed to rotate certs.
@@ -72,6 +79,8 @@ certificate files for all virtual hosts — no restart needed to rotate certs.
 |---------|--------|
 | IP / Port | The bound socket cannot be moved |
 | Thread count | The thread pool is fixed at startup |
+| Enabling the global rate limit | Decided once at startup (changing its numbers reloads) |
+| `[[tcp_proxy]]`, `[[udp_proxy]]`, `[[ws_proxy]]` | Listeners start once |
 | TLS cert / key paths (plain HTTP build) | The acceptor is built once |
 
 :::note[Rate-limit changes are instant]

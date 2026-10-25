@@ -26,7 +26,7 @@ fn dashboard(
     _state: &(),
 ) -> Response {
     let jar = req
-        .get_header("cookie")
+        .header("cookie")
         .map(|h| CookieJar::parse(&h.value))
         .unwrap_or_else(|| CookieJar::parse(""));
 
@@ -212,7 +212,7 @@ fn refresh_session(
 ) -> Response {
     // Read the existing session cookie
     let jar = req
-        .get_header("cookie")
+        .header("cookie")
         .map(|h| CookieJar::parse(&h.value))
         .unwrap_or_else(|| CookieJar::parse(""));
 

@@ -43,7 +43,7 @@ If you see failed test, rerun previous command
 
 > cargo run
 
-At this point, server is started on loopback device (ip 127.0.0.1) 
+At this point, server is started on loopback device (ip 127.0.0.1, port 7888 — set by the repository's rws.config.toml)
 and is not accessible from the network.
 
 Try to open url in the browser

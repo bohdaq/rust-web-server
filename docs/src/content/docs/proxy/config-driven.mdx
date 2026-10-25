@@ -145,7 +145,7 @@ content_type = "application/json*"   # Content-Type prefix match when ending wit
 
 ### `[route.action]` — what to do on match
 
-The `type` field selects the action.
+The `type` field selects the action. An action's keys may also sit directly under `[route.action]` instead of in `[route.action.<type>]` (`type = "proxy"` plus `upstream = "api"` in the same table); if a key appears in both, the nested table wins.
 
 #### `type = "proxy"` — forward to an upstream
 
@@ -258,7 +258,7 @@ htpasswd_file = ".htpasswd"
 
 The htpasswd file supports plain-text and `{SHA256}` (rws's own scheme) entries only — not Apache's real `{SHA}`/`$apr1$`/bcrypt. See the [auth feature page](/features/auth/#validating-against-an-htpasswd-style-file) for the exact file format and how to generate a `{SHA256}` entry with `openssl`.
 
-:::note[Fails open with a warning, not silently]
+:::note[Fails closed, not silently]
 Auth fails closed. If `token_env`/`secret_env`/`htpasswd_file` is unset, empty, or unreadable — or the binary was built without the `auth` feature — that route answers `503 Service Unavailable` (logged to stderr at startup) instead of being served unprotected. Other routes keep working. Check your server's startup logs after changing `[route.middleware.auth]`.
 :::
 
@@ -283,6 +283,8 @@ type   = "uri_strip_prefix"
 prefix = "/internal"
 ```
 
+Request rule types: `header_set` (`name`, `value`), `header_remove` (`name`), `uri_set` (`value`), `uri_strip_prefix` / `strip_prefix` and `uri_add_prefix` / `add_prefix` (`prefix`, or `value`).
+
 #### Response rewriting
 
 ```toml
@@ -295,7 +297,24 @@ value = "no-store"
 type = "body_replace"
 from = "staging.internal"
 to   = "example.com"
+
+[[route.middleware.rewrite.response]]
+type   = "status"
+code   = 410
+reason = "Gone"
 ```
+
+Response rule types: `header_set` (`name`, `value`), `header_remove` (`name`), `status` (`code`, `reason`), `body_replace` (`from`, `to`). An unknown `type` is ignored (and reported by `rws --check`).
+
+#### Response caching
+
+```toml
+[route.middleware.cache]
+ttl_secs = 60                 # default: 60
+vary_by  = ["Accept-Language"] # request headers added to the cache key (optional)
+```
+
+Wraps the route in an in-memory [`CacheLayer`](/features/caching/) (up to 1000 entries). It is the innermost route middleware, so cached responses still pass through rewrite, auth, rate limit and IP filter.
 
 #### Per-route timeout
 
@@ -347,7 +366,12 @@ listen             = "0.0.0.0:8080"
 backends           = ["chat-backend:9000"]
 connect_timeout_ms = 5000
 read_timeout_ms    = 30000
+
+[ws_proxy.health_check]   # optional — same keys as [upstream.health_check]
+path = "/healthz"
 ```
+
+L4 and WebSocket listeners are started once at boot; a `SIGHUP` reload does not add, remove or change them.
 
 ## Global middleware
 

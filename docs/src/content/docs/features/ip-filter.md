@@ -77,7 +77,7 @@ example `["0.0.0.0/0", "::/0"]`.
 use rust_web_server::app::App;
 use rust_web_server::core::New;
 use rust_web_server::ip_filter::IpFilter;
-use rust_web_server::state::AppWithState;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
 use std::sync::Arc;
 
 struct State;
@@ -85,25 +85,23 @@ struct State;
 let admin_only = IpFilter::allow(["10.0.0.0/8", "127.0.0.1"]);
 
 let app = App::with_state(Arc::new(State))
-    .get("/admin/metrics", |_state, _req, _params, _conn| {
+    .get("/admin/metrics", |_req, _params, _conn, _state| {
         // only reachable from internal IPs
-        Response::ok("metrics data")
+        Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "metrics data")
     })
     .wrap(admin_only);
 ```
 
-For more granular control — applying the filter only to `/admin/*` routes rather than the whole app — wrap an inner router instead of the top-level app:
+For more granular control — applying the filter only to `/admin/*` routes rather than the whole app — wrap a separate app that holds only those routes instead of the top-level app:
 
 ```rust
-use rust_web_server::router::Router;
-use rust_web_server::middleware::WithMiddleware;
+use rust_web_server::app::App;
+use rust_web_server::ip_filter::IpFilter;
 
-let admin_router = Router::new()
+// An app with only the admin routes, wrapped with IP filtering
+let protected = App::with_state(())
     .get("/admin/config", admin_config_handler)
-    .get("/admin/metrics", admin_metrics_handler);
-
-// Wrap only the admin router with IP filtering
-let protected = WithMiddleware::new(admin_router)
+    .get("/admin/metrics", admin_metrics_handler)
     .wrap(IpFilter::allow(["10.0.0.0/8", "127.0.0.1"]));
 ```
 
@@ -112,13 +110,13 @@ let protected = WithMiddleware::new(admin_router)
 `IpFilter` implements `Middleware` and stacks cleanly with rate limiting, authentication, and rewrite layers:
 
 ```rust
-use rust_web_server::rate_limit::RateLimitLayer;
+use rust_web_server::middleware::RateLimitLayer;
 use rust_web_server::auth::BasicAuthLayer;
 
 let app = App::new()
     .wrap(IpFilter::allow(["10.0.0.0/8"]))  // checked first
-    .wrap(BasicAuthLayer::new("user", "pass"))
-    .wrap(RateLimitLayer::global());
+    .wrap(BasicAuthLayer::new(|u, p| u == "user" && p == "pass"))
+    .wrap(RateLimitLayer);
 ```
 
 :::note[Client IP source]

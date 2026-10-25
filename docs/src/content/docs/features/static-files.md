@@ -41,7 +41,8 @@ curl http://localhost:7878/index.html # same file, explicit path
 ## How files are served fast
 
 - **Open files are reused.** A static file's open handle is kept for one
-  second (`open_file_cache_secs`, `0` turns it off) and read with positional
+  second (`open_file_cache_secs` / `RWS_CONFIG_OPEN_FILE_CACHE_SECS`, read
+  at startup; `0` turns it off; Unix only) and read with positional
   reads, so a request for a hot file costs one `fstat` instead of an `open`,
   several `stat`s and a `close`. Size and modification time are read on every
   request, so a file edited in place is served correctly at once; a file

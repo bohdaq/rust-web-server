@@ -24,7 +24,7 @@ As you can see `is_matching` method does return a boolean. It is done without ex
 #### Preparing the response
 The result of a `process` method is Response instance (line [59](https://github.com/bohdaq/rust-web-server/blob/149d608841ad77b69e2147143928220d29195988/src/controller/example/mod.rs#L59)). 
 
-In case of an error, a `process` method will return a response (line [35](https://github.com/bohdaq/rust-web-server/blob/149d608841ad77b69e2147143928220d29195988/src/controller/example/mod.rs#L35) - [45]((line [59](https://github.com/bohdaq/rust-web-server/blob/149d608841ad77b69e2147143928220d29195988/src/controller/example/mod.rs#L45))). It may be modified content or error message. 
+In case of an error, a `process` method will return a response (line [35](https://github.com/bohdaq/rust-web-server/blob/149d608841ad77b69e2147143928220d29195988/src/controller/example/mod.rs#L35) - [45](https://github.com/bohdaq/rust-web-server/blob/149d608841ad77b69e2147143928220d29195988/src/controller/example/mod.rs#L45)). It may be modified content or error message. 
 
 The server returns the response to the client
 and doesn't have the ability to process errors happening in the user application.

@@ -89,7 +89,7 @@ Sessions are not removed automatically when they expire — they are simply invi
 store.purge_expired(); // removes all sessions whose TTL has elapsed
 ```
 
-Use the [Scheduler](./scheduler) to run this automatically:
+Use the [Scheduler](/features/scheduler/) to run this automatically:
 
 ```rust
 use std::time::Duration;
@@ -205,7 +205,7 @@ let empty = store.is_empty();  // true when no entries exist
 
 ## DbSessionStore (database-backed)
 
-`DbSessionStore` stores sessions in a `rws_sessions` table managed by the [model layer](../database/overview). Sessions survive process restarts and are visible across multiple instances that share the same database.
+`DbSessionStore` stores sessions in a `rws_sessions` table managed by the [model layer](/database/overview/). Sessions survive process restarts and are visible across multiple instances that share the same database.
 
 ### Setup
 
@@ -224,18 +224,18 @@ use rust_web_server::session::DbSessionStore;
 
 // Use a file or network database for real persistence;
 // :memory: is shown here for illustration.
-let pool = DbPool::memory().unwrap();
-let store = DbSessionStore::new(pool, 3600).unwrap();
+let pool = DbPool::memory().await.unwrap();
+let store = DbSessionStore::new(pool, 3600).await.unwrap();
 
-// All methods return Result<_, DbError>
-let mut sess = store.create().unwrap();
+// All methods are async and return Result<_, DbError>
+let mut sess = store.create().await.unwrap();
 sess.set("user_id", "42");
-store.save(&sess).unwrap();
+store.save(&sess).await.unwrap();
 
-let loaded = store.load(&sess.id).unwrap().unwrap();
+let loaded = store.load(&sess.id).await.unwrap().unwrap();
 assert_eq!(Some("42"), loaded.get("user_id"));
 
-store.destroy(&sess.id).unwrap();
+store.destroy(&sess.id).await.unwrap();
 ```
 
 ### Purging expired sessions
@@ -243,19 +243,21 @@ store.destroy(&sess.id).unwrap();
 Unlike `SessionStore`, expired rows remain in the database until explicitly deleted:
 
 ```rust
-store.purge_expired().unwrap(); // DELETE WHERE expires_at <= now
+store.purge_expired().await.unwrap(); // DELETE WHERE expires_at <= now
 ```
 
-Schedule this with [Scheduler](./scheduler):
+Schedule this with [Scheduler](/features/scheduler/):
 
 ```rust
 use std::time::Duration;
 use rust_web_server::scheduler::Scheduler;
 
 let store_clone = store.clone();
+let rt = tokio::runtime::Handle::current();
 Scheduler::new()
     .every(Duration::from_secs(3600), move || {
-        let _ = store_clone.purge_expired();
+        let store = store_clone.clone();
+        rt.spawn(async move { let _ = store.purge_expired().await; });
     })
     .start();
 ```

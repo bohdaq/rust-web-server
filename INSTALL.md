@@ -35,10 +35,10 @@ You should see output similar to:
 
 > Rust Web Server
 >
-> Version:       17.0.0
+> Version:       17.113.0
 >
 > ...
 >
-> Server is up and running at: http://127.0.0.1:7878
+> Server is up and running at: http://0.0.0.0:7878
 
 Open `http://127.0.0.1:7878` in a browser. Press `Ctrl+C` to stop.

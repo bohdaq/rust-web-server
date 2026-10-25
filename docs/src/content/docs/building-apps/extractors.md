@@ -88,6 +88,19 @@ fn handler(request: &Request) -> Response {
 
 `RequestHeaders::get(&self, name: &str) -> Option<&str>` performs a case-insensitive lookup and returns the value of the first matching header.
 
+### RequestId — correlation ID
+
+The value of the `X-Request-Id` header (set by [`RequestIdLayer`](/building-apps/middleware/#built-in-middleware-layers)). Never fails; `.0` is an empty string when the header is absent.
+
+```rust
+use rust_web_server::extract::{RequestId, FromRequest};
+
+let id = RequestId::from_request(request).unwrap();
+let id: &str = id.as_str();
+```
+
+Two more extractors live outside `extract`: `json::Json<T>` (`serde` feature, see [JSON](/building-apps/json/)) and `validate::Validated<T>` (see [Validation](/building-apps/validation/)).
+
 ## Combining extractors
 
 Extractors are ordinary function calls; combine as many as you need:
@@ -177,4 +190,4 @@ struct Payload {
 // let Payload { body, params } = Payload::from_request(request)?;
 ```
 
-This covers structs built from existing extractors (`Body`, `BodyText`, `Query`, `RequestHeaders`, or your own custom ones). A field like `BearerToken` above works too, as long as it implements `FromRequest` itself — the derive doesn't know how to pull an arbitrary field from a query parameter or header on its own; write a small custom extractor (as shown above) for that and include it as a field.
+This covers structs built from existing extractors (`Body`, `BodyText`, `Query`, `RequestHeaders`, `RequestId`, or your own custom ones). A field like `BearerToken` above works too, as long as it implements `FromRequest` itself — the derive doesn't know how to pull an arbitrary field from a query parameter or header on its own; write a small custom extractor (as shown above) for that and include it as a field.

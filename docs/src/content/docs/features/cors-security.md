@@ -3,7 +3,7 @@ title: CORS & Security Headers
 description: Configure cross-origin resource sharing and automatic security headers in rust-web-server.
 ---
 
-Every response includes a baseline set of security headers automatically. CORS is controlled by a set of `RWS_CONFIG_CORS_*` environment variables. Client Hints are advertised on every response.
+Every response includes a baseline set of security headers automatically. CORS is controlled by a set of `RWS_CONFIG_CORS_*` environment variables. Client Hints are opt-in.
 
 ## CORS
 

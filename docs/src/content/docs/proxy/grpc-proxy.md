@@ -123,6 +123,8 @@ let app = App::new()
         .read_timeout_ms(60_000));
 ```
 
+`.read_timeout_ms()` is accepted but not applied by the HTTP/2 forwarder today — only the connect timeout bounds an upstream call.
+
 Supported backend URL schemes for `H2ReverseProxy`:
 
 | Scheme | Transport | Default port |

@@ -71,7 +71,7 @@ Why do I need to use JSON module if I can use [serde](https://serde.rs/)?
 
 There are 2 reasons why JSON module is written:
 
-- Rust Web Server doesn't use any 3rd party dependencies except standard Rust library, again, concise decision to have control over codebase
+- The JSON module itself doesn't use any 3rd party dependencies except standard Rust library, again, concise decision to have control over codebase (if you do want serde, the `serde` feature adds a `Json<T>` extractor/responder)
 - Tools like `serde` hiding all the implementation details by forcing user to use [procedural macros](https://doc.rust-lang.org/reference/procedural-macros.html) like: `#[serde(default)]` and it's totally fine, but on other hand, again, you don't have granular control over the process of conversion to and from json, and if you're developing something more complex than TODO app, later, it will become a bottleneck. So JSON module on other-hand provides a trait-like implementation with prebuilt JSON conversion functions that are invoked from `your` codebase. So during whole development phase you're in charge of the process. And I think it's a great advantage and totally costs a bit of boilerplate which is required to set JSON serialization.
 
 ## Problem #9

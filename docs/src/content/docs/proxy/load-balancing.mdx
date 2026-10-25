@@ -61,7 +61,7 @@ Request N+1 → api-3
 Request N+2 → api-1
 ```
 
-The live list is protected by `RwLock` — reads are concurrent; the health-checker thread takes a write lock only when the list changes.
+The live list is protected by `RwLock` — reads are concurrent; the health-checker thread takes a brief write lock once per probe round to publish the list.
 
 ## Failover behaviour
 

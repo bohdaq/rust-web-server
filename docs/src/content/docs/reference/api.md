@@ -59,7 +59,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `CsrfLayer` | `csrf` | CSRF double-submit cookie protection middleware |
 | `OidcAuth` | `sso` | OAuth2 / OIDC SSO integration middleware |
 | `CanaryLayer` | `canary` | Weighted traffic splitting (canary deployments) |
-| `CircuitBreaker` | `circuit_breaker` | Circuit breaker state machine (closed / open / half-open) |
+| `CircuitBreaker` / `RedisCircuitBreaker` | `circuit_breaker` | Circuit breaker state machine (closed / open / half-open), in memory or shared via Redis |
+| `RetryLayer` | `circuit_breaker` | Re-dispatches a request whose response status is in a retryable list |
 
 ## Proxy
 
@@ -84,9 +85,9 @@ This page is a quick-reference index — click through to docs.rs for the comple
 
 | Type / Trait | Module | Description |
 |---|---|---|
-| `DbPool` | `model` | Pre-created connection pool with `Mutex<Vec<DbConnection>>` |
-| `DbConnection` | `model` | Single database connection for SQLite, PostgreSQL, or MySQL |
-| `Repository<T, ID>` | `model` | CRUD repository trait (`find_by_id`, `save`, `delete`, …) |
+| `DbPool` | `model` | Async `sqlx` connection pool for SQLite, PostgreSQL, or MySQL; `execute`, `query`, `begin`, `transaction`, `migrate` |
+| `DbTransaction` | `model` | Open transaction from `DbPool::begin`; `commit` / `rollback` |
+| `Repository<T, ID>` | `model` | Async CRUD repository trait (`find_by_id`, `save`, `delete_by_id`, …) |
 | `QueryBuilder<T>` | `model` | Fluent query builder with `where_eq`, `fetch_all`, `count`, etc. |
 
 ## Sessions
@@ -109,6 +110,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `AzureBlobStorage` | `storage` | Azure Blob Storage via Shared Key HMAC signing or Managed Identity, no Azure SDK (`storage-azure` feature) |
 | `OpenApiConfig` / `build_spec` | `openapi` | OpenAPI 3.0 schema generation from registered routes (`openapi` feature) |
 | `with_timeout` / `with_timeout_state` / `with_timeout_async` / `TimeoutLayer` | `timeout` | Per-route request timeouts for `Router`/`AppWithState`/`AsyncAppWithState`/any `Application` |
+| `RsaPublicKey` | `rsa_key` | In-crate RSA public key (PEM/DER/components, 2048–8192 bits) for RS256 verification (`auth-asymmetric` / `sso`) |
 | `KubernetesIngressWatcher` | `ingress` | Polls the Kubernetes API for Ingress resources and maintains a live route table |
 
 ## Typed extractors and errors
@@ -127,7 +129,7 @@ Some types are only compiled when the corresponding Cargo feature is enabled:
 
 - `AsyncAppWithState` — `http2`
 - `H2ReverseProxy`, `GrpcProxy` — `http2`
-- `DbPool`, `DbConnection`, `Repository`, `QueryBuilder` — `model-sqlite`, `model-postgres`, or `model-mysql`
+- `DbPool`, `DbTransaction`, `Repository`, `QueryBuilder` — `model-sqlite`, `model-postgres`, or `model-mysql`
 - `AsyncClient` (HTTP client) — `http2`
 
 See `Cargo.toml` for the full feature list.

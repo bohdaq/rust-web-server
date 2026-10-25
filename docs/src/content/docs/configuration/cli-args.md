@@ -43,11 +43,32 @@ HTTP/3. The server falls back to plain HTTP/1.1 when either flag is absent.
 rws --tls-cert-file=cert.pem --tls-key-file=key.pem
 ```
 
-:::note[mTLS and HTTP redirect port]
-The `--tls-client-ca-file` and `--http-redirect-port` settings do not have CLI
-flags. Configure them via environment variables (`RWS_CONFIG_TLS_CLIENT_CA_FILE`,
-`RWS_CONFIG_HTTP_REDIRECT_PORT`) or `rws.config.toml`.
+| Flag | Short | Type | Default | Maps to |
+|------|-------|------|---------|---------|
+| `--http-redirect-port=<n>` | — | integer | `` (empty) | `RWS_CONFIG_HTTP_REDIRECT_PORT` |
+
+:::note[mTLS]
+`RWS_CONFIG_TLS_CLIENT_CA_FILE` has no CLI flag. Set it via the environment
+variable or `tls_client_ca_file` in `rws.config.toml`.
 :::
+
+## ACME
+
+Long form only (`acme` feature). See [Automatic HTTPS](/features/acme/).
+
+| Flag | Type | Default | Maps to |
+|------|------|---------|---------|
+| `--acme-domains=<list>` | string | `` (empty) | `RWS_CONFIG_ACME_DOMAINS` |
+| `--acme-email=<addr>` | string | `` (empty) | `RWS_CONFIG_ACME_EMAIL` |
+| `--acme-staging=<bool>` | bool | `false` | `RWS_CONFIG_ACME_STAGING` |
+| `--acme-directory=<url>` | string | `` (empty) | `RWS_CONFIG_ACME_DIRECTORY` |
+| `--acme-ca-file=<path>` | path | `` (empty) | `RWS_CONFIG_ACME_CA_FILE` |
+| `--acme-challenge-port=<n>` | integer | `80` | `RWS_CONFIG_ACME_CHALLENGE_PORT` |
+| `--acme-cert-path=<path>` | path | `` (empty) | `RWS_CONFIG_ACME_CERT_PATH` |
+| `--acme-key-path=<path>` | path | `` (empty) | `RWS_CONFIG_ACME_KEY_PATH` |
+
+Settings not listed on this page have no flag; set them through the
+environment or `rws.config.toml`.
 
 ## CORS
 
@@ -81,6 +102,17 @@ When `--cors-allow-all=true` (the default), the specific `--cors-allow-origins`,
 `--cors-allow-methods`, and `--cors-allow-headers` flags are ignored. Set
 `--cors-allow-all=false` to activate fine-grained CORS control.
 :::
+
+## Informational flags
+
+These print and exit without starting the server.
+
+| Flag | What it does |
+|------|--------------|
+| `--version`, `-V` | Print `rws <version>` |
+| `--help` | Print usage and every flag with its environment variable |
+| `--check[=<file>]` | Validate the config file (default: `RWS_CONFIG_FILE`, else `./rws.config.toml`); exit `0` if no errors, `1` otherwise |
+| `--format=json` | With `--check`, print the report as JSON |
 
 ## Quick-start examples
 
@@ -164,4 +196,15 @@ OPTIONS:
 
   -g, --cors-max-age=<seconds>
         Preflight cache duration in seconds (default: 86400)
+
+      --http-redirect-port=<n>
+        Plain-HTTP port that 301-redirects to HTTPS (and answers ACME HTTP-01)
+
+      --acme-domains, --acme-email, --acme-staging, --acme-directory,
+      --acme-ca-file, --acme-challenge-port, --acme-cert-path, --acme-key-path
+        ACME settings (see above)
+
+  -V, --version          Print the version and exit
+      --help             Print usage and exit
+      --check[=<file>]   Validate the configuration and exit (--format=json for JSON)
 ```

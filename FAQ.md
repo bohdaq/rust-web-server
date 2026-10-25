@@ -65,10 +65,10 @@ Started with `--ip=::` but cannot connect via `fe80::...` link-local address.
 Use the interface's `inet` (IPv4) address instead. It will be mapped internally to `[::ffff:192.168.x.y]`.
 
 ## Problem 9
-Trying to open a directory URL gets a _404 Not Found_ error.
+How do I hide the directory listing?
 
 ### Solution
-Directory listing is intentionally not supported (a security decision). Create an `index.html` file in the directory, or link to the files explicitly in an HTML page.
+A directory without an `index.html` is shown as a listing page. Add an `index.html` file to the directory to serve that instead.
 
 ## Problem 10
 Cannot connect to server:
@@ -215,16 +215,16 @@ scrape_configs:
     static_configs:
       - targets: ['hostname:7878']
 ```
-Available metrics: `rws_requests_total`, `rws_errors_total`, `rws_active_connections`.
+Available metrics: `rws_requests_total`, `rws_errors_total`, `rws_active_connections`; `MetricsLayer` adds `rws_route_requests_total` and `rws_route_duration_seconds`, and circuit breakers add `rws_circuit_breaker_state`.
 
 ## Problem 25
 The server does not shut down cleanly when Kubernetes sends SIGTERM — in-flight requests are dropped.
 
 ### Solution
-The `http2` and `http3` builds handle SIGTERM via `tokio::signal` and stop accepting new connections while finishing in-flight requests. The plain `http1` build exits on the next accept-loop tick after the signal. To minimize dropped requests, add a `preStop` hook to delay container termination until the load balancer has drained:
+The `http2` and `http3` builds handle SIGTERM via `tokio::signal` and stop accepting new connections while finishing in-flight requests. The plain `http1` build stops accepting and lets its thread pool finish in-flight requests. To minimize dropped requests, add a `preStop` hook to delay container termination until the load balancer has drained:
 ```yaml
 lifecycle:
   preStop:
-    exec:
-      command: ["/bin/sh", "-c", "sleep 5"]
+    sleep:
+      seconds: 5   # Kubernetes 1.30+; the release image has no shell for an exec hook
 ```

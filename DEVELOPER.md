@@ -34,7 +34,7 @@ cargo test
 
 Run a single test:
 ```bash
-cargo test --package rust-web-server --bin rws client_hint::tests::client_hints_header -- --exact
+cargo test --lib client_hint::tests::hint_list -- --exact
 ```
 
 ## Build
@@ -146,14 +146,22 @@ The crate exposes its core types so you can compose them in your own server or t
 | `RewriteLayer` | `rewrite` | Composable request/response rewriting middleware: request header add/replace/remove, URI set/strip-prefix/add-prefix, response header add/replace/remove, status override, body byte find-and-replace. `.request_uri_regex_rewrite(pattern, replacement)` (requires `features = ["rewrite-regex"]`) rewrites the URI by regex, nginx `rewrite`-directive style, with `$1`/`${name}` capture expansion; returns `Result<Self, regex::Error>`. |
 | `LoadBalancing` | `proxy` | Enum selecting the balancing strategy (`RoundRobin`). Passed to `ReverseProxy::strategy()`. |
 | `MetricsLayer` | `metrics` | Middleware that records per-route request counts and latency histograms. Adds `rws_route_requests_total{method,path,status}` and `rws_route_duration_seconds{method,path}` to `/metrics`. |
-| `CacheLayer` | `cache` | In-memory TTL response cache middleware for GET requests. Builder: `.ttl(secs)`, `.vary_by_header(name)`. Injects `Age` on hits; respects `Cache-Control: no-store/private`. |
-| `ServerConfig` | `server_config` | Typed snapshot of all per-instance config (CORS, CSP, log format, request allocation). `ServerConfig::from_env()` reads `RWS_CONFIG_*` vars; `ServerConfig::current()` is the shared snapshot `App::new()` uses per request (one atomic load, no `getenv`), rebuilt after `server_config::invalidate()` — which config reload and every config writer in the crate call; call it yourself after a direct `std::env::set_var`. `ServerConfig::default()` returns hardcoded defaults. Pass to `App::with_config(config)` to create a fully isolated app instance. |
+| `CacheLayer` | `cache` | In-memory TTL response cache middleware for GET requests. Builder: `.ttl(secs)`, `.vary_by_header(name)`. Injects `Age` on hits; doesn't store `Cache-Control: no-store/private/no-cache` responses, responses to `Range` requests, or responses whose `Vary` names a header outside its key. |
+| `StaticResourceController::STREAM_THRESHOLD` | `app::controller::static_resource` | `256 * 1024`: static files larger than this are streamed from disk (`Response::stream_file`) instead of read into memory. Open handles are cached per path and revalidated every `RWS_CONFIG_OPEN_FILE_CACHE_SECS` (default `1`, `0` = off, Unix only); contents of files ≤ 64 KiB and the gzip of compressible files ≤ 256 KiB are cached too. |
+| `server::REQUEST_HEAD_TIMEOUT` | `server` | 30 s: a request head must complete within this long of its first byte, else `408 Request Timeout` (HTTP/1.1, both loops). |
+| `McpServer` | `mcp` | MCP (Model Context Protocol) server over Streamable HTTP at `POST /mcp` (JSON-RPC 2.0) plus `GET /mcp` SSE; `.tool()` / `.resource()` / `.prompt()` builders, `.require_bearer()` / `.require_oauth()` (`sso`). Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See Use Case #36. |
+| `AcmeConfig` / `AcmeManager` | `acme` (requires `acme` feature) | Let's Encrypt / ACME HTTP-01 certificate provisioning and renewal. `AcmeConfig::from_env()` reads `RWS_CONFIG_ACME_*`; `AcmeManager::new(cfg)`, `.provision_until_ready().await`, `.run_renewal_loop()`. See Use Case #35. |
+| `Blocklist` / `BlocklistLayer` | `blocklist` | Runtime IP blocklist: `blocklist::global().block(ip)` / `.unblock(ip)` / `.is_blocked(ip)` / `.list()` / `.clear()` while the server runs; `BlocklistLayer` answers `403` for blocked client IPs. |
+| `FeatureStore` | `feature` | Runtime feature toggles: `feature::global().set(name, bool)` / `.is_enabled(name)` / `.list()`, flipped without a restart (e.g. from an MCP tool or admin handler). |
+| `MaintenanceLayer` / `MAINTENANCE_MODE` | `maintenance` | While the `MAINTENANCE_MODE` `AtomicBool` is `true`, `MaintenanceLayer` answers `503` for everything except `/healthz` and `/readyz`. |
+| `RequestLog` / `LogLayer` | `request_log` | In-memory buffer of recent requests: `LogLayer` records each one into `request_log::global()` (capacity 1000); `.recent(n)` / `.recent_errors(n)` read them. |
+| `ServerConfig` | `server_config` | Typed snapshot of all per-instance config (CORS, CSP, `client_hints`, `static_cache_control`, log format, request allocation). `ServerConfig::from_env()` reads `RWS_CONFIG_*` vars; `ServerConfig::current()` is the shared snapshot `App::new()` uses per request (one atomic load, no `getenv`), rebuilt after `server_config::invalidate()` — which config reload and every config writer in the crate call; call it yourself after a direct `std::env::set_var`. `ServerConfig::default()` returns hardcoded defaults. Pass to `App::with_config(config)` to create a fully isolated app instance. |
 | `App::with_config` | `app` | Constructor that pins an `App` to a fixed `ServerConfig` — no env reads happen during request processing. Preferred pattern for parallel integration tests that verify CORS/CSP behavior; no `test_env::lock()` needed. |
 | `ConfigSnapshot` | `config_reload` | Point-in-time snapshot of all hot-reloadable config values. Read with `config_reload::current()`. |
 | `config_reload::reload` | `config_reload` | Re-reads `rws.config.toml` and applies CORS, rate-limit, log-format changes live. Triggered by SIGHUP or `POST /admin/config/reload`. |
-| `get_max_body_size` | `entry_point` | Reads `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (default `0`, unlimited). `Server::process`, `process_h1_tls`, `h2_handler`, and `h3_handler` all check a request's declared `Content-Length` (or accumulated body, for H2/H3) against this before buffering it; requests over the limit get `413 Payload Too Large` and the connection is closed. |
+| `get_max_body_size` | `entry_point` | Reads `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (default `0`, unlimited). `Server::process`, `http1_async::serve`, `h2_handler`, and `h3_handler` all check a request's declared `Content-Length` (or accumulated body, for H2/H3) against this before buffering it; requests over the limit get `413 Payload Too Large` and the connection is closed. |
 | `get_spa_fallback` / `get_spa_fallback_exclude_prefixes` | `entry_point` | Reads `RWS_CONFIG_SPA_FALLBACK` (default unset — disabled) and `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES`. `StaticResourceController` serves the configured file for a `GET`/`HEAD` request matching no real file/directory (a no-`.` last path segment, not under an excluded prefix) instead of `404` — see Use Case #79. |
-| `Server::continue_response` / `expectation_failed_response` | `server` (HTTP/1.1: `Server::process`, `process_h1_tls`) | `Expect: 100-continue` support (RFC 9110 §10.1.1). A request with `Expect: 100-continue` and a `Content-Length` gets an immediate `100 Continue` interim response before the server blocks reading the body — checked *after* the `413` size-limit check, so an oversized body is rejected without ever telling the client to send it. Any other `Expect` value gets `417 Expectation Failed` without reading the body at all. HTTP/2 and HTTP/3 read bodies via async per-frame `DATA` streams rather than one blocking read, so they don't have the read-ahead deadlock this exists to avoid, and don't implement it. |
+| `Server::continue_response` / `expectation_failed_response` | `server` (HTTP/1.1: `Server::process`, `http1_async::serve`) | `Expect: 100-continue` support (RFC 9110 §10.1.1). A request with `Expect: 100-continue` and a `Content-Length` gets an immediate `100 Continue` interim response before the server blocks reading the body — checked *after* the `413` size-limit check, so an oversized body is rejected without ever telling the client to send it. Any other `Expect` value gets `417 Expectation Failed` without reading the body at all. HTTP/2 and HTTP/3 read bodies via async per-frame `DATA` streams rather than one blocking read, so they don't have the read-ahead deadlock this exists to avoid, and don't implement it. |
 | `OtelLayer` | `otel` | Middleware that creates the HTTP server root span, propagates W3C `traceparent`, and exports to stdout or OTLP HTTP. Call `otel::setup()` or `otel::setup_from_env()` at startup. Nest child spans under it with `otel::span`/`otel::client_span`. |
 | `Span` / `otel::span` / `otel::client_span` | `otel` | `Span` is an RAII child span — create one with `otel::span(name)` (Internal) or `otel::client_span(name)` (Client), nested under whatever span is currently active (or a fresh trace if none). `.set_attribute(key, value)`, `.set_error()`/`.record_error(msg)`, and drop (or `.end()`) to record it. |
 | `SpanKind` / `AttributeValue` | `otel` | `SpanKind`: `Internal`/`Server`/`Client` (OTLP numbering). `AttributeValue`: `String`/`Int`/`Float`/`Bool`, with `From` impls for ergonomic `set_attribute("key", 42)`. |
@@ -329,8 +337,7 @@ match auth {
 use rust_web_server::url::URL;
 
 // request_uri is e.g. "/search?q=rust&page=2"
-let full_url = format!("http://localhost{}", request.request_uri);
-if let Ok(components) = URL::parse(&full_url) {
+if let Ok(components) = URL::parse_request_target(&request.request_uri) {
     if let Some(query) = components.query {
         let params = URL::parse_query(&query);
         let q = params.get("q").map(String::as_str).unwrap_or("");
@@ -581,7 +588,7 @@ fn process(request: &Request, _response: Response, _connection: &ConnectionInfo)
 }
 ```
 
-`AppError` variants map to: `BadRequest` → 400, `Unauthorized` → 401, `Forbidden` → 403, `NotFound` → 404, `Conflict` → 409, `UnprocessableEntity` → 422, `Internal` → 500.
+`AppError` variants map to: `BadRequest` → 400, `Unauthorized` → 401, `Forbidden` → 403, `NotFound` → 404, `Conflict` → 409, `PayloadTooLarge` → 413, `UnprocessableEntity` → 422, `TooManyRequests` → 429, `Internal` → 500.
 
 ---
 
@@ -1051,6 +1058,7 @@ It also implements `FromRequest`, so it composes with the typed extractor patter
 
 ```rust
 use rust_web_server::app::App;
+use rust_web_server::core::New;
 use rust_web_server::session::{self, SessionStore};
 use rust_web_server::header::Header;
 use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
@@ -1192,7 +1200,7 @@ Handler signature: `Fn(Request, PathParams, ConnectionInfo, Arc<S>) -> Fut` wher
 
 ### 27. IP allowlist / denylist
 
-`IpFilter` middleware (`src/ip_filter/`) blocks or gates requests by client IPv4 address. Entries may be exact addresses (`"1.2.3.4"`) or CIDR ranges (`"10.0.0.0/8"`). Malformed entries are silently skipped.
+`IpFilter` middleware (`src/ip_filter/`) blocks or gates requests by client IPv4 or IPv6 address. Entries may be exact addresses (`"1.2.3.4"`, `"::1"`) or CIDR ranges (`"10.0.0.0/8"`, `"2001:db8::/32"`); IPv4 rules also match IPv4-mapped (`::ffff:a.b.c.d`) clients. Malformed entries are silently skipped.
 
 ```rust
 use rust_web_server::app::App;
@@ -1213,7 +1221,7 @@ let layered = App::new()
     .wrap(IpFilter::deny(["10.0.0.99"]));
 ```
 
-Non-matching IPs in allow mode and IPv6 addresses both receive `403 Forbidden`. Use `IpFilter::deny` when most traffic should pass and only specific addresses need blocking.
+Non-matching IPs in allow mode receive `403 Forbidden`. Use `IpFilter::deny` when most traffic should pass and only specific addresses need blocking.
 
 ---
 
@@ -1383,7 +1391,7 @@ On validation failure the response body looks like:
 ### 30. Reverse proxy / load balancing
 
 `ReverseProxy` (in `src/proxy/`) is a `Middleware` that forwards incoming
-requests to one or more plain-HTTP backends.  Backends are selected in
+requests to one or more HTTP backends (`https://` too, see #85).  Backends are selected in
 round-robin order; when a backend is unreachable the proxy tries the next one
 before returning `502 Bad Gateway`.  Hop-by-hop headers are stripped;
 `X-Forwarded-For` and `Via: 1.1 rws` are added to every forwarded request.
@@ -1417,7 +1425,7 @@ let app = App::new()
 
 **Connection pooling**
 
-`ReverseProxy` ships with an embedded `ConnPool` (8 idle connections per backend, 60 s idle timeout).  When a backend sends `Connection: keep-alive`, the TCP stream is returned to the pool and reused for the next request, eliminating per-request TCP handshakes.
+`ReverseProxy` ships with an embedded `ConnPool` (64 idle connections per backend, 60 s idle timeout).  When a backend sends `Connection: keep-alive`, the TCP stream is returned to the pool and reused for the next request, eliminating per-request TCP handshakes.
 
 To share one pool across multiple `ReverseProxy` instances or to tune pool parameters:
 
@@ -1548,9 +1556,9 @@ let app = App::new()
 
 | Condition | Result |
 |-----------|--------|
-| GET, 2xx, no `Cache-Control: no-store/private` | Response stored; subsequent hits served from cache with `Age` header |
+| GET, 2xx, no `Range` request header, no `Cache-Control: no-store/private/no-cache`, `Vary` only names headers in the key | Response stored; subsequent hits served from cache with `Age` header |
 | Non-GET method | Always passes through to the handler; never cached |
-| Response has `Cache-Control: no-store` or `private` | Handler is called, response is **not** stored |
+| Response has `Cache-Control: no-store`, `private` or `no-cache` (static files' default), answers a `Range` request, or has `Vary: *` / a `Vary` header not added with `.vary_by_header` (except `Origin` without `Access-Control-Allow-Origin`, `Accept-Encoding` with an unencoded body) | Handler is called, response is **not** stored |
 | Request has `Cache-Control: no-cache` | Cache is bypassed, handler is called; the fresh response **is** stored (revalidation) |
 | Entry exceeds TTL | Next request is a miss; handler is called and result replaces the stale entry |
 | Store reaches capacity | Expired entries are purged first; if still full, the oldest entry is evicted (insertion order) |
@@ -1574,7 +1582,7 @@ kill -HUP $(cat /var/run/rws.pid)
 The server prints a confirmation line:
 
 ```
-Config reloaded — cors_allow_all=false rate_limit=1000/60 log_format=clf
+Config reloaded — cors_allow_all=false rate_limit=1000/60 log_format=json
 ```
 
 **Trigger via HTTP endpoint**
@@ -1608,7 +1616,9 @@ fn my_handler(request: &Request, response: Response, conn: &ConnectionInfo) -> R
 | Max body size (`RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`) | ✅ (applies to new connections) |
 | IP / port | ❌ bound socket cannot move |
 | Thread count | ❌ thread pool is fixed at startup |
-| TLS cert / key paths | ❌ acceptor is built once |
+| Client hints, static `Cache-Control` (`RWS_CONFIG_CLIENT_HINTS`, `RWS_CONFIG_STATIC_CACHE_CONTROL`) | ✅ |
+| SPA fallback (`RWS_CONFIG_SPA_FALLBACK*`) | ✅ |
+| TLS certificates | ✅ on `SIGHUP` (TLS builds): `run_tls` re-reads the cert/key files of the default cert and every virtual host; the configured paths themselves are fixed at startup |
 
 ---
 
@@ -1879,7 +1889,8 @@ fn main() {
             },
         );
 
-    Server::new(None).run(srv);
+    let (listener, pool) = Server::setup().unwrap();
+    Server::run(listener, pool, srv);
 }
 ```
 
@@ -1929,9 +1940,9 @@ fn main() {
 
 `require_bearer(token)` enforces `Authorization: Bearer <token>` on every MCP request; set `MCP_TOKEN` in the environment. Requests from unknown clients receive a `401 Unauthorized` with `WWW-Authenticate: Bearer`.
 
-Use `.at("/custom/path")` to override the default `/mcp` endpoint. The bundled `rws` binary ships 8 built-in tools: `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`.
+Use `.at("/custom/path")` to override the default `/mcp` endpoint. The bundled `rws` binary ships 20 built-in tools: `server_config`, `feature_flags`, `server_metrics`, `list_routes`, `cache_stats`, `cache_clear`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`, `maintenance_status`, `set_maintenance`, `block_ip`, `unblock_ip`, `list_blocked_ips`, `feature_list`, `feature_set`, `recent_requests`, `recent_errors`.
 
-**Supported MCP methods:** `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, `prompts/get`, `notifications/initialized`.
+**Supported MCP methods:** `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `resources/subscribe`, `resources/unsubscribe`, `prompts/list`, `prompts/get`, `logging/setLevel`, `completion/complete`, plus the notifications `notifications/initialized`, `notifications/cancelled`, `notifications/roots/list_changed` (each covered below).
 
 **Protocol version negotiation:** `initialize` inspects the client's requested `params.protocolVersion` and responds with the lower of that and the server's own version (version strings are `YYYY-MM-DD` dates, so a plain string comparison already orders them correctly) — rather than always echoing back the server's version regardless of what the client asked for. A client requesting a newer version than this server implements gets told the version it actually speaks, so the client can decide whether to proceed or abort; a client requesting an older version is honored as-is. Missing or absent `protocolVersion`/`params` falls back to the server's own version rather than erroring `initialize` out.
 
@@ -1954,7 +1965,7 @@ let server = McpServer::new("my-server", "1.0")
 
 `initialize` mints a session id (same ID generator as `request_id::generate_request_id`), records that session's `params.clientInfo` (logged to stderr too), and returns the id in an `Mcp-Session-Id` response header. The client is expected to echo that header back on subsequent requests; `execute()` reads it, looks up the recorded `clientInfo`, and builds the `McpContext` a `tool_with_context` handler sees. Calling `handle_request()` directly (bypassing `execute()`, e.g. in tests) gives `tool_with_context` handlers an empty `McpContext` — every field `None` — since there's no `Request` to read a session header from; use `handle_request_with_context(body, ctx)` to supply one explicitly.
 
-`McpContext`'s fields: `client_name`/`client_version` (from this session's `initialize` `clientInfo`, if recognized), `session_id` (the `Mcp-Session-Id` header on this request, if present), `auth_claims` (reserved for a future JWT-auth integration — always `None` today). Session records accumulate for the life of the process with no eviction — fine for a modest, roughly-stable set of long-lived AI-agent clients, not recommended unmodified for a public-internet-facing server churning through unbounded distinct clients.
+`McpContext`'s fields: `client_name`/`client_version` (from this session's `initialize` `clientInfo`, if recognized), `session_id` (the `Mcp-Session-Id` header on this request, if present), `auth_claims` (the verified JWT claims as JSON when `.require_oauth()` is configured — see below; `None` otherwise), plus `progress_token` (see progress below). Session records accumulate for the life of the process with no eviction — fine for a modest, roughly-stable set of long-lived AI-agent clients, not recommended unmodified for a public-internet-facing server churning through unbounded distinct clients.
 
 **Tool annotations (MCP 2025-03-26):** `.tool_annotated(name, description, schema, annotations, handler)` registers a tool the same way `.tool()` does, plus a `ToolAnnotations` struct of behavioral hints that clients like Claude Desktop use to decide whether to warn or ask for confirmation before calling it:
 
@@ -2052,7 +2063,7 @@ Implementation leverages the existing `Response::stream_pipe` mechanism (already
 
 Idle connections get a `: keep-alive` SSE comment every 15 seconds — both to stop intermediate proxies from timing out a silent connection, and because it forces a write attempt that surfaces a disconnected client on its next check. A client whose buffer fills up (32 pending unread frames) is dropped from the broadcast list exactly like a disconnected one — `.notify()` cannot be made to block or fail because one SSE client stopped reading.
 
-Scoped to the plain HTTP/1.1 path only (`Server::run`/`Server::process`), matching `Response::stream_pipe`'s existing scope generally — the HTTP/2 (`h2_handler`) and HTTP/3 (`h3_handler`) handlers don't drive `stream_pipe` for any response yet, not just this one. `TestClient` also doesn't drive `stream_pipe` (it inspects the `Response` directly without running the real write loop), so testing the actual channel plumbing calls the crate-internal `start_sse_stream()` directly alongside the public `.notify()`, reading from the returned `stream_pipe` reader in-process rather than going through `TestClient`.
+Works on HTTP/1.1, HTTP/2 and HTTP/3 — every connection handler streams `stream_pipe` bodies (HTTP/2 and HTTP/3 in 64 KB chunks via `server::body_stream`). `TestClient` also doesn't drive `stream_pipe` (it inspects the `Response` directly without running the real write loop), so testing the actual channel plumbing calls the crate-internal `start_sse_stream()` directly alongside the public `.notify()`, reading from the returned `stream_pipe` reader in-process rather than going through `TestClient`.
 
 **`logging/setLevel` and `notifications/message`:** built directly on the SSE channel above — the spec lets a client request a minimum log level and receive server log messages pushed as `notifications/message` events. `.logging_enabled()` advertises the `logging` capability (`"logging":{}`) in `initialize`; `.log(level, logger, data_json)` pushes a log entry to every connected SSE client, filtered by whatever level the client last set via `logging/setLevel`:
 
@@ -2067,7 +2078,7 @@ server.log(LogLevel::Warning, Some("database"), r#""connection pool exhausted""#
 
 `LogLevel` is the MCP spec's eight RFC 5424 syslog severities (`Debug` through `Emergency`, in that order — `PartialOrd`/`Ord` are derived from declaration order, so `level < min_level` comparisons just work). `.log()` only pushes if `level` is at or above the level most recently set by `logging/setLevel`; before any client calls it, the default is `LogLevel::Debug` — the least restrictive level, so nothing is filtered until a client asks for less noise. `logger` (optional) identifies the log's source (a module or subsystem name) and is escaped automatically; `data_json` is spliced in verbatim as any valid JSON value (an object, a string, whatever the spec allows), not escaped or re-serialized.
 
-`.log()` reuses `.notify()` internally (same backpressure and disconnect handling), so it inherits everything from the SSE section above — never blocks, drops a client whose buffer is full, HTTP/1.1 only. `.logging_enabled()` only changes what's *advertised*: `.log()` and `logging/setLevel` both work whether or not it was called, exactly like `.notify()` itself needs no opt-in — a spec-honest client simply wouldn't send `logging/setLevel` in the first place without seeing the capability advertised.
+`.log()` reuses `.notify()` internally (same backpressure and disconnect handling), so it inherits everything from the SSE section above — never blocks, drops a client whose buffer is full. `.logging_enabled()` only changes what's *advertised*: `.log()` and `logging/setLevel` both work whether or not it was called, exactly like `.notify()` itself needs no opt-in — a spec-honest client simply wouldn't send `logging/setLevel` in the first place without seeing the capability advertised.
 
 **Dynamic tool/resource/prompt registration + `listChanged`:** `.tool()`/`.resource()`/`.prompt()` are consuming builders — called once, before the server starts serving requests. `.register_tool(...)`/`.register_resource(...)`/`.register_prompt(...)` and their `.remove_*(...)` counterparts take `&self` instead, so they can be called at any time from any thread holding a clone of the server — after discovering a plugin, connecting to a database, or reacting to a hot-reloaded config file:
 
@@ -2085,7 +2096,7 @@ let existed = server.remove_tool("refresh_cache"); // -> true
 
 This works because `tools`/`resources`/`prompts` are stored as `Arc<RwLock<Vec<_>>>` rather than a plain `Vec` — every clone of `McpServer` (each connection thread gets one) shares the same live list, so a mutation through one clone is immediately visible to every other clone, including ones currently handling requests. `do_tools_call`/`do_resources_read`/`do_prompts_get` clone the matched handler's `Arc` out from under a short-lived read-lock guard before invoking it, rather than holding the lock for the (potentially slow) duration of the handler call — so a long-running tool invocation never blocks a concurrent `register_tool`/`remove_tool` from another thread.
 
-Each registration or removal that actually changes something pushes the corresponding `notifications/tools/list_changed` / `notifications/resources/list_changed` / `notifications/prompts/list_changed` event (no `params`, per spec) to every `GET /mcp` SSE client via `.notify()` — a no-op removal (name not found) pushes nothing. `initialize`'s capabilities now advertise `"listChanged":true` for all three unconditionally (dynamic registration is always available, not opt-in like logging); `resources.subscribe` stays `false` since `resources/subscribe`/`resources/unsubscribe` aren't implemented (MCP_TODO.md's TODO-14) — advertising it would let a client call a method that doesn't exist.
+Each registration or removal that actually changes something pushes the corresponding `notifications/tools/list_changed` / `notifications/resources/list_changed` / `notifications/prompts/list_changed` event (no `params`, per spec) to every `GET /mcp` SSE client via `.notify()` — a no-op removal (name not found) pushes nothing. `initialize`'s capabilities now advertise `"listChanged":true` for all three unconditionally (dynamic registration is always available, not opt-in like logging); `resources.subscribe` is advertised as `true` too (see `resources/subscribe` below).
 
 There is no dynamic equivalent of `.tool_with_context()`, `.tool_annotated()`, or `.prompt_with_args()` — `register_tool`/`register_prompt` only cover the plain shapes, matching `.tool()`/`.prompt()`. Removing and re-registering under the same name is the way to change a dynamically-added tool's annotations or a prompt's argument definitions later.
 
@@ -2148,7 +2159,7 @@ let server = McpServer::new("my-server", "1.0")
     });
 ```
 
-This is **cooperative** cancellation, not preemptive — Rust cannot forcibly interrupt a running synchronous closure (the same limitation `timeout::with_timeout` already documents elsewhere in this crate). A handler that never checks `is_cancelled()` runs to completion regardless, exactly as before this existed; only a handler that voluntarily polls the flag between its own steps actually stops early. This deliberately differs from the original design sketch, which assumed `tokio_util::sync::CancellationToken` and an async-only implementation gated on TODO-17 (async tool handlers) — that feature doesn't exist in this crate yet, and pulling in a new dependency for a capability with no consumer would be premature. The `AtomicBool`-based approach implemented here needs no new dependency and works identically on `http1` and `http2` builds, unlike the sketch's async-only design.
+This is **cooperative** cancellation, not preemptive — Rust cannot forcibly interrupt a running synchronous closure (the same limitation `timeout::with_timeout` already documents elsewhere in this crate). A handler that never checks `is_cancelled()` runs to completion regardless, exactly as before this existed; only a handler that voluntarily polls the flag between its own steps actually stops early. This deliberately differs from the original design sketch, which assumed `tokio_util::sync::CancellationToken` and an async-only implementation gated on TODO-17 (async tool handlers) — `.async_tool()` handlers get no `McpContext`, and pulling in a new dependency for a capability with no consumer would be premature. The `AtomicBool`-based approach implemented here needs no new dependency and works identically on `http1` and `http2` builds, unlike the sketch's async-only design.
 
 Mechanically: `McpServer` keeps `cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>`, keyed by a `tools/call` request's raw `id` token. `dispatch_with_cancellation` (wrapping `dispatch` in both the single-request and batch code paths) registers a fresh flag just before calling a `tools/call` handler and removes it again once dispatch returns — regardless of whether the handler ever checked it, so this map never accumulates stale entries the way `sessions`/`sse_clients` can. `notifications/cancelled` is special-cased before the generic "notification → 202, no processing" branch: it reads `params.requestId` (stored/matched as a raw JSON token, same as `progress_token`, since the spec allows `string | number`) and flips the matching flag if the target request is still in flight; an unknown or already-finished request id is silently ignored, not an error.
 
@@ -2191,7 +2202,7 @@ let server = McpServer::new("my-server", "1.0")
 
 `SamplingRequest.messages` reuses `PromptMessage` rather than introducing a near-identical `SamplingMessage` type — the spec's sampling message shape (`{"role":...,"content":{"type":"text",...}}`) is exactly what `PromptMessage` already models, right down to its `::user()`/`::assistant()` constructors.
 
-`ctx.sample()` **blocks the calling thread** — it is not `async fn`. This is deliberate, not a stopgap: tool handlers in this crate are plain synchronous closures (no async tool handler support exists yet — MCP_TODO.md's TODO-17), so there's no `.await` point to suspend at even if this were async. The calling thread parks on an internal channel for up to `timeout`; on a thread-pool server this ties up one worker for that long, the same tradeoff `timeout::with_timeout` already accepts for bounding a slow handler's *caller* from the other direction.
+`ctx.sample()` **blocks the calling thread** — it is not `async fn`. This is deliberate, not a stopgap: `.tool_with_context()` handlers are plain synchronous closures (`.async_tool()` has no context-aware variant), so there's no `.await` point to suspend at even if this were async. The calling thread parks on an internal channel for up to `timeout`; on a thread-pool server this ties up one worker for that long, the same tradeoff `timeout::with_timeout` already accepts for bounding a slow handler's *caller* from the other direction.
 
 Mechanically, this is the first place a response needs to be routed back to a specific in-flight call rather than just broadcast or session-targeted like every prior notification. `McpServer` mints a fresh request id, registers an `mpsc::Sender<Result<String, String>>` for it in `pending_replies: Arc<Mutex<HashMap<String, mpsc::Sender<...>>>>`, sends the request to the caller's session via the existing `send_sse_to_sessions` (from `resources/subscribe`), and blocks on the matching receiver. The client's eventual `POST /mcp` reply is a JSON-RPC *response* — no `method` field, by definition — so `handle_request_with_context`/`handle_batch` now check a method-less body with a recognized `id` against `pending_replies` (via `try_deliver_sampling_response`) before falling back to the old "Missing method" `INVALID_REQUEST` error; a matching id delivers the response through the channel and unblocks the waiting call, a non-matching one still gets rejected as invalid, exactly as before this existed. This mechanism (`McpContext::send_and_wait`) is shared with `roots/list` below — `sample()` and `list_roots()` are both thin wrappers around it, differing only in the method name/params they send and how they parse the `result`.
 
@@ -2300,6 +2311,7 @@ RWS_CONFIG_VIRTUAL_HOST_0_KEY_FILE=/etc/ssl/example.key
 ```rust
 use rust_web_server::app::App;
 use rust_web_server::application::Application;
+use rust_web_server::core::New;
 use rust_web_server::request::Request;
 use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
 use rust_web_server::router::{PathParams, Router};
@@ -2633,7 +2645,7 @@ canary_pool.start();
 // BackendPool currently sees.
 let app = App::new()
     .wrap(CanaryLayer::new(vec![WeightedBackend::new("stable-backend:8080", 9)])
-        .add_pool(canary_pool, 1));
+        .add_pool(canary_pool.clone(), 1)); // BackendPool is Clone; clones share state
 
 // Or build a layer purely from dynamic groups:
 let stable_pool = BackendPool::dns("stable.internal", 8080).poll_interval_secs(15);
@@ -2874,7 +2886,7 @@ Scheduler::new()
 
 ### Structured JSON logging
 
-Set `RWS_CONFIG_LOG_FORMAT=json` (or `log_format = 'json'` in `rws.config.toml`) to emit access logs as JSON:
+Access logs are JSON by default (`RWS_CONFIG_LOG_FORMAT=json`, or `log_format = 'json'` in `rws.config.toml`; `combined` for Combined Log Format, `off`/`none` for no access log). Lines are buffered per thread and written to stdout every 100 ms (`Log::flush_access_log()` forces it):
 
 ```json
 {"time":"2026-06-30T12:00:00Z","remote_addr":"10.0.0.5:54321","method":"GET","path":"/index.html","protocol":"HTTP/1.1","status":200,"bytes":4096}
@@ -3201,11 +3213,13 @@ resolved path that doesn't exist returns `404`.
 | `rate_limit` | `{ max_requests = 500, window_secs = 60 }` |
 | `cache` | `{ ttl_secs = 3600, vary_by = ["Accept-Encoding"] }` |
 | `auth` | `{ type = "bearer", token_env = "API_TOKEN" }` — static token, always available. `{ type = "jwt", secret_env = "JWT_SECRET" }` — HS256 verification via `JwtLayer`, requires `features = ["auth"]`. `{ type = "basic", htpasswd_file = ".htpasswd" }` — via `BasicAuthLayer::from_htpasswd_file`, requires `features = ["auth"]` (plain-text and `{SHA256}` entries only — see the `BasicAuthLayer` row above). Auth fails closed: without the `auth` feature, or with an empty/unset `token_env`/`secret_env` or a missing `htpasswd_file`, that route answers `503` (startup error logged) instead of being served unauthenticated. |
-| `ip_allow` / `ip_deny` | `["192.168.1.0/24", "10.0.0.1"]` |
-| `rewrite.request[]` | `[{ type = "header_set", name = "X-Real-IP", value = "$client_ip" }]` |
-| `rewrite.response[]` | `[{ type = "header_remove", name = "Server" }]` |
+| `ip_filter` | `{ allow = ["192.168.1.0/24", "10.0.0.1"] }` or `{ deny = [...] }` (`[route.middleware.ip_filter]`) |
+| `rewrite.request[]` | one `[[route.middleware.rewrite.request]]` table per rule: `type = "header_set"`, `name = "X-Env"`, `value = "prod"` (values are literal — no variable interpolation) |
+| `rewrite.response[]` | `[[route.middleware.rewrite.response]]` with `type = "header_remove"`, `name = "Server"` |
 | `timeout_ms` | `500` — flat key directly under `[route.middleware]`, not a sub-table. Bounds this route's *total* time (including its other middleware); `0`/absent means no timeout. |
-| `max_body_size` | `65536` — flat key (bytes), same convention as `timeout_ms`. Rejects this route's request with `413` if the body is bigger; `0`/absent means no route-specific limit. A stricter *addition* on top of the global `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` — see Use Case #74. |
+| `max_body_size` | `65536` — flat key (bytes), same convention as `timeout_ms`. Rejects this route's request with `413` if the body is bigger; `0`/absent means no route-specific limit. A stricter *addition* on top of the global `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` — see Use Cases #72 and #75. |
+
+The same keys in a top-level `[middleware]` table apply to every request (wrapping all routes and the fallback).
 
 **L4 proxies (separate listeners, spawned from config)**
 
@@ -3445,7 +3459,7 @@ let version = pool.rollback_last("migrations/").await?; // Option<String>
 let versions = pool.rollback("migrations/", 3).await?; // Vec<String>
 ```
 
-Both return `Err` if the migration being undone has no `.down.sql` file — rollback is opt-in per migration. See [Migrations](/database/migrations/) for the down-file naming rule.
+Both return `Err` if the migration being undone has no `.down.sql` file — rollback is opt-in per migration. See [Migrations](docs/src/content/docs/database/migrations.md) for the down-file naming rule.
 
 CRUD via the repository:
 
@@ -3942,7 +3956,7 @@ fn cors_denied_when_origin_not_listed() {
         .send();
 
     // No ACAO header → CORS denied
-    assert!(resp._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).is_none());
+    assert!(resp.header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
 }
 
 #[test]
@@ -3961,8 +3975,8 @@ fn cors_allowed_for_listed_origin() {
         .header(Header::_ACCESS_CONTROL_REQUEST_METHOD, METHOD.get)
         .send();
 
-    let acao = resp._get_header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN.to_string()).unwrap();
-    assert_eq!("https://trusted.example.com", acao.value);
+    let acao = resp.header(Header::_ACCESS_CONTROL_ALLOW_ORIGIN).unwrap();
+    assert_eq!("https://trusted.example.com", acao);
 }
 ```
 
@@ -4499,7 +4513,7 @@ GitHub also sends an older SHA-1-based `X-Hub-Signature` for backward compatibil
 
 ### 72. Bounding request body size
 
-Every read path (`Server::process` for plain HTTP/1.1, `process_h1_tls`, `h2_handler`, `h3_handler`) now accumulates a request's body across as many socket reads as it takes to receive the full declared `Content-Length` — previously, HTTP/1.1 only ever performed a single `request_allocation_size`-sized read, silently truncating (and, for bodies shorter than that buffer, zero-padding) anything that didn't fit in one syscall.
+Every read path (`Server::process` in the `http1` build, `http1_async::serve` for HTTP/1.1 over plain TCP and TLS in the async builds, `h2_handler`, `h3_handler`) now accumulates a request's body across as many socket reads as it takes to receive the full declared `Content-Length` — previously, HTTP/1.1 only ever performed a single `request_allocation_size`-sized read, silently truncating (and, for bodies shorter than that buffer, zero-padding) anything that didn't fit in one syscall.
 
 ```bash
 # Reject any request whose Content-Length exceeds 5 MB, before reading its body
@@ -4606,7 +4620,7 @@ If the declared `Content-Length` exceeds `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` (se
 // curl itself waits for the "100 Continue" line before it starts uploading.
 ```
 
-Scope: this applies to HTTP/1.1 only (`Server::process` and `process_h1_tls`), where the server reads headers and body off one raw byte stream and could otherwise block waiting for a body the client is itself waiting to be told to send. HTTP/2 (`h2_handler`) and HTTP/3 (`h3_handler`) read the body asynchronously as separate `DATA` frames after the headers frame, so that particular deadlock risk doesn't exist there, and 100-continue isn't implemented for them.
+Scope: this applies to HTTP/1.1 only (`Server::process` and `http1_async::serve`), where the server reads headers and body off one raw byte stream and could otherwise block waiting for a body the client is itself waiting to be told to send. HTTP/2 (`h2_handler`) and HTTP/3 (`h3_handler`) read the body asynchronously as separate `DATA` frames after the headers frame, so that particular deadlock risk doesn't exist there, and 100-continue isn't implemented for them.
 
 ### 75. Per-route max body size (config-driven proxy)
 
@@ -4763,6 +4777,7 @@ fn dashboard(req: &Request) {
 
 ```rust
 use rust_web_server::app::App;
+use rust_web_server::core::New;
 use rust_web_server::test_client::TestClient;
 
 let client = TestClient::new(App::new());
@@ -4796,6 +4811,7 @@ cd dist && RWS_CONFIG_SPA_FALLBACK=index.html rws
 
 ```rust
 use rust_web_server::app::App;
+use rust_web_server::core::New;
 use rust_web_server::test_client::TestClient;
 
 // std::env::set_var("RWS_CONFIG_SPA_FALLBACK", "index.html"); // normally set via the environment
@@ -4815,6 +4831,8 @@ assert_eq!(200, response.status());
 export RWS_CONFIG_SPA_FALLBACK=index.html
 export RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES=/api
 ```
+
+A directory or file that *does* exist is always served as itself — the fallback only ever applies to the previously-404 case, and only when the configured fallback file actually exists on disk (a typo'd `RWS_CONFIG_SPA_FALLBACK` value is a silent no-op, not a broken response). Read fresh on every request (`crate::entry_point::get_spa_fallback`), so it can be changed via `rws.config.toml` + `SIGHUP` without a restart, the same as `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`.
 
 ### 80. Secrets-manager integration (Vault / AWS Secrets Manager / Azure Key Vault)
 
@@ -4857,8 +4875,6 @@ rws
 
 **Fail fast, not fail open** — a value that *looks* like a secret reference but fails to resolve (wrong token, unreachable backend, missing field, ...) is a startup error, not a silently-ignored one: the alternative would be a server starting up with a JWT signing key literally equal to the string `"vault://secret/myapp/db#password"`.
 
-A directory or file that *does* exist is always served as itself — the fallback only ever applies to the previously-404 case, and only when the configured fallback file actually exists on disk (a typo'd `RWS_CONFIG_SPA_FALLBACK` value is a silent no-op, not a broken response). Read fresh on every request (`crate::entry_point::get_spa_fallback`), so it can be changed via `rws.config.toml` + `SIGHUP` without a restart, the same as `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES`.
-
 ---
 
 ### 81. One-line JSON/text responses — `Response::json` / `Response::text`
@@ -4880,7 +4896,7 @@ fn error_process(_request: &Request, _response: Response, _connection: &Connecti
 }
 ```
 
-`Response::json` takes already-serialized bytes rather than a `Serialize` value, so it has no dependency on the `serde` feature — pair it with `serde_json::to_vec(&value)?` (or hand-rolled JSON) to build `body`. If you already have a `Serialize` type and want one call to go straight from a typed value to a response, use `Json(value).into_response()` (`serde` feature, see Use Case #2 above) instead — `Json<T>` handles the serialization step for you, these two helpers don't.
+`Response::json` takes already-serialized bytes rather than a `Serialize` value, so it has no dependency on the `serde` feature — pair it with `serde_json::to_vec(&value)?` (or hand-rolled JSON) to build `body`. If you already have a `Serialize` type and want one call to go straight from a typed value to a response, use `Json(value).into_response()` (`serde` feature, see Use Case #24 above) instead — `Json<T>` handles the serialization step for you, these two helpers don't.
 
 ---
 

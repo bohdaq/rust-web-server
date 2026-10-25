@@ -98,7 +98,7 @@ let mcp = McpServer::new("my-server", "1.0")
 | `client_name` | `Option<String>` | This session's `initialize` call's `params.clientInfo.name` |
 | `client_version` | `Option<String>` | This session's `initialize` call's `params.clientInfo.version` |
 | `session_id` | `Option<String>` | The `Mcp-Session-Id` header on this request |
-| `auth_claims` | `Option<String>` | Reserved for a future JWT-auth integration — always `None` today |
+| `auth_claims` | `Option<String>` | Verified JWT claims (JSON) when [`.require_oauth()`](/mcp/auth/#reading-verified-claims) is configured; `None` otherwise |
 | `progress_token` | `Option<String>` | `params._meta.progressToken` from this `tools/call` request, if the client sent one — see [Progress reporting](#progress-reporting) |
 
 ### How the session gets established
@@ -209,7 +209,7 @@ let mcp = McpServer::new("my-server", "1.0")
 `SamplingRequest.messages` reuses [`PromptMessage`](/mcp/prompts/#promptmessage) rather than a near-identical `SamplingMessage` type — the spec's sampling message shape (`{"role":...,"content":{"type":"text",...}}`) is exactly what `PromptMessage` already models, including its `::user()`/`::assistant()` constructors. `SamplingResponse` (what `ctx.sample()` returns on success) has `role`, `content` (an `McpContent`), `model` (which model the client actually used), and `stop_reason`.
 
 :::caution[This blocks the calling thread]
-`ctx.sample()` is not `async fn` — it blocks synchronously until the client responds or `timeout` elapses. This is deliberate: tool handlers in this crate are plain synchronous closures, with no async tool handler support to `.await` inside of yet. On a thread-pool server this ties up one worker thread for up to `timeout` — the same tradeoff per-route timeouts (`with_timeout`) already accept from the other direction.
+`ctx.sample()` is not `async fn` — it blocks synchronously until the client responds or `timeout` elapses. This is deliberate: `.tool_with_context()` handlers are plain synchronous closures (`.async_tool()` handlers don't receive an `McpContext`). On a thread-pool server this ties up one worker thread for up to `timeout` — the same tradeoff per-route timeouts (`with_timeout`) already accept from the other direction.
 :::
 
 `ctx.sample()` fails fast, before sending anything, if:

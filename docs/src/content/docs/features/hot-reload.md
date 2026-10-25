@@ -30,7 +30,7 @@ Request handling reads settings from a cached snapshot (`ServerConfig::current()
 | CORS — all fields | `RWS_CONFIG_CORS_*` |
 | Rate-limit max requests | `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS` |
 | Rate-limit window (seconds) | `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS` |
-| Log format (`combined` / `json`) | `RWS_CONFIG_LOG_FORMAT` |
+| Log format (`json` / `combined` / `off`) | `RWS_CONFIG_LOG_FORMAT` |
 | Request allocation size | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
 | TLS certificates (http2+ builds) | `RWS_CONFIG_TLS_CERT_FILE`, `RWS_CONFIG_TLS_KEY_FILE` |
 | Tera templates (`tera` feature) | re-read from the directory passed to `template::init()` — see [Templates: hot reload](/building-apps/templates/#hot-reload) |
@@ -108,6 +108,7 @@ fn my_handler(req: &Request, conn: &ConnectionInfo) -> Response {
 | `rate_limit_window_secs` | `u64` | `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS` |
 | `log_format` | `String` | `RWS_CONFIG_LOG_FORMAT` |
 | `request_allocation_size` | `i64` | `RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES` |
+| `max_body_size` | `u64` | `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` |
 
 ## Triggering reload from code
 
@@ -135,7 +136,7 @@ fn rate_limit_info(_req: &Request, _conn: &ConnectionInfo) -> Response {
         r#"{{"max_requests":{},"window_secs":{}}}"#,
         cfg.rate_limit_max_requests, cfg.rate_limit_window_secs
     );
-    Response::json(&body)
+    Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, body.into_bytes())
 }
 ```
 

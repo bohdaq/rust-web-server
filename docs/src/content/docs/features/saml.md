@@ -45,6 +45,8 @@ let app = App::new().wrap(saml_sp);
 
 Any other path checks the session: if a completed login exists, claims are injected as the `X-Rws-Saml-Claims` header (JSON) and the request proceeds; otherwise the browser is redirected to `/saml/login?return_to=<original path>`.
 
+The paths can be changed with `.metadata_path()`, `.login_path()`, `.acs_path()` and `.logout_path()`; `.post_login_redirect(path)` sets where a login without `return_to` lands (default `/`).
+
 ## Reading claims in a handler
 
 ```rust
@@ -68,9 +70,12 @@ let meta = SamlIdpMetadata::from_file("idp-metadata.xml")?;
 
 // Or fetch it directly from the IdP's metadata URL:
 let meta = SamlIdpMetadata::from_url("https://idp.corp.com/metadata")?;
+
+// Or from an XML string you already have:
+let meta = SamlIdpMetadata::from_str(&xml)?;
 ```
 
-Both parse the same shape: `entityID`, the `SingleSignOnService` endpoint (an `HTTP-POST` binding entry is preferred if the metadata advertises one — see below for why), and the signing certificate under `KeyDescriptor[use=signing]`.
+All three parse the same shape: `entityID`, the `SingleSignOnService` endpoint (an `HTTP-POST` binding entry is preferred if the metadata advertises one — see below for why), and the signing certificate under `KeyDescriptor[use=signing]`.
 
 ## What assertion validation checks
 

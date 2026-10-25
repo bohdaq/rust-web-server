@@ -18,6 +18,7 @@ the normal `Controller` / `Application` pipeline (which has no access to the
 underlying stream).
 
 ```rust
+use std::io::{Read, Write};
 use std::net::TcpListener;
 use rust_web_server::request::Request;
 use rust_web_server::websocket::{WebSocket, Frame};
@@ -34,8 +35,8 @@ for stream in listener.incoming() {
 
     if WebSocket::is_upgrade_request(&request) {
         // Send 101 Switching Protocols.
-        let response = WebSocket::handshake_response(&request).unwrap();
-        stream.write_all(&response.generate_response()).unwrap();
+        let mut response = WebSocket::handshake_response(&request).unwrap();
+        stream.write_all(&response.generate()).unwrap();
 
         // Enter the frame loop.
         loop {
@@ -155,9 +156,9 @@ fn main() {
             let request = Request::parse(&buf[..n]).unwrap();
             if !WebSocket::is_upgrade_request(&request) { return; }
 
-            let handshake = WebSocket::handshake_response(&request).unwrap();
+            let mut handshake = WebSocket::handshake_response(&request).unwrap();
             use std::io::Write;
-            stream.write_all(&handshake.generate_response()).unwrap();
+            stream.write_all(&handshake.generate()).unwrap();
 
             loop {
                 match WebSocket::read_frame(&mut stream) {

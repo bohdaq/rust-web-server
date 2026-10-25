@@ -83,7 +83,7 @@ use rust_web_server::circuit_breaker::RedisCircuitBreaker;
 let cb = RedisCircuitBreaker::new("127.0.0.1:6379", None, 5, 30);
 
 // Or from RWS_REDIS_HOST/PORT/PASSWORD +
-// RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD/RECOVERY_SECS:
+// RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD/RECOVERY_SECS/MAX_HALF_OPEN_PROBES:
 let cb = RedisCircuitBreaker::from_env();
 ```
 
@@ -101,6 +101,7 @@ cb.record_failure("backend-a:8080")?;
 cb.state("backend-a:8080")?;        // Result<BreakerState, io::Error>
 cb.reset("backend-a:8080")?;
 cb.set_limits(10, 60);              // update thresholds on a live breaker, no restart needed
+cb.set_max_half_open_probes(2);     // HalfOpen probe cap (default 1)
 ```
 
 Because state lives in Redis rather than in the struct, this also gets you circuit-sharing across every `rws` instance pointed at the same Redis server for free — not just restart survival, but a backend that trips the breaker on one instance is immediately seen as open by every other instance too.
@@ -155,16 +156,16 @@ use rust_web_server::proxy::{LoadBalancing, ReverseProxy};
 use rust_web_server::circuit_breaker::RetryLayer;
 
 let app = App::new()
+    .wrap(RetryLayer::new().max_retries(2))
     .wrap(ReverseProxy::new([
         "http://api-1:8080",
         "http://api-2:8080",
         "http://api-3:8080",
-    ]))
-    .wrap(RetryLayer::new().max_retries(2));
+    ]));
 ```
 
 :::note[Layer ordering]
-Middleware is applied in push order — last-pushed is innermost. Push `ReverseProxy` first and `RetryLayer` second so that retries are visible to the outermost layers (metrics, rate limiting, etc.).
+Middleware runs in push order — first-pushed is outermost, last-pushed is innermost. Push `RetryLayer` first and `ReverseProxy` second so the retry layer wraps the proxy and re-runs it on a `502`/`503`/`504`; pushed the other way round, `ReverseProxy` answers before `RetryLayer` is ever reached.
 :::
 
 ## Automatic ReverseProxy wiring

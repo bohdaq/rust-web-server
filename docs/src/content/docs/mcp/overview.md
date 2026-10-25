@@ -76,6 +76,9 @@ All JSON-RPC 2.0 messages travel over `POST /mcp`. The endpoint handles the full
 | `resources/read`     | Read a resource by URI                       |
 | `prompts/list`       | List all registered prompt templates         |
 | `prompts/get`        | Retrieve a rendered prompt by name           |
+| `resources/subscribe` / `resources/unsubscribe` | Watch a resource URI — see [Resource subscriptions](#resource-subscriptions) |
+| `logging/setLevel`   | Set the minimum pushed log level — see [Logging](#logging) |
+| `completion/complete` | Argument autocompletion — see [Argument autocompletion](#argument-autocompletion) |
 
 `OPTIONS /mcp` is handled for CORS preflight, and `GET /mcp` opens an SSE stream for server → client push — see [SSE streaming transport](#sse-streaming-transport) below. All other HTTP methods return `405 Method Not Allowed`.
 
@@ -221,7 +224,7 @@ Every registration or removal that actually changes something pushes the corresp
 
 (Similarly `notifications/resources/list_changed` and `notifications/prompts/list_changed` — none of these carry a `params` field, per spec.) A removal that finds nothing (an unknown name) pushes no notification.
 
-`initialize` now advertises `"listChanged":true` for tools, resources, and prompts unconditionally — dynamic registration is always available, unlike logging which needs `.logging_enabled()`. `resources.subscribe` stays `false`: `resources/subscribe`/`resources/unsubscribe` aren't implemented yet.
+`initialize` now advertises `"listChanged":true` for tools, resources, and prompts unconditionally — dynamic registration is always available, unlike logging which needs `.logging_enabled()`. `resources.subscribe` is advertised as `true` too — see [Resource subscriptions](#resource-subscriptions).
 
 :::note[No dynamic equivalent for every builder variant]
 `.register_tool()` and `.register_prompt()` only cover the plain shapes — matching `.tool()` and `.prompt()`. There's no dynamic equivalent of `.tool_with_context()`, `.tool_annotated()`, or `.prompt_with_args()`. To change a dynamically-added tool's annotations or a prompt's argument definitions, remove it and register it again under the same name.
@@ -316,18 +319,29 @@ Version strings are `YYYY-MM-DD` dates, so a plain string comparison already ord
 
 ## Built-in rws tools
 
-The binary ships 8 built-in tools when run in MCP mode via `app.mcp(...)`:
+The `rws` binary serves `/mcp` with 20 built-in tools (not in config-driven proxy mode). Set `MCP_TOKEN` to require it as a Bearer token:
 
 | Tool name             | Description                              |
 |-----------------------|------------------------------------------|
-| `server_config`       | Return current server configuration      |
+| `server_config`       | Active `RWS_CONFIG_*` values             |
 | `feature_flags`       | List compiled feature flags              |
-| `server_metrics`      | Prometheus-format metrics snapshot       |
+| `server_metrics`      | Live request/error/connection counters   |
+| `list_routes`         | Registered HTTP routes                   |
+| `cache_stats`         | Response cache hit/miss and entry counts |
+| `cache_clear`         | Evict all response cache entries         |
 | `rate_limit_config`   | Current rate limit settings              |
 | `check_rate_limit`    | Check remaining quota for a client IP   |
 | `cors_config`         | Active CORS rules                        |
 | `list_static_files`   | Files served from the static root        |
 | `reload_config`       | Trigger a hot config reload              |
+| `maintenance_status`  | Whether maintenance mode is on           |
+| `set_maintenance`     | Turn maintenance mode on/off             |
+| `block_ip` / `unblock_ip` | Add/remove an IP on the runtime blocklist |
+| `list_blocked_ips`    | Currently blocked IPs                    |
+| `feature_list`        | Runtime feature flags and their state    |
+| `feature_set`         | Enable/disable a runtime feature flag    |
+| `recent_requests`     | Last N requests (default 20, max 100)    |
+| `recent_errors`       | Last N 4xx/5xx requests (default 20, max 100) |
 
 ## Connecting Claude Desktop
 

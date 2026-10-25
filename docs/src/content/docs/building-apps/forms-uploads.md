@@ -66,7 +66,7 @@ use rust_web_server::body::multipart_form_data::FormMultipartData;
 use rust_web_server::header::Header;
 
 fn get_boundary(req: &Request) -> Result<String, String> {
-    let ct = req.get_header("content-type")
+    let ct = req.header("content-type")
         .ok_or_else(|| "missing Content-Type".to_string())?;
 
     FormMultipartData::extract_boundary(&ct.value)
@@ -92,7 +92,7 @@ fn upload(
 ) -> Response {
     // 1. Get boundary from Content-Type
     let content_type = req
-        .get_header("content-type")
+        .header("content-type")
         .map(|h| h.value.to_string())
         .unwrap_or_default();
 
@@ -118,7 +118,7 @@ fn upload(
     // 3. Iterate over parts
     for part in &parts {
         // Each part has headers (e.g. Content-Disposition, Content-Type)
-        if let Some(disposition) = part.get_header("content-disposition".to_string()) {
+        if let Some(disposition) = part.header("content-disposition") {
             let name = extract_field_name(&disposition.value);
             let file_name = extract_filename(&disposition.value);
 
@@ -162,7 +162,7 @@ Each `Part` returned by `FormMultipartData::parse` has:
 | `headers` | `Vec<Header>` | Per-part headers (Content-Disposition, Content-Type, etc.) |
 | `body` | `Vec<u8>` | Raw bytes of this part's body |
 
-Call `part.get_header("header-name")` for case-insensitive lookup of a single header.
+Call `part.header("header-name")` (or `part.get_header(String)`) for case-insensitive lookup of a single header.
 
 ## Storing uploaded files
 

@@ -91,16 +91,28 @@ cargo build --release --no-default-features --features http1
 | `http3` *(default)* | QUIC transport and HTTP/3 on top of `http2` | `quinn`, `h3`, `h3-quinn` |
 | `http-client` | HTTPS support in the outbound `Client` | `rustls`, `webpki-roots` |
 | `serde` | JSON serialization/deserialization via serde | `serde`, `serde_json` |
-| `auth` | HMAC-SHA2 utilities for JWT signing and cookie signing | `hmac`, `sha2` |
-| `macros` | `#[derive(Model)]` proc-macro for the ORM layer | `rws-macros` |
-| `acme` | Automatic TLS certificate provisioning (ACME/Let's Encrypt) | `rcgen`, `aws-lc-rs`, … |
+| `auth` | `BasicAuthLayer`, `JwtLayer` (HS256), `ForwardAuthLayer`, JWT helpers | `hmac`, `sha2` |
+| `auth-asymmetric` | RS256 / ES256 in `JwtLayer` (in-crate RSA verification) | `auth`, `p256`, `rand_core` |
+| `macros` | `#[derive(Model)]`, `#[derive(FromRequest)]`, `#[derive(Validate)]`, `#[derive(Config)]`, `#[get]`/`#[post]`/… route attributes | `rws-macros` |
+| `acme` | Automatic TLS certificate provisioning (ACME/Let's Encrypt) | `http2`, `rcgen`, `aws-lc-rs`, … |
 | `tera` | Tera template engine integration | `tera`, `serde`, `serde_json` |
-| `model-sqlite` | ORM backend for SQLite (bundled libsqlite3, no system dep) | `rusqlite` |
-| `model-postgres` | ORM backend for PostgreSQL | `postgres` |
-| `model-mysql` | ORM backend for MySQL / MariaDB | `mysql` |
-| `crypto` | Argon2id password hashing | `argon2`, `rand_core` |
+| `model-sqlite` | Async ORM backend for SQLite | `http2`, `sqlx` (sqlite) |
+| `model-postgres` | Async ORM backend for PostgreSQL | `http2`, `sqlx` (postgres) |
+| `model-mysql` | Async ORM backend for MySQL / MariaDB | `http2`, `sqlx` (mysql) |
+| `crypto` | Argon2id password hashing, signed (HMAC) and encrypted (AES-GCM) cookies | `argon2`, `rand_core`, `hmac`, `sha2`, `aes-gcm` |
 | `csrf` | CSRF token generation and validation | `rand_core` |
-| `sso` | OAuth 2.0 / OIDC SSO support (RSA + ECDSA signing, outbound HTTPS) | `p256`, `sha2`, `rand_core`, `serde`, `serde_json`, `http-client` |
+| `mailer` | SMTP client (STARTTLS/SMTPS also need `http-client` or `http2`) | — |
+| `sso` | OAuth 2.0 / OIDC client (RS256/ES256 `id_token` verification, outbound HTTPS) | `p256`, `sha2`, `rand_core`, `serde`, `serde_json`, `http-client` |
+| `sso-server` | `AuthServer`: rws as an OAuth 2.0 authorization server (HS256 tokens) | `sso`, `auth` |
+| `sso-saml` | `SamlSp`: SAML 2.0 Service Provider | `sso` |
+| `jobs` | In-memory `JobQueue` (`PersistentJobQueue` also needs a `model-*` feature) | — |
+| `storage-local` | `LocalStorage` | — |
+| `storage-s3` | `S3Storage` (AWS SigV4, no SDK) | `hmac`, `sha2`, `http-client` |
+| `storage-azure` | `AzureBlobStorage` (Shared Key / Managed Identity, no SDK) | `hmac`, `sha2`, `http-client` |
+| `openapi` | `GET /openapi.json` + `GET /docs` from registered routes | — |
+| `webhook` | `verify_webhook_signature` (GitHub, Shopify, Stripe) | `hmac`, `sha2` |
+| `rewrite-regex` | `RewriteLayer::request_uri_regex_rewrite` | `regex` |
+| `secrets` | `secrets::resolve()` for `vault://`, `aws-sm://`, `azkv://` references | `hmac`, `sha2`, `http-client` |
 
 :::note[Combining features]
 Features compose freely. For example, to build HTTP/2 + TLS + JSON + SQLite:

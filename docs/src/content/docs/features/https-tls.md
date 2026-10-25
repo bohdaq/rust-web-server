@@ -117,6 +117,6 @@ name     = "secure-api"
 backends = ["https://api.internal:443", "https://api2.internal:443"]
 ```
 
-Certificate verification uses the WebPKI root store (same trust anchors as browsers). Requires the `http-client` or `http2` feature — included in all builds except `--no-default-features --features http1`.
+Certificate verification uses the WebPKI root store (same trust anchors as browsers). To trust a private CA instead, set `tls_ca_file` on the `[[upstream]]` (since 18.0.0). Requires the `http-client` or `http2` feature — included in all builds except `--no-default-features --features http1`.
 
 See [Config-Driven Proxy → TLS upstreams](/proxy/config-driven/#tls-https-upstreams) for the full reference.

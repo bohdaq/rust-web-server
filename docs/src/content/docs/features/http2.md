@@ -100,9 +100,9 @@ etc.) directly inside route handlers:
 
 ```rust
 let app = App::with_async_state(my_state)
-    .get("/data", |state, _req, _params, _conn| async move {
-        let rows = state.db.fetch_all().await?;
-        Ok(Response::json(&rows))
+    .get("/data", |_req, _params, _conn, state| async move {
+        let rows: Vec<u8> = state.db.fetch_all_json().await;
+        Response::json(STATUS_CODE_REASON_PHRASE.n200_ok, rows)
     });
 ```
 
@@ -118,7 +118,7 @@ Each HTTP/2 connection advertises `SETTINGS_MAX_CONCURRENT_STREAMS = 250`
 (the same limit as Go's `net/http`), so one client can't open unbounded
 simultaneous streams, and `SETTINGS_MAX_HEADER_LIST_SIZE = 64 KiB`, so one
 request can't make the server buffer megabytes of headers (HTTP/3 uses the
-same 64 KiB field-section limit; HTTP/1.1 reads a request head in one
-`request_allocation_size` chunk, 10 KB by default). CI runs [h2spec](https://github.com/summerwind/h2spec)
+same 64 KiB field-section limit; an HTTP/1.1 request head is capped at
+64 KiB, else `431`). CI runs [h2spec](https://github.com/summerwind/h2spec)
 against a live server on every commit and requires all 146 tests to pass
 with none skipped (`ci/e2e/h2spec.sh`).

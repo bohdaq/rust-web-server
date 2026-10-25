@@ -10,7 +10,7 @@ This chart renders exactly the manifests documented at [docs/deployment/kubernet
 # From a local checkout of this repo:
 helm install my-rws ./helm/rws \
   --set image.repository=ghcr.io/your-org/rws \
-  --set image.tag=17.98.0
+  --set image.tag=17.113.0
 ```
 
 TLS is on by default and expects a Secret containing `tls.crt`/`tls.key` to already exist in the release namespace:

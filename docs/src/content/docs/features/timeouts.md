@@ -3,7 +3,7 @@ title: Per-Route Timeouts
 description: Give individual routes their own deadline instead of one global read timeout for everything.
 ---
 
-A single global read timeout (30s per connection, or `RWS_CONFIG_*`) applies to every route by default. A file-upload endpoint may legitimately need 120s while a health check should fail fast at 500ms. `rust_web_server::timeout` wraps individual handlers with their own budget — no new Cargo feature required, no new dependencies.
+A single global read timeout (30s per connection; a request head must also arrive within 30s of its first byte, else `408`) applies to every route by default. A file-upload endpoint may legitimately need 120s while a health check should fail fast at 500ms. `rust_web_server::timeout` wraps individual handlers with their own budget — no new Cargo feature required, no new dependencies.
 
 ## `Router` / stateless handlers
 

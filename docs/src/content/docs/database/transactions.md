@@ -7,7 +7,7 @@ description: Group multiple async database operations into an atomic unit that r
 
 ## Closure-based transactions
 
-`pool.transaction(|mut tx| async move { … }).await` is the recommended approach. Pass an `async` closure that receives a `DbTransaction`. If the closure returns `Ok`, the transaction is committed. If it returns `Err`, the transaction is rolled back automatically — you never need to call `rollback()` yourself unless you want to roll back inside the closure explicitly.
+`pool.transaction(|mut tx| async move { … }).await` is the recommended approach. Pass an `async` closure that receives (and owns) a `DbTransaction`. `transaction` itself does not commit: call `tx.commit().await` before returning `Ok`. If the closure returns `Err` — or returns without committing — the transaction is dropped and rolled back automatically, so you never need to call `rollback()` yourself unless you want to roll back inside the closure explicitly.
 
 ```rust
 use rust_web_server::model::{DbPool, Value};
@@ -104,7 +104,7 @@ pool.transaction(|mut tx| async move {
 }).await?;
 ```
 
-If the profile insert fails (e.g., a constraint violation), the closure returns `Err` and `transaction` rolls back the user insert as well, leaving the database unchanged.
+If the profile insert fails (e.g., a constraint violation), the closure returns `Err` before `commit()`, the dropped transaction rolls back the user insert as well, and the database is left unchanged.
 
 ## Error handling pattern
 

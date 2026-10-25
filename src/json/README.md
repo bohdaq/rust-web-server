@@ -12,6 +12,8 @@ Luckily, all internal cumbersome functionally is done by JSON module, developer 
 
 JSON module supports nested objects and arrays.
 
+With the `serde` feature, `Json<T>` (`src/json/extractor.rs`) extracts a `Deserialize` type from a request body and turns a `Serialize` type into an `application/json` response.
+
 Within module itself, in a tests section, you may find examples on how to use it. 
 
 ### Array

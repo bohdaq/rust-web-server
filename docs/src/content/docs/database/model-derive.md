@@ -40,14 +40,14 @@ pub struct User {
 
 ### `#[primary_key]`
 
-Marks the field as the primary key. Exactly one field must carry this attribute; the derive macro returns a compile error otherwise.
+Marks the field as the primary key. Exactly one field must carry this attribute; the derive macro returns a compile error if none does.
 
 ```rust
 #[primary_key]
 pub id: i64,   // caller sets id before INSERT
 ```
 
-Use this variant when you manage the primary key yourself (e.g. a UUID stored as text).
+Use this variant when you manage the primary key yourself. Note that `Repository::save` treats any key other than `0`/`NULL` as an UPDATE (and `ModelRepository` is keyed by `i64`), so insert rows with a caller-assigned key through raw SQL (`pool.execute`).
 
 ### `#[primary_key(auto_increment)]`
 
@@ -200,14 +200,14 @@ These are the primary entry points for [repository operations](/database/reposit
 Usage example:
 
 ```rust
-use rust_web_server::model::DbPool;
+use rust_web_server::model::{DbPool, Repository};
 
 let pool = DbPool::from_env().await?;
 
 // Save a new user
-let mut user = User { id: 0, email: "alice@example.com".into(), active: true };
-let mut repo = User::repository(&pool);
-repo.save(&mut user).await?;      // id is populated after insert
+let user = User { id: 0, email: "alice@example.com".into(), active: true };
+let repo = User::repository(&pool);
+let user = repo.save(&user).await?;   // returns the inserted row, id populated
 
 // Query with the builder
 let admins: Vec<User> = User::query(&pool)

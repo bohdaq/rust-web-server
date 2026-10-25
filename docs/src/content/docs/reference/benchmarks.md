@@ -65,8 +65,9 @@ On a 10-core Mac (same tools and configuration, `oha` on the same machine):
   that may block (your routes) still get a pool thread, so a slow handler
   can't stall other connections. See
   [`runs_inline`](/building-apps/middleware/#running-on-the-event-loop-runs_inline).
-- **Proxying holds no thread.** Proxy routes to plain-HTTP backends wait for
-  the backend on the connection's task, over pooled keep-alive connections.
+- **Proxying holds no thread.** Proxy routes without middleware, to HTTP or
+  HTTPS backends, wait for the backend on the connection's task, over pooled
+  keep-alive connections.
 - **One idle timer per connection**, pushed back on each read without a lock.
 - **`sendfile` for downloads** over plain HTTP on Linux and macOS: the kernel
   copies file pages straight to the socket, with the response head in the

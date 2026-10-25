@@ -90,7 +90,7 @@ The following headers are never forwarded to the upstream or back to the client,
 
 Streaming responses (SSE, chunked, large downloads) are forwarded directly to the client without buffering — see [Streaming responses](#streaming-responses).
 
-**Defaults:** 8 idle connections per backend, 60-second idle timeout. No configuration needed.
+**Defaults:** 64 idle connections per backend, 60-second idle timeout. No configuration needed.
 
 ### Tuning the built-in pool
 

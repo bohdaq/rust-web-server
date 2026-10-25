@@ -6,9 +6,9 @@ description: Planned features for rust-web-server — each appears as a callout 
 These features are planned. Each appears as a callout on the relevant docs page.
 
 :::caution[Coming Soon]
-**Multi-span distributed tracing**
+**Baggage and automatic child spans**
 
-Child spans, baggage propagation, and per-database-query spans within a single inbound request. Currently `OtelLayer` creates one span per request with no nested structure.
+W3C baggage propagation, and spans created automatically for each database query and outbound call. Child spans already work when started by hand with `otel::span` / `otel::client_span` — see [Distributed Tracing](/features/tracing/#child-spans).
 :::
 
 :::caution[Coming Soon]

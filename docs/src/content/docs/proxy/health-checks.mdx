@@ -82,7 +82,7 @@ After probing all backends, the checker atomically replaces the shared live list
 Arc<RwLock<Vec<String>>>  // written by health checker; read by DynamicProxy
 ```
 
-`DynamicProxy` acquires a read lock on every request, which is concurrent-safe. The health checker acquires a write lock only when publishing the new list.
+`DynamicProxy` acquires a read lock on every request, which is concurrent-safe. The health checker acquires a write lock once per probe round, to publish the new list.
 
 ### Log output
 
@@ -107,8 +107,8 @@ If all backends fail their health checks, the live list becomes empty. `DynamicP
 
 The health checker lives in `src/proxy_config/health.rs`:
 
-- `start_health_checker(upstream_name, backends, live, config)` — spawns the daemon thread.
-- `check_backend(backend, path, timeout)` — sends a single probe, returns `true` on `2xx`.
+- `start_health_checker(upstream_name, backends, live, config, stop, trust)` — spawns the daemon thread. It exits when `stop` is set (a `SIGHUP` reload sets it for the replaced configuration's checkers); `trust` is the upstream's `tls_ca_file` roots, if any, so probes to `https://` backends verify against the same CA as requests.
+- `check_backend(backend, path, timeout, trust)` — sends a single probe, returns `true` on `2xx`.
 - `parse_backend_url(backend)` — strips the `https://`/`http://`/`h2://`/`wss://`/`ws://` prefix (or none) and returns `(host, port, tls)`.
 
 `WsProxy`'s side of this lives in `src/ws_proxy/mod.rs`:

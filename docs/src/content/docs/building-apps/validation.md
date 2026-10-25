@@ -101,7 +101,7 @@ struct SignupForm {
 | `range(min = N)` | `field as f64 >= N` |
 | `range(max = N)` | `field as f64 <= N` |
 | `range(min = N, max = N)` | both bounds |
-| `email` | non-empty local part, exactly one `@`, domain contains `.` |
+| `email` | non-empty local part before the first `@`; domain after it at least 3 chars, contains `.`, and does not start or end with `.` |
 | `required` | `!field.is_empty()` |
 | `url` | starts with `http://` or `https://` |
 

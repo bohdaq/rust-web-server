@@ -4,7 +4,7 @@
 > Website: https://rws8.tech/
 > Crates.io: https://crates.io/crates/rust-web-server
 > Docs: https://docs.rs/rust-web-server
-> License: MIT  |  MSRV: 1.88  |  Current version: 17.109.0
+> License: MIT  |  MSRV: 1.88  |  Current version: 17.113.0
 
 `rws` is a single-binary web server and reverse proxy — automatic HTTPS (ACME / Let's Encrypt),
 HTTP/3, load balancing, auth, rate limiting, configured in one `rws.config.toml` — and the same
@@ -24,7 +24,7 @@ Use it in three modes:
 ## Key files
 
 - [README.md](README.md) — overview, feature list, quick starts
-- [DEVELOPER.md](DEVELOPER.md) — full building-blocks reference + 78 use-case examples
+- [DEVELOPER.md](DEVELOPER.md) — full building-blocks reference + 89 use-case examples
 - [CLAUDE.md](CLAUDE.md) — architecture, request lifecycle, module index, coding conventions
 - [Cargo.toml](Cargo.toml) — feature flags and optional dependencies
 - [src/lib.rs](src/lib.rs) — crate root; all public modules declared here
@@ -39,7 +39,7 @@ Use it in three modes:
 
 ```
 main.rs
-  └─ build_app()              → returns Box<dyn Application>
+  └─ build_app()              → returns impl Application + Send + Clone
   └─ Server::setup()          → binds TCP listener, creates runtime
   └─ tokio::join!(
        Server::run_tls(),     → accepts TLS; ALPN → HTTP/2 or HTTP/1.1
@@ -47,8 +47,8 @@ main.rs
        Server::run_redirect() → optional HTTP→HTTPS redirect port
      )
 
-Per connection (HTTP/1.1 TLS):
-  Server::process() → read bytes → Request::parse()
+Per connection (HTTP/1.1, TLS or plain):
+  http1_async::serve() → read bytes → Request::parse()
                     → app.execute(request, connection) → Response
                     → apply gzip → write bytes
 
@@ -63,7 +63,7 @@ Per connection (HTTP/3):
 
 Every application variant implements `Application`:
 ```rust
-pub trait Application: Send + Sync {
+pub trait Application {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String>;
 }
 ```
@@ -106,7 +106,7 @@ Header          src/header/mod.rs        — name: Cow<'static, str>, value: Cow
 
 ConnectionInfo  src/server/mod.rs        — client: Address { ip, port },
                                            server: Address { ip, port },
-                                           request_size: usize,
+                                           request_size: i64,
                                            sni_hostname: Option<String>
 
 STATUS_CODE_REASON_PHRASE src/response/mod.rs
@@ -176,7 +176,8 @@ Ok(AppError::NotFound("user not found".into()).into_response())
 
 // Full enum: BadRequest(String), Unauthorized, Forbidden,
 //            NotFound(String), Conflict(String),
-//            UnprocessableEntity(String), TooManyRequests, Internal(String)
+//            UnprocessableEntity(String), TooManyRequests,
+//            PayloadTooLarge(String), Internal(String)
 ```
 
 ---
@@ -200,7 +201,7 @@ let app = App::with_state(MyState { … })
     .wrap(RateLimitLayer);
 
 // Handler signature:
-fn get_user(req: &Request, params: &PathParams, conn: &ConnectionInfo, state: &Arc<MyState>)
+fn get_user(req: &Request, params: &PathParams, conn: &ConnectionInfo, state: &MyState)
     -> Response { … }
 ```
 
@@ -212,7 +213,7 @@ fn get_user(req: &Request, params: &PathParams, conn: &ConnectionInfo, state: &A
 let app = App::with_async_state(MyState { … })
     .get("/users", list_users);
 
-async fn list_users(req: &Request, params: &PathParams, conn: &ConnectionInfo, state: &Arc<MyState>)
+async fn list_users(req: Request, params: PathParams, conn: ConnectionInfo, state: Arc<MyState>)
     -> Response { … }
 ```
 
@@ -234,7 +235,7 @@ let app = routes! {
 let app = App::new()
     .wrap(OtelLayer)
     .wrap(RateLimitLayer)
-    .wrap(CacheLayer::new().ttl(60));
+    .wrap(CacheLayer::memory(1000).ttl(60));
 // Layers run in registration order (OtelLayer is outermost here).
 ```
 
@@ -242,8 +243,9 @@ let app = App::new()
 
 ```rust
 let mcp = App::new().mcp("my-server", "1.0.0")
-    .tool("greet", "Say hello", schema, |params| {
-        Ok(format!("Hello, {}!", params["name"]))
+    .tool("greet", "Say hello", schema, |args| {
+        let name = extract_arg(args, "name").unwrap_or_default();
+        Ok(McpContent::text(format!("Hello, {}!", name)))
     });
 // Serves POST /mcp (JSON-RPC 2.0, MCP Streamable HTTP protocol).
 ```
@@ -274,6 +276,13 @@ let mcp = App::new().mcp("my-server", "1.0.0")
 | `sso-saml` | `SamlSp` — SAML 2.0 Service Provider, ACS handler, RSA-SHA256 XML signature verification; implies `sso` | (none — hand-rolled XML parser, not quick-xml) |
 | `webhook` | `verify_webhook_signature`, `WebhookProvider` (GitHub/Shopify/Stripe HMAC verification) | `hmac`, `sha2` |
 | `rewrite-regex` | `RewriteLayer::request_uri_regex_rewrite` — regex URI rewrite with `$1`/`${name}` capture expansion | `regex` |
+| `mailer` | `Mailer` — plain SMTP; STARTTLS/SMTPS additionally needs `http-client` or `http2` | (none) |
+| `jobs` | in-memory `JobQueue`; `PersistentJobQueue` additionally needs a `model-*` feature | (none) |
+| `storage-local` | `LocalStorage` | (none) |
+| `storage-s3` | `S3Storage` (AWS SigV4, no AWS SDK) | `hmac`, `sha2` + `http-client` |
+| `storage-azure` | `AzureBlobStorage` (Shared Key + Managed Identity, no Azure SDK) | `hmac`, `sha2` + `http-client` |
+| `openapi` | `AppWithState::openapi()` / `AsyncAppWithState::openapi()` | (none) |
+| `secrets` | `secrets::resolve()` — `vault://` / `aws-sm://` / `azkv://` references | `hmac`, `sha2` + `http-client` |
 
 Build commands:
 ```bash
@@ -464,7 +473,9 @@ use rust_web_server::auth::{JwtLayer, verify_jwt_rs256, verify_jwt_es256};
 let app = App::new().wrap(JwtLayer::rs256(&rsa_public_key_pem)?);
 let app = App::new().wrap(JwtLayer::es256(&ec_public_key_pem)?);
 
-// Standalone verify (same functions JwtLayer uses internally), for use in a handler:
+// Standalone verify (same functions JwtLayer uses internally), for use in a handler.
+// rsa_public_key: rsa_key::RsaPublicKey (e.g. RsaPublicKey::from_public_key_pem(pem)?);
+// ec_public_key: p256::ecdsa::VerifyingKey
 let claims = verify_jwt_rs256(&token, &rsa_public_key).unwrap();
 let claims = verify_jwt_es256(&token, &ec_public_key).unwrap();
 ```
@@ -1179,6 +1190,7 @@ RWS_CONFIG_SPA_FALLBACK          default: unset (disabled); e.g. "index.html" �
 RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES   default: unset; comma-separated, e.g. "/api,/healthz"
 RWS_CONFIG_STATIC_CACHE_CONTROL  default: "no-cache" (18.0.0) — Cache-Control for static files; "" = the no-store default
 RWS_CONFIG_CLIENT_HINTS          default: false (18.0.0) — send Accept-CH / Critical-CH and the hints in Vary
+RWS_CONFIG_OPEN_FILE_CACHE_SECS  default: 1 — open-file cache revalidation interval; 0 = off (Unix only)
 ```
 
 Default response headers (18.0.0): Vary: Origin, X-Content-Type-Options, Accept-Ranges, X-Frame-Options, Date (IMF-fixdate), Date-Unix-Epoch-Nanos, Cache-Control (no-store, …; static files no-cache), Referrer-Policy, Permissions-Policy, Content-Security-Policy. Static files add ETag, Last-Modified and Last-Modified-Unix-Epoch-Nanos; If-None-Match, else If-Modified-Since, answers 304. CacheLayer never stores no-cache/no-store/private responses, Range requests, or responses whose Vary names a header outside its key (unless that header changed nothing).
@@ -1186,7 +1198,7 @@ Default response headers (18.0.0): Vary: Origin, X-Content-Type-Options, Accept-
 In `rws.config.toml` every setting is its variable name minus `RWS_CONFIG_`, as table + key: top-level
 `port = 443`, `[rate_limit] max_requests = 500` (→ `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS`), one
 `[[virtual_host]]` block per domain (`domain`/`cert_file`/`key_file` → `RWS_CONFIG_VIRTUAL_HOST_<n>_*`),
-`[acme]`, `[cors]`, `[circuit_breaker]`. Strings keep spaces/quotes; arrays become comma lists. Unknown
+`[acme]`, `[cors]`, `[circuit_breaker]`. Strings keep spaces/quotes; arrays become comma lists; inline tables (`rate_limit = { max_requests = 5 }`) work. Unknown
 keys print a startup warning. `RWS_CONFIG_FILE` points at a different file.
 
 ### Typed config binding (requires `macros` feature)
@@ -2241,6 +2253,7 @@ wasmtime serve target/wasm32-wasip2/release/rws_wasm_shim.wasm
 ## Module index
 
 ```
+src/acme/               — AcmeConfig, AcmeManager: automatic HTTPS via ACME HTTP-01 (acme feature)
 src/app/                — App (zero-config) and controller dispatch
 src/application/        — Application trait
 src/async_state/        — AsyncAppWithState
@@ -2256,6 +2269,8 @@ src/circuit_breaker/    — CircuitBreaker, RedisCircuitBreaker (persistent), Re
                           (ReverseProxy auto-wiring), max_half_open_probes cap, all_states() (metrics)
 src/client_hint/        — Client Hints header parsing
 src/compression/        — gzip for text bodies ≥ 512 B (MIN_COMPRESS_SIZE); skips pre-encoded responses and bodies gzip doesn't shrink; static files ≤ 256 KiB compressed once per version (open-file cache)
+src/config_binding/     — FromEnvStr, load_required/load_with_default/load_optional (used by #[derive(Config)])
+src/config_check/       — rws --check: ConfigReport, check_file, check_str
 src/config_reload/      — hot-reload logic; ConfigSnapshot
 src/controller/         — Controller trait; built-in controllers
 src/cookie/             — CookieJar, SetCookie builder
@@ -2288,7 +2303,7 @@ src/metrics/            — Prometheus metrics, MetricsLayer
 src/middleware/         — Middleware trait, WithMiddleware, RateLimitLayer
 src/mime_type/          — MIME type constants and detection
 src/model/              — Async ORM (sqlx): DbPool, DbTransaction, Backend, Model, Repository, QueryBuilder
-src/null/               — NullApplication (returns 404 for everything)
+src/null/               — Null (JSON null), ParseNullError
 src/openapi/            — OpenApiConfig, build_spec, swagger_ui_html (openapi feature)
 src/otel/               — OtelLayer, Span (nested child spans via span()/client_span()), setup, span export
 src/pagination/         — Page<T>, CursorPage<T>, RFC 8288 Link header builder (no feature gate)
@@ -2298,6 +2313,7 @@ src/async_bridge/       — block_on_isolated: sync/async bridge for Middleware/
                           impls that need to call async code (http2 feature)
 src/proxy_config/       — Config-driven proxy: ProxyConfig, ConfigDrivenApp, StaticAdapter
 src/range/              — Range, ContentRange, body construction
+src/rsa_key/            — RsaPublicKey: in-crate RSA PKCS#1 v1.5 / SHA-256 verification (2048–8192-bit keys) (auth-asymmetric or sso feature)
 src/rate_limit/         — RateLimiter, global(), RedisRateLimiter (distributed, Redis-backed)
 src/redis_protocol/     — RespConn: crate-internal hand-rolled RESP v2 client shared by
                           RedisSessionStore and RedisRateLimiter (not public API)
@@ -2311,6 +2327,7 @@ src/rewrite/            — RewriteLayer (request/response rewriting)
 src/router/             — Router, PathParams, named/wildcard routing
 src/scheduler/          — Scheduler (fixed-rate, fixed-delay, cron)
 src/server/             — Server (bind, accept, process), ConnectionInfo, Address
+src/server_config/      — ServerConfig (typed config; ServerConfig::current() snapshot, App::with_config)
 src/service_discovery/  — BackendPool, DiscoverySource (Static/EnvPrefix/File/Dns/DnsSrv/Consul/
                           Docker/EtcdWatch); json_lite (crate-internal JSON parser used by
                           Consul/Docker/etcd); dns_srv (hand-rolled RFC 1035/2782 SRV codec)
@@ -2323,6 +2340,7 @@ src/mailer/             — Mailer, Email, EmailBuilder, SmtpTls, MailerError (m
 src/sso/                — OidcAuth, OidcConfig, OidcProvider, JwksCache (sso feature);
                           AuthServer, ClientStore, OAuthClient (sso-server feature);
                           saml::{SamlSp, SamlConfig, SamlIdpMetadata, AttributeMap} (sso-saml feature)
+src/sse/                — Sse, SseEvent: buffered text/event-stream responses
 src/state/              — AppWithState<S>
 src/storage/            — Storage, LocalStorage, S3Storage, AzureBlobStorage (storage-local /
                           storage-s3 / storage-azure features); aws_credentials — EKS IRSA / ECS /
@@ -2371,7 +2389,7 @@ rust-web-server = { version = "17", default-features = false, features = ["http1
 
 ## Links
 
-- [DEVELOPER.md — 80 use-case examples](DEVELOPER.md)
+- [DEVELOPER.md — 89 use-case examples](DEVELOPER.md)
 - [spec/SSO.md — OAuth2/OIDC design spec](spec/SSO.md)
 - [spec/GAPS_V3.md — current gaps: server, proxy, framework (v17.43.0)](spec/GAPS_V3.md)
 - [spec/GAPS_V2.md — previous gap tracking (all critical items now closed)](spec/GAPS_V2.md)

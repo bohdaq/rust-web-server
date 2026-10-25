@@ -66,6 +66,8 @@ async fn main() {
 
 `DbPool` wraps a `sqlx::Pool` and is cheap to clone — pass it by value into your `AppWithState` state.
 
+`DbPool::from_env().await` combines steps 1 and 2, and `DbPool::memory().await` (`model-sqlite`) opens an isolated in-memory SQLite pool — see [In-memory SQLite](/database/in-memory/).
+
 ## Manual config
 
 If you prefer not to use environment variables, build `DbConfig` directly. `backend` selects which compiled-in driver this config is for — it only needs to be explicit when more than one `model-*` feature is enabled; with just one, `DbConfig::from_env()` (above) infers it for you, but a manually-built `DbConfig` always needs it stated:
@@ -145,7 +147,9 @@ Under the hood, `DbPool` is an enum with one variant per compiled-in backend (`S
 - [#[derive(Model)]](/database/model-derive/) — map structs to tables
 - [Repository](/database/repository/) — CRUD operations
 - [Query Builder](/database/query-builder/) — filtered queries
+- [Pagination](/database/pagination/) — `Page<T>` / `CursorPage<T>`
 - [Raw SQL](/database/raw-sql/) — full control
 - [Transactions](/database/transactions/) — atomic operations
 - [Migrations](/database/migrations/) — schema versioning
 - [Relations](/database/relations/) — HasMany, HasOne, BelongsTo
+- [In-memory SQLite](/database/in-memory/) — isolated databases for tests

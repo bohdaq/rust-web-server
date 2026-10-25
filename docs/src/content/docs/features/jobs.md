@@ -131,6 +131,9 @@ queue.enqueue("send_welcome_email", "new-user@example.com").await?;
 # }
 ```
 
+`queue.stop()` tells the workers started by `start()` to exit after their
+current poll; join the returned handles to wait for them.
+
 ### Crash safety
 
 `PersistentJobQueue::new()` creates the `rws_jobs` table if it doesn't exist,

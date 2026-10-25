@@ -58,7 +58,8 @@ pub struct Response {
     pub reason_phrase: String,            // "OK", "Not Found", etc.
     pub headers: Vec<Header>,
     pub content_range_list: Vec<ContentRange>, // response body parts
-    pub stream_file: Option<String>,      // absolute path for chunked file streaming
+    pub stream_file: Option<String>,      // path of a file streamed from disk
+    pub stream_pipe: Option<Box<dyn std::io::Read + Send>>, // reader piped chunked; wins over both
 }
 ```
 
@@ -111,7 +112,7 @@ let error_response = Response::text(STATUS_CODE_REASON_PHRASE.n400_bad_request, 
 
 ### Streaming large files
 
-For files larger than ~8 MB, set `stream_file` instead of loading bytes into `content_range_list`. The server uses `Transfer-Encoding: chunked` and a constant memory footprint:
+For large files, set `stream_file` instead of loading bytes into `content_range_list` (the static file server does this above 256 KiB, `StaticResourceController::STREAM_THRESHOLD`). Memory stays constant: the body goes out as-is when you set a `Content-Length` header, otherwise with `Transfer-Encoding: chunked`. To stream from any `Read` source, set `stream_pipe` instead:
 
 ```rust
 response.stream_file = Some("/var/data/large-export.csv".to_string());
@@ -159,7 +160,7 @@ Header::_AUTHORIZATION       // "Authorization"
 Header::_CACHE_CONTROL       // "Cache-Control"
 Header::_LOCATION            // "Location"
 Header::_SET_COOKIE          // "Set-Cookie"
-Header::_X_FORWARDED_FOR     // "X-Forwarded-For"
+Header::_FORWARDED           // "Forwarded"
 // ... all standard request and response headers
 ```
 

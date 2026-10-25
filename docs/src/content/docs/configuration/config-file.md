@@ -60,8 +60,8 @@ Strings keep their exact contents (`csp = "default-src 'self'; img-src *"`
 works); arrays become comma-separated lists. A key that doesn't correspond to
 any setting is reported at startup — `Warning: unknown setting '[server] port'
 in rws.config.toml — ignored` — rather than silently dropped. `[[route]]`,
-`[[upstream]]`, `[[tcp_proxy]]`, `[[udp_proxy]]`, and `[[ws_proxy]]` tables
-configure the proxy (below) and aren't settings.
+`[[upstream]]`, `[[tcp_proxy]]`, `[[udp_proxy]]`, `[[ws_proxy]]`, and
+`[middleware]` tables configure the proxy (below) and aren't settings.
 
 An inline table is the same as a sub-table, here and in the proxy sections:
 
@@ -92,6 +92,7 @@ thread_count       = 200         # RWS_CONFIG_THREAD_COUNT (default: 200, http1 
 tls_cert_file      = "cert.pem"  # RWS_CONFIG_TLS_CERT_FILE — enables HTTPS, HTTP/2, HTTP/3
 tls_key_file       = "key.pem"   # RWS_CONFIG_TLS_KEY_FILE
 http_redirect_port = 80          # RWS_CONFIG_HTTP_REDIRECT_PORT — HTTP → HTTPS redirect listener
+request_allocation_size_in_bytes = 10000  # RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES — per-read chunk size
 ```
 
 :::caution
@@ -116,6 +117,9 @@ ca_file        = ""                # extra root CA PEM for a private ACME CA
 challenge_port = 80                # port the CA connects to for HTTP-01
 cert_path      = ""                # default: tls_cert_file, else cert.pem
 key_path       = ""                # default: tls_key_file, else key.pem
+renew_before_days         = 30                  # renew when fewer days remain
+renew_check_interval_secs = 43200               # seconds between expiry checks
+account_key_path          = "acme_account.key"  # ACME account key, kept between restarts
 ```
 
 ## `[cors]`
@@ -162,7 +166,7 @@ window_secs  = 60     # Sliding window length in seconds (default: 60)
 ## Other settings
 
 ```toml
-log_format              = "json"     # RWS_CONFIG_LOG_FORMAT: "combined" (default) | "json"
+log_format              = "json"     # RWS_CONFIG_LOG_FORMAT: "json" (default) | "combined" | "off"
 max_body_size_in_bytes  = 10485760   # RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: 413 above this; 0 = unlimited
 open_file_cache_secs    = 1          # RWS_CONFIG_OPEN_FILE_CACHE_SECS: reuse open static files this long; 0 = off
 csp                     = "default-src 'self'"   # RWS_CONFIG_CSP: Content-Security-Policy header
@@ -173,7 +177,7 @@ template_dir            = "templates"            # RWS_CONFIG_TEMPLATE_DIR
 spa_fallback            = "index.html"   # RWS_CONFIG_SPA_FALLBACK: file served for client-side routes
 spa_fallback_exclude_prefixes = ["/api"]   # RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES
 
-[circuit_breaker]                    # RWS_CONFIG_CIRCUIT_BREAKER_*: proxy backends
+[circuit_breaker]                    # RWS_CONFIG_CIRCUIT_BREAKER_*: read by RedisCircuitBreaker::from_env()
 failure_threshold      = 5
 recovery_secs          = 30
 max_half_open_probes   = 1
@@ -332,7 +336,9 @@ content_type = "application/json"   # (default: text/plain)
 
 ### `[route.action]` — mcp
 
-Mount the MCP Streamable HTTP server on this route.
+Accepted by the parser, but not served from the config file: `rws --check`
+warns, and matching requests fall through to the static files. Mount MCP in
+code instead (see [MCP](/mcp/overview/)).
 
 ```toml
 [route.action]
@@ -344,6 +350,10 @@ type = "mcp"
 Per-route middleware applied before the action. All sub-sections are optional.
 
 ```toml
+[route.middleware]
+timeout_ms    = 5000      # 504 Gateway Timeout past this (0/unset = none)
+max_body_size = 1048576   # 413 above this many bytes (0/unset = only the global limit)
+
 [route.middleware.rate_limit]
 max_requests = 100
 window_secs  = 60
@@ -356,12 +366,15 @@ vary_by  = ["Accept-Encoding", "Authorization"]
 type      = "bearer"        # "bearer" | "jwt" | "basic"
 token_env = "API_TOKEN"     # env var name holding the expected token (bearer)
 # secret_env = "JWT_SECRET" # env var name holding the JWT secret (jwt)
-# users_file = "users.htpasswd" # path to htpasswd file (basic)
+# htpasswd_file = "users.htpasswd" # path to htpasswd file (basic)
 
 [route.middleware.ip_filter]
 allow = ["10.0.0.0/8", "192.168.1.0/24"]
 deny  = ["10.0.0.5"]
 ```
+
+A top-level `[middleware]` table (same keys and sub-tables as
+`[route.middleware]`) wraps every route and the static fallback.
 
 #### Request rewrite rules
 
@@ -451,6 +464,9 @@ listen             = "0.0.0.0:8080"
 backends           = ["localhost:8081"]
 connect_timeout_ms = 5000    # (default: 5000)
 read_timeout_ms    = 30000   # (default: 30000)
+
+[ws_proxy.health_check]       # optional, same keys as [upstream.health_check]
+path = "/health"
 ```
 
 ## Complete example

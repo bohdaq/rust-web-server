@@ -89,17 +89,17 @@ These are registered in `App::execute` in this order (first match wins):
 | Controller | Matches |
 |---|---|
 | `IndexController` | `GET /` — serves `index.html` from the static directory |
-| `StyleController` | `GET *.css` |
-| `ScriptController` | `GET *.js` |
+| `StyleController` | `GET /style.css` |
+| `ScriptController` | `GET /script.js` |
 | `DirectoryListingAssetsController` | `GET /rws-directory-listing.css` / `.js` — same-origin CSS/JS for the directory listing page below |
-| `FileUploadInitiateController` | `POST /upload/initiate` |
-| `FormUrlEncodedEnctypePostMethodController` | `POST` with `application/x-www-form-urlencoded` |
-| `FormGetMethodController` | `GET` requests with query parameters to form paths |
-| `FormMultipartEnctypePostMethodController` | `POST` with `multipart/form-data` |
+| `FileUploadInitiateController` | `POST /file-upload/initiate` |
+| `FormUrlEncodedEnctypePostMethodController` | `POST /form-url-encoded-enctype-post-method` with `application/x-www-form-urlencoded` |
+| `FormGetMethodController` | `GET /form-get-method` (with query parameters) |
+| `FormMultipartEnctypePostMethodController` | `POST /form-multipart-enctype-post-method` with `multipart/form-data` |
 | `HealthController` | `GET /healthz` — returns `200 OK` |
-| `ReadyController` | `GET /readyz` — returns `200` when `SERVER_READY` is set |
+| `ReadyController` | `GET /readyz` — returns `200` when `SERVER_READY` is set, `503` otherwise |
 | `MetricsController` | `GET /metrics` — Prometheus text format |
-| `FaviconController` | `GET /favicon.ico` |
+| `FaviconController` | `GET /favicon.svg` |
 | `StaticResourceController` | Any `GET` for a file found under the static directory; a directory with no `index.html` renders a directory listing page instead of falling through to `404` |
 | `NotFoundController` | Catch-all — returns `404 Not Found` |
 

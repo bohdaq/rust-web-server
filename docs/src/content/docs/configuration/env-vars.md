@@ -24,6 +24,10 @@ order.
 | `RWS_CONFIG_STATIC_CACHE_CONTROL` | `no-cache` | string | `Cache-Control` sent with static files (since 18.0.0; other responses keep `no-store, …`). The default lets browsers keep a file and revalidate it with `If-None-Match` / `If-Modified-Since`, which costs a `304` instead of the whole file. Set e.g. `public, max-age=3600` for assets with versioned names; an empty value sends the `no-store` default for static files too. |
 | `RWS_CONFIG_CLIENT_HINTS` | `false` | boolean | Send `Accept-CH`, `Critical-CH` and the client hints in `Vary` on every response (always on before 18.0.0). Off by default: they add ~700 bytes to every response, and `Critical-CH` makes Chromium retry a request that arrived without the hints. |
 | `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` | `0` | integer | Maximum accepted request body size in bytes. `0` means unlimited. When set, a request whose `Content-Length` exceeds this is rejected with `413 Payload Too Large` before any body bytes are read, and the connection is closed. Applies to HTTP/1.1, HTTP/2, and HTTP/3. |
+| `RWS_CONFIG_CSP` | `default-src 'self'` | string | `Content-Security-Policy` header value. An empty value suppresses the header. |
+| `RWS_CONFIG_SPA_FALLBACK` | `` (empty) | path | File (e.g. `index.html`) served for a `GET`/`HEAD` that matches no file or directory, instead of `404` — for client-side routers. Paths whose last segment contains a `.` still get `404`. Empty disables it. |
+| `RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES` | `` (empty) | string | Comma-separated path prefixes (e.g. `/api,/healthz`) that never get the SPA fallback. |
+| `RWS_CONFIG_FILE` | `rws.config.toml` | path | Config file to load (settings and proxy routes) instead of `./rws.config.toml`. |
 
 :::note[Thread count and the async build]
 `RWS_CONFIG_THREAD_COUNT` only applies to the `http1`-only build, which uses a
@@ -96,11 +100,23 @@ to apply changes without restarting.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS` | `1000` | Maximum number of requests allowed per client IP within the window. Set to `0` to disable rate limiting. |
+| `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS` | `` (unset) | Maximum number of requests allowed per client IP within the window. The `rws` binary enforces the global limit only when this is set above `0` (decided at startup). `rate_limit::global()` in library code defaults to `1000`. |
 | `RWS_CONFIG_RATE_LIMIT_WINDOW_SECS` | `60` | Sliding window length in seconds. |
 
 Rate-limit values are hot-reloadable. Existing per-IP counters are preserved when
 limits change — only the allowed maximum and window size are updated.
+
+## Circuit breaker
+
+Read by `RedisCircuitBreaker::from_env()` (with `RWS_REDIS_HOST`/`_PORT`/`_PASSWORD`;
+see [Circuit breaker](/proxy/circuit-breaker/)). Config-driven proxy routes
+don't use them.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RWS_CONFIG_CIRCUIT_BREAKER_FAILURE_THRESHOLD` | `5` | Consecutive failures before the circuit opens. |
+| `RWS_CONFIG_CIRCUIT_BREAKER_RECOVERY_SECS` | `30` | Seconds the circuit stays open before a half-open probe. |
+| `RWS_CONFIG_CIRCUIT_BREAKER_MAX_HALF_OPEN_PROBES` | `1` | Probe requests allowed while half-open. |
 
 ## Logging
 
@@ -124,6 +140,7 @@ namespace — they use a shorter `RWS_DB_*` prefix.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `RWS_DB_BACKEND` | inferred | `sqlite`, `postgres`, or `mysql`. Inferred when exactly one `model-*` feature is compiled in; required otherwise. |
 | `RWS_DB_HOST` | `localhost` | Database server hostname or IP address. |
 | `RWS_DB_PORT` | `5432` | Database server port. The default matches PostgreSQL; MySQL uses `3306`. |
 | `RWS_DB_USER` | `` (empty) | Database user name. |

@@ -46,13 +46,13 @@ Only the parts of `rust-web-server` that don't touch a socket or spawn a thread 
 | `App`, `Router`, `Controller`, extractors | `Server`, `ThreadPool` |
 | In-memory middleware (CORS, CSRF, rewrite, IP filter, request ID, in-memory rate limit/cache) | `ReverseProxy`, `H2ReverseProxy`, `GrpcProxy`, `TcpProxy`, `UdpProxy`, `WsProxy` |
 | `Response::json`/`::text`, static-file serving (streamed for large files too) | `WebSocket`, `mailer` (raw SMTP — no `wasi:http` equivalent for arbitrary TCP protocols) |
-| `http_client::Client` — **both HTTP and HTTPS**, via a `wasi:http` `outgoing-handler` backend (TLS terminated by the host, not `rustls`) | `otel`, `log`, `Scheduler` (background jobs), `redis_protocol`, `circuit_breaker`, `canary`, `service_discovery`'s DNS/etcd/Consul/Docker sources, `ingress`, `timeout` |
+| `http_client::Client` — **both HTTP and HTTPS**, via a `wasi:http` `outgoing-handler` backend (TLS terminated by the host, not `rustls`) | `otel`, `log`, `Scheduler` (background jobs), `redis_protocol`, `circuit_breaker`, `canary`, `service_discovery`'s DNS/etcd/Consul/Docker sources, `ingress`, `timeout`, `proxy_config` (config-driven proxy) |
 | `auth` (`BasicAuthLayer`, `JwtLayer`, `ForwardAuthLayer`), `auth-asymmetric`, `csrf`, `crypto`, `webhook`, `rewrite-regex` | `model` (async ORM — needs real DB wire protocols) |
 | `sso`, `sso-server`, `sso-saml`, `secrets`, `storage-s3`, `storage-azure` — all work because they only ever used `http_client::Client`, no code changes needed | |
 
-## Two real limitations (confirmed, not theoretical)
+## Three real limitations (confirmed, not theoretical)
 
-Both of these were empirically verified against a real `wasmtime serve` process, not inferred from the spec:
+All of these were empirically verified against a real `wasmtime serve` process, not inferred from the spec:
 
 1. **Stateful middleware does not survive across requests.** `wasmtime serve` instantiates a **fresh guest per request** — confirmed by making an adapter call a request counter five times per invocation and watching it read back exactly `5` on every single request, never `10` or `15`. `RateLimiter`, `CacheLayer`, in-memory sessions, and metrics counters all silently reset every request under this host. Other hosts (Fastly Compute, Spin) are widely understood to behave the same way for the same isolation reasons, though only `wasmtime serve` was directly tested here. There is no in-crate fix for this — it needs either a host-provided KV binding (the `wasi-keyvalue` proposal, still pre-1.0) or accepting that stateful middleware requires a specific instance-reuse-guaranteeing host.
 2. **Filesystem access needs an explicit host grant.** Unlike outbound HTTP (part of the `wasi:http/proxy` world's base contract), filesystem access is opt-in — `wasmtime serve` requires `--dir HOST_DIR::.` to expose any directory to the guest. Without it, static-file controllers silently fall back to `rws`'s built-in embedded default pages for every path, with no error — easy to miss in testing. With `--dir` granted, real files (including a 9 MB file exercised through the streaming code path) serve correctly.
