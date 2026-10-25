@@ -440,3 +440,41 @@ fn static_files_after_builtins_fast_and_general_paths() {
     assert_eq!(200, app.execute(&request("GET", "/static/", vec![]), &conn).unwrap().status_code);
     assert_eq!(404, app.execute(&request("GET", "/static/missing.json", vec![]), &conn).unwrap().status_code);
 }
+
+// The static path sends the cached gzip form; it must be exactly what
+// compression::apply_gzip makes of the plain response.
+#[test]
+fn static_gzip_matches_apply_gzip() {
+    let request = |accept: Option<&str>| Request {
+        method: "GET".to_string(),
+        request_uri: "/static/style.css".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: accept.map(|a| vec![Header::new(Header::_ACCEPT_ENCODING, a.to_string())]).unwrap_or_default(),
+        body: vec![],
+    };
+    let app = App::with_config(ServerConfig::default());
+    let conn = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+        request_size: 16000,
+        sni_hostname: None,
+    };
+    let plain = app.execute(&request(None), &conn).unwrap();
+    if plain.content_range_list.first().map_or(0, |cr| cr.body.len()) < crate::compression::MIN_COMPRESS_SIZE {
+        return; // too small to be compressed at all
+    }
+    let mut expected = plain;
+    crate::compression::apply_gzip(&request(Some("gzip")), &mut expected);
+    for _ in 0..2 {
+        let mut served = app.execute(&request(Some("gzip")), &conn).unwrap();
+        // what the connection writer then does — must be a no-op now
+        crate::compression::apply_gzip(&request(Some("gzip")), &mut served);
+        assert_eq!(expected.content_range_list[0].body, served.content_range_list[0].body);
+        let names = |r: &crate::response::Response| r.headers.iter().filter(|h| h.name != Header::_DATE_UNIX_EPOCH_NANOS).map(|h| format!("{}: {}", h.name, h.value)).collect::<Vec<_>>();
+        let (mut a, mut b) = (names(&expected), names(&served));
+        a.sort(); b.sort();
+        assert_eq!(a, b);
+    }
+    let refused = app.execute(&request(Some("gzip;q=0")), &conn).unwrap();
+    assert!(refused.header(Header::_CONTENT_ENCODING).is_none());
+}

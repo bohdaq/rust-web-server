@@ -44,47 +44,23 @@ pub fn apply_gzip(request: &Request, response: &mut Response) {
     if original_size < MIN_COMPRESS_SIZE {
         return;
     }
-
-    let accepts_gzip = request
-        .header(Header::_ACCEPT_ENCODING)
-        .map(|h| h.value.split(',').any(|coding| {
-            // `gzip`, optionally with parameters; `q=0` means "not acceptable".
-            let mut parts = coding.split(';');
-            let name_ok = parts.next().unwrap_or("").trim().eq_ignore_ascii_case("gzip");
-            let refused = parts.any(|p| {
-                let p = p.trim();
-                p.len() >= 2 && p[..2].eq_ignore_ascii_case("q=") && p[2..].trim().parse::<f32>().is_ok_and(|q| q == 0.0)
-            });
-            name_ok && !refused
-        }))
-        .unwrap_or(false);
-
-    if !accepts_gzip {
+    if !accepts_gzip(request) {
         return;
     }
-
     let content_type = response
         .content_range_list
         .first()
         .map(|cr| cr.content_type.as_str())
         .unwrap_or_default();
-
-    let is_compressible = COMPRESSIBLE.iter().any(|mime| {
-        content_type.len() >= mime.len() && content_type.as_bytes()[..mime.len()].eq_ignore_ascii_case(mime.as_bytes())
-    });
-    if !is_compressible {
+    if !is_compressible(content_type) {
         return;
     }
 
     let mut compressed_bodies = Vec::with_capacity(response.content_range_list.len());
     for cr in &response.content_range_list {
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        if encoder.write_all(&cr.body).is_err() {
-            return;
-        }
-        match encoder.finish() {
-            Ok(compressed) => compressed_bodies.push(compressed),
-            Err(_) => return,
+        match gzip(&cr.body) {
+            Some(compressed) => compressed_bodies.push(compressed),
+            None => return,
         }
     }
     let compressed_size: usize = compressed_bodies.iter().map(Vec::len).sum();
@@ -97,13 +73,49 @@ pub fn apply_gzip(request: &Request, response: &mut Response) {
         cr.range.end = new_len;
         cr.size = new_len.to_string();
     }
+    mark_gzipped(response);
+}
 
+/// Whether the request's `Accept-Encoding` allows gzip: `gzip`, optionally
+/// with parameters, and not `q=0` ("not acceptable").
+pub(crate) fn accepts_gzip(request: &Request) -> bool {
+    request
+        .header(Header::_ACCEPT_ENCODING)
+        .map(|h| h.value.split(',').any(|coding| {
+            let mut parts = coding.split(';');
+            let name_ok = parts.next().unwrap_or("").trim().eq_ignore_ascii_case("gzip");
+            let refused = parts.any(|p| {
+                let p = p.trim();
+                p.len() >= 2 && p[..2].eq_ignore_ascii_case("q=") && p[2..].trim().parse::<f32>().is_ok_and(|q| q == 0.0)
+            });
+            name_ok && !refused
+        }))
+        .unwrap_or(false)
+}
+
+/// Whether a body of this `Content-Type` is worth compressing ([`COMPRESSIBLE`]
+/// prefixes, case-insensitive).
+pub(crate) fn is_compressible(content_type: &str) -> bool {
+    COMPRESSIBLE.iter().any(|mime| {
+        content_type.len() >= mime.len() && content_type.as_bytes()[..mime.len()].eq_ignore_ascii_case(mime.as_bytes())
+    })
+}
+
+/// `body` gzip-compressed at the default level, as [`apply_gzip`] sends it.
+pub(crate) fn gzip(body: &[u8]) -> Option<Vec<u8>> {
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(body).ok()?;
+    encoder.finish().ok()
+}
+
+/// The headers of a gzip-encoded body: `Content-Encoding: gzip`, and
+/// `Accept-Encoding` appended to `Vary` (or a new `Vary`).
+pub(crate) fn mark_gzipped(response: &mut Response) {
     response.headers.push(Header {
         name: Header::_CONTENT_ENCODING.into(),
         value: "gzip".into(),
     });
 
-    // append Accept-Encoding to Vary, or add it
     let vary_pos = response.headers.iter().position(|h| h.name == Header::_VARY);
     if let Some(i) = vary_pos {
         let current = response.headers[i].value.clone();

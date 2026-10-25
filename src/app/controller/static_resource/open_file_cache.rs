@@ -26,8 +26,12 @@ const SHARDS: usize = 8;
 pub(crate) const MAX_CACHED_FILE: u64 = 64 * 1024;
 /// Total cached contents across all entries.
 pub(crate) const CONTENTS_BUDGET: usize = 8 * 1024 * 1024;
-/// Bytes of contents currently cached.
+/// Bytes of contents currently cached (plain and gzipped, together).
 static CONTENTS_BYTES: AtomicUsize = AtomicUsize::new(0);
+/// Files up to this size also have their gzip-compressed form cached — the
+/// static path's streaming threshold: anything bigger goes out with
+/// `sendfile`, uncompressed.
+pub(crate) const MAX_GZIPPED_FILE: u64 = 256 * 1024;
 
 /// An open regular file.
 pub(crate) struct OpenFile {
@@ -38,6 +42,9 @@ pub(crate) struct OpenFile {
     /// request for an unchanged small file costs no read at all.
     cache_contents: bool,
     contents: RwLock<Option<CachedContents>>,
+    /// For cache entries: the gzip-compressed bytes as of `(len, modified)`
+    /// — compressing a text file on every request cost ~80× serving it.
+    gzipped: RwLock<Option<CachedGzip>>,
 }
 
 struct CachedContents {
@@ -46,11 +53,37 @@ struct CachedContents {
     bytes: Arc<[u8]>,
 }
 
+struct CachedGzip {
+    len: u64,
+    modified: u128,
+    /// `None`: gzip doesn't make this file smaller, so it's sent as is.
+    bytes: Option<Arc<[u8]>>,
+}
+
+/// The gzip form of a file, from [`OpenFile::gzipped`].
+pub(crate) enum Gzipped {
+    /// Compressed bytes, smaller than the file.
+    Smaller(Arc<[u8]>),
+    /// gzip doesn't make it smaller: send the file as is.
+    NotSmaller,
+}
+
 impl Drop for OpenFile {
     fn drop(&mut self) {
-        let held = self.contents.get_mut().map(|c| c.as_ref().map_or(0, |c| c.bytes.len())).unwrap_or(0);
+        let held = self.contents.get_mut().map(|c| c.as_ref().map_or(0, |c| c.bytes.len())).unwrap_or(0)
+            + self.gzipped.get_mut().map(|g| g.as_ref().and_then(|g| g.bytes.as_ref()).map_or(0, |b| b.len())).unwrap_or(0);
         CONTENTS_BYTES.fetch_sub(held, Ordering::Relaxed);
     }
+}
+
+/// Take `wanted` bytes of the contents budget, giving back `released`.
+fn reserve(released: usize, wanted: usize) -> bool {
+    CONTENTS_BYTES
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |held| {
+            let after = held - released + wanted;
+            (after <= CONTENTS_BUDGET).then_some(after)
+        })
+        .is_ok()
 }
 
 /// Size and modification time of an [`OpenFile`] right now.
@@ -72,6 +105,7 @@ impl OpenFile {
             file,
             cache_contents: false,
             contents: RwLock::new(None),
+            gzipped: RwLock::new(None),
         })
     }
 
@@ -89,19 +123,37 @@ impl OpenFile {
         if self.cache_contents && state.len <= MAX_CACHED_FILE && settled(state.modified) {
             let mut slot = self.contents.write().unwrap_or_else(|e| e.into_inner());
             let released = slot.as_ref().map_or(0, |c| c.bytes.len());
-            let wanted = body.len();
             // Reserve within the budget, counting what this entry gives back.
-            let reserved = CONTENTS_BYTES
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |held| {
-                    let after = held - released + wanted;
-                    (after <= CONTENTS_BUDGET).then_some(after)
-                })
-                .is_ok();
-            if reserved {
+            if reserve(released, body.len()) {
                 *slot = Some(CachedContents { len: state.len, modified: state.modified, bytes: Arc::from(body.as_slice()) });
             }
         }
         Ok(body)
+    }
+
+    /// The file gzip-compressed as of `state`, as `compression::apply_gzip`
+    /// would send it: cached per `(len, modified)` like [`Self::contents`]
+    /// (files up to [`MAX_GZIPPED_FILE`], settled, within the budget), so an
+    /// unchanged file is compressed once instead of on every request.
+    pub(crate) fn gzipped(&self, state: &FileState) -> std::io::Result<Gzipped> {
+        if let Some(cached) = self.gzipped.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            if cached.len == state.len && cached.modified == state.modified {
+                return Ok(cached.bytes.as_ref().map_or(Gzipped::NotSmaller, |b| Gzipped::Smaller(Arc::clone(b))));
+            }
+        }
+        let plain = self.contents(state)?;
+        let compressed = crate::compression::gzip(&plain)
+            .filter(|gz| gz.len() < plain.len())
+            .map(|gz| Arc::<[u8]>::from(gz.as_slice()));
+        if self.cache_contents && state.len <= MAX_GZIPPED_FILE && settled(state.modified) {
+            let mut slot = self.gzipped.write().unwrap_or_else(|e| e.into_inner());
+            let released = slot.as_ref().and_then(|g| g.bytes.as_ref()).map_or(0, |b| b.len());
+            let wanted = compressed.as_ref().map_or(0, |b| b.len());
+            if reserve(released, wanted) {
+                *slot = Some(CachedGzip { len: state.len, modified: state.modified, bytes: compressed.clone() });
+            }
+        }
+        Ok(compressed.map_or(Gzipped::NotSmaller, Gzipped::Smaller))
     }
 
     /// The open file (for `sendfile`).
@@ -479,6 +531,50 @@ mod tests {
             let md = std::fs::metadata(path.as_str()).unwrap();
             assert_eq!(md.len(), state.len);
             assert_eq!(modified_nanos(&md), state.modified, "{mtime:?}");
+        }
+    }
+
+    fn old_text_file(name: &str, text: &str) -> TempPath {
+        let path = TempPath::new(name);
+        std::fs::write(path.as_str(), text).unwrap();
+        File::options().write(true).open(path.as_str()).unwrap()
+            .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(1_767_222_000)).unwrap();
+        path
+    }
+
+    #[test]
+    fn gzipped_is_compressed_once_per_file_version() {
+        let path = old_text_file("ofc_gzip.js", &"var a = 1; ".repeat(200));
+        let file = open_with(path.as_str(), true, LONG).unwrap();
+        let state = file.state().unwrap();
+        let Gzipped::Smaller(first) = file.gzipped(&state).unwrap() else { panic!("text compresses") };
+        assert_eq!(crate::compression::gzip(&file.contents(&state).unwrap()).unwrap(), first.to_vec());
+        let Gzipped::Smaller(second) = file.gzipped(&state).unwrap() else { panic!() };
+        assert!(Arc::ptr_eq(&first, &second), "a hit reuses the cached bytes");
+
+        // An edit in place (new size and time) is compressed afresh at once.
+        std::fs::write(path.as_str(), "let b = 2; ".repeat(300)).unwrap();
+        File::options().write(true).open(path.as_str()).unwrap()
+            .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(1_767_223_000)).unwrap();
+        let state = file.state().unwrap();
+        let Gzipped::Smaller(third) = file.gzipped(&state).unwrap() else { panic!() };
+        assert!(!Arc::ptr_eq(&first, &third));
+        assert_eq!(crate::compression::gzip("let b = 2; ".repeat(300).as_bytes()).unwrap(), third.to_vec());
+    }
+
+    #[test]
+    fn gzipped_reports_a_file_gzip_does_not_shrink() {
+        let path = TempPath::new("ofc_gzip_random.txt");
+        let noise: Vec<u8> = (0..4096u32).map(|i| (i.wrapping_mul(2654435761) >> 13) as u8).collect();
+        std::fs::write(path.as_str(), &noise).unwrap();
+        File::options().write(true).open(path.as_str()).unwrap()
+            .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(1_767_222_000)).unwrap();
+        let file = open_with(path.as_str(), true, LONG).unwrap();
+        let state = file.state().unwrap();
+        let shrinks = crate::compression::gzip(&noise).unwrap().len() < noise.len();
+        match file.gzipped(&state).unwrap() {
+            Gzipped::Smaller(_) => assert!(shrinks),
+            Gzipped::NotSmaller => assert!(!shrinks),
         }
     }
 }

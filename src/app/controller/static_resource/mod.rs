@@ -364,10 +364,27 @@ impl StaticResourceController {
         let not_modified = request
             .header(Header::_IF_NONE_MATCH)
             .map_or(false, |inm| inm.value == etag_value || inm.value == "*");
+        // A compressible text file for a client that accepts gzip is sent
+        // from the cached compressed form (what apply_gzip would produce,
+        // made once per file version instead of per request).
+        let wants_gzip = !not_modified
+            && state.len <= StaticResourceController::STREAM_THRESHOLD
+            && state.len >= crate::compression::MIN_COMPRESS_SIZE as u64
+            && crate::compression::is_compressible(mime)
+            && crate::compression::accepts_gzip(request);
         // Everything that can fail happens before `response` is taken: on
         // `None` the general path carries on with it.
+        let mut gzipped = false;
         let body = if not_modified || state.len > StaticResourceController::STREAM_THRESHOLD {
             None
+        } else if wants_gzip {
+            match file.gzipped(&state).ok()? {
+                open_file_cache::Gzipped::Smaller(bytes) => {
+                    gzipped = true;
+                    Some(bytes.to_vec())
+                }
+                open_file_cache::Gzipped::NotSmaller => Some(file.contents(&state).ok()?),
+            }
         } else {
             Some(file.contents(&state).ok()?)
         };
@@ -389,6 +406,9 @@ impl StaticResourceController {
         }
 
         response.content_range_list = vec![Range::get_content_range(body.unwrap_or_default(), mime.to_string())];
+        if gzipped {
+            crate::compression::mark_gzipped(&mut response);
+        }
         Some(response)
     }
 

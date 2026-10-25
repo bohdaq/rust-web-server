@@ -2251,7 +2251,7 @@ src/canary/             — CanaryLayer smooth-weighted-round-robin traffic spli
 src/circuit_breaker/    — CircuitBreaker, RedisCircuitBreaker (persistent), RetryLayer, Breaker trait
                           (ReverseProxy auto-wiring), max_half_open_probes cap, all_states() (metrics)
 src/client_hint/        — Client Hints header parsing
-src/compression/        — gzip for text bodies ≥ 512 B (MIN_COMPRESS_SIZE); skips pre-encoded responses and bodies gzip doesn't shrink
+src/compression/        — gzip for text bodies ≥ 512 B (MIN_COMPRESS_SIZE); skips pre-encoded responses and bodies gzip doesn't shrink; static files ≤ 256 KiB compressed once per version (open-file cache)
 src/config_reload/      — hot-reload logic; ConfigSnapshot
 src/controller/         — Controller trait; built-in controllers
 src/cookie/             — CookieJar, SetCookie builder

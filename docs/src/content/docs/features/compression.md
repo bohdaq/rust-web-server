@@ -41,9 +41,27 @@ Only responses whose `Content-Type` starts with one of the following MIME types 
 
 Binary formats (images, audio, video, fonts, archives) are not compressed because they are already compressed or compression yields no benefit.
 
+## Static files are compressed once
+
+A static file is compressed once per version, not on every request: the
+open-file cache keeps the gzip form of each file up to 256 KiB next to its
+contents, keyed by the file's size and modification time, within the same
+8 MiB memory budget. An edit is picked up at once (the size or time
+changes); a file modified less than 2 seconds ago isn't cached yet, as for
+the contents. The bytes and headers are exactly what `apply_gzip` would
+produce. Compressing a 26 KiB JavaScript file on every request cost about
+80× the CPU of serving it; from the cache it costs about the same as an
+uncompressed file.
+
+Responses from your handlers and from proxied backends are still compressed
+per response.
+
 ## Large file streaming
 
-Static files larger than **8 MB** are served via HTTP/1.1 chunked transfer encoding without loading the entire file into memory (`response.stream_file`). Because the file body never passes through the in-memory `ContentRange` list, `apply_gzip` is not called for these responses. Clients receive the raw (uncompressed) file bytes for large assets.
+Static files larger than **256 KiB** are sent without being read into memory
+— `sendfile(2)` over plain HTTP, chunked otherwise (`response.stream_file`).
+They never pass through the in-memory `ContentRange` list, so `apply_gzip`
+is not called for them: clients receive the file uncompressed.
 
 :::note[Range requests]
 Byte-range requests (`Range: bytes=N-M`) always bypass chunked streaming and receive the slice directly. Gzip compression applies normally to range responses when the content type is compressible.

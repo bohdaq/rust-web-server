@@ -269,7 +269,7 @@ Building an AI-powered *backend* rather than using AI to build the backend? See 
 - Kubernetes-ready — `/healthz`, `/readyz`, `/metrics`; `0.0.0.0` default bind; Dockerfile included; parameterized Helm chart at [`helm/rws/`](helm/rws/)
 - Non-blocking proxying — config-file proxy routes without middleware wait for the backend (HTTP or HTTPS) on the connection's task, holding no thread (`Application::execute_async`)
 - Fast static files — open files reused for a second (like nginx's `open_file_cache`; `open_file_cache_secs`), `sendfile` (zero-copy) for downloads over plain HTTP on Linux and macOS, and quick requests (static files, health checks) served on the event loop without a thread handoff
-- Compression — automatic gzip for text types of 512 bytes or more; skipped when it wouldn't shrink the body or the backend already encoded it; chunked streaming for large files
+- Compression — automatic gzip for text types of 512 bytes or more; skipped when it wouldn't shrink the body or the backend already encoded it; static files up to 256 KiB are compressed once per version and served from cache; chunked streaming for large files
 - WASM guest component — `rws-wasm-shim` runs `App`/`Router`/middleware inside a `wasi:http/proxy` component (Wasmtime, Spin, Fastly Compute); the host owns the socket and TLS, calling the guest once per request; outbound HTTP/HTTPS, streaming file downloads, `sso`/`secrets`/`storage-s3`/`storage-azure`/`ForwardAuthLayer` all verified working; see `spec/WASM_SHIM.md`
 
 </details>
