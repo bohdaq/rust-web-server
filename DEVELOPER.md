@@ -71,7 +71,7 @@ Rules for tests:
 ### End-to-end and fuzzing
 
 CI runs these on every push. Run them after touching `acme`, `proxy`,
-`server`, `h2_handler`, `config_reload` or response parsing.
+`server`, `h2_server`, `config_reload` or response parsing.
 
 | Check | Command |
 |---|---|
@@ -157,7 +157,7 @@ smoke-tests the image before pushing it.
 | `src/main.rs` | the `rws` binary |
 | `src/app/` | `App` and the built-in controllers |
 | `src/server/` | listeners, HTTP/1.1 framing, TLS accept loops |
-| `src/h2_handler/`, `src/h3_handler/` | HTTP/2 and HTTP/3 |
+| `src/h2_server/`, `src/h3_handler/` | HTTP/2 (rws's own server: frames, HPACK, flow control) and HTTP/3 |
 | `src/proxy/`, `src/proxy_config/` | reverse proxy and the config-driven proxy |
 | `src/entry_point/` | configuration loading (CLI, env, `rws.config.toml`) |
 | `rws-macros/` | proc macros (`macros` feature) |

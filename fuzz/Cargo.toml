@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-rust-web-server = { path = "..", default-features = false, features = ["auth", "sso-saml"] }
+rust-web-server = { path = "..", default-features = false, features = ["auth", "sso-saml", "http2"] }
 
 # Separate workspace: the root workspace excludes fuzz/.
 [workspace]
@@ -106,3 +106,17 @@ name = "rsa_key"
 path = "fuzz_targets/rsa_key.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "h2_hpack"
+path = "fuzz_targets/h2_hpack.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "h2_connection"
+path = "fuzz_targets/h2_connection.rs"
+test = false
+doc = false
+bench = false

@@ -34,15 +34,23 @@ clients negotiate HTTP/2 automatically.
 
 ## Request pipeline
 
-`h2_handler::handle_connection` manages the HTTP/2 connection lifecycle:
+`rws` has its own HTTP/2 server (`h2_server`, since 18.0.0 — the `h2` crate is
+now only the HTTP/2 client of the proxies). Per connection it:
 
-1. Completes the HTTP/2 connection preface (`h2::server::handshake`).
-2. Accepts streams in a loop (`conn.accept()`).
-3. For each stream, reads H2 headers and body, assembles a `Request`, and calls
-   `app.execute(&request, &connection)` — the same `Application` trait used by
-   HTTP/1.1.
-4. Translates the returned `Response` back into H2 response headers and a DATA
-   frame, then sends them.
+1. Exchanges the connection preface and SETTINGS (at most 250 concurrent
+   streams, header lists up to 64 KiB — larger ones get `431`).
+2. Reads frames, decodes HPACK header blocks and assembles each stream's
+   `Request` (body included), validating it as RFC 9113 §8.3 requires.
+3. Calls your `Application` — inline for a quick bodiless request the app
+   says it can answer inline (`runs_inline`, as on HTTP/1.1), otherwise in its
+   own task.
+4. Encodes the `Response` (headers seen before become one-byte HPACK indexes)
+   and sends it within the client's flow-control windows; file and streamed
+   bodies go out in chunks. Everything ready at once is written in one go.
+
+It passes h2spec's 146 conformance tests and is fuzzed (frames and HPACK).
+Abusive clients are cut off: rapid stream resets, CONTINUATION floods and
+oversized frames end the connection with `GOAWAY`.
 
 Your application code is unchanged between HTTP/1.1 and HTTP/2.
 

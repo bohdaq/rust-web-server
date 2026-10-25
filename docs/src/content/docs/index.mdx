@@ -116,7 +116,7 @@ else falls through to the static files. Add `[acme]` for HTTPS in front.
     Every setting lives in `rws.config.toml` (or env vars, or flags). Unknown keys are reported at startup instead of silently ignored.
   </Card>
   <Card title="No hyper, no Tower, no OpenSSL" icon="puzzle">
-    HTTP/1.1, routing, middleware, WebSocket, SSE, and the ACME client are implemented in-crate. HTTP/2 and HTTP/3 use `h2` and `quinn`; TLS uses `rustls`.
+    HTTP/1.1, HTTP/2, routing, middleware, WebSocket, SSE, and the ACME client are implemented in-crate. HTTP/3 uses `quinn`; TLS uses `rustls`.
   </Card>
   <Card title="Kubernetes-ready" icon="rocket">
     `/healthz`, `/readyz`, Prometheus `/metrics`, graceful SIGTERM shutdown, and a Kubernetes Ingress watcher.

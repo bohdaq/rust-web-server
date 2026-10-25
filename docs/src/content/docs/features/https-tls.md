@@ -62,7 +62,7 @@ HTTP/1.1 simultaneously — no extra configuration is required.
 alpn_protocols = ["h2", "http/1.1"]
 ```
 
-The `h2_handler` translates HTTP/2 frames into the same `Request` /
+The HTTP/2 server (`h2_server`) turns HTTP/2 streams into the same `Request` /
 `Application::execute` / `Response` pipeline that HTTP/1.1 uses.
 
 ## HTTP → HTTPS redirect

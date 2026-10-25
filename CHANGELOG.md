@@ -21,6 +21,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   CSP are opt-in with `RWS_CONFIG_SECURITY_HEADERS=true` (a CSP set with
   `RWS_CONFIG_CSP` is always sent), and `Date-Unix-Epoch-Nanos` /
   `Last-Modified-Unix-Epoch-Nanos` with `RWS_CONFIG_NANOS_HEADERS=true`.
+- **HTTP/2 server:** rws serves HTTP/2 with its own implementation
+  (`h2_server`) instead of the `h2` crate; the hidden `h2_handler` module is
+  gone. Same conformance (h2spec 146/146), limits and behaviour; the `h2`
+  crate stays as the proxies' HTTP/2 client.
 - **RSA keys:** `auth::verify_jwt_rs256` and `SamlIdpMetadata.signing_key` take
   `rsa_key::RsaPublicKey` (was `rsa::RsaPublicKey`); RSA keys under 2048 bits
   are rejected. The `rsa` crate (RUSTSEC-2023-0071) is no longer a dependency
@@ -52,8 +56,8 @@ segment); header lists, dates and numbers built without allocation; request
 and upstream-response heads parsed in one pass; HTTPS upstreams forwarded
 without blocking a thread; access log buffered per thread (flushed every
 100 ms). Files over TLS are read on the connection's task (13% less CPU and
-about half the memory for large downloads), HTTP/2 response headers are no
-longer copied into the `h2` header map (5–8% less CPU), and release builds
+about half the memory for large downloads), HTTP/2 is served by rws's own implementation (20–37% less CPU per request
+than with the `h2` crate), and release builds
 allocate with mimalloc (4–6% less CPU, more memory). Details:
 [Benchmarks](https://rws8.tech/reference/benchmarks/).
 

@@ -141,4 +141,4 @@ TLS uses `rustls` with the `aws-lc-rs` crypto backend. There is no dependency on
 
 HTTP/1.1 parsing, CORS, MIME types, range requests, WebSocket, SSE, and routing are implemented inside this crate. The transitive dependency tree has no `hyper`, `tower`, or `actix-net`.
 
-The rest of the protocol stack uses established crates rather than reimplementing them: HTTP/2 framing uses `h2`, HTTP/3 and QUIC use `h3` and `quinn`, and TLS uses `rustls`. `tokio-util` appears transitively in the default build through `h2`.
+The HTTP/2 server is rws's own (`h2_server`: framing, HPACK, flow control — conformance-checked with h2spec and fuzzed); the `h2` crate remains a dependency as the HTTP/2 *client* of `H2ReverseProxy`/`GrpcProxy`. HTTP/3 and QUIC use `h3` and `quinn`, and TLS uses `rustls`. `tokio-util` appears transitively in the default build through `h2`.

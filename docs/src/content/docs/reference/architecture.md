@@ -5,8 +5,9 @@ description: How rws handles a request — listeners, the HTTP/1.1, HTTP/2 and H
 
 `rws` is one crate: the server, the reverse proxy and the application
 framework share one request type and one handler trait. HTTP/1.1 parsing,
-routing, middleware, JSON, WebSocket and SSE are written in-crate; HTTP/2 uses
-the `h2` crate, HTTP/3 `h3` + `quinn`, TLS `rustls`.
+routing, middleware, JSON, WebSocket, SSE and the HTTP/2 server are written
+in-crate (the `h2` crate is only the proxies' HTTP/2 client); HTTP/3 uses
+`h3` + `quinn`, TLS `rustls`.
 
 ## Builds
 

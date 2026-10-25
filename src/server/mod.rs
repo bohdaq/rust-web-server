@@ -920,7 +920,6 @@ impl Server {
         app: impl Application + Send + 'static + Clone,
     ) {
         use crate::tls::create_tls_acceptor_from_vhosts;
-        use crate::h2_handler;
 
         let cert_path = std::env::var(crate::entry_point::Config::RWS_CONFIG_TLS_CERT_FILE)
             .unwrap_or_default();
@@ -977,7 +976,7 @@ impl Server {
                                         match protocol.as_deref() {
                                             Some(b"h2") => {
                                                 if let Err(e) =
-                                                    h2_handler::handle_connection(tls_stream, peer_addr, sni, app)
+                                                    crate::h2_server::handle_connection(tls_stream, peer_addr, sni, app)
                                                         .await
                                                 {
                                                     eprintln!("H2 connection error: {}", e);

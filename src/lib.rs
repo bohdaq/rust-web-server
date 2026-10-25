@@ -181,7 +181,7 @@ pub mod tls;
 
 #[cfg(feature = "http2")]
 #[doc(hidden)]
-pub mod h2_handler;
+pub mod h2_server;
 
 #[cfg(feature = "http3")]
 #[doc(hidden)]

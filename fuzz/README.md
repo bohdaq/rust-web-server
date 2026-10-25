@@ -21,6 +21,8 @@ cargo install cargo-fuzz
 | `jwt` | `auth::verify_jwt` | bearer tokens |
 | `saml_xml` | the SAML XML parser (via `fuzz_api`) | `POST /saml/acs`, unauthenticated |
 | `rsa_key` | RSA key parsing (DER, PEM, JWK) and RS256 / rsa-sha256 verification | IdP metadata, JWKS, SAML `SignatureValue` |
+| `h2_hpack` | HPACK header-block decoder (`h2_server::hpack`) | HTTP/2 clients |
+| `h2_connection` | rws's HTTP/2 server: frames, stream states, flow control (`h2_server::fuzz`) | HTTP/2 clients |
 | `config_file` | `rws.config.toml` settings loader | operator files |
 | `proxy_config` | proxy route parser | operator files |
 

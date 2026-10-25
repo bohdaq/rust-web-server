@@ -78,3 +78,37 @@ fn deeply_nested_saml_xml() {
         assert!(crate::sso::saml::xml_parse_for_tests(&xml).is_err());
     });
 }
+
+#[cfg(feature = "http2")]
+#[test]
+fn hpack_block_with_thousands_of_fields() {
+    on_small_stack(|| {
+        // Length-prefixed blocks of indexed fields (":method GET", 0x82).
+        let mut data = Vec::new();
+        for _ in 0..2_000 {
+            data.push(250);
+            data.extend(std::iter::repeat(0x82).take(250));
+        }
+        crate::h2_server::fuzz::hpack_decode(&data);
+    });
+}
+
+#[cfg(feature = "http2")]
+#[test]
+fn h2_connection_with_thousands_of_frames() {
+    on_small_stack(|| {
+        // PINGs, WINDOW_UPDATEs and a request split into many CONTINUATIONs.
+        let mut data = Vec::new();
+        for _ in 0..5_000 {
+            data.extend([0, 0, 8, 6, 0, 0, 0, 0, 0]);
+            data.extend(*b"12345678");
+            data.extend([0, 0, 4, 8, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+        }
+        data.extend([0, 0, 1, 1, 1, 0, 0, 0, 1, 0x82]); // HEADERS, END_STREAM
+        for i in 0..3_000 {
+            let flags = if i == 2_999 { 4 } else { 0 };
+            data.extend([0, 0, 1, 9, flags, 0, 0, 0, 1, if i % 2 == 0 { 0x87 } else { 0x84 }]);
+        }
+        crate::h2_server::fuzz::connection(&data);
+    });
+}

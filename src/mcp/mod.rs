@@ -79,7 +79,7 @@
 //!
 //! This transport is only wired up for the plain HTTP/1.1 path
 //! (`Server::run`/`Server::process`) — same scope as `Response::stream_pipe`
-//! generally, which the HTTP/2 (`h2_handler`) and HTTP/3 (`h3_handler`)
+//! generally, which the HTTP/2 (`h2_server`) and HTTP/3 (`h3_handler`)
 //! handlers don't yet support for *any* response, not just this one.
 //!
 //! # Environment variables
