@@ -112,8 +112,15 @@ impl OpenFile {
 
     /// Current size and modification time (`fstat`).
     pub(crate) fn state(&self) -> Option<FileState> {
-        let md = self.file.metadata().ok()?;
-        Some(FileState { len: md.len(), modified: modified_nanos(&md) })
+        #[cfg(all(target_os = "linux", any(feature = "http1", feature = "http2")))]
+        {
+            fstat_state(&self.file)
+        }
+        #[cfg(not(all(target_os = "linux", any(feature = "http1", feature = "http2"))))]
+        {
+            let md = self.file.metadata().ok()?;
+            Some(FileState { len: md.len(), modified: modified_nanos(&md) })
+        }
     }
 
     /// `len` bytes from the start of the file, read with positional reads —
@@ -149,6 +156,30 @@ fn settled(modified_nanos: u128) -> bool {
     now.saturating_sub(modified_nanos) >= SETTLE.as_nanos()
 }
 
+/// [`OpenFile::state`] with one plain `fstat`: `File::metadata` uses
+/// `statx` on Linux (for the birth time, which this doesn't need) — a
+/// heavier syscall, made on every static request. Same values as
+/// `md.len()` and [`modified_nanos`] (a time before the epoch is 0).
+#[cfg(all(target_os = "linux", any(feature = "http1", feature = "http2")))]
+fn fstat_state(file: &File) -> Option<FileState> {
+    use std::os::unix::io::AsRawFd;
+    let mut st = std::mem::MaybeUninit::<libc::stat>::uninit();
+    // SAFETY: fstat writes a full `stat` into `st` on success; the fd is
+    // owned by `file`, which outlives the call.
+    if unsafe { libc::fstat(file.as_raw_fd(), st.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    // SAFETY: fstat returned 0, so `st` is initialized.
+    let st = unsafe { st.assume_init() };
+    let modified = if st.st_mtime < 0 {
+        0
+    } else {
+        st.st_mtime as u128 * 1_000_000_000 + st.st_mtime_nsec as u128
+    };
+    Some(FileState { len: st.st_size as u64, modified })
+}
+
+#[cfg_attr(all(target_os = "linux", any(feature = "http1", feature = "http2")), allow(dead_code))]
 fn modified_nanos(md: &std::fs::Metadata) -> u128 {
     md.modified()
         .ok()
@@ -430,5 +461,24 @@ mod tests {
         }
         let total: usize = shards().iter().map(|s| s.read().unwrap().len()).sum();
         assert!(total <= CAPACITY, "{total} entries");
+    }
+
+    #[test]
+    fn state_matches_std_metadata_including_nanoseconds_and_pre_epoch_times() {
+        let path = TempPath::new("ofc_state.txt");
+        std::fs::write(path.as_str(), b"12345").unwrap();
+        let file = File::open(path.as_str()).unwrap();
+        for mtime in [
+            std::time::UNIX_EPOCH + Duration::new(1_767_222_000, 123_456_789),
+            std::time::UNIX_EPOCH + Duration::from_secs(1),
+            std::time::UNIX_EPOCH - Duration::from_secs(5),
+        ] {
+            file.set_modified(mtime).unwrap();
+            let opened = OpenFile::from_file(File::open(path.as_str()).unwrap()).unwrap();
+            let state = opened.state().unwrap();
+            let md = std::fs::metadata(path.as_str()).unwrap();
+            assert_eq!(md.len(), state.len);
+            assert_eq!(modified_nanos(&md), state.modified, "{mtime:?}");
+        }
     }
 }
