@@ -166,6 +166,41 @@ pub fn split_array_elements(json: &str) -> Vec<String> {
     elements
 }
 
+/// The members of a top-level JSON object `{"k":v,...}` as `(key, raw
+/// value)` pairs, in order; `None` when `json` isn't an object. Keys are
+/// returned unescaped only for `\"` and `\\`, which is all argument and
+/// schema keys use in practice.
+pub fn object_members(json: &str) -> Option<Vec<(String, String)>> {
+    let inner = json.trim().strip_prefix('{')?.trim_end().strip_suffix('}')?;
+    let mut members = Vec::new();
+    for member in split_array_elements(&format!("[{inner}]")) {
+        let rest = member.trim().strip_prefix('"')?;
+        let mut key = String::new();
+        let mut chars = rest.char_indices();
+        let mut end = None;
+        while let Some((i, c)) = chars.next() {
+            match c {
+                '\\' => {
+                    if let Some((_, escaped)) = chars.next() {
+                        key.push(escaped);
+                    }
+                }
+                '"' => {
+                    end = Some(i);
+                    break;
+                }
+                c => key.push(c),
+            }
+        }
+        let value = rest[end? + 1..].trim_start().strip_prefix(':')?.trim();
+        if value.is_empty() {
+            return None;
+        }
+        members.push((key, value.to_string()));
+    }
+    Some(members)
+}
+
 /// Return the raw `id` JSON value, or `None` if the `id` key is absent.
 ///
 /// `None` → notification (no response needed).

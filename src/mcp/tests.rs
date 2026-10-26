@@ -2703,3 +2703,50 @@ fn server_info_carries_title_and_icons() {
     let plain = body_of(&McpServer::new("srv", "1").handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#));
     assert!(plain.contains(r#""serverInfo":{"name":"srv","version":"1"}"#), "{plain}");
 }
+
+// ── #3: input validation failures are tool results ───────────────────────────
+
+const ADD_SCHEMA: &str = r#"{"type":"object","properties":{"a":{"type":"number"},"b":{"type":"integer"},"tag":{"type":["string","null"]}},"required":["a","b"]}"#;
+
+fn add_server() -> McpServer {
+    McpServer::new("srv", "1").tool("add", "Add", ADD_SCHEMA, |_| Ok(McpContent::text("ran")))
+}
+
+fn call_add(arguments: &str) -> String {
+    body_of(&add_server().handle_request(&format!(
+        r#"{{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{{"name":"add","arguments":{arguments}}}}}"#
+    )))
+}
+
+#[test]
+fn valid_arguments_reach_the_handler() {
+    for ok in [r#"{"a":1.5,"b":2}"#, r#"{"a":1,"b":-2,"tag":"x"}"#, r#"{"a":1,"b":2,"tag":null,"extra":true}"#] {
+        let body = call_add(ok);
+        assert!(body.contains(r#""text":"ran""#) && body.contains(r#""isError":false"#), "{ok}: {body}");
+    }
+}
+
+#[test]
+fn invalid_arguments_are_an_error_result_not_a_protocol_error() {
+    for (bad, why) in [
+        (r#"{"a":1}"#, "missing required property \\\"b\\\""),
+        (r#"{"a":"1","b":2}"#, "property \\\"a\\\" must be number, got string"),
+        (r#"{"a":1,"b":2.5}"#, "property \\\"b\\\" must be integer, got number"),
+        (r#"{"a":1,"b":2,"tag":7}"#, "property \\\"tag\\\" must be string or null, got integer"),
+        (r#"[1,2]"#, "expected a JSON object"),
+    ] {
+        let body = call_add(bad);
+        assert!(body.contains(r#""isError":true"#), "{bad}: {body}");
+        assert!(body.contains(why), "{bad}: expected {why} in {body}");
+        assert!(!body.contains(r#""error":"#), "{bad}: protocol error instead of a tool result: {body}");
+    }
+}
+
+#[test]
+fn object_members_splits_top_level_only() {
+    let members = super::json_rpc::object_members(r#"{"a":1, "b":{"c":[1,{"d":"x,y"}]}, "e\"q":"s"}"#).unwrap();
+    assert_eq!(vec![("a".to_string(), "1".to_string()), ("b".to_string(), r#"{"c":[1,{"d":"x,y"}]}"#.to_string()), ("e\"q".to_string(), r#""s""#.to_string())], members);
+    assert_eq!(Some(vec![]), super::json_rpc::object_members("{}"));
+    assert!(super::json_rpc::object_members("[1]").is_none());
+    assert!(super::json_rpc::object_members(r#"{"a"}"#).is_none());
+}

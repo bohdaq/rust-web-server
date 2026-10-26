@@ -42,8 +42,7 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - `mimalloc` feature: the `rws` binary allocates with mimalloc v3; release binaries and images are built with it — 4–6% less CPU per request, at a larger memory footprint (about 34 MiB under load instead of 9; up to ~120 MiB serving large files over TLS). Build without the feature for the smaller footprint.
 - `RWS_CONFIG_RUNTIME=per-core`: one single-threaded runtime per core, each on its own `SO_REUSEPORT` listener (Unix) — more throughput on fast CPUs, more CPU per request on slow ones; the default stays `shared`.
 - Supply chain (#5): release binaries are built with `cargo auditable` (`cargo audit bin rws` works on them), releases carry a CycloneDX SBOM, archives and images get GitHub build-provenance attestations, and images are signed keyless with cosign. CI runs `cargo deny check` (advisories, permissive licenses only, crates.io sources only; `deny.toml`).
-
-- MCP (#3): structured tool results (`McpContent::structured`, `McpServer::tool_output_schema` → `outputSchema`/`structuredContent`), tool and server titles (`tool_title`, `title`) and icons (`McpIcon`, `tool_icon`, `icon`).
+- MCP (#3): structured tool results (`McpContent::structured`, `McpServer::tool_output_schema` → `outputSchema`/`structuredContent`), tool and server titles (`tool_title`, `title`) and icons (`McpIcon`, `tool_icon`, `icon`). `tools/call` arguments are checked against the input schema (an object, `required` properties, property `type`s); a mismatch is an `isError` tool result rather than reaching the handler.
 
 ### Fixed
 

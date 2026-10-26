@@ -2369,6 +2369,46 @@ impl McpServer {
         )
     }
 
+    /// Check a `tools/call`'s `arguments` against the tool's input schema:
+    /// an object, every `required` property present, and each declared
+    /// property of the declared `type`. Not a full JSON Schema validator —
+    /// the checks a model's mistakes actually trip. A failure becomes a tool
+    /// result with `isError: true` (MCP 2025-11-25, SEP-1303), so the model
+    /// sees why and can retry, instead of a protocol error it never reads.
+    pub(crate) fn validate_arguments(schema: &str, args: &str) -> Result<(), String> {
+        let Some(schema) = json_rpc::object_members(schema) else { return Ok(()) };
+        let field = |name: &str| schema.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str());
+        let Some(arguments) = json_rpc::object_members(args) else {
+            return Err("Invalid arguments: expected a JSON object".to_string());
+        };
+        if let Some(required) = field("required") {
+            for name in json_rpc::split_array_elements(required) {
+                let name = name.trim().trim_matches('"');
+                if !arguments.iter().any(|(k, _)| k == name) {
+                    return Err(format!("Invalid arguments: missing required property \"{name}\""));
+                }
+            }
+        }
+        let Some(properties) = field("properties").and_then(json_rpc::object_members) else { return Ok(()) };
+        for (name, value) in &arguments {
+            let Some((_, property)) = properties.iter().find(|(k, _)| k == name) else { continue };
+            let Some(declared) = json_rpc::object_members(property)
+                .and_then(|p| p.into_iter().find(|(k, _)| k == "type").map(|(_, v)| v))
+            else { continue };
+            let allowed: Vec<String> = if declared.starts_with('[') {
+                json_rpc::split_array_elements(&declared).iter().map(|t| t.trim().trim_matches('"').to_string()).collect()
+            } else {
+                vec![declared.trim_matches('"').to_string()]
+            };
+            let actual = json_type(value);
+            let fits = allowed.iter().any(|t| t == actual || (t == "number" && actual == "integer"));
+            if !fits {
+                return Err(format!("Invalid arguments: property \"{name}\" must be {}, got {actual}", allowed.join(" or ")));
+            }
+        }
+        Ok(())
+    }
+
     fn do_tools_call(&self, body: &str, ctx: McpContext) -> Result<String, (i32, String)> {
         let params = json_rpc::extract_raw(body, "params")
             .ok_or((json_rpc::INVALID_PARAMS, "Missing params".to_string()))?;
@@ -2385,9 +2425,12 @@ impl McpServer {
 
         let sync_handler = {
             let tools = self.tools.read().unwrap();
-            tools.iter().find(|t| t.name == name).map(|t| t.handler.clone())
+            tools.iter().find(|t| t.name == name).map(|t| (t.handler.clone(), t.input_schema.clone()))
         };
-        if let Some(handler) = sync_handler {
+        if let Some((handler, schema)) = sync_handler {
+            if let Err(invalid) = Self::validate_arguments(&schema, &args) {
+                return Ok(Self::format_tool_result(Err(invalid)));
+            }
             return Ok(Self::format_tool_result(handler(ctx, &args)));
         }
 
@@ -2395,9 +2438,12 @@ impl McpServer {
         {
             let async_handler = {
                 let async_tools = self.async_tools.read().unwrap();
-                async_tools.iter().find(|t| t.name == name).map(|t| t.handler.clone())
+                async_tools.iter().find(|t| t.name == name).map(|t| (t.handler.clone(), t.input_schema.clone()))
             };
-            if let Some(handler) = async_handler {
+            if let Some((handler, schema)) = async_handler {
+                if let Err(invalid) = Self::validate_arguments(&schema, &args) {
+                    return Ok(Self::format_tool_result(Err(invalid)));
+                }
                 let args_owned = args.clone();
                 let result = crate::async_bridge::block_on_isolated(move || handler(args_owned));
                 return Ok(Self::format_tool_result(result));
@@ -3061,6 +3107,20 @@ fn rpc_error(id: Option<&str>, code: i32, message: &str) -> Response {
     json_response(&format!(
         r#"{{"jsonrpc":"2.0","error":{{"code":{code},"message":"{escaped}"}},"id":{id_str}}}"#
     ))
+}
+
+/// The JSON Schema type of a raw JSON value (`integer` for whole numbers).
+fn json_type(raw: &str) -> &'static str {
+    let raw = raw.trim();
+    match raw.as_bytes().first() {
+        Some(b'"') => "string",
+        Some(b'{') => "object",
+        Some(b'[') => "array",
+        Some(b't' | b'f') => "boolean",
+        Some(b'n') => "null",
+        _ if raw.bytes().all(|b| b.is_ascii_digit() || b == b'-') => "integer",
+        _ => "number",
+    }
 }
 
 pub(crate) fn json_escape(s: &str) -> String {

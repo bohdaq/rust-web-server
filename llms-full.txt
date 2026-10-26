@@ -15149,6 +15149,18 @@ These are advisory only — nothing in `McpServer` verifies that a handler regis
 `.tool_annotated()`'s handler is `Fn(&str) -> Result` — the same plain shape as `.tool()`, not the `Fn(McpContext, &str) -> ...` shape of `.tool_with_context()`. There is currently no single builder that gives you both `McpContext` and `ToolAnnotations` on the same tool.
 :::
 
+## Argument checking
+
+Before a handler runs, `tools/call` arguments are checked against the tool's
+input schema: they must be an object, every `required` property must be
+present, and each property declared in `properties` must have its declared
+`type` (`string`, `number`, `integer`, `boolean`, `object`, `array`, `null`,
+or a list of them). A mismatch is returned as a tool result with
+`isError: true` and the reason (`missing required property "b"`), as MCP
+2025-11-25 asks, so the model sees it and can retry. It isn't a full JSON
+Schema validator: formats, ranges, patterns and nested schemas are still the
+handler's to check.
+
 ## Structured output, titles and icons
 
 A tool can declare the shape of its result and return it as structured data
