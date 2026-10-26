@@ -79,22 +79,22 @@ pub(crate) fn validate_head(head: &[u8], request: &Request) -> Result<(), String
     if !http_1_1 && request.http_version != "HTTP/1.0" {
         return Err(format!("{} is not served on an HTTP/1.1 connection", request.http_version));
     }
-    let is_token_char = |b: u8| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b);
+    // The parser ends the head at a blank-looking line (`" \t"`): anything
+    // it then left over as "body" was a field line it never read.
+    if !request.body.is_empty() {
+        return Err("malformed request head".to_string());
+    }
+    // Checked on the parsed names (no second pass over the head): a folded
+    // line's name starts with whitespace, whitespace before the colon ends
+    // the name with it — neither is a token.
     let mut hosts = 0;
-    for line in head.split(|&b| b == b'\n').skip(1) {
-        let line = line.strip_suffix(b"\r").unwrap_or(line);
-        if line.is_empty() {
-            break;
+    for header in &request.headers {
+        let name = header.name.as_bytes();
+        if name.is_empty() || !name.iter().all(|&b| TOKEN[b as usize]) {
+            return Err(format!("invalid header name {:?} (obs-fold, or whitespace before the colon)", &*header.name));
         }
-        if line[0] == b' ' || line[0] == b'\t' {
-            return Err("obsolete line folding is not accepted".to_string());
-        }
-        let Some(colon) = line.iter().position(|&b| b == b':') else {
-            return Err("header line without a colon".to_string());
-        };
-        let name = &line[..colon];
-        if name.is_empty() || !name.iter().all(|&b| is_token_char(b)) {
-            return Err(format!("invalid header name {:?} (no whitespace before the colon)", String::from_utf8_lossy(name)));
+        if header.value.is_empty() && !has_colon_line(head, name) {
+            return Err(format!("header line without a colon: {:?}", &*header.name));
         }
         if name.eq_ignore_ascii_case(Header::_HOST.as_bytes()) {
             hosts += 1;
@@ -104,6 +104,25 @@ pub(crate) fn validate_head(head: &[u8], request: &Request) -> Result<(), String
         return Err(format!("an HTTP/1.1 request needs exactly one Host header, got {hosts}"));
     }
     Ok(())
+}
+
+/// RFC 9110 §5.6.2 `tchar`, as a lookup table.
+const TOKEN: [bool; 256] = {
+    let mut table = [false; 256];
+    let mut b = 0;
+    while b < 256 {
+        let c = b as u8;
+        table[b] = c.is_ascii_alphanumeric() || matches!(c, b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.' | b'^' | b'_' | b'`' | b'|' | b'~');
+        b += 1;
+    }
+    table
+};
+
+/// `true` when a field line of `head` is `name` followed by a colon — for a
+/// header the parser saw with an empty value, which is also how it records a
+/// line with no colon at all. Only reached for empty values.
+fn has_colon_line(head: &[u8], name: &[u8]) -> bool {
+    head.split(|&b| b == b'\n').skip(1).any(|line| line.len() > name.len() && line.starts_with(name) && line[name.len()] == b':')
 }
 
 /// Whether the connection stays open after this request (RFC 9112 §9.3).
@@ -417,6 +436,9 @@ mod tests {
         assert!(check(b"GET / HTTP/1.1\r\nHost : x\r\n\r\n").is_err(), "space before colon");
         assert!(check(b"GET / HTTP/1.1\r\nHost: x\r\nX(A): 1\r\n\r\n").is_err(), "non-token name");
         assert!(check(b"GET / HTTP/1.1\r\nHost: x\r\nno colon here\r\n\r\n").is_err());
+        assert!(check(b"GET / HTTP/1.1\r\nHost: x\r\nNoColon\r\n\r\n").is_err(), "no colon, no space");
+        assert!(check(b"GET / HTTP/1.1\r\nHost: x\r\nX-Empty:\r\n\r\n").is_ok(), "an empty value is fine");
+        assert!(check(b"GET / HTTP/1.1\r\nHost: x\r\n \t\r\nX-After: 1\r\n\r\n").is_err(), "whitespace-only line");
     }
 
     #[test]
