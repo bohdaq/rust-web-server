@@ -861,6 +861,10 @@ pub struct McpServer {
     completions: Arc<RwLock<Vec<CompletionDef>>>,
     fallback: Option<Arc<dyn Application + Send + Sync>>,
     auth_token: Option<String>,
+    /// Origins a browser may call the endpoint from (see
+    /// [`Self::allowed_origins`]); a request with any other `Origin` is
+    /// refused.
+    allowed_origins: Vec<String>,
     /// Installed by [`Self::require_oauth`] (`sso` feature) — an alternative
     /// to `auth_token` that verifies a client-supplied OAuth 2.0 / OIDC
     /// bearer JWT via JWKS instead of comparing against one static shared
@@ -979,6 +983,7 @@ impl McpServer {
             completions: Arc::new(RwLock::new(Vec::new())),
             fallback: None,
             auth_token: None,
+            allowed_origins: Vec::new(),
             #[cfg(feature = "sso")]
             oauth: None,
             page_size: None,
@@ -1346,8 +1351,28 @@ impl McpServer {
     ///     "headers": { "Authorization": "Bearer <token>" }
     /// }}}
     /// ```
+    ///
+    /// An empty token refuses every request (fails closed) rather than
+    /// accepting an empty `Authorization: Bearer` (since 17.113.1). Tokens
+    /// are compared in constant time.
     pub fn require_bearer(mut self, token: impl Into<String>) -> Self {
         self.auth_token = Some(token.into());
+        self
+    }
+
+    /// Browser origins allowed to call the MCP endpoint, e.g.
+    /// `["https://inspector.example.com"]`. A request carrying an `Origin`
+    /// header that isn't listed gets `403` (the MCP transport spec requires
+    /// validating `Origin`: without it a web page — or a DNS-rebinding
+    /// attack — can drive a local MCP server from the visitor's browser).
+    /// Requests without `Origin` (CLI and agent clients) are unaffected.
+    /// Empty by default: no browser origin is allowed (since 17.113.1).
+    pub fn allowed_origins<I, S>(mut self, origins: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.allowed_origins = origins.into_iter().map(Into::into).collect();
         self
     }
 
@@ -2471,6 +2496,26 @@ impl Application for McpServer {
         }
 
         if request.request_uri == self.path {
+            // Browser requests (they carry `Origin`) only from listed origins.
+            if let Some(origin) = request.headers.iter().find(|h| h.name.eq_ignore_ascii_case("origin")) {
+                let origin = origin.value.trim();
+                if !self.allowed_origins.iter().any(|o| o.trim_end_matches('/').eq_ignore_ascii_case(origin.trim_end_matches('/'))) {
+                    return Ok(forbidden_origin());
+                }
+            }
+            // JSON-RPC bodies only: a form or text/plain POST is what a web
+            // page can send cross-site without a CORS preflight.
+            if request.method == "POST" {
+                let content_type = request.headers.iter()
+                    .find(|h| h.name.eq_ignore_ascii_case("content-type"))
+                    .map(|h| h.value.as_ref())
+                    .unwrap_or("");
+                let media_type = content_type.split(';').next().unwrap_or("").trim();
+                if !media_type.eq_ignore_ascii_case("application/json") {
+                    return Ok(unsupported_media_type());
+                }
+            }
+
             #[cfg_attr(not(feature = "sso"), allow(unused_mut))]
             let mut auth_claims_json: Option<String> = None;
 
@@ -2503,7 +2548,7 @@ impl Application for McpServer {
                     .map(|h| h.value.as_ref())
                     .unwrap_or("");
                 let bearer = provided.strip_prefix("Bearer ").unwrap_or("");
-                if bearer != expected.as_str() {
+                if !bearer_matches(expected, bearer) {
                     return Ok(unauthorized());
                 }
             }
@@ -2514,7 +2559,7 @@ impl Application for McpServer {
                     .map(|h| h.value.as_ref())
                     .unwrap_or("");
                 let bearer = provided.strip_prefix("Bearer ").unwrap_or("");
-                if bearer != expected.as_str() {
+                if !bearer_matches(expected, bearer) {
                     return Ok(unauthorized());
                 }
             }
@@ -2613,6 +2658,36 @@ fn no_content() -> Response {
     let mut r = Response::new();
     r.status_code = *STATUS_CODE_REASON_PHRASE.n202_accepted.status_code;
     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n202_accepted.reason_phrase.to_string();
+    r
+}
+
+/// A configured static token against the presented one: never matches an
+/// empty token (fails closed), compared in constant time.
+fn bearer_matches(expected: &str, provided: &str) -> bool {
+    !expected.is_empty() && crate::proxy_config::constant_time_eq(expected.as_bytes(), provided.as_bytes())
+}
+
+/// `403` for a browser `Origin` not in [`McpServer::allowed_origins`].
+fn forbidden_origin() -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n403_forbidden.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n403_forbidden.reason_phrase.to_string();
+    r.content_range_list = vec![Range::get_content_range(
+        b"Origin not allowed".to_vec(),
+        MimeType::TEXT_PLAIN.to_string(),
+    )];
+    r
+}
+
+/// `415` for a POST whose body isn't `application/json`.
+fn unsupported_media_type() -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n415_unsupported_media_type.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n415_unsupported_media_type.reason_phrase.to_string();
+    r.content_range_list = vec![Range::get_content_range(
+        b"MCP requests must be application/json".to_vec(),
+        MimeType::TEXT_PLAIN.to_string(),
+    )];
     r
 }
 

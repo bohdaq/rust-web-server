@@ -123,6 +123,14 @@ impl<'a, A: Application> TestRequest<'a, A> {
         self
     }
 
+    /// Set the request body to a JSON string, with
+    /// `Content-Type: application/json`.
+    pub fn body_json(mut self, json: &str) -> Self {
+        self.headers.push(Header { name: Header::_CONTENT_TYPE.into(), value: "application/json".into() });
+        self.body = json.as_bytes().to_vec();
+        self
+    }
+
     /// Dispatch the request and return the response.
     pub fn send(self) -> TestResponse {
         let request = Request {

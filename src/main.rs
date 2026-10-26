@@ -90,21 +90,85 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
     let cache2 = cache.clone(); // captured by cache_stats tool
     let cache3 = cache.clone(); // captured by cache_clear tool
 
-    // 3. Middleware stack (innermost → outermost):
-    //    routes → log → blocklist → maintenance → cache → global rate limit → MCP
-    let app = http
+    // 3. Around the routes: maintenance mode and the response cache.
+    //    Maintenance stays inside MCP: the `maintenance` tool is how an
+    //    operator switches it off again.
+    let app = http.wrap(MaintenanceLayer).wrap(cache);
+
+    // 4. MCP — only with a token (#44): its tools change the running server
+    //    (config reload, blocklist, maintenance). Without MCP_TOKEN, /mcp
+    //    isn't mounted at all. Browser origins must be listed in
+    //    MCP_ALLOWED_ORIGINS (comma-separated).
+    let token = std::env::var("MCP_TOKEN").unwrap_or_default();
+    let served = if token.trim().is_empty() {
+        println!("MCP tools not mounted: set MCP_TOKEN to enable /mcp.");
+        Served::Plain(app)
+    } else {
+        let origins: Vec<String> = std::env::var("MCP_ALLOWED_ORIGINS")
+            .unwrap_or_default()
+            .split(',')
+            .map(|o| o.trim().to_string())
+            .filter(|o| !o.is_empty())
+            .collect();
+        let mcp = app
+            .mcp("rws", env!("CARGO_PKG_VERSION"))
+            .require_bearer(token.trim())
+            .allowed_origins(origins);
+        Served::Mcp(rws_mcp_tools(mcp, registered_routes, cache2, cache3))
+    };
+
+    // 5. Outermost — for /mcp as well: access log, IP blocklist, global
+    //    rate limit.
+    rust_web_server::middleware::WithMiddleware::new(served)
         .wrap(LogLayer)
         .wrap(BlocklistLayer)
-        .wrap(MaintenanceLayer)
-        .wrap(cache)
-        .wrap(GlobalRateLimit::from_env());
+        .wrap(GlobalRateLimit::from_env())
+}
 
-    // 4. MCP server — POST /mcp; everything else falls through to `app`.
-    let mut mcp = app.mcp("rws", env!("CARGO_PKG_VERSION"));
-    if let Ok(token) = std::env::var("MCP_TOKEN") {
-        mcp = mcp.require_bearer(token);
+/// Either the MCP server (with the app behind it) or the app alone.
+#[derive(Clone)]
+enum Served<M, A> {
+    Mcp(M),
+    Plain(A),
+}
+
+impl<M: rust_web_server::application::Application, A: rust_web_server::application::Application>
+    rust_web_server::application::Application for Served<M, A>
+{
+    fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
+        match self {
+            Served::Mcp(m) => m.execute(request, connection),
+            Served::Plain(a) => a.execute(request, connection),
+        }
     }
 
+    fn runs_inline(&self, request: &Request, connection: &ConnectionInfo) -> bool {
+        match self {
+            Served::Mcp(m) => m.runs_inline(request, connection),
+            Served::Plain(a) => a.runs_inline(request, connection),
+        }
+    }
+
+    #[cfg(feature = "http2")]
+    fn execute_async<'a>(
+        &'a self,
+        request: &'a Request,
+        connection: &'a ConnectionInfo,
+    ) -> Option<rust_web_server::application::AsyncResponse<'a>> {
+        match self {
+            Served::Mcp(m) => m.execute_async(request, connection),
+            Served::Plain(a) => a.execute_async(request, connection),
+        }
+    }
+}
+
+/// The built-in rws tools on `mcp`.
+fn rws_mcp_tools(
+    mcp: rust_web_server::mcp::McpServer,
+    registered_routes: Vec<(String, String)>,
+    cache2: CacheLayer,
+    cache3: CacheLayer,
+) -> rust_web_server::mcp::McpServer {
     mcp
         // ── server introspection ─────────────────────────────────────────────
         .tool(
