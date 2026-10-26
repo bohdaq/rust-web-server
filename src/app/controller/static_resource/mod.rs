@@ -142,7 +142,7 @@ impl Controller for StaticResourceController {
 
                     let if_none_match = request.get_header(Header::_IF_NONE_MATCH.to_string());
                     if let Some(inm) = if_none_match {
-                        if inm.value == etag_value || inm.value == "*" {
+                        if if_none_match_matches(&inm.value, &etag_value) {
                             response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
                             response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
                             response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
@@ -264,7 +264,7 @@ impl StaticResourceController {
 
                     let if_none_match = request.get_header(Header::_IF_NONE_MATCH.to_string());
                     if let Some(inm) = if_none_match {
-                        if inm.value == etag_value || inm.value == "*" {
+                        if if_none_match_matches(&inm.value, &etag_value) {
                             response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
                             response.reason_phrase = STATUS_CODE_REASON_PHRASE.n304_not_modified.reason_phrase.to_string();
                             response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
@@ -355,7 +355,7 @@ impl StaticResourceController {
         response.headers.push(Header { name: Header::_LAST_MODIFIED_UNIX_EPOCH_NANOS.to_string(), value: modified.to_string() });
         let not_modified = request
             .get_header(Header::_IF_NONE_MATCH.to_string())
-            .map_or(false, |inm| inm.value == etag_value || inm.value == "*");
+            .map_or(false, |inm| if_none_match_matches(&inm.value, &etag_value));
         response.headers.push(Header { name: Header::_ETAG.to_string(), value: etag_value });
         if not_modified {
             response.status_code = *STATUS_CODE_REASON_PHRASE.n304_not_modified.status_code;
@@ -838,6 +838,19 @@ pub(crate) fn working_directory() -> &'static str {
         std::env::current_dir()
             .map(|d| d.to_string_lossy().into_owned())
             .unwrap_or_default()
+    })
+}
+
+/// `If-None-Match` against the current entity tag (RFC 9110 §13.1.2): a
+/// comma-separated list, or `*`, compared weakly — `W/"x"` matches `"x"`
+/// (#56). Before 17.113.2 only a header equal to the tag matched, so a
+/// client sending several tags, or a weak one, never got a `304`.
+pub(crate) fn if_none_match_matches(header_value: &str, etag: &str) -> bool {
+    let opaque = |tag: &str| tag.trim().strip_prefix("W/").unwrap_or(tag.trim()).to_string();
+    let current = opaque(etag);
+    header_value.split(',').any(|candidate| {
+        let candidate = candidate.trim();
+        candidate == "*" || (!candidate.is_empty() && opaque(candidate) == current)
     })
 }
 

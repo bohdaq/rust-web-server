@@ -928,3 +928,40 @@ fn directory_listing_links_resolve() {
     let target = if href.starts_with('/') { href } else { format!("/{}/{}", dir_name, href) };
     assert_eq!(200, static_status(&target), "{target}");
 }
+
+// ── #56: conditional requests ───────────────────────────────────────────────
+
+#[test]
+fn if_none_match_is_a_list_compared_weakly() {
+    use super::if_none_match_matches as m;
+    let etag = "\"1700-42\"";
+    assert!(m("\"1700-42\"", etag));
+    assert!(m("W/\"1700-42\"", etag));
+    assert!(m("\"other\", \"1700-42\"", etag));
+    assert!(m("\"a\",W/\"1700-42\" , \"b\"", etag));
+    assert!(m("*", etag));
+    assert!(!m("\"1700-43\"", etag));
+    assert!(!m("\"a\", \"b\"", etag));
+    assert!(!m("", etag));
+    assert!(!m("1700-42", "\"1700-42-x\""));
+}
+
+fn get_with(uri: &str, headers: Vec<(&str, &str)>) -> Response {
+    use crate::application::Application;
+    let request = Request { method: "GET".into(), request_uri: uri.to_string(), http_version: "HTTP/1.1".into(),
+        headers: headers.into_iter().map(|(n, v)| Header { name: n.to_string(), value: v.to_string() }).collect(), body: vec![] };
+    let conn = ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None };
+    crate::app::App::new().execute(&request, &conn).unwrap()
+}
+
+fn etag_of(response: &Response) -> String {
+    response.headers.iter().find(|h| h.name == Header::_ETAG).map(|h| h.value.clone()).expect("no ETag")
+}
+
+#[test]
+fn a_listed_or_weak_etag_gets_304() {
+    let etag = etag_of(&get_with("/Cargo.toml", vec![]));
+    assert_eq!(304, get_with("/Cargo.toml", vec![("If-None-Match", &format!("\"x\", {etag}"))]).status_code);
+    assert_eq!(304, get_with("/Cargo.toml", vec![("If-None-Match", &format!("W/{etag}"))]).status_code);
+    assert_eq!(200, get_with("/Cargo.toml", vec![("If-None-Match", "\"x\", \"y\"")]).status_code);
+}
