@@ -399,8 +399,6 @@ impl StaticResourceController {
     }
 
     pub fn process_static_resources(request: &Request) -> Result<Vec<ContentRange>, Error> {
-        let dir = std::path::PathBuf::from(working_directory());
-        let working_directory = dir.as_path().to_str().unwrap();
 
         let url = request.request_uri.to_string();
 
@@ -534,7 +532,8 @@ impl StaticResourceController {
 
             if boxed_file.is_err() {
                 //check if .html file exists
-                let static_filepath = [working_directory, components.path.as_str(), ".html"].join(SYMBOL.empty_string);
+                // Decoded like every lookup (#55): `/my%20page` is `my page.html`.
+                let static_filepath = static_fs_path(&format!("{}.html", components.path)).unwrap_or_default();
 
                 let boxed_file = File::open(&static_filepath);
                 if boxed_file.is_ok()  {
