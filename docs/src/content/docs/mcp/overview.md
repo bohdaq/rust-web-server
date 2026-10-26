@@ -3,7 +3,7 @@ title: MCP Server Overview
 description: Expose tools, resources, and prompts to AI agents via the Model Context Protocol over HTTP.
 ---
 
-The Model Context Protocol (MCP) is a JSON-RPC 2.0 standard that lets AI agents (Claude Desktop, Cursor, custom agents) call server-defined **tools**, read **resources**, and retrieve **prompt templates** over plain HTTP. `rust-web-server` ships a first-class `McpServer` that implements the MCP 2024-11-05 specification with no external dependencies, and negotiates that version down for clients that ask for something different — see [Protocol version negotiation](#protocol-version-negotiation) below.
+The Model Context Protocol (MCP) is a JSON-RPC 2.0 standard that lets AI agents (Claude Desktop, Cursor, custom agents) call server-defined **tools**, read **resources**, and retrieve **prompt templates** over plain HTTP. `rust-web-server` ships a first-class `McpServer` that implements the MCP specification up to 2025-11-25 with no external dependencies, and speaks each version from 2024-11-05 on to the clients that ask for it — see [Protocol version negotiation](#protocol-version-negotiation) below.
 
 ## Creating an MCP server
 
@@ -127,7 +127,7 @@ Override the default path with `.at("/custom-path")` if needed.
 
 ## Batch requests
 
-`POST /mcp` also accepts a top-level JSON array instead of a single object — a JSON-RPC 2.0 batch request, letting a client send several calls in one HTTP round trip:
+`POST /mcp` also accepts a top-level JSON array instead of a single object — a JSON-RPC 2.0 batch request, letting a client send several calls in one HTTP round trip. Batching was removed from MCP in 2025-06-18, so batches are accepted only from clients on 2025-03-26 or earlier (by session, or `MCP-Protocol-Version`; no header and no session counts as 2025-03-26); others get a `-32600` error:
 
 ```json
 // Request:
@@ -347,17 +347,21 @@ Nothing proactively notices a `GET /mcp` connection closing and removes its subs
 
 ## Protocol version negotiation
 
-`initialize` inspects the client's requested `params.protocolVersion` and responds with the lower of that and the server's own version, rather than always claiming its own regardless of what the client asked for:
+The server speaks MCP 2024-11-05, 2025-03-26, 2025-06-18 and 2025-11-25.
+`initialize` confirms the client's `params.protocolVersion` when it is one of
+those, and answers anything else — older, newer, malformed or missing — with
+the newest, 2025-11-25; the client then decides whether it can continue:
 
 ```json
-// Client requests a newer version than this server implements:
+// A client on 2025-06-18 gets 2025-06-18:
 {"method": "initialize", "params": {"protocolVersion": "2025-06-18", "clientInfo": {"name": "my-client", "version": "1.0"}}}
-
-// Server responds with the version it actually speaks — not "2025-06-18":
-{"result": {"protocolVersion": "2024-11-05", "capabilities": {...}, "serverInfo": {...}}}
+{"result": {"protocolVersion": "2025-06-18", "capabilities": {...}, "serverInfo": {...}}}
 ```
 
-Version strings are `YYYY-MM-DD` dates, so a plain string comparison already orders them correctly — no date parsing needed. A client requesting an *older* version than the server's is honored as sent (the server confirms it'll speak that version) rather than being overridden. If `protocolVersion` or `params` is missing entirely, `initialize` doesn't error — it falls back to the server's own version, same as before this negotiation existed.
+The session remembers the version. After `initialize`, clients on 2025-06-18
+and later send `MCP-Protocol-Version` on every request; a version the server
+doesn't speak gets `400`, and a request without the header is taken as
+2025-03-26 (as the transport specifies).
 
 `params.clientInfo` (if the client sends it) is logged to stderr at `initialize` time and recorded under a freshly minted session id, returned to the client via an `Mcp-Session-Id` response header — see [Per-request context](/mcp/tools/#per-request-context) for how a `.tool_with_context()` handler gets it back on later requests in the same session.
 

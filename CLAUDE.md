@@ -254,7 +254,7 @@ Call `.with_host("example.com")` before registering routes to restrict a `Router
 
 ### MCP server
 
-`src/mcp/mod.rs` — `McpServer` implements `Application` and serves MCP Streamable HTTP (`POST /mcp`, JSON-RPC 2.0; `GET /mcp` = SSE push stream). Builders: `.tool`, `.tool_with_context` (handler also gets `McpContext`), `.tool_annotated`, `.async_tool` (`http2`), `.resource`, `.prompt`, `.completion`, `.page_size`, `.logging_enabled`, `.require_bearer(token)`, `.require_oauth(provider, audience)` (`sso`), `.wrap(app)` (non-MCP requests fall through). The binary registers 20 rws tools in `main.rs` (config, metrics, routes, cache, rate limits, CORS, static files, reload, maintenance, IP blocklist, feature flags, recent requests/errors).
+`src/mcp/mod.rs` — `McpServer` implements `Application` and serves MCP Streamable HTTP (`POST /mcp`, JSON-RPC 2.0; `GET /mcp` = SSE push stream), protocol versions 2024-11-05 to 2025-11-25 (`SUPPORTED_PROTOCOL_VERSIONS`, `negotiate_version`; the session stores the result; `MCP-Protocol-Version` checked, batches only up to 2025-03-26). Builders: `.tool`, `.tool_with_context` (handler also gets `McpContext`), `.tool_annotated`, `.async_tool` (`http2`), `.resource`, `.prompt`, `.completion`, `.page_size`, `.logging_enabled`, `.require_bearer(token)`, `.require_oauth(provider, audience)` (`sso`), `.wrap(app)` (non-MCP requests fall through). The binary registers 20 rws tools in `main.rs` (config, metrics, routes, cache, rate limits, CORS, static files, reload, maintenance, IP blocklist, feature flags, recent requests/errors).
 
 Things that aren't obvious from the code layout:
 

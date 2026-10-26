@@ -48,7 +48,8 @@
 //! # MCP endpoint
 //!
 //! All JSON-RPC messages are sent as `POST /mcp` (override with [`.at()`](McpServer::at)).
-//! The server implements the [MCP 2024-11-05 specification](https://spec.modelcontextprotocol.io).
+//! The server implements the [MCP specification](https://modelcontextprotocol.io/specification/2025-11-25)
+//! up to 2025-11-25, negotiating 2024-11-05, 2025-03-26, 2025-06-18 or 2025-11-25.
 //!
 //! `GET /mcp` opens a Server-Sent Events stream for server → client push —
 //! see [`McpServer::notify`] and the module docs' SSE section below.
@@ -110,7 +111,24 @@ use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::ConnectionInfo;
 
-const PROTOCOL_VERSION: &str = "2024-11-05";
+/// The newest MCP protocol version this server speaks (#3).
+pub(crate) const PROTOCOL_VERSION: &str = "2025-11-25";
+
+/// Every protocol version this server speaks, oldest first.
+pub(crate) const SUPPORTED_PROTOCOL_VERSIONS: [&str; 4] = ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"];
+
+/// The version a request without `MCP-Protocol-Version` is taken to use
+/// (Streamable HTTP transport, 2025-06-18).
+const ASSUMED_PROTOCOL_VERSION: &str = "2025-03-26";
+
+/// The version to answer an `initialize` asking for `requested` with: that
+/// version when this server speaks it, else the newest (the client then
+/// decides whether it can continue).
+pub(crate) fn negotiate_version(requested: Option<&str>) -> &'static str {
+    requested
+        .and_then(|v| SUPPORTED_PROTOCOL_VERSIONS.iter().find(|s| **s == v).copied())
+        .unwrap_or(PROTOCOL_VERSION)
+}
 
 // ── public content types ──────────────────────────────────────────────────────
 
@@ -633,6 +651,8 @@ struct StoredClientInfo {
     /// Last request in this session; idle past the server's session TTL, the
     /// session is evicted (#4).
     last_seen: std::time::Instant,
+    /// The protocol version `initialize` settled on.
+    protocol_version: &'static str,
     name: Option<String>,
     version: Option<String>,
     /// Whether this session's `initialize` call declared `params.capabilities.sampling`
@@ -910,7 +930,7 @@ struct CompletionDef {
 
 // ── McpServer ─────────────────────────────────────────────────────────────────
 
-/// An HTTP server that implements the MCP 2024-11-05 protocol.
+/// An HTTP server that implements the MCP protocol (2024-11-05 to 2025-11-25).
 ///
 /// Register tools, resources, and prompts with the builder methods, then pass
 /// the server to [`Server::run`] (or [`Server::run_tls`]) as an [`Application`].
@@ -2284,7 +2304,8 @@ impl McpServer {
         self.sessions
             .lock()
             .unwrap()
-            .insert(session_id.clone(), StoredClientInfo { last_seen: std::time::Instant::now(), name, version, supports_sampling, supports_roots, roots: None });
+            .insert(session_id.clone(), StoredClientInfo { last_seen: std::time::Instant::now(), protocol_version: negotiate_version(
+                params.as_deref().and_then(|p| json_rpc::extract_str(p, "protocolVersion")).as_deref()), name, version, supports_sampling, supports_roots, roots: None });
 
         response.headers.push(Header {
             name: "Mcp-Session-Id".into(),
@@ -2300,12 +2321,10 @@ impl McpServer {
     /// rather than blindly echoing `PROTOCOL_VERSION` regardless of what was
     /// asked for.
     ///
-    /// This server implements exactly one protocol version, so "negotiation"
-    /// here means: if the client asked for that same version, confirm it;
-    /// otherwise tell the client the version we actually speak (older *or*
-    /// newer than what was requested), which is always the lower of the two
-    /// — version strings are `YYYY-MM-DD` dates, so a plain string comparison
-    /// already orders them correctly with no date parsing needed.
+    /// A version in [`SUPPORTED_PROTOCOL_VERSIONS`] is confirmed; any other
+    /// (older, newer, malformed) gets [`PROTOCOL_VERSION`], the newest. The
+    /// session remembers the result, which decides e.g. whether JSON-RPC
+    /// batches are accepted (only up to 2025-03-26).
     ///
     /// `clientInfo` is *not* handled here — [`Self::handle_request_with_context`]
     /// extracts and stores it (under a freshly minted session id) after this
@@ -2315,10 +2334,7 @@ impl McpServer {
 
         let client_version = params.as_deref().and_then(|p| json_rpc::extract_str(p, "protocolVersion"));
 
-        let negotiated_version: &str = match client_version.as_deref() {
-            Some(v) if v < PROTOCOL_VERSION => v,
-            _ => PROTOCOL_VERSION,
-        };
+        let negotiated_version = negotiate_version(client_version.as_deref());
 
         let logging_cap = if self.logging_enabled { r#","logging":{}"# } else { "" };
         // completions is advertised iff at least one .completion() has been registered —
@@ -2910,6 +2926,28 @@ impl Application for McpServer {
                     return Ok(session_not_found());
                 }
             }
+            // The protocol version in effect: the header (2025-06-18+
+            // clients send it on every request after initialize), else the
+            // session's, else 2025-03-26. A version this server doesn't speak
+            // is 400 (Streamable HTTP transport).
+            let header_version = request.headers.iter()
+                .find(|h| h.name.eq_ignore_ascii_case("mcp-protocol-version"))
+                .map(|h| h.value.trim().to_string());
+            if let Some(v) = &header_version {
+                if !SUPPORTED_PROTOCOL_VERSIONS.contains(&v.as_str()) {
+                    return Ok(bad_protocol_version(v));
+                }
+            }
+            if request.method == "POST" && request.body.iter().find(|b| !b.is_ascii_whitespace()) == Some(&b'[') {
+                let version = header_version.clone()
+                    .or_else(|| session_id.as_ref().and_then(|sid| self.sessions.lock().unwrap().get(sid).map(|s| s.protocol_version.to_string())))
+                    .unwrap_or_else(|| ASSUMED_PROTOCOL_VERSION.to_string());
+                // JSON-RPC batching was removed in 2025-06-18.
+                if version.as_str() >= "2025-06-18" {
+                    return Ok(rpc_error(None, json_rpc::INVALID_REQUEST,
+                        &format!("JSON-RPC batches are not supported in protocol version {version}")));
+                }
+            }
             return Ok(match request.method.as_str() {
                 "DELETE" => match session_id {
                     // The client ends its session.
@@ -3053,6 +3091,18 @@ fn unsupported_media_type() -> Response {
     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n415_unsupported_media_type.reason_phrase.to_string();
     r.content_range_list = vec![Range::get_content_range(
         b"MCP requests must be application/json".to_vec(),
+        MimeType::TEXT_PLAIN.to_string(),
+    )];
+    r
+}
+
+/// `400` for an `MCP-Protocol-Version` this server doesn't speak.
+fn bad_protocol_version(version: &str) -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n400_bad_request.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n400_bad_request.reason_phrase.to_string();
+    r.content_range_list = vec![Range::get_content_range(
+        format!("Unsupported MCP-Protocol-Version {:?}; supported: {}", version, SUPPORTED_PROTOCOL_VERSIONS.join(", ")).into_bytes(),
         MimeType::TEXT_PLAIN.to_string(),
     )];
     r

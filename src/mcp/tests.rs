@@ -275,35 +275,28 @@ fn initialize_returns_protocol_version() {
     assert!(body.contains("test-srv"), "missing server name: {body}");
 }
 
-#[test]
-fn initialize_negotiates_down_to_server_version_for_a_newer_client() {
-    // Client asks for a version newer than this server implements — the
-    // server must not just echo it back; it can only ever speak the version
-    // it actually implements, which is the lower of the two here.
-    let srv = make_server();
-    let resp = srv.handle_request(
-        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2025-06-18","clientInfo":{"name":"test","version":"1"}}}"#,
-    );
-    assert_eq!(resp.status_code, 200);
-    let body = body_of(&resp);
-    assert!(
-        body.contains(&format!("\"protocolVersion\":\"{PROTOCOL_VERSION}\"")),
-        "should negotiate down to the server's own version: {body}"
-    );
+fn negotiated(requested: &str) -> String {
+    let body = body_of(&make_server().handle_request(&format!(
+        r#"{{"jsonrpc":"2.0","method":"initialize","id":1,"params":{{"protocolVersion":"{requested}"}}}}"#
+    )));
+    super::json_rpc::extract_str(&body, "protocolVersion").unwrap()
 }
 
 #[test]
-fn initialize_honors_an_older_client_version() {
-    // Client asks for a version older than the server's — "lower of the two"
-    // means the server confirms it'll speak the client's (older) version,
-    // rather than insisting on its own newer one.
-    let srv = make_server();
-    let resp = srv.handle_request(
-        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2023-01-01","clientInfo":{"name":"test","version":"1"}}}"#,
-    );
-    assert_eq!(resp.status_code, 200);
-    let body = body_of(&resp);
-    assert!(body.contains("\"protocolVersion\":\"2023-01-01\""), "should honor the older client version: {body}");
+fn initialize_confirms_every_supported_version() {
+    for version in super::SUPPORTED_PROTOCOL_VERSIONS {
+        assert_eq!(version, negotiated(version));
+    }
+    assert_eq!("2025-11-25", PROTOCOL_VERSION);
+}
+
+#[test]
+fn initialize_answers_an_unsupported_version_with_the_newest() {
+    // Older, newer or malformed: the server names the version it speaks
+    // and the client decides (it used to echo any older string back).
+    for requested in ["2023-01-01", "2099-01-01", "latest"] {
+        assert_eq!(PROTOCOL_VERSION, negotiated(requested), "{requested}");
+    }
 }
 
 #[test]
@@ -2773,4 +2766,44 @@ fn object_members_splits_top_level_only() {
     assert_eq!(Some(vec![]), super::json_rpc::object_members("{}"));
     assert!(super::json_rpc::object_members("[1]").is_none());
     assert!(super::json_rpc::object_members(r#"{"a"}"#).is_none());
+}
+
+// ── #3: MCP-Protocol-Version and batches ─────────────────────────────────────
+
+fn initialize_as(client: &TestClient<McpServer>, version: &str) -> String {
+    let resp = client.post("/mcp")
+        .body_json(&format!(r#"{{"jsonrpc":"2.0","method":"initialize","id":1,"params":{{"protocolVersion":"{version}"}}}}"#))
+        .send();
+    resp.header("Mcp-Session-Id").unwrap().to_string()
+}
+
+#[test]
+fn an_unsupported_protocol_version_header_is_400() {
+    let client = TestClient::new(make_server());
+    let session = initialize_as(&client, "2025-11-25");
+    let resp = client.post("/mcp").header("Mcp-Session-Id", &session).header("MCP-Protocol-Version", "1999-01-01")
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/list","id":2}"#).send();
+    assert_eq!(400, resp.status());
+    let ok = client.post("/mcp").header("Mcp-Session-Id", &session).header("MCP-Protocol-Version", "2025-11-25")
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/list","id":2}"#).send();
+    assert_eq!(200, ok.status());
+}
+
+#[test]
+fn batches_are_only_for_clients_up_to_2025_03_26() {
+    let batch = r#"[{"jsonrpc":"2.0","method":"tools/list","id":1},{"jsonrpc":"2.0","method":"ping","id":2}]"#;
+    let client = TestClient::new(make_server());
+    // No header, no session: 2025-03-26 is assumed — batches work.
+    let resp = client.post("/mcp").body_json(batch).send();
+    assert!(resp.body_text().starts_with('['), "{}", resp.body_text());
+    // An old session: batches work.
+    let old = initialize_as(&client, "2025-03-26");
+    let resp = client.post("/mcp").header("Mcp-Session-Id", &old).body_json(batch).send();
+    assert!(resp.body_text().starts_with('['), "{}", resp.body_text());
+    // A 2025-06-18+ session, or the header saying so: refused.
+    let new = initialize_as(&client, "2025-06-18");
+    let resp = client.post("/mcp").header("Mcp-Session-Id", &new).body_json(batch).send();
+    assert!(resp.body_text().contains("batches are not supported in protocol version 2025-06-18"), "{}", resp.body_text());
+    let resp = client.post("/mcp").header("MCP-Protocol-Version", "2025-11-25").body_json(batch).send();
+    assert!(resp.body_text().contains("-32600"), "{}", resp.body_text());
 }
