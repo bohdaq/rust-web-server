@@ -1126,7 +1126,7 @@ fn promote_body_headers(response: &mut Response) {
     } else if response.content_range_list.len() > 1 {
         response.headers.push(Header {
             name: Header::_CONTENT_TYPE.into(),
-            value: crate::range::Range::MULTIPART_BYTERANGES_CONTENT_TYPE.into(),
+            value: crate::range::Range::multipart_content_type(&response.content_range_list).into(),
         });
     }
 }

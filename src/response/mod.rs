@@ -410,6 +410,9 @@ impl Response {
         }
 
         if content_range_list.len() > one {
+            // RFC 2046 §5.1.1: each part opens with "--boundary", the body
+            // closes with "--boundary--" (#53).
+            let boundary = Range::multipart_boundary(&content_range_list);
             for (i, content_range) in content_range_list.iter().enumerate() {
                 let mut body_str = SYMBOL.empty_string.to_string();
                 if i != 0 {
@@ -417,7 +420,7 @@ impl Response {
                 }
                 body_str.push_str(SYMBOL.hyphen);
                 body_str.push_str(SYMBOL.hyphen);
-                body_str.push_str(Range::STRING_SEPARATOR);
+                body_str.push_str(&boundary);
                 body_str.push_str(SYMBOL.new_line_carriage_return);
                 let content_type = [Header::_CONTENT_TYPE, Header::NAME_VALUE_SEPARATOR, SYMBOL.whitespace, &Header::single_line(&content_range.content_type)].join("");
                 body_str.push_str(content_type.as_str());
@@ -427,15 +430,12 @@ impl Response {
                 body_str.push_str(SYMBOL.new_line_carriage_return);
                 body_str.push_str(SYMBOL.new_line_carriage_return);
 
-                let inner_body = [body_str.as_bytes(), &content_range.body].concat();
-                body = [body, inner_body].concat();
+                body.extend_from_slice(body_str.as_bytes());
+                body.extend_from_slice(&content_range.body);
             }
-            let mut trailing_separator = SYMBOL.empty_string.to_string();
-            trailing_separator.push_str(SYMBOL.new_line_carriage_return);
-            trailing_separator.push_str(SYMBOL.hyphen);
-            trailing_separator.push_str(SYMBOL.hyphen);
-            trailing_separator.push_str(Range::STRING_SEPARATOR);
-            body = [&body, trailing_separator.as_bytes()].concat();
+            body.extend_from_slice(b"\r\n--");
+            body.extend_from_slice(boundary.as_bytes());
+            body.extend_from_slice(b"--\r\n");
         }
 
         body
@@ -476,26 +476,24 @@ impl Response {
             // doesn't look at its type.
             content_type = Some(std::mem::take(&mut range.content_type));
         }
-        if content_range_list.len() > 1 {
-            content_type = Some([
-                Range::MULTIPART,
-                SYMBOL.slash,
-                Range::BYTERANGES,
-                SYMBOL.semicolon,
-                SYMBOL.whitespace,
-                Range::BOUNDARY,
-                SYMBOL.equals,
-                Range::STRING_SEPARATOR
-            ].join(""));
+        let multipart = content_range_list.len() > 1;
+        if multipart {
+            content_type = Some(Range::multipart_content_type(&content_range_list));
         }
 
         let is_head = request.method == METHOD.head;
         let is_options = request.method == METHOD.options;
-        let body = if is_head || is_options {
+        let body = if (is_head || is_options) && !multipart {
             Vec::new()
         } else {
             Response::generate_body(content_range_list)
         };
+        if multipart {
+            // Without it a keep-alive client can't tell where the body ends
+            // (RFC 9112 §6.3; #53). A HEAD gets the GET's length.
+            content_length = Some(Decimal::new(body.len() as u128));
+        }
+        let body = if is_head || is_options { Vec::new() } else { body };
         let coalesce = body.len() <= coalesce_limit;
 
         // One buffer, sized up front, written once: this used to build a
@@ -657,9 +655,14 @@ impl Response {
             if is_multipart {
                 let content_range_list : Vec<ContentRange> = vec![];
 
+                let boundary = content_type.value.split(';')
+                    .filter_map(|param| param.trim().strip_prefix("boundary="))
+                    .next()
+                    .map(|b| b.trim_matches('"').to_string())
+                    .unwrap_or_else(|| Range::STRING_SEPARATOR.to_string());
                 let mut buf = vec![];
-                cursor.read_until(b'\n', &mut buf).unwrap();
-                let boxed_value = Range::_parse_multipart_body(cursor, content_range_list);
+                let _ = cursor.read_until(b'\n', &mut buf);
+                let boxed_value = Range::_parse_multipart_body_with_boundary(cursor, content_range_list, &boundary);
                 let mut range_list = vec![];
                 if boxed_value.is_ok() {
                     range_list = boxed_value.unwrap();
@@ -798,24 +801,20 @@ impl Response {
         }
 
         if response.content_range_list.len() > 1 {
-            let content_range_header_value = [
-                Range::MULTIPART,
-                SYMBOL.slash,
-                Range::BYTERANGES,
-                SYMBOL.semicolon,
-                SYMBOL.whitespace,
-                Range::BOUNDARY,
-                SYMBOL.equals,
-                Range::STRING_SEPARATOR
-            ].join("");
             response.headers.push(Header {
                 name: Header::_CONTENT_TYPE.into(),
-                value: content_range_header_value.into(),
+                value: Range::multipart_content_type(&response.content_range_list).into(),
             });
         }
 
         let response_clone = response.clone();
         let body = Response::generate_body(response_clone.content_range_list);
+        if response.content_range_list.len() > 1 {
+            response.headers.push(Header {
+                name: Header::_CONTENT_LENGTH.into(),
+                value: body.len().to_string().into(),
+            });
+        }
 
         let mut headers_str = SYMBOL.new_line_carriage_return.to_string();
 
