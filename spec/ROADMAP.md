@@ -61,9 +61,15 @@ The breaking release already on `main` (Header `Cow` fields, new default headers
 - **#6** **HTTP/2 DoS limits** — confirm the h2 version carries the MadeYouReset fix (CVE-2025-8671); set and test reset-rate, pending-accept-reset, CONTINUATION and header/idle timeouts (only two h2 limits are set in `src/h2_handler/mod.rs`).
 - **#12** **Doc and benchmark truth** — mark `ctx.sample()`, roots and `logging/setLevel` as deprecated by MCP 2026-07-28; verify MCP SSE over HTTP/2 and HTTP/3 at runtime; re-run the HTTP/2 benchmark (the published 53.6k vs nginx 86.4k req/s predates the h2 work).
 
+**MCP: agent-ready by 18.0.** Three ways an AI agent uses rws, each wired to the items that make it real and safe. These ship with 18.0 (layers 1–2 are gated by #44 and #3, already here; the gateway foundation is a stretch — 18.0 may ship without it if the ACME deadline forces the release, and the full gateway stays #28 at 18.9.0):
+
+- **#60** **Operate rws from an AI client (layer 1)** — the ~20 built-in tools are already there; this adds the authenticated setup recipe and a docs page (point an MCP client at `/mcp` with a token; diagnose a spike → `recent_requests`/`block_ip`, bad deploy → `set_maintenance`/`reload_config`). Needs #44 (token) + #3 (protocol).
+- **#61** **Build agent tools on rws (layer 2)** — an `examples/` app that exposes its domain functions via `app.mcp()` with `outputSchema` derived from serde types (shares the derivation with #22), `require_oauth`, and SSE; plus a docs page. Shows rws turning any app into an MCP server for free. Needs #3.
+- **#62** **Minimal MCP gateway (layer 3 foundation)** — one authenticated endpoint federating N upstream MCP servers: `prefix__tool` names, a per-identity tool allow-list, and upstream credentials injected server-side (never passing the client token through). The richer gateway (`tools/list` caching, per-tool rate limits, version bridging, audit log) is #28 at 18.9.0. This is rws's sharpest AI positioning, so a minimal form targets 18.0.
+
 **Breaking:** Already on `main` — see [CHANGELOG.md](../CHANGELOG.md) and [Migrating to 18.0](../docs/src/content/docs/reference/migrating-18.md). New: `acme.renew_before_days` stops being the renewal trigger (ARI decides; the setting becomes a fallback); MCP clients announcing 2025-06-18 or later can no longer send JSON-RPC batches. Plus the streaming request body from the milestone above.
 
-**Done when:** CI green on all feature sets, h2spec 146/146, ACME e2e against Pebble with ARI, MCP server passing the official conformance scenarios for 2025-11-25, a fresh benchmark run, release artifacts signed with an SBOM and provenance attestation, migration page updated.
+**Done when:** CI green on all feature sets, h2spec 146/146, ACME e2e against Pebble with ARI, MCP server passing the official conformance scenarios for 2025-11-25, the three agent-ready usages (#60, #61; #62 if it makes the release) each with a runnable example or recipe, a fresh benchmark run, release artifacts signed with an SBOM and provenance attestation, migration page updated.
 
 ## 18.1.0 — Operations
 
@@ -146,7 +152,7 @@ Give clusters leaving Ingress-NGINX a place to go.
 
 Put MCP servers and LLM providers behind rws with one policy point.
 
-- **#28** **MCP gateway mode** — federate upstream MCP servers (`prefix__tool` names), per-identity tool ACLs, OAuth at the edge with upstream credential injection, per-tool rate limits on `Mcp-Name`, `tools/list` caching, audit log, bridging 2025 clients to 2026 servers. After #13, #15, #24.
+- **#28** **MCP gateway mode** — the full gateway on #62's foundation: federate upstream MCP servers (`prefix__tool` names), per-identity tool ACLs, OAuth at the edge with upstream credential injection, per-tool rate limits on `Mcp-Name`, `tools/list` caching, audit log, bridging 2025 clients to 2026 servers. After #13, #15, #24.
 - **#41** **LLM proxy middleware** — token accounting from `usage`, time-to-first-token metrics, token-based rate limits and budgets, provider fallback, virtual keys (Envoy AI Gateway, Kong, LiteLLM).
 
 **Done when:** Federation of two MCP servers with prefixed tools and per-identity ACLs in an e2e test; streaming LLM responses proxied with token usage recorded in metrics.

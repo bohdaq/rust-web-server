@@ -38,6 +38,7 @@ docs; the docs sidebar is untouched.
 | `/why/` | The argument: one binary, honest comparison, who it's for | README "Why rws" + benchmark headline |
 | `/playground/` | Interactive config builder → live `rws.config.toml` + command | new (small vanilla JS) |
 | `/benchmarks/` | The numbers as charts, not a table | existing `reference/benchmarks.md` data |
+| `/mcp/` | The three agent usages, live, once shipped | roadmap #60/#61/#62 |
 | `/docs/…` | The existing Starlight docs, unchanged | as-is |
 | `/blog/` (or `/changelog/`) | Release notes as posts | `CHANGELOG.md` |
 
@@ -66,14 +67,21 @@ Nav (top bar, shared): Home · Why · Playground · Benchmarks · Docs · GitHub
    enough, it's a crate." A real Rust sample (the `routes!` quick-start), the
    one-`Middleware`-trait pitch, and the genuinely rare batteries in one crate
    (MCP server, OAuth/OIDC/SAML, async ORM, jobs, storage).
-5. **Performance strip.** Three big numbers from the latest benchmark run —
+5. **AI & MCP — rws is agent-usable** *(add once the 18.0 MCP work ships —
+   roadmap #60/#61/#62; until then keep it to one honest line, not a headline)*.
+   Three usages, each with a live snippet: **operate rws** from an AI client via
+   the built-in `/mcp` tools; **build agent tools** on rws with `app.mcp()`; and
+   rws as an **authenticated MCP gateway** in front of other MCP servers. This is
+   the positioning wedge — give it a real section, and a `/mcp/` page, not a
+   tile. Do not showcase `/mcp` until it requires a token (#44).
+6. **Performance strip.** Three big numbers from the latest benchmark run —
    req/s vs nginx, CPU per request, peak memory — each with a small sparkline.
    Links to `/benchmarks/`.
-6. **Built in the open.** Trust: fuzzed parsers, h2spec 146/146, ACME tested
+7. **Built in the open.** Trust: fuzzed parsers, h2spec 146/146, ACME tested
    end-to-end against Pebble, MSRV pinned, signed releases with an SBOM (add the
    signing/SBOM line once #5 ships; add a security-policy link once 17.113.1 and
    the advisory are public — do not pre-announce).
-7. **Footer.** Real links: Docs, GitHub, crates.io, Docker Hub, Homebrew, the
+8. **Footer.** Real links: Docs, GitHub, crates.io, Docker Hub, Homebrew, the
    `llms.txt` for AI tools.
 
 ## Brand
