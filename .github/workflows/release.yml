@@ -46,6 +46,8 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      newest: ${{ steps.newest.outputs.newest }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,6 +61,15 @@ jobs:
             echo "Tag $TAG does not match Cargo.toml version $crate_version" >&2
             exit 1
           fi
+
+      # A patch for an older line (e.g. 17.113.1 after 18.0.0) must not become
+      # the Latest release, Docker `latest` or the Homebrew formula.
+      - name: Is this the highest version?
+        id: newest
+        run: |
+          highest=$(git tag --list '[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -1)
+          if [ "$highest" = "$TAG" ]; then echo "newest=true" >> "$GITHUB_OUTPUT"; else echo "newest=false" >> "$GITHUB_OUTPUT"; fi
+          echo "highest tag: $highest"
 
       - name: Build release notes
         run: |
@@ -101,11 +112,12 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          NEWEST: ${{ steps.newest.outputs.newest }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --notes-file notes.md
           else
-            gh release create "$TAG" --title "$TAG" --notes-file notes.md --verify-tag
+            gh release create "$TAG" --title "$TAG" --notes-file notes.md --verify-tag --latest="$NEWEST"
           fi
 
       # CycloneDX SBOM of the binary's dependency tree (the release features).
@@ -234,7 +246,7 @@ jobs:
           path: target/${{ matrix.target }}/release/rws
 
   docker:
-    needs: binaries
+    needs: [release, binaries]
     runs-on: ubuntu-latest
     env:
       # Docker Hub publishing is skipped until both are configured
@@ -288,9 +300,12 @@ jobs:
         id: tags
         run: |
           major="${TAG%%.*}"
-          tags="ghcr.io/${{ github.repository_owner }}/rws:$TAG,ghcr.io/${{ github.repository_owner }}/rws:$major,ghcr.io/${{ github.repository_owner }}/rws:latest"
+          # `latest` only for the highest version.
+          latest=""
+          [ "${{ needs.release.outputs.newest }}" = "true" ] && latest=1
+          tags="ghcr.io/${{ github.repository_owner }}/rws:$TAG,ghcr.io/${{ github.repository_owner }}/rws:$major${latest:+,ghcr.io/${{ github.repository_owner }}/rws:latest}"
           if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
-            tags="$tags,docker.io/$DOCKERHUB_USERNAME/rws:$TAG,docker.io/$DOCKERHUB_USERNAME/rws:$major,docker.io/$DOCKERHUB_USERNAME/rws:latest"
+            tags="$tags,docker.io/$DOCKERHUB_USERNAME/rws:$TAG,docker.io/$DOCKERHUB_USERNAME/rws:$major${latest:+,docker.io/$DOCKERHUB_USERNAME/rws:latest}"
           else
             echo "::warning::DOCKERHUB_USERNAME / DOCKERHUB_TOKEN not set — publishing to ghcr.io only"
           fi
@@ -344,7 +359,9 @@ jobs:
           fi
 
   homebrew:
-    needs: binaries
+    # The formula follows the highest version only.
+    needs: [release, binaries]
+    if: needs.release.outputs.newest == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Fetch checksums

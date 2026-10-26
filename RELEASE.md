@@ -48,6 +48,8 @@ git push origin 17.110.0
 3. smoke-tests the image, then pushes `<version>`, `<major>` and `latest` (linux/amd64 + linux/arm64) to `ghcr.io/bohdaq/rws` and, when the `DOCKERHUB_USERNAME` variable and `DOCKERHUB_TOKEN` secret are set, to Docker Hub `bohdaq/rws` (its overview is synced from `.github/DOCKERHUB.md` by `dockerhub-overview.yml` whenever that file changes), built from those binaries via `Dockerfile.release`;
 4. rewrites `Formula/rws.rb` in [bohdaq/homebrew-tap](https://github.com/bohdaq/homebrew-tap), authenticated with the `HOMEBREW_TAP_DEPLOY_KEY` repository secret (a write-enabled deploy key on the tap repo).
 
+A patch for an older line (e.g. `17.113.1` after `18.0.0`) is released the same way, from a tag on that line's branch: the workflow sees that it isn't the highest version tag, so the GitHub Release isn't marked Latest, the image is pushed as `<version>` and `<major>` but not `latest`, and the Homebrew formula is left on the newest version.
+
 To rebuild an existing tag after fixing the workflow, run it manually (Actions → Release → Run workflow) with that tag; every step is idempotent.
 
 ## Supported architectures
