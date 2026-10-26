@@ -62,6 +62,12 @@ than with the `h2` crate), and release builds
 allocate with mimalloc (4–6% less CPU, more memory). Details:
 [Benchmarks](https://rws8.tech/reference/benchmarks/).
 
+## 17.113.2 — HTTP conformance
+
+### Fixed
+
+- **gzip no longer rewrites a partial body (#52).** A `Range` request with `Accept-Encoding: gzip` got the requested slice gzipped and `Content-Range` rewritten to the compressed size (`bytes=0-1200` of a 3,700-byte file → `Content-Range: bytes 0-37/37`), which no client can reassemble. A `206` is now sent uncompressed (RFC 9110 §14.4).
+
 ## 17.113.1 — security patch
 
 Fixes from the 2026-10-25 security review. Upgrade from 17.113.0.
