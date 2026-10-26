@@ -188,6 +188,13 @@ that carries both, or two different `Content-Length` values, is rejected with
 `400` so `rws` and a proxy in front of it can never disagree about where a
 request ends.
 
+For the same reason an HTTP/1.1 request head is read strictly (17.113.2) and
+answered `400` when it has no `Host` or more than one, a method not in upper
+case (`get`), a version other than `HTTP/1.0`/`HTTP/1.1`, a folded header
+line (starting with a space or tab), whitespace before a header's colon, or a
+header name with characters a token can't have. `Connection` is read token by
+token: `Connection: close, TE` closes the connection after the response.
+
 ## `[[virtual_host]]`
 
 Repeat this section for each domain that needs its own TLS certificate. The SNI

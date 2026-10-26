@@ -54,6 +54,74 @@ pub(crate) fn scan_head(buf: &[u8]) -> HeadScan {
     }
 }
 
+/// RFC 9112 checks on a request head that `Request::parse` (also used
+/// outside the connection loops) leaves lenient (#57). `head` is the raw
+/// head, `request` its parse. Rejected, as `400`:
+///
+/// - a method that isn't one of the known ones in upper case (methods are
+///   case-sensitive, §3.1: `get` is not `GET`);
+/// - a version other than `HTTP/1.0` / `HTTP/1.1` on this wire (`HTTP/0.9`
+///   and `HTTP/2.0` heads are not HTTP/1.1 messages);
+/// - a field line starting with whitespace (obs-fold, §5.2), with whitespace
+///   between the name and the colon (§5.1), or whose name isn't a token;
+/// - an `HTTP/1.1` request without exactly one `Host`, or any request with
+///   more than one (§3.2).
+///
+/// Each of these is a way for rws and a proxy in front of it to read the
+/// same bytes differently.
+pub(crate) fn validate_head(head: &[u8], request: &Request) -> Result<(), String> {
+    use crate::request::METHOD;
+    let methods = [METHOD.get, METHOD.head, METHOD.post, METHOD.put, METHOD.delete, METHOD.connect, METHOD.options, METHOD.trace, METHOD.patch];
+    if !methods.contains(&request.method.as_str()) {
+        return Err(format!("unknown method {:?} (methods are case-sensitive)", request.method));
+    }
+    let http_1_1 = request.http_version == "HTTP/1.1";
+    if !http_1_1 && request.http_version != "HTTP/1.0" {
+        return Err(format!("{} is not served on an HTTP/1.1 connection", request.http_version));
+    }
+    let is_token_char = |b: u8| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b);
+    let mut hosts = 0;
+    for line in head.split(|&b| b == b'\n').skip(1) {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        if line.is_empty() {
+            break;
+        }
+        if line[0] == b' ' || line[0] == b'\t' {
+            return Err("obsolete line folding is not accepted".to_string());
+        }
+        let Some(colon) = line.iter().position(|&b| b == b':') else {
+            return Err("header line without a colon".to_string());
+        };
+        let name = &line[..colon];
+        if name.is_empty() || !name.iter().all(|&b| is_token_char(b)) {
+            return Err(format!("invalid header name {:?} (no whitespace before the colon)", String::from_utf8_lossy(name)));
+        }
+        if name.eq_ignore_ascii_case(Header::_HOST.as_bytes()) {
+            hosts += 1;
+        }
+    }
+    if hosts > 1 || (http_1_1 && hosts == 0) {
+        return Err(format!("an HTTP/1.1 request needs exactly one Host header, got {hosts}"));
+    }
+    Ok(())
+}
+
+/// Whether the connection stays open after this request (RFC 9112 §9.3).
+/// `Connection` is a comma-separated list of tokens (RFC 9110 §7.6.1):
+/// `close` anywhere in it — `Connection: close, TE` — ends the connection
+/// (#57; the whole value used to be compared with `close`). Otherwise
+/// HTTP/1.1 stays open, and HTTP/1.0 only with a `keep-alive` token.
+pub(crate) fn keep_alive(request: &Request) -> bool {
+    let has_token = |wanted: &str| request.headers.iter()
+        .filter(|h| h.name.eq_ignore_ascii_case(Header::_CONNECTION))
+        .flat_map(|h| h.value.split(','))
+        .any(|token| token.trim().eq_ignore_ascii_case(wanted));
+    if has_token("close") {
+        return false;
+    }
+    request.http_version == "HTTP/1.1" || has_token("keep-alive")
+}
+
 #[derive(Debug, PartialEq)]
 pub(crate) enum BodyFraming {
     /// No body (no `Content-Length`, no `Transfer-Encoding`).
@@ -318,5 +386,64 @@ mod tests {
         assert_eq!(ChunkedBody::new(4).feed(b"5\r\nhello\r\n0\r\n\r\n"), Err(ChunkError::TooLarge));
         let mut ok = ChunkedBody::new(5);
         assert_eq!(ok.feed(b"5\r\nhello\r\n0\r\n\r\n"), Ok((15, true)));
+    }
+
+    // ── #57: strict request heads ──────────────────────────────────────────
+
+    fn check(head: &[u8]) -> Result<(), String> {
+        let request = Request::parse(head)?;
+        validate_head(head, &request)
+    }
+
+    #[test]
+    fn a_well_formed_head_passes() {
+        assert!(check(b"GET / HTTP/1.1\r\nHost: x\r\nAccept: */*\r\n\r\n").is_ok());
+        assert!(check(b"GET / HTTP/1.0\r\n\r\n").is_ok(), "HTTP/1.0 may omit Host");
+        assert!(check(b"GET / HTTP/1.1\nHost: x\n\n").is_ok(), "bare LF");
+        assert!(check(b"GET / HTTP/1.1\r\nhost:x\r\nX-A:  b c \r\n\r\n").is_ok());
+    }
+
+    #[test]
+    fn host_must_appear_exactly_once() {
+        assert!(check(b"GET / HTTP/1.1\r\n\r\n").is_err());
+        assert!(check(b"GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n").is_err());
+        assert!(check(b"GET / HTTP/1.0\r\nHost: a\r\nhost: b\r\n\r\n").is_err());
+    }
+
+    #[test]
+    fn malformed_field_lines_are_rejected() {
+        assert!(check(b"GET / HTTP/1.1\r\nHost: x\r\nX-A: 1\r\n folded\r\n\r\n").is_err(), "obs-fold");
+        assert!(check(b"GET / HTTP/1.1\r\nHost: x\r\n\tX-A: 1\r\n\r\n").is_err(), "leading tab");
+        assert!(check(b"GET / HTTP/1.1\r\nHost : x\r\n\r\n").is_err(), "space before colon");
+        assert!(check(b"GET / HTTP/1.1\r\nHost: x\r\nX(A): 1\r\n\r\n").is_err(), "non-token name");
+        assert!(check(b"GET / HTTP/1.1\r\nHost: x\r\nno colon here\r\n\r\n").is_err());
+    }
+
+    #[test]
+    fn methods_are_case_sensitive_and_versions_are_http_1() {
+        assert!(check(b"get / HTTP/1.1\r\nHost: x\r\n\r\n").is_err());
+        assert!(check(b"Post / HTTP/1.1\r\nHost: x\r\n\r\n").is_err());
+        assert!(check(b"GET / HTTP/2.0\r\nHost: x\r\n\r\n").is_err());
+        assert!(check(b"GET / HTTP/0.9\r\nHost: x\r\n\r\n").is_err());
+    }
+
+    #[test]
+    fn connection_is_read_token_by_token() {
+        let with = |version: &str, value: Option<&str>| {
+            let mut r = request(&[]);
+            r.http_version = version.to_string();
+            if let Some(v) = value {
+                r.headers.push(Header { name: "Connection".into(), value: v.into() });
+            }
+            keep_alive(&r)
+        };
+        assert!(with("HTTP/1.1", None));
+        assert!(!with("HTTP/1.1", Some("close")));
+        assert!(!with("HTTP/1.1", Some("close, TE")));
+        assert!(!with("HTTP/1.1", Some("TE, Close")));
+        assert!(with("HTTP/1.1", Some("TE")));
+        assert!(!with("HTTP/1.0", None));
+        assert!(with("HTTP/1.0", Some("Keep-Alive")));
+        assert!(!with("HTTP/1.0", Some("TE")));
     }
 }

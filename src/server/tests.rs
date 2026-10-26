@@ -1841,7 +1841,7 @@ fn framing_request_head_over_the_limit_gets_431() {
 
 #[test]
 fn framing_pipelined_requests_in_one_read_are_all_served() {
-    let raw = b"POST /a HTTP/1.1\r\nContent-Length: 3\r\n\r\nabcGET /b HTTP/1.1\r\nConnection: close\r\n\r\n".to_vec();
+    let raw = b"POST /a HTTP/1.1\r\nHost: x\r\nContent-Length: 3\r\n\r\nabcGET /b HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n".to_vec();
     let mut stream = SequentialMockStream::new(vec![raw]);
     Server::process(&mut stream, make_connection(), EchoFraming).unwrap();
     let written = String::from_utf8_lossy(&stream.written);
@@ -1851,7 +1851,7 @@ fn framing_pipelined_requests_in_one_read_are_all_served() {
 
 #[test]
 fn framing_chunked_request_body_is_decoded() {
-    let raw = b"POST /c HTTP/1.1\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\nhello\r\n".to_vec();
+    let raw = b"POST /c HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\nhello\r\n".to_vec();
     let rest = b"6\r\n world\r\n0\r\n\r\n".to_vec();
     let mut stream = SequentialMockStream::new(vec![raw, rest]);
     Server::process(&mut stream, make_connection(), EchoFraming).unwrap();
@@ -1861,7 +1861,7 @@ fn framing_chunked_request_body_is_decoded() {
 
 #[test]
 fn framing_content_length_with_transfer_encoding_is_rejected() {
-    let raw = b"POST / HTTP/1.1\r\nContent-Length: 3\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n".to_vec();
+    let raw = b"POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 3\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n".to_vec();
     let mut stream = SequentialMockStream::new(vec![raw]);
     assert!(Server::process(&mut stream, make_connection(), EchoFraming).is_err());
     assert!(String::from_utf8_lossy(&stream.written).starts_with("HTTP/1.1 400"));
@@ -1869,7 +1869,7 @@ fn framing_content_length_with_transfer_encoding_is_rejected() {
 
 #[test]
 fn framing_body_cut_short_is_not_dispatched() {
-    let raw = b"POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\nabc".to_vec();
+    let raw = b"POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 10\r\n\r\nabc".to_vec();
     let mut stream = SequentialMockStream::new(vec![raw]);
     Server::process(&mut stream, make_connection(), EchoFraming).unwrap();
     assert!(stream.written.is_empty(), "{}", String::from_utf8_lossy(&stream.written));
