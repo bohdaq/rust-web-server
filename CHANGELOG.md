@@ -73,6 +73,7 @@ allocate with mimalloc (4–6% less CPU, more memory). Details:
 - **The static request path is percent-decoded (#55).** Files were looked up by the raw request target, so `GET /my%20file.txt` was a `404` for `my file.txt`, and the directory listing's (correctly encoded) links to such names were dead. The path is now decoded once, before the web-root and hidden-file checks of #43 (so `/%2e%2e/` is refused like `/../`); `%2520` stays a literal `%20`. A `Range` request for a name containing a space, quote, `&`, `|` or `;` no longer gets `416` (the file reader refused such paths), and the general static path finds escaped names' `ETag`.
 - **If-None-Match is a list, compared weakly (#56).** Only a header equal to the file's `ETag` gave `304`: a client sending several tags (`"a", "b"`) or the weak form (`W/"…"`) always got the whole file again (RFC 9110 §13.1.2).
 - **If-Range is honored (#56).** It was ignored: a client resuming a download with `If-Range` got `206` with bytes of the file as it is now, even after the file changed. A `Range` now applies only while `If-Range` strongly matches the current `ETag`; otherwise the whole file is sent with `200` (RFC 9110 §13.1.5).
+- **Range: one satisfiable range is enough; 416 names the length (#56).** `bytes=0-9, 99999-` on a small file was a `416` because of the second range; unsatisfiable ranges are now skipped and `416` is sent only when none can be served — with `Content-Range: bytes */<length>`, which it lacked (RFC 9110 §14.2, §15.5.17).
 
 ## 17.113.1 — security patch
 

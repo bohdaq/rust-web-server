@@ -5250,7 +5250,7 @@ Range requests follow RFC 9110 over HTTP/1.1, HTTP/2, and HTTP/3: `bytes=2-5`,
 open-ended `bytes=7-`, suffix `bytes=-500`, and multiple ranges get
 `206 Partial Content` with an exact `Content-Range` (`bytes 7-9/10`); a range
 ending past the file is clamped to its last byte; a range starting past the
-end gets `416`. Full `200` responses carry no `Content-Range`. Overlapping
+end can't be satisfied: it is skipped, and only a request none of whose ranges can be satisfied gets `416`, with `Content-Range: bytes */<length>` (17.113.2). Full `200` responses carry no `Content-Range`. Overlapping
 ranges are merged (and then sorted); more than 16 ranges are answered with
 the whole file as one range, so a response never holds more than the file
 (17.113.1).
