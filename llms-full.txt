@@ -15085,7 +15085,14 @@ let mcp = McpServer::new("my-server", "1.0")
     );
 ```
 
-`total` and `message` are both optional (`None` omits them from the pushed event). Only `.tool_with_context()` handlers can report progress — a plain `.tool()` handler never receives `McpContext` at all, so it has no `progress_token` to report against.
+`total` and `message` are both optional (`None` omits them from the pushed event).
+
+Where the updates go (since 18.0.0): when the call carries a `progressToken`
+and the client accepts `text/event-stream` (Streamable HTTP clients do), the
+`tools/call` response itself is an event stream — each progress update as
+it happens, then the result, then the stream ends. Otherwise updates go to
+the caller's session's `GET /mcp` stream (only that session's; before 18.0.0
+every connected stream got them). Only `.tool_with_context()` handlers can report progress — a plain `.tool()` handler never receives `McpContext` at all, so it has no `progress_token` to report against.
 
 :::note[Always safe to call]
 `report_progress` silently does nothing if the client didn't ask for progress updates (`ctx.progress_token` is `None`) or if `ctx` wasn't built through a live server (e.g. `handle_request()`'s empty default context, rather than `execute()` — see the note above about calling `handle_request()` directly). A handler never needs to check whether progress reporting is actually possible before calling it.

@@ -354,6 +354,10 @@ pub struct McpContext {
     /// by [`Self::list_roots`] to read/write this session's cached roots
     /// list. Not `pub` — plumbing, not context data.
     sessions: Option<Arc<Mutex<HashMap<String, StoredClientInfo>>>>,
+    /// The SSE response of the `tools/call` POST this context serves, when
+    /// the client asked for progress and accepts `text/event-stream`:
+    /// progress notifications go there, ahead of the result.
+    request_stream: Option<SseSender>,
 }
 
 impl McpContext {
@@ -400,7 +404,13 @@ impl McpContext {
             r#"{{"progressToken":{token},"progress":{progress}{total_field}{message_field}}}"#
         );
         let json = render_notification("notifications/progress", Some(&params));
-        broadcast_sse_to(sse_clients, &json);
+        if let Some(stream) = &self.request_stream {
+            let _ = stream.send(format!("data: {json}\n\n").into_bytes());
+        } else if let Some(session) = &self.session_id {
+            send_sse_to_sessions(sse_clients, std::slice::from_ref(session), &json);
+        } else {
+            broadcast_sse_to(sse_clients, &json);
+        }
     }
 
     /// `true` if the client sent `notifications/cancelled` referencing this
@@ -2899,6 +2909,29 @@ impl McpServer {
         ))
     }
 
+    /// Answers a `tools/call` as an SSE stream (Streamable HTTP): the
+    /// handler runs on its own thread, its progress notifications go out as
+    /// they happen, then the JSON-RPC response, and the stream ends.
+    fn stream_tool_call(&self, body: &str, mut ctx: McpContext) -> Response {
+        let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(32);
+        ctx.request_stream = Some(tx.clone());
+        let server = self.clone();
+        let body = body.to_string();
+        std::thread::spawn(move || {
+            let response = server.handle_request_with_context(&body, ctx);
+            let json = response.content_range_list.first().map(|part| String::from_utf8_lossy(&part.body).into_owned()).unwrap_or_default();
+            let _ = tx.send(format!("data: {json}\n\n").into_bytes());
+        });
+        let mut response = Response::new();
+        response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+        response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+        response.headers.push(Header { name: Header::_CONTENT_TYPE.into(), value: "text/event-stream".into() });
+        response.headers.push(Header { name: Header::_CACHE_CONTROL.into(), value: "no-cache".into() });
+        response.headers.push(Header { name: "X-Accel-Buffering".into(), value: "no".into() });
+        response.stream_pipe = Some(Box::new(SseChannelReader::new(rx)));
+        response
+    }
+
     /// Build the [`McpContext`] for an incoming request: the `Mcp-Session-Id`
     /// header, if present, plus whatever `clientInfo` was recorded for that
     /// session at `initialize` time (if this session is recognized).
@@ -2927,6 +2960,7 @@ impl McpServer {
             pending_replies: Some(self.pending_replies.clone()),
             roots_supported,
             sessions: Some(self.sessions.clone()),
+            request_stream: None,
         }
     }
 }
@@ -2934,6 +2968,26 @@ impl McpServer {
 /// Render one JSON-RPC 2.0 notification (no `id` — fire-and-forget, per
 /// spec) as an SSE `data:`-ready message body. Shared by [`McpServer::notify`]
 /// and [`McpContext::report_progress`].
+/// A single `tools/call` POST that asks for progress (`_meta.progressToken`)
+/// from a client that accepts an SSE response.
+fn wants_progress_stream(request: &Request, body: &str) -> bool {
+    let accepts_sse = request.headers.iter()
+        .filter(|h| h.name.eq_ignore_ascii_case("accept"))
+        .any(|h| h.value.to_ascii_lowercase().contains("text/event-stream"));
+    if !accepts_sse || body.trim_start().starts_with('[') {
+        return false;
+    }
+    let Some(members) = json_rpc::object_members(body) else { return false };
+    let member = |key: &str| members.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
+    member("method") == Some(r#""tools/call""#)
+        && member("id").is_some()
+        && member("params")
+            .and_then(json_rpc::object_members)
+            .and_then(|params| params.into_iter().find(|(k, _)| k == "_meta"))
+            .and_then(|(_, meta)| json_rpc::object_members(&meta))
+            .is_some_and(|meta| meta.iter().any(|(k, _)| k == "progressToken"))
+}
+
 fn render_notification(method: &str, params_json: Option<&str>) -> String {
     let params_field = match params_json {
         Some(p) => format!(r#","params":{p}"#),
@@ -3152,7 +3206,11 @@ impl Application for McpServer {
                     let body = std::str::from_utf8(&request.body).unwrap_or("");
                     let mut ctx = self.context_for(request);
                     ctx.auth_claims = auth_claims_json;
-                    self.handle_request_with_context(body, ctx)
+                    if wants_progress_stream(request, body) {
+                        self.stream_tool_call(body, ctx)
+                    } else {
+                        self.handle_request_with_context(body, ctx)
+                    }
                 }
                 "GET" => self.start_sse_stream(request),
                 "OPTIONS" => {

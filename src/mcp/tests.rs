@@ -2937,3 +2937,58 @@ fn a_binary_resource_is_read_as_a_blob() {
     assert!(read("test://bin").contains(r#""contents":[{"uri":"test://bin","mimeType":"image/png","blob":"iVBO"}]"#), "{}", read("test://bin"));
     assert!(read("test://txt").contains(r#""contents":[{"uri":"test://txt","mimeType":"text/plain","text":"hello"}]"#), "{}", read("test://txt"));
 }
+
+// ── Progress on the tools/call response stream ───────────────────────────────
+
+#[test]
+fn progress_streams_on_the_call_s_own_response() {
+    use crate::application::Application;
+    use std::io::Read;
+    let server = McpServer::new("srv", "1").tool_with_context("work", "Work", r#"{"type":"object"}"#, |ctx, _| {
+        ctx.report_progress(0.0, Some(2.0), None);
+        ctx.report_progress(2.0, Some(2.0), Some("done"));
+        Ok(McpContent::text("finished"))
+    });
+    let call = r#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"work","arguments":{},"_meta":{"progressToken":"p-1"}}}"#;
+    let client = crate::test_client::TestClient::new(server.clone());
+    let response = client
+        .post("/mcp")
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
+        .body_text(call)
+        .send();
+    assert_eq!(Some("text/event-stream"), response.header("content-type"));
+    // TestClient doesn't drive stream_pipe: read the stream in-process.
+    let mut raw = server.execute(
+        &crate::request::Request {
+            method: "POST".into(),
+            request_uri: "/mcp".into(),
+            http_version: "HTTP/1.1".into(),
+            headers: vec![
+                crate::header::Header::new("Content-Type", "application/json"),
+                crate::header::Header::new("Accept", "application/json, text/event-stream"),
+            ],
+            body: call.into(),
+        },
+        &crate::server::ConnectionInfo {
+            client: crate::server::Address { ip: "127.0.0.1".into(), port: 0 },
+            server: crate::server::Address { ip: "127.0.0.1".into(), port: 0 },
+            request_size: 16000,
+            sni_hostname: None,
+        },
+    ).unwrap();
+    let mut events = String::new();
+    raw.stream_pipe.take().unwrap().read_to_string(&mut events).unwrap();
+    let frames: Vec<&str> = events.split("\n\n").filter(|f| !f.is_empty()).collect();
+    assert_eq!(3, frames.len(), "{events}");
+    assert!(frames[0].contains(r#""progressToken":"p-1","progress":0"#), "{events}");
+    assert!(frames[1].contains(r#""progress":2,"total":2,"message":"done""#), "{events}");
+    assert!(frames[2].contains(r#""id":7"#) && frames[2].contains("finished"), "{events}");
+
+    // Without a progress token, or without SSE in Accept, the answer is plain JSON.
+    let plain = client.post("/mcp").header("Content-Type", "application/json").header("Accept", "application/json, text/event-stream")
+        .body_text(r#"{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"work","arguments":{}}}"#).send();
+    assert_eq!(Some("application/json"), plain.header("content-type"));
+    let json_only = client.post("/mcp").header("Content-Type", "application/json").header("Accept", "application/json").body_text(call).send();
+    assert_eq!(Some("application/json"), json_only.header("content-type"));
+}

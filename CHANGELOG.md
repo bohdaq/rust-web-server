@@ -42,7 +42,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   the three elicitation scenarios are known failures
   (`ci/mcp-conformance-baseline.yml`). For it, `McpContent::audio`,
   `McpContent::blocks` (several items in one tool result) and
-  `McpContent::blob` (binary resources, sent as `blob`).
+  `McpContent::blob` (binary resources, sent as `blob`). A `tools/call` with a
+  `progressToken` from a client that accepts `text/event-stream` is answered
+  as an event stream — progress notifications, then the result — instead of
+  sending progress to the separate `GET /mcp` stream, which a client may not
+  have opened yet; progress without such a stream now goes only to the
+  caller's session (it went to every connected session).
 - MCP gateway (#62): `mcp::gateway::McpGateway` puts one endpoint in front of
   upstream MCP servers — tools as `<prefix>__<tool>`, `allow(identity, tools)`
   rules (deny by default), upstream credentials set per `Upstream` and never
