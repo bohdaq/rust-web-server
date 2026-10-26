@@ -248,3 +248,40 @@ fn send_text_convenience() {
     let frame = WebSocket::read_frame(&mut cursor).unwrap();
     assert_eq!(Frame::Text("hello".to_string()), frame);
 }
+
+// ── Payload limits: the length comes from the peer ──────────────────────────
+
+#[test]
+fn a_frame_claiming_a_huge_payload_is_refused_before_reading_it() {
+    // FIN + binary, 64-bit length = u64::MAX, no payload behind it: this
+    // used to try to allocate 2^64 - 1 bytes and abort the process.
+    let mut frame = vec![0x82u8, 127];
+    frame.extend_from_slice(&u64::MAX.to_be_bytes());
+    let err = WebSocket::read_frame(&mut std::io::Cursor::new(frame)).unwrap_err();
+    assert!(err.contains("exceeds"), "{err}");
+
+    let mut over = vec![0x82u8, 127];
+    over.extend_from_slice(&(WebSocket::MAX_FRAME_PAYLOAD + 1).to_be_bytes());
+    assert!(WebSocket::read_frame(&mut std::io::Cursor::new(over)).is_err());
+}
+
+#[test]
+fn a_frame_shorter_than_its_length_is_an_error() {
+    // Claims 1000 bytes, carries 3.
+    let mut frame = vec![0x82u8, 126];
+    frame.extend_from_slice(&1000u16.to_be_bytes());
+    frame.extend_from_slice(b"abc");
+    let err = WebSocket::read_frame(&mut std::io::Cursor::new(frame)).unwrap_err();
+    assert!(err.contains("ended inside a frame"), "{err}");
+}
+
+#[test]
+fn read_frame_limited_applies_its_own_limit() {
+    let mut buf = Vec::new();
+    WebSocket::write_frame(&mut buf, Frame::Binary(vec![7u8; 300])).unwrap();
+    assert!(WebSocket::read_frame_limited(&mut std::io::Cursor::new(buf.clone()), 299).is_err());
+    match WebSocket::read_frame_limited(&mut std::io::Cursor::new(buf), 300).unwrap() {
+        Frame::Binary(data) => assert_eq!(vec![7u8; 300], data),
+        other => panic!("{other:?}"),
+    }
+}

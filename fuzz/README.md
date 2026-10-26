@@ -25,6 +25,10 @@ cargo install cargo-fuzz
 | `h2_connection` | rws's HTTP/2 server: frames, stream states, flow control (`h2_server::fuzz`) | HTTP/2 clients |
 | `config_file` | `rws.config.toml` settings loader | operator files |
 | `proxy_config` | proxy route parser | operator files |
+| `websocket_frame` | `WebSocket::read_frame_limited` | WebSocket clients |
+| `dns_srv_response` | the DNS SRV response parser (`service_discovery`) | DNS servers |
+| `redis_reply` | the RESP reply reader (`redis_protocol`) | Redis servers |
+| `cookie_header` | `CookieJar::parse` | any client |
 | `mcp_gateway_reply` | what the MCP gateway reads from an upstream: JSON or event-stream replies, `tools/list` results (via `fuzz_api`) | upstream MCP servers |
 
 ## Running
@@ -34,6 +38,8 @@ fuzz/run.sh            # every target for 60 s, 4 in parallel
 fuzz/run.sh 600 8      # 10 minutes each, 8 in parallel
 cargo +nightly fuzz run http_request corpus/http_request seeds/http_request   # one target, until stopped
 ```
+
+`seeds/http1_framing/` and `seeds/http_request/` include a request-smuggling corpus (`smuggle_*`: CL+TE either way, duplicate or listed `Content-Length`, obfuscated or folded `Transfer-Encoding`, bare-LF chunks, oversized chunk sizes, trailers); `server::framing`'s `the_smuggling_corpus_is_refused_or_framed_consistently` test pins how each one is handled.
 
 `seeds/<target>/` holds hand-written starting inputs (committed); the fuzzer
 grows `corpus/<target>/` from them (not committed). A crash is written to

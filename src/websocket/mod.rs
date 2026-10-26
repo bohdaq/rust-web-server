@@ -71,6 +71,11 @@ pub struct WebSocket;
 impl WebSocket {
     const MAGIC: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
+    /// The largest frame payload [`WebSocket::read_frame`] accepts (16 MiB);
+    /// a frame claiming more is an error. Use
+    /// [`WebSocket::read_frame_limited`] for another limit.
+    pub const MAX_FRAME_PAYLOAD: u64 = 16 * 1024 * 1024;
+
     // ── Handshake ─────────────────────────────────────────────────────────────
 
     /// Returns `true` if `request` is a valid WebSocket upgrade request
@@ -135,7 +140,18 @@ impl WebSocket {
     ///
     /// Handles client-to-server masking automatically. Returns an error if the
     /// stream closes unexpectedly or contains a protocol violation.
+    ///
+    /// A frame whose declared payload exceeds [`WebSocket::MAX_FRAME_PAYLOAD`]
+    /// is refused before any of it is read: the length comes from the peer,
+    /// and allocating it up front (up to 2^64 − 1 bytes) aborted the process.
     pub fn read_frame(stream: &mut impl Read) -> Result<Frame, String> {
+        Self::read_frame_limited(stream, Self::MAX_FRAME_PAYLOAD)
+    }
+
+    /// [`WebSocket::read_frame`] with `max_payload` bytes as the limit. The
+    /// payload is read as it arrives, so memory follows what the peer
+    /// actually sends, not what it claims.
+    pub fn read_frame_limited(stream: &mut impl Read, max_payload: u64) -> Result<Frame, String> {
         let mut header = [0u8; 2];
         read_exact(stream, &mut header)?;
 
@@ -144,19 +160,22 @@ impl WebSocket {
         let masked = (header[1] & 0x80) != 0;
         let payload_len_byte = (header[1] & 0x7F) as usize;
 
-        let payload_len: usize = match payload_len_byte {
+        let payload_len: u64 = match payload_len_byte {
             126 => {
                 let mut ext = [0u8; 2];
                 read_exact(stream, &mut ext)?;
-                u16::from_be_bytes(ext) as usize
+                u16::from_be_bytes(ext) as u64
             }
             127 => {
                 let mut ext = [0u8; 8];
                 read_exact(stream, &mut ext)?;
-                u64::from_be_bytes(ext) as usize
+                u64::from_be_bytes(ext)
             }
-            n => n,
+            n => n as u64,
         };
+        if payload_len > max_payload {
+            return Err(format!("frame payload of {payload_len} bytes exceeds the {max_payload}-byte limit"));
+        }
 
         let mask_key = if masked {
             let mut mk = [0u8; 4];
@@ -166,9 +185,15 @@ impl WebSocket {
             None
         };
 
-        let mut payload = vec![0u8; payload_len];
+        let mut payload = Vec::new();
         if payload_len > 0 {
-            read_exact(stream, &mut payload)?;
+            stream
+                .take(payload_len)
+                .read_to_end(&mut payload)
+                .map_err(|e| format!("read error: {}", e))?;
+            if payload.len() as u64 != payload_len {
+                return Err("read error: stream ended inside a frame".to_string());
+            }
         }
 
         if let Some(key) = mask_key {

@@ -44,7 +44,7 @@ pub(crate) mod json_lite;
 #[cfg(not(target_arch = "wasm32"))]
 mod consul;
 #[cfg(not(target_arch = "wasm32"))]
-mod dns_srv;
+pub(crate) mod dns_srv;
 #[cfg(not(target_arch = "wasm32"))]
 mod docker;
 #[cfg(not(target_arch = "wasm32"))]

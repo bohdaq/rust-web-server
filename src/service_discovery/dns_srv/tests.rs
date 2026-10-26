@@ -248,3 +248,14 @@ fn query_times_out_when_nothing_responds() {
     let result = query("example.com", addr, Duration::from_millis(200));
     assert!(result.is_err());
 }
+
+#[test]
+fn a_response_cut_inside_srv_rdata_is_an_error_not_a_panic() {
+    // A record whose RDLENGTH claims 30 bytes but the buffer ends 3 bytes
+    // into its RDATA: indexing priority/weight/port used to panic.
+    let response = build_srv_response(7, "_http._tcp.example.com", &[(10, 5, 8080, "host1.example.com")]);
+    let rdata_start = response.len() - (6 + "host1.example.com".len() + 2);
+    for cut in [rdata_start + 1, rdata_start + 3, rdata_start + 5] {
+        assert!(parse_response(&response[..cut], 7).is_err(), "cut at {cut}");
+    }
+}

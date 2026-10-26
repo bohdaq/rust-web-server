@@ -161,7 +161,7 @@ fn read_name(buf: &[u8], mut pos: usize) -> Result<(String, usize), String> {
     Ok((labels.join("."), return_pos))
 }
 
-fn parse_response(buf: &[u8], expected_id: u16) -> Result<Vec<SrvRecord>, String> {
+pub(crate) fn parse_response(buf: &[u8], expected_id: u16) -> Result<Vec<SrvRecord>, String> {
     if buf.len() < 12 {
         return Err("response shorter than DNS header".to_string());
     }
@@ -199,9 +199,11 @@ fn parse_response(buf: &[u8], expected_id: u16) -> Result<Vec<SrvRecord>, String
             if rdlength < 6 {
                 return Err("SRV RDATA shorter than 6 bytes".to_string());
             }
-            let priority = u16::from_be_bytes([buf[rdata_start], buf[rdata_start + 1]]);
-            let weight = u16::from_be_bytes([buf[rdata_start + 2], buf[rdata_start + 3]]);
-            let port = u16::from_be_bytes([buf[rdata_start + 4], buf[rdata_start + 5]]);
+            // RDLENGTH is the sender's claim; the bytes may not be there.
+            let fixed = buf.get(rdata_start..rdata_start + 6).ok_or("truncated SRV RDATA")?;
+            let priority = u16::from_be_bytes([fixed[0], fixed[1]]);
+            let weight = u16::from_be_bytes([fixed[2], fixed[3]]);
+            let port = u16::from_be_bytes([fixed[4], fixed[5]]);
             let (target, _) = read_name(buf, rdata_start + 6)?;
             records.push(SrvRecord { priority, weight, port, target });
         }

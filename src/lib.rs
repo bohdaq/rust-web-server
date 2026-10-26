@@ -299,6 +299,42 @@ pub mod fuzz_api {
         }
     }
 
+    /// A WebSocket frame from a client (#8): any bytes; a frame never holds
+    /// more payload than the limit allows. Must never panic.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn websocket_frame(data: &[u8]) {
+        let mut cursor = std::io::Cursor::new(data);
+        while let Ok(frame) = crate::websocket::WebSocket::read_frame_limited(&mut cursor, 4096) {
+            let len = match &frame {
+                crate::websocket::Frame::Text(t) => t.len(),
+                crate::websocket::Frame::Binary(b) | crate::websocket::Frame::Ping(b) | crate::websocket::Frame::Pong(b) => b.len(),
+                crate::websocket::Frame::Continuation { data, .. } => data.len(),
+                crate::websocket::Frame::Close(_, reason) => reason.len() + 2,
+            };
+            assert!(len <= 4096 + 2);
+        }
+    }
+
+    /// A DNS response read for SRV records (#8). Must never panic.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn dns_srv_response(data: &[u8]) {
+        let id = data.get(..2).map_or(0, |b| u16::from_be_bytes([b[0], b[1]]));
+        let _ = crate::service_discovery::dns_srv::parse_response(data, id);
+    }
+
+    /// A Redis (RESP) reply (#8). Must never panic.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn redis_reply(data: &[u8]) {
+        let _ = crate::redis_protocol::read_reply(&mut std::io::Cursor::new(data));
+    }
+
+    /// A `Cookie` request header (#8): every parsed cookie has a name.
+    pub fn cookie_header(data: &[u8]) {
+        let Ok(value) = std::str::from_utf8(data) else { return };
+        let jar = crate::cookie::CookieJar::parse(value);
+        assert!(jar.cookies.iter().all(|c| !c.name.is_empty()));
+    }
+
     /// What ACME renewal parses from the CA (#1): certificate DER (validity,
     /// serial, Authority Key Identifier), renewalInfo windows (RFC 3339) and
     /// directory profile names. Must never panic.

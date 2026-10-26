@@ -5,6 +5,29 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased (18.1.0)
+
+### Fixed
+
+- **WebSocket frames claiming a huge payload (#8).** `WebSocket::read_frame`
+  allocated whatever length a client claimed (up to 2^64 − 1 bytes) before
+  reading it, so one 14-byte frame could abort the process. Payloads are now
+  read as they arrive and capped at `WebSocket::MAX_FRAME_PAYLOAD` (16 MiB);
+  `WebSocket::read_frame_limited` takes another limit.
+- **Redis replies (#8).** The RESP reader allocated a bulk string at the
+  length the server claimed; bulk strings are now read as they arrive, capped
+  at 512 MiB (Redis's own maximum), reply lines at 64 KiB, and a connection
+  closed mid-reply is an error instead of reading as `+OK`.
+- **DNS SRV discovery (#8).** A response whose SRV record ended inside its
+  RDATA panicked while reading priority, weight and port; it is now an error.
+
+### Added
+
+- Fuzz targets for WebSocket frames, DNS SRV responses, Redis replies and
+  `Cookie` headers, and a request-smuggling seed corpus (CL+TE, conflicting
+  or listed `Content-Length`, obfuscated or folded `Transfer-Encoding`,
+  bare-LF and oversized chunks) whose handling a test pins (#8).
+
 ## 18.0.0 — 2026-10-26
 
 ### Breaking

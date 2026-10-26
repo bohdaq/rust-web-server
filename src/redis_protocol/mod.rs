@@ -77,29 +77,49 @@ fn resp_array(args: &[&[u8]]) -> Vec<u8> {
     out
 }
 
-fn read_reply(stream: &mut std::net::TcpStream) -> std::io::Result<RespReply> {
+/// The longest reply line accepted (status, error or length line).
+const MAX_LINE: u64 = 64 * 1024;
+/// The largest bulk string accepted: Redis's own `proto-max-bulk-len`
+/// default. The length comes from the server; it is never allocated up front.
+const MAX_BULK: i64 = 512 * 1024 * 1024;
+
+pub(crate) fn read_reply(stream: &mut impl std::io::Read) -> std::io::Result<RespReply> {
     use std::io::{BufRead, BufReader, Read};
+    let invalid = |msg: &str| std::io::Error::new(std::io::ErrorKind::InvalidData, msg.to_string());
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
-    reader.read_line(&mut line)?;
-    let line = line.trim_end_matches("\r\n");
-    match line.chars().next() {
-        Some('+') => Ok(RespReply::Ok),
-        Some(':') => {
+    (&mut reader).take(MAX_LINE).read_line(&mut line)?;
+    if !line.ends_with('\n') {
+        return Err(invalid("RESP reply line too long or truncated"));
+    }
+    let line = line.trim_end_matches("\r\n").trim_end_matches('\n');
+    match line.as_bytes().first() {
+        Some(b'+') => Ok(RespReply::Ok),
+        Some(b':') => {
             let n = line[1..].parse::<i64>().unwrap_or(0);
             Ok(RespReply::Int(n))
         }
-        Some('-') => Ok(RespReply::Error(line[1..].to_string())),
-        Some('$') => {
+        Some(b'-') => Ok(RespReply::Error(line[1..].to_string())),
+        Some(b'$') => {
             let len = line[1..].parse::<i64>().unwrap_or(-1);
             if len < 0 {
                 return Ok(RespReply::Bulk(None));
             }
-            let mut buf = vec![0u8; len as usize + 2]; // +2 for \r\n
-            reader.read_exact(&mut buf)?;
+            if len > MAX_BULK {
+                return Err(invalid("RESP bulk string over 512 MiB"));
+            }
+            let want = len as u64 + 2; // +2 for \r\n
+            let mut buf = Vec::new();
+            (&mut reader).take(want).read_to_end(&mut buf)?;
+            if buf.len() as u64 != want {
+                return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "RESP bulk string truncated"));
+            }
             buf.truncate(len as usize);
             Ok(RespReply::Bulk(Some(buf)))
         }
         _ => Ok(RespReply::Ok), // ignore arrays etc.
     }
 }
+
+#[cfg(test)]
+mod tests;

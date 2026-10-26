@@ -113,6 +113,16 @@ Reads one complete frame. Client-to-server masking (required by RFC 6455) is
 handled automatically — the payload is unmasked before being returned. Extended
 payload lengths (16-bit and 64-bit) are supported.
 
+A frame whose declared payload is larger than `WebSocket::MAX_FRAME_PAYLOAD`
+(16 MiB) is an error, returned before any of the payload is read, and the
+payload is read as it arrives rather than allocated at the size the client
+claims (since 18.1.0; before, a frame claiming an enormous length made the
+process abort). For another limit:
+
+```rust
+WebSocket::read_frame_limited(stream: &mut impl Read, max_payload: u64) -> Result<Frame, String>
+```
+
 ## Writing frames
 
 ```rust

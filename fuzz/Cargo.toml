@@ -148,3 +148,31 @@ path = "fuzz_targets/mcp_gateway_reply.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "websocket_frame"
+path = "fuzz_targets/websocket_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dns_srv_response"
+path = "fuzz_targets/dns_srv_response.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "redis_reply"
+path = "fuzz_targets/redis_reply.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "cookie_header"
+path = "fuzz_targets/cookie_header.rs"
+test = false
+doc = false
+bench = false
