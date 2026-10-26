@@ -2,6 +2,15 @@
 
 ## 17.113.2 — HTTP conformance
 
+### Upgrading
+
+Some fixes refuse or change what 17.113.1 accepted:
+
+- An HTTP/1.1 request without `Host`, with two `Host` headers, with a lower-case method (`get`), with a folded header line or with whitespace before a header's colon now gets `400` (#57).
+- An HTTP/1.0 connection now closes after each response unless the client sends `Connection: keep-alive` (RFC 9112 §9.3; #57).
+- CORS origins match whole: an allow-list entry that relied on matching part of an origin (`example.com` for `https://app.example.com`) now matches nothing — list each origin (#58).
+- Request paths are percent-decoded: a file whose name contains a literal `%` is requested as `%25` (#55).
+
 ### Fixed
 
 - **gzip no longer rewrites a partial body (#52).** A `Range` request with `Accept-Encoding: gzip` got the requested slice gzipped and `Content-Range` rewritten to the compressed size (`bytes=0-1200` of a 3,700-byte file → `Content-Range: bytes 0-37/37`), which no client can reassemble. A `206` is now sent uncompressed (RFC 9110 §14.4).
