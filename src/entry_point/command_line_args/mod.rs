@@ -55,7 +55,8 @@ fn help_text() -> String {
     text.push_str("      --check[=<file>]                         Validate rws.config.toml (or <file>) and exit:\n");
     text.push_str("                                               0 if it has no errors, 1 otherwise\n");
     text.push_str("  -V, --version                                Print version and exit\n");
-    text.push_str("      --help                                   Print this help and exit\n\n");
+    text.push_str("      --help                                   Print this help and exit\n");
+    text.push_str("      --windows-service=<dir>                  (Windows) Run as a service serving <dir>\n\n");
     text.push_str("Docs: https://rws8.tech\n");
     text
 }

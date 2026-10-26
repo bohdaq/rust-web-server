@@ -3,13 +3,14 @@ name: Packages
 # deb and rpm packages (packaging/linux): build them from a release-style
 # binary, install each on a systemd host — the deb on the runner itself, the
 # rpm in a Fedora container booted with systemd — and require the rws service
-# to start, serve, survive a reload and go away on removal.
+# to start, serve, survive a reload and go away on removal. Windows: run
+# rws.exe --windows-service as a real service, serve, stop.
 on:
   push:
     branches: [main]
-    paths: ["packaging/**", ".github/workflows/packaging.yml"]
+    paths: ["packaging/**", "src/main.rs", ".github/workflows/packaging.yml"]
   pull_request:
-    paths: ["packaging/**", ".github/workflows/packaging.yml"]
+    paths: ["packaging/**", "src/main.rs", ".github/workflows/packaging.yml"]
   workflow_dispatch:
 
 env:
@@ -75,3 +76,38 @@ jobs:
         with:
           name: packages
           path: dist/*.*
+
+  windows-service:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ilammy/setup-nasm@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-service
+      - run: cargo build --release --bin rws --features "acme auth mimalloc"
+      - name: Install, start, serve, stop
+        shell: pwsh
+        run: |
+          $site = Join-Path $env:RUNNER_TEMP "rws-site"
+          New-Item -ItemType Directory -Force $site | Out-Null
+          Set-Content (Join-Path $site "index.html") "rws service is running"
+          $exe = (Resolve-Path target\release\rws.exe).Path
+          New-Service -Name rws -BinaryPathName "`"$exe`" --windows-service=`"$site`"" -StartupType Manual | Out-Null
+          Start-Service rws
+          $body = $null
+          for ($i = 0; $i -lt 30; $i++) {
+            try { $body = (Invoke-WebRequest http://localhost:7878/ -UseBasicParsing).Content; break } catch { Start-Sleep 1 }
+          }
+          if ($body -notmatch "rws service is running") { throw "unexpected response: $body" }
+          (Invoke-WebRequest http://localhost:7878/healthz -UseBasicParsing).StatusCode
+          Stop-Service rws
+          (Get-Service rws).WaitForStatus("Stopped", "00:00:30")
+          sc.exe delete rws
+      - name: Diagnostics
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Service rws -ErrorAction SilentlyContinue | Format-List *
+          Get-WinEvent -LogName System -MaxEvents 20 | Where-Object ProviderName -eq "Service Control Manager" | Format-List TimeCreated, Message

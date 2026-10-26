@@ -115,6 +115,8 @@ These print and exit without starting the server.
 | `--check[=<file>]` | Validate the config file (default: `RWS_CONFIG_FILE`, else `./rws.config.toml`); exit `0` if no errors, `1` otherwise |
 | `--format=json` | With `--check`, print the report as JSON |
 
+`--windows-service=<directory>` (Windows) runs rws as a service of the Service Control Manager, serving `<directory>` — see [Windows](/deployment/windows/).
+
 ## Quick-start examples
 
 ### Development server (HTTP only)
@@ -209,4 +211,6 @@ OPTIONS:
   -V, --version          Print the version and exit
       --help             Print usage and exit
       --check[=<file>]   Validate the configuration and exit (--format=json for JSON)
+      --windows-service=<dir>
+                         (Windows) Run as a service serving <dir>
 ```

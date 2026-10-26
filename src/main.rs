@@ -585,10 +585,9 @@ fn main() {
     Server::run(listener, pool, build_app());
 }
 
+/// The server: everything `main` runs once the runtime is up.
 #[cfg(all(feature = "http2", not(feature = "http3")))]
-#[tokio::main]
-async fn main() {
-    exit_if_informational_flag();
+async fn serve() {
     rust_web_server::server::per_core::default_to_per_core();
     let (listener, pool) = Server::setup().expect("server setup failed");
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
@@ -613,10 +612,9 @@ async fn main() {
     );
 }
 
+/// The server: everything `main` runs once the runtime is up.
 #[cfg(feature = "http3")]
-#[tokio::main]
-async fn main() {
-    exit_if_informational_flag();
+async fn serve() {
     rust_web_server::server::per_core::default_to_per_core();
     let (listener, pool) = Server::setup().expect("server setup failed");
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
@@ -641,4 +639,85 @@ async fn main() {
         Server::run_quic(build_app()),
         Server::run_redirect(),
     );
+}
+
+/// A multi-threaded tokio runtime, as `#[tokio::main]` builds one.
+#[cfg(feature = "http2")]
+fn runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("tokio runtime")
+}
+
+#[cfg(feature = "http2")]
+fn main() {
+    exit_if_informational_flag();
+    #[cfg(windows)]
+    if let Some(directory) = windows_service_mode::requested() {
+        windows_service_mode::run(directory);
+        return;
+    }
+    runtime().block_on(serve());
+}
+
+/// `rws --windows-service=<directory>`: run under the Windows Service Control
+/// Manager, serving `<directory>` (and reading its `rws.config.toml`). A
+/// service starts in `System32` with no console, so the directory is
+/// required and logs belong in a file (`access_log`). Stop and Shutdown
+/// controls shut the server down gracefully, as SIGTERM does on Unix.
+#[cfg(all(windows, feature = "http2"))]
+mod windows_service_mode {
+    use std::ffi::OsString;
+    use std::time::Duration;
+    use windows_service::service::{
+        ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus, ServiceType,
+    };
+    use windows_service::service_control_handler::{self, ServiceControlHandlerResult};
+    use windows_service::{define_windows_service, service_dispatcher};
+
+    const FLAG: &str = "--windows-service=";
+
+    /// The directory given with `--windows-service=`, if the flag is present.
+    pub fn requested() -> Option<String> {
+        std::env::args().find_map(|arg| arg.strip_prefix(FLAG).map(str::to_string))
+    }
+
+    define_windows_service!(ffi_service_main, service_main);
+
+    pub fn run(directory: String) {
+        if let Err(e) = std::env::set_current_dir(&directory) {
+            eprintln!("--windows-service: can't serve {directory}: {e}");
+            std::process::exit(1);
+        }
+        // The service's name comes from the SCM; for an own-process service
+        // the name passed here isn't checked.
+        if let Err(e) = service_dispatcher::start("rws", ffi_service_main) {
+            eprintln!("--windows-service: not started by the Service Control Manager: {e}");
+            std::process::exit(1);
+        }
+    }
+
+    fn service_main(_arguments: Vec<OsString>) {
+        let handler = |control| match control {
+            ServiceControl::Stop | ServiceControl::Shutdown => {
+                rust_web_server::server::request_shutdown();
+                ServiceControlHandlerResult::NoError
+            }
+            ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,
+            _ => ServiceControlHandlerResult::NotImplemented,
+        };
+        let Ok(status) = service_control_handler::register("rws", handler) else { return };
+        let report = |state, accepted| {
+            let _ = status.set_service_status(ServiceStatus {
+                service_type: ServiceType::OWN_PROCESS,
+                current_state: state,
+                controls_accepted: accepted,
+                exit_code: ServiceExitCode::Win32(0),
+                checkpoint: 0,
+                wait_hint: Duration::from_secs(10),
+                process_id: None,
+            });
+        };
+        report(ServiceState::Running, ServiceControlAccept::STOP | ServiceControlAccept::SHUTDOWN);
+        super::runtime().block_on(super::serve());
+        report(ServiceState::Stopped, ServiceControlAccept::empty());
+    }
 }

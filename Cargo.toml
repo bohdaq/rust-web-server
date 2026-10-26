@@ -193,5 +193,9 @@ rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs
 # wasm32-wasip2 outbound HTTP backend for http_client::Client::send() — see
 # the #[cfg(target_arch = "wasm32")] send_once in src/http_client/mod.rs and
 # spec/WASM_SHIM.md Phase 2 item 7. Native builds never see this dependency.
+# `rws --windows-service=<dir>`: run under the Service Control Manager (src/main.rs).
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.8.1"
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasip2 = "2.0"

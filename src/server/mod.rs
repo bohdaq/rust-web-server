@@ -915,22 +915,44 @@ async fn accept_backoff(e: std::io::Error) {
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 }
 
-/// Resolves when SIGTERM is received on Unix, or never on other platforms.
-/// Enables a single `select!` branch to handle both SIGTERM and Ctrl+C.
+/// Set once by [`request_shutdown`]; every receiver sees it, however late.
+#[cfg(feature = "http2")]
+fn shutdown_requests() -> &'static tokio::sync::watch::Sender<bool> {
+    static REQUESTS: std::sync::OnceLock<tokio::sync::watch::Sender<bool>> = std::sync::OnceLock::new();
+    REQUESTS.get_or_init(|| tokio::sync::watch::channel(false).0)
+}
+
+/// Shut the server down gracefully, as SIGTERM does — for hosts that stop a
+/// process some other way (a Windows service's Stop control). The accept
+/// loops of `run_tls`, `run_plain`, `run_quic` and `run_redirect` end.
+#[cfg(feature = "http2")]
+pub fn request_shutdown() {
+    shutdown_requests().send_replace(true);
+}
+
+/// Resolves when SIGTERM is received (Unix) or [`request_shutdown`] is
+/// called. Enables a single `select!` branch to handle both, beside Ctrl+C.
 #[cfg(feature = "http2")]
 async fn sigterm() {
+    let requested = async {
+        let mut requests = shutdown_requests().subscribe();
+        let _ = requests.wait_for(|stop| *stop).await;
+    };
     #[cfg(unix)]
     {
         if let Ok(mut s) = tokio::signal::unix::signal(
             tokio::signal::unix::SignalKind::terminate()
         ) {
-            s.recv().await;
+            tokio::select! {
+                _ = s.recv() => {}
+                _ = requested => {}
+            }
         } else {
-            std::future::pending::<()>().await
+            requested.await
         }
     }
     #[cfg(not(unix))]
-    std::future::pending::<()>().await
+    requested.await
 }
 
 /// Returns a stream that fires on each SIGHUP on Unix; never fires elsewhere.

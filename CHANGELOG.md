@@ -23,6 +23,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `helm/prometheus-adapter-values.yaml` serves the HPA's request-rate metric.
   CI lints the chart, checks it with kubeconform and installs it into kind
   with TLS on and off.
+- deb and rpm packages (#27) for x86_64 and arm64 on each release: `/usr/bin/rws`,
+  the hardened `rws.service` (now the one on the systemd page; it serves
+  `/var/www/rws` and reads `/etc/rws/rws.config.toml`), started on port
+  7878 on install. CI installs both on systemd hosts.
+- Windows service (#27): `rws --windows-service=<directory>` runs under the
+  Service Control Manager; Stop and Shutdown end it gracefully
+  (`server::request_shutdown`, which library users can call too). New page
+  [Windows](https://rws8.tech/deployment/windows/). Adds the `windows-service`
+  dependency on Windows only.
 
 ### Fixed
 

@@ -287,7 +287,7 @@ assert_eq!(200, res.status());
 
 HTTP/1.1 (`http1` feature, `ctrlc` dep): a `SIGINT`/`SIGTERM` handler sets an `AtomicBool`; the accept loop exits and the `ThreadPool` drains in-flight requests before the process exits.
 
-HTTP/2 + HTTP/3 (async features): `tokio::signal` handles `SIGINT` and `SIGTERM`; each `run_tls`/`run_quic` loop `select!`s on the signal and breaks cleanly. `SERVER_READY` is cleared before breaking.
+HTTP/2 + HTTP/3 (async features): `tokio::signal` handles `SIGINT` and `SIGTERM`; each `run_tls`/`run_quic` loop `select!`s on the signal and breaks cleanly. `SERVER_READY` is cleared before breaking. `server::request_shutdown()` (a process-wide `watch`, irreversible — tested in its own binary, `tests/request_shutdown.rs`) resolves the same `sigterm()` arm; `rws --windows-service=<dir>` (`main.rs::windows_service_mode`, `windows-service` crate) calls it on the SCM's Stop/Shutdown, after `main` builds the runtime itself and runs `serve()` (the async mains' body) inside the service. CI: `packaging.yml` job `windows-service`.
 
 ### No async (`http1` feature only)
 
