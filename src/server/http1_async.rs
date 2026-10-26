@@ -212,6 +212,7 @@ where
 
         crate::metrics::record_request();
         crate::compression::apply_gzip(&request, &mut response);
+        response.drop_content_for_status();
         if is_tls {
             response.headers.push(Header::get_hsts_header());
             #[cfg(feature = "http3")]

@@ -79,13 +79,7 @@ fn cors_options_preflight_request() {
     let response_status_code = STATUS_CODE_REASON_PHRASE.n204_no_content.status_code;
     let response_reason_phrase = STATUS_CODE_REASON_PHRASE.n204_no_content.reason_phrase;
 
-    let dir = env::current_dir().unwrap();
-    let working_directory = dir.as_path().to_str().unwrap();
-
-    let response_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
-    let response_html_file= fs::read_to_string(response_filepath.to_string()).unwrap();
     let response_content_length_header_name = Header::_CONTENT_LENGTH;
-    let response_content_length_header_value = response_html_file.len().to_string();
 
     let mock_tcp_stream = MockTcpStream {
         read_data: raw_request.as_bytes().to_vec(),
@@ -100,11 +94,10 @@ fn cors_options_preflight_request() {
     assert_eq!(*response_status_code, response.status_code);
     assert_eq!(response_reason_phrase, response.reason_phrase);
 
-    let content_length_header = response._get_header(response_content_length_header_name.to_string()).unwrap();
-    assert_eq!(response_content_length_header_value, content_length_header.value);
-
-    let content_type_header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
-    assert_eq!(MimeType::APPLICATION_JSON, content_type_header.value);
+    // A 204 has no content, so no Content-Length or Content-Type (#54).
+    assert!(response._get_header(response_content_length_header_name.to_string()).is_none());
+    assert!(response._get_header(Header::_CONTENT_TYPE.to_string()).is_none());
+    assert!(raw_response.ends_with(b"\r\n\r\n"), "a 204 must end at its head");
 
     let x_content_type_options_header = response._get_header(Header::_X_CONTENT_TYPE_OPTIONS.to_string()).unwrap();
     assert_eq!(Header::_X_CONTENT_TYPE_OPTIONS_VALUE_NOSNIFF, x_content_type_options_header.value);

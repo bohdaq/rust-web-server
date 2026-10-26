@@ -584,11 +584,12 @@ fn generate_response_coalesced_appends_small_bodies_only() {
     assert_eq!(expected_head.as_bytes(), &head[..]);
     assert_eq!(b"hello".to_vec(), body);
 
-    for method in ["HEAD", "OPTIONS"] {
-        let (head, body) = Response::generate_response_coalesced(response(), request(method), usize::MAX);
-        assert_eq!(expected_head.as_bytes(), &head[..], "{method}");
-        assert!(body.is_empty());
-    }
+    let (head, body) = Response::generate_response_coalesced(response(), request("HEAD"), usize::MAX);
+    assert_eq!(expected_head.as_bytes(), &head[..]);
+    assert!(body.is_empty());
+    // OPTIONS sends the body its Content-Length announces (#54).
+    let (head, _) = Response::generate_response_coalesced(response(), request("OPTIONS"), usize::MAX);
+    assert_eq!(format!("{expected_head}hello").into_bytes(), head);
     assert_eq!(format!("{expected_head}hello").into_bytes(), Response::generate_response(response(), request("GET")));
 }
 
@@ -831,4 +832,60 @@ fn a_generated_multipart_response_parses_back() {
     let parsed = Response::parse(&raw).unwrap();
     let bodies: Vec<&[u8]> = parsed.content_range_list.iter().map(|cr| &cr.body[..]).collect();
     assert_eq!(vec![&b"first"[..], &b"second"[..]], bodies);
+}
+
+// ── #54: bodiless responses ─────────────────────────────────────────────────
+
+fn with_body(status: &'static crate::response::StatusCodeReasonPhrase) -> Response {
+    Response::get_response(status, None, Some(vec![Range::get_content_range(b"abc".to_vec(), MimeType::TEXT_PLAIN.to_string())]))
+}
+
+fn request_with(method: &str) -> Request {
+    Request { method: method.to_string(), request_uri: "/".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: vec![] }
+}
+
+#[test]
+fn no_content_statuses_send_no_body_or_content_length() {
+    for status in [STATUS_CODE_REASON_PHRASE.n204_no_content, STATUS_CODE_REASON_PHRASE.n304_not_modified, STATUS_CODE_REASON_PHRASE.n100_continue] {
+        for method in ["GET", "OPTIONS"] {
+            let mut response = with_body(status);
+            response.headers.push(Header { name: "Content-Length".into(), value: "3".into() });
+            let (head, body) = Response::generate_response_parts(response, request_with(method));
+            let head = String::from_utf8(head).unwrap();
+            assert!(body.is_empty(), "{} {method}", status.status_code);
+            assert!(!head.to_ascii_lowercase().contains("content-length"), "{head}");
+            assert!(!head.to_ascii_lowercase().contains("transfer-encoding"), "{head}");
+        }
+    }
+}
+
+#[test]
+fn options_with_content_sends_it() {
+    // A 200 to OPTIONS announced its body with Content-Length and then
+    // dropped it, leaving the client waiting.
+    let (head, body) = Response::generate_response_parts(with_body(STATUS_CODE_REASON_PHRASE.n200_ok), request_with("OPTIONS"));
+    assert!(String::from_utf8(head).unwrap().contains("Content-Length: 3\r\n"));
+    assert_eq!(b"abc".to_vec(), body);
+}
+
+#[test]
+fn head_keeps_the_length_but_sends_no_body() {
+    let (head, body) = Response::generate_response_parts(with_body(STATUS_CODE_REASON_PHRASE.n200_ok), request_with("HEAD"));
+    assert!(String::from_utf8(head).unwrap().contains("Content-Length: 3\r\n"));
+    assert!(body.is_empty());
+}
+
+#[test]
+fn drop_content_for_status_clears_streamed_bodies() {
+    let mut response = with_body(STATUS_CODE_REASON_PHRASE.n204_no_content);
+    response.stream_file = Some("/tmp/x".to_string());
+    response.stream_pipe = Some(Box::new(std::io::empty()));
+    response.headers.push(Header { name: "Transfer-Encoding".into(), value: "chunked".into() });
+    response.drop_content_for_status();
+    assert!(response.stream_file.is_none() && response.stream_pipe.is_none() && response.content_range_list.is_empty());
+    assert!(response.headers.iter().all(|h| !h.name.eq_ignore_ascii_case("transfer-encoding")));
+
+    let mut ok = with_body(STATUS_CODE_REASON_PHRASE.n200_ok);
+    ok.drop_content_for_status();
+    assert_eq!(1, ok.content_range_list.len());
 }

@@ -122,7 +122,7 @@ pub fn get_response(
 ) -> Response
 ```
 
-Pass `None` for headers to get an empty header list. Pass `None` for the body list to get an empty body (useful for `204 No Content`).
+Pass `None` for headers to get an empty header list. Pass `None` for the body list to get an empty body (useful for `204 No Content`). A `1xx`, `204` or `304` response is always sent without a body or `Content-Length`, whatever the handler put in it (`Response::drop_content_for_status`; since 17.113.2). A `HEAD` response keeps the `Content-Length` of the `GET` it stands for, without the body.
 
 ### One-line JSON / text responses
 
