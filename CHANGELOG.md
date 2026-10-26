@@ -37,6 +37,9 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   (`server::request_shutdown`, which library users can call too). New page
   [Windows](https://rws8.tech/deployment/windows/). Adds the `windows-service`
   dependency on Windows only.
+- winget manifests (`packaging/winget/generate.sh`) and a nixpkgs expression
+  (`packaging/nix/package.nix`), checked in CI and submitted upstream per
+  release (#27).
 
 ### Fixed
 

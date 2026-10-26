@@ -47,10 +47,17 @@ git push origin 17.110.0
 2. builds `rws` for the targets below and attaches `rws-<version>-<target>.tar.gz` (`.zip` on Windows) plus a `.sha256` for each — the names `[package.metadata.binstall]` in `Cargo.toml` points `cargo binstall` at;
 3. smoke-tests the image, then pushes `<version>`, `<major>` and `latest` (linux/amd64 + linux/arm64) to `ghcr.io/bohdaq/rws` and, when the `DOCKERHUB_USERNAME` variable and `DOCKERHUB_TOKEN` secret are set, to Docker Hub `bohdaq/rws` (its overview is synced from `.github/DOCKERHUB.md` by `dockerhub-overview.yml` whenever that file changes), built from those binaries via `Dockerfile.release`;
 4. rewrites `Formula/rws.rb` in [bohdaq/homebrew-tap](https://github.com/bohdaq/homebrew-tap), authenticated with the `HOMEBREW_TAP_DEPLOY_KEY` repository secret (a write-enabled deploy key on the tap repo).
+5. pushes the Helm chart to `oci://ghcr.io/bohdaq/charts/rws:<version>` (the first push creates the GHCR package private: make it public once in its package settings);
+6. builds `.deb` and `.rpm` packages for x86_64 and arm64 from the Linux binaries and attaches them; with the `PACKAGES_GPG_KEY` secret (an armored private key; `PACKAGES_GPG_PASSPHRASE` if it has one) the rpm files are signed and the docs job below also publishes signed apt and dnf repositories at `rws8.tech/apt` and `/rpm`.
 
 The docs site, [rws8.tech](https://rws8.tech), is rebuilt from the tag's `docs/` and pushed to the `docs` branch of `bohdaq/rws8.tech` (GitHub Pages) by the same workflow; it needs the `DOCS_SITE_DEPLOY_KEY` repository secret, the private half of a write-enabled deploy key on that repo.
 
 A patch for an older line (e.g. `17.113.1` after `18.0.0`) is released the same way, from a tag on that line's branch: the workflow sees that it isn't the highest version tag, so the GitHub Release isn't marked Latest, the image is pushed as `<version>` and `<major>` but not `latest`, and the Homebrew formula is left on the newest version.
+
+After the workflow, submit the release to the two package indexes that take pull requests (both checked in CI by `packaging.yml`):
+
+- **winget**: `packaging/winget/generate.sh <version> out` writes the manifests; open a PR adding `out/manifests/b/bohdaq/rws/<version>` to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs).
+- **nixpkgs**: in `packaging/nix/package.nix` set `version`; `nix-build packaging/nix/release.nix` then fails twice, printing the source `hash` and then the `cargoHash` to fill in; open a PR updating `pkgs/by-name/ru/rust-web-server/package.nix` in [NixOS/nixpkgs](https://github.com/NixOS/nixpkgs) (title `rust-web-server: <old> -> <version>`).
 
 To rebuild an existing tag after fixing the workflow, run it manually (Actions → Release → Run workflow) with that tag; every step is idempotent.
 
