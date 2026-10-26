@@ -304,6 +304,9 @@ pub mod fuzz_api {
         let HeadScan::Complete(head_len) = framing::scan_head(&pending) else { return };
         assert!(head_len <= pending.len() && head_len <= framing::MAX_HEAD_SIZE);
         let Ok(request) = crate::request::Request::parse(&pending[..head_len]) else { return };
+        for header in &request.headers {
+            let _ = crate::http::date::parse(&header.value);
+        }
         let body = &pending[head_len..];
         if let Ok(BodyFraming::Chunked) = framing::body_framing(&request) {
             let split = data.first().map_or(0, |&b| b as usize).min(body.len());

@@ -14,6 +14,9 @@ Static files are sent with `Cache-Control: no-cache` (since 18.0.0; it was
 `If-None-Match` (the `ETag`) or `If-Modified-Since` (the `Last-Modified`
 date), and gets a `304 Not Modified` without a body while the file is
 unchanged. `If-None-Match` decides when both are sent (RFC 9110 §13.1.3).
+`If-Modified-Since` takes any of the three HTTP-date forms: the IMF-fixdate
+rws sends, RFC 850 (`Sunday, 06-Nov-94 08:49:37 GMT`) and asctime
+(`Sun Nov  6 08:49:37 1994`).
 Set `RWS_CONFIG_STATIC_CACHE_CONTROL` to change it — e.g.
 `public, max-age=31536000, immutable` for files with a content hash in their
 name — or to an empty value for the old `no-store` behavior. Responses from

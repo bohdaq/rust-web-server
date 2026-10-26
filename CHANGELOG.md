@@ -46,6 +46,7 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - The reverse proxy sent the client's `Content-Length` upstream next to its own (two headers — strict backends reject that, and it's a desync risk). It now sends one, drops headers named in `Connection`, `Trailer` and `Proxy-Connection`, and appends the client address to an incoming `X-Forwarded-For` instead of sending a second one.
 - `CacheLayer` no longer stores `no-cache` responses, responses to `Range` requests, or responses that vary on a header outside its key.
 - A JWKS key that can't be used is skipped instead of failing verification.
+- `If-Modified-Since` (new in 18.0) accepts the obsolete RFC 850 and asctime date forms as well as the IMF-fixdate (RFC 9110 §5.6.7); a client sending them always got the whole file.
 - `If-Range` with a date (on top of 17.113.2's entity-tag handling): the `Range` applies when the date equals the file's `Last-Modified` and that is at least a second old (a strong validator), else the whole file is sent.
 
 ### Performance
