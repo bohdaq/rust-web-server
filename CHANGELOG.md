@@ -7,6 +7,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased (18.2.0)
 
+### Security
+
+- zstd 0.14.3, zstd-safe 8.2.0, zstd-sys 2.1.2 (RUSTSEC-2026-0391, -0398,
+  -0403, -0410, published 2026-10-16; taken although newer than the two-week
+  rule, being security fixes). rws calls only `zstd::bulk::compress` on its
+  own response bodies — a fresh context per call, no decompression, no
+  WebAssembly build with zstd — so 18.1.0 isn't known to be exposed; the
+  crate now requires zstd ≥ 0.14.3.
+
 ### Added
 
 - Runnable examples (#11): `hello`, `rest_api`, `static_site`,
