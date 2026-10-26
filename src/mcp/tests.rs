@@ -400,7 +400,7 @@ fn tool_with_context_sees_client_info_recorded_at_initialize_via_execute() {
 
     let init_resp = client
         .post("/mcp")
-        .body_text(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"claude-code","version":"1.2.3"}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"claude-code","version":"1.2.3"}}}"#)
         .send();
     assert_eq!(init_resp.status(), 200);
     let session_id = init_resp
@@ -411,7 +411,7 @@ fn tool_with_context_sees_client_info_recorded_at_initialize_via_execute() {
     let call_resp = client
         .post("/mcp")
         .header("Mcp-Session-Id", &session_id)
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"whoami","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"whoami","arguments":{}}}"#)
         .send();
     assert_eq!(call_resp.status(), 200);
     let body = call_resp.body_text();
@@ -426,7 +426,7 @@ fn tool_with_context_sees_empty_client_info_for_unrecognized_session_id() {
     let resp = client
         .post("/mcp")
         .header("Mcp-Session-Id", "not-a-real-session")
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"whoami","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"whoami","arguments":{}}}"#)
         .send();
     assert_eq!(resp.status(), 200);
     let body = resp.body_text();
@@ -863,7 +863,7 @@ fn application_dispatches_post_to_mcp_endpoint() {
     let client = TestClient::new(srv);
     let resp = client
         .post("/mcp")
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#)
         .send();
     assert_eq!(resp.status(), 200);
     let body = resp.body_text().to_string();
@@ -911,7 +911,7 @@ fn mcp_path_override_with_at() {
     // New path → handled
     let resp2 = client
         .post("/api/v1/mcp")
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#)
         .send();
     assert_eq!(resp2.status(), 200);
 }
@@ -938,7 +938,7 @@ fn wrap_forwards_non_mcp_to_existing_app() {
     // MCP endpoint still works.
     let mcp_resp = client
         .post("/mcp")
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#)
         .send();
     assert_eq!(mcp_resp.status(), 200);
     assert!(mcp_resp.body_text().contains("ping"), "MCP tool missing");
@@ -965,7 +965,7 @@ fn wrap_mcp_takes_priority_over_wrapped_app() {
     // POST /mcp → MCP server (200), not the wrapped app's 418.
     let resp = client
         .post("/mcp")
-        .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
         .send();
     assert_eq!(resp.status(), 200);
 }
@@ -984,7 +984,7 @@ fn auth_correct_token_succeeds() {
     let resp = client
         .post("/mcp")
         .header("Authorization", "Bearer secret-token")
-        .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
         .send();
     assert_eq!(resp.status(), 200);
 }
@@ -994,7 +994,7 @@ fn auth_missing_token_returns_401() {
     let client = TestClient::new(make_protected_server());
     let resp = client
         .post("/mcp")
-        .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
         .send();
     assert_eq!(resp.status(), 401);
 }
@@ -1005,7 +1005,7 @@ fn auth_wrong_token_returns_401() {
     let resp = client
         .post("/mcp")
         .header("Authorization", "Bearer wrong-token")
-        .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
         .send();
     assert_eq!(resp.status(), 401);
 }
@@ -1037,7 +1037,7 @@ fn auth_www_authenticate_header_present_on_401() {
     let client = TestClient::new(make_protected_server());
     let resp = client
         .post("/mcp")
-        .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
         .send();
     assert_eq!(resp.status(), 401);
     let has_www_auth = resp.headers().iter()
@@ -1052,7 +1052,7 @@ fn no_auth_configured_allows_all() {
     let client = TestClient::new(srv);
     let resp = client
         .post("/mcp")
-        .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
         .send();
     assert_eq!(resp.status(), 200);
 }
@@ -1430,7 +1430,7 @@ fn tools_call_with_progress_token_delivers_progress_notifications_over_sse() {
     let client = TestClient::new(srv.clone());
     let call_resp = client
         .post("/mcp")
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"long_job","arguments":{},"_meta":{"progressToken":"abc123"}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"long_job","arguments":{},"_meta":{"progressToken":"abc123"}}}"#)
         .send();
     assert_eq!(call_resp.status(), 200);
     assert!(call_resp.body_text().contains("finished"));
@@ -1459,7 +1459,7 @@ fn tools_call_without_progress_token_reports_nothing() {
     let client = TestClient::new(srv.clone());
     client
         .post("/mcp")
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"long_job","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"long_job","arguments":{}}}"#)
         .send();
 
     // If report_progress had (incorrectly) queued anything without a
@@ -1493,7 +1493,7 @@ fn progress_token_numeric_type_round_trips_unquoted() {
     let client = TestClient::new(srv.clone());
     client
         .post("/mcp")
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"long_job","arguments":{},"_meta":{"progressToken":42}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"long_job","arguments":{},"_meta":{"progressToken":42}}}"#)
         .send();
 
     let mut buf = [0u8; 4096];
@@ -1519,7 +1519,7 @@ fn report_progress_omits_total_and_message_when_not_given() {
     let client = TestClient::new(srv.clone());
     client
         .post("/mcp")
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"minimal_job","arguments":{},"_meta":{"progressToken":"t1"}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"minimal_job","arguments":{},"_meta":{"progressToken":"t1"}}}"#)
         .send();
 
     let mut buf = [0u8; 4096];
@@ -1916,14 +1916,14 @@ fn make_sampling_server() -> McpServer {
 #[test]
 fn sample_fails_fast_without_sampling_capability_declared() {
     let client = TestClient::new(make_sampling_server());
-    let init_resp = client.post("/mcp").body_text(
+    let init_resp = client.post("/mcp").body_json(
         r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#, // no capabilities.sampling
     ).send();
     let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
 
     let call_resp = client.post("/mcp")
         .header("Mcp-Session-Id", &session_id)
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
         .send();
     assert!(call_resp.body_text().contains("did not declare sampling support"), "unexpected body: {}", call_resp.body_text());
 }
@@ -1943,7 +1943,7 @@ fn sample_fails_without_a_session_id_even_with_sampling_declared() {
 #[test]
 fn sample_times_out_when_the_client_never_responds() {
     let client = TestClient::new(make_sampling_server());
-    let init_resp = client.post("/mcp").body_text(
+    let init_resp = client.post("/mcp").body_json(
         r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"sampling":{}}}}"#,
     ).send();
     let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
@@ -1951,7 +1951,7 @@ fn sample_times_out_when_the_client_never_responds() {
 
     let call_resp = client.post("/mcp")
         .header("Mcp-Session-Id", &session_id)
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
         .send();
     assert!(call_resp.body_text().contains("timed out"), "unexpected body: {}", call_resp.body_text());
 }
@@ -1961,7 +1961,7 @@ fn sample_full_round_trip_via_sse_and_post_response() {
     let srv_for_responder = make_sampling_server();
     let client = TestClient::new(srv_for_responder.clone());
 
-    let init_resp = client.post("/mcp").body_text(
+    let init_resp = client.post("/mcp").body_json(
         r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"sampling":{}}}}"#,
     ).send();
     let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
@@ -1990,7 +1990,7 @@ fn sample_full_round_trip_via_sse_and_post_response() {
 
     let call_resp = client.post("/mcp")
         .header("Mcp-Session-Id", &session_id)
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
         .send();
 
     responder.join().unwrap();
@@ -2005,7 +2005,7 @@ fn sample_error_response_is_surfaced_to_the_caller() {
     let srv_for_responder = make_sampling_server();
     let client = TestClient::new(srv_for_responder.clone());
 
-    let init_resp = client.post("/mcp").body_text(
+    let init_resp = client.post("/mcp").body_json(
         r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"sampling":{}}}}"#,
     ).send();
     let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
@@ -2028,7 +2028,7 @@ fn sample_error_response_is_surfaced_to_the_caller() {
 
     let call_resp = client.post("/mcp")
         .header("Mcp-Session-Id", &session_id)
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
         .send();
 
     responder.join().unwrap();
@@ -2050,14 +2050,14 @@ fn make_roots_server() -> McpServer {
 #[test]
 fn list_roots_fails_fast_without_roots_capability_declared() {
     let client = TestClient::new(make_roots_server());
-    let init_resp = client.post("/mcp").body_text(
+    let init_resp = client.post("/mcp").body_json(
         r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#, // no capabilities.roots
     ).send();
     let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
 
     let call_resp = client.post("/mcp")
         .header("Mcp-Session-Id", &session_id)
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_roots","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_roots","arguments":{}}}"#)
         .send();
     assert!(call_resp.body_text().contains("did not declare roots support"), "unexpected body: {}", call_resp.body_text());
 }
@@ -2077,7 +2077,7 @@ fn list_roots_fails_without_a_session_id_even_with_roots_declared() {
 #[test]
 fn list_roots_times_out_when_the_client_never_responds() {
     let client = TestClient::new(make_roots_server());
-    let init_resp = client.post("/mcp").body_text(
+    let init_resp = client.post("/mcp").body_json(
         r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"roots":{}}}}"#,
     ).send();
     let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
@@ -2085,7 +2085,7 @@ fn list_roots_times_out_when_the_client_never_responds() {
 
     let call_resp = client.post("/mcp")
         .header("Mcp-Session-Id", &session_id)
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_roots","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_roots","arguments":{}}}"#)
         .send();
     assert!(call_resp.body_text().contains("timed out"), "unexpected body: {}", call_resp.body_text());
 }
@@ -2095,7 +2095,7 @@ fn list_roots_full_round_trip_and_caches_within_the_session() {
     let srv_for_responder = make_roots_server();
     let client = TestClient::new(srv_for_responder.clone());
 
-    let init_resp = client.post("/mcp").body_text(
+    let init_resp = client.post("/mcp").body_json(
         r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"roots":{}}}}"#,
     ).send();
     let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
@@ -2121,14 +2121,14 @@ fn list_roots_full_round_trip_and_caches_within_the_session() {
 
     let first_call = client.post("/mcp")
         .header("Mcp-Session-Id", &session_id)
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_roots","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_roots","arguments":{}}}"#)
         .send();
     responder.join().unwrap();
     assert!(first_call.body_text().contains("file:///workspace"), "unexpected first call body: {}", first_call.body_text());
 
     let second_call = client.post("/mcp")
         .header("Mcp-Session-Id", &session_id)
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":3,"params":{"name":"get_roots","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":3,"params":{"name":"get_roots","arguments":{}}}"#)
         .send();
     assert!(second_call.body_text().contains("file:///workspace"), "expected the cached result: {}", second_call.body_text());
 }
@@ -2138,7 +2138,7 @@ fn roots_list_changed_notification_invalidates_the_cache() {
     let srv_for_responder = make_roots_server();
     let client = TestClient::new(srv_for_responder.clone());
 
-    let init_resp = client.post("/mcp").body_text(
+    let init_resp = client.post("/mcp").body_json(
         r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"roots":{}}}}"#,
     ).send();
     let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
@@ -2167,18 +2167,18 @@ fn roots_list_changed_notification_invalidates_the_cache() {
 
     let first_call = client.post("/mcp")
         .header("Mcp-Session-Id", &session_id)
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_roots","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"get_roots","arguments":{}}}"#)
         .send();
     assert!(first_call.body_text().contains("file:///workspace"), "unexpected first call body: {}", first_call.body_text());
 
     client.post("/mcp")
         .header("Mcp-Session-Id", &session_id)
-        .body_text(r#"{"jsonrpc":"2.0","method":"notifications/roots/list_changed"}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"notifications/roots/list_changed"}"#)
         .send();
 
     let second_call = client.post("/mcp")
         .header("Mcp-Session-Id", &session_id)
-        .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":3,"params":{"name":"get_roots","arguments":{}}}"#)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":3,"params":{"name":"get_roots","arguments":{}}}"#)
         .send();
 
     responder.join().unwrap();
@@ -2379,7 +2379,7 @@ mod oauth_tests {
         let token = token_with("my-client-id", 3600);
         let resp = client.post("/mcp")
             .header("Authorization", &format!("Bearer {token}"))
-            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
             .send();
         assert_eq!(resp.status(), 200);
     }
@@ -2389,7 +2389,7 @@ mod oauth_tests {
         let jwks_url = start_fake_jwks_server(&rsa_jwk_json("key1"));
         let client = TestClient::new(oauth_server(&jwks_url));
         let resp = client.post("/mcp")
-            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
             .send();
         assert_eq!(resp.status(), 401);
     }
@@ -2417,7 +2417,7 @@ mod oauth_tests {
 
         let resp = client.post("/mcp")
             .header("Authorization", &format!("Bearer {token}"))
-            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
             .send();
         assert_eq!(resp.status(), 401);
     }
@@ -2429,7 +2429,7 @@ mod oauth_tests {
         let token = token_with("someone-else", 3600);
         let resp = client.post("/mcp")
             .header("Authorization", &format!("Bearer {token}"))
-            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
             .send();
         assert_eq!(resp.status(), 401);
     }
@@ -2441,7 +2441,7 @@ mod oauth_tests {
         let token = token_with("my-client-id", -3600);
         let resp = client.post("/mcp")
             .header("Authorization", &format!("Bearer {token}"))
-            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
             .send();
         assert_eq!(resp.status(), 401);
     }
@@ -2477,7 +2477,7 @@ mod oauth_tests {
         let token = token_with("my-client-id", 3600);
         let resp = client.post("/mcp")
             .header("Authorization", &format!("Bearer {token}"))
-            .body_text(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"whoami","arguments":{}}}"#)
+            .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"whoami","arguments":{}}}"#)
             .send();
         assert_eq!(resp.status(), 200);
         assert!(resp.body_text().contains("user1"), "expected claims sub in response: {}", resp.body_text());
@@ -2495,7 +2495,7 @@ mod oauth_tests {
         // The correct *static* token is rejected — OAuth verification runs instead.
         let resp = client.post("/mcp")
             .header("Authorization", "Bearer static-secret")
-            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
             .send();
         assert_eq!(resp.status(), 401);
 
@@ -2503,7 +2503,7 @@ mod oauth_tests {
         let token = token_with("my-client-id", 3600);
         let resp = client.post("/mcp")
             .header("Authorization", &format!("Bearer {token}"))
-            .body_text(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
+            .body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#)
             .send();
         assert_eq!(resp.status(), 200);
     }
@@ -2517,4 +2517,42 @@ fn trailing_backslash_in_a_json_string_does_not_panic() {
     assert_eq!(None, crate::mcp::json_rpc::extract_raw(r#"{"id":"abc\"#, "id"));
     let server = McpServer::new("t", "1");
     let _ = server.handle_request(r#"[{"id":2,"method":"tools/call","params":"e\"#);
+}
+
+// ── #44: browser and token protections ───────────────────────────────────────
+
+#[test]
+fn an_empty_bearer_token_refuses_every_request() {
+    let client = TestClient::new(McpServer::new("srv", "1.0").require_bearer(""));
+    let body = r#"{"jsonrpc":"2.0","method":"ping","id":1}"#;
+    assert_eq!(401, client.post("/mcp").body_json(body).send().status());
+    assert_eq!(401, client.post("/mcp").header("Authorization", "Bearer ").body_json(body).send().status());
+}
+
+#[test]
+fn browser_origins_must_be_listed() {
+    let body = r#"{"jsonrpc":"2.0","method":"ping","id":1}"#;
+    let open = TestClient::new(McpServer::new("srv", "1.0"));
+    // No Origin (CLI / agent clients): allowed.
+    assert_eq!(200, open.post("/mcp").body_json(body).send().status());
+    // A browser page on another site (or a DNS-rebinding attack): refused.
+    assert_eq!(403, open.post("/mcp").header("Origin", "https://evil.example").body_json(body).send().status());
+    let listed = TestClient::new(McpServer::new("srv", "1.0").allowed_origins(["https://app.example/"]));
+    assert_eq!(200, listed.post("/mcp").header("Origin", "https://APP.example").body_json(body).send().status());
+    assert_eq!(403, listed.post("/mcp").header("Origin", "https://app.example.evil").body_json(body).send().status());
+}
+
+#[test]
+fn only_json_bodies_are_accepted() {
+    let client = TestClient::new(McpServer::new("srv", "1.0"));
+    let body = r#"{"jsonrpc":"2.0","method":"ping","id":1}"#;
+    // What a web page can send cross-site without a preflight.
+    for content_type in ["text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x", ""] {
+        let mut req = client.post("/mcp").body_text(body);
+        if !content_type.is_empty() {
+            req = req.header("Content-Type", content_type);
+        }
+        assert_eq!(415, req.send().status(), "{content_type:?}");
+    }
+    assert_eq!(200, client.post("/mcp").header("Content-Type", "application/json; charset=utf-8").body_text(body).send().status());
 }

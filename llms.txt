@@ -1301,7 +1301,8 @@ let app = App::new().mcp("my-server", "1.0.0")
               let b: f64 = rust_web_server::mcp::extract_arg(args, "b").unwrap_or_default().parse().unwrap_or(0.0);
               Ok(McpContent::text(format!("{}", a + b)))
           })
-    .require_bearer("my-secret-token")  // optional static Bearer auth
+    .require_bearer("my-secret-token")  // optional static Bearer auth (empty token = refuse all)
+    .allowed_origins(["https://app.example"])  // browser Origins allowed (others → 403); POST must be application/json
     .wrap(App::new());                  // fall through non-MCP requests to inner app
 
 // Serves POST /mcp (JSON-RPC 2.0, MCP Streamable HTTP transport).

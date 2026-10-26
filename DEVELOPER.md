@@ -1909,7 +1909,7 @@ fn main() {
 }
 ```
 
-`require_bearer(token)` enforces `Authorization: Bearer <token>` on every MCP request; set `MCP_TOKEN` in the environment. Requests from unknown clients receive a `401 Unauthorized` with `WWW-Authenticate: Bearer`.
+`require_bearer(token)` enforces `Authorization: Bearer <token>` on every MCP request; set `MCP_TOKEN` in the environment. Requests from unknown clients receive a `401 Unauthorized` with `WWW-Authenticate: Bearer`; an empty token refuses everything. `.allowed_origins([...])` lists the browser origins allowed to call the endpoint (any other `Origin` → `403`), and `POST /mcp` must be `application/json` (else `415`). The `rws` binary mounts its MCP tools only when `MCP_TOKEN` is set (`MCP_ALLOWED_ORIGINS` for browser origins).
 
 Use `.at("/custom/path")` to override the default `/mcp` endpoint. The bundled `rws` binary ships 8 built-in tools: `server_config`, `feature_flags`, `server_metrics`, `rate_limit_config`, `check_rate_limit`, `cors_config`, `list_static_files`, `reload_config`.
 
