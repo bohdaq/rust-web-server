@@ -126,6 +126,14 @@ content_type = "application/json*"   # Content-Type prefix match when ending wit
 | `/api/ping` | Only `/api/ping` (exact match) |
 | _(omitted)_ | All paths |
 
+Paths are normalized before any route is matched, and sent upstream in that
+form (since 17.113.1): percent-encoded unreserved characters are decoded
+(`/%61dmin` → `/admin`; `%2F` and other escapes stay encoded), repeated
+slashes collapse (`//admin` → `/admin`) and `.` / `..` segments are resolved
+(`/x/../admin` → `/admin`). So a route that protects `/admin/*` can't be
+skipped by spelling the path differently. `host` matches ignoring case, and
+ignoring the port unless the route names one.
+
 ### `[route.action]` — what to do on match
 
 The `type` field selects the action.

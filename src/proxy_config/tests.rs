@@ -1373,7 +1373,11 @@ root = "{}"
     let conn = make_conn("127.0.0.1");
     let traversal_uri = format!("/../{}", outside.file_name().unwrap().to_str().unwrap());
     let resp = app.execute(&make_request("GET", &traversal_uri), &conn).unwrap();
-    assert_eq!(resp.status_code, 403);
+    // Normalized to a path inside the root (#50) — not found there (it used
+    // to reach the static action's own check: 403). Never the outside file.
+    assert!(resp.status_code == 403 || resp.status_code == 404, "{}", resp.status_code);
+    let body: Vec<u8> = resp.content_range_list.into_iter().flat_map(|cr| cr.body).collect();
+    assert!(!String::from_utf8_lossy(&body).contains("outside secret"));
 
     std::fs::remove_dir_all(&dir).ok();
     std::fs::remove_file(&outside).ok();
@@ -2082,4 +2086,100 @@ fn an_undeclared_https_upstream_is_reached_over_tls() {
     let (app, _) = crate::proxy_config::builder::build(cfg);
     let _ = app.execute(&make_request("GET", "/"), &make_conn("127.0.0.1"));
     assert_eq!(0x16, rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap());
+}
+
+// ── #50: routes match a normalized path ──────────────────────────────────────
+
+#[test]
+fn bypass_spellings_reach_the_protected_route() {
+    // `/admin/*` is "protected" (answers 403 here); everything else goes to
+    // a catch-all. The catch-all must not get admin paths spelled oddly.
+    let cfg = ProxyConfig::from_str(
+        r#"
+[[route]]
+name = "admin"
+[route.match]
+path = "/admin/*"
+[route.action]
+type = "respond"
+[route.action.respond]
+status = 403
+body = "protected"
+
+[[route]]
+name = "catch-all"
+[route.match]
+path = "/*"
+[route.action]
+type = "respond"
+[route.action.respond]
+status = 200
+body = "public"
+"#,
+    );
+    let (app, _handles) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    for uri in ["/admin/users", "/%61dmin/users", "/%61%64%6D%69%6E/users", "//admin/users", "/x/../admin/users", "/./admin/users", "/admin//users", "/x/%2e%2e/admin/users", "/admin/users?a=1"] {
+        let resp = app.execute(&make_request("GET", uri), &conn).unwrap();
+        assert_eq!(403, resp.status_code, "{uri} skipped the protected route");
+    }
+    for uri in ["/public", "/administrator", "/%2Fadmin/users"] {
+        let resp = app.execute(&make_request("GET", uri), &conn).unwrap();
+        assert_eq!(200, resp.status_code, "{uri}");
+    }
+}
+
+#[test]
+fn request_targets_normalize_like_rfc_3986() {
+    use crate::proxy_config::normalize_request_target as n;
+    for (input, expected) in [
+        ("/a/b", "/a/b"),
+        ("/%61%62", "/ab"),
+        ("/%7e%2d%2E%5F", "/~-._"),
+        ("/a%2fb", "/a%2Fb"),
+        ("/a%20b", "/a%20b"),
+        ("//a///b/", "/a/b/"),
+        ("/a/./b/../c", "/a/c"),
+        ("/../../etc", "/etc"),
+        ("/a/..", "/"),
+        ("/a/b/.", "/a/b/"),
+        ("/a?x=../y//z", "/a?x=../y//z"),
+        ("/%zz/%4", "/%25zz/%254"),
+        ("/*26%%611", "/*26%25a1"),
+        ("/caf\u{e9}/./x", "/caf\u{e9}/x"),
+        ("*", "*"),
+    ] {
+        assert_eq!(expected, n(input), "{input}");
+    }
+    assert!(matches!(n("/already/clean?q=1"), std::borrow::Cow::Borrowed(_)));
+}
+
+#[test]
+fn route_hosts_match_without_case_or_port() {
+    let cfg = ProxyConfig::from_str(
+        r#"
+[[route]]
+name = "site"
+[route.match]
+host = "example.com"
+path = "/*"
+[route.action]
+type = "respond"
+[route.action.respond]
+status = 200
+body = "site"
+"#,
+    );
+    let (app, _handles) = crate::proxy_config::builder::build(cfg);
+    let conn = make_conn("127.0.0.1");
+    for host in ["example.com", "EXAMPLE.com", "example.com:8443"] {
+        let mut req = make_request("GET", "/");
+        req.headers.push(Header { name: "Host".to_string(), value: host.to_string() });
+        let body: Vec<u8> = app.execute(&req, &conn).unwrap().content_range_list.into_iter().flat_map(|cr| cr.body).collect();
+        assert_eq!(b"site".to_vec(), body, "{host}");
+    }
+    let mut other = make_request("GET", "/");
+    other.headers.push(Header { name: "Host".to_string(), value: "example.com.evil".to_string() });
+    let body: Vec<u8> = app.execute(&other, &conn).unwrap().content_range_list.into_iter().flat_map(|cr| cr.body).collect();
+    assert_ne!(b"site".to_vec(), body);
 }

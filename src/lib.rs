@@ -266,6 +266,15 @@ pub mod test_env {
 #[cfg(fuzzing)]
 #[doc(hidden)]
 pub mod fuzz_api {
+    /// Proxy route-matching normalization of a request target (#50): any
+    /// input, and normalizing twice changes nothing.
+    pub fn proxy_normalize_target(data: &[u8]) {
+        let Ok(target) = std::str::from_utf8(data) else { return };
+        let once = crate::proxy_config::normalize_request_target(target).into_owned();
+        let twice = crate::proxy_config::normalize_request_target(&once).into_owned();
+        assert_eq!(once, twice, "normalization is not idempotent for {:?}", target);
+    }
+
     /// The SAML XML parser (`sso::saml::xml`), fed IdP-supplied documents.
     #[cfg(feature = "sso-saml")]
     pub fn saml_xml_parse(xml: &str) {

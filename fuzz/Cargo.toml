@@ -100,3 +100,10 @@ name = "http1_framing"
 path = "fuzz_targets/http1_framing.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "proxy_normalize_target"
+path = "fuzz_targets/proxy_normalize_target.rs"
+test = false
+doc = false
+bench = false
