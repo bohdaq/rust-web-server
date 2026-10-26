@@ -9,6 +9,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Breaking
 
+- **The `rws` binary runs one runtime per core** (`RWS_CONFIG_RUNTIME=per-core`,
+  Unix): one single-threaded runtime per core on its own `SO_REUSEPORT`
+  socket, as nginx runs workers. On the fastest benchmark runners that is
+  where rws trailed nginx on requests per second; on slower machines it costs
+  more CPU per small request. `runtime = "shared"` / `RWS_CONFIG_RUNTIME=shared`
+  restores 17.x behaviour; library applications stay `shared` unless they opt in.
 - **`Header` fields are `Cow<'static, str>`** instead of `String`. Build with
   `Header::new(name, value)` or `.into()`; read with `&*h.value` /
   `h.value.as_ref()`.

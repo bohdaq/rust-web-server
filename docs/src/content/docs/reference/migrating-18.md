@@ -115,6 +115,16 @@ code mostly compiles unchanged. What to change:
 | `request.body = vec` | `request.body = vec.into()` |
 | `assert_eq!(b"x".to_vec(), request.body)` | unchanged (`Vec<u8> == Body` works) |
 
+## The `rws` binary runs one runtime per core
+
+The `rws` binary now starts one single-threaded runtime per core, each
+accepting on its own `SO_REUSEPORT` socket, like nginx's workers
+(`RWS_CONFIG_RUNTIME=per-core`, Unix). On fast CPUs this serves more
+requests per second; on slower ones it can cost more CPU per small request.
+To keep 17.x behaviour, set `runtime = "shared"` in `rws.config.toml` or
+`RWS_CONFIG_RUNTIME=shared`. Applications built on the library are
+unchanged: they stay `shared` unless they set it.
+
 ## Coming from 17.113.0 or earlier
 
 18.0 carries the 17.113.1 security fixes and the 17.113.2 conformance fixes.

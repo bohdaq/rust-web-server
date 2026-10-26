@@ -69,8 +69,8 @@ EXTENDED="${EXTENDED:-}"
 # instead of one per CPU.
 RWS_WORKERS="${RWS_WORKERS:-}"
 [ -n "$RWS_WORKERS" ] && export TOKIO_WORKER_THREADS="$RWS_WORKERS"
-# RWS_RUNTIME=per-core runs rws with one single-threaded runtime per worker
-# (RWS_CONFIG_RUNTIME) instead of the shared multi-threaded one.
+# RWS_RUNTIME=shared|per-core sets rws's RWS_CONFIG_RUNTIME (the binary's
+# default is per-core since 18.0.0).
 RWS_RUNTIME="${RWS_RUNTIME:-}"
 [ -n "$RWS_RUNTIME" ] && export RWS_CONFIG_RUNTIME="$RWS_RUNTIME"
 PERF="${PERF:-perf}"

@@ -35,8 +35,8 @@ on:
       rws_runtime:
         description: rws runtime (RWS_CONFIG_RUNTIME)
         type: choice
-        options: [shared, per-core]
-        default: shared
+        options: [per-core, shared]
+        default: per-core
 
 permissions:
   contents: read

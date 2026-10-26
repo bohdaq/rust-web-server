@@ -187,7 +187,7 @@ log_format              = "json"     # RWS_CONFIG_LOG_FORMAT: "json" (default) |
 max_body_size_in_bytes  = 10485760   # RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: 413 above this; 0 = unlimited
 open_file_cache_secs    = 1          # RWS_CONFIG_OPEN_FILE_CACHE_SECS: reuse open static files this long; 0 = off
 open_file_cache_strict  = true       # RWS_CONFIG_OPEN_FILE_CACHE_STRICT: false = trust size/mtime for that long (no fstat per request)
-runtime                 = "shared"   # RWS_CONFIG_RUNTIME: "per-core" = one single-threaded runtime per core (SO_REUSEPORT)
+runtime                 = "per-core" # RWS_CONFIG_RUNTIME: one single-threaded runtime per core (SO_REUSEPORT; the binary's default since 18.0.0); "shared" = one multi-threaded runtime
 csp                     = "default-src 'self'"   # RWS_CONFIG_CSP: Content-Security-Policy header
 security_headers        = true       # RWS_CONFIG_SECURITY_HEADERS: X-Frame-Options, Referrer-Policy, Permissions-Policy, default CSP
 nanos_headers           = false      # RWS_CONFIG_NANOS_HEADERS: Date-/Last-Modified-Unix-Epoch-Nanos

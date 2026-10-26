@@ -587,6 +587,7 @@ fn main() {
 #[tokio::main]
 async fn main() {
     exit_if_informational_flag();
+    rust_web_server::server::per_core::default_to_per_core();
     let (listener, pool) = Server::setup().expect("server setup failed");
 
     start_acme().await;
@@ -612,6 +613,7 @@ async fn main() {
 #[tokio::main]
 async fn main() {
     exit_if_informational_flag();
+    rust_web_server::server::per_core::default_to_per_core();
     let (listener, pool) = Server::setup().expect("server setup failed");
 
     start_acme().await;

@@ -4,7 +4,9 @@
 //! connection stays on the thread the kernel gave it to, so there's no work
 //! stealing, no cross-thread wake-ups and no idle workers searching for work.
 //!
-//! The default (`shared`) is tokio's multi-threaded runtime. `run_tls` and
+//! The `rws` binary runs per-core unless configured otherwise (since 18.0.0,
+//! [`default_to_per_core`]); for an application built on the library the
+//! default stays `shared`, tokio's multi-threaded runtime. `run_tls` and
 //! `run_plain` start the per-core accept loops ([`spawn`]) and keep the
 //! signals: SIGINT/SIGTERM stop every loop, SIGHUP reloads the config and
 //! hands the rebuilt TLS acceptor to every loop. HTTP/3, the redirect
@@ -19,7 +21,7 @@ use std::net::SocketAddr;
 
 use tokio::sync::watch;
 
-/// `RWS_CONFIG_RUNTIME`: `shared` (default) or `per-core`.
+/// `RWS_CONFIG_RUNTIME`: `shared` or `per-core` (the `rws` binary's default).
 pub const RWS_CONFIG_RUNTIME: &str = "RWS_CONFIG_RUNTIME";
 
 thread_local! {
@@ -32,6 +34,18 @@ thread_local! {
 pub fn enabled() -> bool {
     cfg!(unix)
         && std::env::var(RWS_CONFIG_RUNTIME).is_ok_and(|v| v.trim().eq_ignore_ascii_case("per-core"))
+}
+
+/// Make `per-core` the runtime unless `RWS_CONFIG_RUNTIME` is already set —
+/// what the `rws` binary does before reading its config file and flags, so
+/// `runtime = "shared"` there (or in the environment) still wins. Library
+/// applications don't call it: their handlers may keep tokio I/O in
+/// process-wide structures, which per-core runtimes don't share.
+pub fn default_to_per_core() {
+    if std::env::var_os(RWS_CONFIG_RUNTIME).is_none() {
+        std::env::set_var(RWS_CONFIG_RUNTIME, "per-core");
+        crate::server_config::invalidate();
+    }
 }
 
 /// How many per-core runtimes to start: `TOKIO_WORKER_THREADS` when set
@@ -140,6 +154,22 @@ mod tests {
         assert!(!enabled());
         std::env::set_var(RWS_CONFIG_RUNTIME, " Per-Core ");
         assert_eq!(cfg!(unix), enabled());
+        match before {
+            Some(v) => std::env::set_var(RWS_CONFIG_RUNTIME, v),
+            None => std::env::remove_var(RWS_CONFIG_RUNTIME),
+        }
+    }
+
+    #[test]
+    fn the_binary_defaults_to_per_core_unless_configured() {
+        let _g = crate::test_env::lock();
+        let before = std::env::var(RWS_CONFIG_RUNTIME).ok();
+        std::env::remove_var(RWS_CONFIG_RUNTIME);
+        default_to_per_core();
+        assert_eq!(Some("per-core".to_string()), std::env::var(RWS_CONFIG_RUNTIME).ok());
+        std::env::set_var(RWS_CONFIG_RUNTIME, "shared");
+        default_to_per_core();
+        assert_eq!(Some("shared".to_string()), std::env::var(RWS_CONFIG_RUNTIME).ok());
         match before {
             Some(v) => std::env::set_var(RWS_CONFIG_RUNTIME, v),
             None => std::env::remove_var(RWS_CONFIG_RUNTIME),

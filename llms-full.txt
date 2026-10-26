@@ -949,7 +949,7 @@ order.
 | `RWS_CONFIG_SERVE_DOTFILES` | `false` | boolean | Serve files and directories whose name starts with `.` (`.git/`, `.env`). Off by default since 17.113.1; `.well-known/` is always served. Read at startup. |
 | `RWS_CONFIG_OPEN_FILE_CACHE_SECS` | `1` | integer | How long an open static file is reused before its path is checked again (like nginx's `open_file_cache`). `0` turns the cache off. Edits in place are always served correctly; a replaced or deleted file is noticed within this many seconds. At most 128 files are held open. Read at startup; Unix only. |
 | `RWS_CONFIG_OPEN_FILE_CACHE_STRICT` | `true` | boolean | `true`: every static request checks the cached file's size and modification time (one `fstat`), so an edit in place is served at once. `false`: that check is reused for `RWS_CONFIG_OPEN_FILE_CACHE_SECS`, like nginx's `open_file_cache_valid` — about 0.7 µs less per request, but a file edited in place can be served stale (old size or bytes) for up to that long. Read at startup. |
-| `RWS_CONFIG_RUNTIME` | `shared` | string | Async builds, Unix only. `shared`: one multi-threaded tokio runtime (`TOKIO_WORKER_THREADS` workers) takes every connection. `per-core`: one single-threaded runtime per worker, each accepting on its own `SO_REUSEPORT` socket on the same port, like nginx's worker processes — a connection stays on one thread, with no work stealing or cross-thread wake-ups. On fast CPUs that's more throughput (on the benchmark's fastest runners +12–16% requests per second, and 4% less CPU per proxied request); on slower ones it costs about 12% more CPU per small request for a few percent more throughput. HTTP/3, the redirect listener and ACME stay on the main runtime; SIGHUP and shutdown work as usual. Read at startup. |
+| `RWS_CONFIG_RUNTIME` | `per-core` (`rws` binary; `shared` for library apps) | string | Async builds, Unix only. The `rws` binary runs `per-core` since 18.0.0 (`shared` before); an application built on the library stays `shared` unless it sets this. `shared`: one multi-threaded tokio runtime (`TOKIO_WORKER_THREADS` workers) takes every connection. `per-core`: one single-threaded runtime per worker, each accepting on its own `SO_REUSEPORT` socket on the same port, like nginx's worker processes — a connection stays on one thread, with no work stealing or cross-thread wake-ups. On fast CPUs that's more throughput (on the benchmark's fastest runners +12–16% requests per second, and 4% less CPU per proxied request); on slower ones it costs about 12% more CPU per small request for a few percent more throughput. HTTP/3, the redirect listener and ACME stay on the main runtime; SIGHUP and shutdown work as usual. Read at startup. |
 | `RWS_CONFIG_STATIC_CACHE_CONTROL` | `no-cache` | string | `Cache-Control` sent with static files (since 18.0.0; other responses keep `no-store, …`). The default lets browsers keep a file and revalidate it with `If-None-Match` / `If-Modified-Since`, which costs a `304` instead of the whole file. Set e.g. `public, max-age=3600` for assets with versioned names; an empty value sends the `no-store` default for static files too. |
 | `RWS_CONFIG_CLIENT_HINTS` | `false` | boolean | Send `Accept-CH`, `Critical-CH` and the client hints in `Vary` on every response (always on before 18.0.0). Off by default: they add ~700 bytes to every response, and `Critical-CH` makes Chromium retry a request that arrived without the hints. |
 | `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` | `0` | integer | Maximum accepted request body size in bytes. `0` means unlimited. When set, a request whose `Content-Length` exceeds this is rejected with `413 Payload Too Large` before any body bytes are read, and the connection is closed. Applies to HTTP/1.1, HTTP/2, and HTTP/3. |
@@ -1303,7 +1303,7 @@ log_format              = "json"     # RWS_CONFIG_LOG_FORMAT: "json" (default) |
 max_body_size_in_bytes  = 10485760   # RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES: 413 above this; 0 = unlimited
 open_file_cache_secs    = 1          # RWS_CONFIG_OPEN_FILE_CACHE_SECS: reuse open static files this long; 0 = off
 open_file_cache_strict  = true       # RWS_CONFIG_OPEN_FILE_CACHE_STRICT: false = trust size/mtime for that long (no fstat per request)
-runtime                 = "shared"   # RWS_CONFIG_RUNTIME: "per-core" = one single-threaded runtime per core (SO_REUSEPORT)
+runtime                 = "per-core" # RWS_CONFIG_RUNTIME: one single-threaded runtime per core (SO_REUSEPORT; the binary's default since 18.0.0); "shared" = one multi-threaded runtime
 csp                     = "default-src 'self'"   # RWS_CONFIG_CSP: Content-Security-Policy header
 security_headers        = true       # RWS_CONFIG_SECURITY_HEADERS: X-Frame-Options, Referrer-Policy, Permissions-Policy, default CSP
 nanos_headers           = false      # RWS_CONFIG_NANOS_HEADERS: Date-/Last-Modified-Unix-Epoch-Nanos
@@ -18107,6 +18107,16 @@ code mostly compiles unchanged. What to change:
 | `String::from_utf8(request.body)` | `String::from_utf8(request.body.to_vec())` |
 | `request.body = vec` | `request.body = vec.into()` |
 | `assert_eq!(b"x".to_vec(), request.body)` | unchanged (`Vec<u8> == Body` works) |
+
+## The `rws` binary runs one runtime per core
+
+The `rws` binary now starts one single-threaded runtime per core, each
+accepting on its own `SO_REUSEPORT` socket, like nginx's workers
+(`RWS_CONFIG_RUNTIME=per-core`, Unix). On fast CPUs this serves more
+requests per second; on slower ones it can cost more CPU per small request.
+To keep 17.x behaviour, set `runtime = "shared"` in `rws.config.toml` or
+`RWS_CONFIG_RUNTIME=shared`. Applications built on the library are
+unchanged: they stay `shared` unless they set it.
 
 ## Coming from 17.113.0 or earlier
 
