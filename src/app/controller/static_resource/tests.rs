@@ -861,3 +861,59 @@ fn a_symlink_out_of_the_root_is_not_followed() {
     assert_eq!(200, static_status(&format!("/{}", inside_name)));
 }
 
+
+// ── #55: the request path is percent-decoded once ───────────────────────────
+
+#[test]
+fn percent_encoded_names_are_found() {
+    let file = crate::test_env::TempPath::new_in_cwd("spaced name.txt");
+    std::fs::write(&*file, "spaced").unwrap();
+    let name = file.file_name().unwrap().to_string_lossy().to_string();
+    assert!(name.contains(' '));
+    assert_eq!(200, static_status(&format!("/{}", name.replace(' ', "%20"))));
+    // Decoded once: `%2520` is a literal `%20`, which isn't this file.
+    assert_eq!(404, static_status(&format!("/{}", name.replace(' ', "%2520"))));
+    assert_eq!(200, static_status("/Cargo%2Etoml"));
+}
+
+#[test]
+fn encoded_traversal_and_hidden_names_are_refused() {
+    let name = std::env::current_dir().unwrap().file_name().unwrap().to_string_lossy().to_string();
+    assert_eq!(404, static_status(&format!("/%2e%2e/{}/Cargo.toml", name)));
+    assert_eq!(404, static_status(&format!("/%2E%2E%2F{}%2FCargo.toml", name)));
+    assert_eq!(404, static_status("/%2egitignore"));
+    assert_eq!(404, static_status("/rws.config%2Etoml"));
+    assert_eq!(404, static_status("/Cargo.toml%00.html"));
+}
+
+#[test]
+fn percent_decode_path_rules() {
+    use super::percent_decode_path;
+    assert!(matches!(percent_decode_path("/plain/path"), Ok(std::borrow::Cow::Borrowed("/plain/path"))));
+    assert_eq!("/a b", percent_decode_path("/a%20b").unwrap());
+    assert_eq!("/a+b", percent_decode_path("/a+b").unwrap());
+    assert_eq!("/100%", percent_decode_path("/100%").unwrap());
+    assert_eq!("/%zz%4", percent_decode_path("/%zz%4").unwrap());
+    assert_eq!("/é", percent_decode_path("/%C3%A9").unwrap());
+    assert!(percent_decode_path("/%FF").is_err());
+}
+
+#[test]
+fn directory_listing_links_resolve() {
+    use crate::application::Application;
+    let dir = crate::test_env::TempPath::new_in_cwd("listing_dir");
+    std::fs::create_dir(&*dir).unwrap();
+    std::fs::write(dir.join("a b&c.txt"), "x").unwrap();
+    let dir_name = dir.file_name().unwrap().to_string_lossy().to_string();
+    let request = Request { method: "GET".into(), request_uri: format!("/{}/", dir_name), http_version: "HTTP/1.1".into(), headers: vec![], body: vec![] };
+    let conn = ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None };
+    let listing = crate::app::App::new().execute(&request, &conn).unwrap();
+    let html = String::from_utf8_lossy(&listing.content_range_list[0].body).to_string();
+    let href = html.split("href=\"").skip(1)
+        .map(|rest| rest.split('"').next().unwrap())
+        .find(|h| h.contains("a%20b"))
+        .unwrap_or_else(|| panic!("no link to the file in {html}"))
+        .replace("&amp;", "&");
+    let target = if href.starts_with('/') { href } else { format!("/{}/{}", dir_name, href) };
+    assert_eq!(200, static_status(&target), "{target}");
+}

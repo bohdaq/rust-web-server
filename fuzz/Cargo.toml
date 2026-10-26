@@ -107,3 +107,10 @@ path = "fuzz_targets/proxy_normalize_target.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "static_path_decode"
+path = "fuzz_targets/static_path_decode.rs"
+test = false
+doc = false
+bench = false
