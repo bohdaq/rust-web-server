@@ -1,5 +1,6 @@
 use file_ext::FileExt;
 use crate::controller::Controller;
+use crate::header::Header;
 use crate::mime_type::MimeType;
 use crate::range::Range;
 use crate::request::Request;
@@ -13,7 +14,21 @@ impl Controller for NotFoundController {
         true
     }
 
-    fn process(_request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
+    fn process(request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
+        // A file that exists, asked for with a method static files don't
+        // take (POST, PUT, DELETE…): 405 with the methods that work, not
+        // 404 (RFC 9110 §15.5.6, #56).
+        if NotFoundController::is_static_path_with_other_method(request) {
+            response.status_code = *STATUS_CODE_REASON_PHRASE.n405_method_not_allowed.status_code;
+            response.reason_phrase = STATUS_CODE_REASON_PHRASE.n405_method_not_allowed.reason_phrase.to_string();
+            response.headers.push(Header { name: Header::_ALLOW.into(), value: NotFoundController::STATIC_ALLOW.into() });
+            response.content_range_list = vec![Range::get_content_range(
+                b"405 Method Not Allowed".to_vec(),
+                MimeType::TEXT_PLAIN.to_string(),
+            )];
+            return response;
+        }
+
         response.status_code = *STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase.to_string();
 
@@ -52,6 +67,26 @@ impl Controller for NotFoundController {
         }
 
         response
+    }
+}
+
+impl NotFoundController {
+    /// The `Allow` value for a static file.
+    pub const STATIC_ALLOW: &'static str = "GET, HEAD, OPTIONS";
+
+    /// `true` when the request names a file or directory the static server
+    /// would serve, with a method other than GET, HEAD or OPTIONS.
+    fn is_static_path_with_other_method(request: &Request) -> bool {
+        use crate::request::METHOD;
+        if request.method == METHOD.get || request.method == METHOD.head || request.method == METHOD.options {
+            return false;
+        }
+        let Ok(components) = crate::url::URL::parse_request_target(&request.request_uri) else { return false };
+        if components.path == "/" {
+            return false;
+        }
+        let Ok(fs_path) = crate::app::controller::static_resource::static_fs_path(&components.path) else { return false };
+        std::fs::metadata(&fs_path).is_ok() && crate::app::controller::static_resource::inside_root(&fs_path)
     }
 }
 

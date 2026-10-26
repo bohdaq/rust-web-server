@@ -1134,3 +1134,23 @@ fn one_satisfiable_range_is_enough_and_416_names_the_length() {
     let content_range = none.headers.iter().find(|h| h.name == Header::_CONTENT_RANGE).map(|h| h.value.to_string());
     assert_eq!(Some(format!("bytes */{len}")), content_range);
 }
+
+#[test]
+fn an_unsupported_method_on_a_file_is_405_with_allow() {
+    use crate::application::Application;
+    let conn = ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None };
+    let send = |method: &str, uri: &str| {
+        let request = Request { method: method.into(), request_uri: uri.into(), http_version: "HTTP/1.1".into(), headers: vec![], body: vec![] };
+        crate::app::App::new().execute(&request, &conn).unwrap()
+    };
+    for method in ["POST", "PUT", "DELETE", "PATCH"] {
+        let response = send(method, "/Cargo.toml");
+        assert_eq!(405, response.status_code, "{method}");
+        let allow = response.headers.iter().find(|h| h.name == Header::_ALLOW).map(|h| h.value.to_string());
+        assert_eq!(Some("GET, HEAD, OPTIONS".to_string()), allow);
+    }
+    // A path that doesn't exist, or one outside the root, stays 404.
+    assert_eq!(404, send("POST", "/no-such-file.txt").status_code);
+    assert_eq!(404, send("DELETE", "/../etc/passwd").status_code);
+    assert_eq!(404, send("POST", "/rws.config.toml").status_code);
+}
