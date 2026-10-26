@@ -9,7 +9,15 @@ Security problems: please don't open a public issue — see [SECURITY.md](SECURI
 
 ## Build and test
 
-You need Rust 1.88 or newer.
+You need Rust 1.88 or newer. On a fresh Debian/Ubuntu box:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # install Rust
+sudo apt install build-essential                                 # C linker + headers (aws-lc-rs needs them)
+git clone https://github.com/bohdaq/rust-web-server.git && cd rust-web-server
+```
+
+Then:
 
 ```bash
 cargo build                                            # default: HTTP/1.1 + HTTP/2 + HTTP/3 + TLS
