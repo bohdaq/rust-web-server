@@ -93,6 +93,17 @@ impl Controller for StaticResourceController {
     }
 
     fn process(request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
+        // A Range with an If-Range that no longer matches is answered as if
+        // there were no Range: the whole, current file (#56).
+        let without_stale_range;
+        let request = if range_is_stale(request) {
+            let mut copy = request.clone();
+            copy.headers.retain(|h| !h.name.eq_ignore_ascii_case(Header::_RANGE));
+            without_stale_range = copy;
+            &without_stale_range
+        } else {
+            request
+        };
         if let Some(served) = StaticResourceController::serve_regular_file(request, &mut response) {
             return served;
         }
@@ -852,6 +863,28 @@ pub(crate) fn if_none_match_matches(header_value: &str, etag: &str) -> bool {
         let candidate = candidate.trim();
         candidate == "*" || (!candidate.is_empty() && opaque(candidate) == current)
     })
+}
+
+/// `true` when the request has a `Range` and an `If-Range` that doesn't
+/// match the file as it is now (RFC 9110 §13.1.5): an entity tag must match
+/// the current `ETag` strongly (a weak tag never does); a date never matches,
+/// since no `Last-Modified` is sent to compare it with. Then the `Range` is
+/// ignored and the whole file is sent — the client's piece is out of date.
+pub(crate) fn range_is_stale(request: &Request) -> bool {
+    let Some(if_range) = request.get_header(Header::_IF_RANGE.to_string()) else { return false };
+    if request.get_header(Header::_RANGE.to_string()).is_none() {
+        return false;
+    }
+    let validator = if_range.value.trim();
+    if !validator.starts_with('"') {
+        return true;
+    }
+    let Ok(components) = URL::parse_request_target(&request.request_uri) else { return true };
+    let Ok(fs_path) = static_fs_path(&components.path) else { return true };
+    match (file_modified_utc(&fs_path), metadata(&fs_path)) {
+        (Ok(modified), Ok(md)) => validator != format!("\"{}-{}\"", modified, md.len()),
+        _ => true,
+    }
 }
 
 /// `FileExt::get_static_filepath` without the per-call `current_dir()`:

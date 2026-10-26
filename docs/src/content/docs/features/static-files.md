@@ -36,6 +36,10 @@ the whole file as one range, so a response never holds more than the file
 Conditional requests: every file response carries an `ETag`. `If-None-Match`
 takes a list of tags or `*` and compares weakly (`W/"x"` matches `"x"`), as
 RFC 9110 §13.1.2 requires; a match is a `304 Not Modified` (17.113.2).
+A `Range` with `If-Range` is honored only while the `If-Range` tag strongly
+matches the current `ETag`; otherwise (another tag, a weak one, or a date)
+the whole file is sent with `200`, so a client never splices a piece of a
+newer file onto an older download.
 
 ```bash
 mkdir www && echo "<h1>Hello</h1>" > www/index.html

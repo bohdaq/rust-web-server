@@ -965,3 +965,22 @@ fn a_listed_or_weak_etag_gets_304() {
     assert_eq!(304, get_with("/Cargo.toml", vec![("If-None-Match", &format!("W/{etag}"))]).status_code);
     assert_eq!(200, get_with("/Cargo.toml", vec![("If-None-Match", "\"x\", \"y\"")]).status_code);
 }
+
+#[test]
+fn if_range_with_a_stale_validator_sends_the_whole_file() {
+    let whole = get_with("/Cargo.toml", vec![]);
+    let etag = etag_of(&whole);
+    let len = whole.content_range_list[0].body.len();
+    // Current strong tag: the range is honored.
+    let partial = get_with("/Cargo.toml", vec![("Range", "bytes=0-9"), ("If-Range", &etag)]);
+    assert_eq!(206, partial.status_code);
+    assert_eq!(10, partial.content_range_list[0].body.len());
+    // Another tag, the weak form, or a date: the whole file, 200.
+    for stale in ["\"0-0\"".to_string(), format!("W/{etag}"), "Sat, 01 Jan 2000 00:00:00 GMT".to_string()] {
+        let response = get_with("/Cargo.toml", vec![("Range", "bytes=0-9"), ("If-Range", &stale)]);
+        assert_eq!(200, response.status_code, "If-Range: {stale}");
+        assert_eq!(len, response.content_range_list[0].body.len());
+    }
+    // If-Range without Range changes nothing.
+    assert_eq!(200, get_with("/Cargo.toml", vec![("If-Range", "\"0-0\"")]).status_code);
+}
