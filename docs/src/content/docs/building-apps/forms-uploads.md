@@ -229,8 +229,10 @@ let app = App::with_state(())
   `accepts_streamed_body` says so. The built-in header-only layers (access
   log, rate limit, blocklist, IP filter, request id, metrics, maintenance,
   cache, basic/JWT/forward auth) do; a layer that reads the body must not.
-- Served by the async HTTP/1.1 server (plain and TLS). HTTP/2 and HTTP/3,
-  and the HTTP/1.1-only build, read the body first as before.
+- Served over HTTP/1.1 (plain and TLS) and HTTP/2. On HTTP/2 the stream's
+  flow-control window is given back only as the handler reads, so a client
+  is never more than one window (64 KiB) ahead of it. HTTP/3 and the
+  HTTP/1.1-only build read the body first as before.
 - `FormMultipartData::parse` still needs the whole body; for multipart
   uploads of large files, read the body with `body_bytes()` only up to a
   size you accept, or upload the raw file instead of a form.

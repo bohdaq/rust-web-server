@@ -71,8 +71,9 @@ pub trait Application {
     /// decide from the method, path and headers.
     ///
     /// Default `false`: the body is read first, as always. Async HTTP/1.1
-    /// and HTTP/2 honour it; the HTTP/1.1-only build and HTTP/3 read the
-    /// body first regardless. Wrappers answer `true` only when every layer
+    /// and HTTP/2 honour it (HTTP/2 credits the stream's window back as the
+    /// handler reads); the HTTP/1.1-only build and HTTP/3 read the body
+    /// first regardless. Wrappers answer `true` only when every layer
     /// leaves the body alone ([`Middleware::accepts_streamed_body`]).
     ///
     /// [`Body::Stream`]: crate::request::Body::Stream

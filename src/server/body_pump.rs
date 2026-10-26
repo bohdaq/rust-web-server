@@ -24,16 +24,34 @@ pub(crate) type BodySender = mpsc::Sender<io::Result<Vec<u8>>>;
 /// A channel whose receiving end is a streamed [`Body`].
 pub(crate) fn body_channel() -> (BodySender, Body) {
     let (tx, rx) = mpsc::channel(BODY_CHANNEL_CHUNKS);
-    (tx, Body::stream(ChannelBody { rx, chunk: Vec::new(), pos: 0, failed: None }))
+    (tx, Body::stream(ChannelBody { rx: Rx::Bounded(rx), chunk: Vec::new(), pos: 0, failed: None, on_read: None }))
+}
+
+/// The sending side of [`flow_controlled_body_channel`].
+pub(crate) type UnboundedBodySender = mpsc::UnboundedSender<io::Result<Vec<u8>>>;
+
+/// For HTTP/2, where flow control bounds what the client may send: an
+/// unbounded channel, and `on_read(n)` after every read so the connection
+/// can give the client `n` bytes of window back — the client is never more
+/// than one window ahead of the handler.
+pub(crate) fn flow_controlled_body_channel(on_read: impl Fn(usize) + Send + 'static) -> (UnboundedBodySender, Body) {
+    let (tx, rx) = mpsc::unbounded_channel();
+    (tx, Body::stream(ChannelBody { rx: Rx::Unbounded(rx), chunk: Vec::new(), pos: 0, failed: None, on_read: Some(Box::new(on_read)) }))
+}
+
+enum Rx {
+    Bounded(mpsc::Receiver<io::Result<Vec<u8>>>),
+    Unbounded(mpsc::UnboundedReceiver<io::Result<Vec<u8>>>),
 }
 
 /// Blocking reader over the channel (handlers run on blocking threads).
 struct ChannelBody {
-    rx: mpsc::Receiver<io::Result<Vec<u8>>>,
+    rx: Rx,
     chunk: Vec<u8>,
     pos: usize,
     /// The error that ended the stream, repeated on every later read.
     failed: Option<(io::ErrorKind, String)>,
+    on_read: Option<Box<dyn Fn(usize) + Send>>,
 }
 
 impl Read for ChannelBody {
@@ -42,7 +60,11 @@ impl Read for ChannelBody {
             return Err(io::Error::new(*kind, message.clone()));
         }
         while self.pos >= self.chunk.len() {
-            match self.rx.blocking_recv() {
+            let next = match &mut self.rx {
+                Rx::Bounded(rx) => rx.blocking_recv(),
+                Rx::Unbounded(rx) => rx.blocking_recv(),
+            };
+            match next {
                 Some(Ok(next)) => {
                     self.chunk = next;
                     self.pos = 0;
@@ -57,6 +79,9 @@ impl Read for ChannelBody {
         let n = out.len().min(self.chunk.len() - self.pos);
         out[..n].copy_from_slice(&self.chunk[self.pos..self.pos + n]);
         self.pos += n;
+        if let Some(on_read) = &self.on_read {
+            on_read(n);
+        }
         Ok(n)
     }
 }
@@ -88,6 +113,22 @@ mod tests {
         let mut out = String::new();
         body.into_reader().read_to_string(&mut out).unwrap();
         assert_eq!("hello world", out);
+    }
+
+    #[test]
+    fn a_flow_controlled_channel_reports_reads() {
+        let reported = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = reported.clone();
+        let (tx, body) = flow_controlled_body_channel(move |n| { counter.fetch_add(n, std::sync::atomic::Ordering::SeqCst); });
+        tx.send(Ok(b"0123456789".to_vec())).unwrap();
+        drop(tx);
+        let mut reader = body.into_reader();
+        let mut buf = [0u8; 4];
+        assert_eq!(4, reader.read(&mut buf).unwrap());
+        assert_eq!(4, reported.load(std::sync::atomic::Ordering::SeqCst));
+        let mut rest = Vec::new();
+        reader.read_to_end(&mut rest).unwrap();
+        assert_eq!(10, reported.load(std::sync::atomic::Ordering::SeqCst));
     }
 
     #[test]

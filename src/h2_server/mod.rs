@@ -102,6 +102,7 @@ mod code {
     pub const STREAM_CLOSED: u32 = 0x5;
     pub const FRAME_SIZE_ERROR: u32 = 0x6;
     pub const REFUSED_STREAM: u32 = 0x7;
+    pub const CANCEL: u32 = 0x8;
     pub const COMPRESSION_ERROR: u32 = 0x9;
     pub const ENHANCE_YOUR_CALM: u32 = 0xb;
 }
@@ -143,6 +144,16 @@ struct Stream {
     /// Bytes of the client's DATA not yet credited back on this stream.
     recv_unacked: u32,
     outgoing: Option<Outgoing>,
+    /// A body streamed to a handler that is already running (#31): DATA
+    /// goes here, and the window is credited back only as the handler reads.
+    streamed: Option<StreamedBody>,
+}
+
+/// The connection's side of a streamed request body.
+struct StreamedBody {
+    tx: crate::server::body_pump::UnboundedBodySender,
+    content_length: Option<u64>,
+    received: u64,
 }
 
 impl Stream {
@@ -176,6 +187,8 @@ struct Conn {
     max_body_size: u64,
     /// Requests running in spawned tasks.
     in_flight: usize,
+    /// Streamed-body handlers report bytes read here: `(stream, bytes)`.
+    credit_tx: mpsc::UnboundedSender<(u32, usize)>,
 }
 
 /// Serve one HTTP/2 connection (after ALPN chose `h2`).
@@ -195,6 +208,7 @@ where
         request_size: 0,
         sni_hostname,
     };
+    let (credit_tx, mut credit_rx) = mpsc::unbounded_channel::<(u32, usize)>();
     let mut conn = Conn {
         out: Vec::with_capacity(16 * 1024),
         decoder: hpack::Decoder::new(hpack::DEFAULT_TABLE_SIZE),
@@ -212,6 +226,7 @@ where
         resets: (Instant::now(), 0),
         max_body_size: crate::entry_point::get_max_body_size(),
         in_flight: 0,
+        credit_tx,
     };
     let (done_tx, mut done_rx) = mpsc::unbounded_channel::<Completed>();
 
@@ -250,6 +265,7 @@ where
             read = io.read_buf(&mut input) => Event::Read(read),
             Some(done) = done_rx.recv() => Event::Done(done),
             chunk = next_chunk(&mut conn.streams) => Event::Chunk(chunk),
+            Some((id, n)) = credit_rx.recv() => Event::Credit(id, n),
             _ = &mut idle, if waiting_on_client => Event::Idle,
         };
         if !matches!(event, Event::Idle) {
@@ -283,6 +299,16 @@ where
                 conn.take_chunk(id, chunk);
                 Ok(())
             }
+            Event::Credit(id, n) => {
+                // A streamed body's handler read `n` bytes: the client may
+                // send that much more on the stream.
+                if let Some(s) = conn.streams.get_mut(&id) {
+                    if s.receiving {
+                        s.recv_unacked = s.recv_unacked.saturating_add(n as u32);
+                    }
+                }
+                Ok(())
+            }
         };
         if let Err(e) = step {
             break Err(e);
@@ -294,6 +320,12 @@ where
         conn.credit_windows();
     };
 
+    // Handlers still reading a body get an error, not a body that just ends.
+    for s in conn.streams.values_mut() {
+        if let Some(streamed) = s.streamed.take() {
+            let _ = streamed.tx.send(Err(std::io::Error::new(std::io::ErrorKind::ConnectionAborted, "the HTTP/2 connection closed mid-body")));
+        }
+    }
     if let Err(ConnError(error)) = result {
         conn.goaway(error);
         let _ = io.write_all(&conn.out).await;
@@ -305,6 +337,8 @@ where
 
 enum Event {
     Read(std::io::Result<usize>),
+    /// A streamed body's handler read this many bytes.
+    Credit(u32, usize),
     /// Nothing from the client for READ_TIMEOUT while nothing was running.
     Idle,
     Done(Completed),
@@ -445,7 +479,10 @@ impl Conn {
                 if stream > self.last_stream_id {
                     return Err(ConnError(code::PROTOCOL_ERROR)); // idle
                 }
-                if self.streams.remove(&stream).is_some() {
+                if let Some(mut removed) = self.streams.remove(&stream) {
+                    if let Some(streamed) = removed.streamed.take() {
+                        let _ = streamed.tx.send(Err(std::io::Error::new(std::io::ErrorKind::ConnectionAborted, "the client reset the stream mid-body")));
+                    }
                     self.count_reset();
                 }
                 Ok(())
@@ -672,6 +709,19 @@ impl Conn {
             return Ok(());
         };
         self.open(stream, true);
+        if !end_stream {
+            let head = Request {
+                method: incoming.method.clone(),
+                request_uri: incoming.path.clone(),
+                http_version: VERSION.http_2_0.to_string(),
+                headers: incoming.headers.clone(),
+                body: Default::default(),
+            };
+            if app.streams_body(&head, connection) {
+                self.start_streamed(stream, head, incoming.content_length, app, connection, peer, done);
+                return Ok(());
+            }
+        }
         if let Some(s) = self.streams.get_mut(&stream) {
             s.incoming = Some(incoming);
         }
@@ -679,6 +729,41 @@ impl Conn {
             self.request_complete(stream, app, connection, peer, done)?;
         }
         Ok(())
+    }
+
+    /// Run a request whose body the application streams (#31) now, on the
+    /// blocking pool, with DATA to come through a channel.
+    #[allow(clippy::too_many_arguments)]
+    fn start_streamed<A: Application + Send + Clone + 'static>(
+        &mut self,
+        stream: u32,
+        mut request: Request,
+        content_length: Option<u64>,
+        app: &A,
+        connection: &ConnectionInfo,
+        peer: SocketAddr,
+        done: &mpsc::UnboundedSender<Completed>,
+    ) {
+        let credit = self.credit_tx.clone();
+        let (tx, body) = crate::server::body_pump::flow_controlled_body_channel(move |n| {
+            let _ = credit.send((stream, n));
+        });
+        request.body = body;
+        if let Some(s) = self.streams.get_mut(&stream) {
+            s.streamed = Some(StreamedBody { tx, content_length, received: 0 });
+        }
+        self.in_flight += 1;
+        let (app, connection, done) = (app.clone(), connection.clone(), done.clone());
+        tokio::spawn(async move {
+            let response = match crate::server::http1_async::execute_blocking(app, request, connection).await {
+                Ok((request, result)) => finish(request, Ok(result), peer),
+                Err(e) => {
+                    eprintln!("Handler panicked on H2 stream: {}", e);
+                    None
+                }
+            };
+            let _ = done.send((stream, response));
+        });
     }
 
     fn open(&mut self, stream: u32, receiving: bool) {
@@ -692,6 +777,7 @@ impl Conn {
                 send_window: self.peer_initial_window,
                 recv_unacked: 0,
                 outgoing: None,
+                streamed: None,
             },
         );
     }
@@ -733,6 +819,39 @@ impl Conn {
         };
         if !s.receiving {
             self.reset(stream, code::STREAM_CLOSED);
+            return Ok(());
+        }
+        if let Some(streamed) = s.streamed.as_mut() {
+            // Padding is credited now; the data as the handler reads it.
+            s.recv_unacked += (payload.len() - data.len()) as u32;
+            streamed.received += data.len() as u64;
+            let end = flags & frame::END_STREAM != 0;
+            let too_large = max_body > 0 && streamed.received > max_body;
+            let wrong_length = end && streamed.content_length.is_some_and(|len| len != streamed.received);
+            let error = if too_large {
+                Some(format!("the request body exceeds the {} byte limit", max_body))
+            } else if wrong_length {
+                Some("the request body doesn't match its content-length".to_string())
+            } else {
+                None
+            };
+            let delivered = !data.is_empty() && error.is_none() && streamed.tx.send(Ok(data.to_vec())).is_ok();
+            if !data.is_empty() && !delivered {
+                // Nobody will read it: give the window back at once.
+                s.recv_unacked += data.len() as u32;
+            }
+            if let Some(message) = error {
+                let _ = streamed.tx.send(Err(std::io::Error::new(std::io::ErrorKind::InvalidData, message)));
+                s.streamed = None;
+                self.reset(stream, if too_large { code::CANCEL } else { code::PROTOCOL_ERROR });
+                return Ok(());
+            }
+            if end {
+                s.streamed = None; // the sender drops: the handler reads to the end
+                s.receiving = false;
+                s.recv_unacked = 0;
+                self.close_if_done(stream);
+            }
             return Ok(());
         }
         s.recv_unacked += payload.len() as u32;
@@ -971,7 +1090,10 @@ impl Conn {
     /// `true` when no request is running and no streamed body is being
     /// produced: the connection can only move if the client does.
     fn waiting_on_client(&self) -> bool {
-        self.in_flight == 0
+        // A handler reading a streamed body that is still arriving waits on
+        // the client too: a client that stalls mid-upload times out.
+        let waiting_for_body = self.streams.values().filter(|s| s.streamed.is_some() && s.receiving).count();
+        self.in_flight <= waiting_for_body
             && self.streams.values().all(|s| s.outgoing.as_ref().is_none_or(|o| o.producer.is_none()))
     }
 

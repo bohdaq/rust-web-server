@@ -345,3 +345,85 @@ async fn mcp_sse_stream_over_http2() {
     let text = String::from_utf8_lossy(&chunk);
     assert!(text.contains("data: ") && text.contains("notifications/test"), "{text}");
 }
+
+// ── #31: streamed request bodies over HTTP/2 ─────────────────────────────────
+
+/// Streams every POST body; answers with the byte count, or sends the read
+/// error to `errors`.
+#[derive(Clone)]
+struct StreamingApp {
+    errors: std::sync::mpsc::Sender<String>,
+}
+
+impl Application for StreamingApp {
+    fn execute(&self, request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
+        use std::io::Read;
+        let mut body = &request.body;
+        let mut total = 0usize;
+        let mut buf = [0u8; 4096];
+        loop {
+            match body.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => total += n,
+                Err(e) => {
+                    let _ = self.errors.send(e.to_string());
+                    return Ok(Response::text(STATUS_CODE_REASON_PHRASE.n400_bad_request, &e.to_string()));
+                }
+            }
+        }
+        Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &format!("streamed {total} is_stream={}", request.body.is_stream())))
+    }
+
+    fn streams_body(&self, request: &Request, _connection: &ConnectionInfo) -> bool {
+        request.method == "POST"
+    }
+}
+
+async fn streaming_client() -> (h2::client::SendRequest<Bytes>, std::sync::mpsc::Receiver<String>) {
+    let (errors, rx) = std::sync::mpsc::channel();
+    let (client_io, server_io) = tokio::io::duplex(1 << 20);
+    tokio::spawn(super::handle_connection(server_io, peer(), None, StreamingApp { errors }));
+    let (send, connection) = h2::client::handshake(client_io).await.unwrap();
+    tokio::spawn(connection);
+    (send, rx)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_body_bigger_than_the_window_streams_to_the_handler() {
+    // 1 MiB through a 64 KiB stream window: it only completes if reading
+    // credits the window back.
+    let (send, _errors) = streaming_client().await;
+    let request = http::Request::post("https://x/upload").body(()).unwrap();
+    let (response, mut body) = send.ready().await.unwrap().send_request(request, false).unwrap();
+    for _ in 0..16 {
+        body.send_data(Bytes::from(vec![b'q'; 64 * 1024]), false).unwrap();
+    }
+    body.send_data(Bytes::new(), true).unwrap();
+    let (parts, out) = tokio::time::timeout(std::time::Duration::from_secs(10), read(response)).await.expect("stalled");
+    assert_eq!(200, parts.status.as_u16());
+    assert_eq!(format!("streamed {} is_stream=true", 1024 * 1024).as_bytes(), &out[..]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_reset_mid_body_is_an_error_for_the_handler() {
+    let (send, errors) = streaming_client().await;
+    let request = http::Request::post("https://x/upload").body(()).unwrap();
+    let (_response, mut body) = send.ready().await.unwrap().send_request(request, false).unwrap();
+    body.send_data(Bytes::from_static(b"partial"), false).unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    body.send_reset(h2::Reason::CANCEL);
+    let error = tokio::task::spawn_blocking(move || errors.recv_timeout(std::time::Duration::from_secs(5))).await.unwrap()
+        .expect("the handler never saw an error");
+    assert!(error.contains("reset"), "{error}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_wrong_content_length_is_an_error_for_the_handler() {
+    let (send, errors) = streaming_client().await;
+    let request = http::Request::post("https://x/upload").header("content-length", "100").body(()).unwrap();
+    let (_response, mut body) = send.ready().await.unwrap().send_request(request, false).unwrap();
+    body.send_data(Bytes::from_static(b"short"), true).unwrap();
+    let error = tokio::task::spawn_blocking(move || errors.recv_timeout(std::time::Duration::from_secs(5))).await.unwrap()
+        .expect("the handler never saw an error");
+    assert!(error.contains("content-length"), "{error}");
+}
