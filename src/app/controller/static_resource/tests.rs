@@ -998,6 +998,17 @@ fn percent_encoded_names_are_found() {
     let name = file.file_name().unwrap().to_string_lossy().to_string();
     assert!(name.contains(' '));
     assert_eq!(200, static_status(&format!("/{}", name.replace(' ', "%20"))));
+    // The general path (a Range request) finds it too, with its ETag.
+    {
+        use crate::application::Application;
+        let request = Request { method: "GET".into(), request_uri: format!("/{}", name.replace(' ', "%20")), http_version: "HTTP/1.1".into(),
+            headers: vec![Header { name: "Range".into(), value: "bytes=0-2".into() }], body: vec![] };
+        let conn = ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None };
+        let response = crate::app::App::new().execute(&request, &conn).unwrap();
+        assert_eq!(206, response.status_code, "{}", String::from_utf8_lossy(&response.content_range_list.first().map(|c| c.body.clone()).unwrap_or_default()));
+        assert_eq!(b"spa".to_vec(), response.content_range_list[0].body);
+        assert!(response.headers.iter().any(|h| h.name == "ETag"), "no ETag for an escaped name");
+    }
     // Decoded once: `%2520` is a literal `%20`, which isn't this file.
     assert_eq!(404, static_status(&format!("/{}", name.replace(' ', "%2520"))));
     assert_eq!(200, static_status("/Cargo%2Etoml"));
