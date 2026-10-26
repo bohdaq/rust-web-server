@@ -71,6 +71,11 @@ What it means:
   `RWS_CONFIG_CORS_ALLOW_CREDENTIALS=true` if it sends cookies. Setting
   `RWS_CONFIG_CORS_ALLOW_ALL=true` restores the old echo-any-origin
   behaviour; avoid it for anything with logins.
+- **ACME renewal**: certificates renew at two-thirds of their lifetime (or
+  when the CA's renewal information says), not 30 days before expiry; set
+  `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS=30` to keep the old margin. Code that
+  builds an `AcmeConfig` by hand sets `renew_before_days: None` (or
+  `Some(days)`) and `profile: None`.
 - **`CacheLayer`** no longer stores `no-cache` responses, responses to `Range`
   requests, or responses whose `Vary` names a request header outside its key.
   Static files are therefore not cached by it (they were never meant to be).

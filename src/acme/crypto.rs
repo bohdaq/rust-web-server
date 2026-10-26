@@ -155,17 +155,92 @@ pub fn build_jws(
 
 // ── Certificate expiry ────────────────────────────────────────────────────────
 
-/// Return the number of days until the first certificate in `cert_pem_path`
-/// expires. Returns `None` when the file can't be read or parsed.
-pub fn cert_days_until_expiry(cert_path: &str) -> Option<i64> {
+/// What renewal needs from the leaf certificate: its validity window (Unix
+/// seconds) and its ACME Renewal Information certificate identifier
+/// (RFC 9773 §4.1), when it has an Authority Key Identifier.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CertInfo {
+    pub not_before: i64,
+    pub not_after: i64,
+    /// `base64url(AKI keyIdentifier) "." base64url(serial)`; `None` without
+    /// an Authority Key Identifier extension.
+    pub cert_id: Option<String>,
+}
+
+/// [`CertInfo`] of the first certificate in the PEM file at `cert_path`;
+/// `None` when it can't be read or parsed.
+pub fn read_cert_info(cert_path: &str) -> Option<CertInfo> {
     let pem = std::fs::read_to_string(cert_path).ok()?;
-    let der = pem_to_first_cert_der(&pem)?;
-    let not_after_secs = parse_cert_not_after(&der)?;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()?
-        .as_secs() as i64;
-    Some((not_after_secs - now) / 86400)
+    cert_info_from_der(&pem_to_first_cert_der(&pem)?)
+}
+
+/// [`CertInfo`] from a DER certificate. CA-supplied bytes: every length is
+/// checked by `read_tlv`, nothing panics on malformed input.
+pub(crate) fn cert_info_from_der(cert_der: &[u8]) -> Option<CertInfo> {
+    let (_, cert_body, _) = read_tlv(cert_der, 0)?;
+    let (_, tbs, _) = read_tlv(cert_body, 0)?;
+    let mut pos = 0;
+    if tbs.get(pos) == Some(&0xa0) {
+        pos = read_tlv(tbs, pos)?.2;
+    }
+    let (serial_tag, serial, next) = read_tlv(tbs, pos)?;
+    if serial_tag != 0x02 || serial.is_empty() {
+        return None;
+    }
+    pos = skip_tlvs(tbs, next, 2)?; // signature, issuer
+    let (_, validity, next) = read_tlv(tbs, pos)?;
+    let (nb_tag, nb_val, nb_end) = read_tlv(validity, 0)?;
+    let (na_tag, na_val, _) = read_tlv(validity, nb_end)?;
+    let is_time = |tag: u8| tag == 0x17 || tag == 0x18;
+    if !is_time(nb_tag) || !is_time(na_tag) {
+        return None;
+    }
+    let not_before = parse_asn1_time(nb_val)?;
+    let not_after = parse_asn1_time(na_val)?;
+    pos = skip_tlvs(tbs, next, 2)?; // subject, subjectPublicKeyInfo
+
+    // Optional issuerUniqueID [1], subjectUniqueID [2], then extensions [3].
+    let mut aki: Option<&[u8]> = None;
+    while pos < tbs.len() {
+        let (tag, value, next) = read_tlv(tbs, pos)?;
+        if tag == 0xa3 {
+            aki = authority_key_identifier(value);
+        }
+        pos = next;
+    }
+    let cert_id = aki.map(|key_id| format!("{}.{}", base64url(key_id), base64url(serial)));
+    Some(CertInfo { not_before, not_after, cert_id })
+}
+
+/// The keyIdentifier of the Authority Key Identifier extension
+/// (OID 2.5.29.35) in an `[3] EXPLICIT Extensions` value.
+fn authority_key_identifier(explicit: &[u8]) -> Option<&[u8]> {
+    const AKI_OID: &[u8] = &[0x55, 0x1d, 0x23];
+    let (_, extensions, _) = read_tlv(explicit, 0)?;
+    let mut pos = 0;
+    while pos < extensions.len() {
+        let (_, extension, next) = read_tlv(extensions, pos)?;
+        pos = next;
+        let (oid_tag, oid, mut inner) = read_tlv(extension, 0)?;
+        if oid_tag != 0x06 || oid != AKI_OID {
+            continue;
+        }
+        let (mut tag, mut value, mut after) = read_tlv(extension, inner)?;
+        if tag == 0x01 {
+            // critical BOOLEAN
+            inner = after;
+            (tag, value, after) = read_tlv(extension, inner)?;
+        }
+        let _ = after;
+        if tag != 0x04 {
+            return None;
+        }
+        // OCTET STRING → AuthorityKeyIdentifier SEQUENCE → [0] IMPLICIT keyIdentifier
+        let (_, aki, _) = read_tlv(value, 0)?;
+        let (key_tag, key_id, _) = read_tlv(aki, 0)?;
+        return (key_tag == 0x80 && !key_id.is_empty()).then_some(key_id);
+    }
+    None
 }
 
 fn pem_to_first_cert_der(pem: &str) -> Option<Vec<u8>> {
@@ -185,13 +260,16 @@ fn read_tlv(data: &[u8], pos: usize) -> Option<(u8, &[u8], usize)> {
     let len = {
         let b = *data.get(p)?; p += 1;
         if b < 0x80 { b as usize } else {
+            // At most 4 length bytes: more would overflow the shift (a
+            // panic in debug builds) and no certificate is that large.
             let n = (b & 0x7f) as usize;
+            if n == 0 || n > 4 { return None; }
             let mut l = 0usize;
             for _ in 0..n { l = (l << 8) | *data.get(p)? as usize; p += 1; }
             l
         }
     };
-    let end = p + len;
+    let end = p.checked_add(len)?;
     if end > data.len() { return None; }
     Some((tag, &data[p..end], end))
 }
@@ -204,28 +282,12 @@ fn skip_tlvs(data: &[u8], mut pos: usize, count: usize) -> Option<usize> {
     Some(pos)
 }
 
-/// Parse the `notAfter` date from an X.509 DER certificate → Unix timestamp.
-fn parse_cert_not_after(cert_der: &[u8]) -> Option<i64> {
-    // Certificate → TBSCertificate
-    let (_, cert_body, _) = read_tlv(cert_der, 0)?; // Certificate SEQUENCE
-    let (_, tbs, _) = read_tlv(cert_body, 0)?;       // TBSCertificate SEQUENCE
-
-    let mut pos = 0;
-    if tbs.get(pos) == Some(&0xa0) { // optional version [0]
-        let (_, _, next) = read_tlv(tbs, pos)?;
-        pos = next;
-    }
-    pos = skip_tlvs(tbs, pos, 3)?; // serialNumber, signature, issuer
-
-    // Validity SEQUENCE
-    let (_, validity, _) = read_tlv(tbs, pos)?;
-    let (_, _, nb_end) = read_tlv(validity, 0)?;     // skip notBefore
-    let (na_tag, na_val, _) = read_tlv(validity, nb_end)?; // notAfter
-    if na_tag != 0x17 && na_tag != 0x18 { return None; }
-    parse_asn1_time(na_val)
-}
-
 fn parse_asn1_time(t: &[u8]) -> Option<i64> {
+    // Digits then `Z`: anything else (and any non-ASCII byte, which the
+    // slicing below would split) is not a time rws can read.
+    if t.len() < 2 || !t[..t.len() - 1].iter().all(u8::is_ascii_digit) {
+        return None;
+    }
     let s = std::str::from_utf8(t).ok()?;
     if !s.ends_with('Z') { return None; }
     let s = &s[..s.len() - 1]; // strip 'Z'
@@ -247,7 +309,7 @@ fn parse_asn1_time(t: &[u8]) -> Option<i64> {
     Some(days * 86400 + hr * 3600 + mi * 60 + se)
 }
 
-fn days_since_epoch(year: i64, month: i64, day: i64) -> Option<i64> {
+pub(crate) fn days_since_epoch(year: i64, month: i64, day: i64) -> Option<i64> {
     // https://howardhinnant.github.io/date_algorithms.html "days_from_civil"
     let y = if month <= 2 { year - 1 } else { year };
     let m = if month <= 2 { month + 9 } else { month - 3 };

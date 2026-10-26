@@ -35,7 +35,8 @@
 /// | `RWS_CONFIG_ACME_CERT_PATH` | `RWS_CONFIG_TLS_CERT_FILE` | Where to write the certificate chain |
 /// | `RWS_CONFIG_ACME_KEY_PATH` | `RWS_CONFIG_TLS_KEY_FILE` | Where to write the certificate private key |
 /// | `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port for the HTTP-01 challenge server |
-/// | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | `30` | Renew when fewer than this many days remain |
+/// | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | — | Renew this many days before expiry instead of at two-thirds of the lifetime |
+/// | `RWS_CONFIG_ACME_PROFILE` | — | Certificate profile to order (`classic`, `tlsserver`, `shortlived`, … as the CA offers) |
 /// | `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `acme_account.key` | Persist the ACME account key |
 
 mod crypto;
@@ -48,6 +49,13 @@ use crate::entry_point::Config;
 use client::AcmeHttpClient;
 use crypto::AccountKey;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+/// Parsers of CA-supplied input, for `fuzz_api`.
+#[cfg(fuzzing)]
+pub(crate) mod fuzzing {
+    pub(crate) use super::crypto::cert_info_from_der;
+    pub(crate) use super::{json_object_keys, parse_rfc3339, parse_suggested_window};
+}
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -66,8 +74,13 @@ pub struct AcmeConfig {
     pub key_path: String,
     /// Port for the temporary HTTP-01 challenge server (default 80).
     pub challenge_port: u16,
-    /// Renew the certificate when fewer than this many days remain.
-    pub renew_before_days: i64,
+    /// Renew this many days before expiry. `None` (the default): at
+    /// two-thirds of the certificate's lifetime, or earlier when the CA's
+    /// renewal information (RFC 9773) says so.
+    pub renew_before_days: Option<i64>,
+    /// Certificate profile to order (draft-ietf-acme-profiles), e.g.
+    /// `shortlived`; `None` lets the CA choose.
+    pub profile: Option<String>,
     /// Path to persist the ACME account key between restarts.
     pub account_key_path: String,
 }
@@ -121,8 +134,8 @@ impl AcmeConfig {
             .unwrap_or(80u16);
 
         let renew_before_days = non_empty_env(Config::RWS_CONFIG_ACME_RENEW_BEFORE_DAYS)
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(30i64);
+            .and_then(|v| v.parse().ok());
+        let profile = non_empty_env(Config::RWS_CONFIG_ACME_PROFILE);
 
         let account_key_path = non_empty_env(Config::RWS_CONFIG_ACME_ACCOUNT_KEY_PATH)
             .unwrap_or_else(|| DEFAULT_ACCOUNT_KEY_PATH.to_string());
@@ -135,6 +148,7 @@ impl AcmeConfig {
             key_path,
             challenge_port,
             renew_before_days,
+            profile,
             account_key_path,
         })
     }
@@ -299,31 +313,83 @@ impl AcmeManager {
         AcmeManager { config }
     }
 
-    /// Provision a certificate only if none exists or it expires soon.
+    /// Provision a certificate if there is none, or renew it when it's due
+    /// (see [`check`](Self::check)).
     pub async fn provision_if_needed(&self) -> Result<(), String> {
-        match crypto::cert_days_until_expiry(&self.config.cert_path) {
-            Some(d) if d > self.config.renew_before_days => {
-                println!(
-                    "[ACME] Certificate at '{}' is valid for {d} more days — no action needed.",
-                    self.config.cert_path
-                );
-                return Ok(());
-            }
-            Some(d) => {
-                println!("[ACME] Certificate expires in {d} days, renewing...");
-            }
-            None => {
-                println!(
-                    "[ACME] No valid certificate found at '{}', provisioning...",
-                    self.config.cert_path
-                );
-            }
+        self.check().await.map(|_| ())
+    }
+
+    /// Renew when due, else say when to look again. Due is the two-thirds
+    /// point of the certificate's lifetime (`renew_before_days` set: that
+    /// many days before expiry) — or earlier, when the CA's ACME Renewal
+    /// Information (RFC 9773) suggests a window that starts sooner, e.g.
+    /// after a revocation. A fixed "30 days before expiry" would renew a
+    /// 6-day certificate at once and leave a 45-day one too little margin.
+    /// Renewal information that can't be fetched is not an error: the
+    /// two-thirds point still applies.
+    pub(crate) async fn check(&self) -> Result<RenewalCheck, String> {
+        let Some(info) = crypto::read_cert_info(&self.config.cert_path) else {
+            println!("[ACME] No valid certificate found at '{}', provisioning...", self.config.cert_path);
+            self.provision().await?;
+            return Ok(RenewalCheck::Renewed);
+        };
+        let (window, retry_after) = match &info.cert_id {
+            Some(cert_id) => match self.renewal_info(cert_id).await {
+                Ok(found) => found,
+                Err(e) => {
+                    eprintln!("[ACME] No renewal information ({e}); renewing at two-thirds of the lifetime.");
+                    (None, None)
+                }
+            },
+            None => (None, None),
+        };
+        let due = renewal_time(&info, window, self.config.renew_before_days);
+        let now = unix_now();
+        if now >= due {
+            println!("[ACME] Certificate at '{}' is due for renewal (expires {}), renewing...",
+                self.config.cert_path, crate::http::date::format(info.not_after.max(0) as u64));
+            self.provision_replacing(info.cert_id.as_deref()).await?;
+            return Ok(RenewalCheck::Renewed);
         }
-        self.provision().await
+        println!("[ACME] Certificate at '{}' is current; renewal due {}.",
+            self.config.cert_path, crate::http::date::format(due.max(0) as u64));
+        let mut recheck = renew_check_interval_secs().min((due - now).max(60) as u64);
+        if info.cert_id.is_some() {
+            // The CA's answer can change (revocation): ask again when it
+            // says, else every 6 hours.
+            recheck = recheck.min(retry_after.unwrap_or(RENEWAL_INFO_RECHECK_SECS).max(60));
+        }
+        Ok(RenewalCheck::Current { recheck_in: recheck })
+    }
+
+    /// The CA's suggested renewal window for `cert_id` and its `Retry-After`,
+    /// from the directory's `renewalInfo` endpoint. `(None, None)` when the
+    /// CA has no such endpoint.
+    async fn renewal_info(&self, cert_id: &str) -> Result<(Option<(i64, i64)>, Option<u64>), String> {
+        let http = AcmeHttpClient::new()?;
+        let dir = fetch_directory(&http, &self.config.directory_url).await?;
+        let Some(base) = dir.renewal_info_url else { return Ok((None, None)) };
+        let resp = http.get(&format!("{}/{}", base.trim_end_matches('/'), cert_id)).await?;
+        if resp.status != 200 {
+            return Err(format!("renewalInfo: HTTP {}", resp.status));
+        }
+        let retry_after = resp.header("retry-after").and_then(|v| {
+            v.trim().parse::<u64>().ok().or_else(|| {
+                crate::http::date::parse(v).map(|at| at.saturating_sub(unix_now().max(0) as u64))
+            })
+        });
+        Ok((parse_suggested_window(&resp.body), retry_after))
     }
 
     /// Provision a new certificate unconditionally.
     pub async fn provision(&self) -> Result<(), String> {
+        self.provision_replacing(None).await
+    }
+
+    /// [`provision`](Self::provision), telling the CA which certificate the
+    /// new one replaces (`replaces`, RFC 9773 §5) so it can exempt the order
+    /// from rate limits and track the renewal.
+    async fn provision_replacing(&self, replaces: Option<&str>) -> Result<(), String> {
         println!("[ACME] Provisioning certificate for: {:?}", self.config.domains);
 
         let http = AcmeHttpClient::new()?;
@@ -333,6 +399,14 @@ impl AcmeManager {
 
         // 2. Fetch ACME directory.
         let dir = fetch_directory(&http, &self.config.directory_url).await?;
+        if let Some(profile) = &self.config.profile {
+            if !dir.profiles.is_empty() && !dir.profiles.contains(profile) {
+                return Err(format!(
+                    "the CA doesn't offer the certificate profile {profile:?} (RWS_CONFIG_ACME_PROFILE); it offers: {}",
+                    dir.profiles.join(", ")
+                ));
+            }
+        }
 
         // 3. Get initial nonce.
         let nonce = get_nonce(&http, &dir.new_nonce_url).await?;
@@ -342,10 +416,21 @@ impl AcmeManager {
             create_account(&http, &account_key, &dir.new_account_url, &self.config.email, &nonce).await?;
         println!("[ACME] Account: {account_url}");
 
-        // 5. Submit order.
-        let (order, order_url, nonce) =
-            new_order(&http, &account_key, &account_url, &dir.new_order_url, &self.config.domains, &nonce).await?;
-        println!("[ACME] Order: {order_url}");
+        // 5. Submit order. A CA may refuse `replaces` (the certificate was
+        // already replaced by an order whose certificate never got
+        // installed): order again without it rather than not at all.
+        let profile = self.config.profile.as_deref();
+        let ordered = new_order(&http, &account_key, &account_url, &dir.new_order_url, &self.config.domains, replaces, profile, &nonce).await;
+        let (order, order_url, nonce) = match (ordered, replaces) {
+            (Ok(order), _) => order,
+            (Err(e), Some(_)) => {
+                eprintln!("[ACME] Order replacing the current certificate refused ({e}); ordering without 'replaces'.");
+                let nonce = get_nonce(&http, &dir.new_nonce_url).await?;
+                new_order(&http, &account_key, &account_url, &dir.new_order_url, &self.config.domains, None, profile, &nonce).await?
+            }
+            (Err(e), None) => return Err(e),
+        };
+        println!("[ACME] Order: {order_url}{}", replaces.map(|id| format!(" (replacing {id})")).unwrap_or_default());
 
         // 6. Complete HTTP-01 challenge for each authorization.
         let mut nonce = nonce;
@@ -402,19 +487,24 @@ impl AcmeManager {
         }
     }
 
-    /// Background renewal loop. Checks every
-    /// `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` (default 12 hours) and
-    /// renews when fewer than `renew_before_days` remain; after a failure it
-    /// retries within an hour. After a successful renewal it sends SIGHUP to
-    /// itself (Unix) so the running server reloads the TLS certificate.
+    /// Background renewal loop: [`check`](Self::check)s at most every
+    /// `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` (default 12 hours), sooner
+    /// when renewal is due earlier or the CA's renewal information asks to be
+    /// fetched again; after a failure it retries within an hour. After a
+    /// renewal it sends SIGHUP to itself (Unix) so the running server reloads
+    /// the TLS certificate — only then (it used to on every check).
     pub async fn run_renewal_loop(self) {
         let interval = renew_check_interval_secs();
-        let mut next = interval;
+        let mut next = crypto::read_cert_info(&self.config.cert_path)
+            .map(|info| ((renewal_time(&info, None, self.config.renew_before_days) - unix_now()).max(60) as u64).min(interval))
+            .unwrap_or(interval);
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(next)).await;
-            match self.provision_if_needed().await {
-                Ok(()) => {
-                    next = interval;
+            match self.check().await {
+                Ok(RenewalCheck::Current { recheck_in }) => next = recheck_in,
+                Ok(RenewalCheck::Renewed) => {
+                    // Look at the new certificate's renewal information soon.
+                    next = 60;
                     #[cfg(unix)]
                     {
                         // Signal the process to reload TLS cert (run_tls reloads on SIGHUP).
@@ -518,6 +608,11 @@ struct Directory {
     new_nonce_url: String,
     new_account_url: String,
     new_order_url: String,
+    /// ACME Renewal Information base URL (RFC 9773), if the CA has one.
+    renewal_info_url: Option<String>,
+    /// Certificate profiles the CA offers (`meta.profiles`); empty when it
+    /// doesn't list any.
+    profiles: Vec<String>,
 }
 
 struct Order {
@@ -548,7 +643,9 @@ async fn fetch_directory(http: &AcmeHttpClient, url: &str) -> Result<Directory, 
         .ok_or("directory missing newAccount")?;
     let new_order_url = json_str(&resp.body, "newOrder")
         .ok_or("directory missing newOrder")?;
-    Ok(Directory { new_nonce_url, new_account_url, new_order_url })
+    let renewal_info_url = json_str(&resp.body, "renewalInfo");
+    let profiles = json_object_keys(&resp.body, "profiles");
+    Ok(Directory { new_nonce_url, new_account_url, new_order_url, renewal_info_url, profiles })
 }
 
 async fn get_nonce(http: &AcmeHttpClient, url: &str) -> Result<String, String> {
@@ -580,18 +677,18 @@ async fn create_account(
     Ok((account_url, nonce))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn new_order(
     http: &AcmeHttpClient,
     key: &AccountKey,
     account_url: &str,
     url: &str,
     domains: &[String],
+    replaces: Option<&str>,
+    profile: Option<&str>,
     nonce: &str,
 ) -> Result<(Order, String, String), String> {
-    let ids: Vec<String> = domains.iter()
-        .map(|d| format!(r#"{{"type":"dns","value":"{d}"}}"#))
-        .collect();
-    let payload = format!(r#"{{"identifiers":[{}]}}"#, ids.join(","));
+    let payload = new_order_payload(domains, replaces, profile);
     let body = crypto::build_jws(key, nonce, url, Some(account_url), Some(&payload))?;
     let resp = http.post_jws(url, &body).await?;
     if resp.status != 201 {
@@ -786,6 +883,176 @@ fn generate_csr(domains: &[String]) -> Result<(rcgen::KeyPair, Vec<u8>), String>
     let csr = params.serialize_request(&cert_key)
         .map_err(|e| format!("CSR serialize error: {e}"))?;
     Ok((cert_key, csr.der().to_vec()))
+}
+
+/// The `newOrder` payload: identifiers, plus `replaces` (RFC 9773 §5) and
+/// `profile` (draft-ietf-acme-profiles) when given.
+pub(crate) fn new_order_payload(domains: &[String], replaces: Option<&str>, profile: Option<&str>) -> String {
+    let ids: Vec<String> = domains.iter()
+        .map(|d| format!(r#"{{"type":"dns","value":"{}"}}"#, json_escape(d)))
+        .collect();
+    let mut payload = format!(r#"{{"identifiers":[{}]"#, ids.join(","));
+    if let Some(replaces) = replaces {
+        payload.push_str(&format!(r#","replaces":"{}""#, json_escape(replaces)));
+    }
+    if let Some(profile) = profile {
+        payload.push_str(&format!(r#","profile":"{}""#, json_escape(profile)));
+    }
+    payload.push('}');
+    payload
+}
+
+fn json_escape(value: &str) -> String {
+    value.chars().flat_map(|c| match c {
+        '"' => vec!['\\', '"'],
+        '\\' => vec!['\\', '\\'],
+        c if (c as u32) < 0x20 => format!("\\u{:04x}", c as u32).chars().collect(),
+        c => vec![c],
+    }).collect()
+}
+
+/// Outcome of [`AcmeManager::check`].
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum RenewalCheck {
+    /// A certificate was issued; the server should reload it.
+    Renewed,
+    /// Nothing to do yet; check again in this many seconds.
+    Current { recheck_in: u64 },
+}
+
+/// How often to ask again for renewal information without a `Retry-After`.
+const RENEWAL_INFO_RECHECK_SECS: u64 = 6 * 3600;
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64)
+}
+
+/// When to renew `info` (Unix seconds). The fallback is the two-thirds point
+/// of its lifetime — Let's Encrypt's advice, and right for 6-day as for
+/// 90-day certificates — or `renew_before_days` before expiry when that is
+/// set. The CA's suggested window (`(start, end)`) can only bring renewal
+/// earlier: a point in it, spread per certificate so a fleet doesn't renew
+/// at the same second, wins when it's sooner. A window that has passed
+/// means now.
+pub(crate) fn renewal_time(info: &crypto::CertInfo, window: Option<(i64, i64)>, renew_before_days: Option<i64>) -> i64 {
+    let lifetime = (info.not_after - info.not_before).max(0);
+    let fallback = match renew_before_days {
+        Some(days) => info.not_after - days.saturating_mul(86_400),
+        None => info.not_before + lifetime / 3 * 2,
+    };
+    match window {
+        Some((start, end)) => {
+            let span = (end - start).max(0);
+            let point = start + (span as f64 * window_fraction(info)) as i64;
+            point.min(fallback)
+        }
+        None => fallback,
+    }
+}
+
+/// A fraction in `[0, 1)`, fixed per certificate (FNV-1a of its identity):
+/// the same point in the window at every check, a different one per
+/// certificate.
+fn window_fraction(info: &crypto::CertInfo) -> f64 {
+    let identity = info.cert_id.clone().unwrap_or_else(|| info.not_after.to_string());
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in identity.bytes() {
+        hash = (hash ^ byte as u64).wrapping_mul(0x0100_0000_01b3);
+    }
+    (hash >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// `suggestedWindow.start` / `.end` of a renewalInfo response, as Unix
+/// seconds; `None` when missing or malformed.
+pub(crate) fn parse_suggested_window(body: &str) -> Option<(i64, i64)> {
+    let window = &body[body.find("\"suggestedWindow\"")?..];
+    let start = parse_rfc3339(&json_str(window, "start")?)?;
+    let end = parse_rfc3339(&json_str(window, "end")?)?;
+    (start <= end).then_some((start, end))
+}
+
+/// An RFC 3339 timestamp (`2026-10-26T12:00:00Z`, fractional seconds and
+/// `±hh:mm` offsets allowed) as Unix seconds.
+pub(crate) fn parse_rfc3339(value: &str) -> Option<i64> {
+    let b = value.trim().as_bytes();
+    if b.len() < 20 || b[4] != b'-' || b[7] != b'-' || !matches!(b[10], b'T' | b't') || b[13] != b':' || b[16] != b':' {
+        return None;
+    }
+    let num = |range: std::ops::Range<usize>| -> Option<i64> {
+        let digits = b.get(range)?;
+        digits.iter().all(u8::is_ascii_digit).then(|| digits.iter().fold(0i64, |n, d| n * 10 + (d - b'0') as i64))
+    };
+    let (year, month, day) = (num(0..4)?, num(5..7)?, num(8..10)?);
+    let (hour, minute, second) = (num(11..13)?, num(14..16)?, num(17..19)?);
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 || second > 60 {
+        return None;
+    }
+    let mut rest = &b[19..];
+    if rest.first() == Some(&b'.') {
+        let digits = rest[1..].iter().take_while(|c| c.is_ascii_digit()).count();
+        if digits == 0 {
+            return None;
+        }
+        rest = &rest[1 + digits..];
+    }
+    let offset = match rest {
+        [b'Z' | b'z'] => 0,
+        [sign @ (b'+' | b'-'), h1, h2, b':', m1, m2] => {
+            let digits = [*h1, *h2, *m1, *m2];
+            if !digits.iter().all(u8::is_ascii_digit) {
+                return None;
+            }
+            let minutes = ((h1 - b'0') as i64 * 10 + (h2 - b'0') as i64) * 60 + (m1 - b'0') as i64 * 10 + (m2 - b'0') as i64;
+            if *sign == b'+' { minutes * 60 } else { -minutes * 60 }
+        }
+        _ => return None,
+    };
+    let days = crypto::days_since_epoch(year, month, day)?;
+    Some(days * 86_400 + hour * 3600 + minute * 60 + second - offset)
+}
+
+/// The keys of the JSON object at `field` (e.g. a directory's
+/// `meta.profiles`), skipping nested values; empty when absent.
+pub(crate) fn json_object_keys(json: &str, field: &str) -> Vec<String> {
+    let key = format!("\"{}\"", field);
+    let Some(at) = json.find(&key) else { return vec![] };
+    let rest = json[at + key.len()..].trim_start_matches([' ', ':', '\n', '\r', '\t']);
+    if !rest.starts_with('{') {
+        return vec![];
+    }
+    let mut keys = Vec::new();
+    let (mut depth, mut in_string, mut escaped) = (0usize, false, false);
+    let mut current = String::new();
+    let mut expecting_key = true;
+    for c in rest.chars() {
+        if in_string {
+            if escaped {
+                escaped = false;
+                current.push(c);
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            } else {
+                current.push(c);
+            }
+            continue;
+        }
+        match c {
+            '"' => { in_string = true; current.clear(); }
+            ':' if depth == 1 && expecting_key => { keys.push(std::mem::take(&mut current)); expecting_key = false; }
+            ',' if depth == 1 => expecting_key = true,
+            '{' | '[' => depth += 1,
+            '}' | ']' => {
+                depth -= 1;
+                if depth == 0 { break; }
+            }
+            _ => {}
+        }
+    }
+    keys
 }
 
 pub(crate) fn json_str(json: &str, field: &str) -> Option<String> {

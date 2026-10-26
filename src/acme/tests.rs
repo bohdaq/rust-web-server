@@ -213,11 +213,133 @@ fn build_jws_post_as_get_has_empty_payload() {
     assert_eq!(payload_b64, "", "POST-as-GET must have empty payload");
 }
 
-// ── cert_days_until_expiry ────────────────────────────────────────────────────
+// ── certificate info and renewal (#1) ───────────────────────────────────────
 
 #[test]
-fn cert_days_until_expiry_missing_file_returns_none() {
-    assert!(crypto::cert_days_until_expiry("/nonexistent/cert.pem").is_none());
+fn read_cert_info_missing_file_returns_none() {
+    assert!(crypto::read_cert_info("/nonexistent/cert.pem").is_none());
+}
+
+/// A leaf signed by a CA whose key identifier and the leaf's serial are the
+/// ones in RFC 9773 §4.1's example.
+fn rfc_9773_example_leaf() -> Vec<u8> {
+    let mut ca_params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    ca_params.key_identifier_method = rcgen::KeyIdMethod::PreSpecified(vec![
+        0x69, 0x88, 0x5B, 0x6B, 0x87, 0x46, 0x40, 0x41, 0xE1, 0xB3,
+        0x7B, 0x84, 0x7B, 0xA0, 0xAE, 0x2C, 0xDE, 0x01, 0xC8, 0xD4,
+    ]);
+    let ca_key = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).unwrap();
+    let issuer = rcgen::Issuer::new(ca_params, ca_key);
+
+    let mut params = rcgen::CertificateParams::new(vec!["example.com".to_string()]).unwrap();
+    params.serial_number = Some(rcgen::SerialNumber::from_slice(&[0x00, 0x87, 0x65, 0x43, 0x21]));
+    params.not_before = rcgen::date_time_ymd(2026, 1, 1);
+    params.not_after = rcgen::date_time_ymd(2026, 4, 1);
+    params.use_authority_key_identifier_extension = true;
+    let key = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).unwrap();
+    params.signed_by(&key, &issuer).unwrap().der().to_vec()
+}
+
+#[test]
+fn cert_id_matches_the_rfc_9773_example() {
+    let info = crypto::cert_info_from_der(&rfc_9773_example_leaf()).unwrap();
+    assert_eq!(Some("aYhba4dGQEHhs3uEe6CuLN4ByNQ.AIdlQyE".to_string()), info.cert_id);
+    assert_eq!(super::parse_rfc3339("2026-01-01T00:00:00Z"), Some(info.not_before));
+    assert_eq!(super::parse_rfc3339("2026-04-01T00:00:00Z"), Some(info.not_after));
+}
+
+#[test]
+fn a_certificate_without_aki_has_no_cert_id() {
+    let mut params = rcgen::CertificateParams::new(vec!["example.com".to_string()]).unwrap();
+    params.not_before = rcgen::date_time_ymd(2026, 1, 1);
+    params.not_after = rcgen::date_time_ymd(2026, 1, 7);
+    let key = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).unwrap();
+    let der = params.self_signed(&key).unwrap().der().to_vec();
+    let info = crypto::cert_info_from_der(&der).unwrap();
+    assert_eq!(None, info.cert_id);
+    assert_eq!(6 * 86_400, info.not_after - info.not_before);
+}
+
+#[test]
+fn malformed_certificates_are_none_not_a_panic() {
+    let good = rfc_9773_example_leaf();
+    for len in 0..good.len() {
+        let _ = crypto::cert_info_from_der(&good[..len]);
+    }
+    let mut flipped = good.clone();
+    for i in 0..flipped.len() {
+        flipped[i] ^= 0xff;
+        let _ = crypto::cert_info_from_der(&flipped);
+        flipped[i] ^= 0xff;
+    }
+    // Length-of-length bytes that would overflow.
+    assert!(crypto::cert_info_from_der(&[0x30, 0x89, 1, 1, 1, 1, 1, 1, 1, 1, 1]).is_none());
+    assert!(crypto::cert_info_from_der(&[0x30, 0x84, 0xff, 0xff, 0xff, 0xff]).is_none());
+}
+
+fn info(not_before: i64, days: i64) -> crypto::CertInfo {
+    crypto::CertInfo { not_before, not_after: not_before + days * 86_400, cert_id: Some("a.b".to_string()) }
+}
+
+#[test]
+fn renewal_falls_back_to_two_thirds_of_the_lifetime() {
+    use super::renewal_time;
+    assert_eq!(60 * 86_400, renewal_time(&info(0, 90), None, None));
+    assert_eq!(30 * 86_400, renewal_time(&info(0, 45), None, None));
+    assert_eq!(4 * 86_400, renewal_time(&info(0, 6), None, None));
+    // An explicit renew_before_days replaces the fallback.
+    assert_eq!(60 * 86_400, renewal_time(&info(0, 90), None, Some(30)));
+}
+
+#[test]
+fn the_ca_window_can_only_bring_renewal_earlier() {
+    use super::renewal_time;
+    let cert = info(0, 90);
+    // A window before the fallback: a point inside it.
+    let (start, end) = (10 * 86_400, 12 * 86_400);
+    let at = renewal_time(&cert, Some((start, end)), None);
+    assert!((start..=end).contains(&at), "{at}");
+    // The same point every time for the same certificate.
+    assert_eq!(at, renewal_time(&cert, Some((start, end)), None));
+    // A window after the fallback doesn't push renewal later.
+    assert_eq!(60 * 86_400, renewal_time(&cert, Some((70 * 86_400, 80 * 86_400)), None));
+    // Nor does renew_before_days suppress an open window.
+    assert!(renewal_time(&cert, Some((start, end)), Some(1)) <= end);
+    // A window that has passed means now (or earlier).
+    assert!(renewal_time(&cert, Some((-200, -100)), None) <= -100);
+}
+
+#[test]
+fn suggested_windows_and_rfc_3339_times_parse() {
+    use super::{parse_rfc3339, parse_suggested_window};
+    assert_eq!(Some(0), parse_rfc3339("1970-01-01T00:00:00Z"));
+    assert_eq!(Some(784_111_777), parse_rfc3339("1994-11-06T08:49:37Z"));
+    assert_eq!(Some(784_111_777), parse_rfc3339("1994-11-06T08:49:37.123456Z"));
+    assert_eq!(Some(784_111_777), parse_rfc3339("1994-11-06T10:49:37+02:00"));
+    assert_eq!(Some(784_111_777), parse_rfc3339("1994-11-06T03:49:37-05:00"));
+    for bad in ["", "1994-11-06", "1994-11-06T08:49:37", "1994-13-06T08:49:37Z", "1994-11-06T08:49:37.Z", "1994-11-06T08:49:37+0200", "199x-11-06T08:49:37Z"] {
+        assert_eq!(None, parse_rfc3339(bad), "{bad:?}");
+    }
+    let body = r#"{"suggestedWindow":{"start":"2026-03-01T00:00:00Z","end":"2026-03-03T00:00:00Z"},"explanationURL":"https://x"}"#;
+    let (start, end) = parse_suggested_window(body).unwrap();
+    assert_eq!(2 * 86_400, end - start);
+    assert_eq!(None, parse_suggested_window(r#"{"suggestedWindow":{"start":"2026-03-03T00:00:00Z","end":"2026-03-01T00:00:00Z"}}"#));
+    assert_eq!(None, parse_suggested_window("not json"));
+}
+
+#[test]
+fn directory_profiles_and_new_order_payload() {
+    let directory = r#"{"newNonce":"n","meta":{"profiles":{"classic":"The usual","shortlived":{"description":"6 days, \"short\""},"tlsserver":"x"},"website":"w"}}"#;
+    assert_eq!(vec!["classic", "shortlived", "tlsserver"], super::json_object_keys(directory, "profiles"));
+    assert!(super::json_object_keys(r#"{"meta":{}}"#, "profiles").is_empty());
+    assert!(super::json_object_keys("{}", "profiles").is_empty());
+
+    let domains = vec!["a.example".to_string(), "b.example".to_string()];
+    assert_eq!(r#"{"identifiers":[{"type":"dns","value":"a.example"},{"type":"dns","value":"b.example"}]}"#,
+        super::new_order_payload(&domains, None, None));
+    assert_eq!(r#"{"identifiers":[{"type":"dns","value":"a.example"},{"type":"dns","value":"b.example"}],"replaces":"x.y","profile":"shortlived"}"#,
+        super::new_order_payload(&domains, Some("x.y"), Some("shortlived")));
 }
 
 // ── json helpers ─────────────────────────────────────────────────────────────

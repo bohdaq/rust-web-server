@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-rust-web-server = { path = "..", default-features = false, features = ["auth", "sso-saml", "http2"] }
+rust-web-server = { path = "..", default-features = false, features = ["auth", "sso-saml", "http2", "acme"] }
 
 # Separate workspace: the root workspace excludes fuzz/.
 [workspace]
@@ -131,6 +131,13 @@ bench = false
 [[bin]]
 name = "static_path_decode"
 path = "fuzz_targets/static_path_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "acme_renewal"
+path = "fuzz_targets/acme_renewal.rs"
 test = false
 doc = false
 bench = false

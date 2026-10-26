@@ -77,10 +77,11 @@ Continue the pattern (`_2_`, `_3_`, …) for as many domains as needed. The
 | `RWS_CONFIG_ACME_CERT_PATH` | `` (empty) | Where to write the provisioned certificate chain (PEM). Defaults to `RWS_CONFIG_TLS_CERT_FILE`, else `.rws/acme/cert.pem` (since 17.113.1; was `cert.pem` in the web root). When TLS paths are unset, ACME also points the TLS listener at this file. |
 | `RWS_CONFIG_ACME_KEY_PATH` | `` (empty) | Where to write the certificate's private key (PEM). Defaults to `RWS_CONFIG_TLS_KEY_FILE`, else `.rws/acme/key.pem`; written `0600`. |
 | `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port the CA connects to for HTTP-01. A temporary listener answers at startup; once the redirect listener (`RWS_CONFIG_HTTP_REDIRECT_PORT`) runs on this port it answers renewal challenges. Must be reachable from the internet on port 80. |
-| `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | `30` | Renew the certificate when fewer than this many days remain on it. |
+| `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | `` (empty) | Renew this many days before expiry. Empty (the default since 18.0.0; it was `30`): at two-thirds of the certificate's lifetime, or earlier when the CA's renewal information (RFC 9773) says so. |
+| `RWS_CONFIG_ACME_PROFILE` | `` (empty) | Certificate profile to order, e.g. `shortlived` (6-day certificates) or `tlsserver` at Let's Encrypt. Empty: the CA's default. A profile the CA doesn't offer stops provisioning with the list it offers. |
 | `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `.rws/acme/account.key` | Path to persist the ACME account key between restarts (written `0600`). |
 | `RWS_CONFIG_ACME_CA_FILE` | `` (empty) | PEM file of extra root CAs to trust for the ACME directory, on top of the public roots — for private ACME CAs (step-ca, Pebble). |
-| `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` | `43200` | Seconds between certificate-expiry checks. After a failed renewal the next attempt comes within an hour. |
+| `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` | `43200` | Longest time between renewal checks (sooner when renewal is due earlier or the CA's renewal information asks). After a failed renewal the next attempt comes within an hour. |
 
 ## CORS
 

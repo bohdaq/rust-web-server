@@ -47,8 +47,8 @@ over IPv6, so the challenge and redirect listeners accept both IPv4 and IPv6.
 
 ## How it works
 
-1. **Startup.** If no certificate exists, or it expires within
-   `renew_before_days`, `rws` runs the ACME flow before opening the HTTPS
+1. **Startup.** If no certificate exists, or it is due for renewal (see 4),
+   `rws` runs the ACME flow before opening the HTTPS
    port: account (key saved to `.rws/acme/account.key`), order, HTTP-01 challenge,
    ECDSA P-256 key + CSR, finalize, download.
 2. **Challenges.** At startup a temporary listener on the challenge port
@@ -58,14 +58,27 @@ over IPv6, so the challenge and redirect listeners accept both IPv4 and IPv6.
 3. **First-time failures are retried**, e.g. while DNS for a new domain is
    still propagating: after 30 s, doubling up to every 15 minutes, until a
    certificate is issued.
-4. **Renewal.** Every 12 hours `rws` checks the expiry and renews when fewer
-   than `renew_before_days` (30) remain. A failed renewal is retried within an
+4. **Renewal** (since 18.0.0). A certificate is renewed at two-thirds of its
+   lifetime — day 60 of 90, day 30 of 45, day 4 of 6 — or earlier when the
+   CA's ACME Renewal Information ([RFC 9773](https://www.rfc-editor.org/rfc/rfc9773.html))
+   suggests a window that opens sooner, e.g. after a revocation. `rws` asks
+   for it at every check (every 12 hours at most, every 6 when the CA has
+   renewal information, sooner when renewal is due earlier or the CA's
+   `Retry-After` says so) and picks a point in the window that's fixed per
+   certificate. The renewal order names the certificate it replaces, so the
+   CA can exempt it from rate limits. A failed renewal is retried within an
    hour. After renewing it reloads the TLS certificate in place (on Unix, via
-   the same `SIGHUP` reload used for config).
+   the same `SIGHUP` reload used for config). `renew_before_days`, if set,
+   replaces the two-thirds point (a CA window that opens earlier still wins).
+5. **Profiles.** `profile` orders a certificate profile the CA offers —
+   Let's Encrypt has `classic`, `tlsserver` and `shortlived` (6-day
+   certificates). A name the CA doesn't list stops provisioning with the list
+   it offers. Unset, the CA picks its default.
 
 The ACME client (RFC 8555) is implemented in-crate. It has been tested end to
 end against [Pebble](https://github.com/letsencrypt/pebble), Let's Encrypt's
-test CA, including renewal through the redirect listener.
+test CA, including a `shortlived` profile and renewal on Pebble's renewal
+information through the redirect listener.
 
 ## Testing with the staging CA
 
@@ -115,8 +128,9 @@ command line (`--acme-domains=...`; not the last three), or in the environment.
 | `challenge_port` | `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port the CA connects to for HTTP-01 |
 | `cert_path` | `RWS_CONFIG_ACME_CERT_PATH` | `tls_cert_file`, else `.rws/acme/cert.pem` | Where the certificate chain is stored |
 | `key_path` | `RWS_CONFIG_ACME_KEY_PATH` | `tls_key_file`, else `.rws/acme/key.pem` | Where the certificate key is stored (`0600`) |
-| `renew_before_days` | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | `30` | Renew when fewer than this many days remain |
-| `renew_check_interval_secs` | `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` | `43200` | Seconds between expiry checks |
+| `renew_before_days` | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | — | Renew this many days before expiry instead of at two-thirds of the lifetime (was `30` before 18.0.0) |
+| `profile` | `RWS_CONFIG_ACME_PROFILE` | — | Certificate profile to order (`classic`, `tlsserver`, `shortlived`, … as the CA offers) |
+| `renew_check_interval_secs` | `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` | `43200` | Longest time between renewal checks |
 | `account_key_path` | `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `.rws/acme/account.key` | Where the ACME account key is stored (`0600`) |
 
 Top-level `http_redirect_port` (`RWS_CONFIG_HTTP_REDIRECT_PORT`) starts the

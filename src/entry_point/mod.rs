@@ -136,7 +136,10 @@ impl Config {
 
     /// Renew when fewer than this many days remain on the certificate (default 30).
     pub const RWS_CONFIG_ACME_RENEW_BEFORE_DAYS: &'static str = "RWS_CONFIG_ACME_RENEW_BEFORE_DAYS";
-    pub const RWS_CONFIG_ACME_RENEW_BEFORE_DAYS_DEFAULT_VALUE: &'static str = "30";
+    /// Empty: renew at two-thirds of the certificate's lifetime (or the CA's
+    /// renewal window), not a fixed number of days before expiry.
+    pub const RWS_CONFIG_ACME_RENEW_BEFORE_DAYS_DEFAULT_VALUE: &'static str = "";
+    pub const RWS_CONFIG_ACME_PROFILE: &'static str = "RWS_CONFIG_ACME_PROFILE";
 
     /// Path to persist the ACME account key between restarts (default `acme_account.key`).
     pub const RWS_CONFIG_ACME_ACCOUNT_KEY_PATH: &'static str = "RWS_CONFIG_ACME_ACCOUNT_KEY_PATH";

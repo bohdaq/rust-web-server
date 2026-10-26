@@ -288,6 +288,19 @@ pub mod fuzz_api {
         }
     }
 
+    /// What ACME renewal parses from the CA (#1): certificate DER (validity,
+    /// serial, Authority Key Identifier), renewalInfo windows (RFC 3339) and
+    /// directory profile names. Must never panic.
+    #[cfg(feature = "acme")]
+    pub fn acme_renewal(data: &[u8]) {
+        let _ = crate::acme::fuzzing::cert_info_from_der(data);
+        if let Ok(text) = std::str::from_utf8(data) {
+            let _ = crate::acme::fuzzing::parse_suggested_window(text);
+            let _ = crate::acme::fuzzing::parse_rfc3339(text);
+            let _ = crate::acme::fuzzing::json_object_keys(text, "profiles");
+        }
+    }
+
     /// The SAML XML parser (`sso::saml::xml`), fed IdP-supplied documents.
     #[cfg(feature = "sso-saml")]
     pub fn saml_xml_parse(xml: &str) {

@@ -7,9 +7,13 @@
 #   3. proxy /api/* to a plain-HTTP backend over HTTP/2, relaying its
 #      errors as-is (a 404 with a non-standard reason phrase, not a 502),
 #   4. redirect HTTP -> HTTPS on IPv4 (and IPv6 when the host has it),
-#   5. renew with the challenge answered by the redirect listener (Pebble's
-#      authorization reuse is off, so a real challenge happens) and hot-swap
-#      to the new certificate without a restart.
+#   5. order the `shortlived` profile (a 6-day certificate) and not renew it
+#      while it is current,
+#   6. renew when Pebble's ACME Renewal Information (RFC 9773) says so,
+#      naming the replaced certificate, with the challenge answered by the
+#      redirect listener (Pebble's authorization reuse is off, so a real
+#      challenge happens), and hot-swap to the new certificate without a
+#      restart.
 #
 #   ci/e2e/acme_pebble.sh <path-to-rws> <path-to-pebble> <pebble-source-dir>
 #
@@ -79,6 +83,7 @@ email          = "ci@example.com"
 directory      = "https://localhost:14000/dir"
 ca_file        = "$MINICA"
 challenge_port = 5002
+profile        = "shortlived"
 
 [[upstream]]
 name     = "app"
@@ -93,9 +98,8 @@ backends = ["127.0.0.1:9099"]
   upstream = "app"
 EOF
 
-# Renew on every 20s check so step 5 happens within the test.
-RWS_CONFIG_ACME_RENEW_BEFORE_DAYS=1000 RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS=20 \
-  "$RWS" > rws.log 2>&1 &
+# Check every 20s so step 6 happens within the test.
+RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS=20 "$RWS" > rws.log 2>&1 &
 PIDS+=($!)
 
 wait_for rws.log "Listening for TLS" 90 || fail "rws never started its TLS listener"
@@ -134,8 +138,38 @@ else
   pass "redirect on IPv4 (no IPv6 loopback on this host)"
 fi
 
-# ── 5. renewal through the redirect listener ──────────────────────────────────
+# ── 5. profile, and no renewal while current ──────────────────────────────────
+lifetime() {
+  local dates nb na
+  dates="$(echo | openssl s_client -connect 127.0.0.1:8445 -servername localhost 2>/dev/null | openssl x509 -noout -startdate -enddate)"
+  nb="$(date -u -d "$(echo "$dates" | sed -n 's/^notBefore=//p')" +%s)"
+  na="$(date -u -d "$(echo "$dates" | sed -n 's/^notAfter=//p')" +%s)"
+  echo $((na - nb))
+}
+life="$(lifetime)"
+# Pebble's shortlived profile: 518400 s (6 days), give or take a second.
+[ "$life" -ge 518399 ] && [ "$life" -le 518401 ] || fail "certificate lifetime $life s, not the shortlived profile"
+pass "ordered the shortlived profile (lifetime ${life}s)"
+wait_for rws.log "is current; renewal due" 60 || fail "the renewal check never ran"
+[ "$(grep -c 'Certificate written' rws.log)" = "1" ] || fail "renewed a current certificate"
+pass "a current certificate is not renewed"
+
+# ── 6. renewal when the CA's renewal information says so ─────────────────────
 before="$(serial)"
+# Pebble's management API overrides its ARI answer for a certificate: a
+# window that has already opened means "renew now".
+python3 -I - "$WORK/site/.rws/acme/cert.pem" > "$WORK/ari.json" <<'PY'
+import json, sys, datetime
+pem = open(sys.argv[1]).read()
+first = pem[:pem.index("-----END CERTIFICATE-----") + len("-----END CERTIFICATE-----")] + "\n"
+now = datetime.datetime.now(datetime.timezone.utc)
+fmt = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+window = {"suggestedWindow": {"start": fmt(now - datetime.timedelta(hours=1)), "end": fmt(now - datetime.timedelta(minutes=30))}}
+print(json.dumps({"Certificate": first, "ARIResponse": json.dumps(window)}))
+PY
+curl -sf --cacert "$MINICA" -X POST --data @"$WORK/ari.json" https://localhost:15000/set-renewal-info/ \
+  || fail "could not set Pebble's renewal information"
+wait_for rws.log "replacing [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+" 60 || fail "no order replacing the certificate (ARI ignored?)"
 wait_for rws.log "Answering HTTP-01 challenge via the redirect listener" 60 \
   || fail "renewal challenge was not answered by the redirect listener"
 for _ in $(seq 1 60); do
@@ -146,6 +180,7 @@ done
 sleep 2
 after="$(serial)"
 [ -n "$after" ] && [ "$before" != "$after" ] || fail "served certificate did not change ($before -> $after)"
-pass "renewed via the redirect listener and hot-swapped ($before -> $after)"
+! grep -q "ordering without 'replaces'" rws.log || fail "the CA refused the order's 'replaces'"
+pass "renewed on the CA's renewal information via the redirect listener and hot-swapped ($before -> $after)"
 
 echo "all ACME end-to-end checks passed"

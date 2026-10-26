@@ -66,6 +66,7 @@ Long form only (`acme` feature). See [Automatic HTTPS](/features/acme/).
 | `--acme-challenge-port=<n>` | integer | `80` | `RWS_CONFIG_ACME_CHALLENGE_PORT` |
 | `--acme-cert-path=<path>` | path | `` (empty) | `RWS_CONFIG_ACME_CERT_PATH` |
 | `--acme-key-path=<path>` | path | `` (empty) | `RWS_CONFIG_ACME_KEY_PATH` |
+| `--acme-profile=<name>` | string | `` (empty) | `RWS_CONFIG_ACME_PROFILE` |
 
 Settings not listed on this page have no flag; set them through the
 environment or `rws.config.toml`.
@@ -201,7 +202,8 @@ OPTIONS:
         Plain-HTTP port that 301-redirects to HTTPS (and answers ACME HTTP-01)
 
       --acme-domains, --acme-email, --acme-staging, --acme-directory,
-      --acme-ca-file, --acme-challenge-port, --acme-cert-path, --acme-key-path
+      --acme-ca-file, --acme-challenge-port, --acme-cert-path, --acme-key-path,
+      --acme-profile
         ACME settings (see above)
 
   -V, --version          Print the version and exit

@@ -132,8 +132,9 @@ ca_file        = ""                # extra root CA PEM for a private ACME CA
 challenge_port = 80                # port the CA connects to for HTTP-01
 cert_path      = ""                # default: tls_cert_file, else cert.pem
 key_path       = ""                # default: tls_key_file, else key.pem
-renew_before_days         = 30                  # renew when fewer days remain
-renew_check_interval_secs = 43200               # seconds between expiry checks
+profile        = ""                # certificate profile, e.g. "shortlived"
+# renew_before_days       = 30                  # default: at 2/3 of the lifetime
+renew_check_interval_secs = 43200               # longest time between checks
 account_key_path          = "acme_account.key"  # ACME account key, kept between restarts
 ```
 

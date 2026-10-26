@@ -196,9 +196,11 @@ impl CommandLineArgument {
             ("acme-challenge-port", Config::RWS_CONFIG_ACME_CHALLENGE_PORT,
                 "Port the CA connects to for HTTP-01 challenges (default 80)"),
             ("acme-cert-path", Config::RWS_CONFIG_ACME_CERT_PATH,
-                "Where to store the issued certificate (default: tls-cert-file, else cert.pem)"),
+                "Where to store the issued certificate (default: tls-cert-file, else .rws/acme/cert.pem)"),
             ("acme-key-path", Config::RWS_CONFIG_ACME_KEY_PATH,
-                "Where to store the certificate's private key (default: tls-key-file, else key.pem)"),
+                "Where to store the certificate's private key (default: tls-key-file, else .rws/acme/key.pem)"),
+            ("acme-profile", Config::RWS_CONFIG_ACME_PROFILE,
+                "Certificate profile to order, as the CA offers them (e.g. classic, tlsserver, shortlived)"),
         ];
         for (long_form, environment_variable, hint) in long_only {
             argument_list.push(CommandLineArgument {
