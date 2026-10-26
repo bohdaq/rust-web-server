@@ -157,6 +157,17 @@ impl Range {
         Ok(Range { start, end })
     }
 
+    /// Bytes `start..=end` of the file. `FileExt::read_file_partially`
+    /// refused any path containing a space, quote, `&`, `|` or `;`, so a
+    /// Range request for such a name got `416` (found with #55).
+    fn read_file_range(filepath: &str, start: u64, end: u64) -> Result<Vec<u8>, String> {
+        let mut file = std::fs::File::open(filepath).map_err(|e| e.to_string())?;
+        file.seek(std::io::SeekFrom::Start(start)).map_err(|e| e.to_string())?;
+        let mut body = Vec::with_capacity((end - start + 1) as usize);
+        file.take(end - start + 1).read_to_end(&mut body).map_err(|e| e.to_string())?;
+        Ok(body)
+    }
+
     pub fn parse_content_range(filepath: &str, filelength: u64, raw_range_value: &str) -> Result<Vec<ContentRange>, Error> {
         const INDEX_AFTER_UNIT_DECLARATION : usize = 1;
         let mut content_range_list: Vec<ContentRange> = vec![];
@@ -194,7 +205,7 @@ impl Range {
         let ranges = Range::coalesce(ranges, filelength);
         for range in ranges {
             {
-                let boxed_read = FileExt::read_file_partially(filepath, range.start, range.end);
+                let boxed_read = Range::read_file_range(filepath, range.start, range.end);
                 if boxed_read.is_ok() {
 
                     let content_type = MimeType::detect_mime_type(filepath);

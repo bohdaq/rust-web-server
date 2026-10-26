@@ -115,8 +115,6 @@ impl Controller for StaticResourceController {
                 }
 
 
-                let dir = std::path::PathBuf::from(working_directory());
-                let working_directory = dir.as_path().to_str().unwrap();
 
                 let url = request.request_uri.to_string();
 
@@ -129,7 +127,9 @@ impl Controller for StaticResourceController {
 
                 let components = boxed_url_components.unwrap();
 
-                let static_filepath = [working_directory, components.path.as_str()].join(SYMBOL.empty_string);
+                // Decoded and checked like the lookup itself (#55): the raw
+                // path names no file when it has escapes.
+                let static_filepath = static_fs_path(&components.path).unwrap_or_default();
                 let boxed_modified_date_time = file_modified_utc(&static_filepath);
 
                 if boxed_modified_date_time.is_ok() {
@@ -251,9 +251,7 @@ impl StaticResourceController {
                 }
 
 
-                let dir = std::path::PathBuf::from(working_directory());
-                let working_directory = dir.as_path().to_str().unwrap();
-                let static_filepath = [working_directory, request.request_uri.as_str()].join(SYMBOL.empty_string);
+                let static_filepath = static_fs_path(&request.request_uri).unwrap_or_default();
                 let boxed_modified_date_time = file_modified_utc(&static_filepath);
 
                 if boxed_modified_date_time.is_ok() {
