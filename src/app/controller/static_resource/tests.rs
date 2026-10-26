@@ -835,6 +835,16 @@ fn hidden_files_are_not_served_but_well_known_is() {
     assert!(super::check_request_path("/a\\..\\b").is_err());
 }
 
+#[test]
+fn key_and_config_files_are_not_served() {
+    // rws.config.toml sits in the working directory (the web root) here.
+    assert_eq!(404, static_status("/rws.config.toml"));
+    for path in ["/key.pem", "/cert.PEM", "/a/acme_account.key", "/rws.config.toml"] {
+        assert!(super::check_request_path(path).is_err(), "{path}");
+    }
+    assert!(super::check_request_path("/keys.html").is_ok());
+}
+
 #[cfg(unix)]
 #[test]
 fn a_symlink_out_of_the_root_is_not_followed() {

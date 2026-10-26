@@ -872,6 +872,11 @@ pub(crate) fn check_request_path(path: &str) -> Result<(), String> {
             return Err("invalid path".to_string());
         }
     }
+    // Keys and the config file, wherever they sit in the root (#45).
+    let name = path.rsplit(['/', '\\']).next().unwrap_or("").to_ascii_lowercase();
+    if name.ends_with(".pem") || name.ends_with(".key") || name == "rws.config.toml" {
+        return Err("key and config files are not served".to_string());
+    }
     Ok(())
 }
 

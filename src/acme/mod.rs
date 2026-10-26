@@ -106,12 +106,15 @@ impl AcmeConfig {
                 .unwrap_or_else(|| Self::LETSENCRYPT.to_string())
         };
 
+        // Unset paths default into STATE_DIR, a dot-directory the static
+        // server never serves — not the working directory (the web root),
+        // where they were downloadable before 17.113.1 (#45).
         let cert_path = non_empty_env(Config::RWS_CONFIG_ACME_CERT_PATH)
             .or_else(|| non_empty_env(Config::RWS_CONFIG_TLS_CERT_FILE))
-            .unwrap_or_else(|| "cert.pem".to_string());
+            .unwrap_or_else(|| DEFAULT_CERT_PATH.to_string());
         let key_path = non_empty_env(Config::RWS_CONFIG_ACME_KEY_PATH)
             .or_else(|| non_empty_env(Config::RWS_CONFIG_TLS_KEY_FILE))
-            .unwrap_or_else(|| "key.pem".to_string());
+            .unwrap_or_else(|| DEFAULT_KEY_PATH.to_string());
 
         let challenge_port = non_empty_env(Config::RWS_CONFIG_ACME_CHALLENGE_PORT)
             .and_then(|v| v.parse().ok())
@@ -122,7 +125,7 @@ impl AcmeConfig {
             .unwrap_or(30i64);
 
         let account_key_path = non_empty_env(Config::RWS_CONFIG_ACME_ACCOUNT_KEY_PATH)
-            .unwrap_or_else(|| "acme_account.key".to_string());
+            .unwrap_or_else(|| DEFAULT_ACCOUNT_KEY_PATH.to_string());
 
         Some(AcmeConfig {
             domains,
@@ -156,6 +159,91 @@ pub(crate) fn renew_check_interval_secs() -> u64 {
         .and_then(|v| v.parse().ok())
         .filter(|secs| *secs > 0)
         .unwrap_or(12 * 3600)
+}
+
+/// Where ACME keeps its files when no path is configured (relative to the
+/// working directory, but a dot-directory: never served).
+pub const STATE_DIR: &str = ".rws/acme";
+const DEFAULT_CERT_PATH: &str = ".rws/acme/cert.pem";
+const DEFAULT_KEY_PATH: &str = ".rws/acme/key.pem";
+const DEFAULT_ACCOUNT_KEY_PATH: &str = ".rws/acme/account.key";
+/// The defaults before 17.113.1 — in the web root.
+const LEGACY_DEFAULTS: [(&str, &str); 3] = [
+    ("cert.pem", DEFAULT_CERT_PATH),
+    ("key.pem", DEFAULT_KEY_PATH),
+    ("acme_account.key", DEFAULT_ACCOUNT_KEY_PATH),
+];
+
+/// Move files left at the old default paths (the web root) into
+/// [`STATE_DIR`] when the new default is in use and has no file yet, so an
+/// upgrade keeps its certificate and account — and stops serving its keys.
+fn adopt_legacy_files(config: &AcmeConfig) {
+    for (legacy, current) in LEGACY_DEFAULTS {
+        let in_use = [&config.cert_path, &config.key_path, &config.account_key_path].iter().any(|p| p.as_str() == current);
+        if !in_use || std::path::Path::new(current).exists() || !std::path::Path::new(legacy).is_file() {
+            continue;
+        }
+        match move_private(legacy, current) {
+            Ok(()) => println!("[ACME] Moved '{legacy}' (in the web root) to '{current}'."),
+            Err(e) => eprintln!("[ACME] Could not move '{legacy}' to '{current}': {e}"),
+        }
+    }
+}
+
+/// Move `from` to `to` (creating `to`'s directory), leaving it `0600`.
+fn move_private(from: &str, to: &str) -> std::io::Result<()> {
+    ensure_state_dir(to)?;
+    std::fs::rename(from, to).or_else(|_| std::fs::copy(from, to).and_then(|_| std::fs::remove_file(from)))?;
+    restrict_permissions(to);
+    Ok(())
+}
+
+/// Create the directory holding `path`, `0700` on Unix.
+fn ensure_state_dir(path: &str) -> std::io::Result<()> {
+    let Some(dir) = std::path::Path::new(path).parent().filter(|d| !d.as_os_str().is_empty()) else {
+        return Ok(());
+    };
+    if dir.is_dir() {
+        return Ok(());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        std::fs::DirBuilder::new().recursive(true).mode(0o700).create(dir)
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::create_dir_all(dir)
+    }
+}
+
+/// Write a private key: `0600` on Unix (the file is chmod-ed too if it
+/// already existed with broader permissions).
+fn write_private(path: &str, contents: &[u8]) -> std::io::Result<()> {
+    ensure_state_dir(path)?;
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+        file.write_all(contents)?;
+        restrict_permissions(path);
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, contents)
+    }
+}
+
+fn restrict_permissions(path: &str) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    #[cfg(not(unix))]
+    let _ = path;
 }
 
 fn non_empty_env(name: &str) -> Option<String> {
@@ -280,9 +368,10 @@ impl AcmeManager {
         let cert_pem = download_cert(&http, &account_key, &account_url, &cert_url, &nonce).await?;
 
         // 11. Write cert + key.
-        std::fs::write(&self.config.cert_path, &cert_pem)
+        ensure_state_dir(&self.config.cert_path)
+            .and_then(|_| std::fs::write(&self.config.cert_path, &cert_pem))
             .map_err(|e| format!("failed to write cert to '{}': {e}", self.config.cert_path))?;
-        std::fs::write(&self.config.key_path, cert_key.serialize_pem())
+        write_private(&self.config.key_path, cert_key.serialize_pem().as_bytes())
             .map_err(|e| format!("failed to write key to '{}': {e}", self.config.key_path))?;
 
         println!(
@@ -298,6 +387,7 @@ impl AcmeManager {
     /// e.g. while DNS for a new domain is still propagating. Without a
     /// certificate the TLS listener has nothing to serve.
     pub async fn provision_until_ready(&self) {
+        adopt_legacy_files(&self.config);
         let mut delay = 30u64;
         loop {
             match self.provision_if_needed().await {
@@ -351,7 +441,7 @@ impl AcmeManager {
         }
         let (key, der) = AccountKey::generate()
             .map_err(|e| format!("account key generation failed: {e}"))?;
-        std::fs::write(path, &der)
+        write_private(path, &der)
             .map_err(|e| format!("failed to save account key to '{path}': {e}"))?;
         println!("[ACME] Generated new account key at '{path}'.");
         Ok(key)

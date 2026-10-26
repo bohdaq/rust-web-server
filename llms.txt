@@ -1277,8 +1277,9 @@ email   = "ops@example.com"
 # staging = true | directory = "<ACME URL>" | ca_file = "<extra root PEM>" | challenge_port = 80
 ```
 
-Works with or without proxy routes. Certificate stored as `cert.pem`/`key.pem` in the working
-directory unless `tls_cert_file`/`tls_key_file` or `[acme] cert_path`/`key_path` are set. Startup
+Works with or without proxy routes. Certificate and keys stored in `.rws/acme/`
+(`cert.pem`, `key.pem`, `account.key`; keys 0600; never served — since 17.113.1, earlier in the web root)
+unless `tls_cert_file`/`tls_key_file` or `[acme] cert_path`/`key_path` are set. Startup
 provisioning retries with backoff until issued; renewal checks every 12h
 (`RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS`), renews within `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` (30) of
 expiry and hot-reloads. Renewal challenges are served by the redirect listener (`Server::run_redirect`),
