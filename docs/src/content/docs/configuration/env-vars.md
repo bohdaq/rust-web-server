@@ -84,13 +84,13 @@ Continue the pattern (`_2_`, `_3_`, …) for as many domains as needed. The
 
 ## CORS
 
-When `RWS_CONFIG_CORS_ALLOW_ALL` is `true` the server sets permissive CORS
-headers on every response and the more specific `CORS_ALLOW_*` variables are
+Off by default (since 18.0.0). When `RWS_CONFIG_CORS_ALLOW_ALL` is `true` the server sets permissive CORS
+headers on every response — any origin, with credentials — and the more specific `CORS_ALLOW_*` variables are
 ignored.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RWS_CONFIG_CORS_ALLOW_ALL` | `true` | When `true`, allows all CORS requests from any origin. |
+| `RWS_CONFIG_CORS_ALLOW_ALL` | `false` | When `true`, allows all CORS requests from any origin, with credentials. Was `true` before 18.0.0. |
 | `RWS_CONFIG_CORS_ALLOW_ORIGINS` | `` (empty) | Comma-separated list of allowed origins. Example: `https://app.example.com,https://admin.example.com`. Ignored when `CORS_ALLOW_ALL` is `true`. |
 | `RWS_CONFIG_CORS_ALLOW_METHODS` | `` (empty) | Comma-separated list of allowed HTTP methods. Example: `GET,POST,PUT`. |
 | `RWS_CONFIG_CORS_ALLOW_HEADERS` | `` (empty) | Comma-separated list of allowed request headers (lowercase). Example: `content-type,x-api-key`. |

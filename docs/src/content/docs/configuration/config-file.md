@@ -67,7 +67,7 @@ variable is its table name plus the key, upper-cased:
 | In `rws.config.toml` | Setting |
 |---|---|
 | `port = 443` (top level) | `RWS_CONFIG_PORT` |
-| `[cors]` `allow_all = true` | `RWS_CONFIG_CORS_ALLOW_ALL` |
+| `[cors]` `allow_all = false` | `RWS_CONFIG_CORS_ALLOW_ALL` |
 | `[rate_limit]` `max_requests = 500` | `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS` |
 | 2nd `[[virtual_host]]` block, `domain = ...` | `RWS_CONFIG_VIRTUAL_HOST_1_DOMAIN` |
 
@@ -143,8 +143,9 @@ CORS policy applied to every response. All fields are hot-reloadable.
 
 ```toml
 [cors]
-# Allow every origin. When true, the specific allow_* fields below are ignored.
-allow_all         = true
+# Allow every origin, with credentials (default false since 18.0.0). When
+# true, the specific allow_* fields below are ignored.
+allow_all         = false
 
 # Restrict to specific origins (comma-separated). Used when allow_all = false.
 allow_origins     = "https://app.example.com,https://admin.example.com"

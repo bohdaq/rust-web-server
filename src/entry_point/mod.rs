@@ -32,7 +32,7 @@ impl Config {
     pub const RWS_CONFIG_THREAD_COUNT_DEFAULT_VALUE: &'static str = "200";
 
     pub const RWS_CONFIG_CORS_ALLOW_ALL: &'static str = "RWS_CONFIG_CORS_ALLOW_ALL";
-    pub const RWS_CONFIG_CORS_ALLOW_ALL_DEFAULT_VALUE: &'static str = "true";
+    pub const RWS_CONFIG_CORS_ALLOW_ALL_DEFAULT_VALUE: &'static str = "false";
 
     pub const RWS_CONFIG_CORS_ALLOW_ORIGINS: &'static str = "RWS_CONFIG_CORS_ALLOW_ORIGINS";
     pub const RWS_CONFIG_CORS_ALLOW_ORIGINS_DEFAULT_VALUE: &'static str = "";

@@ -61,7 +61,7 @@ Create React App reads the same shape from a `"proxy"` key in `package.json` ins
 
 ## Alternative: call rws directly, cross-origin
 
-If you'd rather not proxy through the dev server — e.g. you're testing against a shared staging backend rather than a local `rws` instance — call it directly from the browser at its own origin instead. `RWS_CONFIG_CORS_ALLOW_ALL=true` is already the default, so a fresh `rws` instance accepts cross-origin requests (including credentialed ones) from any origin with no configuration at all — convenient for a quick local test, but scope it down for anything beyond that:
+If you'd rather not proxy through the dev server — e.g. you're testing against a shared staging backend rather than a local `rws` instance — call it directly from the browser at its own origin instead. A fresh `rws` sends no CORS headers (since 18.0.0), so list the dev server's origin:
 
 ```bash
 export RWS_CONFIG_CORS_ALLOW_ALL=false

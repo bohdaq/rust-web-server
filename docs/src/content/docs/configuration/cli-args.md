@@ -74,7 +74,7 @@ environment or `rws.config.toml`.
 
 | Flag | Short | Type | Default | Maps to |
 |------|-------|------|---------|---------|
-| `--cors-allow-all=<bool>` | `-a` | bool | `true` | `RWS_CONFIG_CORS_ALLOW_ALL` |
+| `--cors-allow-all=<bool>` | `-a` | bool | `false` | `RWS_CONFIG_CORS_ALLOW_ALL` |
 | `--cors-allow-origins=<list>` | `-o` | string | `` (empty) | `RWS_CONFIG_CORS_ALLOW_ORIGINS` |
 | `--cors-allow-methods=<list>` | `-m` | string | `` (empty) | `RWS_CONFIG_CORS_ALLOW_METHODS` |
 | `--cors-allow-headers=<list>` | `-h` | string | `` (empty) | `RWS_CONFIG_CORS_ALLOW_HEADERS` |

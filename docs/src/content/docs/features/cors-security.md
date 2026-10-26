@@ -7,9 +7,9 @@ Every response includes a baseline set of security headers automatically. CORS i
 
 ## CORS
 
-### Allow-all mode (default)
+### Allow-all mode (opt-in)
 
-When `RWS_CONFIG_CORS_ALLOW_ALL=true` (the default), the server echoes back whatever `Origin` the browser sends and sets `Access-Control-Allow-Credentials: true`. On `OPTIONS` preflight requests it also mirrors back the `Access-Control-Request-Method` and `Access-Control-Request-Headers` values and adds `Access-Control-Max-Age: 86400`.
+With no CORS configuration, `rws` adds no CORS headers: browsers keep other sites from reading its responses (since 18.0.0 — allow-all used to be the default). When `RWS_CONFIG_CORS_ALLOW_ALL=true`, the server echoes back whatever `Origin` the browser sends and sets `Access-Control-Allow-Credentials: true`. On `OPTIONS` preflight requests it also mirrors back the `Access-Control-Request-Method` and `Access-Control-Request-Headers` values and adds `Access-Control-Max-Age: 86400`.
 
 ```bash
 RWS_CONFIG_CORS_ALLOW_ALL=true
@@ -17,7 +17,7 @@ RWS_CONFIG_CORS_ALLOW_ALL=true
 
 ### Explicit origins mode
 
-Set `RWS_CONFIG_CORS_ALLOW_ALL=false` and list the allowed origins as a comma-separated string:
+List the allowed origins as a comma-separated string (`RWS_CONFIG_CORS_ALLOW_ALL` stays `false`, the default):
 
 ```bash
 RWS_CONFIG_CORS_ALLOW_ALL=false
@@ -35,7 +35,7 @@ When the incoming `Origin` is not one of the listed origins no CORS headers are 
 
 | Variable | Default | Description |
 |---|---|---|
-| `RWS_CONFIG_CORS_ALLOW_ALL` | `true` | Echo any origin back |
+| `RWS_CONFIG_CORS_ALLOW_ALL` | `false` | Echo any origin back, with credentials (was `true` before 18.0.0) |
 | `RWS_CONFIG_CORS_ALLOW_ORIGINS` | `""` | Comma-separated allowlist (used when allow-all is `false`) |
 | `RWS_CONFIG_CORS_ALLOW_CREDENTIALS` | `""` | Set `Access-Control-Allow-Credentials: true` |
 | `RWS_CONFIG_CORS_ALLOW_METHODS` | `""` | Value for `Access-Control-Allow-Methods` on preflight |

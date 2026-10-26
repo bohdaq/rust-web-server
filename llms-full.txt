@@ -525,7 +525,7 @@ Create React App reads the same shape from a `"proxy"` key in `package.json` ins
 
 ## Alternative: call rws directly, cross-origin
 
-If you'd rather not proxy through the dev server — e.g. you're testing against a shared staging backend rather than a local `rws` instance — call it directly from the browser at its own origin instead. `RWS_CONFIG_CORS_ALLOW_ALL=true` is already the default, so a fresh `rws` instance accepts cross-origin requests (including credentialed ones) from any origin with no configuration at all — convenient for a quick local test, but scope it down for anything beyond that:
+If you'd rather not proxy through the dev server — e.g. you're testing against a shared staging backend rather than a local `rws` instance — call it directly from the browser at its own origin instead. A fresh `rws` sends no CORS headers (since 18.0.0), so list the dev server's origin:
 
 ```bash
 export RWS_CONFIG_CORS_ALLOW_ALL=false
@@ -986,13 +986,13 @@ Continue the pattern (`_2_`, `_3_`, …) for as many domains as needed. The
 
 ## CORS
 
-When `RWS_CONFIG_CORS_ALLOW_ALL` is `true` the server sets permissive CORS
-headers on every response and the more specific `CORS_ALLOW_*` variables are
+Off by default (since 18.0.0). When `RWS_CONFIG_CORS_ALLOW_ALL` is `true` the server sets permissive CORS
+headers on every response — any origin, with credentials — and the more specific `CORS_ALLOW_*` variables are
 ignored.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RWS_CONFIG_CORS_ALLOW_ALL` | `true` | When `true`, allows all CORS requests from any origin. |
+| `RWS_CONFIG_CORS_ALLOW_ALL` | `false` | When `true`, allows all CORS requests from any origin, with credentials. Was `true` before 18.0.0. |
 | `RWS_CONFIG_CORS_ALLOW_ORIGINS` | `` (empty) | Comma-separated list of allowed origins. Example: `https://app.example.com,https://admin.example.com`. Ignored when `CORS_ALLOW_ALL` is `true`. |
 | `RWS_CONFIG_CORS_ALLOW_METHODS` | `` (empty) | Comma-separated list of allowed HTTP methods. Example: `GET,POST,PUT`. |
 | `RWS_CONFIG_CORS_ALLOW_HEADERS` | `` (empty) | Comma-separated list of allowed request headers (lowercase). Example: `content-type,x-api-key`. |
@@ -1158,7 +1158,7 @@ variable is its table name plus the key, upper-cased:
 | In `rws.config.toml` | Setting |
 |---|---|
 | `port = 443` (top level) | `RWS_CONFIG_PORT` |
-| `[cors]` `allow_all = true` | `RWS_CONFIG_CORS_ALLOW_ALL` |
+| `[cors]` `allow_all = false` | `RWS_CONFIG_CORS_ALLOW_ALL` |
 | `[rate_limit]` `max_requests = 500` | `RWS_CONFIG_RATE_LIMIT_MAX_REQUESTS` |
 | 2nd `[[virtual_host]]` block, `domain = ...` | `RWS_CONFIG_VIRTUAL_HOST_1_DOMAIN` |
 
@@ -1234,8 +1234,9 @@ CORS policy applied to every response. All fields are hot-reloadable.
 
 ```toml
 [cors]
-# Allow every origin. When true, the specific allow_* fields below are ignored.
-allow_all         = true
+# Allow every origin, with credentials (default false since 18.0.0). When
+# true, the specific allow_* fields below are ignored.
+allow_all         = false
 
 # Restrict to specific origins (comma-separated). Used when allow_all = false.
 allow_origins     = "https://app.example.com,https://admin.example.com"
@@ -1733,7 +1734,7 @@ environment or `rws.config.toml`.
 
 | Flag | Short | Type | Default | Maps to |
 |------|-------|------|---------|---------|
-| `--cors-allow-all=<bool>` | `-a` | bool | `true` | `RWS_CONFIG_CORS_ALLOW_ALL` |
+| `--cors-allow-all=<bool>` | `-a` | bool | `false` | `RWS_CONFIG_CORS_ALLOW_ALL` |
 | `--cors-allow-origins=<list>` | `-o` | string | `` (empty) | `RWS_CONFIG_CORS_ALLOW_ORIGINS` |
 | `--cors-allow-methods=<list>` | `-m` | string | `` (empty) | `RWS_CONFIG_CORS_ALLOW_METHODS` |
 | `--cors-allow-headers=<list>` | `-h` | string | `` (empty) | `RWS_CONFIG_CORS_ALLOW_HEADERS` |
@@ -5049,9 +5050,9 @@ Every response includes a baseline set of security headers automatically. CORS i
 
 ## CORS
 
-### Allow-all mode (default)
+### Allow-all mode (opt-in)
 
-When `RWS_CONFIG_CORS_ALLOW_ALL=true` (the default), the server echoes back whatever `Origin` the browser sends and sets `Access-Control-Allow-Credentials: true`. On `OPTIONS` preflight requests it also mirrors back the `Access-Control-Request-Method` and `Access-Control-Request-Headers` values and adds `Access-Control-Max-Age: 86400`.
+With no CORS configuration, `rws` adds no CORS headers: browsers keep other sites from reading its responses (since 18.0.0 — allow-all used to be the default). When `RWS_CONFIG_CORS_ALLOW_ALL=true`, the server echoes back whatever `Origin` the browser sends and sets `Access-Control-Allow-Credentials: true`. On `OPTIONS` preflight requests it also mirrors back the `Access-Control-Request-Method` and `Access-Control-Request-Headers` values and adds `Access-Control-Max-Age: 86400`.
 
 ```bash
 RWS_CONFIG_CORS_ALLOW_ALL=true
@@ -5059,7 +5060,7 @@ RWS_CONFIG_CORS_ALLOW_ALL=true
 
 ### Explicit origins mode
 
-Set `RWS_CONFIG_CORS_ALLOW_ALL=false` and list the allowed origins as a comma-separated string:
+List the allowed origins as a comma-separated string (`RWS_CONFIG_CORS_ALLOW_ALL` stays `false`, the default):
 
 ```bash
 RWS_CONFIG_CORS_ALLOW_ALL=false
@@ -5077,7 +5078,7 @@ When the incoming `Origin` is not one of the listed origins no CORS headers are 
 
 | Variable | Default | Description |
 |---|---|---|
-| `RWS_CONFIG_CORS_ALLOW_ALL` | `true` | Echo any origin back |
+| `RWS_CONFIG_CORS_ALLOW_ALL` | `false` | Echo any origin back, with credentials (was `true` before 18.0.0) |
 | `RWS_CONFIG_CORS_ALLOW_ORIGINS` | `""` | Comma-separated allowlist (used when allow-all is `false`) |
 | `RWS_CONFIG_CORS_ALLOW_CREDENTIALS` | `""` | Set `Access-Control-Allow-Credentials: true` |
 | `RWS_CONFIG_CORS_ALLOW_METHODS` | `""` | Value for `Access-Control-Allow-Methods` on preflight |
@@ -17406,6 +17407,7 @@ case-insensitive lookup that returns `Option<&Header>` without allocating.
 | `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` | always | only with `RWS_CONFIG_SECURITY_HEADERS=true` |
 | `Content-Security-Policy` | `default-src 'self'` unless `RWS_CONFIG_CSP` | `RWS_CONFIG_CSP`, or the default with `RWS_CONFIG_SECURITY_HEADERS=true` |
 | `Date-Unix-Epoch-Nanos`, `Last-Modified-Unix-Epoch-Nanos` | always | only with `RWS_CONFIG_NANOS_HEADERS=true` |
+| `Access-Control-Allow-Origin` (+ `-Credentials: true`) for any `Origin` | always (`cors_allow_all` defaulted to `true`) | only with `RWS_CONFIG_CORS_ALLOW_ALL=true` or a listed origin |
 
 What it means:
 
@@ -17424,6 +17426,11 @@ What it means:
 - **Client hints**: if your app reads `Sec-CH-*` request headers, set
   `RWS_CONFIG_CLIENT_HINTS=true` (or `client_hints = true` in
   `rws.config.toml`).
+- **CORS**: a browser app on another origin that calls `rws` needs its origin
+  in `RWS_CONFIG_CORS_ALLOW_ORIGINS` (`[cors] allow_origins`), plus
+  `RWS_CONFIG_CORS_ALLOW_CREDENTIALS=true` if it sends cookies. Setting
+  `RWS_CONFIG_CORS_ALLOW_ALL=true` restores the old echo-any-origin
+  behaviour; avoid it for anything with logins.
 - **`CacheLayer`** no longer stores `no-cache` responses, responses to `Range`
   requests, or responses whose `Vary` names a request header outside its key.
   Static files are therefore not cached by it (they were never meant to be).

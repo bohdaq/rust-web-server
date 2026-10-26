@@ -21,6 +21,7 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   CSP are opt-in with `RWS_CONFIG_SECURITY_HEADERS=true` (a CSP set with
   `RWS_CONFIG_CSP` is always sent), and `Date-Unix-Epoch-Nanos` /
   `Last-Modified-Unix-Epoch-Nanos` with `RWS_CONFIG_NANOS_HEADERS=true`.
+- **CORS allow-all is off by default** (#59). `RWS_CONFIG_CORS_ALLOW_ALL` defaulted to `true`, which echoed any `Origin` with `Access-Control-Allow-Credentials: true` — any site could read a logged-in user's responses. With no CORS configuration `rws` now adds no CORS headers; list origins in `RWS_CONFIG_CORS_ALLOW_ORIGINS`, or set `RWS_CONFIG_CORS_ALLOW_ALL=true` for the old behaviour.
 - **HTTP/2 server:** rws serves HTTP/2 with its own implementation
   (`h2_server`) instead of the `h2` crate; the hidden `h2_handler` module is
   gone. Same conformance (h2spec 146/146), limits and behaviour; the `h2`

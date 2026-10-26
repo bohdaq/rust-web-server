@@ -3,9 +3,29 @@ mod server_config_tests {
     use crate::server_config::ServerConfig;
 
     #[test]
-    fn default_cors_allow_all_is_true() {
+    fn default_cors_allow_all_is_false() {
+        // Off since 18.0.0 (#59): echoing any origin with credentials let
+        // every site read a logged-in user's responses.
         let cfg = ServerConfig::default();
-        assert!(cfg.cors_allow_all);
+        assert!(!cfg.cors_allow_all);
+    }
+
+    #[test]
+    fn by_default_a_cross_origin_request_gets_no_cors_headers() {
+        use crate::header::Header;
+        use crate::request::Request;
+        let request = Request {
+            method: "GET".to_string(),
+            request_uri: "/".to_string(),
+            http_version: "HTTP/1.1".to_string(),
+            headers: vec![Header { name: "Origin".into(), value: "https://evil.example".into() }],
+            body: vec![],
+        };
+        let headers = crate::cors::Cors::get_headers_from_config(&request, &ServerConfig::default());
+        assert!(headers.is_empty(), "{:?}", headers);
+        let opted_in = ServerConfig { cors_allow_all: true, ..ServerConfig::default() };
+        let headers = crate::cors::Cors::get_headers_from_config(&request, &opted_in);
+        assert!(headers.iter().any(|h| h.name == Header::_ACCESS_CONTROL_ALLOW_ORIGIN && h.value == "https://evil.example"));
     }
 
     #[test]

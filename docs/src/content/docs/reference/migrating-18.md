@@ -47,6 +47,7 @@ case-insensitive lookup that returns `Option<&Header>` without allocating.
 | `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` | always | only with `RWS_CONFIG_SECURITY_HEADERS=true` |
 | `Content-Security-Policy` | `default-src 'self'` unless `RWS_CONFIG_CSP` | `RWS_CONFIG_CSP`, or the default with `RWS_CONFIG_SECURITY_HEADERS=true` |
 | `Date-Unix-Epoch-Nanos`, `Last-Modified-Unix-Epoch-Nanos` | always | only with `RWS_CONFIG_NANOS_HEADERS=true` |
+| `Access-Control-Allow-Origin` (+ `-Credentials: true`) for any `Origin` | always (`cors_allow_all` defaulted to `true`) | only with `RWS_CONFIG_CORS_ALLOW_ALL=true` or a listed origin |
 
 What it means:
 
@@ -65,6 +66,11 @@ What it means:
 - **Client hints**: if your app reads `Sec-CH-*` request headers, set
   `RWS_CONFIG_CLIENT_HINTS=true` (or `client_hints = true` in
   `rws.config.toml`).
+- **CORS**: a browser app on another origin that calls `rws` needs its origin
+  in `RWS_CONFIG_CORS_ALLOW_ORIGINS` (`[cors] allow_origins`), plus
+  `RWS_CONFIG_CORS_ALLOW_CREDENTIALS=true` if it sends cookies. Setting
+  `RWS_CONFIG_CORS_ALLOW_ALL=true` restores the old echo-any-origin
+  behaviour; avoid it for anything with logins.
 - **`CacheLayer`** no longer stores `no-cache` responses, responses to `Range`
   requests, or responses whose `Vary` names a request header outside its key.
   Static files are therefore not cached by it (they were never meant to be).
