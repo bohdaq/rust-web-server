@@ -42,7 +42,7 @@ pub mod app;
 pub mod auth;
 
 #[cfg(feature = "macros")]
-pub use rws_macros::{delete, get, patch, post, put, route, Config, FromRequest, Validate};
+pub use rws_macros::{delete, get, patch, post, put, route, Config, FromRequest, JsonSchema, Validate};
 #[cfg(all(feature = "macros", any(feature = "model-sqlite", feature = "model-postgres", feature = "model-mysql")))]
 pub use rws_macros::Model;
 #[cfg(feature = "http2")]
@@ -82,6 +82,7 @@ pub mod acme;
 pub mod middleware;
 pub mod rate_limit;
 pub mod router;
+pub mod schema;
 pub mod state;
 pub mod test_client;
 pub mod application;

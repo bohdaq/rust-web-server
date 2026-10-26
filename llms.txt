@@ -126,6 +126,7 @@ Use it as:
 - [MCP Prompts](https://rws8.tech/mcp/prompts/): Register reusable prompt templates on an McpServer that AI clients can invoke by name with arguments.
 - [MCP Authentication](https://rws8.tech/mcp/auth/): Protect your MCP endpoint with a static Bearer token (require_bearer) or full OAuth 2.0 / OIDC JWT verification (require_oauth).
 - [Operate rws from an AI client](https://rws8.tech/mcp/operate/): Point Claude Code, Claude Desktop or Cursor at a running rws and let it read metrics and logs, block an abusive IP, or switch on maintenance mode.
+- [Build agent tools on your app](https://rws8.tech/mcp/agent-tools/): Expose an app's domain functions to AI agents as MCP tools — typed schemas, OAuth and live updates from the code the REST API already uses.
 
 ## Testing
 

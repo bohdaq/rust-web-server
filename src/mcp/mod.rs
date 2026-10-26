@@ -87,7 +87,7 @@
 //!
 //! None — configure the server programmatically via the builder.
 
-mod json_rpc;
+pub(crate) mod json_rpc;
 
 #[cfg(test)]
 mod tests;
@@ -1906,6 +1906,56 @@ impl McpServer {
             handler: Arc::new(handler),
         });
         self
+    }
+
+    /// Register a tool whose arguments and result are Rust types: the
+    /// `inputSchema` comes from `In` and the `outputSchema` from `Out`
+    /// ([`JsonSchema`](crate::schema::JsonSchema), usually
+    /// `#[derive(JsonSchema)]`), the arguments are deserialized into `In`, and
+    /// the handler's `Out` is sent as `structuredContent` (and as JSON text
+    /// for older clients). Requires the `serde` feature.
+    ///
+    /// Arguments that don't deserialize come back as an `isError` result
+    /// naming the problem, as do the handler's errors. MCP requires an
+    /// `outputSchema` to describe an object, so an `Out` that isn't a struct
+    /// is sent as JSON text without one.
+    ///
+    /// ```rust,ignore
+    /// use rust_web_server::JsonSchema;
+    /// use serde::{Deserialize, Serialize};
+    ///
+    /// #[derive(Deserialize, JsonSchema)]
+    /// struct Lookup { sku: String }
+    ///
+    /// #[derive(Serialize, JsonSchema)]
+    /// struct Stock { sku: String, available: u32 }
+    ///
+    /// let server = McpServer::new("shop", "1.0")
+    ///     .typed_tool("stock", "Units available for a SKU", |_ctx, args: Lookup| {
+    ///         Ok(Stock { available: 3, sku: args.sku })
+    ///     });
+    /// ```
+    #[cfg(feature = "serde")]
+    pub fn typed_tool<In, Out, F>(self, name: &str, description: &str, handler: F) -> Self
+    where
+        In: serde::de::DeserializeOwned + crate::schema::JsonSchema,
+        Out: serde::Serialize + crate::schema::JsonSchema,
+        F: Fn(McpContext, In) -> Result<Out, String> + Send + Sync + 'static,
+    {
+        let output_schema = Out::json_schema();
+        let structured = crate::schema::is_object_schema(&output_schema);
+        let server = self.tool_with_context(name, description, &In::json_schema(), move |ctx, args| {
+            let args = if args.trim().is_empty() { "{}" } else { args };
+            let input: In = serde_json::from_str(args).map_err(|e| format!("Invalid arguments: {e}"))?;
+            let output = handler(ctx, input)?;
+            let json = serde_json::to_string(&output).map_err(|e| format!("Could not serialize the result: {e}"))?;
+            Ok(if structured { McpContent::structured(json) } else { McpContent::json(json) })
+        });
+        if structured {
+            server.tool_output_schema(name, &output_schema)
+        } else {
+            server
+        }
     }
 
     /// Register a readable resource.

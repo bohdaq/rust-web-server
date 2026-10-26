@@ -2832,3 +2832,75 @@ fn tool_annotations_are_set_after_registration() {
     let list = body_of(&server.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#));
     assert!(list.contains(r#""annotations":{"readOnlyHint":true}"#), "{list}");
 }
+
+// ── #61: typed tools ─────────────────────────────────────────────────────────
+
+#[cfg(all(feature = "macros", feature = "serde"))]
+mod typed_tools {
+    use super::{body_of, McpServer};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Deserialize, crate::JsonSchema)]
+    #[serde(rename_all = "camelCase")]
+    struct Lookup {
+        /// The item's SKU.
+        sku_code: String,
+        warehouse: Option<String>,
+    }
+
+    #[derive(Serialize, crate::JsonSchema)]
+    #[serde(rename_all = "camelCase")]
+    struct Stock {
+        sku_code: String,
+        available: u32,
+    }
+
+    fn server() -> McpServer {
+        McpServer::new("shop", "1")
+            .typed_tool("stock", "Units available", |_ctx, args: Lookup| {
+                if args.sku_code == "missing" {
+                    return Err(format!("no item {}", args.sku_code));
+                }
+                let available = if args.warehouse.as_deref() == Some("east") { 1 } else { 3 };
+                Ok(Stock { sku_code: args.sku_code, available })
+            })
+            .typed_tool("skus", "All SKUs", |_ctx, _args: std::collections::HashMap<String, String>| {
+                Ok(vec!["A-1".to_string()])
+            })
+    }
+
+    fn call(name: &str, arguments: &str) -> String {
+        body_of(&server().handle_request(&format!(
+            r#"{{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{{"name":"{name}","arguments":{arguments}}}}}"#
+        )))
+    }
+
+    #[test]
+    fn schemas_come_from_the_types() {
+        let list = body_of(&server().handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#));
+        assert!(list.contains(r#""inputSchema":{"type":"object","properties":{"skuCode":{"description":"The item's SKU.","type":"string"},"warehouse":{"anyOf":[{"type":"string"},{"type":"null"}]}},"required":["skuCode"]}"#), "{list}");
+        assert!(list.contains(r#""outputSchema":{"type":"object","properties":{"skuCode":{"type":"string"},"available":{"type":"integer","minimum":0}},"required":["skuCode","available"]}"#), "{list}");
+        // A non-object result has no outputSchema.
+        let skus = list.split(r#""name":"skus""#).nth(1).unwrap();
+        assert!(!skus.contains("outputSchema"), "{list}");
+    }
+
+    #[test]
+    fn arguments_are_deserialized_and_the_result_is_structured() {
+        let body = call("stock", r#"{"skuCode":"A-1","warehouse":"east"}"#);
+        assert!(body.contains(r#""structuredContent":{"skuCode":"A-1","available":1}"#), "{body}");
+        assert!(body.contains(r#""isError":false"#), "{body}");
+        let skus = call("skus", "{}");
+        assert!(skus.contains(r#"\"A-1\""#) && !skus.contains("structuredContent"), "{skus}");
+    }
+
+    #[test]
+    fn bad_arguments_and_handler_errors_are_tool_errors() {
+        let missing = call("stock", "{}");
+        assert!(missing.contains(r#""isError":true"#) && missing.contains("skuCode"), "{missing}");
+        let wrong = call("stock", r#"{"skuCode":"A","warehouse":5}"#);
+        assert!(wrong.contains(r#""isError":true"#) && wrong.contains("Invalid arguments"), "{wrong}");
+        let failed = call("stock", r#"{"skuCode":"missing"}"#);
+        assert!(failed.contains(r#""isError":true"#) && failed.contains("no item missing"), "{failed}");
+    }
+}

@@ -341,6 +341,70 @@ let mcp = McpServer::new("calc", "1.0")
 `tool_title`, `tool_icon` and `tool_output_schema` apply to a tool already
 registered under that name (sync or async).
 
+## Typed tools
+
+With the `macros` and `serde` features, a tool can take and return Rust
+types (since 18.0.0): `typed_tool` derives `inputSchema` from the argument
+type and `outputSchema` from the result type, deserializes the arguments,
+and sends the result as `structuredContent`.
+
+```rust
+use rust_web_server::mcp::McpServer;
+use rust_web_server::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+/// Which item.
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct Lookup {
+    /// Stock keeping unit, e.g. "MUG-01".
+    sku_code: String,
+    warehouse: Option<String>,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct Stock {
+    sku_code: String,
+    available: u32,
+}
+
+let mcp = McpServer::new("shop", "1.0")
+    .typed_tool("stock", "Units available for a SKU", |_ctx, args: Lookup| {
+        Ok(Stock { available: 3, sku_code: args.sku_code })
+    });
+```
+
+`tools/list` then shows
+
+```json
+"inputSchema": {"description":"Which item.","type":"object",
+  "properties":{"skuCode":{"description":"Stock keeping unit, e.g. \"MUG-01\".","type":"string"},
+                "warehouse":{"anyOf":[{"type":"string"},{"type":"null"}]}},
+  "required":["skuCode"]},
+"outputSchema": {"type":"object","properties":{"skuCode":{"type":"string"},
+  "available":{"type":"integer","minimum":0}},"required":["skuCode","available"]}
+```
+
+- The handler gets [`McpContext`](#per-request-context) (caller, session,
+  OAuth claims) and the arguments; its `Err(String)` is an `isError`
+  result, as are arguments that don't deserialize
+  (`Invalid arguments: missing field \`skuCode\``).
+- A result that isn't a struct (a `Vec`, a string) is sent as JSON text
+  without an `outputSchema` — MCP requires that schema to be an object.
+- `#[derive(JsonSchema)]` covers structs with named fields and enums of unit
+  variants (a string `enum`). It follows `#[serde(rename, rename_all,
+  default, skip, skip_serializing_if)]`, so the schema matches the JSON
+  serde produces; `flatten`, tagged or untagged enums, `with` and the like
+  are compile errors rather than a schema that doesn't match. `Option`
+  fields aren't required; doc comments become `description`s.
+- `rust_web_server::schema::JsonSchema` is the trait behind it, implemented
+  for primitives, `String`, `Option`, `Vec`, sets, string-keyed maps and
+  smart pointers; implement it by hand for anything else. A type that
+  contains itself ends in `{}` (any value) after 32 levels.
+
+[Build agent tools](/mcp/agent-tools/) puts this together into an app.
+
 ## McpContent variants
 
 ```rust

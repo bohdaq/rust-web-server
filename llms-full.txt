@@ -15285,6 +15285,70 @@ let mcp = McpServer::new("calc", "1.0")
 `tool_title`, `tool_icon` and `tool_output_schema` apply to a tool already
 registered under that name (sync or async).
 
+## Typed tools
+
+With the `macros` and `serde` features, a tool can take and return Rust
+types (since 18.0.0): `typed_tool` derives `inputSchema` from the argument
+type and `outputSchema` from the result type, deserializes the arguments,
+and sends the result as `structuredContent`.
+
+```rust
+use rust_web_server::mcp::McpServer;
+use rust_web_server::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+/// Which item.
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct Lookup {
+    /// Stock keeping unit, e.g. "MUG-01".
+    sku_code: String,
+    warehouse: Option,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct Stock {
+    sku_code: String,
+    available: u32,
+}
+
+let mcp = McpServer::new("shop", "1.0")
+    .typed_tool("stock", "Units available for a SKU", |_ctx, args: Lookup| {
+        Ok(Stock { available: 3, sku_code: args.sku_code })
+    });
+```
+
+`tools/list` then shows
+
+```json
+"inputSchema": {"description":"Which item.","type":"object",
+  "properties":{"skuCode":{"description":"Stock keeping unit, e.g. \"MUG-01\".","type":"string"},
+                "warehouse":{"anyOf":[{"type":"string"},{"type":"null"}]}},
+  "required":["skuCode"]},
+"outputSchema": {"type":"object","properties":{"skuCode":{"type":"string"},
+  "available":{"type":"integer","minimum":0}},"required":["skuCode","available"]}
+```
+
+- The handler gets [`McpContext`](#per-request-context) (caller, session,
+  OAuth claims) and the arguments; its `Err(String)` is an `isError`
+  result, as are arguments that don't deserialize
+  (`Invalid arguments: missing field \`skuCode\``).
+- A result that isn't a struct (a `Vec`, a string) is sent as JSON text
+  without an `outputSchema` — MCP requires that schema to be an object.
+- `#[derive(JsonSchema)]` covers structs with named fields and enums of unit
+  variants (a string `enum`). It follows `#[serde(rename, rename_all,
+  default, skip, skip_serializing_if)]`, so the schema matches the JSON
+  serde produces; `flatten`, tagged or untagged enums, `with` and the like
+  are compile errors rather than a schema that doesn't match. `Option`
+  fields aren't required; doc comments become `description`s.
+- `rust_web_server::schema::JsonSchema` is the trait behind it, implemented
+  for primitives, `String`, `Option`, `Vec`, sets, string-keyed maps and
+  smart pointers; implement it by hand for anything else. A type that
+  contains itself ends in `{}` (any value) after 32 levels.
+
+[Build agent tools](/mcp/agent-tools/) puts this together into an app.
+
 ## McpContent variants
 
 ```rust
@@ -16078,6 +16142,106 @@ The tools act on this process only — a second replica has its own
 blocklist, maintenance switch and request log. They don't restart the
 server, edit `rws.config.toml` or read files outside the static root. The
 blocklist and maintenance mode are in memory: a restart clears them.
+
+---
+
+# Build agent tools on your app
+
+<https://rws8.tech/mcp/agent-tools/>
+
+An app built on rws can answer AI agents with the same functions its REST
+API calls. `app.mcp(name, version)` puts an MCP endpoint at `/mcp` in front
+of the app; each domain function becomes a [typed tool](/mcp/tools/#typed-tools)
+whose schemas come from its Rust types; everything else still reaches the
+app. The runnable version is
+[`examples/mcp_inventory.rs`](https://github.com/bohdaq/rust-web-server/blob/main/examples/mcp_inventory.rs).
+
+```bash
+MCP_TOKEN=$(openssl rand -hex 32) \
+  cargo run --example mcp_inventory --features "macros serde sso"
+curl localhost:7878/items
+claude mcp add --transport http inventory http://localhost:7878/mcp \
+  --header "Authorization: Bearer $MCP_TOKEN"
+```
+
+## One domain, two front doors
+
+Keep the logic in plain functions over plain types, and let the REST
+handlers and the tools both call them:
+
+```rust
+/// A stock change.
+#[derive(Deserialize, JsonSchema)]
+pub struct AdjustStock {
+    pub sku: String,
+    /// Units to add (positive) or remove (negative).
+    pub delta: i64,
+}
+
+impl Inventory {
+    pub fn adjust(&self, change: &AdjustStock, changed_by: Option) -> Result { /* ... */ }
+}
+
+let server = App::with_state(Arc::clone(&inventory))
+    .post("/items/:sku/adjust", |request, params, _, inventory| { /* parse, inventory.adjust(..) */ })
+    .mcp("inventory", "1.0")
+    .typed_tool("adjust_stock", "Add or remove units of an item; fails rather than go below zero.",
+        move |ctx, change: AdjustStock| inventory.adjust(&change, caller(ctx.auth_claims.as_deref())))
+    .typed_tool("list_items", "List stocked items, optionally only those running low.",
+        move |_, filter: ListItems| Ok(inventory.list(&filter)))
+    .tool_annotations("list_items", ToolAnnotations { read_only_hint: Some(true), ..Default::default() });
+```
+
+- The doc comments on the types are what the model reads about each
+  argument; write them for it.
+- A domain error (`only 1 of TEE-02 on hand`) returns as an `isError`
+  result the model can act on, not a protocol failure.
+- Mark tools that only read with `read_only_hint`, so clients that ask
+  before acting ask only for the ones that change something.
+
+## Who is calling
+
+`/mcp` needs a token; the REST routes keep their own rules.
+
+- **One shared token:** `.require_bearer(token)`.
+- **Your identity provider:** `.require_oauth(OidcProvider::discover(issuer)?,
+  audience)`. rws checks the token's signature, issuer, expiry and audience,
+  serves `/.well-known/oauth-protected-resource` so clients can find the
+  provider, and hands the verified claims to every tool as
+  `ctx.auth_claims` — the example records the caller's e-mail on each stock
+  change. The example takes the issuer and audience from `MCP_OAUTH_ISSUER`
+  and `MCP_OAUTH_AUDIENCE`. See [Auth](/mcp/auth/).
+
+## Live updates
+
+A resource plus `notify_resource_updated` lets a client keep a view
+current. The example serves `inventory://items` and, whenever the stock
+changes — through a tool or through the REST API — tells every session
+subscribed to it:
+
+```rust
+let notifier = server.clone();
+inventory.on_change(move || notifier.notify_resource_updated("inventory://items"));
+```
+
+A client holding `GET /mcp` open (SSE) and subscribed with
+`resources/subscribe` receives
+`{"method":"notifications/resources/updated","params":{"uri":"inventory://items"}}`
+and reads the resource again.
+
+## Testing
+
+`TestClient` drives the whole stack, auth included, without a socket — the
+example's tests call tools over `/mcp`, then check the change through the
+REST route:
+
+```rust
+let adjusted = call(&client, "adjust_stock", r#"{"sku":"TEE-02","delta":-2}"#);
+assert!(adjusted.contains(r#""onHand":1"#));
+assert!(client.get("/items/TEE-02").send().body_text().contains(r#""onHand":1"#));
+```
+
+`cargo test --example mcp_inventory --features "macros serde sso"` runs them.
 
 ---
 
@@ -17252,6 +17416,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `routes!` | `macros` | Declarative routing table — builds `AppWithState`, `AsyncAppWithState` or `Router` from `METHOD "path" => handler` lines. See [Routing](/building-apps/routing/) |
 | `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` | crate root (`macros`) | Attribute macros annotating a handler with its method and path |
 | `#[derive(FromRequest)]` | crate root (`macros`) | Derives `FromRequest` for a named-field struct, extracting fields in order and stopping at the first error |
+| `#[derive(JsonSchema)]` | crate root (`macros`) | Derives `schema::JsonSchema` for a named-field struct or unit enum, following its `#[serde]` renames (18.0.0). See [Typed tools](/mcp/tools/#typed-tools) |
 | `#[derive(Validate)]` | crate root (`macros`) | Derives `Validate` from `#[validate(length, range, email, required, url)]` field annotations |
 | `#[derive(Config)]` | crate root (`macros`) | Typed env-var binding: generates `load() -> Result`; `#[config(env, default, prefix)]`. See [Config binding](/features/config-binding/) |
 | `#[derive(Model)]` | crate root (`macros` + a `model-*` feature) | Maps a struct to a table (`#[table]`, `#[primary_key(auto_increment)]`, `#[column]`, `#[ignore]`) and generates `T::repository(&pool)` / `T::query(&pool)` |
@@ -17411,7 +17576,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 
 | Type / Trait | Module | Description |
 |---|---|---|
-| `McpServer` / `McpIcon` | `mcp` | MCP Streamable HTTP server (`POST /mcp`, JSON-RPC 2.0, plus `GET /mcp` SSE); `.tool` / `.resource` / `.prompt`, `.require_bearer`, `.require_oauth` (`sso`), `.session_ttl` / `.max_sessions` / `.max_sse_clients`. Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See [MCP](/mcp/overview/) |
+| `JsonSchema` / `ObjectSchema` | `schema` | A type's JSON Schema as text (primitives, `Option`, collections, smart pointers built in); `ObjectSchema` builds an object schema (18.0.0) |
+| `McpServer` / `McpIcon` | `mcp` | MCP Streamable HTTP server (`POST /mcp`, JSON-RPC 2.0, plus `GET /mcp` SSE); `.tool` / `.typed_tool` (`serde`) / `.resource` / `.prompt`, `.require_bearer`, `.require_oauth` (`sso`), `.session_ttl` / `.max_sessions` / `.max_sse_clients`. Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See [MCP](/mcp/overview/) |
 | `McpContent` | `mcp` | Tool result content: `text`, `json`, `image`, `embedded` |
 | `McpContext` | `mcp` | Per-session context for `.tool_with_context` handlers: client info, `auth_claims`, progress, cancellation, `sample`, `list_roots` |
 | `ToolAnnotations` | `mcp` | `read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint` for `.tool_annotated` |

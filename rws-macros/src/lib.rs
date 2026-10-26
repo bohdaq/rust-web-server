@@ -923,3 +923,275 @@ fn parse_table_name(
     // Default: lowercased struct name.
     Ok(struct_name.to_string().to_lowercase())
 }
+
+// ── #[derive(JsonSchema)] ─────────────────────────────────────────────────────
+
+/// Derive `rust_web_server::schema::JsonSchema` for a struct with named
+/// fields or an enum of unit variants.
+///
+/// The schema follows the type's serde attributes, so it describes the JSON
+/// `serde_json` reads and writes: container `rename_all` and `default`;
+/// field `rename`, `default`, `skip`/`skip_serializing`/`skip_deserializing`
+/// (left out) and `skip_serializing_if` (not required); variant `rename`.
+/// Attributes that change the JSON's shape — `flatten`, `tag`, `content`,
+/// `untagged`, `transparent`, `with`/`serialize_with`/`deserialize_with`,
+/// separate serialize/deserialize renames — are a compile error rather than a
+/// schema that doesn't match. `Option` fields are not required. Doc comments
+/// become `description`s.
+///
+/// ```ignore
+/// #[derive(serde::Serialize, serde::Deserialize, rust_web_server::JsonSchema)]
+/// #[serde(rename_all = "camelCase")]
+/// struct Item {
+///     /// Stock keeping unit.
+///     sku: String,
+///     in_stock: u32,
+///     note: Option<String>,
+/// }
+/// ```
+#[proc_macro_derive(JsonSchema, attributes(serde))]
+pub fn derive_json_schema(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    impl_json_schema(ast)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+fn impl_json_schema(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let name = &input.ident;
+    let container = SerdeAttrs::parse(&input.attrs)?;
+    let description = doc_comment(&input.attrs);
+    let body = match &input.data {
+        Data::Struct(s) => {
+            let Fields::Named(fields) = &s.fields else {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    "#[derive(JsonSchema)] supports structs with named fields and enums of unit variants",
+                ));
+            };
+            let mut properties = Vec::new();
+            for field in &fields.named {
+                let attrs = SerdeAttrs::parse(&field.attrs)?;
+                if attrs.skip {
+                    continue;
+                }
+                let ident = field.ident.as_ref().expect("named field");
+                let json_name = attrs.rename.clone().unwrap_or_else(|| {
+                    rename_with(ident.to_string().trim_start_matches("r#"), container.rename_all.as_deref(), false)
+                });
+                let ty = &field.ty;
+                let field_doc = doc_comment(&field.attrs);
+                let may_be_absent = attrs.default || container.default || attrs.skip_serializing_if;
+                properties.push(quote! {
+                    __schema.property(
+                        #json_name,
+                        &_rws::schema::nested::<#ty>(),
+                        #field_doc,
+                        !#may_be_absent && !<#ty as _rws::schema::JsonSchema>::is_optional(),
+                    );
+                });
+            }
+            quote! {
+                let mut __schema = _rws::schema::ObjectSchema::new(#description);
+                #(#properties)*
+                __schema.finish()
+            }
+        }
+        Data::Enum(e) => {
+            let mut values = Vec::new();
+            for variant in &e.variants {
+                if !matches!(variant.fields, Fields::Unit) {
+                    return Err(syn::Error::new_spanned(
+                        variant,
+                        "#[derive(JsonSchema)] supports only unit enum variants",
+                    ));
+                }
+                let attrs = SerdeAttrs::parse(&variant.attrs)?;
+                if attrs.skip {
+                    continue;
+                }
+                values.push(attrs.rename.unwrap_or_else(|| {
+                    rename_with(&variant.ident.to_string(), container.rename_all.as_deref(), true)
+                }));
+            }
+            quote! { _rws::schema::string_enum(#description, &[#(#values),*]) }
+        }
+        Data::Union(_) => {
+            return Err(syn::Error::new_spanned(name, "#[derive(JsonSchema)] does not support unions"));
+        }
+    };
+
+    let mut generics = input.generics.clone();
+    for param in generics.type_params_mut() {
+        param.bounds.push(syn::parse_quote!(::rust_web_server::schema::JsonSchema));
+    }
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    Ok(quote! {
+        const _: () = {
+            use ::rust_web_server as _rws;
+            impl #impl_generics _rws::schema::JsonSchema for #name #ty_generics #where_clause {
+                fn json_schema() -> ::std::string::String {
+                    #body
+                }
+            }
+        };
+    })
+}
+
+/// The `#[serde(...)]` attributes `#[derive(JsonSchema)]` understands.
+#[derive(Default)]
+struct SerdeAttrs {
+    rename: Option<String>,
+    rename_all: Option<String>,
+    default: bool,
+    skip: bool,
+    skip_serializing_if: bool,
+}
+
+impl SerdeAttrs {
+    fn parse(attrs: &[syn::Attribute]) -> syn::Result<Self> {
+        let mut out = SerdeAttrs::default();
+        for attr in attrs.iter().filter(|a| a.path().is_ident("serde")) {
+            attr.parse_nested_meta(|meta| {
+                let key = meta.path.get_ident().map(|i| i.to_string()).unwrap_or_default();
+                match key.as_str() {
+                    "rename" | "rename_all" => {
+                        if !meta.input.peek(Token![=]) {
+                            return Err(meta.error(format!(
+                                "#[derive(JsonSchema)] needs one `{key}` for both directions (one schema describes input and output)"
+                            )));
+                        }
+                        let value = meta.value()?.parse::<LitStr>()?.value();
+                        if key == "rename" {
+                            out.rename = Some(value);
+                        } else {
+                            if rename_with("a_b", Some(&value), false).is_empty() {
+                                return Err(meta.error(format!("unknown rename_all rule \"{value}\"")));
+                            }
+                            out.rename_all = Some(value);
+                        }
+                    }
+                    "default" => {
+                        out.default = true;
+                        if meta.input.peek(Token![=]) {
+                            meta.value()?.parse::<LitStr>()?;
+                        }
+                    }
+                    "skip" | "skip_serializing" | "skip_deserializing" => out.skip = true,
+                    "skip_serializing_if" => {
+                        out.skip_serializing_if = true;
+                        meta.value()?.parse::<LitStr>()?;
+                    }
+                    "flatten" | "tag" | "content" | "untagged" | "transparent" | "with" | "serialize_with"
+                    | "deserialize_with" | "remote" | "from" | "try_from" | "into" | "getter" => {
+                        return Err(meta.error(format!(
+                            "#[derive(JsonSchema)] does not support #[serde({key})]: the schema would not match the JSON"
+                        )));
+                    }
+                    _ => {
+                        // Attributes that don't change the JSON's shape
+                        // (alias, deny_unknown_fields, bound, crate, borrow,
+                        // expecting, ...): skip their value, if any.
+                        if meta.input.peek(Token![=]) {
+                            meta.value()?.parse::<proc_macro2::TokenStream>()?;
+                        } else if meta.input.peek(syn::token::Paren) {
+                            meta.parse_nested_meta(|nested| {
+                                if nested.input.peek(Token![=]) {
+                                    nested.value()?.parse::<proc_macro2::TokenTree>()?;
+                                }
+                                Ok(())
+                            })?;
+                        }
+                    }
+                }
+                Ok(())
+            })?;
+        }
+        Ok(out)
+    }
+}
+
+/// `name` renamed by serde's `rename_all` `rule` (`variant`: `name` is a
+/// PascalCase enum variant rather than a snake_case field). Empty for an
+/// unknown rule.
+fn rename_with(name: &str, rule: Option<&str>, variant: bool) -> String {
+    let Some(rule) = rule else { return name.to_string() };
+    // Split into lower-case words.
+    let words: Vec<String> = if variant {
+        let mut words = Vec::new();
+        let mut current = String::new();
+        for c in name.chars() {
+            if c.is_uppercase() && !current.is_empty() {
+                words.push(std::mem::take(&mut current));
+            }
+            current.extend(c.to_lowercase());
+        }
+        if !current.is_empty() {
+            words.push(current);
+        }
+        words
+    } else {
+        name.split('_').map(str::to_string).collect()
+    };
+    let capitalize = |w: &String| {
+        let mut chars = w.chars();
+        chars.next().map(|c| c.to_uppercase().chain(chars).collect::<String>()).unwrap_or_default()
+    };
+    match rule {
+        "lowercase" => words.concat(),
+        "UPPERCASE" => words.concat().to_uppercase(),
+        "PascalCase" => words.iter().map(capitalize).collect(),
+        "camelCase" => {
+            let pascal: String = words.iter().map(capitalize).collect();
+            let mut chars = pascal.chars();
+            chars.next().map(|c| c.to_lowercase().chain(chars).collect()).unwrap_or_default()
+        }
+        "snake_case" => words.join("_"),
+        "SCREAMING_SNAKE_CASE" => words.join("_").to_uppercase(),
+        "kebab-case" => words.join("-"),
+        "SCREAMING-KEBAB-CASE" => words.join("-").to_uppercase(),
+        _ => String::new(),
+    }
+}
+
+/// The item's `///` doc comment, lines joined with spaces.
+fn doc_comment(attrs: &[syn::Attribute]) -> String {
+    let mut lines = Vec::new();
+    for attr in attrs.iter().filter(|a| a.path().is_ident("doc")) {
+        if let syn::Meta::NameValue(nv) = &attr.meta {
+            if let syn::Expr::Lit(syn::ExprLit { lit: Lit::Str(s), .. }) = &nv.value {
+                let line = s.value().trim().to_string();
+                if !line.is_empty() {
+                    lines.push(line);
+                }
+            }
+        }
+    }
+    lines.join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rename_with;
+
+    #[test]
+    fn rename_all_rules_match_serde() {
+        let field = |rule| rename_with("line_item_id", Some(rule), false);
+        assert_eq!("lineitemid", field("lowercase"));
+        assert_eq!("LINEITEMID", field("UPPERCASE"));
+        assert_eq!("LineItemId", field("PascalCase"));
+        assert_eq!("lineItemId", field("camelCase"));
+        assert_eq!("line_item_id", field("snake_case"));
+        assert_eq!("LINE_ITEM_ID", field("SCREAMING_SNAKE_CASE"));
+        assert_eq!("line-item-id", field("kebab-case"));
+        assert_eq!("LINE-ITEM-ID", field("SCREAMING-KEBAB-CASE"));
+        let variant = |rule| rename_with("BackOrdered", Some(rule), true);
+        assert_eq!("backordered", variant("lowercase"));
+        assert_eq!("backOrdered", variant("camelCase"));
+        assert_eq!("back_ordered", variant("snake_case"));
+        assert_eq!("BACK-ORDERED", variant("SCREAMING-KEBAB-CASE"));
+        assert_eq!("BackOrdered", variant("PascalCase"));
+        assert_eq!("as_is", rename_with("as_is", None, false));
+        assert_eq!("", rename_with("a_b", Some("Train-Case"), false));
+    }
+}

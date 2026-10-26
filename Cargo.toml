@@ -33,6 +33,13 @@ path = "src/lib.rs"
 name = "rws"
 path = "src/main.rs"
 
+# Runnable with `cargo run --example <name> --features "..."`; `cargo test
+# --all-features` (or with the listed features) also runs their tests.
+[[example]]
+name = "mcp_inventory"
+required-features = ["macros", "serde", "sso"]
+test = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 # `cargo binstall rust-web-server` downloads the prebuilt archive that

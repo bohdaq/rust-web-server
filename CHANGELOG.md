@@ -36,6 +36,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- Typed MCP tools (#61): `McpServer::typed_tool(name, description, |ctx, args: In| -> Result<Out, String>)`
+  (`serde`) derives `inputSchema`/`outputSchema` from the types, deserializes
+  the arguments and returns `structuredContent`. `#[derive(JsonSchema)]`
+  (`macros`) and the `schema::JsonSchema` trait produce the schemas, following
+  `#[serde]` renames; attributes that would make them disagree are compile
+  errors. `examples/mcp_inventory.rs` exposes an app's domain functions as
+  REST routes and MCP tools with OAuth and live resource updates; docs page
+  [Build agent tools](/mcp/agent-tools/). **rws-macros must be published
+  (with the derive) before rust-web-server 18.0.0.**
 - `If-Modified-Since` answers `304` for static files (when there's no `If-None-Match`).
 - `[[upstream]] tls_ca_file` / `ReverseProxy::tls_ca_file`: trust a private CA for `https://` upstreams.
 - Inline tables in `rws.config.toml` settings (`rate_limit = { max_requests = 5 }`).

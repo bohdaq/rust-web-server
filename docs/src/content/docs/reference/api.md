@@ -29,6 +29,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `routes!` | `macros` | Declarative routing table — builds `AppWithState`, `AsyncAppWithState` or `Router` from `METHOD "path" => handler` lines. See [Routing](/building-apps/routing/) |
 | `#[route]`, `#[get]`, `#[post]`, `#[put]`, `#[patch]`, `#[delete]` | crate root (`macros`) | Attribute macros annotating a handler with its method and path |
 | `#[derive(FromRequest)]` | crate root (`macros`) | Derives `FromRequest` for a named-field struct, extracting fields in order and stopping at the first error |
+| `#[derive(JsonSchema)]` | crate root (`macros`) | Derives `schema::JsonSchema` for a named-field struct or unit enum, following its `#[serde]` renames (18.0.0). See [Typed tools](/mcp/tools/#typed-tools) |
 | `#[derive(Validate)]` | crate root (`macros`) | Derives `Validate` from `#[validate(length, range, email, required, url)]` field annotations |
 | `#[derive(Config)]` | crate root (`macros`) | Typed env-var binding: generates `load() -> Result<Self, String>`; `#[config(env, default, prefix)]`. See [Config binding](/features/config-binding/) |
 | `#[derive(Model)]` | crate root (`macros` + a `model-*` feature) | Maps a struct to a table (`#[table]`, `#[primary_key(auto_increment)]`, `#[column]`, `#[ignore]`) and generates `T::repository(&pool)` / `T::query(&pool)` |
@@ -188,7 +189,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 
 | Type / Trait | Module | Description |
 |---|---|---|
-| `McpServer` / `McpIcon` | `mcp` | MCP Streamable HTTP server (`POST /mcp`, JSON-RPC 2.0, plus `GET /mcp` SSE); `.tool` / `.resource` / `.prompt`, `.require_bearer`, `.require_oauth` (`sso`), `.session_ttl` / `.max_sessions` / `.max_sse_clients`. Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See [MCP](/mcp/overview/) |
+| `JsonSchema` / `ObjectSchema` | `schema` | A type's JSON Schema as text (primitives, `Option`, collections, smart pointers built in); `ObjectSchema` builds an object schema (18.0.0) |
+| `McpServer` / `McpIcon` | `mcp` | MCP Streamable HTTP server (`POST /mcp`, JSON-RPC 2.0, plus `GET /mcp` SSE); `.tool` / `.typed_tool` (`serde`) / `.resource` / `.prompt`, `.require_bearer`, `.require_oauth` (`sso`), `.session_ttl` / `.max_sessions` / `.max_sse_clients`. Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See [MCP](/mcp/overview/) |
 | `McpContent` | `mcp` | Tool result content: `text`, `json`, `image`, `embedded` |
 | `McpContext` | `mcp` | Per-session context for `.tool_with_context` handlers: client info, `auth_claims`, progress, cancellation, `sample`, `list_roots` |
 | `ToolAnnotations` | `mcp` | `read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint` for `.tool_annotated` |
