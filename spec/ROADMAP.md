@@ -33,7 +33,7 @@ Net-new RFC-conformance bugs from the 2026-10-26 review, each reproduced against
 - **#55** **percent-decode the request path** — the filesystem lookup uses the raw target, so `GET /my%20file.txt` 404s for `my file.txt`, and directory-listing links are emitted percent-encoded and then 404 (RFC 3986 §2.1). Decode once, after the smuggling checks, before the path is resolved (keep the `..`-confinement from #43). `src/url/mod.rs`, `src/app/controller/static_resource/`.
 - **#56** **conditional requests and status codes** — honor `If-Range` (a stale validator must drop the `Range` and send `200`, not `206`); parse `If-None-Match` as a list with weak comparison; accept all three HTTP-date formats in `If-Modified-Since` (RFC 850 and asctime, not only IMF-fixdate); answer `405` + `Allow` for a known path with an unsupported method; put `Content-Range: bytes */len` on a `416`, and serve a `206` when at least one requested range is satisfiable. RFC 9110 §13, §14, §15.5.6. `src/app/controller/static_resource/`, `src/range/`, `src/http/date.rs`.
 - **#57** **strict request validation** — reject a missing or duplicated `Host` (`400`), whitespace before a field colon, obs-fold continuation lines, and field names that aren't tokens; match the method case-sensitively; reject `HTTP/0.9` and `HTTP/2.0` on the HTTP/1.1 wire; evaluate `Connection` token by token (`close, TE` currently serves keep-alive). RFC 9112 §2.2–§3.2, §5.1, §9.6. `src/request/`, `src/server/framing.rs`, `src/server/http1_async.rs`.
-- **#58** **CORS defaults and matching** — `cors_allow_all` defaults to reflecting any origin with `Access-Control-Allow-Credentials: true`; default it off. Match a configured origin exactly, not by substring (`app.example.com` currently also matches `app.example.co`), and send `Access-Control-Expose-Headers` on the actual response, not only the preflight. Fetch standard / RFC 6454. `src/cors/`.
+- **#58** **CORS matching and exposed headers** — match a configured origin exactly, not by substring (`app.example.com` currently also matches `app.example.co`), and send `Access-Control-Expose-Headers` on the actual response, not only the preflight. Correctness, so it stays in the patch; the allow-all default change is #59 under 18.0. Fetch standard / RFC 6454. `src/cors/`.
 
 **Done when:** a regression test per item that fails on the current build; the review's reproductions (gzip-on-206, the multi-range hang, `OPTIONS`→`204`, the `%20` 404) pass; h2spec still 146/146.
 
@@ -43,8 +43,9 @@ All of 18.0's breaking changes land together, on `main` before 18.0.0 is tagged,
 
 - **#31** **Streaming request bodies** — an upload API and multipart straight to storage (`Request.body` is a `Vec<u8>` today).
 - **#30** **WebSocket permessage-deflate, then WebSocket over HTTP/2 and HTTP/3** (RFC 8441 / RFC 9220 extended CONNECT) — not breaking itself, but it builds on the streaming body type, so it follows #31 (it can ship in an 18.x release if 18.0 needs to go out first).
+- **#59** **CORS allow-all off by default** — `cors_allow_all` currently defaults on, reflecting any origin with `Access-Control-Allow-Credentials: true`. Default it off (opt-in), so a server doesn't permit cross-origin credentialed reads unless configured. A behavior change existing deployments would feel, so it rides 18.0 rather than a patch.
 
-**Breaking:** `Request.body` becomes a streaming body type, with a buffered helper (`body_bytes()`) for handlers that want the whole body.
+**Breaking:** `Request.body` becomes a streaming body type, with a buffered helper (`body_bytes()`) for handlers that want the whole body. `cors_allow_all` now defaults off (#59).
 
 **Done when:** a multi-GB upload streamed to S3 at constant memory; existing handlers ported through the buffered helper; the migration page covers it.
 
