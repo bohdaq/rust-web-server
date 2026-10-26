@@ -48,6 +48,7 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - The reverse proxy sent the client's `Content-Length` upstream next to its own (two headers — strict backends reject that, and it's a desync risk). It now sends one, drops headers named in `Connection`, `Trailer` and `Proxy-Connection`, and appends the client address to an incoming `X-Forwarded-For` instead of sending a second one.
 - `CacheLayer` no longer stores `no-cache` responses, responses to `Range` requests, or responses that vary on a header outside its key.
 - A JWKS key that can't be used is skipped instead of failing verification.
+- HTTP/2 (#6): resets the server sends because the client broke a stream's rules (a zero or overflowing `WINDOW_UPDATE`, a bad `PRIORITY`, frames on a closed stream) count toward the rapid-reset budget, closing the "MadeYouReset" hole (CVE-2025-8671) in rws's own HTTP/2 server; and a connection with nothing running that sends nothing for 30 s — a silent client, a half-sent header block or request body, a client that never opens the flow-control window — is closed with `GOAWAY(NO_ERROR)`. It used to stay open forever.
 - `If-Modified-Since` (new in 18.0) accepts the obsolete RFC 850 and asctime date forms as well as the IMF-fixdate (RFC 9110 §5.6.7); a client sending them always got the whole file.
 - `If-Range` with a date (on top of 17.113.2's entity-tag handling): the `Range` applies when the date equals the file's `Last-Modified` and that is at least a second old (a strong validator), else the whole file is sent.
 

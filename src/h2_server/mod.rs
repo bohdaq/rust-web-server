@@ -59,8 +59,12 @@ pub const MAX_HEADER_BLOCK: usize = 2 * MAX_HEADER_LIST_SIZE as usize;
 /// Our `SETTINGS_MAX_FRAME_SIZE` (the protocol minimum).
 const MAX_FRAME_SIZE: usize = 16_384;
 
-/// Client resets tolerated per [`RESET_WINDOW`] before `ENHANCE_YOUR_CALM`
-/// (CVE-2023-44487, "rapid reset").
+/// Stream resets tolerated per [`RESET_WINDOW`] before `ENHANCE_YOUR_CALM`:
+/// the client's own (CVE-2023-44487, "rapid reset") and the ones it makes
+/// the server send by breaking a stream's rules — a zero or overflowing
+/// `WINDOW_UPDATE`, a bad `PRIORITY`, frames on a closed stream
+/// (CVE-2025-8671, "MadeYouReset"). Either way the request's work may
+/// already be running, so both count against one budget.
 pub const MAX_RESETS_PER_WINDOW: u32 = 1000;
 pub const RESET_WINDOW: Duration = Duration::from_secs(10);
 
@@ -222,6 +226,12 @@ where
     // The client preface, then frames.
     let mut input: Vec<u8> = Vec::with_capacity(32 * 1024);
     let mut preface_seen = false;
+    // Closes a connection that sends nothing for READ_TIMEOUT while the
+    // server isn't working on anything for it: a silent client, a header
+    // block or request body left half-sent, a client that never opens the
+    // flow-control window. Pushed back on every read and every response.
+    let idle = tokio::time::sleep(crate::server::http1_async::READ_TIMEOUT);
+    tokio::pin!(idle);
     let result: Result<(), ConnError> = loop {
         if !conn.out.is_empty() {
             if io.write_all(&conn.out).await.is_err() || io.flush().await.is_err() {
@@ -235,13 +245,19 @@ where
 
         // Unbiased, and finished responses are drained below whatever woke
         // us: a client that never stops sending can't starve them.
+        let waiting_on_client = conn.waiting_on_client();
         let event = tokio::select! {
             read = io.read_buf(&mut input) => Event::Read(read),
             Some(done) = done_rx.recv() => Event::Done(done),
             chunk = next_chunk(&mut conn.streams) => Event::Chunk(chunk),
+            _ = &mut idle, if waiting_on_client => Event::Idle,
         };
+        if !matches!(event, Event::Idle) {
+            idle.as_mut().reset(tokio::time::Instant::now() + crate::server::http1_async::READ_TIMEOUT);
+        }
         let step = match event {
             Event::Read(Ok(0)) | Event::Read(Err(_)) => break Ok(()),
+            Event::Idle => Err(ConnError(code::NO_ERROR)),
             Event::Read(Ok(_)) => {
                 if !preface_seen {
                     if input.len() < PREFACE.len() {
@@ -289,6 +305,8 @@ where
 
 enum Event {
     Read(std::io::Result<usize>),
+    /// Nothing from the client for READ_TIMEOUT while nothing was running.
+    Idle,
     Done(Completed),
     Chunk((u32, Option<Result<Vec<u8>, String>>)),
 }
@@ -358,6 +376,9 @@ impl Conn {
                 }
             }
             self.frame(kind, flags, stream, payload, app, connection, peer, done)?;
+            if self.resets.1 > MAX_RESETS_PER_WINDOW {
+                return Err(ConnError(code::ENHANCE_YOUR_CALM));
+            }
         }
         input.drain(..pos);
         Ok(())
@@ -425,14 +446,7 @@ impl Conn {
                     return Err(ConnError(code::PROTOCOL_ERROR)); // idle
                 }
                 if self.streams.remove(&stream).is_some() {
-                    let now = Instant::now();
-                    if now.duration_since(self.resets.0) > RESET_WINDOW {
-                        self.resets = (now, 0);
-                    }
-                    self.resets.1 += 1;
-                    if self.resets.1 > MAX_RESETS_PER_WINDOW {
-                        return Err(ConnError(code::ENHANCE_YOUR_CALM));
-                    }
+                    self.count_reset();
                 }
                 Ok(())
             }
@@ -954,8 +968,30 @@ impl Conn {
         }
     }
 
-    /// RST_STREAM an existing stream.
+    /// `true` when no request is running and no streamed body is being
+    /// produced: the connection can only move if the client does.
+    fn waiting_on_client(&self) -> bool {
+        self.in_flight == 0
+            && self.streams.values().all(|s| s.outgoing.as_ref().is_none_or(|o| o.producer.is_none()))
+    }
+
+    /// One more stream reset in the current [`RESET_WINDOW`]; the frame
+    /// loop closes the connection past [`MAX_RESETS_PER_WINDOW`].
+    fn count_reset(&mut self) {
+        let now = Instant::now();
+        if now.duration_since(self.resets.0) > RESET_WINDOW {
+            self.resets = (now, 0);
+        }
+        self.resets.1 += 1;
+    }
+
+    /// RST_STREAM an existing stream. Anything but `NO_ERROR` (a stream we
+    /// finished early) is the client's doing and counts toward the reset
+    /// budget (MadeYouReset).
     fn reset(&mut self, stream: u32, error: u32) {
+        if error != code::NO_ERROR {
+            self.count_reset();
+        }
         write_frame_header(&mut self.out, 4, frame::RST_STREAM, 0, stream);
         self.out.extend_from_slice(&error.to_be_bytes());
         self.streams.remove(&stream);

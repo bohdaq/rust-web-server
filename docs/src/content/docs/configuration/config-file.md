@@ -217,6 +217,8 @@ Fixed limits that apply whatever the configuration:
 | Header list, HTTP/2 and HTTP/3 | 64 KiB | stream reset |
 | Concurrent streams per HTTP/2 connection | 250 | stream refused |
 | Idle time between reads | 30 s | connection closed |
+| HTTP/2 connection with nothing running and nothing received | 30 s | `GOAWAY(NO_ERROR)`, connection closed |
+| HTTP/2 stream resets, the client's or provoked by it (rapid reset, MadeYouReset) | 1000 per 10 s | `GOAWAY(ENHANCE_YOUR_CALM)` |
 | Whole request head, from its first byte (HTTP/1.1) | 30 s | `408 Request Timeout` |
 | TLS handshake | 10 s | connection closed |
 

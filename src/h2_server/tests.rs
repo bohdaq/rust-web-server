@@ -230,6 +230,89 @@ async fn rapid_reset_is_cut_off() {
 }
 
 #[tokio::test]
+async fn made_you_reset_is_cut_off() {
+    // CVE-2025-8671: open a stream, then make the server reset it — here
+    // with a WINDOW_UPDATE of 0 — over and over. The server's resets count
+    // like the client's own.
+    let mut frames = Vec::new();
+    for i in 0..=super::MAX_RESETS_PER_WINDOW {
+        let stream = 1 + 2 * i;
+        frames.extend(raw_frame(super::frame::HEADERS, super::frame::END_HEADERS, stream, &[0x82, 0x87, 0x84]));
+        frames.extend(raw_frame(super::frame::WINDOW_UPDATE, 0, stream, &0u32.to_be_bytes()));
+    }
+    assert_eq!(Some(super::code::ENHANCE_YOUR_CALM), goaway_code(&frames).await);
+}
+
+#[tokio::test]
+async fn a_few_server_resets_are_tolerated() {
+    // Below the budget the connection stays up (no GOAWAY).
+    let mut frames = Vec::new();
+    for i in 0..10u32 {
+        let stream = 1 + 2 * i;
+        frames.extend(raw_frame(super::frame::HEADERS, super::frame::END_HEADERS, stream, &[0x82, 0x87, 0x84]));
+        frames.extend(raw_frame(super::frame::WINDOW_UPDATE, 0, stream, &0u32.to_be_bytes()));
+    }
+    assert_eq!(None, goaway_code(&frames).await);
+}
+
+/// Frames written after the preface and an empty SETTINGS; then nothing.
+/// Returns what the server wrote before closing, and whether it closed.
+async fn silent_after(frames: &[u8]) -> (Vec<u8>, bool) {
+    let (mut client, server_io) = tokio::io::duplex(1 << 20);
+    let server = tokio::spawn(super::handle_connection(server_io, peer(), None, TestApp(None)));
+    client.write_all(super::PREFACE).await.unwrap();
+    client.write_all(&[0, 0, 0, 4, 0, 0, 0, 0, 0]).await.unwrap();
+    client.write_all(frames).await.unwrap();
+    let mut out = Vec::new();
+    let closed = tokio::time::timeout(
+        crate::server::http1_async::READ_TIMEOUT + std::time::Duration::from_secs(5),
+        client.read_to_end(&mut out),
+    ).await.is_ok();
+    if closed {
+        server.await.unwrap().unwrap();
+    }
+    (out, closed)
+}
+
+fn goaway_in(out: &[u8]) -> Option<u32> {
+    let mut pos = 0;
+    while out.len() - pos >= 9 {
+        let len = (out[pos] as usize) << 16 | (out[pos + 1] as usize) << 8 | out[pos + 2] as usize;
+        if out[pos + 3] == super::frame::GOAWAY {
+            let p = &out[pos + 9..pos + 9 + len];
+            return Some(u32::from_be_bytes([p[4], p[5], p[6], p[7]]));
+        }
+        pos += 9 + len;
+    }
+    None
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_idle_connection_is_closed() {
+    let (out, closed) = silent_after(&[]).await;
+    assert!(closed, "the connection stayed open");
+    assert_eq!(Some(super::code::NO_ERROR), goaway_in(&out));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_half_sent_request_body_is_closed() {
+    // POST with no END_STREAM and no DATA: the server waits for the client
+    // only as long as an idle connection.
+    let headers = [0x83, 0x87, 0x84]; // :method POST, :scheme https, :path /
+    let (out, closed) = silent_after(&raw_frame(super::frame::HEADERS, super::frame::END_HEADERS, 1, &headers)).await;
+    assert!(closed, "the connection stayed open");
+    assert_eq!(Some(super::code::NO_ERROR), goaway_in(&out));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_half_sent_header_block_is_closed() {
+    // HEADERS without END_HEADERS, and no CONTINUATION.
+    let (out, closed) = silent_after(&raw_frame(super::frame::HEADERS, 0, 1, &[0x82])).await;
+    assert!(closed, "the connection stayed open");
+    assert_eq!(Some(super::code::NO_ERROR), goaway_in(&out));
+}
+
+#[tokio::test]
 async fn a_wrong_preface_is_refused() {
     let (mut client, server_io) = tokio::io::duplex(4096);
     let server = tokio::spawn(super::handle_connection(server_io, peer(), None, TestApp(None)));
