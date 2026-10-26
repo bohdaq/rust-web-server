@@ -984,3 +984,17 @@ fn if_range_with_a_stale_validator_sends_the_whole_file() {
     // If-Range without Range changes nothing.
     assert_eq!(200, get_with("/Cargo.toml", vec![("If-Range", "\"0-0\"")]).status_code);
 }
+
+#[test]
+fn one_satisfiable_range_is_enough_and_416_names_the_length() {
+    let len = std::fs::metadata("Cargo.toml").unwrap().len();
+    let partial = get_with("/Cargo.toml", vec![("Range", "bytes=0-9, 99999999-")]);
+    assert_eq!(206, partial.status_code);
+    assert_eq!(1, partial.content_range_list.len());
+    assert_eq!(10, partial.content_range_list[0].body.len());
+
+    let none = get_with("/Cargo.toml", vec![("Range", "bytes=99999999-, 99999999-100000000")]);
+    assert_eq!(416, none.status_code);
+    let content_range = none.headers.iter().find(|h| h.name == Header::_CONTENT_RANGE).map(|h| h.value.clone());
+    assert_eq!(Some(format!("bytes */{len}")), content_range);
+}

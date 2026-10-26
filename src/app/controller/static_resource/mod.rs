@@ -203,6 +203,16 @@ impl Controller for StaticResourceController {
             response.reason_phrase = error.status_code_reason_phrase.reason_phrase.to_string();
             response.content_range_list = content_range_list;
 
+            // A 416 says how long the file is (RFC 9110 §15.5.17, #56).
+            if response.status_code == 416 {
+                let length = URL::parse_request_target(&request.request_uri).ok()
+                    .and_then(|c| static_fs_path(&c.path).ok())
+                    .and_then(|p| metadata(p).ok())
+                    .map(|md| md.len());
+                if let Some(length) = length {
+                    response.headers.push(Header { name: Header::_CONTENT_RANGE.to_string(), value: format!("bytes */{}", length) });
+                }
+            }
         }
 
 

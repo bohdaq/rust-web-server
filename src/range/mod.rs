@@ -198,9 +198,22 @@ impl Range {
         // Every range is parsed before any byte is read, then overlapping or
         // adjacent ones are merged and too many become the whole file (#46):
         // `bytes=0-,0-,0-,…` read the file into memory once per range.
+        // A range that can't be satisfied is skipped; the request is `416`
+        // only when none can (RFC 9110 §14.2, #56) — `bytes=0-9,99999-`
+        // on a small file is the first ten bytes, not an error.
         let mut ranges: Vec<Range> = Vec::new();
+        let mut first_error: Option<Error> = None;
         for byte in raw_bytes.split(SYMBOL.comma) {
-            ranges.push(Range::parse_range_in_content_range(filelength, byte)?);
+            match Range::parse_range_in_content_range(filelength, byte) {
+                Ok(range) => ranges.push(range),
+                Err(error) => { first_error.get_or_insert(error); }
+            }
+        }
+        if ranges.is_empty() {
+            return Err(first_error.unwrap_or(Error {
+                status_code_reason_phrase: STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable,
+                message: Range::ERROR_UNABLE_TO_PARSE_RANGE_START.to_string(),
+            }));
         }
         let ranges = Range::coalesce(ranges, filelength);
         for range in ranges {

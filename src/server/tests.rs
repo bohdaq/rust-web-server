@@ -1054,11 +1054,12 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
     let header = response._get_header(Header::_ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
-    assert_eq!(*STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
+    // One satisfiable range is enough: the bad one is skipped (#56).
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
-    assert_eq!(content_range.body, Range::ERROR_START_IS_AFTER_END_CONTENT_RANGE.as_bytes());
+    assert_eq!(content_range.body, &buffer[..=mid]);
 }
 
 #[test]
@@ -1121,11 +1122,12 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
     let header = response._get_header(Header::_ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
 
-    assert_eq!(*STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.status_code, response.status_code);
-    assert_eq!(STATUS_CODE_REASON_PHRASE.n416_range_not_satisfiable.reason_phrase, response.reason_phrase);
+    // One satisfiable range is enough: the bad one is skipped (#56).
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n206_partial_content.status_code, response.status_code);
+    assert_eq!(STATUS_CODE_REASON_PHRASE.n206_partial_content.reason_phrase, response.reason_phrase);
 
     let content_range = response.content_range_list.get(0).unwrap();
-    assert_eq!(content_range.body, Range::ERROR_UNABLE_TO_PARSE_RANGE_START.as_bytes());
+    assert_eq!(content_range.body, &buffer[..=mid]);
 }
 
 #[test]
