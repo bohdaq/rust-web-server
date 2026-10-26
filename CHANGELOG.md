@@ -1,6 +1,6 @@
 # Changelog
 
-## 17.113.2 — HTTP conformance
+## 17.113.2 — 2026-10-26 — HTTP conformance
 
 ### Upgrading
 
