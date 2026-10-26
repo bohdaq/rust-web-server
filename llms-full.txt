@@ -17638,12 +17638,31 @@ below runs it as an unprivileged user that can bind ports 80 and 443, sees
 the system read-only except for its own state and log directories, and
 reloads its configuration on `systemctl reload`.
 
-## Install
+## Install from a package
+
+Each release (since 18.2.0) has `.deb` and `.rpm` packages for x86_64 and
+arm64 on its [GitHub release page](https://github.com/bohdaq/rust-web-server/releases).
+They install the binary as `/usr/bin/rws`, the unit below, a configuration
+in `/etc/rws/rws.config.toml` and a placeholder page in `/var/www/rws`,
+create the `rws` user, and start the service on port 7878:
 
 ```bash
-sudo install -m 0755 rws /usr/local/bin/rws
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin rws
-sudo mkdir -p /etc/rws /srv/www
+sudo apt install ./rws_18.2.0_amd64.deb        # Debian, Ubuntu
+sudo dnf install ./rws-18.2.0-1.x86_64.rpm     # Fedora, RHEL, Rocky, Alma
+curl localhost:7878/                           # rws is running
+```
+
+Put your site in `/var/www/rws`, change settings in
+`/etc/rws/rws.config.toml` (an upgrade keeps your edits) and apply them with
+`sudo systemctl reload rws`. To serve on port 80, set `port = 80` — the unit
+already grants the capability.
+
+## Install by hand
+
+```bash
+sudo install -m 0755 rws /usr/bin/rws
+sudo useradd --system --user-group --no-create-home --home-dir /var/lib/rws --shell /usr/sbin/nologin rws
+sudo mkdir -p /etc/rws /var/www/rws
 sudo cp rws.config.toml /etc/rws/
 sudoedit /etc/systemd/system/rws.service      # the unit below
 sudo systemctl daemon-reload
@@ -17651,6 +17670,9 @@ sudo systemctl enable --now rws
 ```
 
 ## The unit
+
+The packages install this file as `/usr/lib/systemd/system/rws.service`
+([`packaging/linux/rws.service`](https://github.com/bohdaq/rust-web-server/blob/main/packaging/linux/rws.service)):
 
 ```ini
 [Unit]
@@ -17663,13 +17685,13 @@ Wants=network-online.target
 Type=simple
 User=rws
 Group=rws
-WorkingDirectory=/srv/www
+WorkingDirectory=/var/www/rws
 Environment=RWS_CONFIG_FILE=/etc/rws/rws.config.toml
 # ACME certificates and account key in /var/lib/rws (StateDirectory below).
 Environment=RWS_CONFIG_ACME_CERT_PATH=/var/lib/rws/cert.pem
 Environment=RWS_CONFIG_ACME_KEY_PATH=/var/lib/rws/key.pem
 Environment=RWS_CONFIG_ACME_ACCOUNT_KEY_PATH=/var/lib/rws/acme_account.key
-ExecStart=/usr/local/bin/rws
+ExecStart=/usr/bin/rws
 # Re-read the config and certificates without dropping connections.
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
@@ -17685,7 +17707,7 @@ NoNewPrivileges=yes
 StateDirectory=rws
 LogsDirectory=rws
 ProtectSystem=strict
-ReadOnlyPaths=/srv/www /etc/rws
+ReadOnlyPaths=/var/www/rws /etc/rws
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes

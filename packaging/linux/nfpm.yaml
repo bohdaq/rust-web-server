@@ -1,0 +1,36 @@
+# deb and rpm packages of the rws binary (nfpm: https://nfpm.goreleaser.com).
+#   VERSION=18.2.0 ARCH=amd64 nfpm package -f packaging/linux/nfpm.yaml -p deb -t dist/
+# with the release binary at dist/rws. ARCH: amd64 or arm64.
+name: rws
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+section: web
+priority: optional
+maintainer: Bohdan Tsap <bohdan.tsap@tutanota.com>
+description: |-
+  Web server and reverse proxy: automatic HTTPS (Let's Encrypt), HTTP/1.1,
+  HTTP/2 and HTTP/3, load balancing, auth and rate limiting, configured in
+  one TOML file. Runs as the systemd service rws.
+vendor: rws
+homepage: https://rws8.tech
+license: MIT
+contents:
+  - src: dist/rws
+    dst: /usr/bin/rws
+    file_info:
+      mode: 0755
+  - src: packaging/linux/rws.service
+    dst: /usr/lib/systemd/system/rws.service
+  - src: packaging/linux/rws.config.toml
+    dst: /etc/rws/rws.config.toml
+    type: config|noreplace
+  - src: packaging/linux/index.html
+    dst: /var/www/rws/index.html
+    type: config|noreplace
+  - src: LICENSE
+    dst: /usr/share/doc/rws/copyright
+scripts:
+  postinstall: packaging/linux/postinstall.sh
+  preremove: packaging/linux/preremove.sh
+  postremove: packaging/linux/postremove.sh

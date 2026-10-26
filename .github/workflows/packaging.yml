@@ -1,0 +1,77 @@
+name: Packages
+
+# deb and rpm packages (packaging/linux): build them from a release-style
+# binary, install each on a systemd host — the deb on the runner itself, the
+# rpm in a Fedora container booted with systemd — and require the rws service
+# to start, serve, survive a reload and go away on removal.
+on:
+  push:
+    branches: [main]
+    paths: ["packaging/**", ".github/workflows/packaging.yml"]
+  pull_request:
+    paths: ["packaging/**", ".github/workflows/packaging.yml"]
+  workflow_dispatch:
+
+env:
+  NFPM_VERSION: 2.47.0
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: packaging
+      - name: Build (as the release does)
+        run: |
+          cargo build --release --bin rws --features "acme auth mimalloc" --target x86_64-unknown-linux-musl
+          mkdir -p dist && cp target/x86_64-unknown-linux-musl/release/rws dist/rws
+      - name: Install nfpm
+        run: |
+          curl -sSfL "https://github.com/goreleaser/nfpm/releases/download/v$NFPM_VERSION/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar xz -C /usr/local/bin nfpm
+      - name: Package
+        run: |
+          export VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="rust-web-server") | .version')
+          export ARCH=amd64
+          nfpm package -f packaging/linux/nfpm.yaml -p deb -t dist/
+          nfpm package -f packaging/linux/nfpm.yaml -p rpm -t dist/
+          ls -l dist
+      - name: deb on the runner (systemd)
+        run: |
+          sudo apt-get install -y ./dist/rws_*_amd64.deb
+          systemctl is-active rws
+          for i in $(seq 1 20); do curl -sf localhost:7878/healthz && break; sleep 1; done
+          curl -sSf localhost:7878/ | grep 'rws is running'
+          test "$(stat -c %U /etc/rws/rws.config.toml)" = root
+          systemd-analyze security rws.service | tail -1
+          sudo systemctl reload rws && sleep 1 && systemctl is-active rws
+          sudo apt-get install -y --reinstall ./dist/rws_*_amd64.deb && systemctl is-active rws
+          sudo apt-get remove -y rws
+          ! systemctl is-active rws
+          test -f /etc/rws/rws.config.toml   # remove keeps config; purge deletes it
+      - name: rpm in a Fedora container (systemd)
+        run: |
+          docker run -d --name fedora --privileged --cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
+            -v "$PWD/dist:/dist:ro" fedora:42 sh -c 'dnf install -y -q systemd curl && exec /usr/lib/systemd/systemd'
+          for i in $(seq 1 120); do docker exec fedora systemctl is-system-running 2>/dev/null | grep -qE 'running|degraded' && break; sleep 2; done
+          docker exec fedora dnf install -y /dist/rws-*.x86_64.rpm
+          docker exec fedora systemctl is-active rws
+          docker exec fedora sh -c 'for i in $(seq 1 20); do curl -sf localhost:7878/healthz && break; sleep 1; done'
+          docker exec fedora sh -c 'curl -sSf localhost:7878/ | grep "rws is running"'
+          docker exec fedora dnf remove -y rws
+          ! docker exec fedora systemctl is-active rws
+      - name: Diagnostics
+        if: failure()
+        run: |
+          sudo journalctl -u rws --no-pager | tail -50 || true
+          docker exec fedora journalctl -u rws --no-pager | tail -50 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: dist/*.*

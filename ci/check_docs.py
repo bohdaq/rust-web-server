@@ -102,9 +102,19 @@ def check_settings_documented():
         errors.append(f"configuration/env-vars.md: {name} is not documented")
 
 
+def check_systemd_unit():
+    """deployment/systemd.md shows the unit the deb/rpm packages install."""
+    unit = open(os.path.join(ROOT, "packaging", "linux", "rws.service")).read()
+    page = open(os.path.join(DOCS, "deployment", "systemd.md")).read()
+    block = re.search(r"```ini\n(.*?)```", page, re.S)
+    if not block or block.group(1) != unit:
+        errors.append("deployment/systemd.md: the ini block must equal packaging/linux/rws.service")
+
+
 check_site_links()
 check_repo_links()
 check_settings_documented()
+check_systemd_unit()
 for e in errors:
     print(e)
 sys.exit(1 if errors else 0)
