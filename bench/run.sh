@@ -411,10 +411,20 @@ import json, platform, os, sys
 path, out_dir, duration, conns = sys.argv[1:5]
 rows = [json.loads(l) for l in open(path) if l.strip()]
 cpus = os.cpu_count()
+# The CPU model: runner types differ up to threefold, so a run is only
+# comparable with runs on the same model.
+model = ""
+try:
+    for l in open("/proc/cpuinfo"):
+        if l.startswith("model name"):
+            model = " " + l.split(":", 1)[1].strip() + ","
+            break
+except OSError:
+    pass
 lines = [
     f"Load: oha, {conns} connections, {duration} per scenario, HTTP/1.1 keep-alive, no compression, access logs off "
     f"(text-gzip: Accept-Encoding gzip; log-1k: access log to a file; https-1k/https-1m: TLS; h2-1k: TLS + HTTP/2). "
-    f"Machine: {platform.system()} {platform.machine()}, {cpus} CPUs (load generator on the same machine).",
+    f"Machine: {platform.system()} {platform.machine()},{model} {cpus} CPUs (load generator on the same machine).",
     "",
     "| Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | 200 OK | Server CPU/request (µs) | Peak RSS (MiB) |",
     "|---|---|---:|---:|---:|---:|---:|---:|",
