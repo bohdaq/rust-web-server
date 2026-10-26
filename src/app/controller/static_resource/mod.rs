@@ -886,7 +886,7 @@ fn push_validators(request: &Request, response: &mut Response, modified_nanos: u
 /// second is not after the given date. An unparseable date is ignored.
 fn is_not_modified(request: &Request, modified_nanos: u128, etag: &str) -> bool {
     if let Some(inm) = request.header(Header::_IF_NONE_MATCH) {
-        return inm.value == etag || inm.value == "*";
+        return if_none_match_matches(&inm.value, etag);
     }
     if request.method != METHOD.get && request.method != METHOD.head {
         return false;
@@ -918,6 +918,19 @@ pub(crate) fn working_directory() -> &'static str {
         std::env::current_dir()
             .map(|d| d.to_string_lossy().into_owned())
             .unwrap_or_default()
+    })
+}
+
+/// `If-None-Match` against the current entity tag (RFC 9110 §13.1.2): a
+/// comma-separated list, or `*`, compared weakly — `W/"x"` matches `"x"`
+/// (#56). Before 17.113.2 only a header equal to the tag matched, so a
+/// client sending several tags, or a weak one, never got a `304`.
+pub(crate) fn if_none_match_matches(header_value: &str, etag: &str) -> bool {
+    let opaque = |tag: &str| tag.trim().strip_prefix("W/").unwrap_or(tag.trim()).to_string();
+    let current = opaque(etag);
+    header_value.split(',').any(|candidate| {
+        let candidate = candidate.trim();
+        candidate == "*" || (!candidate.is_empty() && opaque(candidate) == current)
     })
 }
 

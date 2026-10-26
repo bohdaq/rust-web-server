@@ -5255,6 +5255,10 @@ ranges are merged (and then sorted); more than 16 ranges are answered with
 the whole file as one range, so a response never holds more than the file
 (17.113.1).
 
+Conditional requests: every file response carries an `ETag`. `If-None-Match`
+takes a list of tags or `*` and compares weakly (`W/"x"` matches `"x"`), as
+RFC 9110 §13.1.2 requires; a match is a `304 Not Modified` (17.113.2).
+
 ```bash
 mkdir www && echo "<h1>Hello</h1>" > www/index.html
 cd www
