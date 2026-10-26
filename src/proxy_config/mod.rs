@@ -713,7 +713,7 @@ impl RouteMatcher {
                         .map(|h| h.value.as_ref())
                 })
                 .unwrap_or("");
-            if actual_host != expected_host.as_str() {
+            if !host_matches(expected_host, actual_host) {
                 return false;
             }
         }
@@ -951,12 +951,120 @@ impl ConfigDrivenApp {
     }
 }
 
+/// The request with its target normalized ([`normalize_request_target`]),
+/// borrowed when it already is.
+fn normalized(request: &Request) -> std::borrow::Cow<'_, Request> {
+    match normalize_request_target(&request.request_uri) {
+        std::borrow::Cow::Borrowed(_) => std::borrow::Cow::Borrowed(request),
+        std::borrow::Cow::Owned(target) => {
+            let mut owned = request.clone();
+            owned.request_uri = target;
+            std::borrow::Cow::Owned(owned)
+        }
+    }
+}
+
+/// A request target's path normalized before routes match it, and sent
+/// upstream that way (#50): unreserved characters percent-decoded (`%61` →
+/// `a`; other escapes kept, hex upper-cased), repeated slashes collapsed,
+/// `.` and `..` segments resolved (never above `/`). Otherwise `/%61dmin`,
+/// `//admin` or `/x/../admin` missed a protected `/admin` route and reached
+/// the backend through a catch-all route. The query is kept as is; a
+/// target that isn't a path (`*`) is returned unchanged.
+pub(crate) fn normalize_request_target(target: &str) -> std::borrow::Cow<'_, str> {
+    let (path, query) = match target.find('?') {
+        Some(i) => (&target[..i], &target[i..]),
+        None => (target, ""),
+    };
+    if !path.starts_with('/') || !(path.contains('%') || path.contains("//") || path.contains("/.")) {
+        return std::borrow::Cow::Borrowed(target);
+    }
+    let bytes = path.as_bytes();
+    let mut decoded = String::with_capacity(path.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = |b: u8| (b as char).to_digit(16);
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (hex(bytes[i + 1]), hex(bytes[i + 2])) {
+                let value = (h * 16 + l) as u8;
+                if value.is_ascii_alphanumeric() || matches!(value, b'-' | b'.' | b'_' | b'~') {
+                    decoded.push(value as char);
+                } else {
+                    decoded.push('%');
+                    decoded.push(bytes[i + 1].to_ascii_uppercase() as char);
+                    decoded.push(bytes[i + 2].to_ascii_uppercase() as char);
+                }
+                i += 3;
+                continue;
+            }
+        }
+        // A `%` that starts no escape is a literal percent sign: encoded, so
+        // what follows can't form a new escape with it (normalizing twice
+        // must change nothing — the fuzzer found `%%611` → `%a1`).
+        if bytes[i] == b'%' {
+            decoded.push_str("%25");
+            i += 1;
+            continue;
+        }
+        // `path` is a &str: copy whole UTF-8 sequences.
+        let ch = path[i..].chars().next().unwrap_or('\u{FFFD}');
+        decoded.push(ch);
+        i += ch.len_utf8().max(1);
+    }
+    let mut segments: Vec<&str> = Vec::new();
+    let parts: Vec<&str> = decoded.split('/').collect();
+    let last = parts.len().saturating_sub(1);
+    let mut trailing_slash = false;
+    for (n, segment) in parts.iter().enumerate() {
+        match *segment {
+            "" => trailing_slash = n == last,
+            "." => trailing_slash = n == last,
+            ".." => {
+                segments.pop();
+                trailing_slash = n == last;
+            }
+            s => {
+                segments.push(s);
+                trailing_slash = false;
+            }
+        }
+    }
+    let mut out = String::with_capacity(decoded.len() + query.len());
+    out.push('/');
+    out.push_str(&segments.join("/"));
+    if trailing_slash && !segments.is_empty() {
+        out.push('/');
+    }
+    out.push_str(query);
+    if out == target {
+        std::borrow::Cow::Borrowed(target)
+    } else {
+        std::borrow::Cow::Owned(out)
+    }
+}
+
+/// A route's `host` against the request's (SNI or `Host`): ignoring ASCII
+/// case, and ignoring a port the route doesn't name (#50).
+fn host_matches(expected: &str, actual: &str) -> bool {
+    let actual = if expected.contains(':') {
+        actual
+    } else if let Some(rest) = actual.strip_prefix('[') {
+        // [IPv6]:port
+        rest.split(']').next().unwrap_or(rest)
+    } else {
+        actual.rsplit_once(':').map_or(actual, |(host, port)| if port.bytes().all(|b| b.is_ascii_digit()) { host } else { actual })
+    };
+    let expected = expected.trim_start_matches('[').trim_end_matches(']');
+    actual.eq_ignore_ascii_case(expected)
+}
+
 impl Application for ConfigDrivenApp {
     fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
+        let request = normalized(request);
         let generation = self.current();
         match &generation.entry {
-            Some(entry) => entry.execute(request, conn),
-            None => generation.dispatch.execute(request, conn),
+            Some(entry) => entry.execute(&request, conn),
+            None => generation.dispatch.execute(&request, conn),
         }
     }
 
@@ -964,10 +1072,11 @@ impl Application for ConfigDrivenApp {
     /// that match no route and fall through to the static files run inline,
     /// and only without a global `[middleware]` table.
     fn runs_inline(&self, request: &Request, conn: &ConnectionInfo) -> bool {
+        let request = normalized(request);
         let generation = self.current();
         generation.entry.is_none()
-            && !generation.dispatch.routes.iter().any(|r| r.matcher.matches(request, conn))
-            && App::is_inline_request(request)
+            && !generation.dispatch.routes.iter().any(|r| r.matcher.matches(&request, conn))
+            && App::is_inline_request(&request)
     }
 
     /// A request for a proxy route with a plain-HTTP upstream and no
@@ -979,9 +1088,10 @@ impl Application for ConfigDrivenApp {
         if generation.entry.is_some() {
             return None;
         }
-        let route = generation.dispatch.routes.iter().find(|r| r.matcher.matches(request, conn))?;
+        let request = normalized(request);
+        let route = generation.dispatch.routes.iter().find(|r| r.matcher.matches(&request, conn))?;
         let proxy = Arc::clone(route.async_proxy.as_ref()?);
-        Some(Box::pin(async move { proxy.execute_async(request, conn).await }))
+        Some(Box::pin(async move { proxy.execute_async(&request, conn).await }))
     }
 }
 
