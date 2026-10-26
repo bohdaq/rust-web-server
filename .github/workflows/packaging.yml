@@ -146,3 +146,42 @@ jobs:
         run: |
           Get-Service rws -ErrorAction SilentlyContinue | Format-List *
           Get-WinEvent -LogName System -MaxEvents 20 | Where-Object ProviderName -eq "Service Control Manager" | Format-List TimeCreated, Message
+
+  winget:
+    # packaging/winget manifests for the latest release: winget validates and
+    # installs them (the PR to microsoft/winget-pkgs is made per release).
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          echo "MANIFEST=$(packaging/winget/generate.sh "$version" "$RUNNER_TEMP/winget")" >> "$GITHUB_ENV"
+      - name: Validate and install
+        shell: pwsh
+        run: |
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Install-PackageProvider -Name NuGet -Force | Out-Null
+            Install-Module Microsoft.WinGet.Client -Force -Repository PSGallery | Out-Null
+            Repair-WinGetPackageManager -AllUsers
+          }
+          winget --version
+          winget validate --manifest $env:MANIFEST
+          winget settings --enable LocalManifestFiles
+          winget install --manifest $env:MANIFEST --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $rws = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\rws.exe"
+          & $rws --version
+
+  nix:
+    # packaging/nix/package.nix (the nixpkgs expression) built from this checkout.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31.11.1
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - run: nix-build packaging/nix/ci.nix
+      - run: ./result/bin/rws --version
