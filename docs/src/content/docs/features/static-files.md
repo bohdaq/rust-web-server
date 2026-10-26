@@ -40,6 +40,9 @@ A `Range` with `If-Range` is honored only while the `If-Range` tag strongly
 matches the current `ETag`; otherwise (another tag, a weak one, or a date)
 the whole file is sent with `200`, so a client never splices a piece of a
 newer file onto an older download.
+Asking for an existing file or directory with any other method than `GET`,
+`HEAD` or `OPTIONS` gets `405 Method Not Allowed` with
+`Allow: GET, HEAD, OPTIONS` rather than `404` (17.113.2).
 
 ```bash
 mkdir www && echo "<h1>Hello</h1>" > www/index.html
