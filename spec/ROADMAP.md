@@ -45,7 +45,7 @@ All of 18.0's breaking changes land together, on `main` before 18.0.0 is tagged,
 
 - **#31** **Streaming request bodies** — an upload API and multipart straight to storage (`Request.body` is a `Vec<u8>` today).
 - **#30** **WebSocket permessage-deflate, then WebSocket over HTTP/2 and HTTP/3** (RFC 8441 / RFC 9220 extended CONNECT) — not breaking itself, but it builds on the streaming body type, so it follows #31 (it can ship in an 18.x release if 18.0 needs to go out first).
-- **#59** **CORS allow-all off by default** — `cors_allow_all` currently defaults on, reflecting any origin with `Access-Control-Allow-Credentials: true`. Default it off (opt-in), so a server doesn't permit cross-origin credentialed reads unless configured. A behavior change existing deployments would feel, so it rides 18.0 rather than a patch.
+- **#59** ✅ *main: 6054bc38* **CORS allow-all off by default** — `cors_allow_all` currently defaults on, reflecting any origin with `Access-Control-Allow-Credentials: true`. Default it off (opt-in), so a server doesn't permit cross-origin credentialed reads unless configured. A behavior change existing deployments would feel, so it rides 18.0 rather than a patch.
 
 **Breaking:** `Request.body` becomes a streaming body type, with a buffered helper (`body_bytes()`) for handlers that want the whole body. `cors_allow_all` now defaults off (#59).
 
