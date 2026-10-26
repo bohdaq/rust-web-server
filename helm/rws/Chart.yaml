@@ -2,9 +2,11 @@ apiVersion: v2
 name: rws
 description: Deploy rust-web-server (rws) — an HTTP/1.1, HTTP/2, and HTTP/3 web server, reverse proxy, and application framework — on Kubernetes.
 type: application
-version: 0.1.0
-appVersion: "17.113.0"
-home: https://github.com/bohdaq/rust-web-server
+# The release workflow publishes the chart with version and appVersion set
+# to the rws release tag (oci://ghcr.io/bohdaq/charts/rws:<tag>).
+version: 18.1.0
+appVersion: "18.1.0"
+home: https://rws8.tech/deployment/kubernetes/
 sources:
   - https://github.com/bohdaq/rust-web-server
 keywords:

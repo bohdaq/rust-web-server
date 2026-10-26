@@ -13,9 +13,9 @@ spec:
   selector:
     {{- include "rws.selectorLabels" . | nindent 4 }}
   ports:
-    - name: https
+    - name: {{ include "rws.scheme" . }}
       protocol: TCP
-      port: {{ .Values.service.httpsPort }}
+      port: {{ include "rws.servicePort" . }}
       targetPort: {{ .Values.containerPort }}
     {{- if .Values.quic.enabled }}
     - name: quic

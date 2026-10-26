@@ -1,0 +1,69 @@
+name: Helm chart
+
+# helm/rws: lint, schema-check the rendered manifests (kubeconform), and
+# install the packaged chart into a kind cluster with TLS off and on — the
+# pods must pass their probes and answer through the Service.
+on:
+  push:
+    branches: [main]
+    paths: ["helm/**", ".github/workflows/helm.yml"]
+  pull_request:
+    paths: ["helm/**", ".github/workflows/helm.yml"]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        run: |
+          curl -sSfL https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz | tar xz -C /usr/local/bin kubeconform
+      - name: Lint and validate
+        run: |
+          crds='https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          check() {
+            echo "== $*"
+            helm lint --strict helm/rws "$@"
+            helm template ci helm/rws "$@" | kubeconform -strict -summary -schema-location default -schema-location "$crds"
+          }
+          check
+          check --set tls.enabled=false --set quic.enabled=false
+          check --set ingress.enabled=true --set metrics.serviceMonitor.enabled=true \
+                --set autoscaling.enabled=true --set autoscaling.customMetric.enabled=true
+          check --set tls.enabled=false --set ingress.enabled=true --set ingress.className=nginx \
+                --set 'ingress.tls[0].secretName=x' --set 'ingress.tls[0].hosts[0]=rws.example.com'
+
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: rws
+      - name: Package
+        run: helm package helm/rws -d dist
+      - name: Install with TLS
+        run: |
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 \
+            -subj /CN=localhost -keyout tls.key -out tls.crt
+          kubectl create secret tls rws-tls --cert=tls.crt --key=tls.key
+          helm install tls dist/rws-*.tgz --set replicaCount=1 --set podDisruptionBudget.enabled=false \
+            --wait --timeout 5m
+          kubectl port-forward svc/tls-rws 8443:443 & sleep 3
+          curl -sSfk https://localhost:8443/healthz
+          curl -sSfk https://localhost:8443/metrics | grep '^rws_requests_total'
+          kill %1
+      - name: Install without TLS
+        run: |
+          helm install plain dist/rws-*.tgz --set replicaCount=1 --set podDisruptionBudget.enabled=false \
+            --set tls.enabled=false --set quic.enabled=false --wait --timeout 5m
+          kubectl port-forward svc/plain-rws 8080:80 & sleep 3
+          curl -sSf http://localhost:8080/healthz
+          kill %1
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl get pods -o wide
+          kubectl describe pods
+          kubectl logs -l app.kubernetes.io/name=rws --tail=50 --all-containers

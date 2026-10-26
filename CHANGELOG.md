@@ -16,9 +16,24 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   tests with the `serde` and `macros` features too, so `rest_api` and
   `mcp_inventory` run on every push.
 - `AGENTS.md`: a guide for coding agents building an app on the crate.
+- Helm chart published with each release (#26):
+  `helm install my-rws oci://ghcr.io/bohdaq/charts/rws --version <version>`
+  (chart version = rws version, image `ghcr.io/bohdaq/rws:<version>` by
+  default). New optional `Ingress` and prometheus-operator `ServiceMonitor`;
+  `helm/prometheus-adapter-values.yaml` serves the HPA's request-rate metric.
+  CI lints the chart, checks it with kubeconform and installs it into kind
+  with TLS on and off.
 
 ### Fixed
 
+- Helm chart with `tls.enabled` (its default): liveness/readiness probes and
+  the Prometheus scrape annotations used plain HTTP against the TLS port, so
+  pods never became ready; they now use HTTPS (the Kubernetes docs' YAML had
+  the same mistake). The HPA's custom metric was an `External`
+  `rws_route_requests_total` nothing served; it is now the `Pods` metric
+  `rws_requests_per_second` from the Prometheus Adapter rule. The chart's
+  scrape annotations moved from `podAnnotations` to `metrics.podAnnotations`,
+  and the Service port is named `http` (port 80) when TLS is off.
 - MCP `ctx.sample()` / `ctx.list_roots()` called right after `initialize`,
   before the client had opened its `GET /mcp` stream, sent the request into
   nothing and timed out; they now wait for the stream within the same

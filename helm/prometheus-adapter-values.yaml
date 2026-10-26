@@ -1,0 +1,28 @@
+# Values for the Prometheus Adapter chart that serve the custom metric the
+# rws chart's HPA scales on (autoscaling.customMetric):
+#
+#   helm install prometheus-adapter prometheus-community/prometheus-adapter \
+#     -n monitoring -f helm/prometheus-adapter-values.yaml
+#
+# rws exports the counter rws_requests_total at GET /metrics; this rule
+# exposes its per-pod rate as rws_requests_per_second in the custom metrics
+# API (custom.metrics.k8s.io). Check it with:
+#   kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/default/pods/*/rws_requests_per_second"
+prometheus:
+  # Where your Prometheus is; the scraped series need namespace and pod
+  # labels (the annotation-based kubernetes-pods job and ServiceMonitors add them).
+  url: http://prometheus-server.monitoring.svc
+  port: 80
+
+rules:
+  default: false
+  custom:
+    - seriesQuery: 'rws_requests_total{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: namespace}
+          pod: {resource: pod}
+      name:
+        matches: "^rws_requests_total$"
+        as: "rws_requests_per_second"
+      metricsQuery: 'sum(rate(<<.Series>>{<<.LabelMatchers>>}[2m])) by (<<.GroupBy>>)'

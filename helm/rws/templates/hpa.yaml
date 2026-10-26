@@ -22,10 +22,10 @@ spec:
           averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
     {{- end }}
     {{- if .Values.autoscaling.customMetric.enabled }}
-    # Requires the Prometheus Adapter or KEDA — see
-    # docs/deployment/kubernetes.md#horizontalpodautoscaler.
-    - type: External
-      external:
+    # Served by the Prometheus Adapter (helm/prometheus-adapter-values.yaml) —
+    # see docs/deployment/kubernetes.md#horizontalpodautoscaler.
+    - type: Pods
+      pods:
         metric:
           name: {{ .Values.autoscaling.customMetric.name }}
         target:

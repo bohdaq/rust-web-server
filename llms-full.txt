@@ -16983,8 +16983,15 @@ When Kubernetes sends `SIGTERM`, the server:
 
 Set `terminationGracePeriodSeconds` to at least `30` to give in-flight requests time to complete before Kubernetes sends `SIGKILL`.
 
-:::tip[Helm chart available]
-The raw manifests below are also packaged as a parameterized Helm chart at [`helm/rws/`](https://github.com/bohdaq/rust-web-server/tree/main/helm/rws) in the repository — `helm install my-rws ./helm/rws` instead of hand-editing this YAML. The chart's templates render the same `Deployment`/`Service`/`PodDisruptionBudget`/`HorizontalPodAutoscaler` resources documented on this page, checked with `helm lint` and validated offline against the real Kubernetes schemas with `kubeconform` (see the chart's own README for the exact commands).
+:::tip[Helm chart]
+The manifests below are also a Helm chart, published with every release (since 18.2.0):
+
+```bash
+kubectl create secret tls rws-tls --cert=tls.crt --key=tls.key
+helm install my-rws oci://ghcr.io/bohdaq/charts/rws --version 18.2.0
+```
+
+It renders the same `Deployment`, `Service`, `PodDisruptionBudget` and `HorizontalPodAutoscaler`, plus an optional `Ingress` and prometheus-operator `ServiceMonitor`; CI installs it into a kind cluster with TLS on and off. Its values are documented in [`helm/rws/README.md`](https://github.com/bohdaq/rust-web-server/tree/main/helm/rws).
 :::
 
 ## Deployment YAML
@@ -17006,17 +17013,18 @@ spec:
       labels:
         app: rws
       annotations:
-        # Prometheus scrape annotation — tells Prometheus to scrape this pod.
+        # Prometheus scrape annotations — tells Prometheus to scrape this pod.
         prometheus.io/scrape: "true"
         prometheus.io/path: "/metrics"
         prometheus.io/port: "7878"
+        prometheus.io/scheme: "https"   # the pod serves TLS
     spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: rws
-          image: ghcr.io/your-org/rws:latest
+          image: ghcr.io/bohdaq/rws:18
           ports:
-            - name: http
+            - name: https
               containerPort: 7878
               protocol: TCP
             - name: quic
@@ -17043,6 +17051,7 @@ spec:
             httpGet:
               path: /healthz
               port: 7878
+              scheme: HTTPS   # the port serves TLS; plain-HTTP probes would fail
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
@@ -17051,6 +17060,7 @@ spec:
             httpGet:
               path: /readyz
               port: 7878
+              scheme: HTTPS   # the port serves TLS; plain-HTTP probes would fail
             initialDelaySeconds: 2
             periodSeconds: 5
             timeoutSeconds: 2
@@ -17116,10 +17126,36 @@ spec:
 
 ## HorizontalPodAutoscaler
 
-Scale on CPU utilisation, or on custom Prometheus metrics via the KEDA adapter:
+Scale on CPU utilisation, or on requests per second per pod. rws exports the
+counter `rws_requests_total` at `/metrics`; the
+[Prometheus Adapter](https://github.com/kubernetes-sigs/prometheus-adapter)
+turns it into the per-pod rate `rws_requests_per_second` in the custom
+metrics API. Install it with the rule in
+[`helm/prometheus-adapter-values.yaml`](https://github.com/bohdaq/rust-web-server/blob/main/helm/prometheus-adapter-values.yaml):
+
+```bash
+helm install prometheus-adapter prometheus-community/prometheus-adapter \
+  -n monitoring -f helm/prometheus-adapter-values.yaml   # set prometheus.url first
+kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/default/pods/*/rws_requests_per_second"
+```
+
+The rule:
 
 ```yaml
-# CPU-based autoscaling (built-in metrics server)
+rules:
+  custom:
+    - seriesQuery: 'rws_requests_total{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: namespace}
+          pod: {resource: pod}
+      name:
+        matches: "^rws_requests_total$"
+        as: "rws_requests_per_second"
+      metricsQuery: 'sum(rate(<<.Series>>{<<.LabelMatchers>>}[2m])) by (<<.GroupBy>>)'
+```
+
+```yaml
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -17138,16 +17174,18 @@ spec:
         target:
           type: Utilization
           averageUtilization: 70
-    # Custom metric: request rate from Prometheus (requires KEDA or the
-    # Prometheus adapter). Metric name matches what MetricsLayer exposes.
-    - type: External
-      external:
+    # Requests per second per pod, from the Prometheus Adapter rule above.
+    - type: Pods
+      pods:
         metric:
-          name: rws_route_requests_total
+          name: rws_requests_per_second
         target:
           type: AverageValue
-          averageValue: "1000"
+          averageValue: "500"
 ```
+
+With the Helm chart: `--set autoscaling.enabled=true --set autoscaling.customMetric.enabled=true`.
+(Until 18.2.0 this page used an `External` metric named `rws_route_requests_total`, which nothing served.)
 
 ## Structured logging for Kubernetes
 
@@ -17163,7 +17201,7 @@ Access logs are JSON by default (`RWS_CONFIG_LOG_FORMAT=json`, or `log_format = 
 
 ## Prometheus scraping
 
-With `prometheus.io/scrape: "true"` annotation on the pod, a standard Prometheus installation scrapes `GET /metrics` automatically. The endpoint returns server-wide counters and — if `MetricsLayer` is enabled — per-route histograms in Prometheus text format. Circuit-breaker state (`rws_circuit_breaker_state{backend}`) is included automatically. The full metric list is on the [Metrics](/features/metrics/) page.
+With the `prometheus.io/*` annotations on the pod (`prometheus.io/scheme: "https"` when the pod serves TLS), a Prometheus using annotation-based discovery scrapes `GET /metrics` automatically; with the prometheus-operator, enable the chart's `metrics.serviceMonitor` instead. The endpoint returns server-wide counters and — if `MetricsLayer` is enabled — per-route histograms in Prometheus text format. Circuit-breaker state (`rws_circuit_breaker_state{backend}`) is included automatically. The full metric list is on the [Metrics](/features/metrics/) page.
 
 See the [Observability](/deployment/observability) page for example Grafana queries.
 

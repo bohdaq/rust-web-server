@@ -61,3 +61,17 @@ The ServiceAccount name to use.
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+The scheme the pods serve: "https" with tls.enabled, else "http".
+*/}}
+{{- define "rws.scheme" -}}
+{{- if .Values.tls.enabled }}https{{ else }}http{{ end }}
+{{- end }}
+
+{{/*
+The Service's TCP port for that scheme.
+*/}}
+{{- define "rws.servicePort" -}}
+{{- if .Values.tls.enabled }}{{ .Values.service.httpsPort }}{{ else }}{{ .Values.service.httpPort }}{{ end }}
+{{- end }}

@@ -6,8 +6,9 @@
 replicaCount: 3
 
 image:
-  repository: ghcr.io/your-org/rws
-  tag: "latest"
+  repository: ghcr.io/bohdaq/rws
+  # Empty = the chart's appVersion (the rws release the chart was published with).
+  tag: ""
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -23,13 +24,24 @@ serviceAccount:
   annotations: {}
   name: ""
 
-# Pod-level annotations. The Prometheus scrape annotations are on by
-# default so a standard Prometheus installation picks up GET /metrics
-# with no further configuration — see docs/deployment/observability.md.
-podAnnotations:
-  prometheus.io/scrape: "true"
-  prometheus.io/path: "/metrics"
-  prometheus.io/port: "7878"
+# Pod-level annotations.
+podAnnotations: {}
+
+metrics:
+  # prometheus.io/scrape, /path, /port and /scheme on the pod, so a Prometheus
+  # using annotation-based discovery scrapes GET /metrics (over HTTPS when
+  # tls.enabled) — see docs/deployment/observability.md.
+  podAnnotations: true
+  # A prometheus-operator ServiceMonitor (needs its CRDs in the cluster).
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+    # Used when tls.enabled: the pod certificate is usually issued for the
+    # public name, not the pod IP Prometheus scrapes.
+    tlsConfig:
+      insecureSkipVerify: true
 
 podLabels: {}
 
@@ -84,7 +96,9 @@ quic:
 
 service:
   type: ClusterIP
+  # Port "https" when tls.enabled, else port "http".
   httpsPort: 443
+  httpPort: 80
   quicPort: 443
   annotations: {}
 
@@ -110,6 +124,24 @@ readinessProbe:
   timeoutSeconds: 2
   failureThreshold: 2
 
+# An Ingress in front of the Service. With tls.enabled the pods speak HTTPS,
+# so the controller must too: the chart adds ingress-nginx's
+# backend-protocol annotation; set your controller's equivalent otherwise.
+# Behind an Ingress you usually want tls.enabled=false and quic.enabled=false
+# and TLS terminated by the controller (ingress.tls).
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: rws.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: rws-example-tls
+  #    hosts: [rws.example.com]
+
 podDisruptionBudget:
   enabled: true
   minAvailable: 2
@@ -123,13 +155,13 @@ autoscaling:
   maxReplicas: 20
   # Set to null/0 to omit the CPU metric entirely.
   targetCPUUtilizationPercentage: 70
-  # Requires the Prometheus Adapter or KEDA's metrics-server so the
-  # named metric is available via the external.metrics.k8s.io API.
-  # Metric name matches what MetricsLayer exposes at GET /metrics.
+  # Requests per second per pod, from the custom metrics API. rws exports
+  # the counter rws_requests_total; the Prometheus Adapter rule in
+  # helm/prometheus-adapter-values.yaml turns it into this rate.
   customMetric:
     enabled: false
-    name: rws_route_requests_total
-    averageValue: "1000"
+    name: rws_requests_per_second
+    averageValue: "500"
 
 nodeSelector: {}
 tolerations: []

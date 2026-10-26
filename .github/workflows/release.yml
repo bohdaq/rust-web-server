@@ -15,6 +15,7 @@ name: Release
 #   5. publishes rws-macros (when its version is new) and rust-web-server to
 #      crates.io (CARGO_REGISTRY_TOKEN secret),
 #   6. rebuilds rws8.tech from this tag's docs/ (DOCS_SITE_DEPLOY_KEY secret).
+#   7. pushes the Helm chart to oci://ghcr.io/<owner>/charts/rws:<version>.
 #
 # Supply chain: binaries are built with cargo-auditable (the dependency list
 # is embedded, so `cargo audit bin rws` works on a deployed binary), the
@@ -406,6 +407,31 @@ jobs:
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -q -m "docs: rust-web-server $TAG"
           git push origin HEAD:docs
+
+  chart:
+    # The Helm chart, versioned with the release: oci://ghcr.io/<owner>/charts/rws.
+    # Highest version only, like the site: an older line's chart predates the
+    # TLS-aware probes.
+    needs: [release, docker]
+    if: needs.release.outputs.newest == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repo="oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"
+          echo "$GH_TOKEN" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          if helm show chart "$repo/rws" --version "$TAG" >/dev/null 2>&1; then
+            echo "chart $TAG already published"; exit 0
+          fi
+          helm lint --strict helm/rws
+          helm package helm/rws --version "$TAG" --app-version "$TAG" -d dist
+          helm push "dist/rws-$TAG.tgz" "$repo"
+          helm show chart "$repo/rws" --version "$TAG"
 
   homebrew:
     # The formula follows the highest version only.

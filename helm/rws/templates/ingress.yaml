@@ -1,0 +1,39 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "rws.fullname" . }}
+  labels:
+    {{- include "rws.labels" . | nindent 4 }}
+  {{- $annotations := deepCopy (default (dict) .Values.ingress.annotations) }}
+  {{- if .Values.tls.enabled }}
+  {{- $_ := set $annotations "nginx.ingress.kubernetes.io/backend-protocol" (get $annotations "nginx.ingress.kubernetes.io/backend-protocol" | default "HTTPS") }}
+  {{- end }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "rws.fullname" $ }}
+                port:
+                  name: {{ include "rws.scheme" $ }}
+          {{- end }}
+    {{- end }}
+{{- end }}

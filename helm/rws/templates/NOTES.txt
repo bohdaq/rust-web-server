@@ -6,8 +6,8 @@ Check the rollout status:
 {{- if eq .Values.service.type "ClusterIP" }}
 
 The Service is ClusterIP-only. Port-forward to reach it locally:
-  kubectl port-forward svc/{{ include "rws.fullname" . }} -n {{ .Release.Namespace }} 8443:{{ .Values.service.httpsPort }}
-  curl -k https://localhost:8443/healthz
+  kubectl port-forward svc/{{ include "rws.fullname" . }} -n {{ .Release.Namespace }} 8443:{{ include "rws.servicePort" . }}
+  curl {{ if .Values.tls.enabled }}-k https{{ else }}http{{ end }}://localhost:8443/healthz
 {{- else if eq .Values.service.type "LoadBalancer" }}
 
 Get the external address (may take a few minutes to provision):
@@ -24,9 +24,12 @@ TLS is enabled. This chart does NOT create the certificate Secret for you —
 {{- end }}
 
 Metrics are exposed at GET /metrics on port {{ .Values.containerPort }} (Prometheus text format).
-{{- if index .Values.podAnnotations "prometheus.io/scrape" }}
-The pod's prometheus.io/scrape annotation lets a standard Prometheus
-installation pick this up with no further configuration.
+{{- if .Values.metrics.podAnnotations }}
+The pod's prometheus.io/* annotations let a Prometheus using annotation-based
+discovery pick this up with no further configuration.
+{{- end }}
+{{- if .Values.metrics.serviceMonitor.enabled }}
+A ServiceMonitor for the prometheus-operator was created.
 {{- end }}
 
 {{- if .Values.autoscaling.enabled }}
