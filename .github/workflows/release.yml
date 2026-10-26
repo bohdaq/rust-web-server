@@ -382,7 +382,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: steps.key.outputs.ok == 'true'
         with:
-          node-version: 22
+          node-version: 24
       - name: Build
         if: steps.key.outputs.ok == 'true'
         working-directory: docs
