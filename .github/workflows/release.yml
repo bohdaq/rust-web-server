@@ -15,7 +15,9 @@ name: Release
 #   5. publishes rws-macros (when its version is new) and rust-web-server to
 #      crates.io (CARGO_REGISTRY_TOKEN secret),
 #   6. rebuilds rws8.tech from this tag's docs/ (DOCS_SITE_DEPLOY_KEY secret).
-#   7. pushes the Helm chart to oci://ghcr.io/<owner>/charts/rws:<version>.
+#   7. pushes the Helm chart to oci://ghcr.io/<owner>/charts/rws:<version>,
+#   8. attaches deb/rpm packages and (PACKAGES_GPG_KEY secret) publishes
+#      signed apt/dnf repositories with the site.
 #
 # Supply chain: binaries are built with cargo-auditable (the dependency list
 # is embedded, so `cargo audit bin rws` works on a deployed binary), the
@@ -365,9 +367,57 @@ jobs:
 
   # rws8.tech: this tag's docs/ built and pushed to the docs branch of
   # bohdaq/rws8.tech (GitHub Pages). The site follows the highest version only.
+  packages:
+    # deb and rpm (packaging/), from the release's static Linux binaries; the
+    # rpm is signed when PACKAGES_GPG_KEY is set. Tags before 18.2.0 have no
+    # packaging/ and skip.
+    needs: [release, binaries]
+    runs-on: ubuntu-latest
+    env:
+      NFPM_VERSION: 2.47.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: docker-*-linux-musl
+      - name: Build
+        env:
+          KEY: ${{ secrets.PACKAGES_GPG_KEY }}
+          NFPM_RPM_PASSPHRASE: ${{ secrets.PACKAGES_GPG_PASSPHRASE }}
+        run: |
+          if [ ! -x packaging/build-packages.sh ]; then echo "no packaging/ in $TAG"; exit 0; fi
+          curl -sSfL "https://github.com/goreleaser/nfpm/releases/download/v$NFPM_VERSION/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar xz -C /usr/local/bin nfpm
+          if [ -n "$KEY" ]; then
+            printf '%s\n' "$KEY" > "$RUNNER_TEMP/signing.asc"
+            export RPM_SIGNING_KEY_FILE="$RUNNER_TEMP/signing.asc"
+          else
+            echo "::warning::PACKAGES_GPG_KEY not set: rpm packages unsigned"
+          fi
+          packaging/build-packages.sh "$TAG" amd64 docker-x86_64-unknown-linux-musl/rws packages
+          packaging/build-packages.sh "$TAG" arm64 docker-aarch64-unknown-linux-musl/rws packages
+          rm -f "$RUNNER_TEMP/signing.asc"
+          cd packages && for f in *.deb *.rpm; do sha256sum "$f" > "$f.sha256"; done && ls -l
+      - name: Attest build provenance
+        if: hashFiles('packages/*.deb') != ''
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: packages/*.[dr][ep][bm]
+      - name: Upload to release
+        if: hashFiles('packages/*.deb') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" packages/* --clobber
+
   docs-site:
-    needs: release
-    if: needs.release.outputs.newest == 'true'
+    # Also the signed apt/dnf repositories at rws8.tech/apt and /rpm (newest
+    # version only; older ones stay on the release pages) when
+    # PACKAGES_GPG_KEY is set. Pushed as a single orphan commit: the branch
+    # is a deploy target, and packages would bloat its history.
+    needs: [release, packages]
+    if: ${{ !cancelled() && needs.release.result == 'success' && needs.release.outputs.newest == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy key configured?
@@ -388,6 +438,20 @@ jobs:
         if: steps.key.outputs.ok == 'true'
         working-directory: docs
         run: npm ci --no-audit --no-fund && npm run build
+      - name: Package repositories
+        if: steps.key.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: ${{ secrets.PACKAGES_GPG_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.PACKAGES_GPG_PASSPHRASE }}
+        run: |
+          if [ -z "$KEY" ]; then echo "::warning::PACKAGES_GPG_KEY not set: apt/dnf repositories not updated"; exit 0; fi
+          if [ ! -x packaging/build-repos.sh ]; then exit 0; fi
+          gh release download "$TAG" --pattern '*.deb' --pattern '*.rpm' -D "$RUNNER_TEMP/packages"
+          sudo apt-get update -q && sudo apt-get install -y -q apt-utils createrepo-c
+          printf '%s\n' "$KEY" | gpg --batch --import
+          export GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')
+          packaging/build-repos.sh "$RUNNER_TEMP/packages" docs/dist https://rws8.tech
       - uses: actions/checkout@v4
         if: steps.key.outputs.ok == 'true'
         with:
@@ -399,14 +463,17 @@ jobs:
         if: steps.key.outputs.ok == 'true'
         working-directory: site
         run: |
-          # Everything but the repo's own CNAME, .nojekyll and .gitignore.
-          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name CNAME ! -name .nojekyll ! -name .gitignore -exec rm -rf {} +
+          # Everything but the repo's own CNAME, .nojekyll and .gitignore — and
+          # the package repositories, unless this build has new ones.
+          keep=(! -name .git ! -name CNAME ! -name .nojekyll ! -name .gitignore)
+          [ -d ../docs/dist/apt ] || keep+=(! -name apt ! -name rpm)
+          find . -mindepth 1 -maxdepth 1 "${keep[@]}" -exec rm -rf {} +
           cp -r ../docs/dist/. .
+          git checkout -q --orphan publish
           git add -A
-          if git diff --cached --quiet; then echo "site unchanged"; exit 0; fi
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -q -m "docs: rust-web-server $TAG"
-          git push origin HEAD:docs
+          git push -f origin HEAD:docs
 
   chart:
     # The Helm chart, versioned with the release: oci://ghcr.io/<owner>/charts/rws.

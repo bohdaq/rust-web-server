@@ -31,42 +31,72 @@ jobs:
       - name: Build (as the release does)
         run: |
           cargo build --release --bin rws --features "acme auth mimalloc" --target x86_64-unknown-linux-musl
-          mkdir -p dist && cp target/x86_64-unknown-linux-musl/release/rws dist/rws
       - name: Install nfpm
         run: |
           curl -sSfL "https://github.com/goreleaser/nfpm/releases/download/v$NFPM_VERSION/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" \
             | sudo tar xz -C /usr/local/bin nfpm
-      - name: Package
+      - name: Throwaway signing key
         run: |
-          export VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="rust-web-server") | .version')
-          export ARCH=amd64
-          nfpm package -f packaging/linux/nfpm.yaml -p deb -t dist/
-          nfpm package -f packaging/linux/nfpm.yaml -p rpm -t dist/
-          ls -l dist
+          gpg --batch --gen-key <<'KEY'
+          %no-protection
+          Key-Type: RSA
+          Key-Length: 3072
+          Name-Real: rws CI test
+          Name-Email: ci@example.invalid
+          Expire-Date: 1d
+          %commit
+          KEY
+          echo "GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')" >> "$GITHUB_ENV"
+      - name: Package (as the release does)
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="rust-web-server") | .version')
+          gpg --batch --armor --export-secret-keys "$GPG_KEY_ID" > "$RUNNER_TEMP/signing.asc"
+          RPM_SIGNING_KEY_FILE="$RUNNER_TEMP/signing.asc" \
+            packaging/build-packages.sh "$version" amd64 target/x86_64-unknown-linux-musl/release/rws packages
+          ls -l packages
+      - name: Repositories (as the release does)
+        run: |
+          sudo apt-get install -y apt-utils createrepo-c
+          packaging/build-repos.sh packages site http://localhost:8000
+          nohup setsid python3 -m http.server 8000 --directory site >/dev/null 2>&1 &
+          sleep 1 && curl -sSf localhost:8000/apt/dists/stable/InRelease | head -3
       - name: deb on the runner (systemd)
         run: |
-          sudo apt-get install -y ./dist/rws_*_amd64.deb
+          sudo apt-get install -y ./packages/rws_*_amd64.deb
           systemctl is-active rws
           for i in $(seq 1 20); do curl -sf localhost:7878/healthz && break; sleep 1; done
           curl -sSf localhost:7878/ | grep 'rws is running'
           test "$(stat -c %U /etc/rws/rws.config.toml)" = root
           systemd-analyze security rws.service | tail -1
           sudo systemctl reload rws && sleep 1 && systemctl is-active rws
-          sudo apt-get install -y --reinstall ./dist/rws_*_amd64.deb && systemctl is-active rws
+          sudo apt-get install -y --reinstall ./packages/rws_*_amd64.deb && systemctl is-active rws
           sudo apt-get remove -y rws
           ! systemctl is-active rws
           test -f /etc/rws/rws.config.toml   # remove keeps config; purge deletes it
+      - name: deb from the apt repository
+        run: |
+          curl -sSf localhost:8000/apt/rws.gpg | sudo tee /usr/share/keyrings/rws.gpg >/dev/null
+          echo "deb [signed-by=/usr/share/keyrings/rws.gpg] http://localhost:8000/apt stable main" | sudo tee /etc/apt/sources.list.d/rws.list
+          sudo apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/rws.list -o Dir::Etc::sourceparts=- 
+          sudo apt-get install -y rws
+          systemctl is-active rws
+          sudo apt-get purge -y rws
       - name: rpm in a Fedora container (systemd)
         run: |
           docker run -d --name fedora --privileged --cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
-            -v "$PWD/dist:/dist:ro" fedora:42 sh -c 'dnf install -y -q systemd curl && exec /usr/lib/systemd/systemd'
+            --network host -v "$PWD/packages:/dist:ro" fedora:42 sh -c 'dnf install -y -q systemd curl && exec /usr/lib/systemd/systemd'
           for i in $(seq 1 120); do docker exec fedora systemctl is-system-running 2>/dev/null | grep -qE 'running|degraded' && break; sleep 2; done
-          docker exec fedora dnf install -y "/dist/$(basename dist/rws-*.x86_64.rpm)"
+          docker exec fedora sh -c 'rpm --import http://localhost:8000/rpm/rws.asc && rpm -K /dist/*.x86_64.rpm'
+          docker exec fedora dnf install -y "/dist/$(basename packages/rws-*.x86_64.rpm)"
           docker exec fedora systemctl is-active rws
           docker exec fedora sh -c 'for i in $(seq 1 20); do curl -sf localhost:7878/healthz && break; sleep 1; done'
           docker exec fedora sh -c 'curl -sSf localhost:7878/ | grep "rws is running"'
           docker exec fedora dnf remove -y rws
           ! docker exec fedora systemctl is-active rws
+          # From the signed repository (gpgcheck and repo_gpgcheck on):
+          docker exec fedora curl -sSf -o /etc/yum.repos.d/rws.repo http://localhost:8000/rpm/rws.repo
+          docker exec fedora dnf install -y rws
+          docker exec fedora systemctl is-active rws
       - name: Diagnostics
         if: failure()
         run: |
@@ -75,7 +105,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: packages
-          path: dist/*.*
+          path: packages/*
 
   windows-service:
     runs-on: windows-latest

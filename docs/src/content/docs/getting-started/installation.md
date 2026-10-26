@@ -50,9 +50,12 @@ Every release ships prebuilt binaries, so no Rust toolchain is needed:
 |---|---|---|
 | Homebrew | `brew install bohdaq/tap/rws` | macOS (Apple Silicon, Intel), Linux (x86_64, arm64) |
 | cargo-binstall | `cargo binstall rust-web-server` | everything below, without compiling |
+| apt / dnf | `sudo apt install rws`, `sudo dnf install rws` after adding the repository — [systemd: install from a package](/deployment/systemd/#install-from-a-package); installs and starts the `rws` service (since 18.2.0) | Debian, Ubuntu, Fedora, RHEL and derivatives (x86_64, arm64) |
 | Docker | `docker run -p 7878:7878 -v "$PWD:/srv" bohdaq/rws` (also `ghcr.io/bohdaq/rws`) | linux/amd64, linux/arm64 |
 | Download | [GitHub Releases](https://github.com/bohdaq/rust-web-server/releases/latest) | `x86_64`/`aarch64-unknown-linux-musl`, `x86_64`/`aarch64-apple-darwin`, `x86_64-pc-windows-msvc` |
 | From source | `cargo install rust-web-server` | anywhere Rust 1.88+ runs |
+
+On Windows, `rws.exe` also runs as a Windows service — see [Windows](/deployment/windows/).
 
 Linux binaries are statically linked against musl, so they run on any distribution regardless of glibc version. Each archive has a matching `.sha256` file.
 

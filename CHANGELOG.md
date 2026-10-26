@@ -26,7 +26,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - deb and rpm packages (#27) for x86_64 and arm64 on each release: `/usr/bin/rws`,
   the hardened `rws.service` (now the one on the systemd page; it serves
   `/var/www/rws` and reads `/etc/rws/rws.config.toml`), started on port
-  7878 on install. CI installs both on systemd hosts.
+  7878 on install, and signed apt and dnf repositories at
+  `https://rws8.tech/apt` and `/rpm` (newest release; the rpm files are signed
+  too). CI builds the repositories with a throwaway key and installs from
+  them and from the files on systemd hosts. The release workflow now pushes
+  the rws8.tech `docs` branch as one orphan commit per release (the branch
+  is only a deploy target; packages would bloat its history).
 - Windows service (#27): `rws --windows-service=<directory>` runs under the
   Service Control Manager; Stop and Shutdown end it gracefully
   (`server::request_shutdown`, which library users can call too). New page

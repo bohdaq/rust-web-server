@@ -10,17 +10,33 @@ reloads its configuration on `systemctl reload`.
 
 ## Install from a package
 
-Each release (since 18.2.0) has `.deb` and `.rpm` packages for x86_64 and
-arm64 on its [GitHub release page](https://github.com/bohdaq/rust-web-server/releases).
+Since 18.2.0 rws has `.deb` and `.rpm` packages for x86_64 and arm64, from
+signed repositories (so `apt upgrade` / `dnf upgrade` bring new releases) or
+from each [GitHub release page](https://github.com/bohdaq/rust-web-server/releases).
 They install the binary as `/usr/bin/rws`, the unit below, a configuration
 in `/etc/rws/rws.config.toml` and a placeholder page in `/var/www/rws`,
-create the `rws` user, and start the service on port 7878:
+create the `rws` user, and start the service on port 7878.
+
+Debian, Ubuntu:
 
 ```bash
-sudo apt install ./rws_18.2.0_amd64.deb        # Debian, Ubuntu
-sudo dnf install ./rws-18.2.0-1.x86_64.rpm     # Fedora, RHEL, Rocky, Alma
+curl -fsSL https://rws8.tech/apt/rws.gpg | sudo tee /usr/share/keyrings/rws.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/rws.gpg] https://rws8.tech/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/rws.list
+sudo apt update && sudo apt install rws
 curl localhost:7878/                           # rws is running
 ```
+
+Fedora, RHEL, Rocky, Alma (packages and repository metadata are signed):
+
+```bash
+sudo curl -fsSL -o /etc/yum.repos.d/rws.repo https://rws8.tech/rpm/rws.repo
+sudo dnf install rws
+```
+
+A downloaded package installs the same way: `sudo apt install ./rws_18.2.0_amd64.deb`,
+`sudo dnf install ./rws-18.2.0-1.x86_64.rpm`. The repositories hold the
+newest release only; older ones stay on the release pages.
 
 Put your site in `/var/www/rws`, change settings in
 `/etc/rws/rws.config.toml` (an upgrade keeps your edits) and apply them with
