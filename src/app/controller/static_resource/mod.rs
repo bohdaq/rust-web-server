@@ -102,6 +102,18 @@ impl StaticResourceController {
     /// path: directories, `.html` resolution, ranges, OPTIONS, symlinks with
     /// an untyped name, the SPA fallback. For a caller that already tried it.
     pub(crate) fn process_general(request: &Request, mut response: Response, config: &ServerConfig) -> Response {
+        // A Range with an If-Range that no longer matches is answered as if
+        // there were no Range: the whole, current file (#56). (The fast path
+        // never takes a Range, so only this path needs it.)
+        let without_stale_range;
+        let request = if range_is_stale(request) {
+            let mut copy = request.clone();
+            copy.headers.retain(|h| !h.name.eq_ignore_ascii_case(Header::_RANGE));
+            without_stale_range = copy;
+            &without_stale_range
+        } else {
+            request
+        };
         let boxed_content_range_list = StaticResourceController::process_static_resources(&request);
         if boxed_content_range_list.is_ok() {
             let content_range_list = boxed_content_range_list.unwrap();
@@ -932,6 +944,33 @@ pub(crate) fn if_none_match_matches(header_value: &str, etag: &str) -> bool {
         let candidate = candidate.trim();
         candidate == "*" || (!candidate.is_empty() && opaque(candidate) == current)
     })
+}
+
+/// `true` when the request has a `Range` and an `If-Range` that doesn't
+/// match the file as it is now (RFC 9110 §13.1.5): an entity tag must match
+/// the current `ETag` strongly (a weak tag never does); a date must equal the
+/// file's `Last-Modified` and be a strong validator — at least a second
+/// older than now, so a second write within that second can't share it.
+/// Then the `Range` is ignored and the whole file is sent: the client's
+/// piece is out of date.
+pub(crate) fn range_is_stale(request: &Request) -> bool {
+    let Some(if_range) = request.header(Header::_IF_RANGE) else { return false };
+    if request.header(Header::_RANGE).is_none() {
+        return false;
+    }
+    let validator = if_range.value.trim();
+    let Some(path) = URL::request_target_path(&request.request_uri) else { return true };
+    let Ok(fs_path) = static_fs_path(&os_specific_path(path)) else { return true };
+    let (Ok(modified), Ok(md)) = (file_modified_utc(&fs_path), metadata(&fs_path)) else { return true };
+    if validator.starts_with('"') {
+        return validator != format!("\"{}-{}\"", modified, md.len());
+    }
+    let modified_secs = (modified / 1_000_000_000) as u64;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    match crate::http::date::parse(validator) {
+        Some(date) => date != modified_secs || now < modified_secs + 1,
+        None => true,
+    }
 }
 
 /// `FileExt::get_static_filepath` without the per-call `current_dir()`:

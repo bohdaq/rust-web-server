@@ -46,6 +46,7 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - The reverse proxy sent the client's `Content-Length` upstream next to its own (two headers — strict backends reject that, and it's a desync risk). It now sends one, drops headers named in `Connection`, `Trailer` and `Proxy-Connection`, and appends the client address to an incoming `X-Forwarded-For` instead of sending a second one.
 - `CacheLayer` no longer stores `no-cache` responses, responses to `Range` requests, or responses that vary on a header outside its key.
 - A JWKS key that can't be used is skipped instead of failing verification.
+- `If-Range` with a date (on top of 17.113.2's entity-tag handling): the `Range` applies when the date equals the file's `Last-Modified` and that is at least a second old (a strong validator), else the whole file is sent.
 
 ### Performance
 
@@ -71,6 +72,7 @@ allocate with mimalloc (4–6% less CPU, more memory). Details:
 - **Bodiless responses carry no body or Content-Length (#54).** `1xx`, `204` and `304` responses must have no content (RFC 9110 §6.4.1, §15.3.5): `OPTIONS` on a static file answered `204` with `Content-Length` and, over HTTP/2, a `DATA` frame. Every writer now drops the body (buffered, file or pipe) and `Content-Length`/`Transfer-Encoding` for those statuses (`Response::drop_content_for_status`). And a `200` to `OPTIONS` now sends its body: it used to announce it with `Content-Length` and then drop it, so the client waited for bytes that never came.
 - **The static request path is percent-decoded (#55).** Files were looked up by the raw request target, so `GET /my%20file.txt` was a `404` for `my file.txt`, and the directory listing's (correctly encoded) links to such names were dead. The path is now decoded once, before the web-root and hidden-file checks of #43 (so `/%2e%2e/` is refused like `/../`); `%2520` stays a literal `%20`. A `Range` request for a name containing a space, quote, `&`, `|` or `;` no longer gets `416` (the file reader refused such paths), and the general static path finds escaped names' `ETag`.
 - **If-None-Match is a list, compared weakly (#56).** Only a header equal to the file's `ETag` gave `304`: a client sending several tags (`"a", "b"`) or the weak form (`W/"…"`) always got the whole file again (RFC 9110 §13.1.2).
+- **If-Range is honored (#56).** It was ignored: a client resuming a download with `If-Range` got `206` with bytes of the file as it is now, even after the file changed. A `Range` now applies only while `If-Range` strongly matches the current `ETag`; otherwise the whole file is sent with `200` (RFC 9110 §13.1.5).
 
 ## 17.113.1 — security patch
 
