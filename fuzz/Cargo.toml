@@ -141,3 +141,10 @@ path = "fuzz_targets/acme_renewal.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "mcp_gateway_reply"
+path = "fuzz_targets/mcp_gateway_reply.rs"
+test = false
+doc = false
+bench = false

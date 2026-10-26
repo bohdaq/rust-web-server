@@ -60,6 +60,13 @@ fn deeply_nested_json() {
         let nested = format!("{}{}", "{\"a\":".repeat(50_000), "}".repeat(50_000));
         let _ = crate::json::object::JSON::parse_as_properties(nested.clone());
         let _ = McpServerProbe::run(&format!("[{}]", "[".repeat(50_000)));
+        // An upstream reply the MCP gateway reads (#62).
+        let deep = format!("{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{\"tools\":[{}]}}}}", "[".repeat(50_000));
+        let tools = r#"{"tools":["#.to_string() + &"[".repeat(50_000);
+        let _ = crate::mcp::gateway::parse_reply("application/json", deep.as_bytes(), 1);
+        let _ = crate::mcp::gateway::fuzzing::tools(&tools);
+        let events = "data: {}\n\n".repeat(50_000);
+        let _ = crate::mcp::gateway::parse_reply("text/event-stream", events.as_bytes(), 1);
     });
 }
 

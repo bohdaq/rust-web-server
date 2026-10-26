@@ -36,6 +36,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- MCP gateway (#62): `mcp::gateway::McpGateway` puts one endpoint in front of
+  upstream MCP servers — tools as `<prefix>__<tool>`, `allow(identity, tools)`
+  rules (deny by default), upstream credentials set per `Upstream` and never
+  the caller's; JSON and event-stream replies, paginated `tools/list`, session
+  re-initialization; upstream failures are `isError` results.
+  `McpServer::require_bearer_tokens` (a token per named caller, seen as
+  `{"sub":…}` in `auth_claims`) and `McpServer::tool_filter` (per-request tool
+  visibility) work on any MCP server. `examples/mcp_gateway.rs`; docs page
+  [MCP gateway](/mcp/gateway/).
 - Typed MCP tools (#61): `McpServer::typed_tool(name, description, |ctx, args: In| -> Result<Out, String>)`
   (`serde`) derives `inputSchema`/`outputSchema` from the types, deserializes
   the arguments and returns `structuredContent`. `#[derive(JsonSchema)]`

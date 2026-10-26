@@ -289,6 +289,16 @@ pub mod fuzz_api {
         }
     }
 
+    /// An upstream MCP server's reply as the gateway reads it (#62): a JSON
+    /// body or an event stream, then the response's tools. Must never panic.
+    pub fn mcp_gateway_reply(data: &[u8]) {
+        for content_type in ["application/json", "text/event-stream"] {
+            if let Ok(result) = crate::mcp::gateway::parse_reply(content_type, data, 1) {
+                let _ = crate::mcp::gateway::fuzzing::tools(&result);
+            }
+        }
+    }
+
     /// What ACME renewal parses from the CA (#1): certificate DER (validity,
     /// serial, Authority Key Identifier), renewalInfo windows (RFC 3339) and
     /// directory profile names. Must never panic.

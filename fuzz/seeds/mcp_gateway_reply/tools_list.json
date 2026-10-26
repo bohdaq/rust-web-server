@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"search","title":"Search","description":"d","inputSchema":{"type":"object","properties":{"q":{"type":"string"}}},"outputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}}],"nextCursor":"p2"}}

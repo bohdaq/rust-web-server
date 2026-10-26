@@ -25,6 +25,7 @@ cargo install cargo-fuzz
 | `h2_connection` | rws's HTTP/2 server: frames, stream states, flow control (`h2_server::fuzz`) | HTTP/2 clients |
 | `config_file` | `rws.config.toml` settings loader | operator files |
 | `proxy_config` | proxy route parser | operator files |
+| `mcp_gateway_reply` | what the MCP gateway reads from an upstream: JSON or event-stream replies, `tools/list` results (via `fuzz_api`) | upstream MCP servers |
 
 ## Running
 

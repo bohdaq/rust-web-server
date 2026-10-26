@@ -60,6 +60,28 @@ mode — the `maintenance` tool is how it's switched off). An empty token passed
 to `require_bearer` refuses every request rather than accepting an empty
 `Authorization` header, and tokens are compared in constant time.
 
+## One token per caller
+
+`require_bearer_tokens` (since 18.0.0) accepts several tokens and names the
+caller behind each; tools see that name as `{"sub":"<name>"}` in
+[`ctx.auth_claims`](#reading-verified-claims), the same place OAuth puts the
+token's claims:
+
+```rust
+let mcp = McpServer::new("team-tools", "1.0")
+    .require_bearer_tokens([("token-for-alice", "alice"), ("token-for-ci", "ci")])
+    // Only alice may call tools whose names start with "admin_".
+    .tool_filter(|ctx, tool| {
+        !tool.starts_with("admin_") || ctx.auth_claims.as_deref() == Some(r#"{"sub":"alice"}"#)
+    });
+```
+
+`tool_filter(|ctx, tool_name| -> bool)` decides per request which tools a
+caller sees in `tools/list`; calling any other answers `Unknown tool`, as
+for a tool that doesn't exist. It works with `require_oauth` too (decide
+from the claims). A `require_bearer` token carries no name, so its requests
+have no `auth_claims`.
+
 ## Browser clients: `Origin` and `Content-Type`
 
 A request that carries an `Origin` header — every request a browser sends —
@@ -229,4 +251,4 @@ other non-MCP path.
 
 ### Combining with `require_bearer`
 
-If both `.require_bearer(token)` and `.require_oauth(provider, audience)` are configured on the same server, OAuth verification takes precedence and the static token is never checked. This isn't a supported combination to actually run in production — pick one — it's just an unambiguous tie-break so the behavior isn't undefined if both happen to be set.
+If `.require_bearer(token)` or `.require_bearer_tokens(...)` and `.require_oauth(provider, audience)` are configured on the same server, OAuth verification takes precedence and the static token is never checked. This isn't a supported combination to actually run in production — pick one — it's just an unambiguous tie-break so the behavior isn't undefined if both happen to be set.

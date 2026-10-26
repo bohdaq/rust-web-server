@@ -1,0 +1,6 @@
+event: message
+data: {"jsonrpc":"2.0","method":"notifications/progress","params":{}}
+
+data: {"jsonrpc":"2.0","id":1,
+data: "error":{"code":-32000,"message":"rate limited"}}
+

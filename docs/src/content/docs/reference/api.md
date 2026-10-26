@@ -190,7 +190,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | Type / Trait | Module | Description |
 |---|---|---|
 | `JsonSchema` / `ObjectSchema` | `schema` | A type's JSON Schema as text (primitives, `Option`, collections, smart pointers built in); `ObjectSchema` builds an object schema (18.0.0) |
-| `McpServer` / `McpIcon` | `mcp` | MCP Streamable HTTP server (`POST /mcp`, JSON-RPC 2.0, plus `GET /mcp` SSE); `.tool` / `.typed_tool` (`serde`) / `.resource` / `.prompt`, `.require_bearer`, `.require_oauth` (`sso`), `.session_ttl` / `.max_sessions` / `.max_sse_clients`. Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See [MCP](/mcp/overview/) |
+| `McpGateway` / `Upstream` | `mcp::gateway` | One MCP endpoint federating upstream MCP servers: `prefix__tool` names, per-caller `allow` rules, upstream credentials kept server-side (18.0.0). See [MCP gateway](/mcp/gateway/) |
+| `McpServer` / `McpIcon` | `mcp` | MCP Streamable HTTP server (`POST /mcp`, JSON-RPC 2.0, plus `GET /mcp` SSE); `.tool` / `.typed_tool` (`serde`) / `.resource` / `.prompt`, `.require_bearer`, `.require_bearer_tokens`, `.require_oauth` (`sso`), `.tool_filter`, `.session_ttl` / `.max_sessions` / `.max_sse_clients`. Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See [MCP](/mcp/overview/) |
 | `McpContent` | `mcp` | Tool result content: `text`, `json`, `image`, `embedded` |
 | `McpContext` | `mcp` | Per-session context for `.tool_with_context` handlers: client info, `auth_claims`, progress, cancellation, `sample`, `list_roots` |
 | `ToolAnnotations` | `mcp` | `read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint` for `.tool_annotated` |

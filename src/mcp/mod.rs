@@ -88,6 +88,7 @@
 //! None — configure the server programmatically via the builder.
 
 pub(crate) mod json_rpc;
+pub mod gateway;
 
 #[cfg(test)]
 mod tests;
@@ -169,6 +170,12 @@ impl McpContent {
     /// the result's `structuredContent`, and as text for older clients.
     pub fn structured(json: impl Into<String>) -> Self {
         McpContent { kind: "structured", text: json.into(), mime_type: Some("application/json".to_string()), uri: None }
+    }
+
+    /// A complete `tools/call` result (`{"content":[...],...}`), sent as is —
+    /// how the gateway passes an upstream server's result through.
+    pub(crate) fn raw_result(json: impl Into<String>) -> Self {
+        McpContent { kind: "result", text: json.into(), mime_type: Some("application/json".to_string()), uri: None }
     }
 
     /// Image content (screenshot, chart, generated art) — `data` is base64-encoded
@@ -273,10 +280,11 @@ pub struct McpContext {
     /// the server minted and returned in the `initialize` response header
     /// for this session (see the module docs' Sessions section).
     pub session_id: Option<String>,
-    /// Verified OAuth 2.0 / OIDC JWT claims as a JSON string (serialized
-    /// [`crate::sso::OidcClaims`]), populated when [`McpServer::require_oauth`]
-    /// (`sso` feature) is configured and this request's bearer token
-    /// verified successfully. `None` if OAuth isn't configured, or for a
+    /// The verified caller's claims as a JSON string: the serialized
+    /// [`crate::sso::OidcClaims`] when [`McpServer::require_oauth`] (`sso`
+    /// feature) is configured and this request's bearer token verified, or
+    /// `{"sub":"<identity>"}` for a token from
+    /// [`McpServer::require_bearer_tokens`]. `None` if OAuth isn't configured, or for a
     /// hand-built context (e.g. `handle_request` in tests) that bypassed
     /// `McpServer::execute`'s auth check entirely.
     pub auth_claims: Option<String>,
@@ -802,6 +810,7 @@ type ResourceFn = Arc<dyn Fn(&str) -> Result<McpContent, String>    + Send + Syn
 type PromptFn   = Arc<dyn Fn(&str) -> Result<Vec<PromptMessage>, String> + Send + Sync>;
 /// `Fn(argument_name, partial_value) -> candidate completion strings`.
 type CompletionFn = Arc<dyn Fn(&str, &str) -> Result<Vec<String>, String> + Send + Sync>;
+type ToolFilter = Arc<dyn Fn(&McpContext, &str) -> bool + Send + Sync>;
 /// An async tool handler, boxed so `AsyncToolDef` can store handlers with
 /// different concrete `Future` types uniformly. The `Future` itself doesn't
 /// need `Send` for [`crate::async_bridge::block_on_isolated`] (which drives
@@ -961,6 +970,10 @@ pub struct McpServer {
     completions: Arc<RwLock<Vec<CompletionDef>>>,
     fallback: Option<Arc<dyn Application + Send + Sync>>,
     auth_token: Option<String>,
+    /// `(token, identity)` pairs from [`Self::require_bearer_tokens`].
+    bearer_tokens: Vec<(String, String)>,
+    /// Which tools a caller may see and call ([`Self::tool_filter`]).
+    tool_filter: Option<ToolFilter>,
     /// Origins a browser may call the endpoint from (see
     /// [`Self::allowed_origins`]); a request with any other `Origin` is
     /// refused.
@@ -1096,6 +1109,8 @@ impl McpServer {
             completions: Arc::new(RwLock::new(Vec::new())),
             fallback: None,
             auth_token: None,
+            bearer_tokens: Vec::new(),
+            tool_filter: None,
             allowed_origins: Vec::new(),
             #[cfg(feature = "sso")]
             oauth: None,
@@ -1654,6 +1669,82 @@ impl McpServer {
     pub fn require_bearer(mut self, token: impl Into<String>) -> Self {
         self.auth_token = Some(token.into());
         self
+    }
+
+    /// Accept several bearer tokens, each naming a caller: a request with
+    /// `Authorization: Bearer <token>` is that caller, and handlers see
+    /// `{"sub":"<identity>"}` as [`McpContext::auth_claims`] — what
+    /// [`Self::tool_filter`] and the [gateway](gateway::McpGateway) decide
+    /// by. Any other token gets `401`. Combines with
+    /// [`Self::require_bearer`] (whose token carries no identity); OAuth
+    /// ([`Self::require_oauth`]) replaces both. Empty tokens never match;
+    /// tokens are compared in constant time.
+    ///
+    /// ```rust
+    /// use rust_web_server::mcp::McpServer;
+    ///
+    /// let server = McpServer::new("my-server", "1.0")
+    ///     .require_bearer_tokens([("token-for-alice", "alice"), ("token-for-ci", "ci")]);
+    /// ```
+    pub fn require_bearer_tokens<I, T, N>(mut self, tokens: I) -> Self
+    where
+        I: IntoIterator<Item = (T, N)>,
+        T: Into<String>,
+        N: Into<String>,
+    {
+        self.bearer_tokens.extend(tokens.into_iter().map(|(token, identity)| (token.into(), identity.into())));
+        self
+    }
+
+    /// Show and allow only the tools `allow(ctx, tool_name)` accepts for a
+    /// request: `tools/list` leaves the others out, and `tools/call` answers
+    /// them as it would an unknown tool. `ctx.auth_claims` identifies the
+    /// caller ([`Self::require_bearer_tokens`], [`Self::require_oauth`]).
+    ///
+    /// ```rust
+    /// use rust_web_server::mcp::McpServer;
+    ///
+    /// let server = McpServer::new("my-server", "1.0")
+    ///     .tool_filter(|ctx, tool| !tool.starts_with("admin_") || ctx.auth_claims.as_deref() == Some(r#"{"sub":"root"}"#));
+    /// ```
+    pub fn tool_filter<F>(mut self, allow: F) -> Self
+    where
+        F: Fn(&McpContext, &str) -> bool + Send + Sync + 'static,
+    {
+        self.tool_filter = Some(Arc::new(allow));
+        self
+    }
+
+    fn tool_allowed(&self, ctx: &McpContext, name: &str) -> bool {
+        self.tool_filter.as_ref().is_none_or(|allow| allow(ctx, name))
+    }
+
+    /// Checks a request's bearer token against [`Self::require_bearer`] and
+    /// [`Self::require_bearer_tokens`]: `Ok(claims)` (`Some` for a named
+    /// token), or the `401` to send.
+    fn check_bearer(&self, request: &Request) -> Result<Option<String>, Response> {
+        if self.auth_token.is_none() && self.bearer_tokens.is_empty() {
+            return Ok(None);
+        }
+        let provided = request.headers.iter()
+            .find(|h| h.name.eq_ignore_ascii_case("authorization"))
+            .map(|h| h.value.as_ref())
+            .unwrap_or("");
+        let bearer = provided.strip_prefix("Bearer ").unwrap_or("");
+        // Compare against every token so the time taken doesn't tell which one matched.
+        let mut identity = None;
+        for (token, name) in &self.bearer_tokens {
+            if bearer_matches(token, bearer) && identity.is_none() {
+                identity = Some(name);
+            }
+        }
+        if let Some(identity) = identity {
+            return Ok(Some(format!(r#"{{"sub":"{}"}}"#, json_escape(identity))));
+        }
+        match &self.auth_token {
+            Some(expected) if bearer_matches(expected, bearer) => Ok(None),
+            _ => Err(unauthorized()),
+        }
     }
 
     /// Browser origins allowed to call the MCP endpoint, e.g.
@@ -2219,7 +2310,7 @@ impl McpServer {
         match method {
             "initialize"     => self.do_initialize(body),
             "ping"           => Ok("{}".to_string()),
-            "tools/list"     => self.do_tools_list(body),
+            "tools/list"     => self.do_tools_list(body, &ctx),
             "tools/call"     => self.do_tools_call(body, ctx),
             "resources/list" => self.do_resources_list(body),
             "resources/read" => self.do_resources_read(body),
@@ -2421,14 +2512,16 @@ impl McpServer {
         ))
     }
 
-    fn do_tools_list(&self, body: &str) -> Result<String, (i32, String)> {
+    fn do_tools_list(&self, body: &str, ctx: &McpContext) -> Result<String, (i32, String)> {
         #[cfg_attr(not(feature = "http2"), allow(unused_mut))]
         let mut items: Vec<String> = self.tools.read().unwrap().iter()
+            .filter(|t| self.tool_allowed(ctx, &t.name))
             .map(|t| Self::render_tool_list_entry(&t.name, &t.description, &t.input_schema, t.annotations, &t.meta))
             .collect();
 
         #[cfg(feature = "http2")]
         items.extend(self.async_tools.read().unwrap().iter()
+            .filter(|t| self.tool_allowed(ctx, &t.name))
             .map(|t| Self::render_tool_list_entry(&t.name, &t.description, &t.input_schema, t.annotations, &t.meta)));
 
         let (page, next_cursor) = self.paginate(&items, body)?;
@@ -2498,6 +2591,9 @@ impl McpServer {
             .ok_or((json_rpc::INVALID_PARAMS, "Missing tool name".to_string()))?;
         let args = json_rpc::extract_raw(&params, "arguments")
             .unwrap_or_else(|| "{}".to_string());
+        if !self.tool_allowed(&ctx, &name) {
+            return Err((json_rpc::INVALID_PARAMS, format!("Unknown tool: {name}")));
+        }
 
         // `_meta.progressToken` (string or number, per spec) — stored raw so
         // `McpContext::report_progress` can splice it back verbatim.
@@ -2541,6 +2637,7 @@ impl McpServer {
     /// and (with `http2`) async `tools/call` dispatch paths.
     fn format_tool_result(result: Result<McpContent, String>) -> String {
         match result {
+            Ok(c) if c.kind == "result" => c.text,
             Ok(c) if c.kind == "structured" => format!(
                 r#"{{"content":[{{"type":"text","text":"{}"}}],"structuredContent":{},"isError":false}}"#,
                 json_escape(&c.text),
@@ -2929,10 +3026,13 @@ impl Application for McpServer {
 
             #[cfg_attr(not(feature = "sso"), allow(unused_mut))]
             let mut auth_claims_json: Option<String> = None;
+            #[cfg(feature = "sso")]
+            let oauth_configured = self.oauth.is_some();
+            #[cfg(not(feature = "sso"))]
+            let oauth_configured = false;
 
-            // OAuth (sso feature) takes precedence over a static bearer
-            // token if both are somehow configured — see require_oauth's
-            // doc comment.
+            // OAuth (sso feature) takes precedence over bearer tokens if both
+            // are somehow configured — see require_oauth's doc comment.
             #[cfg(feature = "sso")]
             if let Some(oauth) = &self.oauth {
                 let provided = request.headers.iter()
@@ -2952,26 +3052,11 @@ impl Application for McpServer {
                     Ok(claims) => auth_claims_json = serde_json::to_string(&claims).ok(),
                     Err(_) => return Ok(unauthorized_with_metadata(oauth, request, &self.path)),
                 }
-            } else if let Some(expected) = &self.auth_token {
-                // Check the static bearer token before processing any MCP request.
-                let provided = request.headers.iter()
-                    .find(|h| h.name.eq_ignore_ascii_case("authorization"))
-                    .map(|h| h.value.as_ref())
-                    .unwrap_or("");
-                let bearer = provided.strip_prefix("Bearer ").unwrap_or("");
-                if !bearer_matches(expected, bearer) {
-                    return Ok(unauthorized());
-                }
             }
-            #[cfg(not(feature = "sso"))]
-            if let Some(expected) = &self.auth_token {
-                let provided = request.headers.iter()
-                    .find(|h| h.name.eq_ignore_ascii_case("authorization"))
-                    .map(|h| h.value.as_ref())
-                    .unwrap_or("");
-                let bearer = provided.strip_prefix("Bearer ").unwrap_or("");
-                if !bearer_matches(expected, bearer) {
-                    return Ok(unauthorized());
+            if !oauth_configured {
+                match self.check_bearer(request) {
+                    Ok(claims) => auth_claims_json = claims,
+                    Err(response) => return Ok(response),
                 }
             }
 

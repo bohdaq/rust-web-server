@@ -144,6 +144,7 @@ export default defineConfig({
             { label: 'Auth',       link: '/mcp/auth/' },
             { label: 'Operate rws from an AI client', link: '/mcp/operate/' },
             { label: 'Build agent tools on your app', link: '/mcp/agent-tools/' },
+            { label: 'Gateway', link: '/mcp/gateway/' },
           ],
         },
         {

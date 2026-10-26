@@ -15869,6 +15869,28 @@ mode — the `maintenance` tool is how it's switched off). An empty token passed
 to `require_bearer` refuses every request rather than accepting an empty
 `Authorization` header, and tokens are compared in constant time.
 
+## One token per caller
+
+`require_bearer_tokens` (since 18.0.0) accepts several tokens and names the
+caller behind each; tools see that name as `{"sub":"<name>"}` in
+[`ctx.auth_claims`](#reading-verified-claims), the same place OAuth puts the
+token's claims:
+
+```rust
+let mcp = McpServer::new("team-tools", "1.0")
+    .require_bearer_tokens([("token-for-alice", "alice"), ("token-for-ci", "ci")])
+    // Only alice may call tools whose names start with "admin_".
+    .tool_filter(|ctx, tool| {
+        !tool.starts_with("admin_") || ctx.auth_claims.as_deref() == Some(r#"{"sub":"alice"}"#)
+    });
+```
+
+`tool_filter(|ctx, tool_name| -> bool)` decides per request which tools a
+caller sees in `tools/list`; calling any other answers `Unknown tool`, as
+for a tool that doesn't exist. It works with `require_oauth` too (decide
+from the claims). A `require_bearer` token carries no name, so its requests
+have no `auth_claims`.
+
 ## Browser clients: `Origin` and `Content-Type`
 
 A request that carries an `Origin` header — every request a browser sends —
@@ -16038,7 +16060,7 @@ other non-MCP path.
 
 ### Combining with `require_bearer`
 
-If both `.require_bearer(token)` and `.require_oauth(provider, audience)` are configured on the same server, OAuth verification takes precedence and the static token is never checked. This isn't a supported combination to actually run in production — pick one — it's just an unambiguous tie-break so the behavior isn't undefined if both happen to be set.
+If `.require_bearer(token)` or `.require_bearer_tokens(...)` and `.require_oauth(provider, audience)` are configured on the same server, OAuth verification takes precedence and the static token is never checked. This isn't a supported combination to actually run in production — pick one — it's just an unambiguous tie-break so the behavior isn't undefined if both happen to be set.
 
 ---
 
@@ -16242,6 +16264,96 @@ assert!(client.get("/items/TEE-02").send().body_text().contains(r#""onHand":1"#)
 ```
 
 `cargo test --example mcp_inventory --features "macros serde sso"` runs them.
+
+---
+
+# MCP gateway
+
+<https://rws8.tech/mcp/gateway/>
+
+`McpGateway` (since 18.0.0) federates upstream MCP servers behind one
+`/mcp`. Clients connect to the gateway with their own credentials; the
+gateway calls each upstream with *its* credentials, so the tokens for your
+GitHub, Jira or internal MCP servers live in one place and never reach the
+agents. Which caller may use which tools is one list.
+
+The runnable version is
+[`examples/mcp_gateway.rs`](https://github.com/bohdaq/rust-web-server/blob/main/examples/mcp_gateway.rs):
+`cargo run --example mcp_gateway` starts two upstreams in-process and the
+gateway in front of them.
+
+```rust
+use rust_web_server::mcp::gateway::{McpGateway, Upstream};
+
+let gateway = McpGateway::new("gateway", "1.0")
+    .upstream(Upstream::new("github", "https://mcp.github.example/mcp")
+        .header("Authorization", format!("Bearer {}", std::env::var("GITHUB_MCP_TOKEN")?)))
+    .upstream(Upstream::new("jira", "http://jira-mcp.internal:8080/mcp"))
+    .allow("alice", ["*"])
+    .allow("ci", ["github__search_*", "jira__get_issue"])
+    .build()?                                   // connects and lists every upstream's tools
+    .require_bearer_tokens([
+        (std::env::var("ALICE_TOKEN")?, "alice"),
+        (std::env::var("CI_TOKEN")?, "ci"),
+    ]);
+
+let (listener, pool) = Server::setup()?;
+Server::run_tls(listener, pool, gateway).await;
+```
+
+## What callers see
+
+- Each upstream tool appears as `<prefix>__<tool>` (`github__search_issues`),
+  with the upstream's description, input and output schemas, title and
+  behaviour hints.
+- A call is checked against the upstream's input schema, then forwarded;
+  the upstream's result comes back as it was sent — content, structured
+  content, `isError`.
+- When the upstream fails — it is down, answers HTTP 5xx, or returns a
+  JSON-RPC error — the caller gets an `isError` result naming the upstream
+  (`github: rate limited`), never a protocol error.
+
+## Who may call what
+
+`.allow(identity, tools)` rules add up:
+
+| Pattern | Matches |
+|---|---|
+| `github__search_issues` | that tool |
+| `github__*` | every tool from `github` (any prefix ending in `*`) |
+| `*` | every tool |
+
+The identity is the caller's `sub`: the name given with
+[`require_bearer_tokens`](/mcp/auth/#one-token-per-caller), or the `sub`
+claim of an OAuth token with [`require_oauth`](/mcp/auth/#oauth-20-authorization-mcp-2025-03-26).
+`.allow("*", ...)` applies to every identified caller. A caller no rule
+names sees an empty `tools/list`, and a tool it may not use answers as if
+it didn't exist (`Unknown tool`) — nothing is forwarded. A plain
+`require_bearer` token carries no identity, so behind it the gateway allows
+nothing: use `require_bearer_tokens` or `require_oauth`.
+
+## Upstreams
+
+- `Upstream::new(prefix, url)` — `url` is the server's Streamable HTTP
+  endpoint. The prefix is letters, digits, `-` and single `_`.
+- `.header(name, value)` — sent on every request to that upstream; the
+  caller's `Authorization` is never passed on.
+- `.timeout_ms(ms)` — per request (default 30 s).
+
+The gateway initializes a session with each upstream, sends the session id
+and negotiated `MCP-Protocol-Version` on later requests, reads JSON or
+event-stream replies, and starts a new session once if the upstream has
+forgotten its own. `build()` fails, naming the upstream and its URL, if one
+can't be reached at startup.
+
+## Not yet
+
+This is the minimal gateway. Tools are listed once, at `build()` — restart
+the gateway to pick up an upstream's new tools. Upstream resources, prompts
+and notifications aren't federated, results aren't cached, there are no
+per-tool rate limits or audit log, and each upstream speaks the protocol
+version it agreed with the gateway. The [roadmap](https://github.com/bohdaq/rust-web-server/blob/main/spec/ROADMAP.md)
+tracks the full gateway (#28).
 
 ---
 
@@ -17577,7 +17689,8 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | Type / Trait | Module | Description |
 |---|---|---|
 | `JsonSchema` / `ObjectSchema` | `schema` | A type's JSON Schema as text (primitives, `Option`, collections, smart pointers built in); `ObjectSchema` builds an object schema (18.0.0) |
-| `McpServer` / `McpIcon` | `mcp` | MCP Streamable HTTP server (`POST /mcp`, JSON-RPC 2.0, plus `GET /mcp` SSE); `.tool` / `.typed_tool` (`serde`) / `.resource` / `.prompt`, `.require_bearer`, `.require_oauth` (`sso`), `.session_ttl` / `.max_sessions` / `.max_sse_clients`. Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See [MCP](/mcp/overview/) |
+| `McpGateway` / `Upstream` | `mcp::gateway` | One MCP endpoint federating upstream MCP servers: `prefix__tool` names, per-caller `allow` rules, upstream credentials kept server-side (18.0.0). See [MCP gateway](/mcp/gateway/) |
+| `McpServer` / `McpIcon` | `mcp` | MCP Streamable HTTP server (`POST /mcp`, JSON-RPC 2.0, plus `GET /mcp` SSE); `.tool` / `.typed_tool` (`serde`) / `.resource` / `.prompt`, `.require_bearer`, `.require_bearer_tokens`, `.require_oauth` (`sso`), `.tool_filter`, `.session_ttl` / `.max_sessions` / `.max_sse_clients`. Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See [MCP](/mcp/overview/) |
 | `McpContent` | `mcp` | Tool result content: `text`, `json`, `image`, `embedded` |
 | `McpContext` | `mcp` | Per-session context for `.tool_with_context` handlers: client info, `auth_claims`, progress, cancellation, `sample`, `list_roots` |
 | `ToolAnnotations` | `mcp` | `read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint` for `.tool_annotated` |
