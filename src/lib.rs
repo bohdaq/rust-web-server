@@ -64,6 +64,8 @@ pub mod macros;
 pub mod blocklist;
 pub mod cache;
 pub mod config_reload;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod config_watch;
 pub mod config_check;
 /// RSA public keys and RS256 / rsa-sha256 signature verification (no `rsa` crate).
 #[cfg(any(feature = "auth-asymmetric", feature = "sso"))]

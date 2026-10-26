@@ -23,6 +23,9 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- Reload on file change (#10): `watch = true` (`RWS_CONFIG_WATCH`) reloads
+  when `rws.config.toml` or a configured certificate or key changes, with
+  the same validation as `SIGHUP`; covered by `ci/e2e/config_reload.sh`.
 - Access log to a file (#9): `access_log` (`RWS_CONFIG_ACCESS_LOG`) writes
   access-log lines to a file instead of stdout; `access_log_max_size` rotates
   it by size (`access.log` → `access.log.1` …, keeping `access_log_keep`),

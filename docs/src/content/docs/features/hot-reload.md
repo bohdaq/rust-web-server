@@ -29,6 +29,24 @@ Each reload prints a confirmation line:
 Config reloaded — cors_allow_all=false rate_limit=1000/60 log_format=json
 ```
 
+### Reloading when the file changes
+
+With `watch = true` (`RWS_CONFIG_WATCH`, since 18.1.0) rws reloads by itself
+when `rws.config.toml` (or `RWS_CONFIG_FILE`) or any configured TLS
+certificate or key changes — as Caddy's `--watch` does:
+
+```toml
+watch = true
+```
+
+A background thread checks the files' size and modification time once a
+second; a change that is the same on two checks in a row (an editor or
+`certbot` finished writing) triggers the same reload as `SIGHUP`, so a
+broken edit is rejected and the running configuration keeps serving. The
+files are looked up again on every check, so a reload that points at new
+certificates starts watching those. Off by default; the `watch` setting
+itself is read at startup.
+
 ## What reloads without restart
 
 | Setting | Env var |

@@ -71,3 +71,29 @@ sleep 1
 grep -q "keeping the running routes" rws.log || fail "no reload error logged"
 kill -0 "$PID" 2>/dev/null || fail "rws exited after a broken reload"
 echo "ok: a broken config is rejected and the running routes keep serving"
+
+# ── watch = true: an edit applies itself, no signal ──────────────────────────
+kill "$PID"; wait "$PID" 2>/dev/null || true
+write_watch_config() { # <body> <action-type>
+  write_config "$1" "$2"
+  sed -i '1i watch = true' rws.config.toml
+}
+write_watch_config w1 respond
+"$RWS" > rws.log 2>&1 &
+PID=$!
+for _ in $(seq 1 30); do
+  curl -sf -o /dev/null http://127.0.0.1:8701/v && break
+  sleep 0.5
+done
+[ "$(get)" = "w1" ] || fail "initial watched route: got '$(get)'"
+sleep 1.1   # a new modification time, even on a 1 s-resolution filesystem
+write_watch_config w2 respond
+for _ in $(seq 1 24); do [ "$(get)" = "w2" ] && break; sleep 0.25; done
+[ "$(get)" = "w2" ] || fail "watch: an edit was not applied: got '$(get)'"
+echo "ok: watch = true applies an edit without SIGHUP"
+sleep 1.1
+write_watch_config w3 respnd
+sleep 4
+[ "$(get)" = "w2" ] || fail "watch: a broken edit replaced the running routes: got '$(get)'"
+kill -0 "$PID" 2>/dev/null || fail "rws exited after a broken watched edit"
+echo "ok: watch = true rejects a broken edit and keeps serving"

@@ -184,6 +184,7 @@ window_secs  = 60     # Sliding window length in seconds (default: 60)
 
 ```toml
 log_format              = "json"     # RWS_CONFIG_LOG_FORMAT: "json" (default) | "combined" | "off"
+watch                   = true       # RWS_CONFIG_WATCH: reload when this file or a certificate changes (default false)
 access_log              = "/var/log/rws/access.log"  # RWS_CONFIG_ACCESS_LOG: write the access log here instead of stdout
 access_log_max_size     = "100M"     # RWS_CONFIG_ACCESS_LOG_MAX_SIZE: rotate past this size; 0 (default) = never (use logrotate + SIGUSR1)
 access_log_keep         = 5          # RWS_CONFIG_ACCESS_LOG_KEEP: rotated files kept (access.log.1 … .5)

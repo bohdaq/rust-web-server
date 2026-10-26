@@ -573,6 +573,7 @@ fn main() {
     exit_if_informational_flag();
     let (listener, pool) = Server::setup().expect("server setup failed");
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
+    rust_web_server::config_watch::start();
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
         let proxy_app = rust_web_server::middleware::WithMiddleware::new(proxy_app).wrap(GlobalRateLimit::from_env());
@@ -591,6 +592,7 @@ async fn main() {
     rust_web_server::server::per_core::default_to_per_core();
     let (listener, pool) = Server::setup().expect("server setup failed");
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
+    rust_web_server::config_watch::start();
 
     start_acme().await;
 
@@ -618,6 +620,7 @@ async fn main() {
     rust_web_server::server::per_core::default_to_per_core();
     let (listener, pool) = Server::setup().expect("server setup failed");
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
+    rust_web_server::config_watch::start();
 
     start_acme().await;
 

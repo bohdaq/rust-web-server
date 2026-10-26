@@ -40,6 +40,7 @@ pub const SETTINGS_WITHOUT_FLAG: &[&str] = &[
     "RWS_CONFIG_STATIC_CACHE_CONTROL",
     "RWS_CONFIG_TEMPLATE_DIR",
     "RWS_CONFIG_TLS_CLIENT_CA_FILE",
+    "RWS_CONFIG_WATCH",
 ];
 
 /// Tables (and their sub-tables) read by `proxy_config`'s own parser, not

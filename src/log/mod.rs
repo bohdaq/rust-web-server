@@ -201,6 +201,12 @@ impl Log {
         access_sink::install_reopen_signal();
     }
 
+    /// Reopen the access-log file before its next write — what `SIGUSR1`
+    /// does, for a program that moves the file itself.
+    pub fn reopen_access_log() {
+        access_sink::reopen();
+    }
+
     /// Write out the buffered access-log lines now (they're otherwise written
     /// within 100 ms) — e.g. before exiting without returning from `main`.
     pub fn flush_access_log() {

@@ -1054,6 +1054,7 @@ don't use them.
 
 | Variable | Default | Options | Description |
 |----------|---------|---------|-------------|
+| `RWS_CONFIG_WATCH` | `false` | boolean | Reload when `rws.config.toml` (or `RWS_CONFIG_FILE`) or a configured TLS certificate or key changes — the same validated reload as `SIGHUP`, checked once a second (since 18.1.0). Read at startup. See [Hot reload](/features/hot-reload/#reloading-when-the-file-changes). |
 | `RWS_CONFIG_ACCESS_LOG` | (stdout) | path | Append access-log lines to this file instead of stdout (since 18.1.0). Opened at the first line; `SIGUSR1` reopens it (for logrotate). Read at startup. See [Logs](/deployment/observability/#writing-to-a-file). |
 | `RWS_CONFIG_ACCESS_LOG_MAX_SIZE` | `0` | bytes (`K`/`M`/`G` suffixes) | Rotate the access-log file when the next lines would take it past this size: `access.log` → `access.log.1` …. `0` never rotates (leave it to logrotate). |
 | `RWS_CONFIG_ACCESS_LOG_KEEP` | `5` | integer | Rotated access-log files to keep; `0` empties the file instead of keeping any. |
@@ -1303,6 +1304,7 @@ window_secs  = 60     # Sliding window length in seconds (default: 60)
 
 ```toml
 log_format              = "json"     # RWS_CONFIG_LOG_FORMAT: "json" (default) | "combined" | "off"
+watch                   = true       # RWS_CONFIG_WATCH: reload when this file or a certificate changes (default false)
 access_log              = "/var/log/rws/access.log"  # RWS_CONFIG_ACCESS_LOG: write the access log here instead of stdout
 access_log_max_size     = "100M"     # RWS_CONFIG_ACCESS_LOG_MAX_SIZE: rotate past this size; 0 (default) = never (use logrotate + SIGUSR1)
 access_log_keep         = 5          # RWS_CONFIG_ACCESS_LOG_KEEP: rotated files kept (access.log.1 … .5)
@@ -9212,6 +9214,24 @@ Each reload prints a confirmation line:
 ```text
 Config reloaded — cors_allow_all=false rate_limit=1000/60 log_format=json
 ```
+
+### Reloading when the file changes
+
+With `watch = true` (`RWS_CONFIG_WATCH`, since 18.1.0) rws reloads by itself
+when `rws.config.toml` (or `RWS_CONFIG_FILE`) or any configured TLS
+certificate or key changes — as Caddy's `--watch` does:
+
+```toml
+watch = true
+```
+
+A background thread checks the files' size and modification time once a
+second; a change that is the same on two checks in a row (an editor or
+`certbot` finished writing) triggers the same reload as `SIGHUP`, so a
+broken edit is rejected and the running configuration keeps serving. The
+files are looked up again on every check, so a reload that points at new
+certificates starts watching those. Off by default; the `watch` setting
+itself is read at startup.
 
 ## What reloads without restart
 

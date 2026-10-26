@@ -128,6 +128,7 @@ don't use them.
 
 | Variable | Default | Options | Description |
 |----------|---------|---------|-------------|
+| `RWS_CONFIG_WATCH` | `false` | boolean | Reload when `rws.config.toml` (or `RWS_CONFIG_FILE`) or a configured TLS certificate or key changes — the same validated reload as `SIGHUP`, checked once a second (since 18.1.0). Read at startup. See [Hot reload](/features/hot-reload/#reloading-when-the-file-changes). |
 | `RWS_CONFIG_ACCESS_LOG` | (stdout) | path | Append access-log lines to this file instead of stdout (since 18.1.0). Opened at the first line; `SIGUSR1` reopens it (for logrotate). Read at startup. See [Logs](/deployment/observability/#writing-to-a-file). |
 | `RWS_CONFIG_ACCESS_LOG_MAX_SIZE` | `0` | bytes (`K`/`M`/`G` suffixes) | Rotate the access-log file when the next lines would take it past this size: `access.log` → `access.log.1` …. `0` never rotates (leave it to logrotate). |
 | `RWS_CONFIG_ACCESS_LOG_KEEP` | `5` | integer | Rotated access-log files to keep; `0` empties the file instead of keeping any. |
