@@ -406,6 +406,7 @@ impl Server {
 
             crate::metrics::record_request();
             crate::compression::apply_gzip(&request, &mut response);
+            response.drop_content_for_status();
 
             response.headers.push(Header {
                 name: Header::_CONNECTION.to_string(),
@@ -451,7 +452,7 @@ impl Server {
         let (head, chunked) = Server::stream_file_head(response);
         stream.write_all(&head).map_err(|e| e.to_string())?;
 
-        if request.method != METHOD.head && request.method != METHOD.options {
+        if request.method != METHOD.head {
             let mut file = File::open(filepath).map_err(|e| e.to_string())?;
             let mut buf = vec![0u8; 65536];
             loop {
@@ -553,7 +554,7 @@ impl Server {
         head.push_str(SYMBOL.new_line_carriage_return);
         stream.write_all(head.as_bytes()).map_err(|e| e.to_string())?;
 
-        if request.method != METHOD.head && request.method != METHOD.options {
+        if request.method != METHOD.head {
             let mut buf = [0u8; 8192];
             if backend_is_chunked {
                 // Passthrough: forward raw chunk frames as-is; the client

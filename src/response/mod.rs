@@ -363,6 +363,29 @@ impl Response {
         header
     }
 
+    /// `true` for a status that never has content: `1xx`, `204`, `304`
+    /// (RFC 9110 §6.4.1, §15.3.5, §15.4.5).
+    pub fn status_has_no_content(status_code: i16) -> bool {
+        (100..200).contains(&status_code) || status_code == 204 || status_code == 304
+    }
+
+    /// For a status without content ([`Response::status_has_no_content`]),
+    /// drop the body — buffered, file or pipe — and any `Content-Length` or
+    /// `Transfer-Encoding`, which those responses must not carry (#54).
+    /// Every connection writer calls it before framing the response.
+    pub fn drop_content_for_status(&mut self) {
+        if !Response::status_has_no_content(self.status_code) {
+            return;
+        }
+        self.content_range_list.clear();
+        self.stream_file = None;
+        self.stream_pipe = None;
+        self.headers.retain(|h| {
+            !h.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH)
+                && !h.name.eq_ignore_ascii_case(Header::_TRANSFER_ENCODING)
+        });
+    }
+
     pub fn generate_body(content_range_list: Vec<ContentRange>) -> Vec<u8> {
         let mut body = vec![];
         let one = 1;
@@ -419,6 +442,7 @@ impl Response {
     /// a large body into one combined buffer. The body is empty for HEAD and
     /// OPTIONS.
     pub fn generate_response_parts(mut response: Response, request: Request) -> (Vec<u8>, Vec<u8>) {
+        response.drop_content_for_status();
 
         if response.content_range_list.len() == 1 {
             let content_range_index = 0;
@@ -482,10 +506,10 @@ impl Response {
         }
         head.extend_from_slice(b"\r\n");
 
-        let is_head = request.method == METHOD.head;
-        let is_options = request.method == METHOD.options;
-
-        if is_head || is_options {
+        // HEAD: the head of the GET response, no body. OPTIONS gets its body
+        // like any other method: dropping it under a Content-Length that
+        // announced it left the client waiting.
+        if request.method == METHOD.head {
             (head, Vec::new())
         } else {
             (head, body)
@@ -595,7 +619,9 @@ impl Response {
         }
 
         if current_string_is_empty {
-            let content_type = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
+            // No Content-Type (a 204, a 304): an empty, non-multipart body.
+            let content_type = response._get_header(Header::_CONTENT_TYPE.to_string()).cloned()
+                .unwrap_or(Header { name: Header::_CONTENT_TYPE.to_string(), value: String::new() });
             let is_multipart = Response::_is_multipart_byteranges_content_type(&content_type);
 
             if is_multipart {
@@ -728,6 +754,7 @@ impl Response {
 
     pub fn generate(&mut self) -> Vec<u8> {
         let response = &mut self.clone();
+        response.drop_content_for_status();
 
         if response.content_range_list.len() == 1 {
             let content_range_index = 0;
