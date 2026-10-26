@@ -2559,21 +2559,45 @@ mod oauth_tests {
     }
 
     #[test]
-    fn metadata_endpoint_returns_document_when_configured() {
+    fn protected_resource_metadata_names_the_authorization_server() {
+        // RFC 9728, MCP 2025-06-18: at the well-known path and at it
+        // suffixed with the endpoint path.
         let jwks_url = start_fake_jwks_server(&rsa_jwk_json("key1"));
         let client = TestClient::new(oauth_server(&jwks_url));
-        let resp = client.get("/.well-known/oauth-authorization-server").send();
-        assert_eq!(resp.status(), 200);
-        let body = resp.body_text();
-        assert!(body.contains("\"issuer\":\"https://idp.example.com\""));
-        assert!(body.contains(&jwks_url));
+        for path in ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"] {
+            let resp = client.get(path).header("Host", "mcp.example.com").send();
+            assert_eq!(resp.status(), 200, "{path}");
+            let body = resp.body_text();
+            assert!(body.contains(r#""authorization_servers":["https://idp.example.com"]"#), "{body}");
+            // The audience isn't a URL here: the resource is this server.
+            assert!(body.contains(r#""resource":"https://mcp.example.com/mcp""#), "{body}");
+        }
+        // The authorization-server-style document is gone.
+        assert_ne!(client.get("/.well-known/oauth-authorization-server").send().status(), 200);
+    }
+
+    #[test]
+    fn an_audience_url_is_the_resource_and_401_points_at_the_metadata() {
+        let jwks_url = start_fake_jwks_server(&rsa_jwk_json("key1"));
+        let srv = McpServer::new("srv", "1.0")
+            .require_oauth(test_provider(&jwks_url), "https://mcp.example.com/mcp")
+            .tool("ping", "Ping", "{}", |_| Ok(McpContent::text("pong")));
+        let client = TestClient::new(srv);
+        let body = client.get("/.well-known/oauth-protected-resource").send().body_text().to_string();
+        assert!(body.contains(r#""resource":"https://mcp.example.com/mcp""#), "{body}");
+        let resp = client.post("/mcp").body_json(r#"{"jsonrpc":"2.0","method":"ping","id":1}"#).send();
+        assert_eq!(resp.status(), 401);
+        assert_eq!(
+            Some(r#"Bearer resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource""#),
+            resp.header("WWW-Authenticate"),
+        );
     }
 
     #[test]
     fn metadata_endpoint_falls_through_when_oauth_not_configured() {
         let srv = McpServer::new("srv", "1.0").tool("ping", "Ping", "{}", |_| Ok(McpContent::text("pong")));
         let client = TestClient::new(srv);
-        let resp = client.get("/.well-known/oauth-authorization-server").send();
+        let resp = client.get("/.well-known/oauth-protected-resource").send();
         assert_ne!(resp.status(), 200);
     }
 

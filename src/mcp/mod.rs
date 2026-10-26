@@ -1647,8 +1647,11 @@ impl McpServer {
     /// Reuses [`crate::sso::jwks::JwksCache`] directly — the "leverage
     /// point" this feature was scoped around — rather than reimplementing
     /// JWT/JWKS verification. `provider` supplies the issuer, JWKS URI, and
-    /// (for [`Self::execute`]'s `GET /.well-known/oauth-authorization-server`
-    /// response) the authorization/token endpoints; use a preset
+    /// (for `GET /.well-known/oauth-protected-resource`, RFC 9728) the
+    /// authorization server's issuer; `audience` is the value tokens must
+    /// carry in `aud` — ideally this server's canonical URL
+    /// (`https://mcp.example.com/mcp`, RFC 8707), which is then also the
+    /// metadata's `resource`; use a preset
     /// (`OidcProvider::google()`, etc.) or `OidcProvider::discover(issuer)?`.
     ///
     /// A request with a missing, malformed, or invalid-signature bearer
@@ -2811,10 +2814,16 @@ impl std::io::Read for SseChannelReader {
 
 impl Application for McpServer {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
+        // RFC 9728 protected-resource metadata (MCP 2025-06-18), at the
+        // well-known path and at it suffixed with the endpoint's path.
         #[cfg(feature = "sso")]
-        if request.request_uri == "/.well-known/oauth-authorization-server" && request.method == "GET" {
+        if request.method == "GET" {
             if let Some(oauth) = &self.oauth {
-                return Ok(oauth_metadata_document(oauth));
+                let target = request.request_uri.split('?').next().unwrap_or("");
+                let suffixed = format!("{}{}", PROTECTED_RESOURCE_PATH, self.path);
+                if target == PROTECTED_RESOURCE_PATH || target == suffixed {
+                    return Ok(protected_resource_document(oauth, request, &self.path));
+                }
             }
         }
 
@@ -2853,7 +2862,7 @@ impl Application for McpServer {
                     .unwrap_or("");
                 let bearer = provided.strip_prefix("Bearer ").unwrap_or("");
                 if bearer.is_empty() {
-                    return Ok(unauthorized());
+                    return Ok(unauthorized_with_metadata(oauth, request, &self.path));
                 }
                 let opts = crate::sso::jwks::VerifyOptions {
                     audience: &oauth.audience,
@@ -2862,7 +2871,7 @@ impl Application for McpServer {
                 };
                 match oauth.jwks.verify_jwt(bearer, &opts) {
                     Ok(claims) => auth_claims_json = serde_json::to_string(&claims).ok(),
-                    Err(_) => return Ok(unauthorized()),
+                    Err(_) => return Ok(unauthorized_with_metadata(oauth, request, &self.path)),
                 }
             } else if let Some(expected) = &self.auth_token {
                 // Check the static bearer token before processing any MCP request.
@@ -3076,20 +3085,55 @@ fn unauthorized() -> Response {
     r
 }
 
-/// `GET /.well-known/oauth-authorization-server` — served whenever
-/// [`McpServer::require_oauth`] is configured, per MCP 2025-03-26's OAuth
-/// 2.0 authorization requirement. Not a full RFC 8414 document (this
-/// server is a resource server, not the authorization server itself) —
-/// just enough for a client to confirm the issuer, JWKS URI, and the
-/// authorization/token endpoints already known from `provider`.
+/// RFC 9728's well-known path for protected-resource metadata.
 #[cfg(feature = "sso")]
-fn oauth_metadata_document(oauth: &OAuthConfig) -> Response {
+const PROTECTED_RESOURCE_PATH: &str = "/.well-known/oauth-protected-resource";
+
+/// The protected resource's identifier: the configured audience when it is
+/// an absolute URL (RFC 8707 — the value tokens are minted for), else this
+/// server's origin from the request plus the MCP path.
+#[cfg(feature = "sso")]
+fn resource_identifier(oauth: &OAuthConfig, request: &Request, path: &str) -> String {
+    if oauth.audience.starts_with("https://") || oauth.audience.starts_with("http://") {
+        return oauth.audience.clone();
+    }
+    format!("{}{}", request_origin(request), path)
+}
+
+/// `scheme://host` this request was sent to (`Host`; `https` unless the
+/// host is a loopback name).
+#[cfg(feature = "sso")]
+fn request_origin(request: &Request) -> String {
+    let host = request.headers.iter()
+        .find(|h| h.name.eq_ignore_ascii_case("host"))
+        .map(|h| h.value.to_string())
+        .unwrap_or_else(|| "localhost".to_string());
+    let local = host.starts_with("localhost") || host.starts_with("127.") || host.starts_with("[::1]");
+    format!("{}://{}", if local { "http" } else { "https" }, host)
+}
+
+/// The metadata document's URL, for `WWW-Authenticate`.
+#[cfg(feature = "sso")]
+fn metadata_url(oauth: &OAuthConfig, request: &Request, path: &str) -> String {
+    let resource = resource_identifier(oauth, request, path);
+    let origin = match resource.find("://").and_then(|i| resource[i + 3..].find('/').map(|j| i + 3 + j)) {
+        Some(end) => resource[..end].to_string(),
+        None => resource,
+    };
+    format!("{origin}{PROTECTED_RESOURCE_PATH}")
+}
+
+/// `GET /.well-known/oauth-protected-resource` (RFC 9728): which
+/// authorization server issues tokens for this MCP server, and the resource
+/// identifier a client asks it for (RFC 8707). Served whenever
+/// [`McpServer::require_oauth`] is configured; it replaced the
+/// authorization-server-style document earlier versions served.
+#[cfg(feature = "sso")]
+fn protected_resource_document(oauth: &OAuthConfig, request: &Request, path: &str) -> Response {
     let body = format!(
-        r#"{{"issuer":"{}","authorization_endpoint":"{}","token_endpoint":"{}","jwks_uri":"{}","response_types_supported":["code"]}}"#,
+        r#"{{"resource":"{}","authorization_servers":["{}"],"bearer_methods_supported":["header"]}}"#,
+        json_escape(&resource_identifier(oauth, request, path)),
         json_escape(&oauth.provider.issuer),
-        json_escape(&oauth.provider.authorization_endpoint),
-        json_escape(&oauth.provider.token_endpoint),
-        json_escape(&oauth.provider.jwks_uri),
     );
     let mut r = Response::new();
     r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
@@ -3098,6 +3142,17 @@ fn oauth_metadata_document(oauth: &OAuthConfig) -> Response {
         body.into_bytes(),
         MimeType::APPLICATION_JSON.to_string(),
     )];
+    r
+}
+
+/// `401` whose `WWW-Authenticate` points at the protected-resource
+/// metadata, so a client can discover the authorization server.
+#[cfg(feature = "sso")]
+fn unauthorized_with_metadata(oauth: &OAuthConfig, request: &Request, path: &str) -> Response {
+    let mut r = unauthorized();
+    if let Some(header) = r.headers.iter_mut().find(|h| h.name.eq_ignore_ascii_case("www-authenticate")) {
+        header.value = format!(r#"Bearer resource_metadata="{}""#, metadata_url(oauth, request, path)).into();
+    }
     r
 }
 

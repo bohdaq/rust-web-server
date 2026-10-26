@@ -15842,23 +15842,34 @@ let mcp = McpServer::new("my-server", "1.0")
 
 ### Discovery endpoint
 
-`GET /.well-known/oauth-authorization-server` is served automatically whenever `.require_oauth()` is configured:
+With `.require_oauth()` configured, the server publishes RFC 9728
+protected-resource metadata (MCP 2025-06-18) at
+`/.well-known/oauth-protected-resource` (and at that path followed by the MCP
+path, e.g. `/.well-known/oauth-protected-resource/mcp`):
 
 ```json
 {
-  "issuer": "https://accounts.google.com",
-  "authorization_endpoint": "https://accounts.google.com/o/oauth2/v2/auth",
-  "token_endpoint": "https://oauth2.googleapis.com/token",
-  "jwks_uri": "https://www.googleapis.com/oauth2/v3/certs",
-  "response_types_supported": ["code"]
+  "resource": "https://mcp.example.com/mcp",
+  "authorization_servers": ["https://accounts.google.com"],
+  "bearer_methods_supported": ["header"]
 }
 ```
 
-:::note[Not a full RFC 8414 document]
-This server is a *resource* server verifying tokens issued elsewhere, not the authorization server itself — the metadata document only carries what `OidcProvider` already knows (issuer, endpoints, JWKS URI), not the full set of fields a standalone authorization server's own metadata would advertise.
-:::
+A `401` points clients at it:
+`WWW-Authenticate: Bearer resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource"`.
+The client then discovers the authorization server from its own metadata
+and asks it for a token for `resource` (RFC 8707).
 
-If `.require_oauth()` isn't configured, this path isn't handled specially — it falls through to the fallback app (or the built-in `App`'s `404`) like any other non-MCP path.
+Pass this server's canonical URL as the audience —
+`.require_oauth(provider, "https://mcp.example.com/mcp")`: tokens must carry
+it in `aud`, and it is the metadata's `resource`. With a plain client id as
+the audience, `resource` is built from the request's `Host` and the MCP
+path. (Before 18.0.0 an authorization-server-style document was served at
+`/.well-known/oauth-authorization-server`; it's gone.)
+
+If `.require_oauth()` isn't configured, these paths aren't handled specially —
+they fall through to the fallback app (or the built-in `App`'s `404`) like any
+other non-MCP path.
 
 ### Combining with `require_bearer`
 
