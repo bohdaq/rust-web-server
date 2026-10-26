@@ -37,6 +37,12 @@ pub fn apply_gzip(request: &Request, response: &mut Response) {
     if response.content_range_list.is_empty() {
         return;
     }
+    // A partial body (206, one range or several) is a slice of the
+    // representation: gzipping the slice and rewriting Content-Range to the
+    // compressed size describes bytes that don't exist (#52, RFC 9110 §14.4).
+    if response.status_code == 206 || response.content_range_list.len() > 1 {
+        return;
+    }
     if response.headers.iter().any(|h| h.name.eq_ignore_ascii_case(Header::_CONTENT_ENCODING)) {
         return;
     }

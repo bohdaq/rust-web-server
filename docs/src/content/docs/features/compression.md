@@ -13,8 +13,9 @@ description: Automatic gzip compression for text-based responses with no configu
 2. The body is at least 512 bytes (`compression::MIN_COMPRESS_SIZE`, the same minimum Caddy uses): below that, gzip's framing and CPU cost outweigh the savings.
 3. The `Accept-Encoding` request header contains `gzip` (case-insensitive).
 4. The response `Content-Type` matches a compressible MIME type (see below).
+5. The response isn't partial — a `206` (one range or several) is a slice of the file and is sent as is (since 17.113.2).
 
-Every `ContentRange` is then compressed with `flate2`'s default level. If the
+The body is then compressed with `flate2`'s default level. If the
 result isn't smaller than the original — random or already-compressed data
 served as text — the original body is sent instead. A compressed response
 receives:
