@@ -17362,7 +17362,7 @@ The Cargo registry was written by `sudo cargo …` once. Fix the ownership
 
 <https://rws8.tech/reference/migrating-18/>
 
-18.0 has three breaking changes. Most applications only meet the first.
+18.0 has three breaking changes. Most applications only meet the first. If you are coming from 17.113.0 or earlier, also read [the patch-release changes](#coming-from-171130-or-earlier).
 
 ## `Header` fields are `Cow<'static, str>`
 
@@ -17447,6 +17447,25 @@ let key = RsaPublicKey::from_components(&n_bytes, &e_bytes)?;
 ```
 
 Keys under 2048 bits are rejected; a JWKS key that can't be used is skipped.
+
+## Coming from 17.113.0 or earlier
+
+18.0 carries the 17.113.1 security fixes and the 17.113.2 conformance fixes.
+If you skipped those releases, these refuse or change what you may rely on:
+
+- **Static files:** paths with `..`, dot-files (`.git/`, `.env`; set
+  `RWS_CONFIG_SERVE_DOTFILES=true` to serve them), `*.pem`, `*.key` and
+  `rws.config.toml` are not served. Request paths are percent-decoded, so a
+  file whose name contains a literal `%` is requested as `%25`.
+- **ACME** keeps its keys in `.rws/acme/` by default (files at the old
+  default paths are moved there on start).
+- **The `rws` binary** mounts `/mcp` only when `MCP_TOKEN` is set.
+- **HTTP/1.1 requests** without `Host` or with two, with a lower-case method,
+  a folded header line or whitespace before a header's colon get `400`; an
+  HTTP/1.0 connection closes after each response unless the client sends
+  `Connection: keep-alive`.
+- **CORS** origins match whole: list each origin, a part of one no longer
+  matches.
 
 ## Also new in 18.0 (not breaking)
 
