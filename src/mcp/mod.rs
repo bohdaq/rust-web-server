@@ -613,8 +613,11 @@ struct OAuthConfig {
 /// `clientInfo` recorded for one session at `initialize` time, looked up by
 /// `Mcp-Session-Id` for later requests in the same session. See
 /// `McpServer`'s `sessions` field doc comment for the unbounded-growth caveat.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct StoredClientInfo {
+    /// Last request in this session; idle past the server's session TTL, the
+    /// session is evicted (#4).
+    last_seen: std::time::Instant,
     name: Option<String>,
     version: Option<String>,
     /// Whether this session's `initialize` call declared `params.capabilities.sampling`
@@ -879,14 +882,17 @@ pub struct McpServer {
     page_size: Option<usize>,
     /// `clientInfo` recorded per `Mcp-Session-Id`, minted at `initialize` time.
     /// `Arc<Mutex<_>>` so every clone of this `McpServer` shares one map.
-    ///
-    /// This map only grows — nothing ever removes an entry, since there's no
-    /// session-termination signal in the MCP Streamable HTTP transport to key
-    /// eviction off of. Fine for the expected usage (a modest, roughly-stable
-    /// set of long-lived AI-agent clients); a public-internet-facing server
-    /// churning through unbounded distinct clients would leak memory here
-    /// with no built-in reaping mechanism.
+    /// Bounded (#4): a session idle for `session_ttl` is evicted when next
+    /// seen or when a new one is created, `max_sessions` caps the map
+    /// (oldest evicted first), and `DELETE /mcp` ends one. An evicted
+    /// session's subscriptions and SSE streams go with it.
     sessions: Arc<Mutex<HashMap<String, StoredClientInfo>>>,
+    /// Idle time after which a session is evicted (default 1 hour).
+    session_ttl: Duration,
+    /// Most sessions kept (default 10 000).
+    max_sessions: usize,
+    /// Most open `GET /mcp` SSE streams (default 1000); past it `503`.
+    max_sse_clients: usize,
     /// Senders for every currently-connected `GET /mcp` SSE client, pushed to
     /// by [`Self::notify`]. `Arc<Mutex<_>>` so every clone of this `McpServer`
     /// broadcasts to the same set of listeners.
@@ -959,6 +965,13 @@ type SseSender = SyncSender<Vec<u8>>;
 /// Max buffered-but-unread SSE frames per client before it's treated as dead.
 const SSE_CHANNEL_CAPACITY: usize = 32;
 
+/// Default idle time after which an MCP session is evicted.
+pub const DEFAULT_SESSION_TTL: Duration = Duration::from_secs(3600);
+/// Default cap on MCP sessions.
+pub const DEFAULT_MAX_SESSIONS: usize = 10_000;
+/// Default cap on open `GET /mcp` SSE streams.
+pub const DEFAULT_MAX_SSE_CLIENTS: usize = 1000;
+
 /// How often an idle SSE connection gets a `: keep-alive` comment.
 const SSE_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(15);
 
@@ -988,6 +1001,9 @@ impl McpServer {
             oauth: None,
             page_size: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            session_ttl: DEFAULT_SESSION_TTL,
+            max_sessions: DEFAULT_MAX_SESSIONS,
+            max_sse_clients: DEFAULT_MAX_SSE_CLIENTS,
             sse_clients: Arc::new(Mutex::new(Vec::new())),
             logging_enabled: false,
             min_log_level: Arc::new(Mutex::new(LogLevel::Debug)),
@@ -995,6 +1011,100 @@ impl McpServer {
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
             pending_replies: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Evict a session after it has been idle this long (default 1 hour,
+    /// [`DEFAULT_SESSION_TTL`]). A request with an evicted session's
+    /// `Mcp-Session-Id` gets `404`, which tells the client to initialize a
+    /// new session (MCP Streamable HTTP transport).
+    pub fn session_ttl(mut self, ttl: Duration) -> Self {
+        self.session_ttl = ttl;
+        self
+    }
+
+    /// Keep at most `n` sessions (default [`DEFAULT_MAX_SESSIONS`]); a new
+    /// one past that evicts the least recently used.
+    pub fn max_sessions(mut self, n: usize) -> Self {
+        self.max_sessions = n.max(1);
+        self
+    }
+
+    /// Accept at most `n` open `GET /mcp` SSE streams (default
+    /// [`DEFAULT_MAX_SSE_CLIENTS`]); another gets `503 Service Unavailable`.
+    pub fn max_sse_clients(mut self, n: usize) -> Self {
+        self.max_sse_clients = n;
+        self
+    }
+
+    /// Mark a session as used now. `false` when it doesn't exist or has been
+    /// idle past the TTL (then it's evicted).
+    fn touch_session(&self, session_id: &str) -> bool {
+        let expired = {
+            let mut sessions = self.sessions.lock().unwrap();
+            match sessions.get_mut(session_id) {
+                None => return false,
+                Some(info) if info.last_seen.elapsed() > self.session_ttl => {
+                    sessions.remove(session_id);
+                    true
+                }
+                Some(info) => {
+                    info.last_seen = std::time::Instant::now();
+                    false
+                }
+            }
+        };
+        if expired {
+            self.forget_sessions(&[session_id.to_string()]);
+            return false;
+        }
+        true
+    }
+
+    /// Before a new session: drop expired ones, then the least recently used
+    /// until there's room under `max_sessions`.
+    fn make_room_for_a_session(&self) {
+        let evicted: Vec<String> = {
+            let mut sessions = self.sessions.lock().unwrap();
+            let ttl = self.session_ttl;
+            let mut evicted: Vec<String> = sessions.iter()
+                .filter(|(_, info)| info.last_seen.elapsed() > ttl)
+                .map(|(id, _)| id.clone())
+                .collect();
+            for id in &evicted {
+                sessions.remove(id);
+            }
+            if sessions.len() >= self.max_sessions {
+                let mut by_age: Vec<(std::time::Instant, String)> =
+                    sessions.iter().map(|(id, info)| (info.last_seen, id.clone())).collect();
+                by_age.sort();
+                for (_, id) in by_age.into_iter().take(sessions.len() + 1 - self.max_sessions) {
+                    sessions.remove(&id);
+                    evicted.push(id);
+                }
+            }
+            evicted
+        };
+        if !evicted.is_empty() {
+            self.forget_sessions(&evicted);
+        }
+    }
+
+    /// The rest of an evicted or ended session: its resource subscriptions
+    /// and its SSE streams (dropping the sender ends the stream).
+    fn forget_sessions(&self, ids: &[String]) {
+        let mut subscriptions = self.subscriptions.lock().unwrap();
+        for subscribers in subscriptions.values_mut() {
+            subscribers.retain(|sid| !ids.contains(sid));
+        }
+        subscriptions.retain(|_, subscribers| !subscribers.is_empty());
+        drop(subscriptions);
+        self.sse_clients.lock().unwrap()
+            .retain(|client| client.session_id.as_ref().is_none_or(|sid| !ids.contains(sid)));
+    }
+
+    /// Number of live sessions (for metrics and tests).
+    pub fn session_count(&self) -> usize {
+        self.sessions.lock().unwrap().len()
     }
 
     /// Cap `tools/list`, `resources/list`, and `prompts/list` to at most `n`
@@ -1084,7 +1194,22 @@ impl McpServer {
     fn start_sse_stream(&self, request: &Request) -> Response {
         let session_id = request.get_header("Mcp-Session-Id".to_string()).map(|h| h.value.clone());
         let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(SSE_CHANNEL_CAPACITY);
-        self.sse_clients.lock().unwrap().push(SseClient { session_id: session_id.map(|v| v.into_owned()), sender: tx });
+        {
+            let mut clients = self.sse_clients.lock().unwrap();
+            if clients.len() >= self.max_sse_clients {
+                // Disconnected clients are otherwise only noticed on the next
+                // broadcast: a comment frame finds them now (#4).
+                clients.retain(|client| !matches!(client.sender.try_send(b": ping\n\n".to_vec()), Err(mpsc::TrySendError::Disconnected(_))));
+            }
+            if clients.len() >= self.max_sse_clients {
+                let mut busy = Response::new();
+                busy.status_code = *STATUS_CODE_REASON_PHRASE.n503_service_unavailable.status_code;
+                busy.reason_phrase = STATUS_CODE_REASON_PHRASE.n503_service_unavailable.reason_phrase.to_string();
+                busy.headers.push(Header { name: "Retry-After".into(), value: "30".into() });
+                return busy;
+            }
+            clients.push(SseClient { session_id: session_id.map(|v| v.into_owned()), sender: tx });
+        }
 
         let mut response = Response::new();
         response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
@@ -2010,10 +2135,11 @@ impl McpServer {
         );
 
         let session_id = crate::request_id::generate_request_id();
+        self.make_room_for_a_session();
         self.sessions
             .lock()
             .unwrap()
-            .insert(session_id.clone(), StoredClientInfo { name, version, supports_sampling, supports_roots, roots: None });
+            .insert(session_id.clone(), StoredClientInfo { last_seen: std::time::Instant::now(), name, version, supports_sampling, supports_roots, roots: None });
 
         response.headers.push(Header {
             name: "Mcp-Session-Id".into(),
@@ -2564,7 +2690,42 @@ impl Application for McpServer {
                 }
             }
 
+            // A session id this server doesn't know — never minted, ended,
+            // or evicted — is 404: the client must initialize again
+            // (Streamable HTTP transport). An `initialize` POST may carry a
+            // stale one.
+            let session_id = request.headers.iter()
+                .find(|h| h.name.eq_ignore_ascii_case("mcp-session-id"))
+                .map(|h| h.value.to_string());
+            if let Some(sid) = &session_id {
+                let initializing = request.method == "POST"
+                    && json_rpc::extract_str(std::str::from_utf8(&request.body).unwrap_or(""), "method").as_deref() == Some("initialize");
+                if request.method != "OPTIONS" && !initializing && !self.touch_session(sid) {
+                    return Ok(session_not_found());
+                }
+            }
             return Ok(match request.method.as_str() {
+                "DELETE" => match session_id {
+                    // The client ends its session.
+                    Some(sid) => {
+                        self.sessions.lock().unwrap().remove(&sid);
+                        self.forget_sessions(&[sid]);
+                        let mut r = Response::new();
+                        r.status_code = *STATUS_CODE_REASON_PHRASE.n204_no_content.status_code;
+                        r.reason_phrase = STATUS_CODE_REASON_PHRASE.n204_no_content.reason_phrase.to_string();
+                        r
+                    }
+                    None => {
+                        let mut r = Response::new();
+                        r.status_code = *STATUS_CODE_REASON_PHRASE.n400_bad_request.status_code;
+                        r.reason_phrase = STATUS_CODE_REASON_PHRASE.n400_bad_request.reason_phrase.to_string();
+                        r.content_range_list = vec![Range::get_content_range(
+                            b"DELETE /mcp needs an Mcp-Session-Id".to_vec(),
+                            MimeType::TEXT_PLAIN.to_string(),
+                        )];
+                        r
+                    }
+                },
                 "POST" => {
                     let body = std::str::from_utf8(&request.body).unwrap_or("");
                     let mut ctx = self.context_for(request);
@@ -2579,7 +2740,7 @@ impl Application for McpServer {
                     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
                     r.headers.push(Header {
                         name: "Allow".into(),
-                        value: "GET, POST, OPTIONS".into(),
+                        value: "GET, POST, DELETE, OPTIONS".into(),
                     });
                     r
                 }
@@ -2589,10 +2750,10 @@ impl Application for McpServer {
                     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n405_method_not_allowed.reason_phrase.to_string();
                     r.headers.push(Header {
                         name: "Allow".into(),
-                        value: "GET, POST, OPTIONS".into(),
+                        value: "GET, POST, DELETE, OPTIONS".into(),
                     });
                     r.content_range_list = vec![Range::get_content_range(
-                        b"MCP endpoint only accepts GET (SSE) or POST".to_vec(),
+                        b"MCP endpoint only accepts GET (SSE), POST or DELETE".to_vec(),
                         MimeType::TEXT_PLAIN.to_string(),
                     )];
                     r
@@ -2687,6 +2848,18 @@ fn unsupported_media_type() -> Response {
     r.content_range_list = vec![Range::get_content_range(
         b"MCP requests must be application/json".to_vec(),
         MimeType::TEXT_PLAIN.to_string(),
+    )];
+    r
+}
+
+/// `404` for a request in a session this server doesn't know (anymore).
+fn session_not_found() -> Response {
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n404_not_found.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n404_not_found.reason_phrase.to_string();
+    r.content_range_list = vec![Range::get_content_range(
+        br#"{"jsonrpc":"2.0","error":{"code":-32001,"message":"Session not found: initialize a new one"},"id":null}"#.to_vec(),
+        MimeType::APPLICATION_JSON.to_string(),
     )];
     r
 }

@@ -186,7 +186,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 
 | Type / Trait | Module | Description |
 |---|---|---|
-| `McpServer` | `mcp` | MCP Streamable HTTP server (`POST /mcp`, JSON-RPC 2.0, plus `GET /mcp` SSE); `.tool` / `.resource` / `.prompt`, `.require_bearer`, `.require_oauth` (`sso`). Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See [MCP](/mcp/overview/) |
+| `McpServer` | `mcp` | MCP Streamable HTTP server (`POST /mcp`, JSON-RPC 2.0, plus `GET /mcp` SSE); `.tool` / `.resource` / `.prompt`, `.require_bearer`, `.require_oauth` (`sso`), `.session_ttl` / `.max_sessions` / `.max_sse_clients`. Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See [MCP](/mcp/overview/) |
 | `McpContent` | `mcp` | Tool result content: `text`, `json`, `image`, `embedded` |
 | `McpContext` | `mcp` | Per-session context for `.tool_with_context` handlers: client info, `auth_claims`, progress, cancellation, `sample`, `list_roots` |
 | `ToolAnnotations` | `mcp` | `read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint` for `.tool_annotated` |

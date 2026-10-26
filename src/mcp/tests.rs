@@ -421,17 +421,26 @@ fn tool_with_context_sees_client_info_recorded_at_initialize_via_execute() {
 }
 
 #[test]
-fn tool_with_context_sees_empty_client_info_for_unrecognized_session_id() {
+fn an_unrecognized_session_id_is_404() {
+    // A session this server never minted (or has evicted): the client must
+    // initialize again (Streamable HTTP transport, #4). It used to run the
+    // call with an empty context.
     let client = TestClient::new(make_context_server());
     let resp = client
         .post("/mcp")
         .header("Mcp-Session-Id", "not-a-real-session")
         .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"whoami","arguments":{}}}"#)
         .send();
+    assert_eq!(resp.status(), 404);
+    assert!(resp.body_text().contains("Session not found"), "{}", resp.body_text());
+    // initialize with a stale id still works and mints a new session.
+    let resp = client
+        .post("/mcp")
+        .header("Mcp-Session-Id", "not-a-real-session")
+        .body_json(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2025-03-26","clientInfo":{"name":"c","version":"1"}}}"#)
+        .send();
     assert_eq!(resp.status(), 200);
-    let body = resp.body_text();
-    assert!(body.contains("name=? version=?"), "unknown session should have no stored clientInfo: {body}");
-    assert!(body.contains("session=not-a-real-session"), "session_id should still echo the header sent: {body}");
+    assert!(resp.header("Mcp-Session-Id").is_some_and(|id| id != "not-a-real-session"));
 }
 
 #[test]
@@ -882,12 +891,122 @@ fn application_opens_sse_stream_for_get_on_mcp_path() {
 }
 
 #[test]
-fn application_returns_405_for_delete_on_mcp_path() {
+fn application_returns_400_for_delete_without_a_session() {
     let srv = make_server();
     let client = TestClient::new(srv);
     let resp = client.delete("/mcp").send();
-    assert_eq!(resp.status(), 405);
+    assert_eq!(resp.status(), 400);
 }
+
+#[test]
+fn application_returns_405_for_put_on_mcp_path() {
+    let client = TestClient::new(make_server());
+    let resp = client.put("/mcp").send();
+    assert_eq!(resp.status(), 405);
+    assert_eq!(Some("GET, POST, DELETE, OPTIONS"), resp.header("Allow"));
+}
+
+// ── #4: session eviction ─────────────────────────────────────────────────────
+
+fn initialize(client: &TestClient<McpServer>) -> String {
+    let resp = client.post("/mcp")
+        .body_json(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2025-03-26","clientInfo":{"name":"c","version":"1"}}}"#)
+        .send();
+    resp.header("Mcp-Session-Id").expect("no session id").to_string()
+}
+
+fn list_tools(client: &TestClient<McpServer>, session: &str) -> i16 {
+    client.post("/mcp").header("Mcp-Session-Id", session)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/list","id":2}"#)
+        .send().status()
+}
+
+#[test]
+fn delete_ends_a_session() {
+    let server = make_server();
+    let client = TestClient::new(server.clone());
+    let session = initialize(&client);
+    assert_eq!(200, list_tools(&client, &session));
+    let resp = client.delete("/mcp").header("Mcp-Session-Id", &session).send();
+    assert_eq!(204, resp.status());
+    assert_eq!(0, server.session_count());
+    assert_eq!(404, list_tools(&client, &session));
+}
+
+#[test]
+fn an_idle_session_expires() {
+    let server = make_server().session_ttl(Duration::from_millis(50));
+    let client = TestClient::new(server.clone());
+    let session = initialize(&client);
+    assert_eq!(200, list_tools(&client, &session));
+    std::thread::sleep(Duration::from_millis(120));
+    assert_eq!(404, list_tools(&client, &session));
+    assert_eq!(0, server.session_count());
+}
+
+#[test]
+fn use_keeps_a_session_alive() {
+    let server = make_server().session_ttl(Duration::from_millis(300));
+    let client = TestClient::new(server);
+    let session = initialize(&client);
+    for _ in 0..4 {
+        std::thread::sleep(Duration::from_millis(120));
+        assert_eq!(200, list_tools(&client, &session));
+    }
+}
+
+#[test]
+fn the_least_recently_used_session_is_evicted_at_the_cap() {
+    let server = make_server().max_sessions(2);
+    let client = TestClient::new(server.clone());
+    let first = initialize(&client);
+    std::thread::sleep(Duration::from_millis(5));
+    let second = initialize(&client);
+    std::thread::sleep(Duration::from_millis(5));
+    // Using the first makes the second the least recently used.
+    assert_eq!(200, list_tools(&client, &first));
+    let third = initialize(&client);
+    assert_eq!(2, server.session_count());
+    assert_eq!(404, list_tools(&client, &second));
+    assert_eq!(200, list_tools(&client, &first));
+    assert_eq!(200, list_tools(&client, &third));
+}
+
+#[test]
+fn ending_a_session_drops_its_subscriptions_and_streams() {
+    let server = make_server();
+    let client = TestClient::new(server.clone());
+    let session = initialize(&client);
+    let sse = client.get("/mcp").header("Mcp-Session-Id", &session).send();
+    assert_eq!(200, sse.status());
+    let other = client.get("/mcp").send();
+    assert_eq!(200, other.status());
+    server.subscriptions.lock().unwrap().insert("file:///a".to_string(), vec![session.clone()]);
+    assert_eq!(2, server.sse_clients.lock().unwrap().len());
+    client.delete("/mcp").header("Mcp-Session-Id", &session).send();
+    assert!(server.subscriptions.lock().unwrap().is_empty());
+    assert_eq!(1, server.sse_clients.lock().unwrap().len(), "the session-less stream stays");
+}
+
+#[test]
+fn sse_streams_are_capped() {
+    let server = make_server().max_sse_clients(2);
+    let get = || crate::request::Request {
+        method: "GET".into(), request_uri: "/mcp".into(), http_version: "HTTP/1.1".into(), headers: vec![], body: vec![],
+    };
+    // Responses held open: their readers keep the streams alive.
+    let first = server.start_sse_stream(&get());
+    let second = server.start_sse_stream(&get());
+    assert_eq!(200, first.status_code);
+    assert_eq!(200, second.status_code);
+    let third = server.start_sse_stream(&get());
+    assert_eq!(503, third.status_code);
+    assert!(third.headers.iter().any(|h| h.name == "Retry-After"));
+    // A stream whose reader is gone frees its slot.
+    drop(first);
+    assert_eq!(200, server.start_sse_stream(&get()).status_code);
+}
+
 
 #[test]
 fn application_falls_through_for_non_mcp_path() {

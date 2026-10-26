@@ -358,6 +358,34 @@ Version strings are `YYYY-MM-DD` dates, so a plain string comparison already ord
 
 `params.clientInfo` (if the client sends it) is logged to stderr at `initialize` time and recorded under a freshly minted session id, returned to the client via an `Mcp-Session-Id` response header — see [Per-request context](/mcp/tools/#per-request-context) for how a `.tool_with_context()` handler gets it back on later requests in the same session.
 
+## Sessions
+
+`initialize` mints a session and returns its id in `Mcp-Session-Id`; the
+client sends it on later requests. Sessions are bounded (since 18.0.0):
+
+- A session idle for an hour is evicted — `.session_ttl(Duration)` changes
+  that. Any use keeps it alive.
+- At most 10 000 sessions are kept (`.max_sessions(n)`); a new one past that
+  evicts the least recently used.
+- `DELETE /mcp` with the session's `Mcp-Session-Id` ends it (`204`).
+- A request carrying a session id the server doesn't know — never issued,
+  ended or evicted — gets `404`, the transport's signal to send `initialize`
+  again. An `initialize` carrying a stale id is accepted.
+- An ended or evicted session's resource subscriptions and `GET /mcp` streams
+  go with it.
+- At most 1000 `GET /mcp` streams are open at once (`.max_sse_clients(n)`);
+  another gets `503` with `Retry-After`.
+
+```rust
+use std::time::Duration;
+use rust_web_server::mcp::McpServer;
+
+let mcp = McpServer::new("my-server", "1.0")
+    .session_ttl(Duration::from_secs(15 * 60))
+    .max_sessions(1000)
+    .max_sse_clients(100);
+```
+
 ## Built-in rws tools
 
 The `rws` binary serves `/mcp` with 20 built-in tools (not in config-driven proxy mode). Set `MCP_TOKEN` to require it as a Bearer token:
