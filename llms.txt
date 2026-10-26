@@ -140,7 +140,7 @@ Use it as:
 - [Kubernetes](https://rws8.tech/deployment/kubernetes/): Deploy rust-web-server on Kubernetes with health probes, metrics scraping, graceful shutdown, and autoscaling.
 - [Kubernetes Ingress](https://rws8.tech/deployment/kubernetes-ingress/): Use KubernetesIngressWatcher and IngressRouter to dynamically route traffic from Kubernetes Ingress rules.
 - [Observability](https://rws8.tech/deployment/observability/): Metrics, structured logs, distributed tracing, and health endpoints for rust-web-server.
-- [systemd](https://rws8.tech/deployment/systemd/): Run rws as a hardened systemd service — unprivileged user, read-only system, ports below 1024, access log in /var/log, reload and log rotation by signal.
+- [systemd](https://rws8.tech/deployment/systemd/): Run rws as a hardened systemd service — from the deb/rpm packages or by hand; unprivileged user, read-only system, ports below 1024, reload and log rotation by signal.
 - [WASM Guest Component](https://rws8.tech/deployment/wasm/): Run rust-web-server's App/Router/middleware inside a WASM runtime (Wasmtime, Spin, Fastly Compute) via the wasi:http/proxy world.
 
 ## Reference
