@@ -286,7 +286,6 @@ impl Server {
     pub fn process(mut stream: impl Read + Write + Unpin,
                    connection: ConnectionInfo,
                    app: impl Application) -> Result<(), String> {
-        use crate::http::VERSION;
 
         let request_allocation_size = connection.request_size;
         let client = connection.client.clone();
@@ -334,6 +333,7 @@ impl Server {
             let Some(head_len) = head_len else { break };
 
             let parsed = Request::parse(&pending[..head_len])
+                .and_then(|request| framing::validate_head(&pending[..head_len], &request).map(|_| request))
                 .and_then(|request| framing::body_framing(&request).map(|f| (request, f)));
             pending.drain(..head_len);
             let (mut request, body_framing) = match parsed {
@@ -427,13 +427,7 @@ impl Server {
                 }
             }
 
-            let keep_alive = {
-                let conn_hdr = request.header(Header::_CONNECTION);
-                match conn_hdr {
-                    Some(h) => h.value.to_lowercase() != "close",
-                    None => request.http_version == VERSION.http_1_1,
-                }
-            };
+            let keep_alive = framing::keep_alive(&request);
 
             let mut response = match app.execute(&request, &connection) {
                 Ok(r) => r,

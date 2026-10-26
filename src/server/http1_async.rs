@@ -18,7 +18,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use crate::application::Application;
 use crate::entry_point::{get_ip_port_thread_count, get_request_allocation_size};
 use crate::header::Header;
-use crate::http::VERSION;
+
 use crate::log::Log;
 use crate::request::Request;
 use crate::response::Response;
@@ -110,6 +110,7 @@ where
         let Some(head_len) = head_len else { break };
 
         let parsed = Request::parse(&pending[..head_len])
+            .and_then(|request| framing::validate_head(&pending[..head_len], &request).map(|_| request))
             .and_then(|request| framing::body_framing(&request).map(|f| (request, f)));
         pending.drain(..head_len);
         let (mut request, body_framing) = match parsed {
@@ -193,10 +194,7 @@ where
             }
         }
 
-        let keep_alive = match request.header(Header::_CONNECTION) {
-            Some(h) => !h.value.eq_ignore_ascii_case("close"),
-            None => request.http_version == VERSION.http_1_1,
-        };
+        let keep_alive = framing::keep_alive(&request);
 
         let (request, result) = execute_request(app.clone(), request, &connection)
             .await
@@ -683,6 +681,29 @@ mod tests {
         assert!(task.await.unwrap().is_ok());
     }
 
+    #[tokio::test]
+    async fn connection_close_among_other_tokens_ends_the_session() {
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let task = tokio::spawn(serve(server, peer(), None, false, Hello));
+        client.write_all(b"GET /a HTTP/1.1\r\nHost: x\r\nConnection: close, TE\r\nTE: trailers\r\n\r\n").await.unwrap();
+        let mut raw = Vec::new();
+        client.read_to_end(&mut raw).await.unwrap();
+        let text = String::from_utf8_lossy(&raw);
+        assert!(text.contains("Connection: close"), "{text}");
+        assert!(task.await.unwrap().is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_request_without_host_is_400() {
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let task = tokio::spawn(serve(server, peer(), None, false, Hello));
+        client.write_all(b"GET /a HTTP/1.1\r\nAccept: */*\r\n\r\n").await.unwrap();
+        let mut raw = Vec::new();
+        client.read_to_end(&mut raw).await.unwrap();
+        assert!(String::from_utf8_lossy(&raw).starts_with("HTTP/1.1 400"), "{}", String::from_utf8_lossy(&raw));
+        assert!(task.await.unwrap().is_err());
+    }
+
     #[tokio::test(start_paused = true)]
     async fn idle_connection_is_closed_after_the_read_timeout() {
         let (_client, server) = tokio::io::duplex(1024);
@@ -839,7 +860,7 @@ mod tests {
     async fn large_request_head_spanning_reads_is_served() {
         let (mut client, server) = tokio::io::duplex(1024);
         let task = tokio::spawn(serve(server, peer(), None, false, Echo));
-        let mut raw = b"GET /big HTTP/1.1\r\nCookie: ".to_vec();
+        let mut raw = b"GET /big HTTP/1.1\r\nHost: x\r\nCookie: ".to_vec();
         raw.extend(std::iter::repeat(b'c').take(40_000));
         raw.extend_from_slice(b"\r\nConnection: close\r\n\r\n");
         let writer = tokio::spawn(async move {
@@ -856,7 +877,7 @@ mod tests {
     async fn oversized_request_head_gets_431() {
         let (mut client, server) = tokio::io::duplex(256 * 1024);
         let task = tokio::spawn(serve(server, peer(), None, false, Echo));
-        let mut raw = b"GET / HTTP/1.1\r\nCookie: ".to_vec();
+        let mut raw = b"GET / HTTP/1.1\r\nHost: x\r\nCookie: ".to_vec();
         raw.extend(std::iter::repeat(b'c').take(framing::MAX_HEAD_SIZE + 10));
         client.write_all(&raw).await.unwrap();
         let out = read_to_end(&mut client).await;
@@ -869,9 +890,9 @@ mod tests {
         let (mut client, server) = tokio::io::duplex(64 * 1024);
         let task = tokio::spawn(serve(server, peer(), None, false, Echo));
         client.write_all(
-            b"POST /a HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc\
-              POST /b HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nhi\r\n0\r\n\r\n\
-              GET /c HTTP/1.1\r\nConnection: close\r\n\r\n",
+            b"POST /a HTTP/1.1\r\nHost: x\r\nContent-Length: 3\r\n\r\nabc\
+              POST /b HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nhi\r\n0\r\n\r\n\
+              GET /c HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n",
         ).await.unwrap();
         let out = read_to_end(&mut client).await;
         assert!(out.contains("uri=/a body=abc"), "{out}");
@@ -988,7 +1009,7 @@ mod tests {
         // Body pieces 20 s apart: 40 s in total, but never 30 s without a read.
         let (mut client, server) = tokio::io::duplex(1024);
         let task = tokio::spawn(serve(server, peer(), None, false, Echo));
-        client.write_all(b"POST /slow HTTP/1.1\r\nContent-Length: 6\r\nConnection: close\r\n\r\nab").await.unwrap();
+        client.write_all(b"POST /slow HTTP/1.1\r\nHost: x\r\nContent-Length: 6\r\nConnection: close\r\n\r\nab").await.unwrap();
         tokio::time::sleep(Duration::from_secs(20)).await;
         client.write_all(b"cd").await.unwrap();
         tokio::time::sleep(Duration::from_secs(20)).await;
