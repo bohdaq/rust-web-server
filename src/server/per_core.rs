@@ -64,7 +64,15 @@ pub fn runtime_count() -> usize {
 pub(crate) fn pool_key(key: &str) -> Cow<'_, str> {
     match SLOT.with(|s| s.get()) {
         0 => Cow::Borrowed(key),
-        slot => Cow::Owned(format!("{}#{}", key, slot)),
+        // Pushed rather than `format!`ed: this runs for every proxied request.
+        slot => {
+            let slot = crate::ext::decimal::Decimal::new(slot as u128);
+            let mut owned = String::with_capacity(key.len() + 1 + slot.as_str().len());
+            owned.push_str(key);
+            owned.push('#');
+            owned.push_str(slot.as_str());
+            Cow::Owned(owned)
+        }
     }
 }
 

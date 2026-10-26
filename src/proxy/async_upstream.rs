@@ -133,7 +133,12 @@ pub(crate) async fn forward(
     connect_timeout: Duration,
     read_timeout: Duration,
 ) -> Result<Response, String> {
-    let key = format!("{}:{}", host, port);
+    // `host:port`, pushed rather than `format!`ed (once per proxied request).
+    let port_digits = crate::ext::decimal::Decimal::new(port as u128);
+    let mut key = String::with_capacity(host.len() + 1 + port_digits.as_str().len());
+    key.push_str(host);
+    key.push(':');
+    key.push_str(port_digits.as_str());
     let pooled = crate::server::per_core::pool_key(&key);
     match tls {
         None => {
