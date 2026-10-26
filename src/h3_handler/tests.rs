@@ -45,7 +45,7 @@ fn provider() -> Arc<rustls::crypto::CryptoProvider> {
 
 /// Start a QUIC endpoint serving `app` with a fresh self-signed certificate for
 /// `localhost`. Returns its address and the certificate (DER) to trust.
-fn start_server(app: H3App, cert_file: &TempPath, key_file: &TempPath) -> (SocketAddr, Vec<u8>) {
+fn start_server<A: Application + Clone + Send + Sync + 'static>(app: A, cert_file: &TempPath, key_file: &TempPath) -> (SocketAddr, Vec<u8>) {
     let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
     std::fs::write(cert_file.as_str(), certified.cert.pem()).unwrap();
     std::fs::write(key_file.as_str(), certified.signing_key.serialize_pem()).unwrap();
@@ -155,4 +155,33 @@ async fn http3_round_trip_with_a_real_quic_client() {
     assert_eq!(status, 404);
 
     endpoint.close(0u32.into(), b"done");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn mcp_sse_stream_over_http3() {
+    // #12: GET /mcp's SSE stream is delivered over HTTP/3 as it's produced.
+    let cert_file = TempPath::new("h3_mcp_cert.pem");
+    let key_file = TempPath::new("h3_mcp_key.pem");
+    let mcp = crate::mcp::McpServer::new("t", "1");
+    let (addr, cert_der) = start_server(mcp.clone(), &cert_file, &key_file);
+    let (mut send_request, _endpoint) = connect(addr, cert_der).await;
+    let request = http::Request::builder().method("GET").uri("https://localhost/mcp")
+        .header("accept", "text/event-stream").body(()).unwrap();
+    let mut stream = send_request.send_request(request).await.unwrap();
+    stream.finish().await.unwrap();
+    let response = stream.recv_response().await.unwrap();
+    assert_eq!(200, response.status().as_u16());
+    assert_eq!("text/event-stream", response.headers()["content-type"]);
+    mcp.notify("notifications/test", Some(r#"{"n":1}"#));
+    let mut chunk = tokio::time::timeout(std::time::Duration::from_secs(5), stream.recv_data()).await
+        .expect("no SSE event within 5 s").unwrap().expect("stream ended");
+    let mut text = Vec::new();
+    while chunk.has_remaining() {
+        let part = chunk.chunk();
+        text.extend_from_slice(part);
+        let n = part.len();
+        chunk.advance(n);
+    }
+    let text = String::from_utf8_lossy(&text);
+    assert!(text.contains("data: ") && text.contains("notifications/test"), "{text}");
 }

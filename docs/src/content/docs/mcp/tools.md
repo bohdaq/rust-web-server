@@ -179,6 +179,10 @@ Only `.tool_with_context()` handlers can check cancellation — a plain `.tool()
 
 ## Server-side sampling
 
+:::caution[Deprecated by MCP 2026-07-28]
+Sampling (`sampling/createMessage`, `ctx.sample()`) is deprecated in the [2026-07-28 MCP specification](https://blog.modelcontextprotocol.io/posts/2026-07-28/) (SEP-2577). It still works with clients that use it and will for at least twelve months, but new servers shouldn't rely on it; clients on the 2026-07-28 protocol have no back-channel for server-to-client requests.
+:::
+
 Most MCP traffic flows client → server. `sampling/createMessage` reverses that: the *server* asks the connected client to run LLM inference, and the client answers. This is useful for agent-to-agent or meta-agent patterns — a tool that needs its own LLM call to decide what to do next, using whatever model the client already has configured, rather than the server managing its own API key and provider.
 
 Call `ctx.sample(request, timeout)` from a `.tool_with_context()` handler:
@@ -221,6 +225,10 @@ let mcp = McpServer::new("my-server", "1.0")
 Otherwise, it fails with a timeout error if the client doesn't respond in time — including if the client simply has no [`GET /mcp` SSE connection](/mcp/overview/#sse-streaming-transport) open for that session at all, since there's no separate "not connected" signal.
 
 ## Filesystem roots
+
+:::caution[Deprecated by MCP 2026-07-28]
+Roots (`roots/list`, `ctx.list_roots()`) are deprecated in the [2026-07-28 MCP specification](https://blog.modelcontextprotocol.io/posts/2026-07-28/) (SEP-2577). They still work with clients that use it and will for at least twelve months, but new servers shouldn't rely on them; clients on the 2026-07-28 protocol have no back-channel for server-to-client requests.
+:::
 
 A client can advertise which filesystem roots (workspace directories, mounted volumes) it has access to, so a file-system-aware tool knows to stay within them rather than assuming access to the whole filesystem. `ctx.list_roots(timeout)` asks the connected client for its roots, built on the exact same request/response mechanism as [`ctx.sample()`](#server-side-sampling) — a server-initiated `roots/list` request over SSE, answered by the client's `POST /mcp`:
 

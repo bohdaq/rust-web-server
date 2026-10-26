@@ -201,11 +201,14 @@ data: {"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info"
 `.notify()` never blocks the calling thread. Each connected client has a bounded 32-frame buffer; a client that isn't reading fast enough (buffer full) is dropped from the broadcast list exactly like a disconnected one — one slow or stuck client can never stall notifications to everyone else. Idle connections receive a `: keep-alive` SSE comment every 15 seconds, both so intermediate proxies don't time out a silent connection and because it forces a write attempt that reveals a dead peer.
 :::
 
-:::caution[HTTP/1.1 only]
-The SSE channel is only wired up for the plain HTTP/1.1 path (`Server::run`/`Server::process`). This matches the scope of `Response::stream_pipe` generally (the mechanism this feature is built on) — the HTTP/2 and HTTP/3 handlers don't drive `stream_pipe` for any response yet, not just this one.
-:::
+The stream works over HTTP/1.1, HTTP/2 and HTTP/3 alike: each delivers
+events as they are produced (tested against real HTTP/2 and HTTP/3 clients).
 
 ## Logging
+
+:::caution[Deprecated by MCP 2026-07-28]
+The logging capability (`logging/setLevel`, `notifications/message`, `.log()`) is deprecated in the [2026-07-28 MCP specification](https://blog.modelcontextprotocol.io/posts/2026-07-28/) (SEP-2577). It keeps working with clients that use it, for at least twelve months; new servers should log through their own logging instead.
+:::
 
 The spec lets a client request a minimum log level and receive server log messages pushed as `notifications/message` events over the SSE stream — useful during development, since an MCP client like Claude Desktop can show server diagnostics inline instead of you tailing a separate log file.
 

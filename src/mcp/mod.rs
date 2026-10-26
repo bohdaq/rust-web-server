@@ -375,6 +375,10 @@ impl McpContext {
         self.cancellation.as_ref().is_some_and(|c| c.load(std::sync::atomic::Ordering::Relaxed))
     }
 
+    /// **Deprecated by MCP 2026-07-28** (SEP-2577): Sampling keeps working with
+    /// clients that use it, for at least twelve months, but new servers shouldn't
+    /// rely on it.
+    ///
     /// Ask the connected client to run LLM inference ("sampling") and block
     /// until it replies or `timeout` elapses — the server-initiated half of
     /// `sampling/createMessage`. This reverses the usual request direction:
@@ -436,6 +440,10 @@ impl McpContext {
         parse_sampling_response(&result_json)
     }
 
+    /// **Deprecated by MCP 2026-07-28** (SEP-2577): Roots keeps working with
+    /// clients that use it, for at least twelve months, but new servers shouldn't
+    /// rely on it.
+    ///
     /// Ask the connected client which filesystem roots (workspace
     /// directories, mounted volumes, ...) it has access to — useful for a
     /// file-system-aware tool that should only operate within the client's
@@ -1230,6 +1238,10 @@ impl McpServer {
         response
     }
 
+    /// **Deprecated by MCP 2026-07-28** (SEP-2577): Logging keeps working with
+    /// clients that use it, for at least twelve months, but new servers shouldn't
+    /// rely on it.
+    ///
     /// Advertise the `logging` capability (`"logging":{}`) in `initialize`'s
     /// response, so clients know they can call `logging/setLevel` and expect
     /// `notifications/message` log entries over the `GET /mcp` SSE stream.
@@ -1249,6 +1261,10 @@ impl McpServer {
         self
     }
 
+    /// **Deprecated by MCP 2026-07-28** (SEP-2577): Logging keeps working with
+    /// clients that use it, for at least twelve months, but new servers shouldn't
+    /// rely on it.
+    ///
     /// Push a `notifications/message` log entry to every client connected to
     /// the `GET /mcp` SSE stream, if `level` is at or above the level most
     /// recently set via a client's `logging/setLevel` request (or

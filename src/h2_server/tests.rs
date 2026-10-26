@@ -324,3 +324,24 @@ async fn a_wrong_preface_is_refused() {
     let goaway = out.windows(5).position(|w| w[3] == super::frame::GOAWAY && w[4] == 0).is_some();
     assert!(goaway, "{out:02x?}");
 }
+
+#[tokio::test]
+async fn mcp_sse_stream_over_http2() {
+    // #12: GET /mcp's SSE stream (a stream_pipe body) is delivered over
+    // HTTP/2 as it's produced, not buffered until the end.
+    let mcp = crate::mcp::McpServer::new("t", "1");
+    let (client_io, server_io) = tokio::io::duplex(64 * 1024);
+    tokio::spawn(super::handle_connection(server_io, peer(), None, mcp.clone()));
+    let (send, connection) = h2::client::handshake(client_io).await.unwrap();
+    tokio::spawn(connection);
+    let request = http::Request::get("https://x/mcp").header("accept", "text/event-stream").body(()).unwrap();
+    let (response, _) = send.ready().await.unwrap().send_request(request, true).unwrap();
+    let (parts, mut body) = response.await.unwrap().into_parts();
+    assert_eq!(200, parts.status.as_u16());
+    assert_eq!("text/event-stream", parts.headers["content-type"]);
+    mcp.notify("notifications/test", Some(r#"{"n":1}"#));
+    let chunk = tokio::time::timeout(std::time::Duration::from_secs(5), body.data()).await
+        .expect("no SSE event within 5 s").unwrap().unwrap();
+    let text = String::from_utf8_lossy(&chunk);
+    assert!(text.contains("data: ") && text.contains("notifications/test"), "{text}");
+}

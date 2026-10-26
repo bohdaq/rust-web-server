@@ -14573,11 +14573,14 @@ data: {"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info"
 `.notify()` never blocks the calling thread. Each connected client has a bounded 32-frame buffer; a client that isn't reading fast enough (buffer full) is dropped from the broadcast list exactly like a disconnected one — one slow or stuck client can never stall notifications to everyone else. Idle connections receive a `: keep-alive` SSE comment every 15 seconds, both so intermediate proxies don't time out a silent connection and because it forces a write attempt that reveals a dead peer.
 :::
 
-:::caution[HTTP/1.1 only]
-The SSE channel is only wired up for the plain HTTP/1.1 path (`Server::run`/`Server::process`). This matches the scope of `Response::stream_pipe` generally (the mechanism this feature is built on) — the HTTP/2 and HTTP/3 handlers don't drive `stream_pipe` for any response yet, not just this one.
-:::
+The stream works over HTTP/1.1, HTTP/2 and HTTP/3 alike: each delivers
+events as they are produced (tested against real HTTP/2 and HTTP/3 clients).
 
 ## Logging
+
+:::caution[Deprecated by MCP 2026-07-28]
+The logging capability (`logging/setLevel`, `notifications/message`, `.log()`) is deprecated in the [2026-07-28 MCP specification](https://blog.modelcontextprotocol.io/posts/2026-07-28/) (SEP-2577). It keeps working with clients that use it, for at least twelve months; new servers should log through their own logging instead.
+:::
 
 The spec lets a client request a minimum log level and receive server log messages pushed as `notifications/message` events over the SSE stream — useful during development, since an MCP client like Claude Desktop can show server diagnostics inline instead of you tailing a separate log file.
 
@@ -15019,6 +15022,10 @@ Only `.tool_with_context()` handlers can check cancellation — a plain `.tool()
 
 ## Server-side sampling
 
+:::caution[Deprecated by MCP 2026-07-28]
+Sampling (`sampling/createMessage`, `ctx.sample()`) is deprecated in the [2026-07-28 MCP specification](https://blog.modelcontextprotocol.io/posts/2026-07-28/) (SEP-2577). It still works with clients that use it and will for at least twelve months, but new servers shouldn't rely on it; clients on the 2026-07-28 protocol have no back-channel for server-to-client requests.
+:::
+
 Most MCP traffic flows client → server. `sampling/createMessage` reverses that: the *server* asks the connected client to run LLM inference, and the client answers. This is useful for agent-to-agent or meta-agent patterns — a tool that needs its own LLM call to decide what to do next, using whatever model the client already has configured, rather than the server managing its own API key and provider.
 
 Call `ctx.sample(request, timeout)` from a `.tool_with_context()` handler:
@@ -15061,6 +15068,10 @@ let mcp = McpServer::new("my-server", "1.0")
 Otherwise, it fails with a timeout error if the client doesn't respond in time — including if the client simply has no [`GET /mcp` SSE connection](/mcp/overview/#sse-streaming-transport) open for that session at all, since there's no separate "not connected" signal.
 
 ## Filesystem roots
+
+:::caution[Deprecated by MCP 2026-07-28]
+Roots (`roots/list`, `ctx.list_roots()`) are deprecated in the [2026-07-28 MCP specification](https://blog.modelcontextprotocol.io/posts/2026-07-28/) (SEP-2577). They still work with clients that use it and will for at least twelve months, but new servers shouldn't rely on them; clients on the 2026-07-28 protocol have no back-channel for server-to-client requests.
+:::
 
 A client can advertise which filesystem roots (workspace directories, mounted volumes) it has access to, so a file-system-aware tool knows to stay within them rather than assuming access to the whole filesystem. `ctx.list_roots(timeout)` asks the connected client for its roots, built on the exact same request/response mechanism as [`ctx.sample()`](#server-side-sampling) — a server-initiated `roots/list` request over SSE, answered by the client's `POST /mcp`:
 
