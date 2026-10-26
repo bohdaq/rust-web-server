@@ -291,6 +291,36 @@ pub mod fuzz_api {
         }
     }
 
+    /// `Accept-Encoding` negotiation (#7): any header value; the choice is
+    /// always one of the offered codings, and a coding the value refuses
+    /// (its first `q=` parameter is 0) is never chosen.
+    pub fn accept_encoding(data: &[u8]) {
+        let Ok(value) = std::str::from_utf8(data) else { return };
+        let request = crate::request::Request {
+            method: "GET".to_string(),
+            request_uri: "/".to_string(),
+            http_version: "HTTP/1.1".to_string(),
+            headers: vec![crate::header::Header::new(crate::header::Header::_ACCEPT_ENCODING, value.to_string())],
+            body: Default::default(),
+        };
+        for preference in [crate::compression::DYNAMIC_PREFERENCE, crate::compression::STATIC_PREFERENCE] {
+            if let Some(chosen) = crate::compression::negotiate(&request, preference) {
+                assert!(preference.contains(&chosen));
+                // Refused: the coding's first `q=` parameter is exactly 0.
+                let refused = value.split(',').any(|c| {
+                    let mut parts = c.split(';');
+                    parts.next().unwrap_or("").trim().eq_ignore_ascii_case(chosen.token())
+                        && parts
+                            .map(str::trim)
+                            .find(|p| p.as_bytes().get(..2).is_some_and(|b| b.eq_ignore_ascii_case(b"q=")))
+                            .is_some_and(|q| q[2..].trim().parse::<f32>() == Ok(0.0))
+                });
+                let listed_once = value.split(',').filter(|c| c.split(';').next().unwrap_or("").trim().eq_ignore_ascii_case(chosen.token())).count() == 1;
+                assert!(!(refused && listed_once), "{value:?} refused {chosen:?}");
+            }
+        }
+    }
+
     /// An upstream MCP server's reply as the gateway reads it (#62): a JSON
     /// body or an event stream, then the response's tools. Must never panic.
     pub fn mcp_gateway_reply(data: &[u8]) {

@@ -5714,29 +5714,59 @@ Cloning a `RedisRateLimiter` is cheap — all clones share the same underlying T
 
 <https://rws8.tech/features/compression/>
 
-`rust-web-server` compresses HTTP responses automatically when the client signals support via the `Accept-Encoding: gzip` request header. No middleware registration, no feature flag, no configuration — it works out of the box for every build variant.
+`rust-web-server` compresses text responses automatically, in the coding the
+client prefers: `br` (brotli), `zstd` or `gzip` (brotli and zstd since
+18.1.0). No middleware registration, no configuration.
 
-## How it works
+## Which coding
 
-`compression::apply_gzip(request, response)` is called by the HTTP/1.1 connection handler after `app.execute()` returns, before the response bytes are written to the socket. It compresses only when:
+The request's `Accept-Encoding` decides: the coding with the highest `q`
+wins, `*` stands for any coding not listed, and `q=0` refuses one. When
+several are equally acceptable — a browser sends
+`gzip, deflate, br, zstd` — the server's order breaks the tie:
 
-1. The response has no `Content-Encoding` already — a backend's gzipped or Brotli response is passed through, never compressed twice.
-2. The body is at least 512 bytes (`compression::MIN_COMPRESS_SIZE`, the same minimum Caddy uses): below that, gzip's framing and CPU cost outweigh the savings.
-3. The `Accept-Encoding` request header contains `gzip` (case-insensitive).
-4. The response `Content-Type` matches a compressible MIME type (see below).
-5. The response isn't partial — a `206` (one range or several) is a slice of the file and is sent as is (since 17.113.2).
+| Response | Order | Why |
+|---|---|---|
+| Static files (compressed once, then cached) | `br`, `zstd`, `gzip` | brotli's output is smallest, and it is paid for once |
+| Everything else (compressed per response) | `zstd`, `br`, `gzip` | zstd costs the least CPU at a similar ratio |
 
-The body is then compressed with `flate2`'s default level. If the
-result isn't smaller than the original — random or already-compressed data
-served as text — the original body is sent instead. A compressed response
-receives:
+A request without `Accept-Encoding` gets the response uncompressed.
 
-- `Content-Encoding: gzip`
-- `Vary: Accept-Encoding` (appended to any existing `Vary` value, or added if absent)
+Brotli and zstd are the `brotli` and `zstd` Cargo features, both on by
+default (`zstd` builds the C libzstd). Without them only gzip is offered;
+the `http1`-only build (`--no-default-features --features http1`) has
+gzip only.
+
+## What gets compressed
+
+`compression::apply_compression(request, response)` runs after your
+handler, before the response is written (HTTP/1.1, HTTP/2 and HTTP/3). It
+compresses when:
+
+1. The response has no `Content-Encoding` already — a backend's compressed
+   response is passed through, never compressed twice.
+2. The body is at least 512 bytes (`compression::MIN_COMPRESS_SIZE`, the
+   same minimum Caddy uses).
+3. The client accepts a coding (above).
+4. The `Content-Type` is compressible (below).
+5. The response isn't partial: a `206` is a slice of the file and is sent as
+   is (since 17.113.2).
+
+Levels are the fast ones peers use for per-response compression: brotli 4,
+zstd 3, gzip 6 (`compression::Level::Dynamic`; brotli's default, 11, is
+about a hundred times slower than gzip). If the result isn't smaller than
+the original, the original is sent. A compressed response gets:
+
+- `Content-Encoding: br`, `zstd` or `gzip`
+- `Vary: Accept-Encoding` (appended to an existing `Vary`, or added)
+- its own `ETag` when it had one: `"x"` becomes `"x-br"` (since 18.1.0;
+  each representation needs a different strong ETag)
+
+`compression::apply_gzip` still exists and only ever uses gzip.
 
 ## Compressible content types
 
-Only responses whose `Content-Type` starts with one of the following MIME types are compressed:
+Only responses whose `Content-Type` starts with one of these are compressed:
 
 | MIME type |
 |-----------|
@@ -5751,47 +5781,61 @@ Only responses whose `Content-Type` starts with one of the following MIME types 
 | `application/xhtml+xml` |
 | `image/svg+xml` |
 
-Binary formats (images, audio, video, fonts, archives) are not compressed because they are already compressed or compression yields no benefit.
+Images, audio, video, fonts and archives are already compressed.
 
 ## Static files are compressed once
 
-A static file is compressed once per version, not on every request: the
-open-file cache keeps the gzip form of each file up to 1 MiB next to its
-contents, keyed by the file's size and modification time, within the same
-8 MiB memory budget. An edit is picked up at once (the size or time
-changes); a file modified less than 2 seconds ago isn't cached yet, as for
-the contents. The bytes and headers are exactly what `apply_gzip` would
-produce. Compressing a 26 KiB JavaScript file on every request cost about
-80× the CPU of serving it; from the cache it costs about the same as an
-uncompressed file.
+A static file is compressed once per version per coding, not on every
+request: the open-file cache keeps the brotli, zstd and gzip forms of each
+file up to 1 MiB, keyed by its size and modification time, within the same
+8 MiB memory budget, at the higher `Level::Static` (brotli 6, zstd 6,
+gzip 6). An edit is picked up at once; a file modified less than 2 seconds
+ago isn't cached yet. The `ETag` carries the coding (`"<mtime>-<size>-br"`),
+so a client revalidating gets a `304` for the representation it holds.
 
-Responses from your handlers and from proxied backends are still compressed
-per response.
+### Precompressed files
 
-## Large file streaming
-
-Static files larger than **256 KiB** are sent without being read into memory
-— `sendfile(2)` over plain HTTP, chunked otherwise (`response.stream_file`)
-— except that a client accepting gzip gets a compressible file of up to
-**1 MiB** gzip-compressed from the cache (a 330 KiB JavaScript bundle went
-out as 80 KiB, at less CPU than sending it whole). Larger files, and every
-large file for a client without gzip, are sent uncompressed.
-
-:::note[Range requests]
-Byte-range requests (`Range: bytes=N-M`) always bypass chunked streaming and receive the slice directly. Gzip compression applies normally to range responses when the content type is compressible.
-:::
-
-## Example: verifying compression
+If `app.js.br`, `app.js.zst` or `app.js.gz` sits next to `app.js`, is a
+regular file (not a symlink) and is at least as new as `app.js`, its bytes
+are sent for that coding instead of compressing — as nginx's `gzip_static`
+does. Build them once with the best settings (`brotli -q 11`,
+`zstd -19`):
 
 ```bash
-curl -s -H "Accept-Encoding: gzip" http://localhost:7878/ \
-  --output - | file -
-# output: gzip compressed data
+brotli -q 11 -k static/app.js       # static/app.js.br
+zstd -19 -k static/app.js           # static/app.js.zst
+gzip -9 -k static/app.js            # static/app.js.gz
+```
+
+A sibling older than the file (the file was edited since) is ignored, and
+the file is compressed instead. Like the cached forms, this applies to
+files up to 1 MiB.
+
+## Large files
+
+Static files larger than **256 KiB** are sent without being read into
+memory — `sendfile(2)` over plain HTTP, chunked otherwise — except that a
+client accepting a coding gets a compressible file of up to **1 MiB**
+compressed from the cache. Larger files are sent uncompressed.
+
+:::note[Range requests]
+Byte-range requests (`Range: bytes=N-M`) are answered with the slice,
+uncompressed: compressing a slice would describe bytes that don't exist.
+:::
+
+## Checking it
+
+```bash
+curl -s -D - -o /dev/null -H "Accept-Encoding: br" http://localhost:7878/app.js
+# content-encoding: br
+# vary: Accept-Encoding
+# etag: "1793007086216830266-26624-br"
 ```
 
 ## No configuration needed
 
-There are no `rws.config.toml` keys, environment variables, or middleware layers to enable compression. It is always active at the server-core level.
+There are no `rws.config.toml` keys, environment variables or middleware
+layers for compression.
 
 ---
 
@@ -17890,6 +17934,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 
 | Type / Trait | Module | Description |
 |---|---|---|
+| `Encoding` / `Level` | `compression` | Content codings (`gzip`, `br`, `zstd`) and levels; `negotiate(request, preference)`, `encode`, `apply_compression` (18.1.0). See [Compression](/features/compression/) |
 | `JsonSchema` / `ObjectSchema` | `schema` | A type's JSON Schema as text (primitives, `Option`, collections, smart pointers built in); `ObjectSchema` builds an object schema (18.0.0) |
 | `McpGateway` / `Upstream` | `mcp::gateway` | One MCP endpoint federating upstream MCP servers: `prefix__tool` names, per-caller `allow` rules, upstream credentials kept server-side (18.0.0). See [MCP gateway](/mcp/gateway/) |
 | `McpServer` / `McpIcon` | `mcp` | MCP Streamable HTTP server (`POST /mcp`, JSON-RPC 2.0, plus `GET /mcp` SSE); `.tool` / `.typed_tool` (`serde`) / `.resource` / `.prompt`, `.require_bearer`, `.require_bearer_tokens`, `.require_oauth` (`sso`), `.tool_filter`, `.session_ttl` / `.max_sessions` / `.max_sse_clients`. Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See [MCP](/mcp/overview/) |

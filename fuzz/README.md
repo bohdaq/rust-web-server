@@ -29,6 +29,7 @@ cargo install cargo-fuzz
 | `dns_srv_response` | the DNS SRV response parser (`service_discovery`) | DNS servers |
 | `redis_reply` | the RESP reply reader (`redis_protocol`) | Redis servers |
 | `cookie_header` | `CookieJar::parse` | any client |
+| `accept_encoding` | `Accept-Encoding` negotiation for gzip / br / zstd (via `fuzz_api`) | any client |
 | `mcp_gateway_reply` | what the MCP gateway reads from an upstream: JSON or event-stream replies, `tools/list` results (via `fuzz_api`) | upstream MCP servers |
 
 ## Running

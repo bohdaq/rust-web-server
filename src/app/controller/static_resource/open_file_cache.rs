@@ -17,6 +17,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
+use crate::compression::{Encoding, Level};
+
 /// Most files held open at once — well under the common 256-descriptor
 /// soft limit on macOS.
 pub(crate) const CAPACITY: usize = 128;
@@ -26,11 +28,11 @@ const SHARDS: usize = 8;
 pub(crate) const MAX_CACHED_FILE: u64 = 64 * 1024;
 /// Total cached contents across all entries.
 pub(crate) const CONTENTS_BUDGET: usize = 8 * 1024 * 1024;
-/// Bytes of contents currently cached (plain and gzipped, together).
+/// Bytes of contents currently cached (plain and compressed, together).
 static CONTENTS_BYTES: AtomicUsize = AtomicUsize::new(0);
-/// Files up to this size also have their gzip-compressed form cached (and a
-/// gzip client gets it even above the streaming threshold); anything bigger
-/// goes out with `sendfile`, uncompressed.
+/// Files up to this size also have their compressed forms cached (and a
+/// client that accepts gzip, br or zstd gets one even above the streaming
+/// threshold); anything bigger goes out with `sendfile`, uncompressed.
 pub(crate) const MAX_GZIPPED_FILE: u64 = 1024 * 1024;
 
 /// An open regular file.
@@ -45,9 +47,10 @@ pub(crate) struct OpenFile {
     /// For cache entries with `RWS_CONFIG_OPEN_FILE_CACHE_STRICT=false`: the
     /// last `fstat` result and when it was taken, reused within [`valid_for`].
     last_state: RwLock<Option<(Instant, u64, u128)>>,
-    /// For cache entries: the gzip-compressed bytes as of `(len, modified)`
-    /// — compressing a text file on every request cost ~80× serving it.
-    gzipped: RwLock<Option<CachedGzip>>,
+    /// For cache entries: the compressed bytes as of `(len, modified)`, one
+    /// slot per [`Encoding`] — compressing a text file on every request cost
+    /// ~80× serving it.
+    encoded: [RwLock<Option<CachedEncoded>>; 3],
 }
 
 struct CachedContents {
@@ -56,25 +59,64 @@ struct CachedContents {
     bytes: Arc<[u8]>,
 }
 
-struct CachedGzip {
+struct CachedEncoded {
     len: u64,
     modified: u128,
-    /// `None`: gzip doesn't make this file smaller, so it's sent as is.
+    /// `None`: the encoding doesn't make this file smaller, so it's sent as is.
     bytes: Option<Arc<[u8]>>,
 }
 
-/// The gzip form of a file, from [`OpenFile::gzipped`].
-pub(crate) enum Gzipped {
+/// A file in one content coding, from [`OpenFile::encoded`].
+pub(crate) enum Encoded {
     /// Compressed bytes, smaller than the file.
     Smaller(Arc<[u8]>),
-    /// gzip doesn't make it smaller: send the file as is.
+    /// The encoding doesn't make it smaller: send the file as is.
     NotSmaller,
+}
+
+fn slot(encoding: Encoding) -> usize {
+    match encoding {
+        Encoding::Gzip => 0,
+        Encoding::Brotli => 1,
+        Encoding::Zstd => 2,
+    }
+}
+
+/// The file name suffix of a precompressed sibling (`app.js.br`).
+fn sibling_suffix(encoding: Encoding) -> &'static str {
+    match encoding {
+        Encoding::Gzip => ".gz",
+        Encoding::Brotli => ".br",
+        Encoding::Zstd => ".zst",
+    }
+}
+
+/// The bytes of `path` + `.gz`/`.br`/`.zst` when that is a regular file (not
+/// a symlink, which could point outside the web root) at least as new as the
+/// file itself (`modified`, nanoseconds), as nginx's `gzip_static` serves.
+fn precompressed_sibling(path: &str, encoding: Encoding, modified: u128) -> Option<Arc<[u8]>> {
+    let mut sibling = String::with_capacity(path.len() + 4);
+    sibling.push_str(path);
+    sibling.push_str(sibling_suffix(encoding));
+    let md = std::fs::symlink_metadata(&sibling).ok()?;
+    if !md.file_type().is_file() {
+        return None;
+    }
+    let sibling_modified = md.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos();
+    if sibling_modified < modified {
+        return None;
+    }
+    std::fs::read(&sibling).ok().map(Arc::from)
 }
 
 impl Drop for OpenFile {
     fn drop(&mut self) {
         let held = self.contents.get_mut().map(|c| c.as_ref().map_or(0, |c| c.bytes.len())).unwrap_or(0)
-            + self.gzipped.get_mut().map(|g| g.as_ref().and_then(|g| g.bytes.as_ref()).map_or(0, |b| b.len())).unwrap_or(0);
+            + self
+                .encoded
+                .iter_mut()
+                .map(|slot| slot.get_mut().map(|g| g.as_ref().and_then(|g| g.bytes.as_ref()).map_or(0, |b| b.len())).unwrap_or(0))
+                .sum::<usize>();
         CONTENTS_BYTES.fetch_sub(held, Ordering::Relaxed);
     }
 }
@@ -109,7 +151,7 @@ impl OpenFile {
             cache_contents: false,
             contents: RwLock::new(None),
             last_state: RwLock::new(None),
-            gzipped: RwLock::new(None),
+            encoded: [RwLock::new(None), RwLock::new(None), RwLock::new(None)],
         })
     }
 
@@ -135,29 +177,37 @@ impl OpenFile {
         Ok(body)
     }
 
-    /// The file gzip-compressed as of `state`, as `compression::apply_gzip`
-    /// would send it: cached per `(len, modified)` like [`Self::contents`]
-    /// (files up to [`MAX_GZIPPED_FILE`], settled, within the budget), so an
-    /// unchanged file is compressed once instead of on every request.
-    pub(crate) fn gzipped(&self, state: &FileState) -> std::io::Result<Gzipped> {
-        if let Some(cached) = self.gzipped.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
+    /// The file in `encoding` as of `state`: a precompressed sibling
+    /// (`<path>.br`, `.zst`, `.gz`) at least as new as the file when there is
+    /// one, else the file compressed at [`Level::Static`]. Cached per
+    /// `(len, modified)` like [`Self::contents`] (files up to
+    /// [`MAX_GZIPPED_FILE`], settled, within the budget), so an unchanged file
+    /// costs no compression and no sibling lookup after the first request.
+    pub(crate) fn encoded(&self, state: &FileState, encoding: Encoding, path: &str) -> std::io::Result<Encoded> {
+        let slot = &self.encoded[slot(encoding)];
+        if let Some(cached) = slot.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
             if cached.len == state.len && cached.modified == state.modified {
-                return Ok(cached.bytes.as_ref().map_or(Gzipped::NotSmaller, |b| Gzipped::Smaller(Arc::clone(b))));
+                return Ok(cached.bytes.as_ref().map_or(Encoded::NotSmaller, |b| Encoded::Smaller(Arc::clone(b))));
             }
         }
-        let plain = self.contents(state)?;
-        let compressed = crate::compression::gzip(&plain)
-            .filter(|gz| gz.len() < plain.len())
-            .map(|gz| Arc::<[u8]>::from(gz.as_slice()));
+        let compressed = match precompressed_sibling(path, encoding, state.modified) {
+            Some(bytes) => Some(bytes),
+            None => {
+                let plain = self.contents(state)?;
+                crate::compression::encode(encoding, &plain, Level::Static)
+                    .filter(|encoded| encoded.len() < plain.len())
+                    .map(|encoded| Arc::<[u8]>::from(encoded.as_slice()))
+            }
+        };
         if self.cache_contents && state.len <= MAX_GZIPPED_FILE && settled(state.modified) {
-            let mut slot = self.gzipped.write().unwrap_or_else(|e| e.into_inner());
+            let mut slot = slot.write().unwrap_or_else(|e| e.into_inner());
             let released = slot.as_ref().and_then(|g| g.bytes.as_ref()).map_or(0, |b| b.len());
             let wanted = compressed.as_ref().map_or(0, |b| b.len());
             if reserve(released, wanted) {
-                *slot = Some(CachedGzip { len: state.len, modified: state.modified, bytes: compressed.clone() });
+                *slot = Some(CachedEncoded { len: state.len, modified: state.modified, bytes: compressed.clone() });
             }
         }
-        Ok(compressed.map_or(Gzipped::NotSmaller, Gzipped::Smaller))
+        Ok(compressed.map_or(Encoded::NotSmaller, Encoded::Smaller))
     }
 
     /// The open file (for `sendfile`).
@@ -587,9 +637,9 @@ mod tests {
         let path = old_text_file("ofc_gzip.js", &"var a = 1; ".repeat(200));
         let file = open_with(path.as_str(), true, LONG).unwrap();
         let state = file.state().unwrap();
-        let Gzipped::Smaller(first) = file.gzipped(&state).unwrap() else { panic!("text compresses") };
+        let Encoded::Smaller(first) = file.encoded(&state, Encoding::Gzip, path.as_str()).unwrap() else { panic!("text compresses") };
         assert_eq!(crate::compression::gzip(&file.contents(&state).unwrap()).unwrap(), first.to_vec());
-        let Gzipped::Smaller(second) = file.gzipped(&state).unwrap() else { panic!() };
+        let Encoded::Smaller(second) = file.encoded(&state, Encoding::Gzip, path.as_str()).unwrap() else { panic!() };
         assert!(Arc::ptr_eq(&first, &second), "a hit reuses the cached bytes");
 
         // An edit in place (new size and time) is compressed afresh at once.
@@ -597,7 +647,7 @@ mod tests {
         File::options().write(true).open(path.as_str()).unwrap()
             .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(1_767_223_000)).unwrap();
         let state = file.state().unwrap();
-        let Gzipped::Smaller(third) = file.gzipped(&state).unwrap() else { panic!() };
+        let Encoded::Smaller(third) = file.encoded(&state, Encoding::Gzip, path.as_str()).unwrap() else { panic!() };
         assert!(!Arc::ptr_eq(&first, &third));
         assert_eq!(crate::compression::gzip("let b = 2; ".repeat(300).as_bytes()).unwrap(), third.to_vec());
     }
@@ -612,9 +662,62 @@ mod tests {
         let file = open_with(path.as_str(), true, LONG).unwrap();
         let state = file.state().unwrap();
         let shrinks = crate::compression::gzip(&noise).unwrap().len() < noise.len();
-        match file.gzipped(&state).unwrap() {
-            Gzipped::Smaller(_) => assert!(shrinks),
-            Gzipped::NotSmaller => assert!(!shrinks),
+        match file.encoded(&state, Encoding::Gzip, path.as_str()).unwrap() {
+            Encoded::Smaller(_) => assert!(shrinks),
+            Encoded::NotSmaller => assert!(!shrinks),
+        }
+    }
+
+    #[test]
+    fn each_encoding_is_cached_in_its_own_slot() {
+        let path = old_text_file("ofc_encodings.css", &".a { color: red; }\n".repeat(300));
+        let file = open_with(path.as_str(), true, LONG).unwrap();
+        let state = file.state().unwrap();
+        let plain = file.contents(&state).unwrap();
+        for encoding in [Encoding::Gzip, Encoding::Brotli, Encoding::Zstd].into_iter().filter(|e| e.available()) {
+            let Encoded::Smaller(first) = file.encoded(&state, encoding, path.as_str()).unwrap() else { panic!("{encoding:?} compresses") };
+            assert_eq!(crate::compression::encode(encoding, &plain, Level::Static).unwrap(), first.to_vec(), "{encoding:?}");
+            let Encoded::Smaller(again) = file.encoded(&state, encoding, path.as_str()).unwrap() else { panic!() };
+            assert!(Arc::ptr_eq(&first, &again), "{encoding:?}: a hit reuses the cached bytes");
+        }
+    }
+
+    /// A sibling file next to `file_name`, with its modification time.
+    fn sibling(file_name: &str, suffix: &str, bytes: &[u8], mtime_secs: u64) -> TempPath {
+        let path = TempPath::new_in_cwd(&format!("{file_name}{suffix}"));
+        std::fs::write(path.as_str(), bytes).unwrap();
+        File::options().write(true).open(path.as_str()).unwrap()
+            .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(mtime_secs)).unwrap();
+        path
+    }
+
+    #[test]
+    fn a_precompressed_sibling_at_least_as_new_is_served() {
+        let path = old_text_file("ofc_sibling_new.js", &"var s = 1; ".repeat(200));
+        let _sibling = sibling("ofc_sibling_new.js", ".gz", b"precompressed bytes", 1_767_222_000);
+        let file = open_with(path.as_str(), true, LONG).unwrap();
+        let state = file.state().unwrap();
+        let Encoded::Smaller(bytes) = file.encoded(&state, Encoding::Gzip, path.as_str()).unwrap() else { panic!() };
+        assert_eq!(b"precompressed bytes", &bytes[..]);
+    }
+
+    #[test]
+    fn an_older_or_symlinked_sibling_is_ignored() {
+        let path = old_text_file("ofc_sibling_old.js", &"var s = 1; ".repeat(200));
+        let _old = sibling("ofc_sibling_old.js", ".gz", b"precompressed bytes", 1_767_221_000);
+        let file = open_with(path.as_str(), true, LONG).unwrap();
+        let state = file.state().unwrap();
+        let Encoded::Smaller(compressed) = file.encoded(&state, Encoding::Gzip, path.as_str()).unwrap() else { panic!() };
+        assert_eq!(crate::compression::gzip(&file.contents(&state).unwrap()).unwrap(), compressed.to_vec());
+
+        // A symlink sibling is never followed (it could point outside the root).
+        #[cfg(unix)]
+        if Encoding::Zstd.available() {
+            let target = sibling("ofc_sibling_old.js", ".target", b"precompressed bytes", 1_767_223_000);
+            let link = TempPath::new_in_cwd("ofc_sibling_old.js.zst");
+            std::os::unix::fs::symlink(target.as_str(), link.as_str()).unwrap();
+            let Encoded::Smaller(bytes) = file.encoded(&state, Encoding::Zstd, path.as_str()).unwrap() else { panic!() };
+            assert_ne!(b"precompressed bytes", &bytes[..]);
         }
     }
 

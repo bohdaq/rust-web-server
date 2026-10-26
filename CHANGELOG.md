@@ -7,22 +7,16 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased (18.1.0)
 
-### Fixed
-
-- **WebSocket frames claiming a huge payload (#8).** `WebSocket::read_frame`
-  allocated whatever length a client claimed (up to 2^64 − 1 bytes) before
-  reading it, so one 14-byte frame could abort the process. Payloads are now
-  read as they arrive and capped at `WebSocket::MAX_FRAME_PAYLOAD` (16 MiB);
-  `WebSocket::read_frame_limited` takes another limit.
-- **Redis replies (#8).** The RESP reader allocated a bulk string at the
-  length the server claimed; bulk strings are now read as they arrive, capped
-  at 512 MiB (Redis's own maximum), reply lines at 64 KiB, and a connection
-  closed mid-reply is an error instead of reading as `+OK`.
-- **DNS SRV discovery (#8).** A response whose SRV record ended inside its
-  RDATA panicked while reading priority, weight and port; it is now an error.
-
 ### Added
 
+- brotli and zstd compression (#7): responses are compressed in the coding
+  the client prefers by `Accept-Encoding` q-values (`br`, `zstd` or `gzip`),
+  at the fast levels peers use per response (brotli 4, zstd 3); static files
+  are compressed once per version per coding (brotli 6, zstd 6) and cached,
+  and precompressed `app.js.br` / `.zst` / `.gz` siblings are served when at
+  least as new as the file. `compression::apply_compression`, `negotiate`,
+  `encode`, `Encoding`, `Level`; Cargo features `brotli` and `zstd` (default).
+  New benchmark scenarios `text-br` and `text-zstd`.
 - Reload on file change (#10): `watch = true` (`RWS_CONFIG_WATCH`) reloads
   when `rws.config.toml` or a configured certificate or key changes, with
   the same validation as `SIGHUP`; covered by `ci/e2e/config_reload.sh`.
@@ -36,6 +30,27 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `Cookie` headers, and a request-smuggling seed corpus (CL+TE, conflicting
   or listed `Content-Length`, obfuscated or folded `Transfer-Encoding`,
   bare-LF and oversized chunks) whose handling a test pins (#8).
+
+### Fixed
+
+- **WebSocket frames claiming a huge payload (#8).** `WebSocket::read_frame`
+  allocated whatever length a client claimed (up to 2^64 − 1 bytes) before
+  reading it, so one 14-byte frame could abort the process. Payloads are now
+  read as they arrive and capped at `WebSocket::MAX_FRAME_PAYLOAD` (16 MiB);
+  `WebSocket::read_frame_limited` takes another limit.
+- **Redis replies (#8).** The RESP reader allocated a bulk string at the
+  length the server claimed; bulk strings are now read as they arrive, capped
+  at 512 MiB (Redis's own maximum), reply lines at 64 KiB, and a connection
+  closed mid-reply is an error instead of reading as `+OK`.
+- **DNS SRV discovery (#8).** A response whose SRV record ended inside its
+  RDATA panicked while reading priority, weight and port; it is now an error.
+- A compressed response kept the uncompressed body's strong `ETag`, so a
+  cache could not tell the representations apart; it now carries the coding
+  (`"x"` → `"x-gzip"`), static files included.
+- An `Accept-Encoding` parameter starting with a multi-byte character
+  (`gzip;aé`) panicked while looking for `q=`, ending that connection
+  (found by the new `accept_encoding` fuzz target; the same code was in 17.x
+  and 18.0.0).
 
 ## 18.0.0 — 2026-10-26
 

@@ -189,6 +189,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 
 | Type / Trait | Module | Description |
 |---|---|---|
+| `Encoding` / `Level` | `compression` | Content codings (`gzip`, `br`, `zstd`) and levels; `negotiate(request, preference)`, `encode`, `apply_compression` (18.1.0). See [Compression](/features/compression/) |
 | `JsonSchema` / `ObjectSchema` | `schema` | A type's JSON Schema as text (primitives, `Option`, collections, smart pointers built in); `ObjectSchema` builds an object schema (18.0.0) |
 | `McpGateway` / `Upstream` | `mcp::gateway` | One MCP endpoint federating upstream MCP servers: `prefix__tool` names, per-caller `allow` rules, upstream credentials kept server-side (18.0.0). See [MCP gateway](/mcp/gateway/) |
 | `McpServer` / `McpIcon` | `mcp` | MCP Streamable HTTP server (`POST /mcp`, JSON-RPC 2.0, plus `GET /mcp` SSE); `.tool` / `.typed_tool` (`serde`) / `.resource` / `.prompt`, `.require_bearer`, `.require_bearer_tokens`, `.require_oauth` (`sso`), `.tool_filter`, `.session_ttl` / `.max_sessions` / `.max_sse_clients`. Entry point `McpServer::new(name, version)` or `app.mcp(name, version)`. See [MCP](/mcp/overview/) |

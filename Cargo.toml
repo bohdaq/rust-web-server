@@ -65,11 +65,15 @@ pkg-fmt = "tgz"
 pkg-fmt = "zip"
 
 [features]
-default = ["http3"]
+default = ["http3", "brotli", "zstd"]
 http1 = ["dep:ctrlc", "dep:libc"]
 http2 = ["dep:h2", "dep:rustls", "dep:tokio-rustls", "dep:tokio", "dep:bytes", "dep:http", "dep:webpki-roots", "dep:libc"]
 http3 = ["http2", "dep:quinn", "dep:h3", "dep:h3-quinn"]
 http-client = ["dep:rustls", "dep:webpki-roots"]
+# Content codings besides gzip (18.1.0): `br` (pure Rust) and `zstd` (C
+# libzstd, built with the crate). Both are in the default set.
+brotli = ["dep:brotli"]
+zstd   = ["dep:zstd"]
 acme   = ["http2", "dep:rcgen", "dep:webpki-roots", "dep:libc", "dep:aws-lc-rs"]
 serde  = ["dep:serde", "dep:serde_json"]
 auth   = ["dep:hmac", "dep:sha2"]
@@ -103,6 +107,8 @@ mimalloc = { version = "0.1", optional = true, default-features = false, feature
 libc = { version = "0.2", optional = true }
 file-ext = "12.0.0"
 flate2 = "1"
+brotli = { version = "9", optional = true }
+zstd = { version = "0.14", optional = true }
 url-search-params = "12.0.0"
 url-build-parse = "12.1.0"
 tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "io-util", "signal", "time"], optional = true }

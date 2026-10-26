@@ -1,0 +1,1 @@
+br;q=0.9, zstd;q=0, *;q=0.5, gzip;q=abc

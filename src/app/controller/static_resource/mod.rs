@@ -366,43 +366,53 @@ impl StaticResourceController {
         let file = open_file_cache::open(&fs_path, follow_symlinks)?;
         let state = file.state()?;
 
-        // ETag "<modified>-<len>" and the nanosecond Last-Modified, built
-        // without format!: this runs for every request.
+        // A compressible text file for a client that accepts br, zstd or gzip
+        // is sent from the cached compressed form (or a precompressed
+        // sibling), made once per file version instead of per request. Only
+        // a request with Accept-Encoding pays for the negotiation.
+        let encoding = if state.len <= open_file_cache::MAX_GZIPPED_FILE
+            && state.len >= crate::compression::MIN_COMPRESS_SIZE as u64
+            && crate::compression::is_compressible(mime)
+        {
+            crate::compression::negotiate(request, crate::compression::STATIC_PREFERENCE)
+        } else {
+            None
+        };
+        // ETag "<modified>-<len>", plus "-<coding>" when the file goes out
+        // compressed (each representation needs its own strong ETag), and the
+        // nanosecond Last-Modified, built without format!: this runs for
+        // every request.
         let modified = Decimal::new(state.modified);
         let len = Decimal::new(state.len as u128);
-        let mut etag_value = String::with_capacity(modified.as_str().len() + len.as_str().len() + 3);
+        let mut etag_value = String::with_capacity(modified.as_str().len() + len.as_str().len() + 8);
         etag_value.push('"');
         etag_value.push_str(modified.as_str());
         etag_value.push('-');
         etag_value.push_str(len.as_str());
+        if let Some(encoding) = encoding {
+            etag_value.push('-');
+            etag_value.push_str(encoding.token());
+        }
         etag_value.push('"');
         let not_modified = is_not_modified(request, state.modified, &etag_value);
-        // A compressible text file for a client that accepts gzip is sent
-        // from the cached compressed form (what apply_gzip would produce,
-        // made once per file version instead of per request).
-        let wants_gzip = !not_modified
-            && state.len <= open_file_cache::MAX_GZIPPED_FILE
-            && state.len >= crate::compression::MIN_COMPRESS_SIZE as u64
-            && crate::compression::is_compressible(mime)
-            && crate::compression::accepts_gzip(request);
         // Everything that can fail happens before `response` is taken: on
         // `None` the general path carries on with it.
         // A body of None means: stream the file (sendfile over plain TCP).
         // Compressible files up to MAX_GZIPPED_FILE (above the streaming
         // threshold too) go to gzip clients compressed — a JS bundle of a few
         // hundred KiB used to be sent uncompressed.
-        let mut gzipped = false;
+        let mut sent_encoded = None;
         let large = state.len > StaticResourceController::STREAM_THRESHOLD;
         let body = if not_modified {
             None
-        } else if wants_gzip {
-            match file.gzipped(&state).ok()? {
-                open_file_cache::Gzipped::Smaller(bytes) => {
-                    gzipped = true;
+        } else if let Some(encoding) = encoding {
+            match file.encoded(&state, encoding, &fs_path).ok()? {
+                open_file_cache::Encoded::Smaller(bytes) => {
+                    sent_encoded = Some(encoding);
                     Some(bytes.to_vec())
                 }
-                open_file_cache::Gzipped::NotSmaller if large => None,
-                open_file_cache::Gzipped::NotSmaller => Some(file.contents(&state).ok()?),
+                open_file_cache::Encoded::NotSmaller if large => None,
+                open_file_cache::Encoded::NotSmaller => Some(file.contents(&state).ok()?),
             }
         } else if large {
             None
@@ -431,8 +441,8 @@ impl StaticResourceController {
         };
 
         response.content_range_list = vec![Range::get_content_range(body, mime.to_string())];
-        if gzipped {
-            crate::compression::mark_gzipped(&mut response);
+        if let Some(encoding) = sent_encoded {
+            crate::compression::mark_encoded(&mut response, encoding);
         }
         Some(response)
     }

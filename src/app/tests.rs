@@ -472,6 +472,56 @@ fn static_gzip_matches_apply_gzip() {
     assert!(refused.header(Header::_CONTENT_ENCODING).is_none());
 }
 
+// 18.1.0: a browser's Accept-Encoding gets brotli for a static file (its
+// smaller output wins once it is cached), with its own ETag and a 304 for it.
+#[test]
+fn static_files_negotiate_br_and_zstd_with_their_own_etags() {
+    let request = |headers: Vec<Header>| Request {
+        method: "GET".to_string(),
+        request_uri: "/static/style.css".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers,
+        body: Default::default(),
+    };
+    let accept = |a: &str| Header::new(Header::_ACCEPT_ENCODING, a.to_string());
+    let app = App::with_config(ServerConfig::default());
+    let conn = ConnectionInfo {
+        client: Address { ip: "127.0.0.1".to_string(), port: 0 },
+        server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
+        request_size: 16000,
+        sni_hostname: None,
+    };
+    let plain = app.execute(&request(vec![]), &conn).unwrap();
+    let plain_body = plain.content_range_list.first().map(|cr| cr.body.clone()).unwrap_or_default();
+    if plain_body.len() < crate::compression::MIN_COMPRESS_SIZE {
+        return;
+    }
+    let plain_etag = plain.header(Header::_ETAG).unwrap().value.to_string();
+    for (accepted, encoding) in [
+        ("gzip, deflate, br, zstd", crate::compression::Encoding::Brotli),
+        ("zstd, gzip;q=0.5", crate::compression::Encoding::Zstd),
+        ("gzip", crate::compression::Encoding::Gzip),
+    ] {
+        if !encoding.available() {
+            continue;
+        }
+        let served = app.execute(&request(vec![accept(accepted)]), &conn).unwrap();
+        assert_eq!(Some(encoding.token()), served.header(Header::_CONTENT_ENCODING).map(|h| &*h.value), "{accepted}");
+        assert_eq!(
+            crate::compression::encode(encoding, &plain_body, crate::compression::Level::Static).unwrap(),
+            served.content_range_list[0].body,
+            "{accepted}"
+        );
+        let etag = served.header(Header::_ETAG).unwrap().value.to_string();
+        assert_eq!(format!("{}-{}\"", plain_etag.trim_end_matches('"'), encoding.token()), etag);
+        // Revalidating with that ETag is a 304; with the plain one it isn't.
+        let again = app.execute(&request(vec![accept(accepted), Header::new(Header::_IF_NONE_MATCH, etag.clone())]), &conn).unwrap();
+        assert_eq!(304, again.status_code, "{accepted}");
+        let other = app.execute(&request(vec![accept(accepted), Header::new(Header::_IF_NONE_MATCH, plain_etag.clone())]), &conn).unwrap();
+        assert_eq!(200, other.status_code, "{accepted}");
+    }
+}
+
 #[test]
 fn client_hints_are_opt_in() {
     let request = Request {

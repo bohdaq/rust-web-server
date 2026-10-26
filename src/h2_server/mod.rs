@@ -1304,7 +1304,7 @@ fn finish(request: Request, result: Result<Result<Response, String>, String>, pe
         }
     };
     crate::metrics::record_request();
-    crate::compression::apply_gzip(&request, &mut response);
+    crate::compression::apply_compression(&request, &mut response);
     // 1xx/204/304: no DATA frame, no content-length (#54).
     response.drop_content_for_status();
     response.headers.push(Header::get_hsts_header());

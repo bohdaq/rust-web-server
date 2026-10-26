@@ -147,7 +147,7 @@ async fn handle_stream(
 
     let mut rws_response = rws_response;
     crate::metrics::record_request();
-    crate::compression::apply_gzip(&rws_request, &mut rws_response);
+    crate::compression::apply_compression(&rws_request, &mut rws_response);
     rws_response.drop_content_for_status();
     rws_response.headers.push(Header::get_hsts_header());
 

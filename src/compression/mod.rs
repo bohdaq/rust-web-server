@@ -34,6 +34,17 @@ pub const MIN_COMPRESS_SIZE: usize = 512;
 /// compressed or random data) is left as it was, and so is a response that
 /// already has a `Content-Encoding` (e.g. a backend that compressed it).
 pub fn apply_gzip(request: &Request, response: &mut Response) {
+    compress_with(request, response, &[Encoding::Gzip]);
+}
+
+/// Like [`apply_gzip`], with the content coding negotiated from the request's
+/// `Accept-Encoding` among those compiled in ([`DYNAMIC_PREFERENCE`]): `zstd`,
+/// `br` or `gzip`. What the HTTP/1.1, HTTP/2 and HTTP/3 writers call (18.1.0).
+pub fn apply_compression(request: &Request, response: &mut Response) {
+    compress_with(request, response, DYNAMIC_PREFERENCE);
+}
+
+fn compress_with(request: &Request, response: &mut Response, preference: &[Encoding]) {
     if response.content_range_list.is_empty() {
         return;
     }
@@ -50,9 +61,7 @@ pub fn apply_gzip(request: &Request, response: &mut Response) {
     if original_size < MIN_COMPRESS_SIZE {
         return;
     }
-    if !accepts_gzip(request) {
-        return;
-    }
+    let Some(encoding) = negotiate(request, preference) else { return };
     let content_type = response
         .content_range_list
         .first()
@@ -64,7 +73,7 @@ pub fn apply_gzip(request: &Request, response: &mut Response) {
 
     let mut compressed_bodies = Vec::with_capacity(response.content_range_list.len());
     for cr in &response.content_range_list {
-        match gzip(&cr.body) {
+        match encode(encoding, &cr.body, Level::Dynamic) {
             Some(compressed) => compressed_bodies.push(compressed),
             None => return,
         }
@@ -79,24 +88,166 @@ pub fn apply_gzip(request: &Request, response: &mut Response) {
         cr.range.end = new_len;
         cr.size = new_len.to_string();
     }
-    mark_gzipped(response);
+    mark_encoded(response, encoding);
+    tag_etag(response, encoding);
 }
 
-/// Whether the request's `Accept-Encoding` allows gzip: `gzip`, optionally
-/// with parameters, and not `q=0` ("not acceptable").
-pub(crate) fn accepts_gzip(request: &Request) -> bool {
-    request
-        .header(Header::_ACCEPT_ENCODING)
-        .map(|h| h.value.split(',').any(|coding| {
-            let mut parts = coding.split(';');
-            let name_ok = parts.next().unwrap_or("").trim().eq_ignore_ascii_case("gzip");
-            let refused = parts.any(|p| {
+/// A compressed body is a different representation, so it needs its own
+/// ETag: `"x"` becomes `"x-br"` (weak tags too), as nginx and Caddy do.
+fn tag_etag(response: &mut Response, encoding: Encoding) {
+    for header in response.headers.iter_mut().filter(|h| h.name.eq_ignore_ascii_case(Header::_ETAG)) {
+        let value = header.value.trim();
+        if let Some(quoted) = value.strip_suffix('"') {
+            let mut tagged = String::with_capacity(value.len() + 6);
+            tagged.push_str(quoted);
+            tagged.push('-');
+            tagged.push_str(encoding.token());
+            tagged.push('"');
+            header.value = tagged.into();
+        }
+    }
+}
+
+/// A content coding rws can produce. `Brotli` and `Zstd` need the `brotli`
+/// and `zstd` features (both default); without them they are never chosen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Encoding {
+    Gzip,
+    Brotli,
+    Zstd,
+}
+
+impl Encoding {
+    /// The `Content-Encoding` / `Accept-Encoding` token.
+    pub fn token(self) -> &'static str {
+        match self {
+            Encoding::Gzip => "gzip",
+            Encoding::Brotli => "br",
+            Encoding::Zstd => "zstd",
+        }
+    }
+
+    /// Whether this build can produce it.
+    pub fn available(self) -> bool {
+        match self {
+            Encoding::Gzip => true,
+            Encoding::Brotli => cfg!(feature = "brotli"),
+            Encoding::Zstd => cfg!(feature = "zstd"),
+        }
+    }
+}
+
+/// Order of preference for responses compressed per request, when the client
+/// accepts several equally: zstd costs the least CPU at a ratio close to
+/// brotli's at the levels used here.
+pub const DYNAMIC_PREFERENCE: &[Encoding] = &[Encoding::Zstd, Encoding::Brotli, Encoding::Gzip];
+
+/// Order of preference for static files, compressed once per file version:
+/// brotli's smaller output wins.
+pub const STATIC_PREFERENCE: &[Encoding] = &[Encoding::Brotli, Encoding::Zstd, Encoding::Gzip];
+
+/// How hard to compress.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Level {
+    /// For a body compressed on every request: fast levels (brotli 4, zstd 3,
+    /// gzip 6 — what Caddy and nginx use). Brotli's default quality, 11, is
+    /// about a hundred times slower than gzip.
+    Dynamic,
+    /// For a static file compressed once per version and cached: a notch
+    /// higher (brotli 6, zstd 6, gzip 6).
+    Static,
+}
+
+/// Brotli quality per [`Level`].
+pub const BROTLI_QUALITY: [u32; 2] = [4, 6];
+/// zstd level per [`Level`].
+pub const ZSTD_LEVEL: [i32; 2] = [3, 6];
+
+impl Level {
+    fn index(self) -> usize {
+        match self {
+            Level::Dynamic => 0,
+            Level::Static => 1,
+        }
+    }
+}
+
+/// The coding to use for this request among `preference` (in that order of
+/// preference on equal weight): the one with the highest `q` in its
+/// `Accept-Encoding`, counting `*` for codings not listed; `None` without the
+/// header, or when nothing in `preference` is acceptable or compiled in.
+pub fn negotiate(request: &Request, preference: &[Encoding]) -> Option<Encoding> {
+    let header = request.header(Header::_ACCEPT_ENCODING)?;
+    let mut best: Option<(Encoding, f32)> = None;
+    for &encoding in preference.iter().filter(|e| e.available()) {
+        let q = accepted_weight(&header.value, encoding.token());
+        if q > 0.0 && best.is_none_or(|(_, best_q)| q > best_q) {
+            best = Some((encoding, q));
+        }
+    }
+    best.map(|(encoding, _)| encoding)
+}
+
+/// `token`'s weight in an `Accept-Encoding` value: its own entry's `q`
+/// (1 when absent or unparsable), else the `*` entry's, else 0.
+fn accepted_weight(value: &str, token: &str) -> f32 {
+    let mut wildcard = None;
+    for coding in value.split(',') {
+        let mut parts = coding.split(';');
+        let name = parts.next().unwrap_or("").trim();
+        let q = parts
+            .find_map(|p| {
                 let p = p.trim();
-                p.len() >= 2 && p[..2].eq_ignore_ascii_case("q=") && p[2..].trim().parse::<f32>().is_ok_and(|q| q == 0.0)
-            });
-            name_ok && !refused
-        }))
-        .unwrap_or(false)
+                // Bytes, not a str slice: `p` may start with a multi-byte
+                // character, and `p[..2]` would panic (found by fuzzing).
+                p.as_bytes().get(..2).is_some_and(|b| b.eq_ignore_ascii_case(b"q=")).then(|| p[2..].trim().parse::<f32>().ok())
+            })
+            .flatten()
+            .filter(|q| (0.0..=1.0).contains(q))
+            .unwrap_or(1.0);
+        if name.eq_ignore_ascii_case(token) {
+            return q;
+        }
+        if name == "*" {
+            wildcard = Some(q);
+        }
+    }
+    wildcard.unwrap_or(0.0)
+}
+
+/// `body` in `encoding` at `level`; `None` if this build can't produce it or
+/// the encoder fails.
+pub fn encode(encoding: Encoding, body: &[u8], level: Level) -> Option<Vec<u8>> {
+    match encoding {
+        Encoding::Gzip => gzip(body),
+        #[cfg(feature = "brotli")]
+        Encoding::Brotli => {
+            let mut out = Vec::with_capacity(body.len() / 3 + 64);
+            {
+                let mut writer = brotli::CompressorWriter::new(&mut out, 4096, BROTLI_QUALITY[level.index()], 22);
+                writer.write_all(body).ok()?;
+                writer.flush().ok()?;
+            }
+            Some(out)
+        }
+        #[cfg(feature = "zstd")]
+        Encoding::Zstd => zstd::bulk::compress(body, ZSTD_LEVEL[level.index()]).ok(),
+        #[allow(unreachable_patterns)]
+        _ => {
+            let _ = level;
+            None
+        }
+    }
+}
+
+/// The headers of a body in `encoding`: `Content-Encoding`, and
+/// `Accept-Encoding` appended to `Vary` (or a new `Vary`).
+pub fn mark_encoded(response: &mut Response, encoding: Encoding) {
+    response.headers.push(Header {
+        name: Header::_CONTENT_ENCODING.into(),
+        value: encoding.token().into(),
+    });
+    add_vary_accept_encoding(response);
 }
 
 /// Whether a body of this `Content-Type` is worth compressing ([`COMPRESSIBLE`]
@@ -114,14 +265,7 @@ pub(crate) fn gzip(body: &[u8]) -> Option<Vec<u8>> {
     encoder.finish().ok()
 }
 
-/// The headers of a gzip-encoded body: `Content-Encoding: gzip`, and
-/// `Accept-Encoding` appended to `Vary` (or a new `Vary`).
-pub(crate) fn mark_gzipped(response: &mut Response) {
-    response.headers.push(Header {
-        name: Header::_CONTENT_ENCODING.into(),
-        value: "gzip".into(),
-    });
-
+fn add_vary_accept_encoding(response: &mut Response) {
     let vary_pos = response.headers.iter().position(|h| h.name == Header::_VARY);
     if let Some(i) = vary_pos {
         let current = response.headers[i].value.clone();

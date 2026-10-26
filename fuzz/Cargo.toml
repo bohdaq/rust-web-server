@@ -176,3 +176,10 @@ path = "fuzz_targets/cookie_header.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "accept_encoding"
+path = "fuzz_targets/accept_encoding.rs"
+test = false
+doc = false
+bench = false

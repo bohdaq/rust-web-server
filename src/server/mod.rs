@@ -442,7 +442,7 @@ impl Server {
             };
 
             crate::metrics::record_request();
-            crate::compression::apply_gzip(&request, &mut response);
+            crate::compression::apply_compression(&request, &mut response);
             response.drop_content_for_status();
 
             response.headers.push(Header {

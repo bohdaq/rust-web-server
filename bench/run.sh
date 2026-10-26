@@ -31,6 +31,9 @@
 # can't run, e.g. nginx without its ssl module, is skipped):
 #   text-gzip  GET a 26 KiB JavaScript file with Accept-Encoding: gzip
 #              (gzip level 6 everywhere)
+#   text-br / text-zstd  the same with Accept-Encoding: br / zstd, for the
+#              servers that answer in that coding (rws: br and zstd; Caddy:
+#              zstd; distribution nginx: neither, so it is skipped)
 #   log-1k     static-1k with an access log written to a file
 #   https-1k   static-1k over TLS (HTTP/1.1)   h2-1k  the same over HTTP/2
 #   https-1m   static-1m over TLS (no sendfile under TLS)
@@ -209,6 +212,16 @@ bench_server() { # <name> <pid> <port>
   if [ -n "$EXTENDED" ]; then
     OHA_ARGS=(-H "Accept-Encoding: gzip")
     run_load "$name" "$pid" text-gzip "http://127.0.0.1:$port/app.js"
+    # Only a server that answers in that coding does equal work: nginx from
+    # the distribution has neither module, Caddy has zstd but not brotli.
+    for coding in br zstd; do
+      if curl -s -o /dev/null -D - -H "Accept-Encoding: $coding" "http://127.0.0.1:$port/app.js" | grep -qi "^content-encoding: *$coding"; then
+        OHA_ARGS=(-H "Accept-Encoding: $coding")
+        run_load "$name" "$pid" "text-$coding" "http://127.0.0.1:$port/app.js"
+      else
+        echo "text-$coding: skipped for $name (no $coding response)" >&2
+      fi
+    done
   fi
 }
 
@@ -300,6 +313,7 @@ if [ -n "$CADDY" ]; then
 :8082 {
   root * $SITE
   encode {
+    zstd
     gzip 6
   }
   handle /api/* {
@@ -423,13 +437,13 @@ except OSError:
     pass
 lines = [
     f"Load: oha, {conns} connections, {duration} per scenario, HTTP/1.1 keep-alive, no compression, access logs off "
-    f"(text-gzip: Accept-Encoding gzip; log-1k: access log to a file; https-1k/https-1m: TLS; h2-1k: TLS + HTTP/2). "
+    f"(text-gzip/-br/-zstd: that Accept-Encoding, servers answering in it only; log-1k: access log to a file; https-1k/https-1m: TLS; h2-1k: TLS + HTTP/2). "
     f"Machine: {platform.system()} {platform.machine()},{model} {cpus} CPUs (load generator on the same machine).",
     "",
     "| Scenario | Server | Requests/s | p50 (ms) | p99 (ms) | 200 OK | Server CPU/request (µs) | Peak RSS (MiB) |",
     "|---|---|---:|---:|---:|---:|---:|---:|",
 ]
-for scenario in ["static-1k", "static-1m", "proxy-1k", "text-gzip", "log-1k", "https-1k", "h2-1k", "https-1m"]:
+for scenario in ["static-1k", "static-1m", "proxy-1k", "text-gzip", "text-br", "text-zstd", "log-1k", "https-1k", "h2-1k", "https-1m"]:
     for r in [r for r in rows if r["scenario"] == scenario]:
         lines.append(f"| {scenario} | {r['server']} | {r['rps']:,} | {r['p50_ms']} | {r['p99_ms']} | {r['ok_pct']}% | {r['cpu_us_per_req']} | {r['peak_rss_mib']} |")
 table = "\n".join(lines)

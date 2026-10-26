@@ -59,7 +59,7 @@ Use it as:
 - [CORS & Security Headers](https://rws8.tech/features/cors-security/): Configure cross-origin resource sharing and automatic security headers in rust-web-server.
 - [Static Files, Directory Listing & SPA Fallback](https://rws8.tech/features/static-files/): How rust-web-server serves files from disk, the default directory listing page for directories without an index.html, and the opt-in SPA fallback for client-side routers.
 - [Rate Limiting](https://rws8.tech/features/rate-limiting/): Per-IP sliding-window rate limiting with a global singleton, per-route custom limiters, and a Redis-backed distributed limiter for multi-instance deployments.
-- [Compression](https://rws8.tech/features/compression/): Automatic gzip compression for text-based responses with no configuration required.
+- [Compression](https://rws8.tech/features/compression/): Automatic brotli, zstd and gzip compression for text responses, negotiated per request, with static files compressed once.
 - [HTTPS / TLS](https://rws8.tech/features/https-tls/): Serve traffic over TLS with HTTP/2 and HTTP/1.1 on the same port using rustls and aws-lc-rs.
 - [Automatic HTTPS (ACME)](https://rws8.tech/features/acme/): Get and auto-renew Let's Encrypt certificates with one config section — no certbot, no cron, no restarts.
 - [Mutual TLS (mTLS)](https://rws8.tech/features/mtls/): Require clients to present a certificate signed by a trusted CA on every HTTPS and QUIC connection.
