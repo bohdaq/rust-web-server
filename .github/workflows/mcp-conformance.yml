@@ -3,6 +3,9 @@ name: MCP conformance
 # The official MCP conformance suite against examples/mcp_conformance.rs
 # (ci/e2e/mcp_conformance.sh). Known failures: ci/mcp-conformance-baseline.yml.
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 jobs:

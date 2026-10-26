@@ -1,0 +1,8 @@
+# Known failures of examples/mcp_conformance.rs in the official MCP
+# conformance suite (ci/e2e/mcp_conformance.sh). Remove an entry when its
+# scenario passes — the run fails on a listed scenario that passes.
+server:
+  # Elicitation (server asks the user for input) isn't implemented.
+  - tools-call-elicitation
+  - elicitation-sep1034-defaults
+  - elicitation-sep1330-enums

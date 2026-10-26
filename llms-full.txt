@@ -15363,6 +15363,15 @@ McpContent::json(r#"{"count": 42, "items": ["a", "b"]}"#);
 // Image — data is base64-encoded binary, mime_type e.g. "image/png"
 McpContent::image(base64_encoded_png, "image/png");
 
+// Audio — base64 too, e.g. "audio/wav" (18.0.0)
+McpContent::audio(base64_encoded_wav, "audio/wav");
+
+// Several items in one result (18.0.0) — each renders as it would alone
+McpContent::blocks([
+    McpContent::text("Chart for last week:"),
+    McpContent::image(base64_encoded_png, "image/png"),
+]);
+
 // Embedded resource — a resource included directly in the tool's response,
 // as opposed to one the client fetches separately via resources/read
 McpContent::embedded("docs://readme", "# My Project\n...", "text/markdown");
@@ -15372,7 +15381,7 @@ McpContent::embedded("docs://readme", "# My Project\n...", "text/markdown");
 
 `McpContent::embedded(uri, text, mime_type)` serializes to `{"type":"resource","resource":{"uri":"...","mimeType":"...","text":"..."}}`.
 
-All four variants work anywhere an `McpContent` is expected — tool results (`tools/call`) and prompt messages (`prompts/get`) alike.
+`McpContent::audio` serializes like an image with `"type":"audio"`. `McpContent::blocks` is for tool results; the other variants work anywhere an `McpContent` is expected — tool results (`tools/call`) and prompt messages (`prompts/get`) alike.
 
 ## Extracting arguments
 
@@ -15537,6 +15546,9 @@ McpContent::text("line1\nline2\nline3")
 
 // JSON resource — mimeType set to application/json
 McpContent::json(r#"{"key":"value"}"#)
+
+// Binary resource — base64 data, sent as `blob` instead of `text` (18.0.0)
+McpContent::blob(base64_encoded_png, "image/png")
 ```
 
 ## Resource listing

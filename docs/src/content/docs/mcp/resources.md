@@ -65,6 +65,9 @@ McpContent::text("line1\nline2\nline3")
 
 // JSON resource — mimeType set to application/json
 McpContent::json(r#"{"key":"value"}"#)
+
+// Binary resource — base64 data, sent as `blob` instead of `text` (18.0.0)
+McpContent::blob(base64_encoded_png, "image/png")
 ```
 
 ## Resource listing

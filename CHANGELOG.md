@@ -36,6 +36,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- MCP conformance: the official suite (`@modelcontextprotocol/conformance`
+  0.1.16, 2025-11-25 scenarios) runs on every push against
+  `examples/mcp_conformance.rs` (`ci/e2e/mcp_conformance.sh`): 28 of 31 pass,
+  the three elicitation scenarios are known failures
+  (`ci/mcp-conformance-baseline.yml`). For it, `McpContent::audio`,
+  `McpContent::blocks` (several items in one tool result) and
+  `McpContent::blob` (binary resources, sent as `blob`).
 - MCP gateway (#62): `mcp::gateway::McpGateway` puts one endpoint in front of
   upstream MCP servers — tools as `<prefix>__<tool>`, `allow(identity, tools)`
   rules (deny by default), upstream credentials set per `Upstream` and never

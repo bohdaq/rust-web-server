@@ -141,7 +141,8 @@ pub(crate) fn negotiate_version(requested: Option<&str>) -> &'static str {
 /// [`McpContent::embedded`] (a resource embedded inline in a tool response).
 #[derive(Clone, Debug)]
 pub struct McpContent {
-    /// `"text"`, `"image"`, `"resource"`, or `"structured"`.
+    /// `"text"`, `"image"`, `"audio"`, `"resource"`, `"blob"`, `"blocks"`
+    /// or `"structured"`.
     pub kind: &'static str,
     /// The content string — text for `"text"`, base64 data for `"image"`,
     /// or the embedded resource's text for `"resource"`.
@@ -172,6 +173,25 @@ impl McpContent {
         McpContent { kind: "structured", text: json.into(), mime_type: Some("application/json".to_string()), uri: None }
     }
 
+    /// Audio content — `data` is base64-encoded audio and `mime_type` e.g.
+    /// `"audio/wav"` (MCP 2025-03-26).
+    pub fn audio(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
+        McpContent { kind: "audio", text: data.into(), mime_type: Some(mime_type.into()), uri: None }
+    }
+
+    /// A binary resource for `resources/read` — `data` is base64-encoded and
+    /// sent as the contents' `blob` (with `mime_type`) instead of `text`.
+    pub fn blob(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
+        McpContent { kind: "blob", text: data.into(), mime_type: Some(mime_type.into()), uri: None }
+    }
+
+    /// Several content items in one tool result — e.g. a text summary, an
+    /// image and an embedded resource. Each item renders as it would alone.
+    pub fn blocks(items: impl IntoIterator<Item = McpContent>) -> Self {
+        let rendered: Vec<String> = items.into_iter().map(|item| item.to_content_json()).collect();
+        McpContent { kind: "blocks", text: rendered.join(","), mime_type: None, uri: None }
+    }
+
     /// A complete `tools/call` result (`{"content":[...],...}`), sent as is —
     /// how the gateway passes an upstream server's result through.
     pub(crate) fn raw_result(json: impl Into<String>) -> Self {
@@ -192,11 +212,19 @@ impl McpContent {
 
     fn to_content_json(&self) -> String {
         match self.kind {
-            "image" => format!(
-                r#"{{"type":"image","data":"{}","mimeType":"{}"}}"#,
+            "image" | "audio" => format!(
+                r#"{{"type":"{}","data":"{}","mimeType":"{}"}}"#,
+                self.kind,
                 json_escape(&self.text),
                 json_escape(self.mime_type.as_deref().unwrap_or("application/octet-stream")),
             ),
+            "blob" => format!(
+                r#"{{"type":"resource","resource":{{"uri":"{}","mimeType":"{}","blob":"{}"}}}}"#,
+                json_escape(self.uri.as_deref().unwrap_or("")),
+                json_escape(self.mime()),
+                json_escape(&self.text),
+            ),
+            "blocks" => self.text.clone(),
             "resource" => format!(
                 r#"{{"type":"resource","resource":{{"uri":"{}","mimeType":"{}","text":"{}"}}}}"#,
                 json_escape(self.uri.as_deref().unwrap_or("")),
@@ -2638,6 +2666,7 @@ impl McpServer {
     fn format_tool_result(result: Result<McpContent, String>) -> String {
         match result {
             Ok(c) if c.kind == "result" => c.text,
+            Ok(c) if c.kind == "blocks" => format!(r#"{{"content":[{}],"isError":false}}"#, c.text),
             Ok(c) if c.kind == "structured" => format!(
                 r#"{{"content":[{{"type":"text","text":"{}"}}],"structuredContent":{},"isError":false}}"#,
                 json_escape(&c.text),
@@ -2684,9 +2713,10 @@ impl McpServer {
             Ok(c) => {
                 let text_esc = json_escape(&c.text);
                 let uri_esc  = json_escape(&uri);
+                let field = if c.kind == "blob" { "blob" } else { "text" };
                 Ok(format!(
-                    r#"{{"contents":[{{"uri":"{uri_esc}","mimeType":"{}","text":"{text_esc}"}}]}}"#,
-                    c.mime(),
+                    r#"{{"contents":[{{"uri":"{uri_esc}","mimeType":"{}","{field}":"{text_esc}"}}]}}"#,
+                    json_escape(c.mime()),
                 ))
             }
             Err(e) => Err((json_rpc::INVALID_PARAMS, e)),

@@ -31,6 +31,8 @@ cargo test --lib client_hint::tests::accept_client_hints_header -- --exact
 ci/e2e/acme_pebble.sh target/debug/rws <pebble-binary> <pebble-source-dir>
 #   HTTP/2 conformance with h2spec — must be 0 failed, 0 skipped
 ci/e2e/h2spec.sh target/debug/rws <h2spec-binary>
+#   MCP conformance (official suite via npx, CI workflow mcp-conformance.yml); known failures in ci/mcp-conformance-baseline.yml
+ci/e2e/mcp_conformance.sh target/debug/examples/mcp_conformance ci/mcp-conformance-baseline.yml
 
 # Fuzz every untrusted-input parser (nightly + cargo-fuzz) — see fuzz/README.md
 fuzz/run.sh 60 4

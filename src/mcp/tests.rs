@@ -2904,3 +2904,36 @@ mod typed_tools {
         assert!(failed.contains(r#""isError":true"#) && failed.contains("no item missing"), "{failed}");
     }
 }
+
+// ── Conformance: audio, several content items, binary resources ─────────────
+
+#[test]
+fn audio_and_several_content_items_in_one_result() {
+    let server = McpServer::new("srv", "1")
+        .tool("audio", "Audio", r#"{"type":"object"}"#, |_| Ok(McpContent::audio("UklGRg==", "audio/wav")))
+        .tool("mixed", "Mixed", r#"{"type":"object"}"#, |_| {
+            Ok(McpContent::blocks([
+                McpContent::text("Summary:"),
+                McpContent::image("iVBO", "image/png"),
+                McpContent::embedded("test://r", r#"{"a":1}"#, "application/json"),
+            ]))
+        });
+    let call = |name: &str| body_of(&server.handle_request(&format!(r#"{{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{{"name":"{name}","arguments":{{}}}}}}"#)));
+    let audio = call("audio");
+    assert!(audio.contains(r#""content":[{"type":"audio","data":"UklGRg==","mimeType":"audio/wav"}],"isError":false"#), "{audio}");
+    let mixed = call("mixed");
+    assert!(
+        mixed.contains(r#""content":[{"type":"text","text":"Summary:"},{"type":"image","data":"iVBO","mimeType":"image/png"},{"type":"resource","resource":{"uri":"test://r","mimeType":"application/json","text":"{\"a\":1}"}}],"isError":false"#),
+        "{mixed}"
+    );
+}
+
+#[test]
+fn a_binary_resource_is_read_as_a_blob() {
+    let server = McpServer::new("srv", "1")
+        .resource("test://bin", "bin", "Binary", |_| Ok(McpContent::blob("iVBO", "image/png")))
+        .resource("test://txt", "txt", "Text", |_| Ok(McpContent::text("hello")));
+    let read = |uri: &str| body_of(&server.handle_request(&format!(r#"{{"jsonrpc":"2.0","method":"resources/read","id":1,"params":{{"uri":"{uri}"}}}}"#)));
+    assert!(read("test://bin").contains(r#""contents":[{"uri":"test://bin","mimeType":"image/png","blob":"iVBO"}]"#), "{}", read("test://bin"));
+    assert!(read("test://txt").contains(r#""contents":[{"uri":"test://txt","mimeType":"text/plain","text":"hello"}]"#), "{}", read("test://txt"));
+}

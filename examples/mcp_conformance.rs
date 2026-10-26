@@ -8,8 +8,8 @@
 //!   --expected-failures ci/mcp-conformance-baseline.yml
 //! ```
 //!
-//! Fixtures rws can't express yet are left out, so their scenarios fail
-//! and are listed in the baseline rather than faked.
+//! Fixtures rws can't express yet (elicitation) are left out, so their
+//! scenarios fail and are listed in the baseline rather than faked.
 
 use rust_web_server::mcp::{LogLevel, McpContent, McpServer, PromptArgDef, PromptMessage, SamplingRequest};
 use rust_web_server::server::Server;
@@ -17,22 +17,38 @@ use rust_web_server::server::Server;
 const TEST_IMAGE_BASE64: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
 
+const TEST_AUDIO_BASE64: &str = "UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQIAAAA=";
+
 fn arg(args: &str, name: &str) -> String {
     rust_web_server::mcp::extract_arg(args, name).unwrap_or_default()
 }
 
 /// The fixtures.
 pub fn server() -> McpServer {
+    // A browser page on this machine may call the server; any other origin
+    // gets 403 (the suite's DNS-rebinding check).
+    let port = std::env::var("RWS_CONFIG_PORT").unwrap_or_else(|_| "7878".into());
     let server = McpServer::new("rws-conformance", env!("CARGO_PKG_VERSION"))
+        .allowed_origins([format!("http://127.0.0.1:{port}"), format!("http://localhost:{port}")])
         .logging_enabled()
         // ── tools ──
-        .tool("test_simple_text", "Tests simple text content response", "{}", |_| {
+        .tool("test_simple_text", "Tests simple text content response", r#"{"type":"object"}"#, |_| {
             Ok(McpContent::text("This is a simple text response for testing."))
         })
-        .tool("test_image_content", "Tests image content response", "{}", |_| {
+        .tool("test_image_content", "Tests image content response", r#"{"type":"object"}"#, |_| {
             Ok(McpContent::image(TEST_IMAGE_BASE64, "image/png"))
         })
-        .tool("test_embedded_resource", "Tests embedded resource content response", "{}", |_| {
+        .tool("test_audio_content", "Tests audio content response", r#"{"type":"object"}"#, |_| {
+            Ok(McpContent::audio(TEST_AUDIO_BASE64, "audio/wav"))
+        })
+        .tool("test_multiple_content_types", "Tests response with multiple content types (text, image, resource)", r#"{"type":"object"}"#, |_| {
+            Ok(McpContent::blocks([
+                McpContent::text("Multiple content types test:"),
+                McpContent::image(TEST_IMAGE_BASE64, "image/png"),
+                McpContent::embedded("test://mixed-content-resource", r#"{"test":"data","value":123}"#, "application/json"),
+            ]))
+        })
+        .tool("test_embedded_resource", "Tests embedded resource content response", r#"{"type":"object"}"#, |_| {
             Ok(McpContent::embedded("test://embedded-resource", "This is an embedded resource content.", "text/plain"))
         })
         .tool_with_context(
@@ -47,7 +63,7 @@ pub fn server() -> McpServer {
                 Ok(McpContent::text(ctx.progress_token.clone().unwrap_or_else(|| "0".into()).trim_matches('"').to_string()))
             },
         )
-        .tool("test_error_handling", "Tests error response handling", "{}", |_| {
+        .tool("test_error_handling", "Tests error response handling", r#"{"type":"object"}"#, |_| {
             Err("This tool intentionally returns an error for testing".into())
         })
         .tool_with_context(
@@ -71,6 +87,9 @@ pub fn server() -> McpServer {
         // ── resources ──
         .resource("test://static-text", "static-text", "A static text resource for testing", |_| {
             Ok(McpContent::text("This is the content of the static text resource."))
+        })
+        .resource("test://static-binary", "static-binary", "A static binary resource (image) for testing", |_| {
+            Ok(McpContent::blob(TEST_IMAGE_BASE64, "image/png"))
         })
         .resource("test://template/{id}/data", "template", "A resource template with parameter substitution", |uri| {
             let id = uri.trim_start_matches("test://template/").trim_end_matches("/data");
