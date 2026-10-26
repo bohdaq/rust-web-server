@@ -3802,6 +3802,9 @@ let app = App::with_state(())
   flow-control window is given back only as the handler reads, so a client
   is never more than one window (64 KiB) ahead of it. HTTP/3 and the
   HTTP/1.1-only build read the body first as before.
+- To keep it in object storage instead of a file, pass the same reader to
+  [`Storage::put_stream`](/features/storage/#large-objects-put_stream) —
+  S3 then receives it in 8 MiB parts.
 - `FormMultipartData::parse` still needs the whole body; for multipart
   uploads of large files, read the body with `body_bytes()` only up to a
   size you accept, or upload the raw file instead of a form.
@@ -8626,6 +8629,32 @@ RWS_AZURE_CONTAINER=my-container
 :::note[Signing scope]
 Shared Key requests sign every `x-ms-*` header actually sent — `x-ms-date`, `x-ms-version`, and `x-ms-blob-type` on `PUT` — plus the standard `Content-Type`/`Content-Length` slots. Managed Identity requests skip signing entirely and use `Authorization: Bearer {token}` instead. This covers standard single-blob `PUT`/`GET`/`DELETE` — there's no support for SAS tokens, blob listing, or multipart (block list) uploads.
 :::
+
+## Large objects: `put_stream`
+
+`put_stream(key, reader, content_type)` stores whatever a `std::io::Read`
+yields, without holding it all in memory — pair it with a
+[streamed upload](/building-apps/forms-uploads/#streaming-large-uploads),
+whose `&request.body` is a reader (since 18.0.0):
+
+```rust
+use rust_web_server::storage::{S3Storage, Storage};
+
+let store = S3Storage::from_env()?;
+// In a route registered with .stream_body("PUT", "/upload/:name"):
+store.put_stream("uploads/video.mp4", &mut &request.body, "video/mp4")?;
+```
+
+- `S3Storage` uses an S3 multipart upload: 8 MiB parts (`S3_PART_SIZE`)
+  read and sent one at a time, so memory stays at one part; objects up to
+  ~78 GiB (S3's 10 000-part limit). Anything that fits in one part is a
+  plain `PUT`. A failure aborts the upload, so no orphaned parts are left
+  behind. Tested end to end with a 2 GiB HTTP upload against an
+  S3-compatible server.
+- `LocalStorage` writes to a temporary file beside the target as it reads
+  and renames it into place, so a failed upload never replaces the old file.
+- `AzureBlobStorage` and custom backends use the default: read everything,
+  then `put`.
 
 ## Writing handler code against `Storage`
 
@@ -17262,6 +17291,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 |---|---|---|
 | `FromRequest` | `extract` | Trait for typed extraction from a request, returning a ready error response on failure. See [Extractors](/building-apps/extractors/) |
 | `Body` | `extract` | Raw request body bytes (never fails) |
+| `Storage::put_stream` / `S3_PART_SIZE` | `storage` | Store a `Read` stream: S3 multipart upload (8 MiB parts), local temp file + rename; default buffers (18.0.0) |
 | `request::Body` | `request` | `Request.body` (18.0.0): bytes, or a stream (`Body::stream`, `body_bytes()`, `into_reader()`); derefs to `&[u8]`. Not the `extract::Body` extractor |
 | `BodyText` | `extract` | UTF-8 request body (returns 400 on invalid UTF-8) |
 | `Query` | `extract` | Parsed query string as `HashMap` |

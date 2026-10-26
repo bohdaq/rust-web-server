@@ -136,4 +136,16 @@ pub trait Storage: Send + Sync {
     /// is also served as static files); for [`S3Storage`] it's the object's
     /// HTTPS URL. This performs no I/O and never fails.
     fn url(&self, key: &str) -> String;
+    /// Store everything `reader` yields under `key` — for a body too large
+    /// to hold in memory, e.g. a streamed upload ([`Request::body`] read as a
+    /// stream, #31). [`LocalStorage`] writes as it reads and [`S3Storage`]
+    /// uploads in parts (S3 multipart upload), so memory stays at one part;
+    /// the default reads everything first and calls [`Storage::put`].
+    ///
+    /// [`Request::body`]: crate::request::Request::body
+    fn put_stream(&self, key: &str, reader: &mut dyn std::io::Read, content_type: &str) -> Result<String, StorageError> {
+        let mut data = Vec::new();
+        reader.read_to_end(&mut data).map_err(|e| StorageError::new(format!("failed to read the data for '{key}': {e}")))?;
+        self.put(key, &data, content_type)
+    }
 }

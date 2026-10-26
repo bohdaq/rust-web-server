@@ -52,6 +52,31 @@ impl Storage for LocalStorage {
         Ok(key.to_string())
     }
 
+    /// Writes to a temporary file beside the target as it reads, then
+    /// renames it into place: a failed or partial upload never replaces an
+    /// existing object.
+    fn put_stream(&self, key: &str, reader: &mut dyn std::io::Read, _content_type: &str) -> Result<String, StorageError> {
+        let path = self.resolve(key)?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| StorageError::new(format!("failed to create '{}': {e}", parent.display())))?;
+        }
+        let partial = path.with_file_name(format!(
+            ".{}.partial-{}",
+            path.file_name().and_then(|n| n.to_str()).unwrap_or("upload"),
+            std::process::id()
+        ));
+        let written = fs::File::create(&partial).and_then(|mut file| {
+            std::io::copy(reader, &mut file)?;
+            file.sync_all()
+        });
+        if let Err(e) = written.and_then(|_| fs::rename(&partial, &path)) {
+            let _ = fs::remove_file(&partial);
+            return Err(StorageError::new(format!("failed to write '{key}': {e}")));
+        }
+        Ok(key.to_string())
+    }
+
     fn get(&self, key: &str) -> Result<Vec<u8>, StorageError> {
         let path = self.resolve(key)?;
         fs::read(&path).map_err(|e| StorageError::new(format!("failed to read '{key}': {e}")))

@@ -233,6 +233,9 @@ let app = App::with_state(())
   flow-control window is given back only as the handler reads, so a client
   is never more than one window (64 KiB) ahead of it. HTTP/3 and the
   HTTP/1.1-only build read the body first as before.
+- To keep it in object storage instead of a file, pass the same reader to
+  [`Storage::put_stream`](/features/storage/#large-objects-put_stream) —
+  S3 then receives it in 8 MiB parts.
 - `FormMultipartData::parse` still needs the whole body; for multipart
   uploads of large files, read the body with `body_bytes()` only up to a
   size you accept, or upload the raw file instead of a form.

@@ -68,6 +68,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 |---|---|---|
 | `FromRequest` | `extract` | Trait for typed extraction from a request, returning a ready error response on failure. See [Extractors](/building-apps/extractors/) |
 | `Body` | `extract` | Raw request body bytes (never fails) |
+| `Storage::put_stream` / `S3_PART_SIZE` | `storage` | Store a `Read` stream: S3 multipart upload (8 MiB parts), local temp file + rename; default buffers (18.0.0) |
 | `request::Body` | `request` | `Request.body` (18.0.0): bytes, or a stream (`Body::stream`, `body_bytes()`, `into_reader()`); derefs to `&[u8]`. Not the `extract::Body` extractor |
 | `BodyText` | `extract` | UTF-8 request body (returns 400 on invalid UTF-8) |
 | `Query` | `extract` | Parsed query string as `HashMap<String, String>` |

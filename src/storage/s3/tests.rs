@@ -324,3 +324,70 @@ fn from_env_respects_custom_endpoint_and_region() {
     std::env::remove_var("RWS_S3_REGION");
     std::env::remove_var("RWS_S3_ENDPOINT");
 }
+
+// ── #31: streamed uploads (multipart) ────────────────────────────────────────
+
+/// A reader of `len` deterministic bytes.
+struct Pattern {
+    len: usize,
+    pos: usize,
+}
+
+impl std::io::Read for Pattern {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = buf.len().min(self.len - self.pos);
+        for (i, b) in buf[..n].iter_mut().enumerate() {
+            *b = ((self.pos + i) % 251) as u8;
+        }
+        self.pos += n;
+        Ok(n)
+    }
+}
+
+fn peak_rss_kib() -> u64 {
+    std::fs::read_to_string("/proc/self/status").ok()
+        .and_then(|s| s.lines().find(|l| l.starts_with("VmHWM:")).and_then(|l| l.split_whitespace().nth(1)?.parse().ok()))
+        .unwrap_or(0)
+}
+
+/// Against a real S3-compatible server, configured by `RWS_S3_E2E_*`
+/// (endpoint, bucket, access/secret key): a 100 MiB streamed upload goes up
+/// in parts with peak memory well under the object's size, and reads back
+/// byte for byte. `cargo test --features storage-s3 --lib s3_multipart -- --ignored`.
+#[test]
+#[ignore]
+fn s3_multipart_upload_streams_in_constant_memory() {
+    let env = |name: &str| std::env::var(format!("RWS_S3_E2E_{name}")).expect("set RWS_S3_E2E_{ENDPOINT,BUCKET,ACCESS_KEY,SECRET_KEY}");
+    let storage = S3Storage::new(S3Config {
+        bucket: env("BUCKET"),
+        region: "us-east-1".to_string(),
+        access_key: env("ACCESS_KEY"),
+        secret_key: env("SECRET_KEY"),
+        endpoint: env("ENDPOINT"),
+    });
+    const LEN: usize = 100 * 1024 * 1024 + 12345; // 13 parts, the last short
+    let before = peak_rss_kib();
+    storage.put_stream("rws-e2e/big.bin", &mut Pattern { len: LEN, pos: 0 }, "application/octet-stream").unwrap();
+    let grown_mib = peak_rss_kib().saturating_sub(before) / 1024;
+    assert!(grown_mib < 48, "a 100 MiB streamed upload grew the peak by {grown_mib} MiB");
+    let back = storage.get("rws-e2e/big.bin").unwrap();
+    assert_eq!(LEN, back.len());
+    assert!(back.iter().enumerate().all(|(i, b)| *b == (i % 251) as u8), "content differs");
+    // A small object takes the single-PUT path.
+    storage.put_stream("rws-e2e/small.txt", &mut &b"small"[..], "text/plain").unwrap();
+    assert_eq!(b"small".to_vec(), storage.get("rws-e2e/small.txt").unwrap());
+    storage.delete("rws-e2e/big.bin").unwrap();
+    storage.delete("rws-e2e/small.txt").unwrap();
+}
+
+#[test]
+fn part_reading_and_xml_helpers() {
+    let mut reader = Pattern { len: super::S3_PART_SIZE + 10, pos: 0 };
+    assert_eq!(super::S3_PART_SIZE, super::read_part(&mut reader, "k").unwrap().len());
+    assert_eq!(10, super::read_part(&mut reader, "k").unwrap().len());
+    assert!(super::read_part(&mut reader, "k").unwrap().is_empty());
+    let xml = "<InitiateMultipartUploadResult><Bucket>b</Bucket><UploadId>abc-123</UploadId></InitiateMultipartUploadResult>";
+    assert_eq!(Some("abc-123".to_string()), super::xml_element(xml, "UploadId"));
+    assert_eq!(None, super::xml_element(xml, "Missing"));
+    assert_eq!("&quot;e&amp;t&quot;", super::xml_escape("\"e&t\""));
+}

@@ -209,6 +209,32 @@ RWS_AZURE_CONTAINER=my-container
 Shared Key requests sign every `x-ms-*` header actually sent — `x-ms-date`, `x-ms-version`, and `x-ms-blob-type` on `PUT` — plus the standard `Content-Type`/`Content-Length` slots. Managed Identity requests skip signing entirely and use `Authorization: Bearer {token}` instead. This covers standard single-blob `PUT`/`GET`/`DELETE` — there's no support for SAS tokens, blob listing, or multipart (block list) uploads.
 :::
 
+## Large objects: `put_stream`
+
+`put_stream(key, reader, content_type)` stores whatever a `std::io::Read`
+yields, without holding it all in memory — pair it with a
+[streamed upload](/building-apps/forms-uploads/#streaming-large-uploads),
+whose `&request.body` is a reader (since 18.0.0):
+
+```rust
+use rust_web_server::storage::{S3Storage, Storage};
+
+let store = S3Storage::from_env()?;
+// In a route registered with .stream_body("PUT", "/upload/:name"):
+store.put_stream("uploads/video.mp4", &mut &request.body, "video/mp4")?;
+```
+
+- `S3Storage` uses an S3 multipart upload: 8 MiB parts (`S3_PART_SIZE`)
+  read and sent one at a time, so memory stays at one part; objects up to
+  ~78 GiB (S3's 10 000-part limit). Anything that fits in one part is a
+  plain `PUT`. A failure aborts the upload, so no orphaned parts are left
+  behind. Tested end to end with a 2 GiB HTTP upload against an
+  S3-compatible server.
+- `LocalStorage` writes to a temporary file beside the target as it reads
+  and renames it into place, so a failed upload never replaces the old file.
+- `AzureBlobStorage` and custom backends use the default: read everything,
+  then `put`.
+
 ## Writing handler code against `Storage`
 
 Depend on the trait, not a concrete type, so the same function works with any backend:

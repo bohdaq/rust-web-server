@@ -84,6 +84,38 @@ pub(crate) fn sign(
     epoch_secs: u64,
     service: &str,
 ) -> Vec<(String, String)> {
+    sign_with_query(method, host, canonical_path, &[], payload, region, access_key, secret_key, session_token, epoch_secs, service)
+}
+
+/// The canonical query string of SigV4: parameters sorted by name, names
+/// and values URI-encoded, `name=value` joined with `&` (a parameter
+/// without a value, like S3's `uploads`, is `uploads=`).
+pub(crate) fn canonical_query(params: &[(&str, &str)]) -> String {
+    let mut encoded: Vec<(String, String)> = params.iter()
+        .map(|(name, value)| (uri_encode_segment(name), uri_encode_segment(value)))
+        .collect();
+    encoded.sort();
+    encoded.iter().map(|(name, value)| format!("{name}={value}")).collect::<Vec<_>>().join("&")
+}
+
+/// [`sign`] for a request with a query string — S3's multipart upload
+/// calls (`?uploads`, `?partNumber=1&uploadId=…`). The same `params` must
+/// be sent on the wire, encoded as [`canonical_query`] encodes them.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sign_with_query(
+    method: &str,
+    host: &str,
+    canonical_path: &str,
+    params: &[(&str, &str)],
+    payload: &[u8],
+    region: &str,
+    access_key: &str,
+    secret_key: &str,
+    session_token: Option<&str>,
+    epoch_secs: u64,
+    service: &str,
+) -> Vec<(String, String)> {
+    let query = canonical_query(params);
     let (date, datetime) = amz_date_and_datetime(epoch_secs);
     let payload_hash = to_hex(&Sha256::digest(payload));
 
@@ -102,7 +134,7 @@ pub(crate) fn sign(
     };
 
     let canonical_request = format!(
-        "{method}\n{canonical_path}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
+        "{method}\n{canonical_path}\n{query}\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
     );
     let hashed_canonical_request = to_hex(&Sha256::digest(canonical_request.as_bytes()));
 

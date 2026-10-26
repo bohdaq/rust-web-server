@@ -134,3 +134,19 @@ fn different_session_tokens_produce_different_signatures() {
     let b = sign("GET", HOST, "/examplebucket/test.txt", b"", REGION, ACCESS_KEY, SECRET_KEY, Some("token-b"), EPOCH, "s3");
     assert_ne!(header(&a, "Authorization"), header(&b, "Authorization"));
 }
+
+#[test]
+fn canonical_query_sorts_and_encodes() {
+    assert_eq!("uploads=", super::canonical_query(&[("uploads", "")]));
+    assert_eq!("partNumber=2&uploadId=a%2Fb%2Bc%3D", super::canonical_query(&[("uploadId", "a/b+c="), ("partNumber", "2")]));
+    assert_eq!("", super::canonical_query(&[]));
+}
+
+#[test]
+fn signing_with_an_empty_query_matches_plain_signing() {
+    let plain = super::sign("PUT", "h", "/b/k", b"x", "us-east-1", "AK", "SK", None, 1_700_000_000, "s3");
+    let with_query = super::sign_with_query("PUT", "h", "/b/k", &[], b"x", "us-east-1", "AK", "SK", None, 1_700_000_000, "s3");
+    assert_eq!(plain, with_query);
+    let other = super::sign_with_query("PUT", "h", "/b/k", &[("uploads", "")], b"x", "us-east-1", "AK", "SK", None, 1_700_000_000, "s3");
+    assert_ne!(plain.last(), other.last(), "the query is part of the signature");
+}

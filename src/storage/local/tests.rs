@@ -78,3 +78,31 @@ fn url_with_base_url_uses_prefix() {
     let store = LocalStorage::new(dir.to_str().unwrap()).with_base_url("/uploads");
     assert_eq!("/uploads/avatars/42.png", store.url("avatars/42.png"));
 }
+
+#[test]
+fn put_stream_writes_as_it_reads_and_replaces_atomically() {
+    let dir = crate::test_env::TempPath::new("local_put_stream");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let store = LocalStorage::new(dir.as_str());
+    let data: Vec<u8> = (0..300_000u32).map(|i| (i % 251) as u8).collect();
+    store.put_stream("big/file.bin", &mut &data[..], "application/octet-stream").unwrap();
+    assert_eq!(data, store.get("big/file.bin").unwrap());
+
+    // A reader that fails midway leaves the existing object as it was.
+    struct Failing(usize);
+    impl std::io::Read for Failing {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.0 == 0 {
+                return Err(std::io::Error::other("client went away"));
+            }
+            let n = buf.len().min(self.0);
+            buf[..n].fill(b'x');
+            self.0 -= n;
+            Ok(n)
+        }
+    }
+    assert!(store.put_stream("big/file.bin", &mut Failing(1000), "application/octet-stream").is_err());
+    assert_eq!(data, store.get("big/file.bin").unwrap());
+    let leftovers: Vec<_> = std::fs::read_dir(dir.join("big")).unwrap().filter_map(|e| e.ok()).map(|e| e.file_name()).collect();
+    assert_eq!(1, leftovers.len(), "{leftovers:?}");
+}

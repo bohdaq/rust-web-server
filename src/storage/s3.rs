@@ -191,6 +191,133 @@ impl Storage for S3Storage {
     fn url(&self, key: &str) -> String {
         self.request_url(key)
     }
+
+    /// S3 multipart upload: parts of [`S3_PART_SIZE`] read and sent one at
+    /// a time, so memory stays at one part however large the object. An
+    /// object that fits in one part is a plain `PUT`. Any failure aborts the
+    /// upload, so S3 keeps no orphaned parts.
+    fn put_stream(&self, key: &str, reader: &mut dyn std::io::Read, content_type: &str) -> Result<String, StorageError> {
+        let mut part = read_part(reader, key)?;
+        if part.len() < S3_PART_SIZE {
+            return self.put(key, &part, content_type);
+        }
+        let upload_id = self.create_multipart_upload(key, content_type)?;
+        let mut etags: Vec<String> = Vec::new();
+        let uploaded = (|| -> Result<(), StorageError> {
+            loop {
+                let number = (etags.len() + 1).to_string();
+                etags.push(self.upload_part(key, &upload_id, &number, &part)?);
+                part = read_part(reader, key)?;
+                if part.is_empty() {
+                    return Ok(());
+                }
+            }
+        })()
+        .and_then(|_| self.complete_multipart_upload(key, &upload_id, &etags));
+        if let Err(e) = uploaded {
+            let _ = self.abort_multipart_upload(key, &upload_id);
+            return Err(e);
+        }
+        Ok(key.to_string())
+    }
+}
+
+/// Size of each part of an S3 multipart upload (S3's minimum is 5 MiB,
+/// except for the last part). 10 000 parts — S3's maximum — make objects of
+/// up to ~78 GiB.
+pub const S3_PART_SIZE: usize = 8 * 1024 * 1024;
+
+/// Up to [`S3_PART_SIZE`] bytes from `reader` (fewer only at the end).
+fn read_part(reader: &mut dyn std::io::Read, key: &str) -> Result<Vec<u8>, StorageError> {
+    let mut part = vec![0u8; S3_PART_SIZE];
+    let mut filled = 0;
+    while filled < part.len() {
+        match reader.read(&mut part[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(StorageError::new(format!("failed to read the data for '{key}': {e}"))),
+        }
+    }
+    part.truncate(filled);
+    Ok(part)
+}
+
+impl S3Storage {
+    /// Send a request to `/{bucket}/{key}?{params}`, signed with the query.
+    fn send_with_query(&self, method: &str, key: &str, params: &[(&str, &str)], body: Vec<u8>, content_type: Option<&str>) -> Result<Response, StorageError> {
+        let query = aws_sigv4::canonical_query(params);
+        let url = format!("{}?{}", self.request_url(key), query);
+        let creds = self.credentials.get()?;
+        let epoch_secs = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let headers = aws_sigv4::sign_with_query(
+            method, &self.host(), &self.canonical_path(key), params, &body, &self.config.region,
+            &creds.access_key, &creds.secret_key, creds.session_token.as_deref(), epoch_secs, "s3",
+        );
+        let mut builder = self.client.request(method, &url);
+        if let Some(content_type) = content_type {
+            builder = builder.header("Content-Type", content_type);
+        }
+        for (name, value) in headers {
+            if !name.eq_ignore_ascii_case("host") {
+                builder = builder.header(&name, &value);
+            }
+        }
+        builder.body(body).send().map_err(|e| StorageError::new(format!("S3 {method} '{key}' failed: {e}")))
+    }
+
+    fn create_multipart_upload(&self, key: &str, content_type: &str) -> Result<String, StorageError> {
+        let resp = self.send_with_query("POST", key, &[("uploads", "")], Vec::new(), Some(content_type))?;
+        if !resp.is_success() {
+            return Err(Self::error_from_response("CreateMultipartUpload", key, &resp));
+        }
+        xml_element(&resp.text().unwrap_or_default(), "UploadId")
+            .ok_or_else(|| StorageError::new(format!("S3 CreateMultipartUpload '{key}': no UploadId in the response")))
+    }
+
+    fn upload_part(&self, key: &str, upload_id: &str, number: &str, data: &[u8]) -> Result<String, StorageError> {
+        let resp = self.send_with_query("PUT", key, &[("partNumber", number), ("uploadId", upload_id)], data.to_vec(), None)?;
+        if !resp.is_success() {
+            return Err(Self::error_from_response("UploadPart", key, &resp));
+        }
+        resp.header("etag").map(str::to_string)
+            .ok_or_else(|| StorageError::new(format!("S3 UploadPart '{key}' part {number}: no ETag in the response")))
+    }
+
+    fn complete_multipart_upload(&self, key: &str, upload_id: &str, etags: &[String]) -> Result<(), StorageError> {
+        let mut body = String::from("<CompleteMultipartUpload>");
+        for (i, etag) in etags.iter().enumerate() {
+            body.push_str(&format!("<Part><PartNumber>{}</PartNumber><ETag>{}</ETag></Part>", i + 1, xml_escape(etag)));
+        }
+        body.push_str("</CompleteMultipartUpload>");
+        let resp = self.send_with_query("POST", key, &[("uploadId", upload_id)], body.into_bytes(), Some("application/xml"))?;
+        // S3 can answer 200 and still report an error in the body.
+        let text = resp.text().unwrap_or_default();
+        if !resp.is_success() || text.contains("<Error>") {
+            return Err(StorageError::new(format!("S3 CompleteMultipartUpload '{key}' failed: HTTP {} {text}", resp.status())));
+        }
+        Ok(())
+    }
+
+    fn abort_multipart_upload(&self, key: &str, upload_id: &str) -> Result<(), StorageError> {
+        let resp = self.send_with_query("DELETE", key, &[("uploadId", upload_id)], Vec::new(), None)?;
+        if !resp.is_success() {
+            return Err(Self::error_from_response("AbortMultipartUpload", key, &resp));
+        }
+        Ok(())
+    }
+}
+
+/// The text of the first `<name>…</name>` in `xml`.
+fn xml_element(xml: &str, name: &str) -> Option<String> {
+    let open = format!("<{name}>");
+    let start = xml.find(&open)? + open.len();
+    let end = xml[start..].find(&format!("</{name}>"))?;
+    Some(xml[start..start + end].to_string())
+}
+
+fn xml_escape(text: &str) -> String {
+    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
 fn non_empty(s: &str) -> Option<String> {
