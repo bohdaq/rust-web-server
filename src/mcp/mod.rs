@@ -471,9 +471,11 @@ impl McpContext {
     /// call never declared `capabilities.sampling` (it wouldn't know what
     /// to do with the request); this request has no session id (nothing to
     /// address the request to); or `ctx` has no live server behind it.
-    /// Otherwise fails with a timeout error if the client never responds —
-    /// including if it simply has no `GET /mcp` SSE connection open for
-    /// this session, since there's no separate "not connected" signal.
+    /// Otherwise the request goes out on the session's `GET /mcp` SSE stream
+    /// — waited for, within `timeout`, if the client hasn't opened it yet
+    /// (clients often call a tool right after `initialize`, before their
+    /// stream is up) — and it fails with a timeout error if the stream never
+    /// opens or the client never responds.
     ///
     /// ```rust,no_run
     /// use rust_web_server::mcp::{McpServer, PromptMessage, SamplingRequest};
@@ -594,16 +596,24 @@ impl McpContext {
         };
         let rpc = format!(r#"{{"jsonrpc":"2.0","id":{request_id},"method":"{method}"{params_field}}}"#);
 
-        send_sse_to_sessions(sse_clients, &[session_id], &rpc);
-
-        let outcome = rx.recv_timeout(timeout);
+        // A client may call a tool before its `GET /mcp` stream is open (the
+        // SDK clients open it in the background after `initialize`): wait for
+        // the stream, within the same timeout, instead of sending into nothing.
+        let deadline = std::time::Instant::now() + timeout;
+        let outcome = loop {
+            if send_sse_to_sessions(sse_clients, std::slice::from_ref(&session_id), &rpc) > 0 {
+                break rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+                    .map_err(|_| format!("{method} timed out waiting for the client's response"));
+            }
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                break Err(format!("{method} timed out: the client has no GET /mcp stream open for this session"));
+            }
+            std::thread::sleep(left.min(SSE_STREAM_WAIT_POLL));
+        };
         pending.lock().unwrap().remove(&request_id);
 
-        match outcome {
-            Ok(Ok(result_json)) => Ok(result_json),
-            Ok(Err(e)) => Err(e),
-            Err(_) => Err(format!("{method} timed out waiting for the client's response")),
-        }
+        outcome.and_then(|reply| reply)
     }
 }
 
@@ -3012,18 +3022,27 @@ fn broadcast_sse_to(clients: &Arc<Mutex<Vec<SseClient>>>, json: &str) {
 /// `session_ids`, is left untouched (kept, not sent to) — this is a
 /// targeted send for [`McpServer::notify_resource_updated`], not a
 /// broadcast like [`broadcast_sse_to`].
-fn send_sse_to_sessions(clients: &Arc<Mutex<Vec<SseClient>>>, session_ids: &[String], json: &str) {
+/// Sends `json` to every SSE stream of `session_ids`; returns how many took it.
+fn send_sse_to_sessions(clients: &Arc<Mutex<Vec<SseClient>>>, session_ids: &[String], json: &str) -> usize {
     let frame = format!("data: {json}\n\n").into_bytes();
     let mut clients = clients.lock().unwrap();
+    let mut delivered = 0;
     clients.retain(|c| {
         let is_target = c.session_id.as_deref().is_some_and(|sid| session_ids.iter().any(|s| s == sid));
         if is_target {
-            c.sender.try_send(frame.clone()).is_ok()
+            let sent = c.sender.try_send(frame.clone()).is_ok();
+            delivered += sent as usize;
+            sent
         } else {
             true
         }
     });
+    delivered
 }
+
+/// How often a server-to-client request checks for the session's SSE stream
+/// while waiting for the client to open it.
+const SSE_STREAM_WAIT_POLL: Duration = Duration::from_millis(20);
 
 // ── SSE channel reader ────────────────────────────────────────────────────────
 

@@ -2113,6 +2113,57 @@ fn sample_full_round_trip_via_sse_and_post_response() {
 }
 
 #[test]
+fn sample_waits_for_a_stream_the_client_opens_after_the_tool_call() {
+    // SDK clients open GET /mcp in the background after initialize, so a
+    // tool called right away may run before the stream exists (the flaky
+    // tools-call-sampling conformance scenario).
+    let srv = make_sampling_server();
+    let client = TestClient::new(srv.clone());
+    let init_resp = client.post("/mcp").body_json(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"sampling":{}}}}"#,
+    ).send();
+    let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
+
+    let late_client = srv.clone();
+    let late_session = session_id.clone();
+    let responder = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(150));
+        let mut sse_resp = late_client.start_sse_stream(&get_request_with_session(Some(&late_session)));
+        let mut reader = sse_resp.stream_pipe.take().unwrap();
+        let mut buf = [0u8; 4096];
+        let n = reader.read(&mut buf).unwrap();
+        let text = String::from_utf8_lossy(&buf[..n]).into_owned();
+        let json_line = text.trim().trim_start_matches("data:").trim();
+        assert!(json_line.contains(r#""method":"sampling/createMessage""#), "unexpected SSE frame: {json_line}");
+        let id = json_rpc::extract_id(json_line).expect("outbound sampling request should carry an id");
+        late_client.handle_request(&format!(
+            r#"{{"jsonrpc":"2.0","id":{id},"result":{{"role":"assistant","content":{{"type":"text","text":"4"}},"model":"m","stopReason":"endTurn"}}}}"#
+        ));
+    });
+
+    let call_resp = client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
+        .send();
+    responder.join().unwrap();
+    assert!(call_resp.body_text().contains('4'), "expected the sampled response: {}", call_resp.body_text());
+}
+
+#[test]
+fn sample_reports_a_stream_that_never_opens() {
+    let client = TestClient::new(make_sampling_server());
+    let init_resp = client.post("/mcp").body_json(
+        r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"capabilities":{"sampling":{}}}}"#,
+    ).send();
+    let session_id = init_resp.header("Mcp-Session-Id").unwrap().to_string();
+    let call_resp = client.post("/mcp")
+        .header("Mcp-Session-Id", &session_id)
+        .body_json(r#"{"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":"ask","arguments":{}}}"#)
+        .send();
+    assert!(call_resp.body_text().contains("no GET /mcp stream open"), "unexpected body: {}", call_resp.body_text());
+}
+
+#[test]
 fn sample_error_response_is_surfaced_to_the_caller() {
     let srv_for_responder = make_sampling_server();
     let client = TestClient::new(srv_for_responder.clone());

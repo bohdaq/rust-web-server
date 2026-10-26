@@ -19,6 +19,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Fixed
 
+- MCP `ctx.sample()` / `ctx.list_roots()` called right after `initialize`,
+  before the client had opened its `GET /mcp` stream, sent the request into
+  nothing and timed out; they now wait for the stream within the same
+  timeout. SDK clients open that stream in the background, so this made the
+  conformance suite's `tools-call-sampling` scenario fail about one run in
+  three.
 - Release workflow: the docs-site job builds on Node 24 (Astro needs
   ≥ 22.23.4; the runner's Node 22 was older, so 18.1.0's site update failed).
 

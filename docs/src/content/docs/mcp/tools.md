@@ -229,7 +229,7 @@ let mcp = McpServer::new("my-server", "1.0")
 - This request has no session id (`Mcp-Session-Id`) — there'd be no way to address the request to a specific client connection.
 - `ctx` has no live server behind it (e.g. a context built by hand via `handle_request_with_context` in a test, rather than a real request through `execute()`).
 
-Otherwise, it fails with a timeout error if the client doesn't respond in time — including if the client simply has no [`GET /mcp` SSE connection](/mcp/overview/#sse-streaming-transport) open for that session at all, since there's no separate "not connected" signal.
+Otherwise the request goes out on the session's [`GET /mcp` SSE stream](/mcp/overview/#sse-streaming-transport). A client that calls a tool right after `initialize` may not have opened that stream yet, so `ctx.sample()` waits for it within the same `timeout` (since 18.2.0; before, the request was dropped and the call timed out). It fails with a timeout error if the stream never opens or the client doesn't respond in time.
 
 ## Filesystem roots
 
