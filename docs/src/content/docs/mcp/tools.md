@@ -306,6 +306,29 @@ These are advisory only — nothing in `McpServer` verifies that a handler regis
 `.tool_annotated()`'s handler is `Fn(&str) -> Result<McpContent, String>` — the same plain shape as `.tool()`, not the `Fn(McpContext, &str) -> ...` shape of `.tool_with_context()`. There is currently no single builder that gives you both `McpContext` and `ToolAnnotations` on the same tool.
 :::
 
+## Structured output, titles and icons
+
+A tool can declare the shape of its result and return it as structured data
+(MCP 2025-06-18). The client gets it as `structuredContent` and, for older
+clients, as JSON text:
+
+```rust
+use rust_web_server::mcp::{McpContent, McpIcon, McpServer};
+
+let mcp = McpServer::new("calc", "1.0")
+    .title("Calculator")                                   // serverInfo.title
+    .icon(McpIcon::new("https://example.com/calc.svg").mime_type("image/svg+xml").size("any"))
+    .tool("add", "Add two numbers",
+        r#"{"type":"object","properties":{"a":{"type":"number"},"b":{"type":"number"}},"required":["a","b"]}"#,
+        |_args| Ok(McpContent::structured(r#"{"sum":3}"#)))
+    .tool_title("add", "Add numbers")                      // tools/list title
+    .tool_output_schema("add", r#"{"type":"object","properties":{"sum":{"type":"number"}},"required":["sum"]}"#)
+    .tool_icon("add", McpIcon::new("data:image/png;base64,…").size("48x48"));
+```
+
+`tool_title`, `tool_icon` and `tool_output_schema` apply to a tool already
+registered under that name (sync or async).
+
 ## McpContent variants
 
 ```rust

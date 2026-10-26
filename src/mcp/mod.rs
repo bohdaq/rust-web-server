@@ -122,7 +122,7 @@ const PROTOCOL_VERSION: &str = "2024-11-05";
 /// [`McpContent::embedded`] (a resource embedded inline in a tool response).
 #[derive(Clone, Debug)]
 pub struct McpContent {
-    /// `"text"`, `"image"`, or `"resource"`.
+    /// `"text"`, `"image"`, `"resource"`, or `"structured"`.
     pub kind: &'static str,
     /// The content string — text for `"text"`, base64 data for `"image"`,
     /// or the embedded resource's text for `"resource"`.
@@ -144,6 +144,13 @@ impl McpContent {
     /// JSON content — sets `mimeType` to `application/json`.
     pub fn json(s: impl Into<String>) -> Self {
         McpContent { kind: "text", text: s.into(), mime_type: Some("application/json".to_string()), uri: None }
+    }
+
+    /// Structured content (MCP 2025-06-18): `json` is a JSON value — usually an
+    /// object matching the tool's [`McpServer::tool_output_schema`] — sent as
+    /// the result's `structuredContent`, and as text for older clients.
+    pub fn structured(json: impl Into<String>) -> Self {
+        McpContent { kind: "structured", text: json.into(), mime_type: Some("application/json".to_string()), uri: None }
     }
 
     /// Image content (screenshot, chart, generated art) — `data` is base64-encoded
@@ -791,7 +798,68 @@ struct ToolDef {
     description: String,
     input_schema: String,
     annotations: Option<ToolAnnotations>,
+    meta: ToolMeta,
     handler: ToolFn,
+}
+
+/// Optional `tools/list` fields set after registration, by tool name:
+/// [`McpServer::tool_title`], [`McpServer::tool_icon`],
+/// [`McpServer::tool_output_schema`].
+#[derive(Clone, Default)]
+struct ToolMeta {
+    title: Option<String>,
+    icons: Vec<McpIcon>,
+    output_schema: Option<String>,
+}
+
+/// An icon for the server, a tool, a resource or a prompt (MCP 2025-11-25):
+/// `src` is an `https:` or `data:` URL.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct McpIcon {
+    pub src: String,
+    pub mime_type: Option<String>,
+    /// e.g. `["48x48"]`, `["any"]` for SVG.
+    pub sizes: Vec<String>,
+}
+
+impl McpIcon {
+    /// An icon at `src`, with no MIME type or sizes.
+    pub fn new(src: impl Into<String>) -> Self {
+        McpIcon { src: src.into(), mime_type: None, sizes: Vec::new() }
+    }
+
+    /// Set the MIME type (`image/png`, `image/svg+xml`, …).
+    pub fn mime_type(mut self, mime_type: impl Into<String>) -> Self {
+        self.mime_type = Some(mime_type.into());
+        self
+    }
+
+    /// Add a size (`48x48`, or `any` for scalable formats).
+    pub fn size(mut self, size: impl Into<String>) -> Self {
+        self.sizes.push(size.into());
+        self
+    }
+
+    fn to_json(&self) -> String {
+        let mut out = format!(r#"{{"src":"{}""#, json_escape(&self.src));
+        if let Some(mime) = &self.mime_type {
+            out.push_str(&format!(r#","mimeType":"{}""#, json_escape(mime)));
+        }
+        if !self.sizes.is_empty() {
+            let sizes: Vec<String> = self.sizes.iter().map(|s| format!(r#""{}""#, json_escape(s))).collect();
+            out.push_str(&format!(r#","sizes":[{}]"#, sizes.join(",")));
+        }
+        out.push('}');
+        out
+    }
+}
+
+fn icons_json(icons: &[McpIcon]) -> String {
+    if icons.is_empty() {
+        return String::new();
+    }
+    let icons: Vec<String> = icons.iter().map(McpIcon::to_json).collect();
+    format!(r#","icons":[{}]"#, icons.join(","))
 }
 
 /// A tool registered via [`McpServer::async_tool`]/[`McpServer::register_async_tool`]
@@ -808,6 +876,7 @@ struct AsyncToolDef {
     description: String,
     input_schema: String,
     annotations: Option<ToolAnnotations>,
+    meta: ToolMeta,
     handler: AsyncToolFn,
 }
 
@@ -901,6 +970,9 @@ pub struct McpServer {
     max_sessions: usize,
     /// Most open `GET /mcp` SSE streams (default 1000); past it `503`.
     max_sse_clients: usize,
+    /// `serverInfo.title` and `serverInfo.icons`.
+    server_title: Option<String>,
+    server_icons: Vec<McpIcon>,
     /// Senders for every currently-connected `GET /mcp` SSE client, pushed to
     /// by [`Self::notify`]. `Arc<Mutex<_>>` so every clone of this `McpServer`
     /// broadcasts to the same set of listeners.
@@ -1012,6 +1084,8 @@ impl McpServer {
             session_ttl: DEFAULT_SESSION_TTL,
             max_sessions: DEFAULT_MAX_SESSIONS,
             max_sse_clients: DEFAULT_MAX_SSE_CLIENTS,
+            server_title: None,
+            server_icons: Vec::new(),
             sse_clients: Arc::new(Mutex::new(Vec::new())),
             logging_enabled: false,
             min_log_level: Arc::new(Mutex::new(LogLevel::Debug)),
@@ -1041,6 +1115,52 @@ impl McpServer {
     /// [`DEFAULT_MAX_SSE_CLIENTS`]); another gets `503 Service Unavailable`.
     pub fn max_sse_clients(mut self, n: usize) -> Self {
         self.max_sse_clients = n;
+        self
+    }
+
+    /// A human-readable title for tool `name` (`title` in `tools/list`,
+    /// MCP 2025-06-18); `name` stays the identifier. No effect for an
+    /// unknown name — register the tool first.
+    pub fn tool_title(self, name: &str, title: impl Into<String>) -> Self {
+        let title = title.into();
+        self.with_tool_meta(name, |meta| meta.title = Some(title.clone()));
+        self
+    }
+
+    /// Add an icon to tool `name` (`icons` in `tools/list`, MCP 2025-11-25).
+    pub fn tool_icon(self, name: &str, icon: McpIcon) -> Self {
+        self.with_tool_meta(name, |meta| meta.icons.push(icon.clone()));
+        self
+    }
+
+    /// Declare tool `name`'s result shape: a JSON Schema object (an `object`
+    /// type at the top). Clients may validate the `structuredContent` the
+    /// handler returns with [`McpContent::structured`] against it.
+    pub fn tool_output_schema(self, name: &str, schema: &str) -> Self {
+        let schema = schema.to_string();
+        self.with_tool_meta(name, |meta| meta.output_schema = Some(schema.clone()));
+        self
+    }
+
+    fn with_tool_meta(&self, name: &str, mut change: impl FnMut(&mut ToolMeta)) {
+        for tool in self.tools.write().unwrap().iter_mut().filter(|t| t.name == name) {
+            change(&mut tool.meta);
+        }
+        #[cfg(feature = "http2")]
+        for tool in self.async_tools.write().unwrap().iter_mut().filter(|t| t.name == name) {
+            change(&mut tool.meta);
+        }
+    }
+
+    /// A human-readable server title (`serverInfo.title`, MCP 2025-06-18).
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+        self.server_title = Some(title.into());
+        self
+    }
+
+    /// Add a server icon (`serverInfo.icons`, MCP 2025-11-25).
+    pub fn icon(mut self, icon: McpIcon) -> Self {
+        self.server_icons.push(icon);
         self
     }
 
@@ -1348,6 +1468,7 @@ impl McpServer {
             description: description.to_string(),
             input_schema: input_schema.to_string(),
             annotations: None,
+            meta: ToolMeta::default(),
             handler: Arc::new(move |_ctx: McpContext, args: &str| handler(args)),
         });
         self.notify("notifications/tools/list_changed", None);
@@ -1368,6 +1489,7 @@ impl McpServer {
             description: description.to_string(),
             input_schema: input_schema.to_string(),
             annotations: None,
+            meta: ToolMeta::default(),
             handler: Arc::new(move |args: String| Box::pin(handler(&args))),
         });
         self.notify("notifications/tools/list_changed", None);
@@ -1615,6 +1737,7 @@ impl McpServer {
             description: description.to_string(),
             input_schema: input_schema.to_string(),
             annotations: None,
+            meta: ToolMeta::default(),
             handler: Arc::new(move |_ctx: McpContext, args: &str| handler(args)),
         });
         self
@@ -1660,6 +1783,7 @@ impl McpServer {
             description: description.to_string(),
             input_schema: input_schema.to_string(),
             annotations: None,
+            meta: ToolMeta::default(),
             handler: Arc::new(move |args: String| Box::pin(handler(&args))),
         });
         self
@@ -1706,6 +1830,7 @@ impl McpServer {
             description: description.to_string(),
             input_schema: input_schema.to_string(),
             annotations: Some(annotations),
+            meta: ToolMeta::default(),
             handler: Arc::new(move |_ctx: McpContext, args: &str| handler(args)),
         });
         self
@@ -1741,6 +1866,7 @@ impl McpServer {
             description: description.to_string(),
             input_schema: input_schema.to_string(),
             annotations: None,
+            meta: ToolMeta::default(),
             handler: Arc::new(handler),
         });
         self
@@ -2204,22 +2330,24 @@ impl McpServer {
             r#"{{"tools":{{"listChanged":true}},"resources":{{"subscribe":true,"listChanged":true}},"prompts":{{"listChanged":true}}{logging_cap}{completions_cap}}}"#
         );
         Ok(format!(
-            r#"{{"protocolVersion":"{}","capabilities":{caps},"serverInfo":{{"name":"{}","version":"{}"}}}}"#,
+            r#"{{"protocolVersion":"{}","capabilities":{caps},"serverInfo":{{"name":"{}"{}"version":"{}"{}}}}}"#,
             json_escape(negotiated_version),
             json_escape(&self.server_name),
+            self.server_title.as_ref().map(|t| format!(r#","title":"{}","#, json_escape(t))).unwrap_or_else(|| ",".to_string()),
             json_escape(&self.server_version),
+            icons_json(&self.server_icons),
         ))
     }
 
     fn do_tools_list(&self, body: &str) -> Result<String, (i32, String)> {
         #[cfg_attr(not(feature = "http2"), allow(unused_mut))]
         let mut items: Vec<String> = self.tools.read().unwrap().iter()
-            .map(|t| Self::render_tool_list_entry(&t.name, &t.description, &t.input_schema, t.annotations))
+            .map(|t| Self::render_tool_list_entry(&t.name, &t.description, &t.input_schema, t.annotations, &t.meta))
             .collect();
 
         #[cfg(feature = "http2")]
         items.extend(self.async_tools.read().unwrap().iter()
-            .map(|t| Self::render_tool_list_entry(&t.name, &t.description, &t.input_schema, t.annotations)));
+            .map(|t| Self::render_tool_list_entry(&t.name, &t.description, &t.input_schema, t.annotations, &t.meta)));
 
         let (page, next_cursor) = self.paginate(&items, body)?;
         Ok(format!(r#"{{"tools":[{}]{}}}"#, page.join(","), next_cursor_json(&next_cursor)))
@@ -2228,14 +2356,16 @@ impl McpServer {
     /// Render one `tools/list` entry — shared by the sync (`tools`) and
     /// (with the `http2` feature) async (`async_tools`) collections, which
     /// are otherwise identical from the client's point of view.
-    fn render_tool_list_entry(name: &str, description: &str, input_schema: &str, annotations: Option<ToolAnnotations>) -> String {
+    fn render_tool_list_entry(name: &str, description: &str, input_schema: &str, annotations: Option<ToolAnnotations>, meta: &ToolMeta) -> String {
         let annotations_field = match annotations {
             Some(a) => format!(r#","annotations":{}"#, a.to_json()),
             None => String::new(),
         };
+        let title = meta.title.as_ref().map(|t| format!(r#","title":"{}""#, json_escape(t))).unwrap_or_default();
+        let output_schema = meta.output_schema.as_ref().map(|schema| format!(r#","outputSchema":{schema}"#)).unwrap_or_default();
         format!(
-            r#"{{"name":"{}","description":"{}","inputSchema":{}{}}}"#,
-            json_escape(name), json_escape(description), input_schema, annotations_field,
+            r#"{{"name":"{}"{title},"description":"{}","inputSchema":{}{output_schema}{}{}}}"#,
+            json_escape(name), json_escape(description), input_schema, annotations_field, icons_json(&meta.icons),
         )
     }
 
@@ -2283,6 +2413,11 @@ impl McpServer {
     /// and (with `http2`) async `tools/call` dispatch paths.
     fn format_tool_result(result: Result<McpContent, String>) -> String {
         match result {
+            Ok(c) if c.kind == "structured" => format!(
+                r#"{{"content":[{{"type":"text","text":"{}"}}],"structuredContent":{},"isError":false}}"#,
+                json_escape(&c.text),
+                c.text,
+            ),
             Ok(c) => format!(
                 r#"{{"content":[{}],"isError":false}}"#,
                 c.to_content_json(),

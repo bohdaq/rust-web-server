@@ -2668,3 +2668,38 @@ fn only_json_bodies_are_accepted() {
     }
     assert_eq!(200, client.post("/mcp").header("Content-Type", "application/json; charset=utf-8").body_text(body).send().status());
 }
+
+// ── #3: titles, icons, output schemas, structured content ───────────────────
+
+#[test]
+fn tools_list_carries_title_icons_and_output_schema() {
+    let server = McpServer::new("srv", "1")
+        .tool("add", "Add two numbers", r#"{"type":"object"}"#, |_| Ok(McpContent::structured(r#"{"sum":3}"#)))
+        .tool_title("add", "Add numbers")
+        .tool_icon("add", super::McpIcon::new("https://example.com/add.svg").mime_type("image/svg+xml").size("any"))
+        .tool_output_schema("add", r#"{"type":"object","properties":{"sum":{"type":"number"}},"required":["sum"]}"#)
+        .tool_title("missing", "ignored");
+    let list = body_of(&server.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#));
+    assert!(list.contains(r#""name":"add","title":"Add numbers""#), "{list}");
+    assert!(list.contains(r#""outputSchema":{"type":"object","properties":{"sum":{"type":"number"}},"required":["sum"]}"#), "{list}");
+    assert!(list.contains(r#""icons":[{"src":"https://example.com/add.svg","mimeType":"image/svg+xml","sizes":["any"]}]"#), "{list}");
+}
+
+#[test]
+fn a_structured_result_has_structured_content_and_text() {
+    let server = McpServer::new("srv", "1")
+        .tool("add", "Add", r#"{"type":"object"}"#, |_| Ok(McpContent::structured(r#"{"sum":3}"#)));
+    let body = body_of(&server.handle_request(r#"{"jsonrpc":"2.0","method":"tools/call","id":1,"params":{"name":"add","arguments":{}}}"#));
+    assert!(body.contains(r#""structuredContent":{"sum":3}"#), "{body}");
+    assert!(body.contains(r#""content":[{"type":"text","text":"{\"sum\":3}"}]"#), "{body}");
+    assert!(body.contains(r#""isError":false"#), "{body}");
+}
+
+#[test]
+fn server_info_carries_title_and_icons() {
+    let server = McpServer::new("srv", "1").title("My Server").icon(super::McpIcon::new("data:image/png;base64,AAAA").size("48x48"));
+    let body = body_of(&server.handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2025-03-26"}}"#));
+    assert!(body.contains(r#""serverInfo":{"name":"srv","title":"My Server","version":"1","icons":[{"src":"data:image/png;base64,AAAA","sizes":["48x48"]}]}"#), "{body}");
+    let plain = body_of(&McpServer::new("srv", "1").handle_request(r#"{"jsonrpc":"2.0","method":"initialize","id":1,"params":{}}"#));
+    assert!(plain.contains(r#""serverInfo":{"name":"srv","version":"1"}"#), "{plain}");
+}

@@ -43,6 +43,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - `RWS_CONFIG_RUNTIME=per-core`: one single-threaded runtime per core, each on its own `SO_REUSEPORT` listener (Unix) — more throughput on fast CPUs, more CPU per request on slow ones; the default stays `shared`.
 - Supply chain (#5): release binaries are built with `cargo auditable` (`cargo audit bin rws` works on them), releases carry a CycloneDX SBOM, archives and images get GitHub build-provenance attestations, and images are signed keyless with cosign. CI runs `cargo deny check` (advisories, permissive licenses only, crates.io sources only; `deny.toml`).
 
+- MCP (#3): structured tool results (`McpContent::structured`, `McpServer::tool_output_schema` → `outputSchema`/`structuredContent`), tool and server titles (`tool_title`, `title`) and icons (`McpIcon`, `tool_icon`, `icon`).
+
 ### Fixed
 
 - Docs (#12): MCP sampling, roots and logging are marked deprecated by the 2026-07-28 MCP specification (they keep working); the MCP SSE stream is documented — and now tested — over HTTP/2 and HTTP/3, not only HTTP/1.1.
