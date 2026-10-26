@@ -28,7 +28,10 @@ rustPlatform.buildRustPackage (finalAttrs: {
     perl
   ];
 
-  cargoBuildFlags = [ "--bin" "rws" ];
+  cargoBuildFlags = [
+    "--bin"
+    "rws"
+  ];
   buildFeatures = [
     "acme"
     "auth"
@@ -43,6 +46,6 @@ rustPlatform.buildRustPackage (finalAttrs: {
     changelog = "https://github.com/bohdaq/rust-web-server/blob/${finalAttrs.version}/CHANGELOG.md";
     license = lib.licenses.mit;
     mainProgram = "rws";
-    maintainers = [ ];
+    maintainers = [ ]; # upstream: with lib.maintainers; [ bohdaq ]
   };
 })
