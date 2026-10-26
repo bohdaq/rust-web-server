@@ -20,8 +20,9 @@ email   = "you@example.com"
 rws
 ```
 
-On first start `rws` requests a certificate, stores it as `cert.pem` /
-`key.pem` in the working directory, and starts serving HTTPS, HTTP/2, and
+On first start `rws` requests a certificate, stores it in `.rws/acme/`
+(`cert.pem`, `key.pem`, `account.key` — keys `0600`, the directory `0700`,
+and never served: the working directory is the web root), and starts serving HTTPS, HTTP/2, and
 HTTP/3 with it. Later starts reuse the stored certificate. Renewal happens in
 the background and is hot-swapped without dropping connections.
 
@@ -48,7 +49,7 @@ over IPv6, so the challenge and redirect listeners accept both IPv4 and IPv6.
 
 1. **Startup.** If no certificate exists, or it expires within
    `renew_before_days`, `rws` runs the ACME flow before opening the HTTPS
-   port: account (key saved to `acme_account.key`), order, HTTP-01 challenge,
+   port: account (key saved to `.rws/acme/account.key`), order, HTTP-01 challenge,
    ECDSA P-256 key + CSR, finalize, download.
 2. **Challenges.** At startup a temporary listener on the challenge port
    (default 80) answers them. Once the HTTP → HTTPS redirect listener is
@@ -79,8 +80,13 @@ domains = ["example.com"]
 staging = true
 ```
 
-Delete `cert.pem`, `key.pem`, and `acme_account.key` before switching back to
-production.
+Delete `.rws/acme/` before switching back to production.
+
+Before 17.113.1 the defaults were `cert.pem`, `key.pem` and `acme_account.key`
+in the working directory — the web root, so the keys could be downloaded.
+On upgrade, files found there are moved into `.rws/acme/` (when the default
+paths are in use), and the static server no longer serves `*.pem`, `*.key`
+or `rws.config.toml` anywhere. Rotate a key that was exposed.
 
 ## Private ACME CAs
 
@@ -107,11 +113,11 @@ command line (`--acme-domains=...`; not the last three), or in the environment.
 | `directory` | `RWS_CONFIG_ACME_DIRECTORY` | Let's Encrypt | ACME directory URL of another CA |
 | `ca_file` | `RWS_CONFIG_ACME_CA_FILE` | — | Extra root CA(s) to trust for the directory (private CAs) |
 | `challenge_port` | `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port the CA connects to for HTTP-01 |
-| `cert_path` | `RWS_CONFIG_ACME_CERT_PATH` | `tls_cert_file`, else `cert.pem` | Where the certificate chain is stored |
-| `key_path` | `RWS_CONFIG_ACME_KEY_PATH` | `tls_key_file`, else `key.pem` | Where the certificate key is stored |
+| `cert_path` | `RWS_CONFIG_ACME_CERT_PATH` | `tls_cert_file`, else `.rws/acme/cert.pem` | Where the certificate chain is stored |
+| `key_path` | `RWS_CONFIG_ACME_KEY_PATH` | `tls_key_file`, else `.rws/acme/key.pem` | Where the certificate key is stored (`0600`) |
 | `renew_before_days` | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | `30` | Renew when fewer than this many days remain |
 | `renew_check_interval_secs` | `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` | `43200` | Seconds between expiry checks |
-| `account_key_path` | `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `acme_account.key` | Where the ACME account key is stored |
+| `account_key_path` | `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `.rws/acme/account.key` | Where the ACME account key is stored (`0600`) |
 
 Top-level `http_redirect_port` (`RWS_CONFIG_HTTP_REDIRECT_PORT`) starts the
 HTTP → HTTPS redirect listener; set it to the challenge port (80) in

@@ -28,6 +28,8 @@ Only files inside the root are served: a path with a `..` segment is refused
 (`404`), and so is a symlink in the root that points outside it. Files and
 directories whose name starts with `.` (`.git/`, `.env`) are not served unless
 `RWS_CONFIG_SERVE_DOTFILES=true`; `.well-known/` always is (17.113.1).
+Private-key and config files — `*.pem`, `*.key`, `rws.config.toml` — are
+never served.
 
 Range requests follow RFC 9110 over HTTP/1.1, HTTP/2, and HTTP/3: `bytes=2-5`,
 open-ended `bytes=7-`, suffix `bytes=-500`, and multiple ranges get

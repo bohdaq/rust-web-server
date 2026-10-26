@@ -338,14 +338,16 @@ fn reset_acme_env_to_startup_defaults() {
 }
 
 #[test]
-fn from_env_with_only_domains_set_uses_working_directory_defaults() {
+fn from_env_with_only_domains_set_uses_the_state_directory() {
     let _g = crate::test_env::lock();
     reset_acme_env_to_startup_defaults();
     std::env::set_var("RWS_CONFIG_ACME_DOMAINS", "example.com");
     let cfg = super::AcmeConfig::from_env().unwrap();
     reset_acme_env_to_startup_defaults();
-    assert_eq!("cert.pem", cfg.cert_path);
-    assert_eq!("key.pem", cfg.key_path);
+    // Not the working directory — the web root (#45).
+    assert_eq!(".rws/acme/cert.pem", cfg.cert_path);
+    assert_eq!(".rws/acme/key.pem", cfg.key_path);
+    assert_eq!(".rws/acme/account.key", cfg.account_key_path);
     assert_eq!(super::AcmeConfig::LETSENCRYPT, cfg.directory_url);
     assert_eq!(80, cfg.challenge_port);
 }
@@ -375,7 +377,7 @@ fn install_as_tls_certificate_fills_only_empty_tls_paths() {
     let cert = std::env::var("RWS_CONFIG_TLS_CERT_FILE").unwrap();
     let key = std::env::var("RWS_CONFIG_TLS_KEY_FILE").unwrap();
     reset_acme_env_to_startup_defaults();
-    assert_eq!("cert.pem", cert);
+    assert_eq!(".rws/acme/cert.pem", cert);
     assert_eq!("/explicit/key.pem", key);
 }
 
@@ -454,4 +456,39 @@ fn add_extra_roots_rejects_missing_or_empty_files() {
     std::fs::write(&*path, "not a certificate\n").unwrap();
     let err = super::client::add_extra_roots(&mut store, path.to_str().unwrap()).unwrap_err();
     assert!(err.contains("no certificates found"), "{err}");
+}
+
+
+// ── #45: private keys out of the web root ────────────────────────────────────
+
+#[cfg(unix)]
+#[test]
+fn private_keys_are_written_owner_only() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = crate::test_env::TempPath::new("acme_state");
+    let key = format!("{}/nested/key.pem", dir.as_str());
+    super::write_private(&key, b"secret").unwrap();
+    assert_eq!(0o600, std::fs::metadata(&key).unwrap().permissions().mode() & 0o777);
+    assert_eq!(0o700, std::fs::metadata(format!("{}/nested", dir.as_str())).unwrap().permissions().mode() & 0o777);
+    // An existing world-readable key is tightened on rewrite.
+    std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644)).unwrap();
+    super::write_private(&key, b"secret2").unwrap();
+    assert_eq!(0o600, std::fs::metadata(&key).unwrap().permissions().mode() & 0o777);
+    assert_eq!(b"secret2", &std::fs::read(&key).unwrap()[..]);
+}
+
+#[cfg(unix)]
+#[test]
+fn legacy_files_move_out_of_the_web_root() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = crate::test_env::TempPath::new("acme_legacy");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let legacy = format!("{}/key.pem", dir.as_str());
+    std::fs::write(&legacy, b"old key").unwrap();
+    std::fs::set_permissions(&legacy, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let current = format!("{}/.rws/acme/key.pem", dir.as_str());
+    super::move_private(&legacy, &current).unwrap();
+    assert!(!std::path::Path::new(&legacy).exists());
+    assert_eq!(b"old key", &std::fs::read(&current).unwrap()[..]);
+    assert_eq!(0o600, std::fs::metadata(&current).unwrap().permissions().mode() & 0o777);
 }
