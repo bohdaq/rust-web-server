@@ -227,6 +227,11 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                     report.error(format!("{key} = {value:?}: expected true or false"));
                 }
             }
+            "RWS_CONFIG_ACCESS_LOG_MAX_SIZE" | "RWS_CONFIG_ACCESS_LOG_KEEP" => {
+                if crate::log::access_sink::parse_size(value).is_none() {
+                    report.error(format!("{key} = {value:?}: expected a number of bytes or files (e.g. 104857600 or 100M)"));
+                }
+            }
             "RWS_CONFIG_RUNTIME" => {
                 if !matches!(value.to_ascii_lowercase().as_str(), "shared" | "per-core") {
                     report.error(format!("{key} = {value:?}: expected \"shared\" or \"per-core\""));

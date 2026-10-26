@@ -23,6 +23,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- Access log to a file (#9): `access_log` (`RWS_CONFIG_ACCESS_LOG`) writes
+  access-log lines to a file instead of stdout; `access_log_max_size` rotates
+  it by size (`access.log` → `access.log.1` …, keeping `access_log_keep`),
+  and `SIGUSR1` reopens it for logrotate (only when a file is configured;
+  otherwise `SIGUSR1` keeps its default action). A hardened systemd unit is
+  documented on the new [systemd](/deployment/systemd/) page.
 - Fuzz targets for WebSocket frames, DNS SRV responses, Redis replies and
   `Cookie` headers, and a request-smuggling seed corpus (CL+TE, conflicting
   or listed `Content-Length`, obfuscated or folded `Transfer-Encoding`,

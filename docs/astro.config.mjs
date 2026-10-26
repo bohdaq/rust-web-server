@@ -161,6 +161,7 @@ export default defineConfig({
             { label: 'Kubernetes',           link: '/deployment/kubernetes/' },
             { label: 'Kubernetes Ingress',   link: '/deployment/kubernetes-ingress/' },
             { label: 'Observability',        link: '/deployment/observability/' },
+            { label: 'systemd',              link: '/deployment/systemd/' },
             { label: 'WASM Guest Component', link: '/deployment/wasm/' },
           ],
         },

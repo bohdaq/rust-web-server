@@ -112,6 +112,44 @@ lines from one thread keep their order, and every line carries its own
 timestamp. Code that ends the process some other way can call
 `Log::flush_access_log()` first.
 
+### Writing to a file
+
+Set `access_log` (`RWS_CONFIG_ACCESS_LOG`, since 18.1.0) to write the access
+log to a file instead of stdout:
+
+```toml
+log_format          = "combined"
+access_log          = "/var/log/rws/access.log"
+access_log_max_size = "100M"    # optional: rotate past 100 MiB
+access_log_keep     = 5         # access.log.1 … access.log.5
+```
+
+- Lines are appended; the file and its directory must be writable by rws.
+- **Rotation by rws:** with `access_log_max_size`, the file is renamed
+  `access.log.1` (older ones shift up, the oldest past `access_log_keep` is
+  deleted) and a new one is started when the next lines would pass the
+  size.
+- **Rotation by logrotate:** leave `access_log_max_size` at `0` and have
+  logrotate send `SIGUSR1` after moving the file; rws reopens the path
+  before its next write:
+
+  ```
+  /var/log/rws/access.log {
+      daily
+      rotate 14
+      compress
+      delaycompress
+      missingok
+      notifempty
+      postrotate
+          systemctl kill -s USR1 rws.service
+      endscript
+  }
+  ```
+
+  Without an access-log file `SIGUSR1` keeps its default action (it ends
+  the process), so don't send it to an rws logging to stdout.
+
 ### Log aggregation in Kubernetes
 
 The server writes all logs to stdout. Kubernetes log aggregation pipelines pick them up automatically:
@@ -123,9 +161,6 @@ kubectl logs -f deployment/my-rws-app
 # Ship to Loki via Promtail — no application config required; just label the pod
 ```
 
-:::caution[Coming Soon]
-Access log rotation. Currently, redirect stdout to a log file and use an external tool such as `logrotate` if you need rotation outside of Kubernetes.
-:::
 
 ## Tracing
 

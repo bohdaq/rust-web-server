@@ -194,6 +194,13 @@ impl Log {
         });
     }
 
+    /// Have `SIGUSR1` reopen the access-log file (`RWS_CONFIG_ACCESS_LOG`)
+    /// before its next write, for logrotate; does nothing when the log goes
+    /// to stdout. The `rws` binary calls it at startup.
+    pub fn reopen_access_log_on_sigusr1() {
+        access_sink::install_reopen_signal();
+    }
+
     /// Write out the buffered access-log lines now (they're otherwise written
     /// within 100 ms) — e.g. before exiting without returning from `main`.
     pub fn flush_access_log() {

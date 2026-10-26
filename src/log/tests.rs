@@ -323,3 +323,91 @@ fn json_and_combined_lines_escape_and_format_exactly() {
     assert!(Log::combined(&request, &response, &v6).ends_with("\" 304 -"));
     assert!(Log::json(&request, &response, &v6).ends_with("\"status\":304,\"bytes\":0}"));
 }
+
+// ── 18.1.0: access log to a file, rotated by size, reopened on SIGUSR1 ───────
+
+mod access_log_file {
+    use crate::log::access_sink::{parse_size, LogFile};
+    use crate::test_env::TempPath;
+    use std::path::Path;
+
+    fn dir(name: &str) -> TempPath {
+        let dir = TempPath::new(name);
+        std::fs::create_dir_all(dir.as_str()).unwrap();
+        dir
+    }
+
+    fn read(path: &Path) -> String {
+        std::fs::read_to_string(path).unwrap_or_default()
+    }
+
+    #[test]
+    fn lines_are_appended_to_an_existing_file() {
+        let dir = dir("alog_append");
+        let path = Path::new(dir.as_str()).join("access.log");
+        std::fs::write(&path, "old line\n").unwrap();
+        let mut log = LogFile::open(&path, 0, 5).unwrap();
+        log.write(b"one\n", false).unwrap();
+        log.write(b"two\n", false).unwrap();
+        assert_eq!("old line\none\ntwo\n", read(&path));
+    }
+
+    #[test]
+    fn past_the_size_limit_the_file_rotates_keeping_n() {
+        let dir = dir("alog_rotate");
+        let path = Path::new(dir.as_str()).join("access.log");
+        let numbered = |n: u32| Path::new(dir.as_str()).join(format!("access.log.{n}"));
+        let mut log = LogFile::open(&path, 10, 2).unwrap();
+        for line in ["aaaaaaaa\n", "bbbbbbbb\n", "cccccccc\n", "dddddddd\n"] {
+            log.write(line.as_bytes(), false).unwrap();
+        }
+        // Each 9-byte line would take the file past 10 bytes, so every write
+        // after the first rotated: newest in the live file, two kept.
+        assert_eq!("dddddddd\n", read(&path));
+        assert_eq!("cccccccc\n", read(&numbered(1)));
+        assert_eq!("bbbbbbbb\n", read(&numbered(2)));
+        assert!(!numbered(3).exists(), "only `keep` rotated files are kept");
+        // A write larger than the limit goes into an empty file whole.
+        let mut big = LogFile::open(&Path::new(dir.as_str()).join("big.log"), 4, 1).unwrap();
+        big.write(b"0123456789\n", false).unwrap();
+        assert_eq!("0123456789\n", read(&Path::new(dir.as_str()).join("big.log")));
+    }
+
+    #[test]
+    fn keep_zero_empties_the_file_instead() {
+        let dir = dir("alog_keep0");
+        let path = Path::new(dir.as_str()).join("access.log");
+        let mut log = LogFile::open(&path, 10, 0).unwrap();
+        log.write(b"aaaaaaaa\n", false).unwrap();
+        log.write(b"bbbbbbbb\n", false).unwrap();
+        assert_eq!("bbbbbbbb\n", read(&path));
+        assert!(!Path::new(dir.as_str()).join("access.log.1").exists());
+    }
+
+    #[test]
+    fn a_reopen_after_logrotate_moved_the_file_writes_a_new_one() {
+        let dir = dir("alog_reopen");
+        let path = Path::new(dir.as_str()).join("access.log");
+        let moved = Path::new(dir.as_str()).join("access.log.2026-10-26");
+        let mut log = LogFile::open(&path, 0, 5).unwrap();
+        log.write(b"before\n", false).unwrap();
+        // logrotate renames the file, then sends SIGUSR1.
+        std::fs::rename(&path, &moved).unwrap();
+        log.write(b"still the old file\n", false).unwrap();
+        log.write(b"after\n", true).unwrap();
+        assert_eq!("before\nstill the old file\n", read(&moved));
+        assert_eq!("after\n", read(&path));
+    }
+
+    #[test]
+    fn sizes_parse_with_units() {
+        assert_eq!(Some(100), parse_size("100"));
+        assert_eq!(Some(100 << 20), parse_size("100M"));
+        assert_eq!(Some(2 << 10), parse_size(" 2k "));
+        assert_eq!(Some(1 << 30), parse_size("1G"));
+        assert_eq!(None, parse_size("lots"));
+        assert_eq!(None, parse_size(""));
+        assert_eq!(None, parse_size("99999999999999999999G"));
+        assert_eq!(None, parse_size("é"));
+    }
+}

@@ -128,6 +128,9 @@ don't use them.
 
 | Variable | Default | Options | Description |
 |----------|---------|---------|-------------|
+| `RWS_CONFIG_ACCESS_LOG` | (stdout) | path | Append access-log lines to this file instead of stdout (since 18.1.0). Opened at the first line; `SIGUSR1` reopens it (for logrotate). Read at startup. See [Logs](/deployment/observability/#writing-to-a-file). |
+| `RWS_CONFIG_ACCESS_LOG_MAX_SIZE` | `0` | bytes (`K`/`M`/`G` suffixes) | Rotate the access-log file when the next lines would take it past this size: `access.log` → `access.log.1` …. `0` never rotates (leave it to logrotate). |
+| `RWS_CONFIG_ACCESS_LOG_KEEP` | `5` | integer | Rotated access-log files to keep; `0` empties the file instead of keeping any. |
 | `RWS_CONFIG_LOG_FORMAT` | `json` | `json`, `combined`, `off` | Log format for access logs. `json` writes structured JSON. `combined` writes Combined Log Format (Apache/nginx-compatible). `off` (or `none`) writes no per-request line — e.g. behind a proxy that already logs. Hot-reloadable. |
 
 The log format is hot-reloadable.
