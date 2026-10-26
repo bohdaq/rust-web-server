@@ -45,6 +45,11 @@ name = "mcp_gateway"
 required-features = ["http2"]
 test = true
 
+[[example]]
+name = "mcp_conformance"
+required-features = ["http2"]
+test = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 # `cargo binstall rust-web-server` downloads the prebuilt archive that

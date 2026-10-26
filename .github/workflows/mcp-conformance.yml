@@ -1,0 +1,30 @@
+name: MCP conformance
+
+# The official MCP conformance suite against examples/mcp_conformance.rs
+# (ci/e2e/mcp_conformance.sh). Known failures: ci/mcp-conformance-baseline.yml.
+on:
+  workflow_dispatch:
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: mcp-conformance
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cargo build --example mcp_conformance
+      - run: |
+          baseline=ci/mcp-conformance-baseline.yml
+          [ -f "$baseline" ] || baseline=""
+          RESULTS_DIR="$RUNNER_TEMP/mcp-conformance" ci/e2e/mcp_conformance.sh target/debug/examples/mcp_conformance $baseline
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-conformance-results
+          path: ${{ runner.temp }}/mcp-conformance
