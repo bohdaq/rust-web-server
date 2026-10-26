@@ -31,6 +31,7 @@ contents:
   - src: LICENSE
     dst: /usr/share/doc/rws/copyright
 scripts:
+  preinstall: packaging/linux/preinstall.sh
   postinstall: packaging/linux/postinstall.sh
   preremove: packaging/linux/preremove.sh
   postremove: packaging/linux/postremove.sh
