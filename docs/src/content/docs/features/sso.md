@@ -7,7 +7,7 @@ The `sso` feature adds full OAuth 2.0 / OIDC support: authorization-code + PKCE 
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["sso"] }
+rust-web-server = { version = "18", features = ["sso"] }
 ```
 
 ## Quick start
@@ -251,7 +251,7 @@ always delegating to Google/Okta/etc.
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["sso-server"] }
+rust-web-server = { version = "18", features = ["sso-server"] }
 ```
 
 ```rust

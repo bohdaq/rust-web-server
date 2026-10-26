@@ -10,7 +10,7 @@ The template integration requires the `tera` feature:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["tera"] }
+rust-web-server = { version = "18", features = ["tera"] }
 ```
 :::
 

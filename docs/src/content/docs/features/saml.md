@@ -7,7 +7,7 @@ The `sso-saml` feature (implies `sso`) adds `SamlSp`, a SAML 2.0 Service Provide
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["sso-saml"] }
+rust-web-server = { version = "18", features = ["sso-saml"] }
 ```
 
 ## Quick start

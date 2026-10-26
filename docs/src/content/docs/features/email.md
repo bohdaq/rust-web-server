@@ -11,10 +11,10 @@ STARTTLS and SMTPS (TLS) additionally require the `http-client` or `http2` featu
 # Cargo.toml
 [dependencies]
 # STARTTLS or SMTPS (most SMTP providers)
-rust-web-server = { version = "17", features = ["mailer", "http-client"] }
+rust-web-server = { version = "18", features = ["mailer", "http-client"] }
 
 # Plain SMTP / local relay only
-rust-web-server = { version = "17", features = ["mailer"] }
+rust-web-server = { version = "18", features = ["mailer"] }
 ```
 
 ## Quick start

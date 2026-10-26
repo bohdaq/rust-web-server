@@ -10,7 +10,7 @@ description: Write async route handlers using AsyncAppWithState for non-blocking
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17" }  # default features include http2 + http3
+rust-web-server = { version = "18" }  # default features include http2 + http3
 ```
 :::
 

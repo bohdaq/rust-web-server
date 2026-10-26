@@ -48,7 +48,7 @@ Use `rust-web-server` as a Rust library crate and define your own handlers.
 
 ```toml title="Cargo.toml"
 [dependencies]
-rust-web-server = "17"
+rust-web-server = "18"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

@@ -120,7 +120,7 @@ Plain `SetCookie` values are readable and forgeable by the client — fine for a
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["crypto"] }
+rust-web-server = { version = "18", features = ["crypto"] }
 ```
 
 | Function pair | Guarantee | Use when |

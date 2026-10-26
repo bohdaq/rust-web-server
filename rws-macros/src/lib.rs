@@ -4,7 +4,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! rust-web-server = { version = "17", features = ["macros"] }
+//! rust-web-server = { version = "18", features = ["macros"] }
 //! ```
 //!
 //! # Attributes

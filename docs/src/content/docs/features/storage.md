@@ -22,7 +22,7 @@ No new dependencies.
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["storage-local"] }
+rust-web-server = { version = "18", features = ["storage-local"] }
 ```
 
 ```rust
@@ -57,7 +57,7 @@ Works with AWS S3, Cloudflare R2, MinIO, or any other S3-compatible provider. Si
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["storage-s3"] }
+rust-web-server = { version = "18", features = ["storage-s3"] }
 ```
 
 ```rust,no_run
@@ -142,7 +142,7 @@ Signs every request with the Shared Key HMAC-SHA256 scheme using the existing ou
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["storage-azure"] }
+rust-web-server = { version = "18", features = ["storage-azure"] }
 ```
 
 ```rust,no_run

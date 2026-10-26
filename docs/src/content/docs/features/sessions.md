@@ -213,7 +213,7 @@ Requires the `model-sqlite`, `model-postgres`, or `model-mysql` feature. The tab
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["model-sqlite"] }
+rust-web-server = { version = "18", features = ["model-sqlite"] }
 ```
 
 ### Basic usage

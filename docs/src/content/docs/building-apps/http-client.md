@@ -14,7 +14,7 @@ description: Call external APIs from handlers with the built-in synchronous Clie
 ```toml
 [dependencies]
 # Only needed for HTTPS in an http1-only build; the default features already include it.
-rust-web-server = { version = "17", default-features = false, features = ["http1", "http-client"] }
+rust-web-server = { version = "18", default-features = false, features = ["http1", "http-client"] }
 ```
 
 :::caution

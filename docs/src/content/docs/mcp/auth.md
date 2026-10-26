@@ -179,7 +179,7 @@ The 2025-03-26 revision of the MCP spec defines an OAuth 2.0 authorization flow 
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["sso"] }
+rust-web-server = { version = "18", features = ["sso"] }
 ```
 
 ```rust

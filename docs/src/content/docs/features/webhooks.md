@@ -7,7 +7,7 @@ Requires the `webhook` feature:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["webhook"] }
+rust-web-server = { version = "18", features = ["webhook"] }
 ```
 
 Any handler that accepts webhooks from a third party needs to confirm the request actually came from that provider — otherwise anyone who finds (or guesses) the endpoint URL can send a forged payload. `hmac` and `sha2` are already dependencies elsewhere in `rws` (`auth`, `crypto`, `storage-s3`); this feature just adds the provider-specific conventions on top so you don't re-derive them from each provider's docs.

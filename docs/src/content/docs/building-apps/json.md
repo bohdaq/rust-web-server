@@ -14,7 +14,7 @@ Enable the `serde` feature in `Cargo.toml`:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["serde"] }
+rust-web-server = { version = "18", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 ```
 

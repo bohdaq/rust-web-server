@@ -175,7 +175,7 @@ The `macros` feature can generate the boilerplate above for a named-field struct
 
 ```toml
 # Cargo.toml
-rust-web-server = { version = "17", features = ["macros"] }
+rust-web-server = { version = "18", features = ["macros"] }
 ```
 
 ```rust

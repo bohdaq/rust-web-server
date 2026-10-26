@@ -63,7 +63,7 @@ Add `features = ["macros"]` to your dependency to unlock the derive macro.
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["macros"] }
+rust-web-server = { version = "18", features = ["macros"] }
 ```
 
 Then annotate your struct fields with `#[validate(...)]` rules:

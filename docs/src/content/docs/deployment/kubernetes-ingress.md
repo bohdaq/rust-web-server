@@ -172,5 +172,5 @@ The connection is TLS, trusting **only** the cluster's own CA certificate (`.../
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["http-client"] }
+rust-web-server = { version = "18", features = ["http-client"] }
 ```

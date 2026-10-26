@@ -7,9 +7,9 @@ The `auth` Cargo feature adds `BasicAuthLayer`, `JwtLayer`, and `ForwardAuthLaye
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["auth"] }
+rust-web-server = { version = "18", features = ["auth"] }
 # or, for RS256/ES256 support too:
-rust-web-server = { version = "17", features = ["auth-asymmetric"] }
+rust-web-server = { version = "18", features = ["auth-asymmetric"] }
 ```
 
 The `auth` feature pulls in `hmac` and `sha2` (RustCrypto) as additional dependencies. `auth-asymmetric` additionally pulls in `p256` (also RustCrypto) for ES256; RS256 is verified in-crate (`rust_web_server::rsa_key::RsaPublicKey`), with no `rsa` crate.
@@ -197,7 +197,7 @@ A common pattern: a separate auth server issues JWTs signed with its RSA or P-25
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["auth-asymmetric"] }
+rust-web-server = { version = "18", features = ["auth-asymmetric"] }
 ```
 
 ```rust
@@ -323,7 +323,7 @@ The `crypto` feature (independent of `auth`) adds Argon2id password hashing and 
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["crypto"] }
+rust-web-server = { version = "18", features = ["crypto"] }
 ```
 
 ```rust

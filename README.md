@@ -77,7 +77,7 @@ The server above is the `rust-web-server` crate. Use it directly when you need r
 ```toml
 # Cargo.toml
 [dependencies]
-rust-web-server = "17"
+rust-web-server = "18"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

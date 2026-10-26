@@ -9,7 +9,7 @@ Enable the `macros` feature in `Cargo.toml`:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["macros"] }
+rust-web-server = { version = "18", features = ["macros"] }
 ```
 
 ## Quick start

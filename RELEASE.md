@@ -26,9 +26,11 @@ cargo build --release --no-default-features --features http1
 
 ## Publish to crates.io
 
-```bash
-cargo publish
-```
+The release workflow publishes both crates when the tag is pushed: `rws-macros`
+first (only if its `rws-macros/Cargo.toml` version isn't on crates.io yet —
+bump it whenever the macros change), then `rust-web-server`. It needs the
+`CARGO_REGISTRY_TOKEN` repository secret (a crates.io token with publish rights
+for both crates); a version already on crates.io is skipped, so re-runs are safe.
 
 ## Publish a GitHub Release
 

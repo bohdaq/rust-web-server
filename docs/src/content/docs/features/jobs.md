@@ -7,7 +7,7 @@ Requires the `jobs` feature:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["jobs"] }
+rust-web-server = { version = "18", features = ["jobs"] }
 ```
 
 There are two queue types:
@@ -99,7 +99,7 @@ Additionally requires a `model-*` feature:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["jobs", "model-sqlite"] }
+rust-web-server = { version = "18", features = ["jobs", "model-sqlite"] }
 ```
 
 Because a closure can't be serialized to disk, persisted jobs are `(job_type,

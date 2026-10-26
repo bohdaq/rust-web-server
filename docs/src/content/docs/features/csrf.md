@@ -7,7 +7,7 @@ The `csrf` feature adds `CsrfLayer` middleware that protects state-mutating requ
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["csrf"] }
+rust-web-server = { version = "18", features = ["csrf"] }
 ```
 
 ## Quick start

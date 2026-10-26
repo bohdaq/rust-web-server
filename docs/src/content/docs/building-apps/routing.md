@@ -154,7 +154,7 @@ The `macros` feature also adds `#[get("/path")]`, `#[post("/path")]`, `#[put]`, 
 
 ```toml
 # Cargo.toml
-rust-web-server = { version = "17", features = ["macros"] }
+rust-web-server = { version = "18", features = ["macros"] }
 ```
 
 ```rust

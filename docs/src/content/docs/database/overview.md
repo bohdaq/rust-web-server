@@ -17,7 +17,7 @@ Add the flag to `Cargo.toml`:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["model-sqlite"] }
+rust-web-server = { version = "18", features = ["model-sqlite"] }
 ```
 
 Unlike most feature pairs in this crate, `model-sqlite`, `model-postgres`, and `model-mysql` are **not** mutually exclusive — enable more than one and each gets its own [`DbPool`](#multiple-backends-in-one-binary) variant, so a single binary can hold pools to more than one backend (e.g. SQLite for hot-path data, PostgreSQL for an analytics tier).
@@ -106,7 +106,7 @@ Enable more than one `model-*` feature and each gets its own [`DbPool`](#pool-be
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["model-sqlite", "model-postgres"] }
+rust-web-server = { version = "18", features = ["model-sqlite", "model-postgres"] }
 ```
 
 ```rust

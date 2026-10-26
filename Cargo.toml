@@ -1,6 +1,6 @@
 [package]
 name = "rust-web-server"
-version = "17.113.0"
+version = "18.0.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
@@ -123,7 +123,7 @@ hmac  = { version = "0.12", optional = true }
 sha2  = { version = "0.10", features = ["oid"], optional = true }
 p256      = { version = "0.14", features = ["ecdsa"], optional = true }
 aws-lc-rs = { version = "1", optional = true }
-rws-macros = { path = "rws-macros", version = "17", optional = true }
+rws-macros = { path = "rws-macros", version = "17.28", optional = true }
 tera = { version = "1", optional = true }
 sqlx = { version = "0.8", default-features = false, optional = true }
 argon2    = { version = "0.5", features = ["password-hash"], optional = true }

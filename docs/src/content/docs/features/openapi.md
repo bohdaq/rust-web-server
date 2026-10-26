@@ -7,7 +7,7 @@ Requires the `openapi` feature:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["openapi"] }
+rust-web-server = { version = "18", features = ["openapi"] }
 ```
 
 No API consumers reading source code or hand-maintained spec files that drift out of sync — the spec is built from the same route registrations your app already has.

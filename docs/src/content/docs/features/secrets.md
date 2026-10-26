@@ -9,7 +9,7 @@ The `secrets` module gives any config value that ability directly: a value of th
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["secrets"] }
+rust-web-server = { version = "18", features = ["secrets"] }
 ```
 
 ```rust,no_run

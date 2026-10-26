@@ -26,7 +26,7 @@ Or pin the major version manually:
 
 ```toml
 [dependencies]
-rust-web-server = "17"
+rust-web-server = "18"
 ```
 
 The default feature set (`http3`) pulls in HTTP/3, HTTP/2, TLS, and a tokio async runtime. If you need a lighter build, opt out and select a lower feature tier (see the feature flags table below).
@@ -143,7 +143,7 @@ cargo build --release --no-default-features --features http1
 Features compose freely. For example, to build HTTP/2 + TLS + JSON + SQLite:
 
 ```toml
-rust-web-server = { version = "17", default-features = false, features = ["http2", "serde", "model-sqlite"] }
+rust-web-server = { version = "18", default-features = false, features = ["http2", "serde", "model-sqlite"] }
 ```
 :::
 

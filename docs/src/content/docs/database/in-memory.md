@@ -69,5 +69,5 @@ async fn test_example() {
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["model-sqlite"] }
+rust-web-server = { version = "18", features = ["model-sqlite"] }
 ```

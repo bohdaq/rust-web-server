@@ -5,7 +5,7 @@
 > the same engine as a Rust library (routing, middleware, MCP server, async ORM).
 
 Source: https://github.com/bohdaq/rust-web-server · Website: https://rws8.tech/ ·
-API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.88 · Version: 17.113.0
+API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.88 · Version: 18.0.0
 
 HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS and JSON are implemented in
 the crate — no hyper, Tower or Axum; HTTP/2 and HTTP/3 use `h2` and `quinn`/`h3`, TLS uses
@@ -75,7 +75,7 @@ Use `rust-web-server` as a Rust library crate and define your own handlers.
 
 ```toml title="Cargo.toml"
 [dependencies]
-rust-web-server = "17"
+rust-web-server = "18"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -292,7 +292,7 @@ Or pin the major version manually:
 
 ```toml
 [dependencies]
-rust-web-server = "17"
+rust-web-server = "18"
 ```
 
 The default feature set (`http3`) pulls in HTTP/3, HTTP/2, TLS, and a tokio async runtime. If you need a lighter build, opt out and select a lower feature tier (see the feature flags table below).
@@ -409,7 +409,7 @@ cargo build --release --no-default-features --features http1
 Features compose freely. For example, to build HTTP/2 + TLS + JSON + SQLite:
 
 ```toml
-rust-web-server = { version = "17", default-features = false, features = ["http2", "serde", "model-sqlite"] }
+rust-web-server = { version = "18", default-features = false, features = ["http2", "serde", "model-sqlite"] }
 ```
 :::
 
@@ -2315,7 +2315,7 @@ The `macros` feature also adds `#[get("/path")]`, `#[post("/path")]`, `#[put]`, 
 
 ```toml
 # Cargo.toml
-rust-web-server = { version = "17", features = ["macros"] }
+rust-web-server = { version = "18", features = ["macros"] }
 ```
 
 ```rust
@@ -2967,7 +2967,7 @@ The `macros` feature can generate the boilerplate above for a named-field struct
 
 ```toml
 # Cargo.toml
-rust-web-server = { version = "17", features = ["macros"] }
+rust-web-server = { version = "18", features = ["macros"] }
 ```
 
 ```rust
@@ -3423,7 +3423,7 @@ Add `features = ["macros"]` to your dependency to unlock the derive macro.
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["macros"] }
+rust-web-server = { version = "18", features = ["macros"] }
 ```
 
 Then annotate your struct fields with `#[validate(...)]` rules:
@@ -3863,7 +3863,7 @@ Enable the `serde` feature in `Cargo.toml`:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["serde"] }
+rust-web-server = { version = "18", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 ```
 
@@ -4171,7 +4171,7 @@ Plain `SetCookie` values are readable and forgeable by the client — fine for a
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["crypto"] }
+rust-web-server = { version = "18", features = ["crypto"] }
 ```
 
 | Function pair | Guarantee | Use when |
@@ -4313,7 +4313,7 @@ fn rotate_token(old: &str) -> String {
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17" }  # default features include http2 + http3
+rust-web-server = { version = "18" }  # default features include http2 + http3
 ```
 :::
 
@@ -4568,7 +4568,7 @@ let app = AsyncAppWithState::new(Config {
 ```toml
 [dependencies]
 # Only needed for HTTPS in an http1-only build; the default features already include it.
-rust-web-server = { version = "17", default-features = false, features = ["http1", "http-client"] }
+rust-web-server = { version = "18", default-features = false, features = ["http1", "http-client"] }
 ```
 
 :::caution
@@ -4668,7 +4668,7 @@ The template integration requires the `tera` feature:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["tera"] }
+rust-web-server = { version = "18", features = ["tera"] }
 ```
 :::
 
@@ -6890,9 +6890,9 @@ The `auth` Cargo feature adds `BasicAuthLayer`, `JwtLayer`, and `ForwardAuthLaye
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["auth"] }
+rust-web-server = { version = "18", features = ["auth"] }
 # or, for RS256/ES256 support too:
-rust-web-server = { version = "17", features = ["auth-asymmetric"] }
+rust-web-server = { version = "18", features = ["auth-asymmetric"] }
 ```
 
 The `auth` feature pulls in `hmac` and `sha2` (RustCrypto) as additional dependencies. `auth-asymmetric` additionally pulls in `p256` (also RustCrypto) for ES256; RS256 is verified in-crate (`rust_web_server::rsa_key::RsaPublicKey`), with no `rsa` crate.
@@ -7080,7 +7080,7 @@ A common pattern: a separate auth server issues JWTs signed with its RSA or P-25
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["auth-asymmetric"] }
+rust-web-server = { version = "18", features = ["auth-asymmetric"] }
 ```
 
 ```rust
@@ -7206,7 +7206,7 @@ The `crypto` feature (independent of `auth`) adds Argon2id password hashing and 
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["crypto"] }
+rust-web-server = { version = "18", features = ["crypto"] }
 ```
 
 ```rust
@@ -7237,7 +7237,7 @@ The `sso` feature adds full OAuth 2.0 / OIDC support: authorization-code + PKCE 
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["sso"] }
+rust-web-server = { version = "18", features = ["sso"] }
 ```
 
 ## Quick start
@@ -7481,7 +7481,7 @@ always delegating to Google/Okta/etc.
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["sso-server"] }
+rust-web-server = { version = "18", features = ["sso-server"] }
 ```
 
 ```rust
@@ -7574,7 +7574,7 @@ The `sso-saml` feature (implies `sso`) adds `SamlSp`, a SAML 2.0 Service Provide
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["sso-saml"] }
+rust-web-server = { version = "18", features = ["sso-saml"] }
 ```
 
 ## Quick start
@@ -7702,7 +7702,7 @@ The `csrf` feature adds `CsrfLayer` middleware that protects state-mutating requ
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["csrf"] }
+rust-web-server = { version = "18", features = ["csrf"] }
 ```
 
 ## Quick start
@@ -8089,7 +8089,7 @@ Requires the `model-sqlite`, `model-postgres`, or `model-mysql` feature. The tab
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["model-sqlite"] }
+rust-web-server = { version = "18", features = ["model-sqlite"] }
 ```
 
 ### Basic usage
@@ -8204,10 +8204,10 @@ STARTTLS and SMTPS (TLS) additionally require the `http-client` or `http2` featu
 # Cargo.toml
 [dependencies]
 # STARTTLS or SMTPS (most SMTP providers)
-rust-web-server = { version = "17", features = ["mailer", "http-client"] }
+rust-web-server = { version = "18", features = ["mailer", "http-client"] }
 
 # Plain SMTP / local relay only
-rust-web-server = { version = "17", features = ["mailer"] }
+rust-web-server = { version = "18", features = ["mailer"] }
 ```
 
 ## Quick start
@@ -8443,7 +8443,7 @@ No new dependencies.
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["storage-local"] }
+rust-web-server = { version = "18", features = ["storage-local"] }
 ```
 
 ```rust
@@ -8478,7 +8478,7 @@ Works with AWS S3, Cloudflare R2, MinIO, or any other S3-compatible provider. Si
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["storage-s3"] }
+rust-web-server = { version = "18", features = ["storage-s3"] }
 ```
 
 ```rust,no_run
@@ -8563,7 +8563,7 @@ Signs every request with the Shared Key HMAC-SHA256 scheme using the existing ou
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["storage-azure"] }
+rust-web-server = { version = "18", features = ["storage-azure"] }
 ```
 
 ```rust,no_run
@@ -9406,7 +9406,7 @@ The operations above cover fixed strings. When the rewrite depends on part of th
 
 ```toml
 # Cargo.toml
-rust-web-server = { version = "17", features = ["rewrite-regex"] }
+rust-web-server = { version = "18", features = ["rewrite-regex"] }
 ```
 
 ```rust
@@ -9881,7 +9881,7 @@ Requires the `jobs` feature:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["jobs"] }
+rust-web-server = { version = "18", features = ["jobs"] }
 ```
 
 There are two queue types:
@@ -9973,7 +9973,7 @@ Additionally requires a `model-*` feature:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["jobs", "model-sqlite"] }
+rust-web-server = { version = "18", features = ["jobs", "model-sqlite"] }
 ```
 
 Because a closure can't be serialized to disk, persisted jobs are `(job_type,
@@ -10078,7 +10078,7 @@ Requires the `openapi` feature:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["openapi"] }
+rust-web-server = { version = "18", features = ["openapi"] }
 ```
 
 No API consumers reading source code or hand-maintained spec files that drift out of sync — the spec is built from the same route registrations your app already has.
@@ -10284,7 +10284,7 @@ Enable the `macros` feature in `Cargo.toml`:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["macros"] }
+rust-web-server = { version = "18", features = ["macros"] }
 ```
 
 ## Quick start
@@ -10484,7 +10484,7 @@ Requires the `webhook` feature:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["webhook"] }
+rust-web-server = { version = "18", features = ["webhook"] }
 ```
 
 Any handler that accepts webhooks from a third party needs to confirm the request actually came from that provider — otherwise anyone who finds (or guesses) the endpoint URL can send a forged payload. `hmac` and `sha2` are already dependencies elsewhere in `rws` (`auth`, `crypto`, `storage-s3`); this feature just adds the provider-specific conventions on top so you don't re-derive them from each provider's docs.
@@ -10579,7 +10579,7 @@ The `secrets` module gives any config value that ability directly: a value of th
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["secrets"] }
+rust-web-server = { version = "18", features = ["secrets"] }
 ```
 
 ```rust,no_run
@@ -12924,7 +12924,7 @@ Add the flag to `Cargo.toml`:
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["model-sqlite"] }
+rust-web-server = { version = "18", features = ["model-sqlite"] }
 ```
 
 Unlike most feature pairs in this crate, `model-sqlite`, `model-postgres`, and `model-mysql` are **not** mutually exclusive — enable more than one and each gets its own [`DbPool`](#multiple-backends-in-one-binary) variant, so a single binary can hold pools to more than one backend (e.g. SQLite for hot-path data, PostgreSQL for an analytics tier).
@@ -13013,7 +13013,7 @@ Enable more than one `model-*` feature and each gets its own [`DbPool`](#pool-be
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["model-sqlite", "model-postgres"] }
+rust-web-server = { version = "18", features = ["model-sqlite", "model-postgres"] }
 ```
 
 ```rust
@@ -14463,7 +14463,7 @@ async fn test_example() {
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["model-sqlite"] }
+rust-web-server = { version = "18", features = ["model-sqlite"] }
 ```
 
 ---
@@ -16007,7 +16007,7 @@ The 2025-03-26 revision of the MCP spec defines an OAuth 2.0 authorization flow 
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["sso"] }
+rust-web-server = { version = "18", features = ["sso"] }
 ```
 
 ```rust
@@ -17208,7 +17208,7 @@ The connection is TLS, trusting **only** the cluster's own CA certificate (`.../
 
 ```toml
 [dependencies]
-rust-web-server = { version = "17", features = ["http-client"] }
+rust-web-server = { version = "18", features = ["http-client"] }
 ```
 
 ---

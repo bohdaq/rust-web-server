@@ -79,7 +79,7 @@ The operations above cover fixed strings. When the rewrite depends on part of th
 
 ```toml
 # Cargo.toml
-rust-web-server = { version = "17", features = ["rewrite-regex"] }
+rust-web-server = { version = "18", features = ["rewrite-regex"] }
 ```
 
 ```rust

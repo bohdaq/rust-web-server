@@ -2145,7 +2145,7 @@ dependencies = [
 
 [[package]]
 name = "rust-web-server"
-version = "17.113.0"
+version = "18.0.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -2242,7 +2242,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rws-macros"
-version = "17.27.0"
+version = "17.28.0"
 dependencies = [
  "proc-macro2",
  "quote",
