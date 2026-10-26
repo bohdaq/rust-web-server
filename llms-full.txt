@@ -5234,7 +5234,12 @@ Files larger than 256 KiB are streamed from disk with an exact
 uses a few MiB. The static root is the working directory `rws` was started
 in.
 
-Only files inside the root are served: a path with a `..` segment is refused
+The request path is percent-decoded once before the lookup, so
+`/my%20file.txt` serves `my file.txt` and `%2F` is a `/` (17.113.2); `+` is a
+literal `+`. A path that isn't UTF-8 once decoded gets `404`.
+
+Only files inside the root are served — checked on the decoded path, so
+`/%2e%2e/` is refused like `/../`: a path with a `..` segment is refused
 (`404`), and so is a symlink in the root that points outside it. Files and
 directories whose name starts with `.` (`.git/`, `.env`) are not served unless
 `RWS_CONFIG_SERVE_DOTFILES=true`; `.well-known/` always is (17.113.1).

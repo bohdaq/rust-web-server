@@ -278,6 +278,16 @@ pub mod fuzz_api {
         assert_eq!(once, twice, "normalization is not idempotent for {:?}", target);
     }
 
+    /// Static-file request-path decoding (#55). Must never panic; the
+    /// decoded path never carries a `..` segment past the web-root check.
+    pub fn static_path_decode(data: &[u8]) {
+        let Ok(path) = std::str::from_utf8(data) else { return };
+        if let Ok(fs_path) = crate::app::controller::static_resource::static_fs_path(path) {
+            let relative = &fs_path[crate::app::controller::static_resource::working_directory().len()..];
+            assert!(!relative.split(['/', '\\']).any(|segment| segment == ".."), "{:?} -> {:?}", path, fs_path);
+        }
+    }
+
     /// The SAML XML parser (`sso::saml::xml`), fed IdP-supplied documents.
     #[cfg(feature = "sso-saml")]
     pub fn saml_xml_parse(xml: &str) {
