@@ -127,9 +127,12 @@ jobs:
           published() {
             curl -sf -A "rws-release (github.com/bohdaq/rust-web-server)" "https://crates.io/api/v1/crates/$1/$2" > /dev/null
           }
+          # --locked only where the branch tracks Cargo.lock (17.113.x doesn't).
+          locked=""
+          [ -f Cargo.lock ] && locked="--locked"
           macros=$(grep -m1 '^version' rws-macros/Cargo.toml | cut -d '"' -f2)
-          if published rws-macros "$macros"; then echo "rws-macros $macros is already on crates.io"; else cargo publish -p rws-macros --locked; fi
-          if published rust-web-server "$TAG"; then echo "rust-web-server $TAG is already on crates.io"; else cargo publish -p rust-web-server --locked; fi
+          if published rws-macros "$macros"; then echo "rws-macros $macros is already on crates.io"; else cargo publish -p rws-macros $locked; fi
+          if published rust-web-server "$TAG"; then echo "rust-web-server $TAG is already on crates.io"; else cargo publish -p rust-web-server $locked; fi
 
   binaries:
     needs: release
