@@ -36,6 +36,36 @@ path = "src/main.rs"
 # Runnable with `cargo run --example <name> --features "..."`; `cargo test
 # --all-features` (or with the listed features) also runs their tests.
 [[example]]
+name = "hello"
+required-features = ["http2"]
+test = true
+
+[[example]]
+name = "rest_api"
+required-features = ["http2", "serde"]
+test = true
+
+[[example]]
+name = "static_site"
+required-features = ["http2"]
+test = true
+
+[[example]]
+name = "reverse_proxy"
+required-features = ["http2"]
+test = true
+
+[[example]]
+name = "sse_ticker"
+required-features = ["http2"]
+test = true
+
+[[example]]
+name = "upload"
+required-features = ["http2"]
+test = true
+
+[[example]]
 name = "mcp_inventory"
 required-features = ["macros", "serde", "sso"]
 test = true

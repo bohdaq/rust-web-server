@@ -5,6 +5,23 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased (18.2.0)
+
+### Added
+
+- Runnable examples (#11): `hello`, `rest_api`, `static_site`,
+  `reverse_proxy`, `sse_ticker` and `upload` join the MCP examples in
+  `examples/`, each with a test `cargo test` runs; listed on the new
+  [Examples](https://rws8.tech/getting-started/examples/) page. CI now
+  tests with the `serde` and `macros` features too, so `rest_api` and
+  `mcp_inventory` run on every push.
+- `AGENTS.md`: a guide for coding agents building an app on the crate.
+
+### Fixed
+
+- Release workflow: the docs-site job builds on Node 24 (Astro needs
+  ≥ 22.23.4; the runner's Node 22 was older, so 18.1.0's site update failed).
+
 ## 18.1.0 — 2026-10-26
 
 ### Added

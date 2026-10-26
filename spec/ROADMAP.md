@@ -88,7 +88,7 @@ Close the everyday gaps an operator meets on day one: compression peers all have
 
 With a few hundred downloads per quarter, discoverability is the bottleneck: runnable examples, an agent guide, and installation the way people expect it.
 
-- **#11** **`examples/` and `AGENTS.md`** — runnable Cargo examples (the prerequisite for demo apps and doc tests) and an agent guide for people building on the crate. Discoverability, not features, is the bottleneck.
+- **#11** ✅ *main: examples `hello`, `rest_api`, `static_site`, `reverse_proxy`, `sse_ticker`, `upload` (each tested; SSE and a 5 MB streamed upload checked live), `AGENTS.md`, page getting-started/examples, CI tests with `serde macros`* **`examples/` and `AGENTS.md`** — runnable Cargo examples (the prerequisite for demo apps and doc tests) and an agent guide for people building on the crate. Discoverability, not features, is the bottleneck.
 - **#26** **Publish the Helm chart** (OCI) with Ingress / ServiceMonitor templates, and prometheus-adapter rules for the HPA example (the example references a metric nothing exports under that name).
 - **#27** **OS packages** — deb / rpm repositories, a Windows service, nixpkgs / winget. Caddy and nginx ship OS packages; rws has Homebrew, Docker and archives.
 

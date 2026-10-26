@@ -28,8 +28,8 @@ jobs:
             args: ""
           - name: http1 only
             args: --no-default-features --features http1
-          - name: tls + auth + sso
-            args: --features "sso sso-server sso-saml auth-asymmetric http-client acme"
+          - name: tls + auth + sso + serde
+            args: --features "sso sso-server sso-saml auth-asymmetric http-client acme serde macros"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
