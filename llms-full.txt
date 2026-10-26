@@ -329,6 +329,30 @@ rws --help      # every option, with its environment-variable equivalent
 
 Run it in any directory that contains static files and it will serve them on `http://localhost:7878` with no configuration file needed.
 
+### Verifying a release
+
+From 18.0.0, releases can be checked end to end:
+
+```bash
+# The archive was built by this repository's release workflow
+gh attestation verify rws-18.0.0-x86_64-unknown-linux-musl.tar.gz --repo bohdaq/rust-web-server
+
+# The image too — attestation, or the keyless cosign signature
+gh attestation verify oci://ghcr.io/bohdaq/rws:18.0.0 --repo bohdaq/rust-web-server
+cosign verify ghcr.io/bohdaq/rws:18.0.0 \
+  --certificate-identity-regexp 'https://github.com/bohdaq/rust-web-server/.github/workflows/release.yml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+# Known vulnerabilities in the dependencies compiled into a binary
+# (built with cargo-auditable, so the list travels with it)
+cargo audit bin ./rws
+```
+
+Each release also has a CycloneDX SBOM (`rws-<version>.cdx.json`) of the
+binary's dependency tree. CI checks every change with `cargo audit` and
+`cargo deny` (advisories; permissive licenses only; crates.io sources only —
+`deny.toml`).
+
 ## Build from source
 
 ```bash

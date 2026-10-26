@@ -41,6 +41,7 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - `RWS_CONFIG_OPEN_FILE_CACHE_STRICT=false`: reuse a cached file's metadata for the cache window instead of checking it per request.
 - `mimalloc` feature: the `rws` binary allocates with mimalloc v3; release binaries and images are built with it — 4–6% less CPU per request, at a larger memory footprint (about 34 MiB under load instead of 9; up to ~120 MiB serving large files over TLS). Build without the feature for the smaller footprint.
 - `RWS_CONFIG_RUNTIME=per-core`: one single-threaded runtime per core, each on its own `SO_REUSEPORT` listener (Unix) — more throughput on fast CPUs, more CPU per request on slow ones; the default stays `shared`.
+- Supply chain (#5): release binaries are built with `cargo auditable` (`cargo audit bin rws` works on them), releases carry a CycloneDX SBOM, archives and images get GitHub build-provenance attestations, and images are signed keyless with cosign. CI runs `cargo deny check` (advisories, permissive licenses only, crates.io sources only; `deny.toml`).
 
 ### Fixed
 

@@ -123,6 +123,16 @@ jobs:
       # Reads ignores (with justifications) from .cargo/audit.toml
       - run: cargo audit
 
+  deny:
+    name: cargo deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@cargo-deny
+      # Advisories, licenses (permissive only), banned sources (crates.io
+      # only) — deny.toml.
+      - run: cargo deny check
+
   docs:
     name: docs site
     runs-on: ubuntu-latest

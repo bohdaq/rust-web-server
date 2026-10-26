@@ -13,6 +13,12 @@ name: Release
 #      dockerhub-overview.yml),
 #   4. updates the Homebrew formula in bohdaq/homebrew-tap.
 #
+# Supply chain: binaries are built with cargo-auditable (the dependency list
+# is embedded, so `cargo audit bin rws` works on a deployed binary), the
+# release carries a CycloneDX SBOM, every archive and image gets a GitHub
+# build-provenance attestation (`gh attestation verify`), and images are
+# signed keyless with cosign (`cosign verify`, identity = this workflow).
+#
 # Re-running for an existing tag (e.g. after fixing this workflow) is
 # supported via workflow_dispatch; every step is idempotent.
 on:
@@ -27,6 +33,9 @@ on:
 permissions:
   contents: write
   packages: write
+  # Build-provenance attestations and keyless cosign signatures (OIDC).
+  id-token: write
+  attestations: write
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
@@ -97,6 +106,15 @@ jobs:
             gh release create "$TAG" --title "$TAG" --notes-file notes.md --verify-tag
           fi
 
+      # CycloneDX SBOM of the binary's dependency tree (the release features).
+      - uses: taiki-e/install-action@cargo-cyclonedx
+      - name: SBOM
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cargo cyclonedx -F "acme auth mimalloc" --format json --spec-version 1.5 --override-filename "rws-$TAG.cdx"
+          gh release upload "$TAG" "rws-$TAG.cdx.json" --clobber
+
   binaries:
     needs: release
     name: binary (${{ matrix.target }})
@@ -126,11 +144,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
+      - uses: taiki-e/install-action@cargo-auditable
 
       - name: Build
         # acme: automatic HTTPS; auth: JWT / basic auth in config-driven routes;
         # mimalloc: the allocator (musl's own is much slower than glibc's).
-        run: cargo build --release --bin rws --features "acme auth mimalloc" --target ${{ matrix.target }}
+        # cargo auditable embeds the dependency list (`cargo audit bin`).
+        run: cargo auditable build --release --bin rws --features "acme auth mimalloc" --target ${{ matrix.target }}
 
       - name: Package
         shell: bash
@@ -169,6 +189,11 @@ jobs:
           done
           curl -sf http://127.0.0.1:7979/healthz
           kill $pid
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ env.ARCHIVE }}
 
       - name: Upload to release
         shell: bash
@@ -256,7 +281,9 @@ jobs:
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.release
@@ -270,6 +297,27 @@ jobs:
             org.opencontainers.image.title=rws
             org.opencontainers.image.description=Single-binary web server and reverse proxy: automatic HTTPS, HTTP/3, load balancing, configured in one TOML file
             org.opencontainers.image.url=https://rws8.tech
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/rws
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      # Keyless signature (Sigstore, GitHub OIDC identity): verify with
+      #   cosign verify ghcr.io/bohdaq/rws:<tag> \
+      #     --certificate-identity-regexp 'https://github.com/bohdaq/rust-web-server/.github/workflows/release.yml@.*' \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign the image
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          cosign sign --yes "ghcr.io/${{ github.repository_owner }}/rws@$DIGEST"
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            cosign sign --yes "docker.io/$DOCKERHUB_USERNAME/rws@$DIGEST"
+          fi
 
   homebrew:
     needs: binaries

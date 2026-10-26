@@ -1,0 +1,49 @@
+# cargo-deny (https://embarkstudios.github.io/cargo-deny/), run by CI's
+# `deny` job: `cargo deny check`. Covers every feature combination.
+
+[graph]
+all-features = true
+
+[advisories]
+# RUSTSEC advisories fail the build, as `cargo audit` does; ignores carry
+# their reason, as in .cargo/audit.toml.
+ignore = [
+    # rsa "Marvin Attack" (no fixed release): only through sqlx-mysql
+    # (`model-mysql`), which uses the MySQL server's *public* key — no
+    # private-key operation. rws's own RSA verification is in src/rsa_key.
+    { id = "RUSTSEC-2023-0071", reason = "public-key use only, via sqlx-mysql" },
+]
+
+[licenses]
+# Permissive licenses only: rws is MIT, and its binaries and images must
+# stay redistributable under MIT terms.
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "CC0-1.0",
+    "Unlicense",
+    "Unicode-3.0",
+    # Mozilla's CA list in webpki-roots.
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Duplicate versions are reported, not fatal: they come from upstream
+# version skew rws can't fix alone.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# crates.io only — no git dependencies, no other registries.
+unknown-registry = "deny"
+unknown-git = "deny"
