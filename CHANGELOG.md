@@ -1,6 +1,6 @@
 # Changelog
 
-## 17.113.1 — security patch
+## 17.113.1 — 2026-10-26 — security patch
 
 Fixes from the 2026-10-25 security review. Upgrade from 17.113.0.
 
