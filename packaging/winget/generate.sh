@@ -12,7 +12,7 @@ sha=$(curl -fsSL "$url.sha256" | awk '{print toupper($1)}')
 
 dir="$out/manifests/b/bohdaq/rws/$version"
 mkdir -p "$dir"
-schema=1.9.0
+schema=1.12.0
 
 cat > "$dir/bohdaq.rws.yaml" <<YAML
 # yaml-language-server: \$schema=https://aka.ms/winget-manifest.version.$schema.schema.json
