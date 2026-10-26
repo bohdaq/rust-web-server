@@ -134,6 +134,83 @@ where
             None => false,
         };
 
+        // A body the application wants as a stream (#31): run the handler on
+        // the blocking pool now and feed it the body as it arrives.
+        if !matches!(body_framing, framing::BodyFraming::None) && app.streams_body(&request, &connection) {
+            if let framing::BodyFraming::Length(declared_len) = body_framing {
+                if max_body_size > 0 && declared_len > max_body_size {
+                    let raw = Server::payload_too_large_response(format!(
+                        "413 Payload Too Large: declared Content-Length {} exceeds the {} byte limit",
+                        declared_len, max_body_size
+                    ));
+                    write_and_flush(&mut stream, &raw).await;
+                    break;
+                }
+            }
+            if expects_continue && stream.write_all(&Server::continue_response()).await.is_err() {
+                break;
+            }
+            let (tx, body) = crate::server::body_pump::body_channel();
+            request.body = body;
+            let keep_alive = framing::keep_alive(&request);
+            let handler_app = app.clone();
+            let handler_connection = connection.clone();
+            let mut handler = tokio::task::spawn_blocking(move || {
+                let result = handler_app.execute(&request, &handler_connection);
+                (request, result)
+            });
+            let (joined, outcome) = {
+                let pump = pump_body(&mut stream, &mut read_buffer, &mut pending, idle.as_mut(), body_framing, max_body_size, tx);
+                tokio::pin!(pump);
+                let mut outcome = None;
+                let joined = loop {
+                    tokio::select! {
+                        done = &mut pump, if outcome.is_none() => outcome = Some(done),
+                        joined = &mut handler => break joined,
+                    }
+                };
+                (joined, outcome)
+            };
+            let (request, result) = joined.map_err(|e| format!("request handler panicked: {}", e))?;
+            // Reuse the connection only when the whole body was read off it.
+            let reusable = keep_alive && outcome == Some(crate::server::body_pump::PumpOutcome::Complete);
+            let mut response = match result {
+                Ok(r) => r,
+                Err(message) => {
+                    write_and_flush(&mut stream, &Server::bad_request_response(message.clone())).await;
+                    return Err(message);
+                }
+            };
+            crate::metrics::record_request();
+            crate::compression::apply_gzip(&request, &mut response);
+            response.drop_content_for_status();
+            if is_tls {
+                response.headers.push(Header::get_hsts_header());
+                #[cfg(feature = "http3")]
+                let alt_svc = format!("h3=\":{}\"", server_port);
+                #[cfg(not(feature = "http3"))]
+                let alt_svc = format!("h2=\":{}\"", server_port);
+                response.headers.push(Header { name: Header::_ALT_SVC.into(), value: alt_svc.into() });
+            }
+            response.headers.push(Header {
+                name: Header::_CONNECTION.into(),
+                value: if reusable { "keep-alive" } else { "close" }.into(),
+            });
+            Log::log_access(&request, &response, &peer_addr);
+            if response.stream_pipe.is_some() || response.stream_file.is_some() {
+                write_streaming(&mut stream, response, request).await?;
+            } else {
+                let (head, body) = Response::generate_response_parts(response, request);
+                stream.write_all(&head).await.map_err(|e| e.to_string())?;
+                stream.write_all(&body).await.map_err(|e| e.to_string())?;
+                stream.flush().await.map_err(|e| e.to_string())?;
+            }
+            if !reusable {
+                break;
+            }
+            continue;
+        }
+
         match body_framing {
             framing::BodyFraming::None => {}
             framing::BodyFraming::Length(declared_len) => {
@@ -334,6 +411,78 @@ pub(crate) async fn execute_blocking<A: Application + Send + 'static>(
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+/// Feed a streamed request body (#31) from the connection into `tx`: what
+/// is already in `pending`, then reads, decoding chunked framing. Every read
+/// is bounded by the idle timer as usual. A client that stops, sends too
+/// much or breaks the framing ends the stream with an error the handler
+/// sees; a handler that drops the body ends it as abandoned.
+async fn pump_body<S: AsyncRead + Unpin>(
+    stream: &mut S,
+    read_buffer: &mut [u8],
+    pending: &mut Vec<u8>,
+    mut idle: std::pin::Pin<&mut tokio::time::Sleep>,
+    body_framing: framing::BodyFraming,
+    max_body_size: u64,
+    tx: crate::server::body_pump::BodySender,
+) -> crate::server::body_pump::PumpOutcome {
+    use crate::server::body_pump::PumpOutcome;
+    use std::io::{Error, ErrorKind};
+    let stopped = || Error::new(ErrorKind::UnexpectedEof, "the client stopped sending the request body");
+    match body_framing {
+        framing::BodyFraming::None => PumpOutcome::Complete,
+        framing::BodyFraming::Length(declared_len) => {
+            let mut remaining = declared_len;
+            loop {
+                if remaining > 0 && !pending.is_empty() {
+                    let take = (pending.len() as u64).min(remaining) as usize;
+                    let chunk: Vec<u8> = pending.drain(..take).collect();
+                    remaining -= take as u64;
+                    if tx.send(Ok(chunk)).await.is_err() {
+                        return PumpOutcome::Abandoned;
+                    }
+                }
+                if remaining == 0 {
+                    return PumpOutcome::Complete;
+                }
+                if !read_more(stream, read_buffer, pending, idle.as_mut(), None).await {
+                    let _ = tx.send(Err(stopped())).await;
+                    return PumpOutcome::Failed;
+                }
+            }
+        }
+        framing::BodyFraming::Chunked => {
+            let mut decoder = framing::ChunkedBody::new(max_body_size);
+            loop {
+                match decoder.feed(pending) {
+                    Ok((consumed, done)) => {
+                        pending.drain(..consumed);
+                        let chunk = decoder.take_decoded();
+                        if !chunk.is_empty() && tx.send(Ok(chunk)).await.is_err() {
+                            return PumpOutcome::Abandoned;
+                        }
+                        if done {
+                            return PumpOutcome::Complete;
+                        }
+                    }
+                    Err(framing::ChunkError::TooLarge) => {
+                        let message = format!("the request body exceeds the {} byte limit", max_body_size);
+                        let _ = tx.send(Err(Error::new(ErrorKind::InvalidData, message))).await;
+                        return PumpOutcome::Failed;
+                    }
+                    Err(framing::ChunkError::Malformed(message)) => {
+                        let _ = tx.send(Err(Error::new(ErrorKind::InvalidData, message))).await;
+                        return PumpOutcome::Failed;
+                    }
+                }
+                if !read_more(stream, read_buffer, pending, idle.as_mut(), None).await {
+                    let _ = tx.send(Err(stopped())).await;
+                    return PumpOutcome::Failed;
+                }
+            }
+        }
+    }
 }
 
 /// One read (bounded by [`READ_TIMEOUT`], via the connection's `idle` timer,
@@ -1050,4 +1199,179 @@ mod tests {
         assert!(task.await.unwrap().is_ok());
     }
 
+
+    // ── #31: streamed request bodies ────────────────────────────────────────
+
+    /// Streams `/stream*` bodies; reports bytes read, or the read error.
+    /// `/stream/early` answers without reading. Each read's size goes to
+    /// `reads` so a test can see the handler running mid-upload.
+    #[derive(Clone)]
+    struct StreamApp {
+        reads: std::sync::mpsc::Sender<usize>,
+    }
+
+    impl Application for StreamApp {
+        fn execute(&self, request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
+            use std::io::Read;
+            if request.request_uri == "/stream/early" {
+                return Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "early"));
+            }
+            let mut body = &request.body;
+            let mut total = 0;
+            let mut buf = [0u8; 8192];
+            loop {
+                match body.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        total += n;
+                        let _ = self.reads.send(n);
+                    }
+                    Err(e) => return Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &format!("error: {e}"))),
+                }
+            }
+            Ok(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &format!("streamed {total} bytes, is_stream={}", request.body.is_stream())))
+        }
+
+        fn streams_body(&self, request: &Request, _connection: &ConnectionInfo) -> bool {
+            request.request_uri.starts_with("/stream")
+        }
+    }
+
+    fn stream_app() -> (StreamApp, std::sync::mpsc::Receiver<usize>) {
+        let (reads, rx) = std::sync::mpsc::channel();
+        (StreamApp { reads }, rx)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn the_handler_reads_the_body_while_it_arrives() {
+        let (app, reads) = stream_app();
+        let (mut client, server) = tokio::io::duplex(1 << 20);
+        let task = tokio::spawn(serve(server, peer(), None, false, app));
+        client.write_all(b"PUT /stream HTTP/1.1\r\nHost: x\r\nContent-Length: 200000\r\n\r\n").await.unwrap();
+        client.write_all(&vec![b'a'; 100_000]).await.unwrap();
+        // The handler has read part of the body before the rest is sent.
+        let first = tokio::task::spawn_blocking(move || {
+            let n = reads.recv_timeout(std::time::Duration::from_secs(5)).expect("no read before the body ended");
+            (n, reads)
+        }).await.unwrap();
+        assert!(first.0 > 0);
+        client.write_all(&vec![b'b'; 100_000]).await.unwrap();
+        let response = read_until_count(&mut client, "bytes", 1).await;
+        assert!(response.contains("streamed 200000 bytes, is_stream=true"), "{response}");
+        assert!(response.contains("Connection: keep-alive"), "{response}");
+        // The connection carries the next request.
+        client.write_all(b"POST /stream HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n").await.unwrap();
+        let second = read_to_end(&mut client).await;
+        assert!(second.contains("streamed 11 bytes"), "{second}");
+        assert!(task.await.unwrap().is_ok());
+        drop(first.1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_client_that_stops_mid_body_is_an_error_for_the_handler() {
+        let (app, _reads) = stream_app();
+        let (mut client, server) = tokio::io::duplex(1 << 20);
+        let task = tokio::spawn(serve(server, peer(), None, false, app));
+        client.write_all(b"PUT /stream HTTP/1.1\r\nHost: x\r\nContent-Length: 1000\r\n\r\nonly this").await.unwrap();
+        client.shutdown().await.unwrap();
+        let response = read_to_end(&mut client).await;
+        assert!(response.contains("error: the client stopped sending the request body"), "{response}");
+        assert!(response.contains("Connection: close"), "{response}");
+        let _ = task.await.unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_handler_that_stops_reading_closes_the_connection() {
+        let (app, _reads) = stream_app();
+        let (mut client, server) = tokio::io::duplex(1 << 20);
+        let task = tokio::spawn(serve(server, peer(), None, false, app));
+        client.write_all(b"PUT /stream/early HTTP/1.1\r\nHost: x\r\nContent-Length: 1000000\r\n\r\nabc").await.unwrap();
+        let response = read_to_end(&mut client).await;
+        assert!(response.contains("early"), "{response}");
+        assert!(response.contains("Connection: close"), "{response}");
+        assert!(task.await.unwrap().is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn broken_chunked_framing_is_an_error_for_the_handler() {
+        let (app, _reads) = stream_app();
+        let (mut client, server) = tokio::io::duplex(1 << 20);
+        let _task = tokio::spawn(serve(server, peer(), None, false, app));
+        client.write_all(b"PUT /stream HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\nzz\r\n").await.unwrap();
+        let response = read_until_count(&mut client, "error", 1).await;
+        assert!(response.contains("error:"), "{response}");
+        assert!(response.contains("Connection: close"), "{response}");
+    }
+
+    #[tokio::test]
+    async fn without_opting_in_the_body_is_read_first() {
+        let (mut client, server) = tokio::io::duplex(1 << 20);
+        let task = tokio::spawn(serve(server, peer(), None, false, Echo));
+        client.write_all(b"POST /x HTTP/1.1\r\nHost: x\r\nContent-Length: 3\r\nConnection: close\r\n\r\nabc").await.unwrap();
+        let response = read_to_end(&mut client).await;
+        assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+        assert!(task.await.unwrap().is_ok());
+    }
+
+    fn peak_rss_kib() -> u64 {
+        std::fs::read_to_string("/proc/self/status").ok()
+            .and_then(|status| status.lines().find(|l| l.starts_with("VmHWM:"))
+                .and_then(|l| l.split_whitespace().nth(1)?.parse().ok()))
+            .unwrap_or(0)
+    }
+
+    /// The exit criterion of #31: a large upload in constant memory. Run
+    /// alone (`--ignored --test-threads=1`): other tests in the process
+    /// move the peak.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore]
+    async fn a_large_streamed_upload_runs_in_constant_memory() {
+        const TOTAL: usize = 512 * 1024 * 1024;
+        let (app, reads) = stream_app();
+        std::thread::spawn(move || while reads.recv().is_ok() {});
+        let before = peak_rss_kib();
+        let (client, server) = tokio::io::duplex(1 << 16);
+        let task = tokio::spawn(serve(server, peer(), None, false, app));
+        let (mut read_half, mut write_half) = tokio::io::split(client);
+        let writer = tokio::spawn(async move {
+            write_half.write_all(format!("PUT /stream HTTP/1.1\r\nHost: x\r\nContent-Length: {TOTAL}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+            let chunk = vec![b'z'; 1 << 20];
+            for _ in 0..TOTAL / chunk.len() {
+                write_half.write_all(&chunk).await.unwrap();
+            }
+        });
+        let mut response = Vec::new();
+        read_half.read_to_end(&mut response).await.unwrap();
+        writer.await.unwrap();
+        let response = String::from_utf8_lossy(&response);
+        assert!(response.contains(&format!("streamed {TOTAL} bytes")), "{response}");
+        let grown_mib = (peak_rss_kib().saturating_sub(before)) / 1024;
+        assert!(grown_mib < 64, "peak memory grew {grown_mib} MiB for a 512 MiB upload");
+        let _ = task.await;
+    }
+
+    /// Control for the test above: the same upload read into memory first
+    /// does show up in the peak — so the measurement can tell.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore]
+    async fn a_large_buffered_upload_shows_in_peak_memory() {
+        const TOTAL: usize = 256 * 1024 * 1024;
+        let before = peak_rss_kib();
+        let (client, server) = tokio::io::duplex(1 << 16);
+        let task = tokio::spawn(serve(server, peer(), None, false, Hello));
+        let (mut read_half, mut write_half) = tokio::io::split(client);
+        let writer = tokio::spawn(async move {
+            write_half.write_all(format!("PUT /x HTTP/1.1\r\nHost: x\r\nContent-Length: {TOTAL}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+            let chunk = vec![b'z'; 1 << 20];
+            for _ in 0..TOTAL / chunk.len() {
+                write_half.write_all(&chunk).await.unwrap();
+            }
+        });
+        let mut response = Vec::new();
+        read_half.read_to_end(&mut response).await.unwrap();
+        writer.await.unwrap();
+        let grown_mib = (peak_rss_kib().saturating_sub(before)) / 1024;
+        assert!(grown_mib >= 200, "a 256 MiB buffered body grew the peak only {grown_mib} MiB");
+        let _ = task.await;
+    }
 }

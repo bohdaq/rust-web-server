@@ -201,8 +201,10 @@ enum ChunkState {
 /// large body is decoded in one pass.
 pub(crate) struct ChunkedBody {
     state: ChunkState,
-    /// Decoded body bytes so far.
+    /// Decoded body bytes so far (not yet taken by [`ChunkedBody::take_decoded`]).
     pub(crate) body: Vec<u8>,
+    /// Decoded bytes already taken out — still counted against the limit.
+    taken: u64,
     /// Largest accepted decoded body; `0` is unlimited.
     max_body_size: u64,
 }
@@ -217,7 +219,14 @@ pub(crate) enum ChunkError {
 
 impl ChunkedBody {
     pub(crate) fn new(max_body_size: u64) -> Self {
-        ChunkedBody { state: ChunkState::Size, body: Default::default(), max_body_size }
+        ChunkedBody { state: ChunkState::Size, body: Default::default(), taken: 0, max_body_size }
+    }
+
+    /// The bytes decoded since the last call, for a streamed body (#31);
+    /// they still count against the size limit.
+    pub(crate) fn take_decoded(&mut self) -> Vec<u8> {
+        self.taken += self.body.len() as u64;
+        std::mem::take(&mut self.body)
     }
 
     /// Decode from `buf`. Returns how many bytes of `buf` were consumed (the
@@ -242,7 +251,7 @@ impl ChunkedBody {
                     if size == 0 {
                         self.state = ChunkState::Trailer;
                     } else {
-                        let total = (self.body.len() as u64).saturating_add(size);
+                        let total = (self.taken + self.body.len() as u64).saturating_add(size);
                         if self.max_body_size > 0 && total > self.max_body_size {
                             return Err(ChunkError::TooLarge);
                         }
@@ -405,6 +414,15 @@ mod tests {
         assert_eq!(ChunkedBody::new(4).feed(b"5\r\nhello\r\n0\r\n\r\n"), Err(ChunkError::TooLarge));
         let mut ok = ChunkedBody::new(5);
         assert_eq!(ok.feed(b"5\r\nhello\r\n0\r\n\r\n"), Ok((15, true)));
+    }
+
+    #[test]
+    fn taken_bytes_still_count_against_the_limit() {
+        let mut decoder = ChunkedBody::new(8);
+        assert_eq!(decoder.feed(b"5\r\nhello\r\n"), Ok((10, false)));
+        assert_eq!(b"hello".to_vec(), decoder.take_decoded());
+        assert!(decoder.body.is_empty());
+        assert_eq!(decoder.feed(b"5\r\nworld\r\n"), Err(ChunkError::TooLarge));
     }
 
     // ── #57: strict request heads ──────────────────────────────────────────

@@ -288,6 +288,12 @@ impl CacheLayer {
 }
 
 impl Middleware for CacheLayer {
+    /// Headers only: a streamed body passes through untouched.
+    fn accepts_streamed_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
+
+
     fn handle(
         &self,
         request: &Request,

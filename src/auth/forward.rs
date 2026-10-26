@@ -111,6 +111,12 @@ impl ForwardAuthLayer {
 }
 
 impl Middleware for ForwardAuthLayer {
+    /// Headers only: a streamed body passes through untouched.
+    fn accepts_streamed_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
+
+
     fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
         // max_redirects(0): a 3xx from the auth service (e.g. an OAuth
         // login redirect) must reach passthrough_response() as-is, not be

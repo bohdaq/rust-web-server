@@ -77,6 +77,9 @@ use crate::response::STATUS_CODE_REASON_PHRASE;
 pub struct AppWithState<S> {
     state: Arc<S>,
     router: Router,
+    /// Routes whose body the handler reads as a stream ([`Self::stream_body`]);
+    /// matched only, never dispatched.
+    streaming: Router,
     /// When `Some`, the fallback `App` is pinned to this config (see
     /// [`App::with_config`]); when `None`, the fallback reads
     /// `RWS_CONFIG_*` env vars per request via `App::new()`, same as `App`'s
@@ -93,6 +96,7 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
         AppWithState {
             state: Arc::new(state),
             router: Router::new(),
+            streaming: Router::new(),
             config: None,
         }
     }
@@ -185,6 +189,29 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
     }
 
     /// Return a snapshot of all registered routes as `(method, pattern)` pairs.
+    /// Hand requests to `method` `pattern` (same pattern syntax as the route)
+    /// their body as a stream instead of reading it into memory first
+    /// (#31): the handler reads `request.body` with `std::io::Read` while
+    /// the upload is still arriving.
+    ///
+    /// ```rust,no_run
+    /// use std::io::Read;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+    ///
+    /// let app = App::with_state(())
+    ///     .put("/upload/:name", |request, params, _conn, _state| {
+    ///         let mut file = std::fs::File::create(format!("/tmp/{}", params.get("name").unwrap())).unwrap();
+    ///         let copied = std::io::copy(&mut &request.body, &mut file);
+    ///         Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &format!("{copied:?}"))
+    ///     })
+    ///     .stream_body("PUT", "/upload/:name");
+    /// ```
+    pub fn stream_body(mut self, method: &str, pattern: &str) -> Self {
+        self.streaming = self.streaming.add(method, pattern, |_, _, _| Response::new());
+        self
+    }
+
     pub fn route_entries(&self) -> Vec<crate::router::RouteInfo> {
         self.router.route_entries()
     }
@@ -297,5 +324,9 @@ impl<S: Send + Sync + 'static> Application for AppWithState<S> {
     /// matches, falling through to the built-in `App`, run inline.
     fn runs_inline(&self, request: &Request, connection: &ConnectionInfo) -> bool {
         !self.router.matches(request, connection) && App::is_inline_request(request)
+    }
+
+    fn streams_body(&self, request: &Request, connection: &ConnectionInfo) -> bool {
+        self.streaming.matches(request, connection)
     }
 }

@@ -159,6 +159,15 @@ leaving it out is always safe. The built-in in-memory layers
 `LogLayer`, `BlocklistLayer`, `MaintenanceLayer`) opt in; user route handlers,
 proxy routes and MCP calls never run inline.
 
+### Streamed request bodies (`accepts_streamed_body`)
+
+An application can take a request's body as a stream
+(`Application::streams_body`, see [Streaming large uploads](/building-apps/forms-uploads/#streaming-large-uploads)).
+Through a `WithMiddleware` stack that happens only if every layer returns
+`true` from `accepts_streamed_body` — the layer then sees an empty
+`request.body`, so return `true` only from a layer that never reads it. The
+built-in header-only layers do; the default is `false`.
+
 ### Passing requests through (`is_passthrough`)
 
 Some applications can answer a request asynchronously (`Application::execute_async`,

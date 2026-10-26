@@ -141,7 +141,7 @@ impl Router {
         self.add("DELETE", pattern, handler)
     }
 
-    fn add<F>(mut self, method: &str, pattern: &str, handler: F) -> Self
+    pub(crate) fn add<F>(mut self, method: &str, pattern: &str, handler: F) -> Self
     where F: Fn(&Request, &PathParams, &ConnectionInfo) -> Response + Send + Sync + 'static {
         self.routes.push(Route {
             method: method.to_string(),

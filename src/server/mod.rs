@@ -17,6 +17,8 @@ pub(crate) mod http1_async;
 #[cfg(feature = "http2")]
 pub(crate) mod body_stream;
 #[cfg(feature = "http2")]
+pub(crate) mod body_pump;
+#[cfg(feature = "http2")]
 pub(crate) mod sendfile;
 #[cfg(feature = "http2")]
 pub mod per_core;

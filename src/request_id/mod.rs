@@ -125,6 +125,12 @@ impl Default for RequestIdLayer {
 }
 
 impl Middleware for RequestIdLayer {
+    /// Headers only: a streamed body passes through untouched.
+    fn accepts_streamed_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
+
+
     fn handle(&self, request: &Request, connection: &ConnectionInfo, next: &dyn Application) -> Result<Response, String> {
         let existing = request.get_header(self.header.clone()).map(|h| h.value.to_string());
 

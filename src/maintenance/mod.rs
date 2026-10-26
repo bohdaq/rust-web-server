@@ -53,6 +53,12 @@ fn service_unavailable() -> Response {
 pub struct MaintenanceLayer;
 
 impl Middleware for MaintenanceLayer {
+    /// Headers only: a streamed body passes through untouched.
+    fn accepts_streamed_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
+
+
     fn handle(
         &self,
         request: &Request,

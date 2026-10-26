@@ -3037,6 +3037,14 @@ impl Application for McpServer {
         }
     }
 
+    /// MCP requests are JSON-RPC read whole; other paths: the wrapped app.
+    fn streams_body(&self, request: &Request, connection: &ConnectionInfo) -> bool {
+        if request.request_uri == self.path || request.request_uri.starts_with("/.well-known/") {
+            return false;
+        }
+        self.fallback.as_ref().is_some_and(|app| app.streams_body(request, connection))
+    }
+
     #[cfg(feature = "http2")]
     fn execute_async<'a>(&'a self, request: &'a Request, connection: &'a ConnectionInfo) -> Option<crate::application::AsyncResponse<'a>> {
         if request.request_uri == self.path || request.request_uri.starts_with("/.well-known/") {

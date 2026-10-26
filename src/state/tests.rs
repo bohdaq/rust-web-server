@@ -393,3 +393,24 @@ mod openapi_tests {
         assert!(!spec.contains("/posts"));
     }
 }
+
+#[test]
+fn stream_body_marks_only_its_routes() {
+    use crate::application::Application;
+    let app = crate::app::App::with_state(())
+        .put("/upload/:name", |_r, _p, _c, _s| Response::new())
+        .post("/form", |_r, _p, _c, _s| Response::new())
+        .stream_body("PUT", "/upload/:name");
+    let conn = crate::server::ConnectionInfo {
+        client: crate::server::Address { ip: "127.0.0.1".into(), port: 1 },
+        server: crate::server::Address { ip: "127.0.0.1".into(), port: 2 },
+        request_size: 0,
+        sni_hostname: None,
+    };
+    let request = |method: &str, uri: &str| Request {
+        method: method.into(), request_uri: uri.into(), http_version: "HTTP/1.1".into(), headers: vec![], body: Default::default(),
+    };
+    assert!(app.streams_body(&request("PUT", "/upload/a.bin"), &conn));
+    assert!(!app.streams_body(&request("POST", "/upload/a.bin"), &conn));
+    assert!(!app.streams_body(&request("POST", "/form"), &conn));
+}

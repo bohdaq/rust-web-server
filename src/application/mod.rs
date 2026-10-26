@@ -62,6 +62,25 @@ pub trait Application {
     fn execute_async<'a>(&'a self, _request: &'a Request, _connection: &'a ConnectionInfo) -> Option<AsyncResponse<'a>> {
         None
     }
+
+    /// `true` to receive this request's body as a stream ([`Body::Stream`])
+    /// instead of read into memory first: [`execute`] then runs while the
+    /// body is still arriving, on a blocking-pool thread, and reads it with
+    /// `std::io::Read` — a multi-gigabyte upload in a few chunks of memory.
+    /// Asked after the head is read, so `request.body` is empty here;
+    /// decide from the method, path and headers.
+    ///
+    /// Default `false`: the body is read first, as always. Async HTTP/1.1
+    /// and HTTP/2 honour it; the HTTP/1.1-only build and HTTP/3 read the
+    /// body first regardless. Wrappers answer `true` only when every layer
+    /// leaves the body alone ([`Middleware::accepts_streamed_body`]).
+    ///
+    /// [`Body::Stream`]: crate::request::Body::Stream
+    /// [`execute`]: Application::execute
+    /// [`Middleware::accepts_streamed_body`]: crate::middleware::Middleware::accepts_streamed_body
+    fn streams_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        false
+    }
 }
 
 /// The future [`Application::execute_async`] returns.

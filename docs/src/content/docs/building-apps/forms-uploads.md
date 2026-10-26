@@ -188,9 +188,52 @@ For an upload endpoint, set `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` to the largest f
 
 The limit is global: routes are matched only after the whole request, body included, has been read, so no per-route limit can run before buffering. For one route that must be stricter, the config-driven proxy has [`[route.middleware] max_body_size`](/proxy/config-driven/), and a `Router`/`AppWithState` handler can check `request.body.len()` and return `AppError::PayloadTooLarge`. Both run after the body is in memory, so they protect that route's logic, not server memory.
 
-:::note[Streaming uploads]
-The multipart parser reads the entire body into memory before returning — `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` bounds *how much* memory that can consume, but handlers still see the whole body at once rather than incrementally. For very large files, consider streaming the upload to disk at the TCP layer or using an object-storage pre-signed URL workflow and directing the client to upload directly.
-:::
+## Streaming large uploads
+
+By default a request's body is read into memory before the handler runs.
+For large uploads a handler can instead read the body **as it arrives**
+(since 18.0.0): opt in per route, and `request.body` is a stream —
+memory stays at a few chunks whatever the size.
+
+```rust
+use std::io::Read;
+use rust_web_server::app::App;
+use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+let app = App::with_state(())
+    .put("/upload/:name", |request, params, _conn, _state| {
+        let path = format!("/var/data/uploads/{}", params.get("name").unwrap_or("upload"));
+        let mut file = match std::fs::File::create(&path) {
+            Ok(file) => file,
+            Err(e) => return Response::text(STATUS_CODE_REASON_PHRASE.n500_internal_server_error, &e.to_string()),
+        };
+        // `&request.body` implements std::io::Read.
+        match std::io::copy(&mut &request.body, &mut file) {
+            Ok(bytes) => Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &format!("{bytes} bytes")),
+            Err(e) => Response::text(STATUS_CODE_REASON_PHRASE.n400_bad_request, &e.to_string()),
+        }
+    })
+    .stream_body("PUT", "/upload/:name");
+```
+
+- Any `Application` can opt in by implementing
+  `streams_body(&self, request, connection) -> bool`; it is asked after the
+  head is read, so decide from the method, path and headers.
+- The handler runs on a blocking-pool thread while the body arrives; a
+  client that stops, stalls past the read timeout, or sends more than
+  `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` makes the read fail with an error,
+  rather than the body just ending early.
+- If the handler answers without reading the whole body, the response goes
+  out with `Connection: close` and the connection is closed.
+- Middleware must agree: a stack streams only if every layer's
+  `accepts_streamed_body` says so. The built-in header-only layers (access
+  log, rate limit, blocklist, IP filter, request id, metrics, maintenance,
+  cache, basic/JWT/forward auth) do; a layer that reads the body must not.
+- Served by the async HTTP/1.1 server (plain and TLS). HTTP/2 and HTTP/3,
+  and the HTTP/1.1-only build, read the body first as before.
+- `FormMultipartData::parse` still needs the whole body; for multipart
+  uploads of large files, read the body with `body_bytes()` only up to a
+  size you accept, or upload the raw file instead of a form.
 
 ## `Expect: 100-continue` for large uploads
 

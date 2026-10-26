@@ -69,6 +69,12 @@ use crate::server::ConnectionInfo;
 pub struct RateLimitLayer;
 
 impl Middleware for RateLimitLayer {
+    /// Headers only: a streamed body passes through untouched.
+    fn accepts_streamed_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
+
+
     fn handle(
         &self,
         request: &Request,
@@ -123,6 +129,15 @@ pub trait Middleware: Send + Sync {
     /// offers the inner application's `execute_async` only if every layer
     /// passes the request through. Default `false`.
     fn is_passthrough(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        false
+    }
+
+    /// `true` when this layer never reads `request.body`, so the inner
+    /// application may receive it as a stream ([`Application::streams_body`]).
+    /// A layer that inspects the body (CSRF tokens in a form, request
+    /// signatures, rewriting) must keep the default `false`: it would see an
+    /// empty body.
+    fn accepts_streamed_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
         false
     }
 }
@@ -184,6 +199,9 @@ impl<A: Application> Application for WithMiddleware<A> {
         } else {
             None
         }
+    }
+    fn streams_body(&self, request: &Request, connection: &ConnectionInfo) -> bool {
+        self.layers.iter().all(|l| l.accepts_streamed_body(request, connection)) && self.inner.streams_body(request, connection)
     }
 }
 
