@@ -11,7 +11,6 @@ use crate::request::{METHOD, Request};
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use crate::server::Server;
 use crate::server::tests::MockTcpStream;
-use crate::symbol::SYMBOL;
 
 #[test]
 fn check_range_response_is_ok_two_part() {
@@ -76,17 +75,8 @@ fn check_range_response_is_ok_two_part() {
     let header = response._get_header(Header::_ACCEPT_RANGES.to_string()).unwrap();
     assert_eq!(Range::BYTES, header.value);
     let header = response._get_header(Header::_CONTENT_TYPE.to_string()).unwrap();
-    let value = [
-        Range::MULTIPART,
-        SYMBOL.slash,
-        Range::BYTERANGES,
-        SYMBOL.semicolon,
-        SYMBOL.whitespace,
-        Range::BOUNDARY,
-        SYMBOL.equals,
-        Range::STRING_SEPARATOR
-    ].join("");
-    assert_eq!(value, header.value);
+    assert_eq!(Range::multipart_content_type(&response.content_range_list), header.value);
+    assert!(header.value.starts_with("multipart/byteranges; boundary=rws-"));
 
     let response_result_body : Vec<u8>;
     let first_range = response.content_range_list.get(0).unwrap();

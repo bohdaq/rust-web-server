@@ -190,7 +190,7 @@ async fn send_h2_response(
     } else if rws_response.content_range_list.len() > 1 {
         rws_response.headers.push(crate::header::Header {
             name: crate::header::Header::_CONTENT_TYPE.to_string(),
-            value: crate::range::Range::MULTIPART_BYTERANGES_CONTENT_TYPE.to_string(),
+            value: crate::range::Range::multipart_content_type(&rws_response.content_range_list),
         });
     }
 

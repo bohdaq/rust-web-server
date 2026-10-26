@@ -220,4 +220,4 @@ let body = Range::get_content_range(
 response.content_range_list = vec![body];
 ```
 
-For multipart range responses (e.g. `Accept-Ranges` support), push multiple `ContentRange` values into the list. The framework serialises them as `multipart/byteranges` automatically.
+For multipart range responses (e.g. `Accept-Ranges` support), push multiple `ContentRange` values into the list. The framework serialises them as `multipart/byteranges` automatically, with a `Content-Length` and a boundary that occurs in none of the parts (`Range::multipart_boundary`; since 17.113.2).

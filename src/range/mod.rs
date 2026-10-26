@@ -58,7 +58,41 @@ impl Range {
     pub const BYTERANGES: &'static str = "byteranges";
     pub const MULTIPART: &'static str = "multipart";
     pub const BYTES: &'static str = "bytes";
+    /// The fixed boundary used before 17.113.2. A part containing it broke
+    /// the framing; responses now use [`Range::multipart_boundary`].
     pub const MULTIPART_BYTERANGES_CONTENT_TYPE: &'static str = "multipart/byteranges; boundary=String_separator";
+
+    /// The boundary for a `multipart/byteranges` body of these parts (#53):
+    /// derived from the parts, so the `Content-Type` header and
+    /// [`Response::generate_body`](crate::response::Response::generate_body)
+    /// agree without passing it around, and checked not to occur in any
+    /// part (RFC 2046 §5.1.1).
+    pub fn multipart_boundary(content_range_list: &[ContentRange]) -> String {
+        // FNV-1a over each part's position and length.
+        let mut seed: u64 = 0xcbf2_9ce4_8422_2325;
+        for cr in content_range_list {
+            for n in [cr.range.start, cr.range.end, cr.body.len() as u64] {
+                for byte in n.to_le_bytes() {
+                    seed = (seed ^ byte as u64).wrapping_mul(0x0100_0000_01b3);
+                }
+            }
+        }
+        let mut salt: u64 = 0;
+        loop {
+            let candidate = format!("rws-{:016x}", seed.wrapping_add(salt));
+            let collides = content_range_list.iter()
+                .any(|cr| cr.body.windows(candidate.len()).any(|w| w == candidate.as_bytes()));
+            if !collides {
+                return candidate;
+            }
+            salt += 1;
+        }
+    }
+
+    /// `multipart/byteranges; boundary=…` for these parts.
+    pub fn multipart_content_type(content_range_list: &[ContentRange]) -> String {
+        format!("{}/{}; {}={}", Range::MULTIPART, Range::BYTERANGES, Range::BOUNDARY, Range::multipart_boundary(content_range_list))
+    }
 
 
     pub const _ERROR_NO_EMPTY_LINE_BETWEEN_CONTENT_RANGE_HEADER_AND_BODY: &'static str = "no empty line between content range headers and body";
@@ -308,7 +342,14 @@ impl Range {
         Ok(content_range_list)
     }
 
-    pub fn _parse_multipart_body(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>) -> Result<Vec<ContentRange>, String> {
+    pub fn _parse_multipart_body(cursor: &mut Cursor<&[u8]>, content_range_list: Vec<ContentRange>) -> Result<Vec<ContentRange>, String> {
+        Range::_parse_multipart_body_with_boundary(cursor, content_range_list, Range::STRING_SEPARATOR)
+    }
+
+    /// [`Range::_parse_multipart_body`] for a body delimited by `boundary`
+    /// (the `boundary=` parameter of its `Content-Type`).
+    pub(crate) fn _parse_multipart_body_with_boundary(cursor: &mut Cursor<&[u8]>, mut content_range_list: Vec<ContentRange>, boundary: &str) -> Result<Vec<ContentRange>, String> {
+        let separator = [SYMBOL.hyphen, SYMBOL.hyphen, boundary].join("");
         // A loop, not recursion: one stack frame per line let a backend's
         // multipart/byteranges body with thousands of lines overflow the
         // stack and abort the process.
@@ -331,7 +372,6 @@ impl Range {
             };
 
             let content_range_is_not_parsed = content_range.body.len() == 0;
-            let separator = [SYMBOL.hyphen, SYMBOL.hyphen, Range::STRING_SEPARATOR].join("");
             if string.starts_with(separator.as_str()) && content_range_is_not_parsed {
                 //read next line - Content-Type
                 buffer = Range::_parse_line_as_bytes(cursor);
@@ -385,11 +425,13 @@ impl Range {
                 body = [body, string.as_bytes().to_vec()].concat();
 
                 let mut buf = Vec::from(string.as_bytes());
-                let separator = [SYMBOL.hyphen, SYMBOL.hyphen, Range::STRING_SEPARATOR].join("");
                 while !buf.starts_with(separator.as_bytes()) {
                     buf = vec![];
-                    cursor.read_until(b'\n', &mut buf).unwrap();
-                    let separator = [SYMBOL.hyphen, SYMBOL.hyphen, Range::STRING_SEPARATOR].join("");
+                    // End of input without the next delimiter: a truncated
+                    // body. Stop instead of looping forever.
+                    if cursor.read_until(b'\n', &mut buf).unwrap_or(0) == 0 {
+                        return Err("multipart body ends without a closing boundary".to_string());
+                    }
                     if !buf.starts_with(separator.as_bytes()) {
                         body = [body, buf.to_vec()].concat();
                     }

@@ -578,3 +578,63 @@ fn single_line_borrows_clean_values() {
     assert!(matches!(Header::single_line("plain"), std::borrow::Cow::Borrowed("plain")));
     assert_eq!("a  b c", Header::single_line("a\r\nb\rc"));
 }
+
+// ── #53: multipart/byteranges framing ───────────────────────────────────────
+
+fn two_parts(first: &[u8], second: &[u8]) -> Response {
+    let part = |body: &[u8], start: u64| {
+        let mut cr = Range::get_content_range(body.to_vec(), MimeType::TEXT_PLAIN.to_string());
+        cr.range.start = start;
+        cr.range.end = start + body.len() as u64 - 1;
+        cr.size = "1000".to_string();
+        cr
+    };
+    let mut response = Response::get_response(STATUS_CODE_REASON_PHRASE.n206_partial_content, None, None);
+    response.content_range_list = vec![part(first, 0), part(second, 500)];
+    response
+}
+
+fn get_request() -> Request {
+    Request { method: METHOD.get.to_string(), request_uri: "/f".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: vec![] }
+}
+
+#[test]
+fn multipart_byteranges_has_a_length_and_a_closed_delimiter() {
+    let (head, body) = Response::generate_response_parts(two_parts(b"first", b"second"), get_request());
+    let head = String::from_utf8(head).unwrap();
+    let length = head.lines().find_map(|l| l.strip_prefix("Content-Length: ")).expect("no Content-Length");
+    assert_eq!(body.len().to_string(), length);
+    let boundary = head.lines().find_map(|l| l.strip_prefix("Content-Type: multipart/byteranges; boundary=")).unwrap();
+    let body = String::from_utf8(body).unwrap();
+    assert!(body.starts_with(&format!("--{boundary}\r\n")), "{body}");
+    assert!(body.ends_with(&format!("\r\n--{boundary}--\r\n")), "{body}");
+    assert_eq!(3, body.matches(boundary).count());
+    assert!(!head.contains("Transfer-Encoding"));
+}
+
+#[test]
+fn the_boundary_never_occurs_in_a_part() {
+    // A part containing the boundary its position would otherwise get, and
+    // the old fixed one.
+    let plain = two_parts(b"aaaa", b"bbbbbb");
+    let natural = Range::multipart_boundary(&plain.content_range_list);
+    let tricky = two_parts(format!("x{natural}x").as_bytes(), b"--String_separator\r\n");
+    let boundary = Range::multipart_boundary(&tricky.content_range_list);
+    assert_ne!(natural, boundary);
+    for cr in &tricky.content_range_list {
+        assert!(!cr.body.windows(boundary.len()).any(|w| w == boundary.as_bytes()));
+    }
+    // The header and the body agree.
+    let (head, body) = Response::generate_response_parts(tricky, get_request());
+    let head = String::from_utf8(head).unwrap();
+    assert!(head.contains(&format!("boundary={boundary}\r\n")));
+    assert!(String::from_utf8_lossy(&body).ends_with(&format!("--{boundary}--\r\n")));
+}
+
+#[test]
+fn a_generated_multipart_response_parses_back() {
+    let raw = Response::generate_response(two_parts(b"first", b"second"), get_request());
+    let parsed = Response::parse(&raw).unwrap();
+    let bodies: Vec<&[u8]> = parsed.content_range_list.iter().map(|cr| &cr.body[..]).collect();
+    assert_eq!(vec![&b"first"[..], &b"second"[..]], bodies);
+}

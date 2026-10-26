@@ -5,6 +5,7 @@
 ### Fixed
 
 - **gzip no longer rewrites a partial body (#52).** A `Range` request with `Accept-Encoding: gzip` got the requested slice gzipped and `Content-Range` rewritten to the compressed size (`bytes=0-1200` of a 3,700-byte file → `Content-Range: bytes 0-37/37`), which no client can reassemble. A `206` is now sent uncompressed (RFC 9110 §14.4).
+- **multipart/byteranges framing (#53).** A multi-range response had neither `Content-Length` nor `Transfer-Encoding`, so a keep-alive client couldn't tell where it ended and waited; the closing delimiter lacked its trailing `--`; and the boundary was the fixed string `String_separator`, which broke the framing of any part that contained it. The response now carries a `Content-Length`, ends with `--boundary--`, and uses a boundary (`Range::multipart_boundary`) that occurs in none of the parts (RFC 9112 §6.3, RFC 2046 §5.1.1). The legacy `Response::_parse_response` reads the boundary from `Content-Type` and no longer loops forever on a body without a closing delimiter.
 
 ## 17.113.1 — 2026-10-26 — security patch
 
