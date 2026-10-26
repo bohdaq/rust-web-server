@@ -5071,7 +5071,7 @@ RWS_CONFIG_CORS_EXPOSE_HEADERS=X-Total-Count,X-Request-ID
 RWS_CONFIG_CORS_MAX_AGE=3600
 ```
 
-When the incoming `Origin` header does not appear in `RWS_CONFIG_CORS_ALLOW_ORIGINS` no CORS headers are added to the response.
+When the incoming `Origin` is not one of the listed origins no CORS headers are added to the response. Origins are compared whole (ASCII case ignored): with `https://app.example.com` listed, `https://app.example.co` and `https://app.example.com.evil` don't match (`Cors::origin_is_allowed`; before 17.113.2 a substring of the list matched). `Access-Control-Expose-Headers` is sent on the actual response, where the browser reads it, not only on the preflight.
 
 ### Environment variable reference
 
@@ -5082,7 +5082,7 @@ When the incoming `Origin` header does not appear in `RWS_CONFIG_CORS_ALLOW_ORIG
 | `RWS_CONFIG_CORS_ALLOW_CREDENTIALS` | `""` | Set `Access-Control-Allow-Credentials: true` |
 | `RWS_CONFIG_CORS_ALLOW_METHODS` | `""` | Value for `Access-Control-Allow-Methods` on preflight |
 | `RWS_CONFIG_CORS_ALLOW_HEADERS` | `""` | Value for `Access-Control-Allow-Headers` on preflight |
-| `RWS_CONFIG_CORS_EXPOSE_HEADERS` | `""` | Value for `Access-Control-Expose-Headers` |
+| `RWS_CONFIG_CORS_EXPOSE_HEADERS` | `""` | Value for `Access-Control-Expose-Headers`, on every response to an allowed origin |
 | `RWS_CONFIG_CORS_MAX_AGE` | `86400` | Preflight cache TTL in seconds |
 
 ### Programmatic CORS (`Cors` struct)

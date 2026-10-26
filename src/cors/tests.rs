@@ -489,3 +489,77 @@ fn cors_process_empty_config() {
 
     println!("end cors_process_empty_config");
 }
+// ── #58: exact origin match; exposed headers on the actual response ─────────
+
+fn cors_request(method: &str, origin: &str) -> Request {
+    Request {
+        method: method.to_string(),
+        request_uri: "/".to_string(),
+        http_version: "HTTP/1.1".to_string(),
+        headers: vec![
+            Header { name: "Origin".into(), value: origin.to_string().into() },
+            Header { name: "Access-Control-Request-Method".into(), value: "GET".into() },
+        ],
+        body: vec![],
+    }
+}
+
+fn config_allowing(origins: &str) -> crate::server_config::ServerConfig {
+    crate::server_config::ServerConfig {
+        cors_allow_all: false,
+        cors_allow_origins: origins.to_string(),
+        cors_expose_headers: "X-Total-Count,X-Request-Id".to_string(),
+        ..crate::server_config::ServerConfig::default()
+    }
+}
+
+fn allow_origin(headers: &[Header]) -> Option<String> {
+    headers.iter().find(|h| h.name == Header::_ACCESS_CONTROL_ALLOW_ORIGIN).map(|h| h.value.to_string())
+}
+
+#[test]
+fn origins_match_whole_not_as_substrings() {
+    let config = config_allowing("https://app.example.com,https://admin.example.com");
+    for (origin, allowed) in [
+        ("https://app.example.com", true),
+        ("https://ADMIN.example.com", true),
+        ("https://app.example.co", false),
+        ("https://app.example.com.evil", false),
+        ("https://pp.example.com", false),
+        ("app.example.com", false),
+        (",", false),
+        ("", false),
+    ] {
+        let headers = Cors::get_headers_from_config(&cors_request("GET", origin), &config);
+        assert_eq!(allowed, allow_origin(&headers).is_some(), "{origin:?}");
+    }
+    assert!(Cors::origin_is_allowed(" https://a.example , https://b.example ", "https://b.example"));
+    assert!(!Cors::origin_is_allowed("https://a.example", ""));
+}
+
+#[test]
+fn expose_headers_go_on_the_actual_response() {
+    let config = config_allowing("https://app.example.com");
+    let headers = Cors::get_headers_from_config(&cors_request("GET", "https://app.example.com"), &config);
+    let expose = headers.iter().find(|h| h.name == Header::_ACCESS_CONTROL_EXPOSE_HEADERS).map(|h| h.value.to_string());
+    assert_eq!(Some("x-total-count,x-request-id".to_string()), expose);
+    // Not for an origin that isn't allowed.
+    let denied = Cors::get_headers_from_config(&cors_request("GET", "https://other.example"), &config);
+    assert!(denied.is_empty());
+}
+
+#[test]
+fn the_library_cors_matches_whole_origins_too() {
+    let cors = Cors {
+        allow_all: false,
+        allow_origins: vec!["https://app.example.com".to_string()],
+        allow_methods: vec!["GET".to_string()],
+        allow_headers: vec![],
+        allow_credentials: true,
+        expose_headers: vec!["X-Total-Count".to_string()],
+        max_age: "60".to_string(),
+    };
+    assert!(Cors::_process(&cors_request("GET", "https://app.example.co"), &cors).unwrap().is_empty());
+    let ok = Cors::_process(&cors_request("GET", "https://app.example.com"), &cors).unwrap();
+    assert!(ok.iter().any(|h| h.name == Header::_ACCESS_CONTROL_EXPOSE_HEADERS && h.value == "x-total-count"));
+}

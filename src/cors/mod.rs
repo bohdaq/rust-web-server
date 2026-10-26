@@ -20,6 +20,16 @@ pub struct Cors {
 impl Cors {
     pub const MAX_AGE: &'static str = "86400";
 
+    /// `true` when `origin` is one of the comma-separated `allowed` origins —
+    /// the whole origin, not a substring of the list (#58): with
+    /// `https://app.example.com` allowed, `https://app.example.co` and
+    /// `https://app.example.com.evil` used to match too. ASCII case is
+    /// ignored (scheme and host are case-insensitive).
+    pub fn origin_is_allowed(allowed: &str, origin: &str) -> bool {
+        let origin = origin.trim();
+        !origin.is_empty() && allowed.split(',').any(|candidate| candidate.trim().eq_ignore_ascii_case(origin))
+    }
+
     pub fn get_vary_header_value() -> String {
         Header::_ORIGIN.to_string()
     }
@@ -92,7 +102,7 @@ impl Cors {
         let origin = boxed_origin.unwrap();
         let origin_value = format!("{}", origin.value);
 
-        let is_valid_origin = allow_origins.contains(&origin_value);
+        let is_valid_origin = Cors::origin_is_allowed(&allow_origins, &origin_value);
         if !is_valid_origin {
             return Ok(headers)
         }
@@ -111,6 +121,14 @@ impl Cors {
             headers.push(allow_credentials);
         }
 
+        // On the actual response, where the browser reads it (#58).
+        if !cors.expose_headers.is_empty() {
+            headers.push(Header {
+                name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.into(),
+                value: cors.expose_headers.join(",").to_lowercase().into(),
+            });
+        }
+
         let is_options = request.method == METHOD.options;
         if is_options {
             let methods = cors.allow_methods.join(",");
@@ -126,13 +144,6 @@ impl Cors {
                 value: allow_headers_value.to_lowercase().into()
             };
             headers.push(allow_headers);
-
-            let allow_expose_headers  = cors.expose_headers.join(",");
-            let expose_headers = Header {
-                name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.into(),
-                value: allow_expose_headers.to_lowercase().into()
-            };
-            headers.push(expose_headers);
 
             let max_age = Header {
                 name: Header::_ACCESS_CONTROL_MAX_AGE.into(),
@@ -165,7 +176,7 @@ impl Cors {
         }
         let origin_value = boxed_origin.unwrap().value.clone();
 
-        if !config.cors_allow_origins.contains(&*origin_value) {
+        if !Cors::origin_is_allowed(&config.cors_allow_origins, &origin_value) {
             return Ok(headers);
         }
 
@@ -182,6 +193,15 @@ impl Cors {
             });
         }
 
+        // On the actual response, where the browser reads it — it was sent
+        // only on the preflight, which ignores it (#58).
+        if !config.cors_expose_headers.is_empty() {
+            headers.push(Header {
+                name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.into(),
+                value: config.cors_expose_headers.to_lowercase().into(),
+            });
+        }
+
         if request.method == METHOD.options {
             if !config.cors_allow_methods.is_empty() {
                 headers.push(Header {
@@ -193,12 +213,6 @@ impl Cors {
                 headers.push(Header {
                     name: Header::_ACCESS_CONTROL_ALLOW_HEADERS.into(),
                     value: config.cors_allow_headers.to_lowercase().into(),
-                });
-            }
-            if !config.cors_expose_headers.is_empty() {
-                headers.push(Header {
-                    name: Header::_ACCESS_CONTROL_EXPOSE_HEADERS.into(),
-                    value: config.cors_expose_headers.to_lowercase().into(),
                 });
             }
             if !config.cors_max_age.is_empty() {
