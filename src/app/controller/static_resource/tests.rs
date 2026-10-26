@@ -1154,3 +1154,14 @@ fn an_unsupported_method_on_a_file_is_405_with_allow() {
     assert_eq!(404, send("DELETE", "/../etc/passwd").status_code);
     assert_eq!(404, send("POST", "/rws.config.toml").status_code);
 }
+
+#[test]
+fn an_escaped_extensionless_name_finds_its_html_file() {
+    let file = crate::test_env::TempPath::new_in_cwd("spaced page.html");
+    std::fs::write(&*file, "<p>page</p>").unwrap();
+    let name = file.file_name().unwrap().to_string_lossy().to_string();
+    let stem = name.trim_end_matches(".html").replace(' ', "%20");
+    let response = get_with(&format!("/{stem}"), vec![]);
+    assert_eq!(200, response.status_code);
+    assert_eq!(b"<p>page</p>".to_vec(), response.content_range_list[0].body);
+}
