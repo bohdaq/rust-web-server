@@ -1162,6 +1162,19 @@ impl McpServer {
         self
     }
 
+    /// Set (or replace) the behaviour hints of tool `name` — e.g. read-only,
+    /// or destructive — for a tool registered without them.
+    pub fn tool_annotations(self, name: &str, annotations: ToolAnnotations) -> Self {
+        for tool in self.tools.write().unwrap().iter_mut().filter(|t| t.name == name) {
+            tool.annotations = Some(annotations.clone());
+        }
+        #[cfg(feature = "http2")]
+        for tool in self.async_tools.write().unwrap().iter_mut().filter(|t| t.name == name) {
+            tool.annotations = Some(annotations.clone());
+        }
+        self
+    }
+
     fn with_tool_meta(&self, name: &str, mut change: impl FnMut(&mut ToolMeta)) {
         for tool in self.tools.write().unwrap().iter_mut().filter(|t| t.name == name) {
             change(&mut tool.meta);
@@ -3035,14 +3048,28 @@ impl Application for McpServer {
 
 // ── public helper ─────────────────────────────────────────────────────────────
 
-/// Extract a string argument from a tool/prompt `arguments` JSON object.
+/// Extract an argument from a tool/prompt `arguments` JSON object: a
+/// string's value, or a number's or boolean's literal text (`"3"`,
+/// `"true"`). Objects, arrays and `null` are `None`. Numbers and booleans
+/// used to be `None` too, so a tool reading `"enabled": true` saw nothing.
 ///
 /// ```rust
 /// use rust_web_server::mcp::extract_arg;
 /// assert_eq!(extract_arg(r#"{"text":"hello"}"#, "text").as_deref(), Some("hello"));
+/// assert_eq!(extract_arg(r#"{"enabled":true,"n":3}"#, "enabled").as_deref(), Some("true"));
+/// assert_eq!(extract_arg(r#"{"enabled":true,"n":3}"#, "n").as_deref(), Some("3"));
 /// assert_eq!(extract_arg(r#"{}"#, "missing"), None);
 /// ```
 pub fn extract_arg(arguments: &str, name: &str) -> Option<String> {
+    if let Some(members) = json_rpc::object_members(arguments) {
+        let (_, raw) = members.into_iter().find(|(key, _)| key == name)?;
+        return match raw.as_bytes().first() {
+            Some(b'"') => json_rpc::extract_str(&format!(r#"{{"v":{raw}}}"#), "v"),
+            Some(b'{' | b'[') | None => None,
+            _ if raw == "null" => None,
+            _ => Some(raw),
+        };
+    }
     json_rpc::extract_str(arguments, name)
 }
 

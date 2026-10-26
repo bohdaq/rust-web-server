@@ -395,7 +395,7 @@ let mcp = McpServer::new("my-server", "1.0")
 
 ## Built-in rws tools
 
-The `rws` binary serves `/mcp` with 20 built-in tools (not in config-driven proxy mode). Set `MCP_TOKEN` to require it as a Bearer token:
+The `rws` binary serves `/mcp` with 20 built-in tools when `MCP_TOKEN` is set (required as a Bearer token; without it there is no `/mcp`), not in config-driven proxy mode. See [Operate rws from an AI client](/mcp/operate/) for setup and playbooks:
 
 | Tool name             | Description                              |
 |-----------------------|------------------------------------------|

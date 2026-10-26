@@ -46,6 +46,7 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Fixed
 
+- MCP (#60): `extract_arg` returns numbers and booleans (it read only strings), so the binary's `set_maintenance {"enabled": true}` and `feature_set` did nothing and `recent_requests`/`recent_errors` ignored `n`; the `reload_config` tool now reloads (it set a flag only the HTTP/1.1-only server reads) via the new `config_reload::request_reload()`. The built-in tools carry read-only/destructive hints (`McpServer::tool_annotations`), and the new [Operate rws from an AI client](https://rws8.tech/mcp/operate/) page has the setup and playbooks.
 - Docs (#12): MCP sampling, roots and logging are marked deprecated by the 2026-07-28 MCP specification (they keep working); the MCP SSE stream is documented — and now tested — over HTTP/2 and HTTP/3, not only HTTP/1.1.
 - A request head must arrive within 30 s of its first byte, else `408` — a slow-drip client could hold a connection for weeks.
 - `H2ReverseProxy::read_timeout_ms` was ignored; a silent HTTP/2 backend hung the request.

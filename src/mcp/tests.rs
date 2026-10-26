@@ -2807,3 +2807,28 @@ fn batches_are_only_for_clients_up_to_2025_03_26() {
     let resp = client.post("/mcp").header("MCP-Protocol-Version", "2025-11-25").body_json(batch).send();
     assert!(resp.body_text().contains("-32600"), "{}", resp.body_text());
 }
+
+#[test]
+fn extract_arg_reads_numbers_and_booleans() {
+    use super::extract_arg;
+    let args = r#"{"enabled":true,"off":false,"n":3,"x":-1.5,"s":"a\"b","o":{"k":1},"l":[1],"z":null}"#;
+    assert_eq!(Some("true"), extract_arg(args, "enabled").as_deref());
+    assert_eq!(Some("false"), extract_arg(args, "off").as_deref());
+    assert_eq!(Some("3"), extract_arg(args, "n").as_deref());
+    assert_eq!(Some("-1.5"), extract_arg(args, "x").as_deref());
+    assert_eq!(Some("a\"b"), extract_arg(args, "s").as_deref());
+    for absent in ["o", "l", "z", "missing"] {
+        assert_eq!(None, extract_arg(args, absent), "{absent}");
+    }
+    // A nested key of the same name isn't the argument.
+    assert_eq!(None, extract_arg(r#"{"o":{"n":1}}"#, "n"));
+}
+
+#[test]
+fn tool_annotations_are_set_after_registration() {
+    let server = McpServer::new("srv", "1")
+        .tool("look", "Look", r#"{"type":"object"}"#, |_| Ok(McpContent::text("ok")))
+        .tool_annotations("look", ToolAnnotations { read_only_hint: Some(true), ..ToolAnnotations::default() });
+    let list = body_of(&server.handle_request(r#"{"jsonrpc":"2.0","method":"tools/list","id":1}"#));
+    assert!(list.contains(r#""annotations":{"readOnlyHint":true}"#), "{list}");
+}

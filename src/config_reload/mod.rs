@@ -133,6 +133,22 @@ pub fn current() -> ConfigSnapshot {
     global().read().unwrap().clone()
 }
 
+/// Ask the running server to reload, exactly as `SIGHUP` does: on Unix it
+/// raises `SIGHUP` for this process, so the server's own handler reloads the
+/// config, the proxy routes and (TLS builds) the certificates; elsewhere it
+/// calls [`reload`]. Setting [`RELOAD_REQUESTED`] alone only reaches the
+/// HTTP/1.1-only server's accept loop — the async servers never read it, so
+/// the MCP `reload_config` tool did nothing in them.
+pub fn request_reload() {
+    #[cfg(all(unix, any(feature = "http1", feature = "http2")))]
+    // SAFETY: kill(2) on our own pid with a signal both servers handle.
+    unsafe {
+        libc::kill(libc::getpid(), libc::SIGHUP);
+    }
+    #[cfg(not(all(unix, any(feature = "http1", feature = "http2"))))]
+    reload();
+}
+
 /// Re-read `rws.config.toml` and apply all hot-reloadable changes in-place.
 ///
 /// Called automatically when [`RELOAD_REQUESTED`] is set (SIGHUP on Unix) or

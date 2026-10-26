@@ -142,6 +142,7 @@ export default defineConfig({
             { label: 'Resources',  link: '/mcp/resources/' },
             { label: 'Prompts',    link: '/mcp/prompts/' },
             { label: 'Auth',       link: '/mcp/auth/' },
+            { label: 'Operate rws from an AI client', link: '/mcp/operate/' },
           ],
         },
         {

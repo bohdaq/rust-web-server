@@ -14,7 +14,7 @@ use rust_web_server::cache::CacheLayer;
 use rust_web_server::core::New;
 use rust_web_server::feature;
 use rust_web_server::maintenance::{MaintenanceLayer, MAINTENANCE_MODE};
-use rust_web_server::mcp::{McpContent, extract_arg};
+use rust_web_server::mcp::{McpContent, ToolAnnotations, extract_arg};
 use rust_web_server::metrics::SERVER_READY;
 use rust_web_server::request::Request;
 use rust_web_server::request_log::{self, LogLayer};
@@ -169,7 +169,7 @@ fn rws_mcp_tools(
     cache2: CacheLayer,
     cache3: CacheLayer,
 ) -> rust_web_server::mcp::McpServer {
-    mcp
+    let mcp = mcp
         // ── server introspection ─────────────────────────────────────────────
         .tool(
             "server_config",
@@ -336,7 +336,7 @@ fn rws_mcp_tools(
             "Trigger a hot config reload from environment variables and rws.config.toml",
             r#"{"type":"object"}"#,
             |_| {
-                rust_web_server::config_reload::RELOAD_REQUESTED.store(true, Ordering::SeqCst);
+                rust_web_server::config_reload::request_reload();
                 Ok(McpContent::text("config reload requested"))
             },
         )
@@ -457,7 +457,26 @@ fn rws_mcp_tools(
                     .collect();
                 Ok(McpContent::json(format!("[{}]", entries.join(","))))
             },
-        )
+        );
+    // Behaviour hints, so an AI client can tell looking from changing — and
+    // ask before the latter.
+    let read_only = ToolAnnotations { read_only_hint: Some(true), open_world_hint: Some(false), ..ToolAnnotations::default() };
+    let changes = |destructive: bool| ToolAnnotations {
+        read_only_hint: Some(false),
+        destructive_hint: Some(destructive),
+        idempotent_hint: Some(true),
+        open_world_hint: Some(false),
+    };
+    let mut mcp = mcp;
+    for name in ["server_config", "feature_flags", "server_metrics", "list_routes", "cache_stats", "rate_limit_config",
+        "check_rate_limit", "cors_config", "list_static_files", "maintenance_status", "list_blocked_ips", "feature_list",
+        "recent_requests", "recent_errors"] {
+        mcp = mcp.tool_annotations(name, read_only.clone());
+    }
+    for name in ["cache_clear", "reload_config", "set_maintenance", "block_ip", "feature_set"] {
+        mcp = mcp.tool_annotations(name, changes(true));
+    }
+    mcp.tool_annotations("unblock_ip", changes(false))
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
