@@ -28,7 +28,7 @@ fn get(uri: &str) -> Request {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     }
 }
 
@@ -38,7 +38,7 @@ fn post(uri: &str, body: &[u8]) -> Request {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: body.to_vec(),
+        body: body.to_vec().into(),
     }
 }
 
@@ -187,7 +187,7 @@ fn put_patch_delete_are_registered() {
             request_uri: "/r".to_string(),
             http_version: VERSION.http_1_1.to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
         };
         let resp = app.execute(&req, &conn()).unwrap();
         let body = String::from_utf8(resp.content_range_list[0].body.clone()).unwrap();

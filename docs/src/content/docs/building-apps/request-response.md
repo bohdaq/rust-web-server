@@ -13,9 +13,23 @@ pub struct Request {
     pub request_uri: String,  // "/search?q=rust"
     pub http_version: String, // "HTTP/1.1"
     pub headers: Vec<Header>,
-    pub body: Vec<u8>,        // raw bytes
+    pub body: Body,           // the body (since 18.0.0; was Vec<u8>)
 }
 ```
+
+### The body
+
+`request.body` is a `request::Body` (since 18.0.0). It dereferences to
+`&[u8]`, so `&request.body[..]`, `request.body.len()` and
+`String::from_utf8_lossy(&request.body)` work as before; `.to_vec()` gives a
+`Vec<u8>`. Build one from bytes or text with `.into()`
+(`body: b"data".to_vec().into()`, `body: "text".into()`) or `Default::default()`
+for none.
+
+The server reads the whole body before your handler runs, as it always has.
+A `Body` can also be a stream (`Body::stream(reader)`, `body.is_stream()`):
+read it with `std::io::Read` (`(&request.body).read(..)`), `into_reader()`,
+or all at once with `body_bytes()`.
 
 ### METHOD constants
 

@@ -45,7 +45,7 @@ fn get_version(_req: &Request, _p: &PathParams, _c: &ConnectionInfo, state: &App
 }
 
 fn echo_post(req: &Request, _p: &PathParams, _c: &ConnectionInfo, _s: &AppState) -> Response {
-    let body = req.body.clone();
+    let body = req.body.to_vec();
     let mut r = Response::new();
     r.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
     r.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();

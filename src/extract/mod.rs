@@ -42,7 +42,7 @@ pub struct Body(pub Vec<u8>);
 
 impl FromRequest for Body {
     fn from_request(request: &Request) -> Result<Self, Response> {
-        Ok(Body(request.body.clone()))
+        Ok(Body(request.body.to_vec()))
     }
 }
 
@@ -60,7 +60,7 @@ pub struct BodyText(pub String);
 
 impl FromRequest for BodyText {
     fn from_request(request: &Request) -> Result<Self, Response> {
-        String::from_utf8(request.body.clone())
+        String::from_utf8(request.body.to_vec())
             .map(BodyText)
             .map_err(|_| bad_request(request, "request body is not valid UTF-8"))
     }

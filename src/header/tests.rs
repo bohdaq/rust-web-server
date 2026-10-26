@@ -195,7 +195,7 @@ fn hsts_header() {
 #[test]
 fn security_headers_are_opt_in() {
     use crate::server_config::ServerConfig;
-    let request = crate::request::Request { method: "GET".to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] };
+    let request = crate::request::Request { method: "GET".to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: Default::default() };
     let opt_in = [Header::_X_FRAME_OPTIONS, Header::_REFERRER_POLICY, Header::_PERMISSIONS_POLICY, Header::_CONTENT_SECURITY_POLICY, Header::_DATE_UNIX_EPOCH_NANOS];
 
     // Default (18.0.0): none of them; nosniff and Date always.
@@ -268,7 +268,7 @@ fn header_new_borrows_static_strings_and_owns_strings() {
 fn standard_header_list_is_borrowed_except_date() {
     use std::borrow::Cow;
     use crate::server_config::ServerConfig;
-    let request = crate::request::Request { method: "GET".to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] };
+    let request = crate::request::Request { method: "GET".to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: Default::default() };
     for csp in ["", "default-src 'self'", "default-src 'none'"] {
         let config = ServerConfig { csp: csp.to_string(), security_headers: true, nanos_headers: true, ..ServerConfig::default() };
         let list = Header::get_header_list_with_config(&request, &config);

@@ -31,7 +31,7 @@ fn get(uri: &str) -> Request {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     }
 }
 
@@ -867,7 +867,7 @@ fn closes_after_each_response_backend(max_conns: usize) -> (u16, Arc<AtomicU32>)
 fn post(uri: &str) -> Request {
     let mut r = get(uri);
     r.method = METHOD.post.to_string();
-    r.body = b"x".to_vec();
+    r.body = b"x".to_vec().into();
     r
 }
 

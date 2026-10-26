@@ -19,7 +19,7 @@ mod server_config_tests {
             request_uri: "/".to_string(),
             http_version: "HTTP/1.1".to_string(),
             headers: vec![Header { name: "Origin".into(), value: "https://evil.example".into() }],
-            body: vec![],
+            body: Default::default(),
         };
         let headers = crate::cors::Cors::get_headers_from_config(&request, &ServerConfig::default());
         assert!(headers.is_empty(), "{:?}", headers);

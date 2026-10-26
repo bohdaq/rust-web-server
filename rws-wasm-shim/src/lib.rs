@@ -111,7 +111,7 @@ fn to_rws_request(request: &IncomingRequest) -> RwsRequest {
         // what most existing rws logic (e.g. keep-alive checks) expects.
         http_version: "HTTP/1.1".to_string(),
         headers,
-        body: read_incoming_body(request),
+        body: read_incoming_body(request).into(),
     }
 }
 

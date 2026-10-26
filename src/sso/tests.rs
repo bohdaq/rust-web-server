@@ -910,7 +910,7 @@ mod oidc_auth_tests {
             request_uri: uri.to_string(),
             http_version: VERSION.http_1_1.to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
         }
     }
 
@@ -1610,7 +1610,7 @@ mod server_tests {
             request_uri: uri.to_string(),
             http_version: VERSION.http_1_1.to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
         }
     }
 
@@ -1620,7 +1620,7 @@ mod server_tests {
             request_uri: uri.to_string(),
             http_version: VERSION.http_1_1.to_string(),
             headers: vec![],
-            body: body.as_bytes().to_vec(),
+            body: body.as_bytes().to_vec().into(),
         }
     }
 

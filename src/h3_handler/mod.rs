@@ -124,7 +124,7 @@ async fn handle_stream(
         request_uri: uri,
         http_version: VERSION.http_3_0.to_string(),
         headers,
-        body,
+        body: body.into(),
     };
 
     let (rws_request, result) =

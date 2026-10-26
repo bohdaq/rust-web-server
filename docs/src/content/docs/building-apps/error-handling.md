@@ -105,7 +105,7 @@ impl IntoResponse for ApiError {
             request_uri: "/".to_string(),
             http_version: "HTTP/1.1".to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
         };
         let headers = Header::get_header_list(&dummy);
         let body = Range::get_content_range(

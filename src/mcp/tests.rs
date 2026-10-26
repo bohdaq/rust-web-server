@@ -985,7 +985,7 @@ fn ending_a_session_drops_its_subscriptions_and_streams() {
 fn sse_streams_are_capped() {
     let server = make_server().max_sse_clients(2);
     let get = || crate::request::Request {
-        method: "GET".into(), request_uri: "/mcp".into(), http_version: "HTTP/1.1".into(), headers: vec![], body: vec![],
+        method: "GET".into(), request_uri: "/mcp".into(), http_version: "HTTP/1.1".into(), headers: vec![], body: Default::default(),
     };
     // Responses held open: their readers keep the streams alive.
     let first = server.start_sse_stream(&get());
@@ -1193,7 +1193,7 @@ fn get_request_with_session(session_id: Option<&str>) -> crate::request::Request
         request_uri: "/mcp".to_string(),
         http_version: crate::http::VERSION.http_1_1.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     }
 }
 

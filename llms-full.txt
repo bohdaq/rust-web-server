@@ -2345,9 +2345,23 @@ pub struct Request {
     pub request_uri: String,  // "/search?q=rust"
     pub http_version: String, // "HTTP/1.1"
     pub headers: Vec,
-    pub body: Vec<u8>,        // raw bytes
+    pub body: Body,           // the body (since 18.0.0; was Vec<u8>)
 }
 ```
+
+### The body
+
+`request.body` is a `request::Body` (since 18.0.0). It dereferences to
+`&[u8]`, so `&request.body[..]`, `request.body.len()` and
+`String::from_utf8_lossy(&request.body)` work as before; `.to_vec()` gives a
+`Vec<u8>`. Build one from bytes or text with `.into()`
+(`body: b"data".to_vec().into()`, `body: "text".into()`) or `Default::default()`
+for none.
+
+The server reads the whole body before your handler runs, as it always has.
+A `Body` can also be a stream (`Body::stream(reader)`, `body.is_stream()`):
+read it with `std::io::Read` (`(&request.body).read(..)`), `into_reader()`,
+or all at once with `body_bytes()`.
 
 ### METHOD constants
 
@@ -3078,7 +3092,7 @@ impl IntoResponse for ApiError {
             request_uri: "/".to_string(),
             http_version: "HTTP/1.1".to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
         };
         let headers = Header::get_header_list(&dummy);
         let body = Range::get_content_range(
@@ -3569,7 +3583,7 @@ fn handle_login(
     _conn: &ConnectionInfo,
     _state: &(),
 ) -> Response {
-    let fields = match FormUrlEncoded::parse(req.body.clone()) {
+    let fields = match FormUrlEncoded::parse(req.body.to_vec()) {
         Ok(map) => map,
         Err(e)  => {
             // body was not valid UTF-8
@@ -6975,7 +6989,7 @@ use rust_web_server::body::form_urlencoded::FormUrlEncoded;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn login(req: &Request) -> Response {
-    let form = FormUrlEncoded::parse(req.body.clone()).unwrap_or_default();
+    let form = FormUrlEncoded::parse(req.body.to_vec()).unwrap_or_default();
     let username = form.get("username").map(String::as_str).unwrap_or("");
     let password = form.get("password").map(String::as_str).unwrap_or("");
 
@@ -17194,6 +17208,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 |---|---|---|
 | `FromRequest` | `extract` | Trait for typed extraction from a request, returning a ready error response on failure. See [Extractors](/building-apps/extractors/) |
 | `Body` | `extract` | Raw request body bytes (never fails) |
+| `request::Body` | `request` | `Request.body` (18.0.0): bytes, or a stream (`Body::stream`, `body_bytes()`, `into_reader()`); derefs to `&[u8]`. Not the `extract::Body` extractor |
 | `BodyText` | `extract` | UTF-8 request body (returns 400 on invalid UTF-8) |
 | `Query` | `extract` | Parsed query string as `HashMap` |
 | `RequestHeaders` | `extract` | All request headers with case-insensitive `.get(name)` |
@@ -17599,7 +17614,7 @@ The Cargo registry was written by `sudo cargo …` once. Fix the ownership
 
 <https://rws8.tech/reference/migrating-18/>
 
-18.0 has three breaking changes. Most applications only meet the first. If you are coming from 17.113.0 or earlier, also read [the patch-release changes](#coming-from-171130-or-earlier).
+18.0 has a handful of breaking changes; most applications only meet the first and the `Request.body` type. If you are coming from 17.113.0 or earlier, also read [the patch-release changes](#coming-from-171130-or-earlier).
 
 ## `Header` fields are `Cow<'static, str>`
 
@@ -17695,6 +17710,21 @@ let key = RsaPublicKey::from_components(&n_bytes, &e_bytes)?;
 ```
 
 Keys under 2048 bits are rejected; a JWKS key that can't be used is skipped.
+
+## `Request.body` is a `Body`
+
+`Request.body` was a `Vec<u8>`; it is a `request::Body`, which can also be a
+stream of a body still arriving. It dereferences to `&[u8]`, so reading
+code mostly compiles unchanged. What to change:
+
+| 17.x | 18.0 |
+|---|---|
+| `body: vec![]` | `body: Default::default()` |
+| `body: bytes` (a `Vec<u8>`) | `body: bytes.into()` |
+| `request.body.clone()` where a `Vec<u8>` is wanted | `request.body.to_vec()` |
+| `String::from_utf8(request.body)` | `String::from_utf8(request.body.to_vec())` |
+| `request.body = vec` | `request.body = vec.into()` |
+| `assert_eq!(b"x".to_vec(), request.body)` | unchanged (`Vec<u8> == Body` works) |
 
 ## Coming from 17.113.0 or earlier
 

@@ -55,7 +55,7 @@ impl New for ContentRange {
             unit: Range::BYTES.to_string(),
             range: Range { start: 0, end: 0 },
             size: "".to_string(),
-            body: vec![],
+            body: Default::default(),
             content_type: "".to_string()
         }
     }
@@ -400,7 +400,7 @@ impl Range {
                 unit: Range::BYTES.to_string(),
                 range: Range { start: 0, end: 0 },
                 size: "".to_string(),
-                body: vec![],
+                body: Default::default(),
                 content_type: "".to_string()
             };
 
@@ -632,7 +632,7 @@ impl Range {
             unit: Range::BYTES.to_string(),
             range: Range { start: 0, end: 0 },
             size: "".to_string(),
-            body: vec![],
+            body: Default::default(),
             content_type: "".to_string()
         };
 

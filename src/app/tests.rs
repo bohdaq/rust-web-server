@@ -20,7 +20,7 @@ fn not_found() {
         request_uri: "/some/path".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let (response, _request) = App::handle_request(request);
@@ -40,7 +40,7 @@ fn static_file() {
         request_uri: "/static/content.png".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let (response, _request) = App::handle_request(request);
@@ -60,7 +60,7 @@ fn index() {
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let (response, _request) = App::handle_request(request);
@@ -99,7 +99,7 @@ fn static_file_cors_options_preflight_request_client_hints() {
                 value: expected_allow_headers.into()
             },
         ],
-        body: vec![],
+        body: Default::default(),
     };
 
     let (response, _request) = App::handle_request(request);
@@ -169,7 +169,7 @@ fn static_file_cors_off_options_preflight_request_client_hints() {
             Header { name: Header::_ACCESS_CONTROL_REQUEST_METHOD.into(), value: METHOD.post.to_string().into() },
             Header { name: Header::_ACCESS_CONTROL_REQUEST_HEADERS.into(), value: expected_allow_headers.into() },
         ],
-        body: vec![],
+        body: Default::default(),
     };
     let response = app.execute(&request, &conn).unwrap();
 
@@ -222,7 +222,7 @@ mod builder_tests {
             request_uri: uri.to_string(),
             http_version: VERSION.http_1_1.to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
         }
     }
 
@@ -377,7 +377,7 @@ fn builtin_controllers_match_path_without_query_where_they_always_did() {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     // These two compare the parsed path: a query or fragment doesn't matter.
@@ -402,7 +402,7 @@ fn static_files_after_builtins_fast_and_general_paths() {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
     let app = App::with_config(ServerConfig::default());
     let conn = ConnectionInfo {
@@ -443,7 +443,7 @@ fn static_gzip_matches_apply_gzip() {
         request_uri: "/static/style.css".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: accept.map(|a| vec![Header::new(Header::_ACCEPT_ENCODING, a.to_string())]).unwrap_or_default(),
-        body: vec![],
+        body: Default::default(),
     };
     let app = App::with_config(ServerConfig::default());
     let conn = ConnectionInfo {
@@ -479,7 +479,7 @@ fn client_hints_are_opt_in() {
         request_uri: "/healthz".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
     let conn = ConnectionInfo {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },

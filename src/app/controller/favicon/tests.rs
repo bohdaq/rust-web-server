@@ -20,7 +20,7 @@ fn favicon_retrieval() {
         request_uri: path.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {

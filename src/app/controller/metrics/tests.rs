@@ -23,7 +23,7 @@ fn make_metrics_request() -> Request {
         request_uri: "/metrics".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     }
 }
 
@@ -40,7 +40,7 @@ fn metrics_does_not_match_other_uri() {
         request_uri: "/other".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
     assert!(!MetricsController::is_matching(&req, &make_connection()));
 }

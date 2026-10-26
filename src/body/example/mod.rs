@@ -26,7 +26,7 @@ fn body_in_request() {
         request_uri: "/some/path".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body, // same as `body: body`
+        body: body.into(), // a Vec<u8> becomes a Body
     };
 
     // replace with your logic
@@ -117,7 +117,7 @@ fn multipart_form_data_body_in_request() {
         request_uri: "/some/path".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![host, content_type],
-        body, // same as `body: body`
+        body: body.into(), // a Vec<u8> becomes a Body
     };
 
     // replace with your logic
@@ -227,7 +227,7 @@ fn form_urlencoded() {
         request_uri: "/some/path".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![host, content_type],
-        body, // same as `body: body`
+        body: body.into(), // a Vec<u8> becomes a Body
     };
 
     // replace with your logic
@@ -272,13 +272,13 @@ fn json_in_request() {
         request_uri: "/some/path".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![host, content_type],
-        body, // same as `body: body`
+        body: body.into(), // a Vec<u8> becomes a Body
     };
 
     // replace with your logic
     assert_eq!(expected_body, request.body);
 
-    let actual_json_string = String::from_utf8(request.body).unwrap();
+    let actual_json_string = String::from_utf8(request.body.to_vec()).unwrap();
     let _actual_list : Vec<ExampleObject> = ExampleObject::from_json_list(actual_json_string).unwrap();
 }
 

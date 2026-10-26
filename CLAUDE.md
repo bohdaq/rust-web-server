@@ -208,7 +208,7 @@ Hot reload: `SIGHUP` (or `POST /admin/config/reload`) calls `config_reload::relo
 
 ### Key types
 
-- `Request` (`src/request/mod.rs`) — method, request_uri, http_version, headers, body (raw bytes)
+- `Request` (`src/request/mod.rs`) — method, request_uri, http_version, headers, body (`request::Body`, 18.0: bytes or a stream; derefs to `&[u8]`, build with `.into()`/`Default::default()`)
 - `Response` (`src/response/mod.rs`) — status code, headers, body as `Vec<ContentRange>`, and `stream_file: Option<String>` for chunked file streaming
 - `Header` (`src/header/mod.rs`) — name/value pair, both `Cow<'static, str>` (18.0.0): build built-in headers from the `Header::_X` constants and `&'static str` values (borrowed, no allocation) — never `Header::_X.to_string()` — and other values from a `String` (`Header::new(name, value)` or `.into()`); read via deref (`&*h.value`; `str::as_str` isn't stable on the MSRV, use `.as_ref()`). Both parsers take header names through `Header::name_from` (common names in their canonical or lower-case spelling are borrowed, anything else owned — same text)
 - `ConnectionInfo` (`src/server/mod.rs`) — client/server IP+port, request allocation size, and `sni_hostname: Option<String>` (SNI hostname from TLS handshake, `None` for plain HTTP), passed into every controller

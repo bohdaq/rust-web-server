@@ -247,7 +247,7 @@ impl AuthServer {
     // ── /oauth/token ─────────────────────────────────────────────────────────
 
     fn handle_token(&self, request: &Request) -> Response {
-        let form = match FormUrlEncoded::parse(request.body.clone()) {
+        let form = match FormUrlEncoded::parse(request.body.to_vec()) {
             Ok(f) => f,
             Err(_) => return Self::oauth_error(STATUS_CODE_REASON_PHRASE.n400_bad_request, "invalid_request", "malformed request body"),
         };

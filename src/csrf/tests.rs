@@ -25,7 +25,7 @@ fn req(method: &str, headers: Vec<Header>, body: Vec<u8>) -> Request {
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers,
-        body,
+        body: body.into(),
     }
 }
 

@@ -27,7 +27,7 @@ fn get(uri: &str) -> Request {
         request_uri: uri.to_string(),
         http_version: "HTTP/1.1".to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     }
 }
 

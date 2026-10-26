@@ -24,6 +24,9 @@ use crate::http::HTTP;
 use crate::symbol::SYMBOL;
 use crate::url::URL;
 
+mod body;
+pub use body::Body;
+
 /// A parsed HTTP request.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Request {
@@ -35,8 +38,11 @@ pub struct Request {
     pub http_version: String,
     /// Request headers.
     pub headers: Vec<Header>,
-    /// Raw request body bytes.
-    pub body: Vec<u8>,
+    /// The request body: its bytes (`&request.body[..]`, `request.body.len()`)
+    /// — or, for an application that opted in with
+    /// [`Application::streams_body`](crate::application::Application::streams_body),
+    /// a stream to read as it arrives. See [`Body`].
+    pub body: Body,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -202,8 +208,7 @@ impl Request {
         let clone = self.clone();
         let mut request = Request::_generate_request(clone).as_bytes().to_vec();
 
-        let mut body = self.body.clone();
-        request.append(&mut body);
+        request.extend_from_slice(&self.body);
 
         request
     }
@@ -254,7 +259,7 @@ impl Request {
             request_uri: "".to_string(),
             http_version: "".to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
         };
 
         let content_length: usize = 0;
@@ -392,7 +397,7 @@ impl Request {
 
         // remaining part is request body
         let start = (cursor.position() as usize).min(input.len());
-        request.body.extend_from_slice(&input[start..]);
+        request.body = input[start..].to_vec().into();
         cursor.set_position(input.len() as u64);
 
         Ok(true)

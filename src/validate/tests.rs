@@ -11,7 +11,7 @@ fn make_req(body: &[u8]) -> Request {
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: body.to_vec(),
+        body: body.to_vec().into(),
     }
 }
 
@@ -195,7 +195,7 @@ fn validated_extraction_error_returns_400_not_422() {
 
     impl FromRequest for MustBeUtf8 {
         fn from_request(req: &Request) -> Result<Self, Response> {
-            String::from_utf8(req.body.clone())
+            String::from_utf8(req.body.to_vec())
                 .map(MustBeUtf8)
                 .map_err(|_| {
                     let mut r = Response::new();

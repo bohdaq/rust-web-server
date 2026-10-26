@@ -365,7 +365,7 @@ fn form_urlencoded_content_type() {
 
     assert_eq!(body.as_bytes(), request.body);
 
-    let boxed_parse = FormUrlEncoded::parse(request.body);
+    let boxed_parse = FormUrlEncoded::parse(request.body.to_vec());
     let form = boxed_parse.unwrap();
 
     assert_eq!(form.get("key").unwrap(), "5678");
@@ -410,7 +410,7 @@ fn form_urlencoded_content_type_ends_with_new_line() {
 
     assert_eq!(body.as_bytes(), request.body);
 
-    let boxed_parse = FormUrlEncoded::parse(request.body);
+    let boxed_parse = FormUrlEncoded::parse(request.body.to_vec());
     let form = boxed_parse.unwrap();
 
     assert_eq!(form.get("key").unwrap(), "5678");

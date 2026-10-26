@@ -31,7 +31,7 @@ fn make_request() -> Request {
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     }
 }
 

@@ -30,7 +30,7 @@ impl Application for TestApp {
         }
         let mut response = if request.method == "POST" {
             let mut r = Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "");
-            r.content_range_list[0].body = request.body.clone();
+            r.content_range_list[0].body = request.body.to_vec();
             r
         } else if request.request_uri == "/big" {
             let mut r = Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "");

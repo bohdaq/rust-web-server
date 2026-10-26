@@ -19,7 +19,7 @@ fn is_matching_only_for_multipart_post_to_its_path() {
         headers: content_type
             .map(|v| vec![Header { name: Header::_CONTENT_TYPE.into(), value: v.to_string().into() }])
             .unwrap_or_default(),
-        body: vec![],
+        body: Default::default(),
     };
     let path = "/form-multipart-enctype-post-method";
     assert!(C::is_matching(&req("POST", path, Some("multipart/form-data; boundary=x")), &conn));

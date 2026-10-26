@@ -477,7 +477,7 @@ fn parse_multipart_request_body_image_extra_new_line_before_starting_payload_bou
 
 #[test]
 fn generate_part_no_headers() {
-    let part = Part { headers: vec![], body: vec![] };
+    let part = Part { headers: vec![], body: Default::default() };
     let boxed_part = FormMultipartData::generate_part(part);
     assert!(boxed_part.is_err());
     assert_eq!("One of the body parts does not have any header specified. At least Content-Disposition is required", boxed_part.err().unwrap())

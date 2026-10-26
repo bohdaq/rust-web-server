@@ -3,7 +3,7 @@ title: Migrating to 18.0
 description: What changes when upgrading rws from 17.x to 18.0 — Header field types, default response headers, and RSA public keys.
 ---
 
-18.0 has three breaking changes. Most applications only meet the first. If you are coming from 17.113.0 or earlier, also read [the patch-release changes](#coming-from-171130-or-earlier).
+18.0 has a handful of breaking changes; most applications only meet the first and the `Request.body` type. If you are coming from 17.113.0 or earlier, also read [the patch-release changes](#coming-from-171130-or-earlier).
 
 ## `Header` fields are `Cow<'static, str>`
 
@@ -99,6 +99,21 @@ let key = RsaPublicKey::from_components(&n_bytes, &e_bytes)?;
 ```
 
 Keys under 2048 bits are rejected; a JWKS key that can't be used is skipped.
+
+## `Request.body` is a `Body`
+
+`Request.body` was a `Vec<u8>`; it is a `request::Body`, which can also be a
+stream of a body still arriving. It dereferences to `&[u8]`, so reading
+code mostly compiles unchanged. What to change:
+
+| 17.x | 18.0 |
+|---|---|
+| `body: vec![]` | `body: Default::default()` |
+| `body: bytes` (a `Vec<u8>`) | `body: bytes.into()` |
+| `request.body.clone()` where a `Vec<u8>` is wanted | `request.body.to_vec()` |
+| `String::from_utf8(request.body)` | `String::from_utf8(request.body.to_vec())` |
+| `request.body = vec` | `request.body = vec.into()` |
+| `assert_eq!(b"x".to_vec(), request.body)` | unchanged (`Vec<u8> == Body` works) |
 
 ## Coming from 17.113.0 or earlier
 

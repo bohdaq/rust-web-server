@@ -29,7 +29,7 @@ impl Controller for FormUrlEncodedEnctypePostMethodController {
         response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
 
-        let boxed_body_string = String::from_utf8(_request.body.clone());
+        let boxed_body_string = String::from_utf8(_request.body.to_vec());
         if boxed_body_string.is_err() {
             let message = boxed_body_string.clone().err().unwrap().to_string();
             response.status_code = *STATUS_CODE_REASON_PHRASE.n400_bad_request.status_code;
@@ -47,7 +47,7 @@ impl Controller for FormUrlEncodedEnctypePostMethodController {
 
         // direct unwrap due to prior utf-8 encoding check
         // here is the form data, as an example here it is printed in the response body
-        let form : HashMap<String, String> = FormUrlEncoded::parse(_request.body.clone()).unwrap();
+        let form : HashMap<String, String> = FormUrlEncoded::parse(_request.body.to_vec()).unwrap();
 
         let mut formatted_list : Vec<String> = vec![];
         for (key, value) in form.into_iter() {
@@ -91,7 +91,7 @@ impl FormUrlEncodedEnctypePostMethodController {
         response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
 
-        let boxed_body_string = String::from_utf8(_request.body.clone());
+        let boxed_body_string = String::from_utf8(_request.body.to_vec());
         if boxed_body_string.is_err() {
             let message = boxed_body_string.clone().err().unwrap().to_string();
             response.status_code = *STATUS_CODE_REASON_PHRASE.n400_bad_request.status_code;
@@ -109,7 +109,7 @@ impl FormUrlEncodedEnctypePostMethodController {
 
         // direct unwrap due to prior utf-8 encoding check
         // here is the form data, as an example here it is printed in the response body
-        let form : HashMap<String, String> = FormUrlEncoded::parse(_request.body.clone()).unwrap();
+        let form : HashMap<String, String> = FormUrlEncoded::parse(_request.body.to_vec()).unwrap();
 
         let mut formatted_list : Vec<String> = vec![];
         for (key, value) in form.into_iter() {

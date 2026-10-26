@@ -217,7 +217,7 @@ pub(crate) enum ChunkError {
 
 impl ChunkedBody {
     pub(crate) fn new(max_body_size: u64) -> Self {
-        ChunkedBody { state: ChunkState::Size, body: Vec::new(), max_body_size }
+        ChunkedBody { state: ChunkState::Size, body: Default::default(), max_body_size }
     }
 
     /// Decode from `buf`. Returns how many bytes of `buf` were consumed (the
@@ -306,7 +306,7 @@ mod tests {
             request_uri: "/".to_string(),
             http_version: "HTTP/1.1".to_string(),
             headers: headers.iter().map(|(n, v)| Header { name: n.to_string().into(), value: v.to_string().into() }).collect(),
-            body: vec![],
+            body: Default::default(),
         }
     }
 

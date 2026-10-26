@@ -201,7 +201,7 @@ fn it_generates_successful_response_with_additional_headers() {
         request_uri: "/some-route".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_response = Response::generate_response(response, request);
@@ -267,7 +267,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
         request_uri: "/some-route".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_response = Response::generate_response(response, request);
@@ -544,7 +544,7 @@ fn multipart_part_header_without_separator_does_not_panic() {
 #[test]
 fn generate_response_parts_splits_head_and_body() {
     use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
-    let request = |m: &str| crate::request::Request { method: m.to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] };
+    let request = |m: &str| crate::request::Request { method: m.to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: Default::default() };
     let (head, body) = Response::generate_response_parts(Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "hello"), request("GET"));
     let head = String::from_utf8(head).unwrap();
     assert!(head.starts_with("HTTP/1.1 200 OK\r\n") && head.ends_with("\r\n\r\n"), "{head:?}");
@@ -559,7 +559,7 @@ fn generate_response_parts_splits_head_and_body() {
 #[test]
 fn generate_response_coalesced_appends_small_bodies_only() {
     use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
-    let request = |m: &str| crate::request::Request { method: m.to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] };
+    let request = |m: &str| crate::request::Request { method: m.to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: Default::default() };
     let response = || {
         let mut r = Response::get_response(
             STATUS_CODE_REASON_PHRASE.n200_ok,
@@ -596,7 +596,7 @@ fn generate_response_coalesced_appends_small_bodies_only() {
 #[test]
 fn generate_response_parts_partial_and_multipart_headers() {
     use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
-    let request = crate::request::Request { method: "GET".to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] };
+    let request = crate::request::Request { method: "GET".to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: Default::default() };
     let part = |start: u64, end: u64, body: &[u8]| ContentRange {
         unit: Range::BYTES.to_string(),
         range: Range { start, end },
@@ -757,7 +757,7 @@ fn head_lines(raw: &[u8]) -> Vec<String> {
 
 #[test]
 fn header_values_cannot_split_the_response() {
-    let request = Request { method: METHOD.get.to_string(), request_uri: "/".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: vec![] };
+    let request = Request { method: METHOD.get.to_string(), request_uri: "/".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: Default::default() };
     let (head, _) = Response::generate_response_parts(split_attempt(), request.clone());
     let full = Response::generate_response(split_attempt(), request);
     for raw in [head, full] {
@@ -790,7 +790,7 @@ fn two_parts(first: &[u8], second: &[u8]) -> Response {
 }
 
 fn get_request() -> Request {
-    Request { method: METHOD.get.to_string(), request_uri: "/f".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: vec![] }
+    Request { method: METHOD.get.to_string(), request_uri: "/f".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: Default::default() }
 }
 
 #[test]
@@ -841,7 +841,7 @@ fn with_body(status: &'static crate::response::StatusCodeReasonPhrase) -> Respon
 }
 
 fn request_with(method: &str) -> Request {
-    Request { method: method.to_string(), request_uri: "/".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: vec![] }
+    Request { method: method.to_string(), request_uri: "/".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: Default::default() }
 }
 
 #[test]

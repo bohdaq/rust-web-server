@@ -779,7 +779,7 @@ impl Conn {
             request_uri: incoming.path,
             http_version: VERSION.http_2_0.to_string(),
             headers: incoming.headers,
-            body: incoming.body,
+            body: incoming.body.into(),
         };
         // As on HTTP/1.1: a quick bodiless request the app answers inline
         // runs on this task; anything else (bodies, proxying, handlers that
@@ -1117,7 +1117,7 @@ impl Fields {
             }
             path
         };
-        Some(Incoming { method, path, headers: self.headers, body: Vec::new(), content_length: self.content_length })
+        Some(Incoming { method, path, headers: self.headers, body: Default::default(), content_length: self.content_length })
     }
 }
 

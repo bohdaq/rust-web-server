@@ -163,7 +163,7 @@ use rust_web_server::body::form_urlencoded::FormUrlEncoded;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn login(req: &Request) -> Response {
-    let form = FormUrlEncoded::parse(req.body.clone()).unwrap_or_default();
+    let form = FormUrlEncoded::parse(req.body.to_vec()).unwrap_or_default();
     let username = form.get("username").map(String::as_str).unwrap_or("");
     let password = form.get("password").map(String::as_str).unwrap_or("");
 

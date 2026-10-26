@@ -27,7 +27,7 @@ struct Echo;
 impl Application for Echo {
     fn execute(&self, request: &Request, _connection: &ConnectionInfo) -> Result<Response, String> {
         let mut response = Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "");
-        response.content_range_list[0].body = request.body.clone();
+        response.content_range_list[0].body = request.body.to_vec();
         Ok(response)
     }
 

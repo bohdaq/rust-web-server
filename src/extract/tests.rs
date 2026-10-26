@@ -7,7 +7,7 @@ fn request_with_body(body: Vec<u8>) -> Request {
         request_uri: "/test".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body,
+        body: body.into(),
     }
 }
 
@@ -17,7 +17,7 @@ fn request_with_uri(uri: &str) -> Request {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     }
 }
 
@@ -87,7 +87,7 @@ fn request_headers_get_case_insensitive() {
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![Header { name: "Content-Type".into(), value: "text/plain".into() }],
-        body: vec![],
+        body: Default::default(),
     };
     let headers = RequestHeaders::from_request(&req).unwrap();
     assert_eq!(Some("text/plain"), headers.get("content-type"));
@@ -116,7 +116,7 @@ mod derive {
             request_uri: uri.to_string(),
             http_version: VERSION.http_1_1.to_string(),
             headers: vec![],
-            body: body.to_vec(),
+            body: body.to_vec().into(),
         }
     }
 

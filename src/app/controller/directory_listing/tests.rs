@@ -23,7 +23,7 @@ fn get(path: &str) -> Request {
         request_uri: path.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     }
 }
 
@@ -41,7 +41,7 @@ fn matches_css_and_js_paths_only() {
         request_uri: "/rws-directory-listing.css".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
     assert!(!DirectoryListingAssetsController::is_matching(&post, &connection_info));
 }

@@ -1392,7 +1392,7 @@ where
     builder = builder.header("x-forwarded-for", client_ip);
     builder = builder.header("via", "2 rws");
 
-    let body_bytes = Bytes::from(request.body.clone());
+    let body_bytes = Bytes::from(request.body.to_vec());
     let end_of_stream = body_bytes.is_empty();
     let http_req = builder.body(()).map_err(|e| e.to_string())?;
 

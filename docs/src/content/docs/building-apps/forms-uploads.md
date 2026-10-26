@@ -23,7 +23,7 @@ fn handle_login(
     _conn: &ConnectionInfo,
     _state: &(),
 ) -> Response {
-    let fields = match FormUrlEncoded::parse(req.body.clone()) {
+    let fields = match FormUrlEncoded::parse(req.body.to_vec()) {
         Ok(map) => map,
         Err(e)  => {
             // body was not valid UTF-8

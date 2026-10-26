@@ -23,7 +23,7 @@ fn make_healthz_request() -> Request {
         request_uri: "/healthz".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![Header { name: "Host".into(), value: "localhost".into() }],
-        body: vec![],
+        body: Default::default(),
     }
 }
 
@@ -40,7 +40,7 @@ fn healthz_does_not_match_other_uri() {
         request_uri: "/other".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
     assert!(!HealthController::is_matching(&req, &make_connection()));
 }
@@ -52,7 +52,7 @@ fn healthz_does_not_match_post() {
         request_uri: "/healthz".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
     assert!(!HealthController::is_matching(&req, &make_connection()));
 }

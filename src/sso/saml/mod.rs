@@ -326,7 +326,7 @@ impl SamlSp {
         let request_id = session.get("_saml_request_id").map(|s| s.to_string());
         let return_to = session.get("_saml_return_to").unwrap_or(&self.post_login_redirect).to_string();
 
-        let form = match FormUrlEncoded::parse(request.body.clone()) {
+        let form = match FormUrlEncoded::parse(request.body.to_vec()) {
             Ok(f) => f,
             Err(e) => return Self::error_response(&format!("malformed ACS request body: {e}")),
         };

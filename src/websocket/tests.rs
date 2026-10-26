@@ -73,7 +73,7 @@ fn upgrade_request() -> Request {
             Header { name: "Sec-WebSocket-Key".into(),    value: "dGhlIHNhbXBsZSBub25jZQ==".into() },
             Header { name: "Sec-WebSocket-Version".into(), value: "13".into() },
         ],
-        body: vec![],
+        body: Default::default(),
     }
 }
 
@@ -83,7 +83,7 @@ fn plain_request() -> Request {
         request_uri: "/index.html".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     }
 }
 

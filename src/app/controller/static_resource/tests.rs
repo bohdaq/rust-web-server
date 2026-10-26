@@ -17,7 +17,7 @@ fn directory_index_html() {
         request_uri: path.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {
@@ -51,7 +51,7 @@ fn directory_index_html_with_query() {
         request_uri: path.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {
@@ -85,7 +85,7 @@ fn directory_index_html_no_slash() {
         request_uri: path.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {
@@ -119,7 +119,7 @@ fn directory_index_html_no_slash_and_query() {
         request_uri: path.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {
@@ -153,7 +153,7 @@ fn file_retrieval() {
         request_uri: path.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {
@@ -192,7 +192,7 @@ fn not_found() {
         request_uri: path.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {
@@ -224,7 +224,7 @@ fn malformed() {
         request_uri: path.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {
@@ -254,7 +254,7 @@ fn file_retrieval_with_query_params() {
         request_uri: request_uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {
@@ -288,7 +288,7 @@ fn file_retrieval_no_html_suffix() {
         request_uri: request_uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {
@@ -322,7 +322,7 @@ fn file_retrieval_no_html_suffix_with_query_params() {
         request_uri: request_uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {
@@ -354,7 +354,7 @@ fn file_response_includes_etag_header() {
         request_uri: "/static/test.txt".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {
@@ -392,7 +392,7 @@ fn if_none_match_returns_304_not_modified() {
         request_uri: "/static/test.txt".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let response1 = StaticResourceController::process(&request1, Response::new(), &connection_info);
@@ -407,7 +407,7 @@ fn if_none_match_returns_304_not_modified() {
         request_uri: "/static/test.txt".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![Header { name: Header::_IF_NONE_MATCH.into(), value: etag.clone() }],
-        body: vec![],
+        body: Default::default(),
     };
 
     let response2 = StaticResourceController::process(&request2, Response::new(), &connection_info);
@@ -436,7 +436,7 @@ fn if_none_match_star_returns_304() {
         request_uri: "/static/test.txt".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![Header { name: Header::_IF_NONE_MATCH.into(), value: "*".into() }],
-        body: vec![],
+        body: Default::default(),
     };
 
     let response = StaticResourceController::process(&request, Response::new(), &connection_info);
@@ -462,7 +462,7 @@ fn stale_etag_returns_200_with_body() {
             name: Header::_IF_NONE_MATCH.into(),
             value: "\"outdated-etag-value\"".into(),
         }],
-        body: vec![],
+        body: Default::default(),
     };
 
     let response = StaticResourceController::process(&request, Response::new(), &connection_info);
@@ -480,7 +480,7 @@ fn directory_without_index_html_matches_and_renders_listing() {
         request_uri: path.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let connection_info = ConnectionInfo {
@@ -516,7 +516,7 @@ fn directory_without_index_html_matches_head_and_options() {
         request_uri: "/static/no_index/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
     assert!(StaticResourceController::is_matching(&head_request, &connection_info));
 
@@ -525,7 +525,7 @@ fn directory_without_index_html_matches_head_and_options() {
         request_uri: "/static/no_index/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
     assert!(StaticResourceController::is_matching(&options_request, &connection_info));
 }
@@ -584,7 +584,7 @@ fn spa_request(path: &str) -> (Request, ConnectionInfo) {
         request_uri: path.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
     let connection_info = ConnectionInfo {
         client: Address { ip: "127.0.0.1".to_string(), port: 0 },
@@ -720,7 +720,7 @@ impl Drop for ServedFile {
 }
 
 fn static_request(method: &str, uri: &str, headers: Vec<Header>) -> Request {
-    Request { method: method.to_string(), request_uri: uri.to_string(), http_version: VERSION.http_1_1.to_string(), headers, body: vec![] }
+    Request { method: method.to_string(), request_uri: uri.to_string(), http_version: VERSION.http_1_1.to_string(), headers, body: Default::default() }
 }
 
 #[test]
@@ -817,7 +817,7 @@ fn is_matching_only_for_get_head_options_on_origin_form_targets() {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     for method in [METHOD.get, METHOD.head, METHOD.options] {
@@ -936,7 +936,7 @@ fn large_compressible_file_is_gzipped_for_gzip_clients_and_streamed_otherwise() 
 
 fn static_status(uri: &str) -> i16 {
     use crate::application::Application;
-    let request = Request { method: "GET".into(), request_uri: uri.to_string(), http_version: "HTTP/1.1".into(), headers: vec![], body: vec![] };
+    let request = Request { method: "GET".into(), request_uri: uri.to_string(), http_version: "HTTP/1.1".into(), headers: vec![], body: Default::default() };
     let conn = ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None };
     crate::app::App::new().execute(&request, &conn).unwrap().status_code
 }
@@ -1002,7 +1002,7 @@ fn percent_encoded_names_are_found() {
     {
         use crate::application::Application;
         let request = Request { method: "GET".into(), request_uri: format!("/{}", name.replace(' ', "%20")), http_version: "HTTP/1.1".into(),
-            headers: vec![Header { name: "Range".into(), value: "bytes=0-2".into() }], body: vec![] };
+            headers: vec![Header { name: "Range".into(), value: "bytes=0-2".into() }], body: Default::default() };
         let conn = ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None };
         let response = crate::app::App::new().execute(&request, &conn).unwrap();
         assert_eq!(206, response.status_code, "{}", String::from_utf8_lossy(&response.content_range_list.first().map(|c| c.body.clone()).unwrap_or_default()));
@@ -1043,7 +1043,7 @@ fn directory_listing_links_resolve() {
     std::fs::create_dir(&*dir).unwrap();
     std::fs::write(dir.join("a b&c.txt"), "x").unwrap();
     let dir_name = dir.file_name().unwrap().to_string_lossy().to_string();
-    let request = Request { method: "GET".into(), request_uri: format!("/{}/", dir_name), http_version: "HTTP/1.1".into(), headers: vec![], body: vec![] };
+    let request = Request { method: "GET".into(), request_uri: format!("/{}/", dir_name), http_version: "HTTP/1.1".into(), headers: vec![], body: Default::default() };
     let conn = ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None };
     let listing = crate::app::App::new().execute(&request, &conn).unwrap();
     let html = String::from_utf8_lossy(&listing.content_range_list[0].body).to_string();
@@ -1076,7 +1076,7 @@ fn if_none_match_is_a_list_compared_weakly() {
 fn get_with(uri: &str, headers: Vec<(&str, &str)>) -> Response {
     use crate::application::Application;
     let request = Request { method: "GET".into(), request_uri: uri.to_string(), http_version: "HTTP/1.1".into(),
-        headers: headers.into_iter().map(|(n, v)| Header { name: n.to_string().into(), value: v.to_string().into() }).collect(), body: vec![] };
+        headers: headers.into_iter().map(|(n, v)| Header { name: n.to_string().into(), value: v.to_string().into() }).collect(), body: Default::default() };
     let conn = ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None };
     crate::app::App::new().execute(&request, &conn).unwrap()
 }
@@ -1140,7 +1140,7 @@ fn an_unsupported_method_on_a_file_is_405_with_allow() {
     use crate::application::Application;
     let conn = ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None };
     let send = |method: &str, uri: &str| {
-        let request = Request { method: method.into(), request_uri: uri.into(), http_version: "HTTP/1.1".into(), headers: vec![], body: vec![] };
+        let request = Request { method: method.into(), request_uri: uri.into(), http_version: "HTTP/1.1".into(), headers: vec![], body: Default::default() };
         crate::app::App::new().execute(&request, &conn).unwrap()
     };
     for method in ["POST", "PUT", "DELETE", "PATCH"] {

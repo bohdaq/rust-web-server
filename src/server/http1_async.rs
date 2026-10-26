@@ -156,7 +156,7 @@ where
                         break 'session; // closed or stalled mid-body
                     }
                 }
-                request.body = pending.drain(..declared_len as usize).collect();
+                request.body = pending.drain(..declared_len as usize).collect::<Vec<u8>>().into();
             }
             framing::BodyFraming::Chunked => {
                 if expects_continue
@@ -190,7 +190,7 @@ where
                         break 'session;
                     }
                 }
-                request.body = decoder.body;
+                request.body = decoder.body.into();
             }
         }
 
@@ -933,7 +933,7 @@ mod tests {
     }
 
     fn probe_request(uri: &str) -> Request {
-        Request { method: "GET".to_string(), request_uri: uri.to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] }
+        Request { method: "GET".to_string(), request_uri: uri.to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: Default::default() }
     }
 
     #[tokio::test]

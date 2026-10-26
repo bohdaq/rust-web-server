@@ -49,7 +49,7 @@ fn parse_array_of_bytes_as_request() {
 
 
     // in this example request body contained url encoded form, here is the sample how to parse it
-    let boxed_parse = FormUrlEncoded::parse(request.body);
+    let boxed_parse = FormUrlEncoded::parse(request.body.to_vec());
     let form = boxed_parse.unwrap();
 
     // asserts for form
@@ -76,7 +76,7 @@ fn generate() {
         request_uri: endpoint.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![host],
-        body: form_url_encoded.as_bytes().to_vec(),
+        body: form_url_encoded.as_bytes().to_vec().into(),
     };
 
     let raw_request : Vec<u8> = request.generate();

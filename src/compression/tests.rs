@@ -17,7 +17,7 @@ fn make_request_with_gzip() -> Request {
             name: Header::_ACCEPT_ENCODING.into(),
             value: "gzip, deflate".into(),
         }],
-        body: vec![],
+        body: Default::default(),
     }
 }
 
@@ -61,7 +61,7 @@ fn does_not_compress_when_gzip_not_accepted() {
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
     let mut response = make_response(b"<html>hello</html>", MimeType::TEXT_HTML);
     let original_len = response.content_range_list[0].body.len();

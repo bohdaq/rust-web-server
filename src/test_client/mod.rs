@@ -100,7 +100,7 @@ impl<'a, A: Application> TestRequest<'a, A> {
             method,
             path: path.to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
             client,
         }
     }
@@ -138,7 +138,7 @@ impl<'a, A: Application> TestRequest<'a, A> {
             request_uri: self.path,
             http_version: VERSION.http_1_1.to_string(),
             headers: self.headers,
-            body: self.body,
+            body: self.body.into(),
         };
 
         let response = self.client.app.execute(&request, &self.client.connection)
@@ -148,7 +148,7 @@ impl<'a, A: Application> TestRequest<'a, A> {
                     request_uri: "/".to_string(),
                     http_version: VERSION.http_1_1.to_string(),
                     headers: vec![],
-                    body: vec![],
+                    body: Default::default(),
                 };
                 let header_list = Header::get_header_list(&dummy);
                 let body = msg.into_bytes();

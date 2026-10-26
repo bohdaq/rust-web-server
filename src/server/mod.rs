@@ -130,7 +130,7 @@ impl Server {
             request_uri: "".to_string(),
             http_version: "".to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
         };
 
         let size = message.chars().count() as u64;
@@ -164,7 +164,7 @@ impl Server {
             request_uri: "".to_string(),
             http_version: "".to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
         };
 
         let size = message.chars().count() as u64;
@@ -214,7 +214,7 @@ impl Server {
             request_uri: "".to_string(),
             http_version: "".to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
         };
 
         let size = message.chars().count() as u64;
@@ -244,7 +244,7 @@ impl Server {
             request_uri: "".to_string(),
             http_version: "".to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
         };
         let response = Response::get_response(STATUS_CODE_REASON_PHRASE.n100_continue, None, None);
         Response::generate_response(response, dummy_request)
@@ -260,7 +260,7 @@ impl Server {
             request_uri: "".to_string(),
             http_version: "".to_string(),
             headers: vec![],
-            body: vec![],
+            body: Default::default(),
         };
 
         let size = message.chars().count() as u64;
@@ -388,7 +388,7 @@ impl Server {
                             Ok(k) => pending.extend_from_slice(&read_buffer[..k]),
                         }
                     }
-                    request.body = pending.drain(..declared_len as usize).collect();
+                    request.body = pending.drain(..declared_len as usize).collect::<Vec<u8>>().into();
                 }
                 framing::BodyFraming::Chunked => {
                     if expects_continue && pending.is_empty() {
@@ -423,7 +423,7 @@ impl Server {
                             Ok(k) => pending.extend_from_slice(&read_buffer[..k]),
                         }
                     }
-                    request.body = decoder.body;
+                    request.body = decoder.body.into();
                 }
             }
 

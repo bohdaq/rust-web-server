@@ -9,14 +9,14 @@ use super::forward;
 use crate::request::Request;
 
 fn get(uri: &str) -> Request {
-    Request { method: "GET".to_string(), request_uri: uri.to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] }
+    Request { method: "GET".to_string(), request_uri: uri.to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: Default::default() }
 }
 
 fn with_method(method: &str) -> Request {
     let mut r = get("/");
     r.method = method.to_string();
     if method == "POST" {
-        r.body = b"x".to_vec();
+        r.body = b"x".to_vec().into();
     }
     r
 }

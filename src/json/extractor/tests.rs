@@ -11,7 +11,7 @@ fn post_json(body: &[u8]) -> Request {
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: body.to_vec(),
+        body: body.to_vec().into(),
     }
 }
 

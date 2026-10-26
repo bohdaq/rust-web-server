@@ -24,7 +24,7 @@ fn log_request_response() {
             Header { name: Header::_ACCEPT_ENCODING.into(), value: "gzip, deflate, br".into() },
             Header { name: Header::_REFERER.into(), value: "https://127.0.0.1:7878/".into() },
         ],
-        body: vec![],
+        body: Default::default(),
     };
 
     let (response, request) = App::handle_request(request);
@@ -85,7 +85,7 @@ fn combined_log_format_includes_clf_fields() {
         request_uri: "/static/test.txt".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let (response, request) = App::handle_request(request);
@@ -120,7 +120,7 @@ fn combined_log_format_empty_body_uses_dash() {
         request_uri: "/nonexistent".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let response = Response::new();
@@ -139,7 +139,7 @@ fn make_request(method: &str, uri: &str) -> Request {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     }
 }
 
@@ -302,7 +302,7 @@ fn json_and_combined_lines_escape_and_format_exactly() {
         request_uri: "/a\"b\\c\nd\re?q=1".to_string(),
         http_version: "HTTP/1.1".to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
     let mut response = crate::response::Response::get_response(crate::response::STATUS_CODE_REASON_PHRASE.n200_ok, None, Some(vec![Range::get_content_range(vec![b'x'; 1234], "text/plain".to_string())]));
     let v4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 7)), 5555);

@@ -66,7 +66,7 @@ impl FormMultipartData {
         // parts overflow the stack and abort the process.
         loop {
             let mut buf = vec![];
-            let mut part = Part { headers: vec![], body: vec![] };
+            let mut part = Part { headers: vec![], body: Default::default() };
 
             // first boundary starts parsable payload
             if bytes_read == 0 {

@@ -11,7 +11,7 @@ pub(super) fn parse(request_vec_u8: &[u8]) -> Result<Request, String> {
         request_uri: "".to_string(),
         http_version: "".to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
     cursor_read(&mut cursor, 0, &mut request, 0)?;
     Ok(request)
@@ -56,7 +56,7 @@ pub(super) fn cursor_read(cursor: &mut Cursor<&[u8]>, mut iteration_number: usiz
     // remaining part is request body
     let mut body = vec![];
     cursor.read_to_end(&mut body).map_err(|e| e.to_string())?;
-    request.body.append(&mut body);
+    request.body = body.into();
 
     Ok(true)
 }

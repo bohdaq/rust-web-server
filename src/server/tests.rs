@@ -67,7 +67,7 @@ fn it_generates_successful_response_with_index_html() {
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -133,7 +133,7 @@ fn it_generates_successful_response_with_index_html_as_symlink() {
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -201,7 +201,7 @@ fn it_generates_successful_response_with_static_file() {
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -276,7 +276,7 @@ fn it_generates_not_found_page_for_absent_static_file() {
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -351,7 +351,7 @@ fn it_generates_not_found_page_for_absent_route() {
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -422,7 +422,7 @@ fn it_generates_directory_listing_for_static_directory_without_index_html() {
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -487,7 +487,7 @@ fn it_generates_directory_listing_with_parent_link_for_nested_static_subdirector
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -592,7 +592,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory() {
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -663,7 +663,7 @@ fn it_generates_successful_response_with_static_file_in_subdirectory_to_head_req
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -737,7 +737,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -810,7 +810,7 @@ fn it_generates_successful_response_with_static_file_in_multiple_static_director
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -895,7 +895,7 @@ fn check_range_response_for_not_proper_range_header() {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -962,7 +962,7 @@ fn check_range_response_range_end_bigger_than_filesize_is_clamped() {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -1031,7 +1031,7 @@ fn check_range_response_for_not_proper_range_header_range_start_bigger_than_end(
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -1099,7 +1099,7 @@ fn check_range_response_for_not_proper_range_header_range_start_malformed() {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -1167,7 +1167,7 @@ fn check_range_response_for_not_proper_range_header_range_end_malformed() {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -1229,7 +1229,7 @@ fn check_range_response_for_not_proper_range_header_malformed() {
         request_uri: uri.to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -1419,7 +1419,7 @@ fn write_chunked_file_produces_valid_chunked_encoding() {
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     };
 
     let mut out: Vec<u8> = vec![];
@@ -1796,7 +1796,7 @@ fn write_chunked_file_with_known_length_sends_raw_body_not_chunked() {
         stream_file: None,
         stream_pipe: None,
     };
-    let request = Request { method: METHOD.get.to_string(), request_uri: "/".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: vec![] };
+    let request = Request { method: METHOD.get.to_string(), request_uri: "/".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: Default::default() };
     let mut out = Vec::new();
     Server::write_chunked_file(&mut out, response, request, file.as_str()).unwrap();
     let raw = String::from_utf8(out).unwrap();

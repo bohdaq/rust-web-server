@@ -12,7 +12,7 @@ fn empty_get() -> Request {
         request_uri: "/".to_string(),
         http_version: VERSION.http_1_1.to_string(),
         headers: vec![],
-        body: vec![],
+        body: Default::default(),
     }
 }
 
@@ -25,7 +25,7 @@ fn get_with_cookie(cookie_header: &str) -> Request {
             name: "Cookie".into(),
             value: cookie_header.to_string().into(),
         }],
-        body: vec![],
+        body: Default::default(),
     }
 }
 

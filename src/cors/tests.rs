@@ -61,7 +61,7 @@ fn cors_options_preflight_request() {
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -160,7 +160,7 @@ fn actual_request_after_preflight() {
         request_uri: request_uri.to_string(),
         http_version: request_http_version.to_string(),
         headers,
-        body: vec![],
+        body: Default::default(),
     };
 
     let raw_request = Request::_generate_request(request);
@@ -244,7 +244,7 @@ fn cors_allow_all() {
                 value: expected_allow_headers.into()
             },
         ],
-        body: vec![],
+        body: Default::default(),
     };
 
     let mut response = Response {
@@ -301,7 +301,7 @@ fn cors_process() {
                 value: origin_value.to_string().into()
             }
         ],
-        body: vec![],
+        body: Default::default(),
     };
 
     let mut response = Response {
@@ -378,7 +378,7 @@ fn cors_process_default_config() {
                 value: origin_value.to_string().into()
             }
         ],
-        body: vec![],
+        body: Default::default(),
     };
 
     let mut response = Response {
@@ -440,7 +440,7 @@ fn cors_process_empty_config() {
                 value: origin_value.to_string().into()
             }
         ],
-        body: vec![],
+        body: Default::default(),
     };
 
     let mut response = Response {
@@ -500,7 +500,7 @@ fn cors_request(method: &str, origin: &str) -> Request {
             Header { name: "Origin".into(), value: origin.to_string().into() },
             Header { name: "Access-Control-Request-Method".into(), value: "GET".into() },
         ],
-        body: vec![],
+        body: Default::default(),
     }
 }
 

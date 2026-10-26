@@ -19,7 +19,7 @@ fn conn() -> ConnectionInfo {
 }
 
 fn req(method: &str, uri: &str) -> Request {
-    Request { method: method.to_string(), request_uri: uri.to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: vec![] }
+    Request { method: method.to_string(), request_uri: uri.to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: Default::default() }
 }
 
 /// A user layer that doesn't declare itself non-blocking.
