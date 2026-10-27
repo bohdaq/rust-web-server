@@ -32,7 +32,10 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         section
     };
     let keys: Vec<&'static str> = match section {
-        "upstream" => vec!["name", "backends", "strategy", "tls_ca_file", "tls_client_cert_file", "tls_client_key_file"],
+        "upstream" => vec!["name", "backends", "strategy", "weights", "tls_ca_file", "tls_client_cert_file", "tls_client_key_file"],
+        "upstream.sticky" => vec!["cookie", "max_age_secs"],
+        "upstream.circuit_breaker" => vec!["failure_threshold", "recovery_secs", "half_open_probes"],
+        "upstream.retry" => vec!["attempts", "status"],
         "upstream.health_check" | "ws_proxy.health_check" => HEALTH_CHECK_KEYS.to_vec(),
         "route" => vec!["name"],
         "route.match" => vec!["host", "path", "method", "content_type"],
@@ -169,6 +172,45 @@ impl ProxyConfig {
                     upstream.strategy,
                     STRATEGIES.join(", ")
                 ));
+            }
+            if !upstream.weights.is_empty() {
+                if upstream.weights.len() != upstream.backends.len() {
+                    report.error(format!("{label}: `weights` has {} entries for {} backends (one each, in order)", upstream.weights.len(), upstream.backends.len()));
+                }
+                if upstream.weights.contains(&0) {
+                    report.error(format!("{label}: `weights` must be whole numbers of 1 or more"));
+                }
+                if upstream.strategy == "ip_hash" {
+                    report.warn(format!("{label}: `weights` don't apply to strategy ip_hash"));
+                }
+            }
+            if let Some(sticky) = &upstream.sticky {
+                let token = |c: char| c.is_ascii_alphanumeric() || "!#$%&'*+-.^_`|~".contains(c);
+                if sticky.cookie.is_empty() || !sticky.cookie.chars().all(token) {
+                    report.error(format!("{label}: sticky cookie name '{}' isn't a valid cookie name", sticky.cookie));
+                }
+            }
+            if let Some(breaker) = &upstream.circuit_breaker {
+                if breaker.failure_threshold == 0 {
+                    report.error(format!("{label}: circuit_breaker.failure_threshold must be 1 or more"));
+                }
+                if breaker.recovery_secs == 0 {
+                    report.warn(format!("{label}: circuit_breaker.recovery_secs = 0 probes an open backend on the next request"));
+                }
+            }
+            if let Some(retry) = &upstream.retry {
+                if retry.attempts == 0 {
+                    report.warn(format!("{label}: retry.attempts = 0 never retries"));
+                } else if retry.attempts as usize >= upstream.backends.len() {
+                    report.warn(format!(
+                        "{label}: retry.attempts = {} but there are {} backends — a request goes to each at most once",
+                        retry.attempts,
+                        upstream.backends.len()
+                    ));
+                }
+                if let Some(status) = retry.status.iter().find(|s| !(400..=599).contains(*s)) {
+                    report.error(format!("{label}: retry.status {status} isn't an error status (400–599)"));
+                }
             }
             #[cfg(not(any(feature = "http-client", feature = "http2")))]
             if upstream.tls {

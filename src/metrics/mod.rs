@@ -222,6 +222,12 @@ pub fn prometheus_text() -> String {
         out.push_str(&route_text);
     }
 
+    let upstream_text = crate::proxy_config::upstream::prometheus_text();
+    if !upstream_text.is_empty() {
+        out.push('\n');
+        out.push_str(&upstream_text);
+    }
+
     let breaker_text = circuit_breaker_prometheus_text();
     if !breaker_text.is_empty() {
         out.push('\n');

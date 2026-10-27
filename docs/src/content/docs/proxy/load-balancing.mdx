@@ -47,6 +47,8 @@ strategy = "least_connections"   # "round_robin" (default) | "random" | "ip_hash
 
 An unrecognized or omitted `strategy` value falls back to `round_robin`.
 
+`weights = [3, 1, 1]` (one per backend) makes `round_robin`, `random` and `least_connections` proportional — smooth weighted round-robin, so 3:1:1 goes `a b a c a` rather than `a a a b c` — and `[upstream.sticky]` pins a client to a backend with a cookie. See [Weights, stickiness, retries and the circuit breaker](/proxy/config-driven/#weights-stickiness-retries-and-the-circuit-breaker).
+
 ### DynamicProxy and live backend lists
 
 When `[upstream.health_check]` is configured, the health-checker thread maintains a shared `Arc<RwLock<Vec<String>>>` containing only the currently healthy backends. `DynamicProxy` (the config-driven proxy adapter) reads from this live list on every request:

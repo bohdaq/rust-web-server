@@ -9400,6 +9400,27 @@ rws_circuit_breaker_state{backend="api-2:8080"} 2
 
 The gauge value is `0` (Closed/healthy), `1` (HalfOpen/probing), or `2` (Open/unhealthy). Wiring `ReverseProxy::with_circuit_breaker(Arc::new(circuit_breaker::global()))` gets you this metric "for free" alongside the automatic proxy integration, since both read from the same breaker instance. `RedisCircuitBreaker` state doesn't appear here — the minimal hand-rolled RESP client has no `SCAN`/`KEYS` support to enumerate its keys.
 
+## Upstream metrics
+
+Every `[[upstream]]` of a [config-file proxy](/proxy/config-driven/) is measured per backend, with no opt-in:
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `rws_upstream_requests_total` | Counter | `upstream`, `backend`, `code` | Requests sent to the backend by response status; `code="error"` when none came back |
+| `rws_upstream_request_duration_seconds` | Histogram | `upstream`, `backend` | Time to the backend's response head |
+| `rws_upstream_retries_total` | Counter | `upstream` | Requests sent again to another backend (`[upstream.retry]`) |
+| `rws_upstream_backend_up` | Gauge | `upstream`, `backend` | `1` while in rotation (passing health checks, breaker not open), else `0` |
+| `rws_upstream_circuit_breaker_state` | Gauge | `upstream`, `backend` | `0`=closed, `1`=half_open, `2`=open; only for upstreams with `[upstream.circuit_breaker]` |
+
+```promql
+# Backend error ratio
+sum by (upstream, backend) (rate(rws_upstream_requests_total{code=~"5..|error"}[5m]))
+  / sum by (upstream, backend) (rate(rws_upstream_requests_total[5m]))
+
+# Backends out of rotation
+rws_upstream_backend_up == 0
+```
+
 ## `SERVER_READY` and `/readyz`
 
 The built-in `GET /readyz` controller returns `200 OK` when `SERVER_READY` is `true` and `503 Service Unavailable` when it is `false`. The flag is set to `true` after `Server::setup()` completes and back to `false` when a shutdown signal is received, so Kubernetes stops routing traffic before the pod exits.
@@ -11413,6 +11434,37 @@ unhealthy_threshold  = 3            # consecutive failures before marking dead (
 
 See [Health Checks](/proxy/health-checks/) for the full implementation details.
 
+### Weights, stickiness, retries and the circuit breaker
+
+Since 18.6.0 an `[[upstream]]` takes the same traffic policies as the library proxy:
+
+```toml
+[[upstream]]
+name     = "api"
+backends = ["10.0.0.1:3000", "10.0.0.2:3000", "10.0.0.3:3000"]
+weights  = [3, 1, 1]            # one per backend, ≥ 1 (default: 1 each)
+
+[upstream.sticky]
+cookie       = "rws_backend"    # cookie name (default: rws_backend)
+max_age_secs = 3600             # omit for a session cookie
+
+[upstream.circuit_breaker]
+failure_threshold = 5           # consecutive failures before a backend is taken out (default: 5)
+recovery_secs     = 30          # how long it stays out before a probe request (default: 30)
+half_open_probes  = 1           # probe requests let through at a time (default: 1)
+
+[upstream.retry]
+attempts = 1                    # extra backends to try (default: 1)
+status   = [502, 503, 504]      # responses that count as failed (default: 502, 503, 504)
+```
+
+- **`weights`** — `round_robin` spreads requests in proportion to the weights without sending runs to one backend (smooth weighted round-robin, as nginx does: 3:1:1 goes `a b a c a`); `random` picks in proportion to them; `least_connections` compares in-flight requests per unit of weight. `ip_hash` ignores them.
+- **`[upstream.sticky]`** — the first response to a client sets `Set-Cookie: <cookie>=<id>; Path=/; HttpOnly; SameSite=Lax`. The id is a hash of the backend URL, so it doesn't reveal backend addresses and stays the same across restarts and replicas. A client that sends it goes to that backend while it is in rotation; otherwise (backend removed, ejected or failed on this request) the strategy picks another and the cookie is replaced.
+- **`[upstream.circuit_breaker]`** — passive health checking: every proxied request counts. No response, or a `502`/`503`/`504`, is a failure; `failure_threshold` failures in a row take the backend out of rotation for `recovery_secs`, then `half_open_probes` requests are let through, and a success puts it back. It works with or without `[upstream.health_check]` (a backend has to pass both). When every backend is out, the route answers `503 Service Unavailable` with `Retry-After` without contacting any.
+- **`[upstream.retry]`** — a request that got no response or one of the `status` codes is sent to up to `attempts` other backends. Only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`, `TRACE`) with a buffered body are retried; a `POST` or a streamed upload gets the first answer. The last answer is returned when every attempt fails.
+
+`rws --check` validates them: weight counts that don't match `backends`, a weight of `0`, an invalid cookie name, `failure_threshold = 0` and retry statuses outside 400–599 are errors; weights with `ip_hash` and `attempts` at or above the number of backends are warnings. Each upstream's traffic shows up on [`/metrics`](/features/metrics/#upstream-metrics).
+
 ## `[[route]]` — routing rules
 
 Routes are evaluated in declaration order; the first match wins.
@@ -12160,6 +12212,8 @@ strategy = "least_connections"   # "round_robin" (default) | "random" | "ip_hash
 
 An unrecognized or omitted `strategy` value falls back to `round_robin`.
 
+`weights = [3, 1, 1]` (one per backend) makes `round_robin`, `random` and `least_connections` proportional — smooth weighted round-robin, so 3:1:1 goes `a b a c a` rather than `a a a b c` — and `[upstream.sticky]` pins a client to a backend with a cookie. See [Weights, stickiness, retries and the circuit breaker](/proxy/config-driven/#weights-stickiness-retries-and-the-circuit-breaker).
+
 ### DynamicProxy and live backend lists
 
 When `[upstream.health_check]` is configured, the health-checker thread maintains a shared `Arc>>` containing only the currently healthy backends. `DynamicProxy` (the config-driven proxy adapter) reads from this live list on every request:
@@ -12300,9 +12354,13 @@ State changes are logged to stderr:
 [health] upstream=api backend=api-2:3000 restored (2x ok)
 ```
 
+## Passive health checks
+
+Active probes find a dead backend only on the next interval. `[upstream.circuit_breaker]` also takes a backend out when the requests it serves fail (no response, `502`/`503`/`504` — `failure_threshold` in a row) and lets a probe request through after `recovery_secs`. The two combine: a backend is in rotation only while it passes its probes and its breaker isn't open. See [Weights, stickiness, retries and the circuit breaker](/proxy/config-driven/#weights-stickiness-retries-and-the-circuit-breaker).
+
 ## All backends unhealthy
 
-If all backends fail their health checks, the live list becomes empty. `DynamicProxy` returns `502 Bad Gateway` for every HTTP/gRPC request until at least one backend recovers; a `[[ws_proxy]]` returns `503 Service Unavailable` for every new WebSocket upgrade attempt instead (the connection never gets far enough to be a "gateway" in the HTTP sense — it's rejected before any backend is contacted).
+If all backends fail their health checks, the live list becomes empty. `DynamicProxy` returns `502 Bad Gateway` for every HTTP/gRPC request until at least one backend recovers (`503` with `Retry-After` when the circuit breaker has taken them all out); a `[[ws_proxy]]` returns `503 Service Unavailable` for every new WebSocket upgrade attempt instead (the connection never gets far enough to be a "gateway" in the HTTP sense — it's rejected before any backend is contacted).
 
 :::note[No health checks in library mode — except WsProxy]
 `ReverseProxy` does not have built-in health checks. Use `BackendPool` with a `File` or `Dns` source (see [Service Discovery](/proxy/service-discovery/)) and `CircuitBreaker` (see [Circuit Breaker](/proxy/circuit-breaker/)) to replicate the behaviour programmatically.
@@ -12551,6 +12609,10 @@ if !allowed {
     // Return 503 without attempting a connection
 }
 ```
+
+## In `rws.config.toml`
+
+`[upstream.circuit_breaker]` and `[upstream.retry]` give a config-file upstream a breaker per backend and retries to other backends — see [Weights, stickiness, retries and the circuit breaker](/proxy/config-driven/#weights-stickiness-retries-and-the-circuit-breaker). Their state is exported as `rws_upstream_circuit_breaker_state{upstream,backend}` ([upstream metrics](/features/metrics/#upstream-metrics)), not through `circuit_breaker::global()`.
 
 ## Metrics
 
@@ -18090,6 +18152,10 @@ Present automatically — no `MetricsLayer` or other opt-in needed — for every
 
 Wire `ReverseProxy::with_circuit_breaker(Arc::new(circuit_breaker::global()))` to get this metric for free alongside [automatic breaker integration](/proxy/circuit-breaker/#automatic-reverseproxy-wiring).
 
+### Upstreams
+
+Config-file proxies export `rws_upstream_requests_total`, `rws_upstream_request_duration_seconds`, `rws_upstream_retries_total`, `rws_upstream_backend_up` and `rws_upstream_circuit_breaker_state` per `upstream` and `backend` — see [Upstream metrics](/features/metrics/#upstream-metrics).
+
 ### Grafana / PromQL queries
 
 ```promql
@@ -18821,6 +18887,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `PathType` | `ingress` | `Exact`, `Prefix`, `ImplementationSpecific` |
 | `ProxyConfig` | `proxy_config` | Parsed `[[route]]`/`[[upstream]]` config; `ProxyConfig::is_proxy_mode()`, `.validate(&mut ConfigReport)`. See [Config-driven proxy](/proxy/config-driven/) |
 | `ConfigDrivenApp` | `proxy_config` | The app `proxy_config::build_from_file()` returns: first-match router with per-route middleware and per-upstream `strategy` (`round_robin`, `random`, `ip_hash`, `least_connections`); `.with_config(ServerConfig)` |
+| `StickyConfig`, `BreakerConfig`, `RetryConfig` | `proxy_config` | An `[[upstream]]`'s `[upstream.sticky]`, `[upstream.circuit_breaker]` and `[upstream.retry]` (fields of `UpstreamConfig`, beside `weights`). See [Weights, stickiness, retries and the circuit breaker](/proxy/config-driven/#weights-stickiness-retries-and-the-circuit-breaker) |
 | `ReloadOutcome` | `proxy_config` | Result of `ConfigDrivenApp::reload_from_str` / `reload_from_file` (validated first; the running routes stay on errors) |
 
 ## HTTP client

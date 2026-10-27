@@ -1433,9 +1433,9 @@ fn two_backends() -> std::sync::Arc<std::sync::RwLock<Vec<String>>> {
 #[test]
 fn dynamic_proxy_round_robin_cycles_backends() {
     let dp = DynamicProxy::new(two_backends(), 100, 100, None, None, false, "round_robin".to_string());
-    let first = dp.next_backend("10.0.0.1").unwrap();
-    let second = dp.next_backend("10.0.0.1").unwrap();
-    let third = dp.next_backend("10.0.0.1").unwrap();
+    let first = pick(&dp, "10.0.0.1");
+    let second = pick(&dp, "10.0.0.1");
+    let third = pick(&dp, "10.0.0.1");
     assert_ne!(first, second);
     assert_eq!(first, third);
 }
@@ -1444,25 +1444,25 @@ fn dynamic_proxy_round_robin_cycles_backends() {
 fn dynamic_proxy_default_strategy_is_round_robin() {
     // Empty/unset `strategy` must behave exactly like `strategy = "round_robin"`.
     let dp = DynamicProxy::new(two_backends(), 100, 100, None, None, false, String::new());
-    let first = dp.next_backend("10.0.0.1").unwrap();
-    let second = dp.next_backend("10.0.0.1").unwrap();
+    let first = pick(&dp, "10.0.0.1");
+    let second = pick(&dp, "10.0.0.1");
     assert_ne!(first, second);
 }
 
 #[test]
 fn dynamic_proxy_unknown_strategy_falls_back_to_round_robin() {
     let dp = DynamicProxy::new(two_backends(), 100, 100, None, None, false, "not-a-real-strategy".to_string());
-    let first = dp.next_backend("10.0.0.1").unwrap();
-    let second = dp.next_backend("10.0.0.1").unwrap();
+    let first = pick(&dp, "10.0.0.1");
+    let second = pick(&dp, "10.0.0.1");
     assert_ne!(first, second);
 }
 
 #[test]
 fn dynamic_proxy_ip_hash_is_sticky_per_client() {
     let dp = DynamicProxy::new(two_backends(), 100, 100, None, None, false, "ip_hash".to_string());
-    let a1 = dp.next_backend("10.0.0.5").unwrap();
-    let a2 = dp.next_backend("10.0.0.5").unwrap();
-    let a3 = dp.next_backend("10.0.0.5").unwrap();
+    let a1 = pick(&dp, "10.0.0.5");
+    let a2 = pick(&dp, "10.0.0.5");
+    let a3 = pick(&dp, "10.0.0.5");
     assert_eq!(a1, a2);
     assert_eq!(a2, a3);
 }
@@ -1472,7 +1472,7 @@ fn dynamic_proxy_random_always_picks_a_live_backend() {
     let live = two_backends();
     let dp = DynamicProxy::new(live.clone(), 100, 100, None, None, false, "random".to_string());
     for _ in 0..20 {
-        let backend = dp.next_backend("10.0.0.1").unwrap();
+        let backend = pick(&dp, "10.0.0.1");
         assert!(live.read().unwrap().contains(&backend));
     }
 }
@@ -1485,7 +1485,7 @@ fn dynamic_proxy_least_connections_avoids_busy_backend() {
     let busy_counter = dp.connection_counter("127.0.0.1:1");
     busy_counter.fetch_add(3, std::sync::atomic::Ordering::Relaxed);
 
-    let chosen = dp.next_backend("10.0.0.1").unwrap();
+    let chosen = pick(&dp, "10.0.0.1");
     assert_eq!(chosen, "127.0.0.1:2");
 }
 
@@ -2277,4 +2277,16 @@ fn upstream_client_certificate_keys_are_checked() {
     let mut report = crate::config_check::ConfigReport::default();
     crate::proxy_config::validate::check_unknown_keys(&toml("tls_client_cert_file = \"/x.pem\"\ntls_client_key_file = \"/x.key\"\n"), &mut report);
     assert!(report.warnings.is_empty() && report.errors.is_empty(), "{:?} {:?}", report.warnings, report.errors);
+}
+
+/// The backend `dp` picks for a plain request from `client_ip`.
+fn pick(dp: &DynamicProxy, client_ip: &str) -> String {
+    let request = Request {
+        method: "GET".to_string(),
+        request_uri: "/".to_string(),
+        http_version: "HTTP/1.1".to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+    dp.next_backend(&request, client_ip, &[]).expect("a backend")
 }

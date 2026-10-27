@@ -93,9 +93,13 @@ State changes are logged to stderr:
 [health] upstream=api backend=api-2:3000 restored (2x ok)
 ```
 
+## Passive health checks
+
+Active probes find a dead backend only on the next interval. `[upstream.circuit_breaker]` also takes a backend out when the requests it serves fail (no response, `502`/`503`/`504` — `failure_threshold` in a row) and lets a probe request through after `recovery_secs`. The two combine: a backend is in rotation only while it passes its probes and its breaker isn't open. See [Weights, stickiness, retries and the circuit breaker](/proxy/config-driven/#weights-stickiness-retries-and-the-circuit-breaker).
+
 ## All backends unhealthy
 
-If all backends fail their health checks, the live list becomes empty. `DynamicProxy` returns `502 Bad Gateway` for every HTTP/gRPC request until at least one backend recovers; a `[[ws_proxy]]` returns `503 Service Unavailable` for every new WebSocket upgrade attempt instead (the connection never gets far enough to be a "gateway" in the HTTP sense — it's rejected before any backend is contacted).
+If all backends fail their health checks, the live list becomes empty. `DynamicProxy` returns `502 Bad Gateway` for every HTTP/gRPC request until at least one backend recovers (`503` with `Retry-After` when the circuit breaker has taken them all out); a `[[ws_proxy]]` returns `503 Service Unavailable` for every new WebSocket upgrade attempt instead (the connection never gets far enough to be a "gateway" in the HTTP sense — it's rejected before any backend is contacted).
 
 :::note[No health checks in library mode — except WsProxy]
 `ReverseProxy` does not have built-in health checks. Use `BackendPool` with a `File` or `Dns` source (see [Service Discovery](/proxy/service-discovery/)) and `CircuitBreaker` (see [Circuit Breaker](/proxy/circuit-breaker/)) to replicate the behaviour programmatically.

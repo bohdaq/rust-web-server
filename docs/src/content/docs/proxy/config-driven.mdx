@@ -114,6 +114,37 @@ unhealthy_threshold  = 3            # consecutive failures before marking dead (
 
 See [Health Checks](/proxy/health-checks/) for the full implementation details.
 
+### Weights, stickiness, retries and the circuit breaker
+
+Since 18.6.0 an `[[upstream]]` takes the same traffic policies as the library proxy:
+
+```toml
+[[upstream]]
+name     = "api"
+backends = ["10.0.0.1:3000", "10.0.0.2:3000", "10.0.0.3:3000"]
+weights  = [3, 1, 1]            # one per backend, ≥ 1 (default: 1 each)
+
+[upstream.sticky]
+cookie       = "rws_backend"    # cookie name (default: rws_backend)
+max_age_secs = 3600             # omit for a session cookie
+
+[upstream.circuit_breaker]
+failure_threshold = 5           # consecutive failures before a backend is taken out (default: 5)
+recovery_secs     = 30          # how long it stays out before a probe request (default: 30)
+half_open_probes  = 1           # probe requests let through at a time (default: 1)
+
+[upstream.retry]
+attempts = 1                    # extra backends to try (default: 1)
+status   = [502, 503, 504]      # responses that count as failed (default: 502, 503, 504)
+```
+
+- **`weights`** — `round_robin` spreads requests in proportion to the weights without sending runs to one backend (smooth weighted round-robin, as nginx does: 3:1:1 goes `a b a c a`); `random` picks in proportion to them; `least_connections` compares in-flight requests per unit of weight. `ip_hash` ignores them.
+- **`[upstream.sticky]`** — the first response to a client sets `Set-Cookie: <cookie>=<id>; Path=/; HttpOnly; SameSite=Lax`. The id is a hash of the backend URL, so it doesn't reveal backend addresses and stays the same across restarts and replicas. A client that sends it goes to that backend while it is in rotation; otherwise (backend removed, ejected or failed on this request) the strategy picks another and the cookie is replaced.
+- **`[upstream.circuit_breaker]`** — passive health checking: every proxied request counts. No response, or a `502`/`503`/`504`, is a failure; `failure_threshold` failures in a row take the backend out of rotation for `recovery_secs`, then `half_open_probes` requests are let through, and a success puts it back. It works with or without `[upstream.health_check]` (a backend has to pass both). When every backend is out, the route answers `503 Service Unavailable` with `Retry-After` without contacting any.
+- **`[upstream.retry]`** — a request that got no response or one of the `status` codes is sent to up to `attempts` other backends. Only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`, `TRACE`) with a buffered body are retried; a `POST` or a streamed upload gets the first answer. The last answer is returned when every attempt fails.
+
+`rws --check` validates them: weight counts that don't match `backends`, a weight of `0`, an invalid cookie name, `failure_threshold = 0` and retry statuses outside 400–599 are errors; weights with `ip_hash` and `attempts` at or above the number of backends are warnings. Each upstream's traffic shows up on [`/metrics`](/features/metrics/#upstream-metrics).
+
 ## `[[route]]` — routing rules
 
 Routes are evaluated in declaration order; the first match wins.

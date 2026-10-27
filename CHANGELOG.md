@@ -5,6 +5,29 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased (18.6.0)
+
+### Added
+
+- Config-file proxy parity (#21): an `[[upstream]]` takes `weights`
+  (smooth weighted round-robin; proportional `random` and
+  `least_connections`), `[upstream.sticky]` (a `HttpOnly` cookie naming the
+  backend by a hash of its URL), `[upstream.circuit_breaker]` (passive health
+  checks: failing backends leave rotation for `recovery_secs`; `503` +
+  `Retry-After` when all are out) and `[upstream.retry]` (idempotent requests
+  with a buffered body go to another backend on no response or a listed
+  status). All checked by `rws --check`.
+- Per-upstream metrics on `/metrics`: `rws_upstream_requests_total`,
+  `rws_upstream_request_duration_seconds`, `rws_upstream_retries_total`,
+  `rws_upstream_backend_up`, `rws_upstream_circuit_breaker_state`.
+- `ci/e2e/proxy_policies.sh` runs these against real backends.
+
+### Changed
+
+- `proxy_config::UpstreamConfig` has new public fields (`weights`, `sticky`,
+  `circuit_breaker`, `retry`); code that builds it with a struct literal must
+  set them (`Vec::new()` / `None`).
+
 ## 18.5.0 — 2026-10-27
 
 ### Added

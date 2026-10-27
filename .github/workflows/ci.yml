@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, grpc, proxy-protocol, realtime]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, grpc, proxy-protocol, realtime]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -144,6 +144,9 @@ jobs:
       - name: Access log to a file (SIGUSR1 reopen, size rotation)
         if: matrix.check == 'access-log'
         run: ci/e2e/access_log.sh target/debug/rws
+      - name: Upstream weights, stickiness, retries, circuit breaker, metrics
+        if: matrix.check == 'proxy-policies'
+        run: ci/e2e/proxy_policies.sh target/debug/rws
       - name: gRPC against tonic (every call type, cleartext and mTLS upstreams; h2c with grpcurl)
         if: matrix.check == 'grpc'
         env:

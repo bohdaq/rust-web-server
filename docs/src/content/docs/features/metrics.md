@@ -119,6 +119,27 @@ rws_circuit_breaker_state{backend="api-2:8080"} 2
 
 The gauge value is `0` (Closed/healthy), `1` (HalfOpen/probing), or `2` (Open/unhealthy). Wiring `ReverseProxy::with_circuit_breaker(Arc::new(circuit_breaker::global()))` gets you this metric "for free" alongside the automatic proxy integration, since both read from the same breaker instance. `RedisCircuitBreaker` state doesn't appear here — the minimal hand-rolled RESP client has no `SCAN`/`KEYS` support to enumerate its keys.
 
+## Upstream metrics
+
+Every `[[upstream]]` of a [config-file proxy](/proxy/config-driven/) is measured per backend, with no opt-in:
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `rws_upstream_requests_total` | Counter | `upstream`, `backend`, `code` | Requests sent to the backend by response status; `code="error"` when none came back |
+| `rws_upstream_request_duration_seconds` | Histogram | `upstream`, `backend` | Time to the backend's response head |
+| `rws_upstream_retries_total` | Counter | `upstream` | Requests sent again to another backend (`[upstream.retry]`) |
+| `rws_upstream_backend_up` | Gauge | `upstream`, `backend` | `1` while in rotation (passing health checks, breaker not open), else `0` |
+| `rws_upstream_circuit_breaker_state` | Gauge | `upstream`, `backend` | `0`=closed, `1`=half_open, `2`=open; only for upstreams with `[upstream.circuit_breaker]` |
+
+```promql
+# Backend error ratio
+sum by (upstream, backend) (rate(rws_upstream_requests_total{code=~"5..|error"}[5m]))
+  / sum by (upstream, backend) (rate(rws_upstream_requests_total[5m]))
+
+# Backends out of rotation
+rws_upstream_backend_up == 0
+```
+
 ## `SERVER_READY` and `/readyz`
 
 The built-in `GET /readyz` controller returns `200 OK` when `SERVER_READY` is `true` and `503 Service Unavailable` when it is `false`. The flag is set to `true` after `Server::setup()` completes and back to `false` when a shutdown signal is received, so Kubernetes stops routing traffic before the pod exits.

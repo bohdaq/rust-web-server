@@ -57,10 +57,25 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
     // reload picks up a rotated CA). A CA file that can't be loaded fails
     // closed: every handshake fails (502) instead of trusting public CAs.
     let mut upstream_trust: HashMap<String, Arc<crate::proxy::UpstreamTls>> = HashMap::new();
+    // Weights, stickiness, circuit breaker, retries: one state per
+    // upstream, shared by its routes.
+    let mut upstream_policies: HashMap<String, Arc<crate::proxy_config::upstream::UpstreamPolicy>> = HashMap::new();
 
     for upstream in &config.upstreams {
         let live = Arc::new(RwLock::new(upstream.backends.clone()));
         upstream_lives.insert(upstream.name.clone(), Arc::clone(&live));
+        upstream_policies.insert(
+            upstream.name.clone(),
+            Arc::new(crate::proxy_config::upstream::UpstreamPolicy::new(
+                &upstream.name,
+                Arc::clone(&live),
+                &upstream.backends,
+                &upstream.weights,
+                upstream.sticky.clone(),
+                upstream.circuit_breaker.as_ref(),
+                upstream.retry.clone(),
+            )),
+        );
 
         let client = upstream.tls_client_cert_file.as_deref().zip(upstream.tls_client_key_file.as_deref());
         let configured = upstream.tls_ca_file.is_some() || upstream.tls_client_cert_file.is_some() || upstream.tls_client_key_file.is_some();
@@ -85,6 +100,8 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
             );
         }
     }
+
+    crate::proxy_config::upstream::register(upstream_policies.values().cloned().collect());
 
     // ── 2. Build compiled routes ───────────────────────────────────────────
     let mut compiled: Vec<CompiledRoute> = Vec::new();
@@ -124,7 +141,9 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                         add_path_prefix.clone(),
                         upstream_tls,
                         upstream_strategy,
-                    ).with_trust(upstream_trust.get(upstream.as_str()).cloned()));
+                    )
+                    .with_trust(upstream_trust.get(upstream.as_str()).cloned())
+                    .with_policy(upstream, upstream_policies.get(upstream.as_str()).cloned()));
                     if proxy.supports_async() && route.middleware.is_empty() {
                         async_proxy = Some(Arc::clone(&proxy));
                     }
@@ -170,7 +189,8 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                             .unwrap_or_else(|| "round_robin".to_string());
                         arc_app(
                             DynamicProxy::new(live, *connect_timeout_ms, *read_timeout_ms, None, None, upstream_tls, upstream_strategy)
-                                .with_trust(upstream_trust.get(upstream.as_str()).cloned()),
+                                .with_trust(upstream_trust.get(upstream.as_str()).cloned())
+                                .with_policy(upstream, upstream_policies.get(upstream.as_str()).cloned()),
                         )
                     }
                 }

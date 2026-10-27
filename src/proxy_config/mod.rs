@@ -27,6 +27,9 @@
 
 pub mod parser;
 pub mod health;
+pub(crate) mod upstream;
+
+pub use upstream::{BreakerConfig, RetryConfig, StickyConfig};
 pub mod builder;
 pub mod validate;
 
@@ -76,6 +79,15 @@ pub struct UpstreamConfig {
     /// Since 18.3.0.
     pub tls_client_cert_file: Option<String>,
     pub tls_client_key_file: Option<String>,
+    /// `weights` — one per backend, in order (default 1 each). Since 18.6.0.
+    pub weights: Vec<u32>,
+    /// `[upstream.sticky]` — keep a client on one backend. Since 18.6.0.
+    pub sticky: Option<StickyConfig>,
+    /// `[upstream.circuit_breaker]` — take failing backends out of rotation
+    /// (passive health checks). Since 18.6.0.
+    pub circuit_breaker: Option<BreakerConfig>,
+    /// `[upstream.retry]` — try another backend. Since 18.6.0.
+    pub retry: Option<RetryConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -320,8 +332,26 @@ impl ProxyConfig {
             let tls_ca_file = Some(get_str(&map, &sec, "tls_ca_file")).filter(|v| !v.is_empty());
             let tls_client_cert_file = Some(get_str(&map, &sec, "tls_client_cert_file")).filter(|v| !v.is_empty());
             let tls_client_key_file = Some(get_str(&map, &sec, "tls_client_key_file")).filter(|v| !v.is_empty());
+            let weights: Vec<u32> = get_array(&map, &sec, "weights").iter().map(|w| w.trim().parse().unwrap_or(0)).collect();
+            let sticky_sec = format!("{}.sticky", sec);
+            let sticky = section_exists(&map, &sticky_sec).then(|| StickyConfig {
+                cookie: Some(get_str(&map, &sticky_sec, "cookie")).filter(|c| !c.is_empty()).unwrap_or_else(|| "rws_backend".to_string()),
+                max_age_secs: Some(get_u64(&map, &sticky_sec, "max_age_secs", 0)).filter(|s| *s > 0),
+            });
+            let cb_sec = format!("{}.circuit_breaker", sec);
+            let circuit_breaker = section_exists(&map, &cb_sec).then(|| BreakerConfig {
+                failure_threshold: get_u32(&map, &cb_sec, "failure_threshold", 5),
+                recovery_secs: get_u64(&map, &cb_sec, "recovery_secs", 30),
+                half_open_probes: get_u32(&map, &cb_sec, "half_open_probes", 1),
+            });
+            let retry_sec = format!("{}.retry", sec);
+            let retry = section_exists(&map, &retry_sec).then(|| {
+                let status: Vec<i16> = get_array(&map, &retry_sec, "status").iter().filter_map(|s| s.trim().parse().ok()).collect();
+                RetryConfig { attempts: get_u32(&map, &retry_sec, "attempts", 1), status: if status.is_empty() { vec![502, 503, 504] } else { status } }
+            });
             upstreams.push(UpstreamConfig {
                 name, backends, strategy, health_check, tls, tls_ca_file, tls_client_cert_file, tls_client_key_file,
+                weights, sticky, circuit_breaker, retry,
             });
             i += 1;
         }
@@ -1246,7 +1276,9 @@ impl LoadBalanceStrategy {
 
 /// A proxy adapter that reads its backend list from a shared, health-checker-
 /// maintained live list at request time. Supports dynamic removal/restoration
-/// of backends without restarting.
+/// of backends without restarting, and — for a declared `[[upstream]]` — its
+/// [`upstream::UpstreamPolicy`]: weights, stickiness, the circuit breaker,
+/// retries and metrics.
 ///
 /// This type is `Clone + Send + Sync` and implements `Application`.
 #[derive(Clone)]
@@ -1262,12 +1294,24 @@ pub(crate) struct DynamicProxy {
     connections: Arc<RwLock<HashMap<String, Arc<AtomicUsize>>>>,
     /// The upstream's `tls_ca_file` trust settings; `None` = WebPKI roots.
     trust: Option<Arc<crate::proxy::UpstreamTls>>,
+    /// The upstream's name, for metrics.
+    upstream: Arc<String>,
+    /// The declared upstream's policy; `None` for an inline backend.
+    policy: Option<Arc<upstream::UpstreamPolicy>>,
 }
 
 impl DynamicProxy {
     /// Trust the given CA for TLS backends instead of the WebPKI roots.
     pub(crate) fn with_trust(mut self, trust: Option<Arc<crate::proxy::UpstreamTls>>) -> Self {
         self.trust = trust;
+        self
+    }
+
+    /// Apply the upstream's weights, stickiness, circuit breaker, retries
+    /// and metrics.
+    pub(crate) fn with_policy(mut self, upstream: &str, policy: Option<Arc<upstream::UpstreamPolicy>>) -> Self {
+        self.upstream = Arc::new(upstream.to_string());
+        self.policy = policy;
         self
     }
 
@@ -1291,48 +1335,80 @@ impl DynamicProxy {
             strategy: LoadBalanceStrategy::parse(&strategy),
             connections: Arc::new(RwLock::new(HashMap::new())),
             trust: None,
+            upstream: Arc::new(String::new()),
+            policy: None,
         }
     }
 
-    fn next_backend(&self, client_ip: &str) -> Option<String> {
-        let live = self.live.read().unwrap();
-        if live.is_empty() {
-            return None;
-        }
-
+    /// Pick by the strategy among `candidates` (not empty).
+    fn pick(&self, candidates: &[String], client_ip: &str) -> String {
+        let policy = self.policy.as_deref().filter(|p| p.weighted());
         let idx = match self.strategy {
-            LoadBalanceStrategy::RoundRobin => {
-                self.counter.fetch_add(1, Ordering::Relaxed) % live.len()
-            }
+            LoadBalanceStrategy::RoundRobin => match policy {
+                Some(policy) => return policy.weighted_round_robin(candidates).unwrap_or_else(|| candidates[0].clone()),
+                None => self.counter.fetch_add(1, Ordering::Relaxed) % candidates.len(),
+            },
             LoadBalanceStrategy::Random => {
                 let nanos = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .map(|d| d.subsec_nanos())
                     .unwrap_or(0) as usize;
                 let salt = self.counter.fetch_add(1, Ordering::Relaxed);
-                nanos.wrapping_add(salt) % live.len()
+                let roll = nanos.wrapping_add(salt.wrapping_mul(2_654_435_761));
+                match policy {
+                    Some(policy) => policy.weighted_index(candidates, roll),
+                    None => roll % candidates.len(),
+                }
             }
             LoadBalanceStrategy::IpHash => {
                 let mut hasher = DefaultHasher::new();
                 client_ip.hash(&mut hasher);
-                (hasher.finish() as usize) % live.len()
+                (hasher.finish() as usize) % candidates.len()
             }
             LoadBalanceStrategy::LeastConnections => {
                 let connections = self.connections.read().unwrap();
-                live.iter()
+                let load = |backend: &String| connections.get(backend).map(|c| c.load(Ordering::Relaxed)).unwrap_or(0) as u64;
+                let weight = |backend: &String| self.policy.as_deref().map_or(1, |p| p.weight(backend)) as u64;
+                // Fewest in flight per unit of weight (compared crosswise).
+                candidates
+                    .iter()
                     .enumerate()
-                    .min_by_key(|(_, backend)| {
-                        connections
-                            .get(*backend)
-                            .map(|c| c.load(Ordering::Relaxed))
-                            .unwrap_or(0)
-                    })
+                    .min_by(|(_, a), (_, b)| (load(a) * weight(b)).cmp(&(load(b) * weight(a))))
                     .map(|(i, _)| i)
                     .unwrap_or(0)
             }
         };
+        candidates[idx].clone()
+    }
 
-        Some(live[idx].clone())
+    /// The backend for this attempt: the sticky one if it's still in
+    /// rotation, else one by the strategy, skipping `tried` and backends
+    /// whose circuit breaker is open. `Err(true)`: none, because the breaker
+    /// holds the rest open; `Err(false)`: none at all.
+    fn next_backend(&self, request: &Request, client_ip: &str, tried: &[String]) -> Result<String, bool> {
+        let mut candidates: Vec<String> = self.live.read().unwrap().iter().filter(|b| !tried.contains(b)).cloned().collect();
+        let Some(policy) = self.policy.as_deref() else {
+            return if candidates.is_empty() { Err(false) } else { Ok(self.pick(&candidates, client_ip)) };
+        };
+        if let Some(sticky) = &policy.sticky {
+            if let Some(id) = upstream::cookie_value(request, &sticky.cookie) {
+                if let Some(backend) = candidates.iter().find(|b| upstream::backend_id(b) == id).cloned() {
+                    if policy.admits(&backend) {
+                        return Ok(backend);
+                    }
+                    candidates.retain(|b| *b != backend);
+                }
+            }
+        }
+        let ejected = policy.any_open(&candidates);
+        while !candidates.is_empty() {
+            let backend = self.pick(&candidates, client_ip);
+            if policy.admits(&backend) {
+                return Ok(backend);
+            }
+            candidates.retain(|b| *b != backend);
+        }
+        Err(ejected)
     }
 
     /// Returns the shared in-flight connection counter for `backend`,
@@ -1365,17 +1441,29 @@ impl Drop for ConnectionGuard {
 /// A request ready to send: the chosen backend and the (possibly rewritten)
 /// request. Holding it keeps the backend's least-connections count raised.
 struct Prepared<'a> {
+    backend: String,
     host: String,
     port: u16,
     request: std::borrow::Cow<'a, Request>,
     _guard: Option<ConnectionGuard>,
 }
 
+/// How one attempt went.
+enum Attempt {
+    /// A response to pass on.
+    Done(Response),
+    /// A failure, retried when the policy allows: the backend's response (a
+    /// retried status) or none (no response).
+    Failed(Option<Response>),
+}
+
 impl DynamicProxy {
-    /// Pick a backend and apply the path rewriting; `Err` is the response to
-    /// send instead (no live backend, unparsable backend address).
-    fn prepare<'a>(&self, request: &'a Request, conn: &ConnectionInfo) -> Result<Prepared<'a>, Response> {
-        let backend = self.next_backend(&conn.client.ip).ok_or_else(bad_gateway)?;
+    /// Pick a backend (not one of `tried`) and apply the path rewriting;
+    /// `Err` is the response to send instead (no backend in rotation — `503`
+    /// when the circuit breaker took them out, `502` otherwise — or an
+    /// unparsable backend address).
+    fn prepare<'a>(&self, request: &'a Request, conn: &ConnectionInfo, tried: &[String]) -> Result<Prepared<'a>, Response> {
+        let backend = self.next_backend(request, &conn.client.ip, tried).map_err(|ejected| if ejected { service_unavailable() } else { bad_gateway() })?;
 
         let guard = if self.strategy == LoadBalanceStrategy::LeastConnections {
             let counter = self.connection_counter(&backend);
@@ -1407,35 +1495,89 @@ impl DynamicProxy {
             std::borrow::Cow::Borrowed(request)
         };
 
-        Ok(Prepared { host, port, request, _guard: guard })
+        Ok(Prepared { backend, host, port, request, _guard: guard })
+    }
+
+    /// Record an attempt's outcome (breaker, metrics) and classify it.
+    fn settle(&self, backend: &str, result: Result<Response, ()>, started: std::time::Instant) -> Attempt {
+        let status = result.as_ref().ok().map(|r| r.status_code);
+        upstream::observe(&self.upstream, backend, status, started);
+        let failed = status.is_none_or(|s| matches!(s, 502..=504));
+        if let Some(policy) = &self.policy {
+            policy.record(backend, failed);
+        }
+        match result {
+            Ok(response) if self.policy.as_deref().is_some_and(|p| p.retries_status(response.status_code)) => Attempt::Failed(Some(response)),
+            Ok(response) => Attempt::Done(response),
+            Err(()) => Attempt::Failed(None),
+        }
+    }
+
+    /// How many attempts `request` may get.
+    fn attempts(&self, request: &Request) -> u32 {
+        match self.policy.as_deref().and_then(|p| p.retry.as_ref()) {
+            Some(retry) if upstream::replayable(request) => 1 + retry.attempts,
+            _ => 1,
+        }
+    }
+
+    /// Set the sticky cookie when the client doesn't hold this backend's.
+    fn stick(&self, request: &Request, backend: &str, response: &mut Response) {
+        let Some(sticky) = self.policy.as_deref().and_then(|p| p.sticky.as_ref()) else { return };
+        let id = upstream::backend_id(backend);
+        if upstream::cookie_value(request, &sticky.cookie).as_deref() == Some(id.as_str()) {
+            return;
+        }
+        let max_age = sticky.max_age_secs.map(|s| format!("; Max-Age={s}")).unwrap_or_default();
+        response.headers.push(crate::header::Header {
+            name: "Set-Cookie".into(),
+            value: format!("{}={id}; Path=/; HttpOnly; SameSite=Lax{max_age}", sticky.cookie).into(),
+        });
     }
 
     /// The same as [`Application::execute`], without blocking a thread while
     /// the backend answers, for HTTP and HTTPS backends alike.
     #[cfg(feature = "http2")]
     pub(crate) async fn execute_async(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
-        let prepared = match self.prepare(request, conn) {
-            Ok(p) => p,
-            Err(response) => return Ok(response),
-        };
-        let tls = self.tls.then(|| match &self.trust {
-            Some(trust) => trust.async_tls(),
-            None => crate::proxy::async_upstream::AsyncTls {
-                config: crate::proxy::tls_client_config(),
-                pool: crate::proxy::async_upstream::default_tls_pool(),
-            },
-        });
-        let result = crate::proxy::async_upstream::forward(
-            &prepared.request,
-            &conn.client.ip,
-            &prepared.host,
-            prepared.port,
-            tls,
-            self.connect_timeout,
-            self.read_timeout,
-        )
-        .await;
-        Ok(result.unwrap_or_else(|_| bad_gateway()))
+        let mut tried: Vec<String> = Vec::new();
+        let mut last: Option<Response> = None;
+        for attempt in 0..self.attempts(request) {
+            let prepared = match self.prepare(request, conn, &tried) {
+                Ok(p) => p,
+                Err(response) => return Ok(last.unwrap_or(response)),
+            };
+            if attempt > 0 {
+                upstream::observe_retry(&self.upstream);
+            }
+            let tls = self.tls.then(|| match &self.trust {
+                Some(trust) => trust.async_tls(),
+                None => crate::proxy::async_upstream::AsyncTls {
+                    config: crate::proxy::tls_client_config(),
+                    pool: crate::proxy::async_upstream::default_tls_pool(),
+                },
+            });
+            let started = std::time::Instant::now();
+            let result = crate::proxy::async_upstream::forward(
+                &prepared.request,
+                &conn.client.ip,
+                &prepared.host,
+                prepared.port,
+                tls,
+                self.connect_timeout,
+                self.read_timeout,
+            )
+            .await
+            .map_err(|_| ());
+            match self.settle(&prepared.backend, result, started) {
+                Attempt::Done(mut response) => {
+                    self.stick(request, &prepared.backend, &mut response);
+                    return Ok(response);
+                }
+                Attempt::Failed(response) => last = response,
+            }
+            tried.push(prepared.backend.clone());
+        }
+        Ok(last.unwrap_or_else(bad_gateway))
     }
 
     /// Whether [`execute_async`](Self::execute_async) can serve this proxy.
@@ -1446,30 +1588,53 @@ impl DynamicProxy {
 
 impl Application for DynamicProxy {
     fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
-        let prepared = match self.prepare(request, conn) {
-            Ok(p) => p,
-            Err(response) => return Ok(response),
-        };
-
-        // Pooled keep-alive connections to the backend, TLS or not (a fresh
-        // connection per request halved throughput vs. Caddy/nginx).
-        let result = crate::proxy::forward_upstream_trusting(
-            crate::proxy::shared_pool(),
-            &prepared.request,
-            &conn.client.ip,
-            &prepared.host,
-            prepared.port,
-            self.tls,
-            self.trust.as_deref(),
-            self.connect_timeout,
-            self.read_timeout,
-        );
-
-        match result {
-            Ok(r) => Ok(r),
-            Err(_) => Ok(bad_gateway()),
+        let mut tried: Vec<String> = Vec::new();
+        let mut last: Option<Response> = None;
+        for attempt in 0..self.attempts(request) {
+            let prepared = match self.prepare(request, conn, &tried) {
+                Ok(p) => p,
+                Err(response) => return Ok(last.unwrap_or(response)),
+            };
+            if attempt > 0 {
+                upstream::observe_retry(&self.upstream);
+            }
+            // Pooled keep-alive connections to the backend, TLS or not (a
+            // fresh connection per request halved throughput vs. Caddy/nginx).
+            let started = std::time::Instant::now();
+            let result = crate::proxy::forward_upstream_trusting(
+                crate::proxy::shared_pool(),
+                &prepared.request,
+                &conn.client.ip,
+                &prepared.host,
+                prepared.port,
+                self.tls,
+                self.trust.as_deref(),
+                self.connect_timeout,
+                self.read_timeout,
+            )
+            .map_err(|_| ());
+            match self.settle(&prepared.backend, result, started) {
+                Attempt::Done(mut response) => {
+                    self.stick(request, &prepared.backend, &mut response);
+                    return Ok(response);
+                }
+                Attempt::Failed(response) => last = response,
+            }
+            tried.push(prepared.backend.clone());
         }
+        Ok(last.unwrap_or_else(bad_gateway))
     }
+}
+
+fn service_unavailable() -> Response {
+    use crate::mime_type::MimeType;
+    use crate::range::Range;
+    let mut r = Response::new();
+    r.status_code = *STATUS_CODE_REASON_PHRASE.n503_service_unavailable.status_code;
+    r.reason_phrase = STATUS_CODE_REASON_PHRASE.n503_service_unavailable.reason_phrase.to_string();
+    r.headers.push(crate::header::Header { name: "Retry-After".into(), value: "5".into() });
+    r.content_range_list = vec![Range::get_content_range(b"503 Service Unavailable: every backend is out of rotation".to_vec(), MimeType::TEXT_PLAIN.to_string())];
+    r
 }
 
 fn bad_gateway() -> Response {

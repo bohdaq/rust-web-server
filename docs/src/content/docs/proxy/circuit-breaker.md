@@ -227,6 +227,10 @@ if !allowed {
 }
 ```
 
+## In `rws.config.toml`
+
+`[upstream.circuit_breaker]` and `[upstream.retry]` give a config-file upstream a breaker per backend and retries to other backends — see [Weights, stickiness, retries and the circuit breaker](/proxy/config-driven/#weights-stickiness-retries-and-the-circuit-breaker). Their state is exported as `rws_upstream_circuit_breaker_state{upstream,backend}` ([upstream metrics](/features/metrics/#upstream-metrics)), not through `circuit_breaker::global()`.
+
 ## Metrics
 
 `GET /metrics` includes `rws_circuit_breaker_state{backend}` automatically — no opt-in layer needed — for every backend known to `circuit_breaker::global()`:
