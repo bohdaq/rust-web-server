@@ -263,6 +263,13 @@ impl Exchange {
                 response.headers.push(Header::new(name.as_str().to_string(), value.to_string()));
             }
         }
+        // Headers only, the stream already ended (a gRPC trailers-only
+        // error): no body, so the client's HEADERS end the stream too — gRPC
+        // clients read the status from them only then.
+        if body.is_end_stream() {
+            response.headers.retain(|h| !h.name.eq_ignore_ascii_case("content-length"));
+            return send_head(head_tx, Ok(response));
+        }
         let trailers = Trailers::new();
         response.trailers = Some(trailers.clone());
 

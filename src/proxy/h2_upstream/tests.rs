@@ -108,7 +108,9 @@ async fn within<F: std::future::Future>(f: F) -> F::Output {
 }
 
 /// The whole response: status, body bytes, trailers.
-async fn finish(response: h2::client::ResponseFuture) -> (http::response::Parts, Vec<u8>, Option<http::HeaderMap>) {
+async fn finish(
+    response: impl std::future::Future<Output = Result<http::Response<h2::RecvStream>, h2::Error>>,
+) -> (http::response::Parts, Vec<u8>, Option<http::HeaderMap>) {
     let (parts, mut body) = within(response).await.unwrap().into_parts();
     let mut bytes = Vec::new();
     while let Some(chunk) = within(body.data()).await {
@@ -172,7 +174,10 @@ async fn a_trailers_only_error_keeps_its_status() {
     let rws = grpc_client().await;
     let (response, mut send) = within(rws.ready()).await.unwrap().send_request(grpc_call("/test.Echo/Fail"), false).unwrap();
     send.send_data(message(b"x"), true).unwrap();
-    let (parts, body, _) = finish(response).await;
+    let response = within(response).await.unwrap();
+    // HEADERS with END_STREAM, as the backend sent it (Go's gRPC insists).
+    assert!(response.body().is_end_stream(), "a trailers-only response must end with its headers");
+    let (parts, body, _) = finish(async { Ok::<_, h2::Error>(response) }).await;
     assert_eq!("13", parts.headers["grpc-status"]);
     assert_eq!("boom", parts.headers["grpc-message"]);
     assert!(body.is_empty());
