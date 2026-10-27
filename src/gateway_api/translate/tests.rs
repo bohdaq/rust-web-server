@@ -40,6 +40,9 @@ fn snapshot(fixtures: &[&str]) -> Snapshot {
             "Gateway" => s.gateways.push(serde_json::from_value(doc).unwrap()),
             "HTTPRoute" => s.http_routes.push(serde_json::from_value(doc).unwrap()),
             "GRPCRoute" => s.grpc_routes.push(serde_json::from_value(doc).unwrap()),
+            "TLSRoute" => s.tls_routes.push(serde_json::from_value(doc).unwrap()),
+            "TCPRoute" => s.tcp_routes.push(serde_json::from_value(doc).unwrap()),
+            "UDPRoute" => s.udp_routes.push(serde_json::from_value(doc).unwrap()),
             "ReferenceGrant" => s.reference_grants.push(serde_json::from_value(doc).unwrap()),
             "Service" => s.services.push(serde_json::from_value(doc).unwrap()),
             "Namespace" => s.namespaces.push(serde_json::from_value(doc).unwrap()),
@@ -325,4 +328,70 @@ fn grpc_routes_match_listener_hostnames() {
         assert!(parents.iter().all(|p| find(&p.conditions, "Accepted").status == "True"), "{name}: {parents:?}");
     }
     assert_eq!(1, listener(&desired, "grpcroute-listener-hostname-matching", "listener-1").attached_routes);
+}
+
+/// A TLS Secret named `name` in the infra namespace, as the suite creates at run time.
+fn tls_secret(name: &str) -> Secret {
+    let cert = rcgen::generate_simple_self_signed(vec!["example.org".to_string()]).unwrap();
+    let mut secret: Secret = serde_json::from_value(serde_json::json!({
+        "apiVersion": "v1", "kind": "Secret", "type": "kubernetes.io/tls",
+        "metadata": {"name": name, "namespace": INFRA}
+    }))
+    .unwrap();
+    secret.data = Some(BTreeMap::from([
+        ("tls.crt".to_string(), ByteString(cert.cert.pem().into_bytes())),
+        ("tls.key".to_string(), ByteString(cert.signing_key.serialize_pem().into_bytes())),
+    ]));
+    secret
+}
+
+#[test]
+fn tls_passthrough_routes_attach_by_hostname_without_certificates() {
+    let (config, desired) = run(&snapshot(&["tlsroute-simple-same-namespace"]));
+    let parent = &desired.tls_routes[&(INFRA.to_string(), "gateway-conformance-infra-test".to_string())][0];
+    assert_eq!("True", find(&parent.conditions, "Accepted").status, "{parent:?}");
+    assert_eq!("True", find(&parent.conditions, "ResolvedRefs").status);
+    let https = listener(&desired, "gateway-tlsroute", "https");
+    assert_eq!(1, https.attached_routes);
+    assert_eq!("True", find(&https.conditions, "Programmed").status, "passthrough needs no certificate: {:?}", https.conditions);
+    let served = config.listeners.iter().find(|l| l.gateway.1 == "gateway-tlsroute").unwrap();
+    assert_eq!(("TLS", None), (served.protocol.as_str(), served.tls.as_ref().map(|_| ())));
+    assert_eq!(vec!["abc.example.com".to_string()], served.http_routes[0].hostnames);
+}
+
+#[test]
+fn tls_listeners_carry_only_tls_routes() {
+    let (_, desired) = run(&snapshot(&["tlsroute-listener-passthrough-supported-kinds"]));
+    let l = listener(&desired, "gateway-tlsroute-passthrough-supported-kind", "tls-passthrough");
+    assert_eq!(vec!["TLSRoute"], l.supported_kinds.iter().map(|k| k.kind.as_str()).collect::<Vec<_>>());
+    assert_eq!(("False", "InvalidRouteKinds"), (find(&l.conditions, "ResolvedRefs").status.as_str(), find(&l.conditions, "ResolvedRefs").reason.as_str()));
+}
+
+#[test]
+fn tls_terminate_listeners_need_their_certificate() {
+    let mut s = snapshot(&["tlsroute-terminate-simple-same-namespace"]);
+    let (_, desired) = run(&s);
+    let l = listener(&desired, "gateway-tlsroute-terminate", "tlsterminate");
+    assert_eq!("InvalidCertificateRef", find(&l.conditions, "ResolvedRefs").reason);
+    s.secrets.push(tls_secret("tls-terminate-checks-certificate"));
+    let (config, desired) = run(&s);
+    let l = listener(&desired, "gateway-tlsroute-terminate", "tlsterminate");
+    assert_eq!(("True", 1), (find(&l.conditions, "Programmed").status.as_str(), l.attached_routes));
+    let served = config.listeners.iter().find(|l| l.gateway.1 == "gateway-tlsroute-terminate").unwrap();
+    assert!(served.tls.is_some(), "the data plane terminates with it");
+    let parent = &desired.tls_routes[&(INFRA.to_string(), "tlsroute-terminated-test".to_string())][0];
+    assert_eq!("True", find(&parent.conditions, "Accepted").status);
+}
+
+#[test]
+fn tcp_and_udp_routes_attach_to_their_listeners() {
+    let (config, desired) = run(&snapshot(&["tcproute-multiple-routes-attachment", "udproute-simple"]));
+    let tcp = &desired.tcp_routes[&(INFRA.to_string(), "tcproute-attach-older".to_string())][0];
+    assert_eq!("True", find(&tcp.conditions, "Accepted").status, "{tcp:?}");
+    assert_eq!("True", find(&tcp.conditions, "ResolvedRefs").status);
+    let udp = &desired.udp_routes[&(INFRA.to_string(), "udp-coredns".to_string())][0];
+    assert_eq!("True", find(&udp.conditions, "Accepted").status, "{udp:?}");
+    assert_eq!(1, listener(&desired, "udp-gateway", "coredns").attached_routes);
+    let protocols: BTreeSet<&str> = config.listeners.iter().filter(|l| l.gateway.1.contains("tcp") || l.gateway.1.contains("udp")).map(|l| l.protocol.as_str()).collect();
+    assert_eq!(BTreeSet::from(["TCP", "UDP"]), protocols);
 }

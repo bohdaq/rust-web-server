@@ -10,6 +10,9 @@ pub type GatewayClass = Object<GatewayClassSpec, GatewayClassStatus>;
 pub type Gateway = Object<GatewaySpec, GatewayStatus>;
 pub type HttpRoute = Object<HttpRouteSpec, RouteStatus>;
 pub type GrpcRoute = Object<GrpcRouteSpec, RouteStatus>;
+pub type TlsRoute = Object<L4RouteSpec, RouteStatus>;
+pub type TcpRoute = Object<L4RouteSpec, RouteStatus>;
+pub type UdpRoute = Object<L4RouteSpec, RouteStatus>;
 pub type ReferenceGrant = Object<ReferenceGrantSpec, NoStatus>;
 
 fn resource(version: &str, kind: &str, plural: &str) -> ApiResource {
@@ -30,6 +33,18 @@ pub fn http_routes() -> ApiResource {
 
 pub fn grpc_routes() -> ApiResource {
     resource("v1", "GRPCRoute", "grpcroutes")
+}
+
+pub fn tls_routes() -> ApiResource {
+    resource("v1", "TLSRoute", "tlsroutes")
+}
+
+pub fn tcp_routes() -> ApiResource {
+    resource("v1", "TCPRoute", "tcproutes")
+}
+
+pub fn udp_routes() -> ApiResource {
+    resource("v1", "UDPRoute", "udproutes")
 }
 
 pub fn reference_grants() -> ApiResource {

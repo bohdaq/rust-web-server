@@ -105,3 +105,132 @@ async fn an_https_listener_terminates_tls_with_the_secret_certificate() {
     assert!(body.starts_with("HTTP/1.1 200"), "{body}");
     assert!(body.contains("GET /pay HTTP/1.1|secure.example.com"), "{body}");
 }
+
+/// A TCP backend echoing every byte back.
+fn tcp_echo_backend() -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                let mut reader = stream.try_clone().unwrap();
+                let mut writer = stream;
+                let _ = std::io::copy(&mut reader, &mut writer);
+            });
+        }
+    });
+    port
+}
+
+fn l4_config(container_port: u16, backend: u16, protocol: &str, tls: Option<(Vec<u8>, Vec<u8>)>) -> GatewayConfig {
+    let mut config = config(container_port, backend, protocol, tls);
+    config.listeners[0].http_routes[0].rules[0].matches.clear();
+    config
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_tcp_listener_relays_bytes() {
+    let backend = tcp_echo_backend();
+    let port = free_port();
+    let plane = DataPlane::new("127.0.0.1");
+    plane.apply(&l4_config(port, backend, "TCP", None));
+    let echoed = tokio::task::spawn_blocking(move || {
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+        stream.write_all(b"raw bytes").unwrap();
+        let mut buffer = [0u8; 9];
+        stream.read_exact(&mut buffer).unwrap();
+        buffer.to_vec()
+    })
+    .await
+    .unwrap();
+    assert_eq!(b"raw bytes".to_vec(), echoed);
+}
+
+/// A TLS client to the gateway's `port` for `name`, trusting `cert`: sends
+/// "ping", returns what comes back.
+fn tls_ping(port: u16, name: &str, cert: &rcgen::CertifiedKey<rcgen::KeyPair>) -> Vec<u8> {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(rustls::pki_types::CertificateDer::from(cert.cert.der().to_vec())).unwrap();
+    let config = crate::tls_client_builder().with_root_certificates(roots).with_no_client_auth();
+    let connection = rustls::ClientConnection::new(Arc::new(config), name.to_string().try_into().unwrap()).unwrap();
+    let tcp = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    tcp.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+    let mut tls = rustls::StreamOwned::new(connection, tcp);
+    tls.write_all(b"ping").unwrap();
+    let mut buffer = [0u8; 4];
+    tls.read_exact(&mut buffer).unwrap();
+    buffer.to_vec()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_tls_terminate_listener_decrypts_and_relays() {
+    let backend = tcp_echo_backend();
+    let port = free_port();
+    let cert = rcgen::generate_simple_self_signed(vec!["term.example.com".to_string()]).unwrap();
+    let plane = DataPlane::new("127.0.0.1");
+    plane.apply(&l4_config(port, backend, "TLS", Some((cert.cert.pem().into_bytes(), cert.signing_key.serialize_pem().into_bytes()))));
+    let echoed = tokio::task::spawn_blocking(move || tls_ping(port, "term.example.com", &cert)).await.unwrap();
+    assert_eq!(b"ping".to_vec(), echoed, "plaintext reached the echo backend and came back encrypted");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_tls_passthrough_listener_forwards_the_encrypted_stream() {
+    // The backend terminates TLS itself, with its own certificate.
+    let cert = rcgen::generate_simple_self_signed(vec!["pass.example.com".to_string()]).unwrap();
+    let server_config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(vec![rustls::pki_types::CertificateDer::from(cert.cert.der().to_vec())], rustls::pki_types::PrivateKeyDer::try_from(cert.signing_key.serialize_der()).unwrap())
+        .unwrap();
+    let server_config = Arc::new(server_config);
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let backend = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        let (tcp, _) = listener.accept().unwrap();
+        let connection = rustls::ServerConnection::new(server_config).unwrap();
+        let mut tls = rustls::StreamOwned::new(connection, tcp);
+        let mut buffer = [0u8; 4];
+        if tls.read_exact(&mut buffer).is_ok() {
+            let _ = tls.write_all(&buffer);
+            let _ = tls.flush();
+        }
+    });
+    let port = free_port();
+    let plane = DataPlane::new("127.0.0.1");
+    let mut config = l4_config(port, backend, "TLS", None);
+    config.listeners[0].http_routes[0].hostnames = vec!["pass.example.com".to_string()];
+    plane.apply(&config);
+    let echoed = tokio::task::spawn_blocking(move || tls_ping(port, "pass.example.com", &cert)).await.unwrap();
+    assert_eq!(b"ping".to_vec(), echoed, "the backend's certificate, end to end");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_udp_listener_relays_datagrams_both_ways() {
+    let backend = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    let backend_port = backend.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        let mut buffer = [0u8; 1500];
+        while let Ok((n, from)) = backend.recv_from(&mut buffer) {
+            let _ = backend.send_to(&buffer[..n], from);
+        }
+    });
+    let port = std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let plane = DataPlane::new("127.0.0.1");
+    plane.apply(&l4_config(port, backend_port, "UDP", None));
+    let replies = tokio::task::spawn_blocking(move || {
+        let client = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        client.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+        let mut replies = Vec::new();
+        for message in [&b"one"[..], b"two"] {
+            client.send_to(message, ("127.0.0.1", port)).unwrap();
+            let mut buffer = [0u8; 1500];
+            let (n, _) = client.recv_from(&mut buffer).unwrap();
+            replies.push(buffer[..n].to_vec());
+        }
+        replies
+    })
+    .await
+    .unwrap();
+    assert_eq!(vec![b"one".to_vec(), b"two".to_vec()], replies);
+    assert_eq!(vec![port], plane.ports());
+}

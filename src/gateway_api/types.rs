@@ -571,6 +571,29 @@ pub struct GrpcMethodMatch {
     pub method: Option<String>,
 }
 
+// ── TLSRoute, TCPRoute, UDPRoute (v1) ─────────────────────────────────────────
+
+/// TLSRoute's spec; TCPRoute and UDPRoute have the same without hostnames.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct L4RouteSpec {
+    #[serde(default)]
+    pub parent_refs: Vec<ParentReference>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hostnames: Vec<String>,
+    #[serde(default)]
+    pub rules: Vec<L4RouteRule>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct L4RouteRule {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub backend_refs: Vec<BackendRef>,
+}
+
 /// The status every route kind has.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct RouteStatus {

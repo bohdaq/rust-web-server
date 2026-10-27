@@ -18405,7 +18405,10 @@ The GatewayClass's `status.supportedFeatures` lists what rws claims; the conform
 
 - **GRPCRoute**: attached like HTTPRoutes (HTTP and HTTPS listeners carry both), matched on `method` (`Exact` service and/or method; `RegularExpression` isn't supported) and headers, with the header-modifier and mirror filters, weighted backends reached over h2c with trailers passed through. A call no rule matches gets HTTP `404`, which gRPC clients report as `UNIMPLEMENTED`.
 
-TLSRoute, TCPRoute and UDPRoute come in the following phases.
+- **TLSRoute** on `TLS` listeners: in `Passthrough` mode rws reads the ClientHello's SNI, picks the route whose hostname matches best and relays the still-encrypted stream (the backend presents its own certificate); in `Terminate` mode (the default) it decrypts with the listener's certificate and relays the plaintext over TCP.
+- **TCPRoute** on `TCP` listeners and **UDPRoute** on `UDP` listeners: bytes, or datagrams, relayed to a backend of the route's first rule by weight. When several routes attach to one listener, the oldest serves it (TLSRoutes: the best hostname match first). Each UDP client gets its own socket to the backend, closed after 60 s without traffic.
+
+ListenerSet, BackendTLSPolicy, client certificates and the provisioned mode come in the following phases.
 
 ## Settings
 
@@ -18422,7 +18425,7 @@ Also as `[gateway_api]` in `rws.config.toml` ([Config file](/configuration/confi
 
 ## Permissions
 
-The controller needs to list and watch GatewayClasses, Gateways, HTTPRoutes, GRPCRoutes, ReferenceGrants, Services, EndpointSlices, Namespaces and Secrets; patch the status of GatewayClasses, Gateways, HTTPRoutes and GRPCRoutes; create and patch Services; and get, create and update Leases in its namespace. The Gateway API CRDs (standard channel, v1.6) must be installed in the cluster first.
+The controller needs to list and watch GatewayClasses, Gateways, HTTPRoutes, GRPCRoutes, TLSRoutes, TCPRoutes, UDPRoutes, ReferenceGrants, Services, EndpointSlices, Namespaces and Secrets; patch the status of GatewayClasses, Gateways and every route kind; create and patch Services; and get, create and update Leases in its namespace. The Gateway API CRDs (standard channel, v1.6) must be installed in the cluster first.
 
 ---
 

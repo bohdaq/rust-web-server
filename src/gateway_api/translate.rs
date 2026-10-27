@@ -11,7 +11,7 @@ use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{Condition, LabelSelector, Time};
 use kube::ResourceExt;
 
-use super::resources::{Gateway, GatewayClass, GrpcRoute, HttpRoute, ReferenceGrant};
+use super::resources::{Gateway, GatewayClass, GrpcRoute, HttpRoute, ReferenceGrant, TcpRoute, TlsRoute, UdpRoute};
 use super::routes::CompiledHttpRoute;
 use super::services::ServiceSettings;
 use super::types::*;
@@ -36,6 +36,9 @@ pub struct Snapshot {
     pub gateways: Vec<Gateway>,
     pub http_routes: Vec<HttpRoute>,
     pub grpc_routes: Vec<GrpcRoute>,
+    pub tls_routes: Vec<TlsRoute>,
+    pub tcp_routes: Vec<TcpRoute>,
+    pub udp_routes: Vec<UdpRoute>,
     pub reference_grants: Vec<ReferenceGrant>,
     pub services: Vec<Service>,
     pub namespaces: Vec<Namespace>,
@@ -79,6 +82,9 @@ pub struct Desired {
     pub http_routes: BTreeMap<(String, String), Vec<RouteParentStatus>>,
     /// The same for GRPCRoutes.
     pub grpc_routes: BTreeMap<(String, String), Vec<RouteParentStatus>>,
+    pub tls_routes: BTreeMap<(String, String), Vec<RouteParentStatus>>,
+    pub tcp_routes: BTreeMap<(String, String), Vec<RouteParentStatus>>,
+    pub udp_routes: BTreeMap<(String, String), Vec<RouteParentStatus>>,
     /// (namespace, name) → the Service each of our Gateways should have.
     pub services: BTreeMap<(String, String), Service>,
 }
@@ -136,6 +142,10 @@ pub const SUPPORTED_FEATURES: &[&str] = &[
     "HTTPRouteResponseHeaderModification",
     "HTTPRouteSchemeRedirect",
     "ReferenceGrant",
+    "TCPRoute",
+    "TLSRoute",
+    "TLSRouteModeTerminate",
+    "UDPRoute",
 ];
 
 pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (GatewayConfig, Desired) {
@@ -176,7 +186,10 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
         .http_routes
         .iter()
         .map(|r| RouteIn::new("HTTPRoute", r, &r.spec.parent_refs, &r.spec.hostnames, http_references(&r.spec.rules), super::routes::compile(r, snapshot)))
-        .chain(snapshot.grpc_routes.iter().map(|r| RouteIn::new("GRPCRoute", r, &r.spec.parent_refs, &r.spec.hostnames, grpc_references(&r.spec.rules), super::routes::compile_grpc(r, snapshot))));
+        .chain(snapshot.grpc_routes.iter().map(|r| RouteIn::new("GRPCRoute", r, &r.spec.parent_refs, &r.spec.hostnames, grpc_references(&r.spec.rules), super::routes::compile_grpc(r, snapshot))))
+        .chain([("TLSRoute", &snapshot.tls_routes), ("TCPRoute", &snapshot.tcp_routes), ("UDPRoute", &snapshot.udp_routes)].into_iter().flat_map(|(kind, routes)| {
+            routes.iter().map(move |r| RouteIn::new(kind, r, &r.spec.parent_refs, &r.spec.hostnames, l4_references(&r.spec.rules), super::routes::compile_l4(r, kind, snapshot)))
+        }));
     let mut attached: BTreeMap<(String, String, String), i32> = BTreeMap::new();
     for route in routes {
         let namespace = route.namespace.clone();
@@ -215,7 +228,13 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
             parents.push(RouteParentStatus { parent_ref: parent_ref.clone(), controller_name: controller_name.to_string(), conditions });
         }
         if !parents.is_empty() {
-            let statuses = if route.kind == "GRPCRoute" { &mut desired.grpc_routes } else { &mut desired.http_routes };
+            let statuses = match route.kind {
+                "GRPCRoute" => &mut desired.grpc_routes,
+                "TLSRoute" => &mut desired.tls_routes,
+                "TCPRoute" => &mut desired.tcp_routes,
+                "UDPRoute" => &mut desired.udp_routes,
+                _ => &mut desired.http_routes,
+            };
             statuses.insert((namespace, route.name), parents);
         }
     }
@@ -303,10 +322,23 @@ struct ListenerView {
     http_routes: Vec<CompiledHttpRoute>,
 }
 
+/// HTTPS listeners, and TLS listeners in `Terminate` mode (the default),
+/// decrypt with their certificates; `Passthrough` forwards the TLS stream.
+fn terminates_tls(listener: &Listener) -> bool {
+    match listener.protocol.as_str() {
+        "HTTPS" => true,
+        "TLS" => listener.tls.as_ref().and_then(|t| t.mode.as_deref()).unwrap_or("Terminate") == "Terminate",
+        _ => false,
+    }
+}
+
 /// The route kinds a protocol carries.
 fn kinds_for(protocol: &str) -> &'static [&'static str] {
     match protocol {
         "HTTP" | "HTTPS" => &["HTTPRoute", "GRPCRoute"],
+        "TLS" => &["TLSRoute"],
+        "TCP" => &["TCPRoute"],
+        "UDP" => &["UDPRoute"],
         _ => &[],
     }
 }
@@ -341,7 +373,7 @@ fn listener_views(gateway: &Gateway, snapshot: &Snapshot) -> Vec<ListenerView> {
                 (true, "Accepted", String::new())
             };
             let mut tls = None;
-            if accepted && l.protocol == "HTTPS" {
+            if accepted && terminates_tls(l) {
                 match certificates(l, &gateway_namespace, snapshot) {
                     Ok(material) => tls = Some(material),
                     Err(e) => resolved_refs = Err(e),
@@ -376,6 +408,10 @@ fn listener_views(gateway: &Gateway, snapshot: &Snapshot) -> Vec<ListenerView> {
             if i == j || views[i].port != views[j].port {
                 continue;
             }
+            // TCP and UDP listeners on one port number don't share a socket.
+            if super::services::transport(&views[i].protocol) != super::services::transport(&views[j].protocol) {
+                continue;
+            }
             let reason = if views[i].protocol != views[j].protocol {
                 Some("ProtocolConflict")
             } else if views[i].hostname == views[j].hostname {
@@ -399,10 +435,10 @@ type TlsMaterial = (Vec<u8>, Vec<u8>);
 
 fn certificates(listener: &Listener, gateway_namespace: &str, snapshot: &Snapshot) -> Result<TlsMaterial, (&'static str, String)> {
     let Some(tls) = &listener.tls else {
-        return Err(("InvalidCertificateRef", "an HTTPS listener needs tls.certificateRefs".to_string()));
+        return Err(("InvalidCertificateRef", "a listener that terminates TLS needs tls.certificateRefs".to_string()));
     };
     if tls.certificate_refs.is_empty() {
-        return Err(("InvalidCertificateRef", "an HTTPS listener needs tls.certificateRefs".to_string()));
+        return Err(("InvalidCertificateRef", "a listener that terminates TLS needs tls.certificateRefs".to_string()));
     }
     let mut material = None;
     for cert in &tls.certificate_refs {
@@ -580,6 +616,10 @@ fn rule_references<'a>(backend_refs: &'a [HttpBackendRef], filters: &'a [HttpRou
 
 fn http_references(rules: &[HttpRouteRule]) -> Vec<&BackendObjectReference> {
     rules.iter().flat_map(|r| rule_references(&r.backend_refs, &r.filters)).collect()
+}
+
+fn l4_references(rules: &[L4RouteRule]) -> Vec<&BackendObjectReference> {
+    rules.iter().flat_map(|r| r.backend_refs.iter().map(|b| &b.object)).collect()
 }
 
 fn grpc_references(rules: &[GrpcRouteRule]) -> Vec<&BackendObjectReference> {

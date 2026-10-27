@@ -1,0 +1,105 @@
+[
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "tcp-attach-backend-1",
+   "namespace": "gateway-conformance-infra",
+   "labels": {
+    "app": "tcp-attach-backend-1"
+   }
+  },
+  "spec": {
+   "selector": {
+    "app": "tcp-attach-backend-1"
+   },
+   "ports": [
+    {
+     "name": "tcp",
+     "protocol": "TCP",
+     "port": 3000,
+     "targetPort": 3000
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "tcp-attach-backend-2",
+   "namespace": "gateway-conformance-infra",
+   "labels": {
+    "app": "tcp-attach-backend-2"
+   }
+  },
+  "spec": {
+   "selector": {
+    "app": "tcp-attach-backend-2"
+   },
+   "ports": [
+    {
+     "name": "tcp",
+     "protocol": "TCP",
+     "port": 3000,
+     "targetPort": 3000
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+   "name": "tcp-multi-route-attach-gateway",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "gatewayClassName": "rws",
+   "listeners": [
+    {
+     "name": "tcp",
+     "protocol": "TCP",
+     "port": 9310,
+     "allowedRoutes": {
+      "kinds": [
+       {
+        "kind": "TCPRoute",
+        "group": "gateway.networking.k8s.io"
+       }
+      ],
+      "namespaces": {
+       "from": "Same"
+      }
+     }
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "TCPRoute",
+  "metadata": {
+   "name": "tcproute-attach-older",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "parentRefs": [
+    {
+     "name": "tcp-multi-route-attach-gateway",
+     "sectionName": "tcp"
+    }
+   ],
+   "rules": [
+    {
+     "backendRefs": [
+      {
+       "name": "tcp-attach-backend-1",
+       "port": 3000
+      }
+     ]
+    }
+   ]
+  }
+ }
+]

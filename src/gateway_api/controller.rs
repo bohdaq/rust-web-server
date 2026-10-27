@@ -25,7 +25,7 @@ use kube::{Client, Resource, ResourceExt};
 use serde::de::DeserializeOwned;
 use tokio::sync::Notify;
 
-use super::resources::{self, Gateway, GatewayClass, GrpcRoute, HttpRoute, ReferenceGrant};
+use super::resources::{self, Gateway, GatewayClass, GrpcRoute, HttpRoute, ReferenceGrant, TcpRoute, TlsRoute, UdpRoute};
 use super::translate::{translate, GatewayConfig, Settings, Snapshot};
 use super::types::RouteParentStatus;
 
@@ -51,6 +51,9 @@ pub struct Stores {
     pub gateways: Store<Gateway>,
     pub http_routes: Store<HttpRoute>,
     pub grpc_routes: Store<GrpcRoute>,
+    pub tls_routes: Store<TlsRoute>,
+    pub tcp_routes: Store<TcpRoute>,
+    pub udp_routes: Store<UdpRoute>,
     pub reference_grants: Store<ReferenceGrant>,
     pub services: Store<Service>,
     pub namespaces: Store<Namespace>,
@@ -71,6 +74,9 @@ impl Stores {
             gateways: all(&self.gateways),
             http_routes: all(&self.http_routes),
             grpc_routes: all(&self.grpc_routes),
+            tls_routes: all(&self.tls_routes),
+            tcp_routes: all(&self.tcp_routes),
+            udp_routes: all(&self.udp_routes),
             reference_grants: all(&self.reference_grants),
             services: all(&self.services),
             namespaces: all(&self.namespaces),
@@ -109,6 +115,9 @@ pub fn start_watches(client: &Client) -> (Stores, Arc<Notify>) {
         gateways: watch(Api::all_with(client.clone(), &resources::gateways()), resources::gateways(), Arc::clone(&changed)),
         http_routes: watch(Api::all_with(client.clone(), &resources::http_routes()), resources::http_routes(), Arc::clone(&changed)),
         grpc_routes: watch(Api::all_with(client.clone(), &resources::grpc_routes()), resources::grpc_routes(), Arc::clone(&changed)),
+        tls_routes: watch(Api::all_with(client.clone(), &resources::tls_routes()), resources::tls_routes(), Arc::clone(&changed)),
+        tcp_routes: watch(Api::all_with(client.clone(), &resources::tcp_routes()), resources::tcp_routes(), Arc::clone(&changed)),
+        udp_routes: watch(Api::all_with(client.clone(), &resources::udp_routes()), resources::udp_routes(), Arc::clone(&changed)),
         reference_grants: watch(Api::all_with(client.clone(), &resources::reference_grants()), resources::reference_grants(), Arc::clone(&changed)),
         services: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         namespaces: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
@@ -192,6 +201,9 @@ pub async fn reconcile(client: &Client, stores: &Stores, options: &Options) -> R
     let controller_name = options.settings.controller_name.as_str();
     failures.extend(write_route_status(client, &snapshot.http_routes, &desired.http_routes, &resources::http_routes(), controller_name).await);
     failures.extend(write_route_status(client, &snapshot.grpc_routes, &desired.grpc_routes, &resources::grpc_routes(), controller_name).await);
+    failures.extend(write_route_status(client, &snapshot.tls_routes, &desired.tls_routes, &resources::tls_routes(), controller_name).await);
+    failures.extend(write_route_status(client, &snapshot.tcp_routes, &desired.tcp_routes, &resources::tcp_routes(), controller_name).await);
+    failures.extend(write_route_status(client, &snapshot.udp_routes, &desired.udp_routes, &resources::udp_routes(), controller_name).await);
     if failures.is_empty() {
         Ok(())
     } else {

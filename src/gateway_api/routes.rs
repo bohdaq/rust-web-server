@@ -6,6 +6,7 @@ use k8s_openapi::api::discovery::v1::EndpointSlice;
 use kube::ResourceExt;
 
 use super::resources::{GrpcRoute, HttpRoute};
+use super::types::L4RouteSpec;
 use super::translate::Snapshot;
 use super::types::*;
 
@@ -169,6 +170,40 @@ pub fn compile_grpc(route: &GrpcRoute, snapshot: &Snapshot) -> CompiledHttpRoute
                     .map(|f| Mirror::from_filter(f, &namespace, snapshot))
                     .collect(),
             }
+        })
+        .collect();
+    CompiledHttpRoute {
+        key: (namespace, route.name_any()),
+        hostnames: route.spec.hostnames.clone(),
+        created: route.metadata.creation_timestamp.as_ref().map(|t| t.0.to_string()).unwrap_or_default(),
+        rules,
+    }
+}
+
+/// A TLSRoute, TCPRoute or UDPRoute: one rule per rule, no matches (the
+/// data plane picks the route by SNI or age, then a rule's backend by
+/// weight).
+pub fn compile_l4(route: &kube::core::Object<L4RouteSpec, RouteStatus>, kind: &str, snapshot: &Snapshot) -> CompiledHttpRoute {
+    let namespace = route.namespace().unwrap_or_default();
+    let rules = route
+        .spec
+        .rules
+        .iter()
+        .map(|rule| CompiledRule {
+            name: rule.name.clone(),
+            matches: Vec::new(),
+            filters: Vec::new(),
+            backends: rule
+                .backend_refs
+                .iter()
+                .map(|b| {
+                    let (endpoints, app_protocol) = resolve(&b.object, &namespace, kind, snapshot);
+                    Backend { weight: b.weight.unwrap_or(1).max(0) as u32, endpoints, app_protocol, filters: Vec::new() }
+                })
+                .collect(),
+            timeouts: None,
+            retry: None,
+            mirrors: Vec::new(),
         })
         .collect();
     CompiledHttpRoute {

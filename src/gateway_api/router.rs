@@ -63,7 +63,7 @@ pub(crate) fn host_score(pattern: &str, host: &str) -> Option<(usize, usize)> {
 
 /// The listener a request on this port belongs to: the most specific
 /// matching hostname; a listener without one matches any host.
-fn pick_listener<'a>(listeners: &'a [ListenerConfig], host: &str) -> Option<&'a ListenerConfig> {
+pub(crate) fn pick_listener<'a>(listeners: &'a [ListenerConfig], host: &str) -> Option<&'a ListenerConfig> {
     listeners
         .iter()
         .filter_map(|l| match l.hostname.as_deref().filter(|h| !h.is_empty()) {

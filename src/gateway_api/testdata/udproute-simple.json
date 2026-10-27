@@ -1,0 +1,53 @@
+[
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+   "name": "udp-gateway",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "gatewayClassName": "rws",
+   "listeners": [
+    {
+     "name": "coredns",
+     "protocol": "UDP",
+     "port": 5300,
+     "allowedRoutes": {
+      "kinds": [
+       {
+        "kind": "UDPRoute"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "UDPRoute",
+  "metadata": {
+   "name": "udp-coredns",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "parentRefs": [
+    {
+     "name": "udp-gateway",
+     "sectionName": "coredns"
+    }
+   ],
+   "rules": [
+    {
+     "backendRefs": [
+      {
+       "name": "coredns",
+       "port": 53
+      }
+     ]
+    }
+   ]
+  }
+ }
+]
