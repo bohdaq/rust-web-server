@@ -73,7 +73,14 @@ cp "$NAMED" "$WORK/named"
 "$WORK/named" -g -c "$WORK/bind/named.conf" > "$WORK/named.log" 2>&1 &
 PIDS+=($!)
 wait_for "$WORK/named.log" "running" 30 || fail "BIND did not start"
-[ "$(dig +short -p 8053 @127.0.0.1 A www.example.test)" = "127.0.0.1" ] || fail "BIND doesn't answer for example.test"
+# "running" is logged a moment before queries are answered on a slow runner.
+answer=""
+for _ in $(seq 1 20); do
+  answer=$(dig +short +tries=1 +time=1 -p 8053 @127.0.0.1 A www.example.test 2>&1 || true)
+  [ "$answer" = "127.0.0.1" ] && break
+  sleep 0.5
+done
+[ "$answer" = "127.0.0.1" ] || fail "BIND doesn't answer for example.test: $answer"
 
 # ── Pebble, resolving through BIND ───────────────────────────────────────────
 (cd "$PEBBLE_SRC" && PEBBLE_AUTHZREUSE=0 PEBBLE_VA_NOSLEEP=1 PEBBLE_WFE_NONCEREJECT=0 \
