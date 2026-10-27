@@ -13,14 +13,15 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use crate::application::Application;
-use crate::core::New;
 use crate::request::Request;
 use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+
+use super::filters::{self, status, Cors};
 use crate::server::ConnectionInfo;
 
 use super::routes::{CompiledHttpRoute, CompiledRule};
 use super::translate::ListenerConfig;
-use super::types::HttpRouteMatch;
+use super::types::{HttpRouteFilter, HttpRouteMatch};
 
 /// The listeners served on one container port (one Gateway's, one port;
 /// several when they differ by hostname).
@@ -78,7 +79,7 @@ fn path_of(request: &Request) -> &str {
     uri.split(['?', '#']).next().unwrap_or(uri)
 }
 
-fn query_value<'a>(request: &'a Request, name: &str) -> Option<String> {
+fn query_value(request: &Request, name: &str) -> Option<String> {
     let query = request.request_uri.split_once('?')?.1;
     let query = query.split('#').next().unwrap_or(query);
     query.split('&').find_map(|pair| {
@@ -133,10 +134,10 @@ fn match_score(m: &HttpRouteMatch, request: &Request) -> Option<(u8, usize, u8, 
     Some((exact, length, m.method.is_some() as u8, m.headers.len(), m.query_params.len()))
 }
 
-/// The rule a request goes to on a listener.
-pub(crate) fn select<'a>(listener: &'a ListenerConfig, request: &Request, host: &str) -> Option<(&'a CompiledHttpRoute, &'a CompiledRule)> {
+/// The rule a request goes to on a listener, and the match that chose it.
+pub(crate) fn select<'a>(listener: &'a ListenerConfig, request: &Request, host: &str) -> Option<(&'a CompiledHttpRoute, &'a CompiledRule, &'a HttpRouteMatch)> {
     type Key<'k> = ((usize, usize), (u8, usize, u8, usize, usize), std::cmp::Reverse<(&'k str, &'k (String, String), usize, usize)>);
-    let mut best: Option<(Key, &CompiledHttpRoute, &CompiledRule)> = None;
+    let mut best: Option<(Key, &CompiledHttpRoute, &CompiledRule, &HttpRouteMatch)> = None;
     for route in &listener.http_routes {
         let host_match = if route.hostnames.is_empty() {
             Some((0, 0))
@@ -148,20 +149,13 @@ pub(crate) fn select<'a>(listener: &'a ListenerConfig, request: &Request, host: 
             for (match_index, m) in rule.matches.iter().enumerate() {
                 let Some(score) = match_score(m, request) else { continue };
                 let key = (host_match, score, std::cmp::Reverse((route.created.as_str(), &route.key, rule_index, match_index)));
-                if best.as_ref().is_none_or(|(b, _, _)| key > *b) {
-                    best = Some((key, route, rule));
+                if best.as_ref().is_none_or(|(b, ..)| key > *b) {
+                    best = Some((key, route, rule, m));
                 }
             }
         }
     }
-    best.map(|(_, route, rule)| (route, rule))
-}
-
-fn status(code: &'static crate::response::StatusCodeReasonPhrase) -> Response {
-    let mut response = Response::new();
-    response.status_code = *code.status_code;
-    response.reason_phrase = code.reason_phrase.to_string();
-    response
+    best.map(|(_, route, rule, m)| (route, rule, m))
 }
 
 impl PortRouter {
@@ -186,6 +180,19 @@ impl PortRouter {
                 }
             })
             .expect("weights sum to total");
+        let modified;
+        let request = if backend.filters.is_empty() {
+            request
+        } else {
+            let mut copy = request.clone();
+            for filter in &backend.filters {
+                if let Some(f) = filter.request_header_modifier.as_ref().filter(|_| filter.filter_type == "RequestHeaderModifier") {
+                    filters::modify_headers(&mut copy.headers, f);
+                }
+            }
+            modified = copy;
+            &modified
+        };
         let endpoints = match &backend.endpoints {
             Err(_) => return status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error),
             Ok(e) if e.is_empty() => return status(STATUS_CODE_REASON_PHRASE.n503_service_unavailable),
@@ -216,6 +223,74 @@ impl PortRouter {
     }
 }
 
+impl PortRouter {
+    /// Run the rule's filters in order around forwarding: a redirect or a
+    /// CORS preflight answers here; header modifiers, rewrites and CORS
+    /// headers change the request or the response.
+    fn route(&self, listener: &ListenerConfig, rule: &CompiledRule, matched: &HttpRouteMatch, request: &Request, host: &str, connection: &ConnectionInfo) -> Response {
+        if rule.filters.is_empty() {
+            return self.forward(rule, request, connection);
+        }
+        let mut request = request.clone();
+        let mut response_filters: Vec<&HttpRouteFilter> = Vec::new();
+        let mut cors_headers = Vec::new();
+        for filter in &rule.filters {
+            match filter.filter_type.as_str() {
+                "RequestHeaderModifier" => {
+                    if let Some(f) = &filter.request_header_modifier {
+                        filters::modify_headers(&mut request.headers, f);
+                    }
+                }
+                "ResponseHeaderModifier" => response_filters.push(filter),
+                "RequestRedirect" => {
+                    if let Some(f) = &filter.request_redirect {
+                        return filters::redirect(&request, host, listener.protocol == "HTTPS", listener.port as u16, matched, f);
+                    }
+                }
+                "URLRewrite" => {
+                    if let Some(f) = &filter.url_rewrite {
+                        if let Some(hostname) = &f.hostname {
+                            request.headers.retain(|h| !h.name.eq_ignore_ascii_case("host"));
+                            request.headers.push(crate::header::Header::new("Host", hostname.clone()));
+                        }
+                        if let Some(modifier) = &f.path {
+                            let (path, query) = filters::split_target(&request.request_uri);
+                            request.request_uri = format!("{}{query}", filters::modified_path(path, matched, modifier));
+                        }
+                    }
+                }
+                "CORS" => {
+                    if let Some(f) = &filter.cors {
+                        match filters::cors(&request, f) {
+                            Cors::Pass => {}
+                            Cors::Preflight(headers) => {
+                                let mut response = status(STATUS_CODE_REASON_PHRASE.n204_no_content);
+                                response.headers.extend(headers);
+                                return response;
+                            }
+                            Cors::Actual(headers) => cors_headers = headers,
+                        }
+                    }
+                }
+                "RequestMirror" => {} // Phase 4
+                // ExtensionRef and anything unknown: the spec's 500.
+                _ => return status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error),
+            }
+        }
+        let mut response = self.forward(rule, &request, connection);
+        for filter in response_filters {
+            if let Some(f) = &filter.response_header_modifier {
+                filters::modify_headers(&mut response.headers, f);
+            }
+        }
+        for header in cors_headers {
+            response.headers.retain(|h| !h.name.eq_ignore_ascii_case(&header.name));
+            response.headers.push(header);
+        }
+        response
+    }
+}
+
 impl Application for PortRouter {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         let listeners = self.listeners.read().unwrap_or_else(|e| e.into_inner()).clone();
@@ -224,7 +299,7 @@ impl Application for PortRouter {
             return Ok(status(STATUS_CODE_REASON_PHRASE.n404_not_found));
         };
         match select(listener, request, &host) {
-            Some((_, rule)) => Ok(self.forward(rule, request, connection)),
+            Some((_, rule, matched)) => Ok(self.route(listener, rule, matched, request, &host, connection)),
             None => Ok(status(STATUS_CODE_REASON_PHRASE.n404_not_found)),
         }
     }

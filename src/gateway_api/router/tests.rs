@@ -47,7 +47,7 @@ fn listener(hostname: Option<&str>, routes: Vec<CompiledHttpRoute>) -> ListenerC
 }
 
 fn picked(l: &ListenerConfig, r: &Request) -> Option<String> {
-    select(l, r, &request_host(r)).and_then(|(_, rule)| rule.name.clone())
+    select(l, r, &request_host(r)).and_then(|(_, rule, _)| rule.name.clone())
 }
 
 #[test]
@@ -146,4 +146,45 @@ fn unresolvable_or_empty_backends_answer_500_and_503() {
     assert_eq!(500, code(vec![backend(1, Err("not found".to_string()))]));
     assert_eq!(503, code(vec![backend(1, Ok(vec![]))]), "no ready endpoints");
     assert_eq!(404, router.execute(&r, &connection).unwrap().status_code, "no listener");
+}
+
+#[test]
+fn rule_filters_answer_redirects_preflights_and_unknown_filters_here() {
+    use crate::gateway_api::types::{HttpCorsFilter, HttpRequestRedirectFilter, HttpRouteFilter};
+    let filtered = |filter: HttpRouteFilter| {
+        let mut r = rule("x", vec![path("PathPrefix", "/")], vec![backend(1, Ok(vec![]))]);
+        r.filters = vec![filter];
+        listener(None, vec![route("r", "1", &[], vec![r])])
+    };
+    let router = PortRouter::new(Arc::new(RwLock::new(Arc::new(vec![]))));
+    let connection = ConnectionInfo {
+        client: crate::server::Address { ip: "127.0.0.1".to_string(), port: 1 },
+        server: crate::server::Address { ip: "127.0.0.1".to_string(), port: 2 },
+        request_size: 0,
+        sni_hostname: None,
+    };
+    let run = |l: &ListenerConfig, r: &Request| {
+        let (_, rule, matched) = select(l, r, "example.org").expect("a rule");
+        router.route(l, rule, matched, r, "example.org", &connection)
+    };
+    let redirect = filtered(HttpRouteFilter {
+        filter_type: "RequestRedirect".to_string(),
+        request_redirect: Some(HttpRequestRedirectFilter { scheme: Some("https".to_string()), ..Default::default() }),
+        ..Default::default()
+    });
+    let response = run(&redirect, &request("GET", "/a?b", &[("host", "example.org")]));
+    assert_eq!(302, response.status_code);
+    assert_eq!(Some("https://example.org/a?b"), response.headers.iter().find(|h| h.name == "Location").map(|h| h.value.as_ref()));
+
+    let cors = filtered(HttpRouteFilter {
+        filter_type: "CORS".to_string(),
+        cors: Some(HttpCorsFilter { allow_origins: vec!["*".to_string()], ..Default::default() }),
+        ..Default::default()
+    });
+    let preflight = request("OPTIONS", "/", &[("origin", "https://a.com"), ("access-control-request-method", "GET")]);
+    assert_eq!(204, run(&cors, &preflight).status_code, "answered without the backend");
+    assert_eq!(503, run(&cors, &request("GET", "/", &[])).status_code, "others reach the (empty) backend");
+
+    let unknown = filtered(HttpRouteFilter { filter_type: "ExtensionRef".to_string(), ..Default::default() });
+    assert_eq!(500, run(&unknown, &request("GET", "/", &[])).status_code);
 }

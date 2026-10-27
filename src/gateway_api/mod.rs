@@ -16,6 +16,7 @@
 
 pub mod controller;
 pub mod dataplane;
+pub mod filters;
 pub mod lease;
 pub mod resources;
 pub mod router;

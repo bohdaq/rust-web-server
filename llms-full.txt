@@ -18393,8 +18393,9 @@ With the `gateway-api` build feature and `RWS_CONFIG_GATEWAY_API_ENABLED=true`, 
 - **A Service per Gateway** (`rws-<gateway>`, `LoadBalancer` by default): one port per listener port, each mapped to a container port from `RWS_CONFIG_GATEWAY_API_PORT_RANGE`; the Service's load-balancer address becomes the Gateway's `status.addresses`. `spec.infrastructure` labels and annotations are put on it.
 - **HTTP and HTTPS listeners**, the latter with the certificate from the listener's TLS Secret (by SNI between listeners).
 - **HTTPRoute routing**: hostnames, `Exact`/`PathPrefix` paths, exact header and query-parameter matches, methods, the spec's precedence between routes and rules, weighted backends over the Services' ready endpoints. The client's `Host` is kept.
+- **HTTPRoute filters**, applied in the order listed: `RequestHeaderModifier` and `ResponseHeaderModifier` (`set` replaces, `add` appends, `remove` drops — names case-insensitive), `RequestHeaderModifier` on a `backendRef` (only for requests sent to that backend), `RequestRedirect` (scheme, hostname, port, `ReplaceFullPath`/`ReplacePrefixMatch` path, status 301/302/303/307/308; the port defaults to the scheme's well-known port when the scheme is set, else the listener's, and a well-known port isn't written into `Location`), `URLRewrite` (hostname, path) and `CORS` (preflights answered with `204` by rws, actual requests get `Access-Control-Allow-Origin` and the exposed headers; `*` in an origin matches one or more labels). An `ExtensionRef` or unknown filter answers `500`, as the spec requires.
 
-Filters (header changes, redirects, rewrites, mirroring, CORS), timeouts and retries, GRPCRoute, TLSRoute, TCPRoute and UDPRoute come in the following phases.
+Mirroring, timeouts and retries, GRPCRoute, TLSRoute, TCPRoute and UDPRoute come in the following phases.
 
 ## Settings
 

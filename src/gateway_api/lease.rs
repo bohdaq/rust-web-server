@@ -143,7 +143,7 @@ mod tests {
         let taken = held(&settings, Some(&current), now);
         assert_eq!(Some("42".to_string()), taken.metadata.resource_version);
         let spec = taken.spec.unwrap();
-        assert_eq!((Some("a".to_string()), Some(1)), (spec.holder_identity, spec.lease_transitions));
+        assert_eq!((Some("a".to_string()), Some(1)), (spec.holder_identity.clone(), spec.lease_transitions));
         let renewed = held(&settings, Some(&Lease { spec: Some(spec.clone()), ..current }), now);
         assert_eq!(Some(1), renewed.spec.unwrap().lease_transitions, "renewing isn't a transition");
     }
