@@ -28,6 +28,10 @@ pub mod pool;
 pub(crate) mod async_upstream;
 #[cfg(feature = "http2")]
 pub(crate) mod h2_upstream;
+#[cfg(feature = "http2")]
+pub mod grpc_web;
+#[cfg(feature = "http2")]
+pub use grpc_web::GrpcWebLayer;
 
 #[cfg(test)]
 mod tests;

@@ -31,7 +31,7 @@ Only requests whose `Content-Type` header starts with `application/grpc` are int
 | `application/grpc` | bare gRPC |
 | `application/grpc+proto` | Protocol Buffers encoding |
 | `application/grpc+json` | JSON-encoded gRPC |
-| `application/grpc-web` | gRPC-Web |
+| `application/grpc-web` | gRPC-Web (forwarded as is — put [`GrpcWebLayer`](#grpc-web-from-browsers) in front to translate it) |
 
 Any request whose `Content-Type` does not start with `application/grpc` is passed to `next.execute()` unchanged.
 
@@ -165,6 +165,37 @@ Supported backend URL schemes for `H2ReverseProxy`:
 | `h2://host:port` | plain TCP | 80 |
 | `h2s://host:port` | TLS + ALPN `h2` | 443 |
 | `https://host:port` | TLS + ALPN `h2` | 443 |
+
+## gRPC-web from browsers
+
+Browsers can't read HTTP trailers, so they speak gRPC-web: the status
+travels at the end of the body. `GrpcWebLayer` (since 18.3.0) translates it
+for the gRPC backend, as Envoy's `grpc_web` filter does — put it in front of
+`GrpcProxy`:
+
+```rust
+use rust_web_server::proxy::{GrpcProxy, GrpcWebLayer};
+
+let app = App::new()
+    .wrap(GrpcWebLayer::new())
+    .wrap(GrpcProxy::new(["grpc-svc:50051"]));
+```
+
+- `application/grpc-web[+proto|+json]` and `application/grpc-web-text`
+  (base64) requests go to the backend as `application/grpc…` with
+  `te: trailers`, the `-text` body decoded as it arrives.
+- The response comes back as gRPC-web: the content type renamed, the
+  trailers (`grpc-status`, `grpc-message`) appended as the final frame of the
+  body (flag `0x80`), base64 for `-text`. Messages stream as the backend sends
+  them, over HTTP/1.1, HTTP/2 and HTTP/3.
+- A trailers-only error keeps its status in the response headers.
+- Plain gRPC requests pass through untouched.
+
+The config file's `grpc` action does this on its own. A page on another
+origin needs CORS: allow the `content-type`, `x-grpc-web` and
+`x-user-agent` request headers and expose `grpc-status` and `grpc-message`
+([CORS](/features/cors-security/)). CI checks it from headless Chromium
+(`ci/e2e/grpc_web.sh`).
 
 ## Connections
 

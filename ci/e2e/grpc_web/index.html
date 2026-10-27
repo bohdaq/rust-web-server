@@ -1,0 +1,67 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>rws gRPC-web check</title>
+<script>
+// gRPC-web calls to echo.Echo (ci/e2e/grpc/proto/echo.proto) with fetch, the
+// protobuf encoded by hand (Msg { string text = 1; }). window.result is set
+// to "ok" or to what went wrong.
+const encoder = new TextEncoder(), decoder = new TextDecoder();
+
+function msg(text) {
+  const bytes = encoder.encode(text);
+  return Uint8Array.of(0x0a, bytes.length, ...bytes); // field 1, length-delimited (< 128 bytes)
+}
+function frame(payload) {
+  const out = new Uint8Array(5 + payload.length);
+  new DataView(out.buffer).setUint32(1, payload.length);
+  out.set(payload, 5);
+  return out;
+}
+function frames(bytes) { // -> { messages: [text], trailers: {name: value} }
+  const messages = [], trailers = {};
+  for (let at = 0; at < bytes.length;) {
+    const flag = bytes[at], len = new DataView(bytes.buffer, bytes.byteOffset + at + 1, 4).getUint32(0);
+    const body = bytes.subarray(at + 5, at + 5 + len);
+    if (flag & 0x80) {
+      for (const line of decoder.decode(body).split("\r\n").filter(Boolean)) {
+        const i = line.indexOf(":");
+        trailers[line.slice(0, i)] = line.slice(i + 1);
+      }
+    } else {
+      messages.push(decoder.decode(body.subarray(2, 2 + body[1])));
+    }
+    at += 5 + len;
+  }
+  return { messages, trailers };
+}
+const b64 = bytes => btoa(String.fromCharCode(...bytes));
+const unb64 = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
+
+async function call(method, text, mode) {
+  const body = frame(msg(text));
+  const response = await fetch(`/echo.Echo/${method}`, {
+    method: "POST",
+    headers: { "content-type": mode === "text" ? "application/grpc-web-text" : "application/grpc-web+proto", "x-grpc-web": "1" },
+    body: mode === "text" ? b64(body) : body,
+  });
+  let bytes = new Uint8Array(await response.arrayBuffer());
+  if (mode === "text") bytes = unb64(decoder.decode(bytes));
+  return { status: response.status, headers: response.headers, ...frames(bytes) };
+}
+
+async function check() {
+  const expect = (label, ok, got) => { if (!ok) throw new Error(`${label}: ${JSON.stringify(got)}`); };
+  let r = await call("Unary", "hi", "binary");
+  expect("unary", r.messages.join() === "hi" && r.trailers["grpc-status"] === "0", r);
+  r = await call("ServerStream", "s", "binary");
+  expect("server streaming", r.messages.join() === "s-0,s-1,s-2" && r.trailers["grpc-status"] === "0", r);
+  r = await call("ServerStream", "fail", "binary");
+  expect("status after a message", r.messages.join() === "fail-0" && r.trailers["grpc-status"] === "10", r);
+  r = await call("Unary", "text", "text");
+  expect("grpc-web-text", r.messages.join() === "text" && r.trailers["grpc-status"] === "0", r);
+  r = await call("Fail", "x", "binary");
+  expect("trailers-only error", r.headers.get("grpc-status") === "3" && r.headers.get("grpc-message") === "boom", Object.fromEntries(r.headers));
+  return "ok";
+}
+check().then(result => window.result = result, error => window.result = String(error));
+</script>

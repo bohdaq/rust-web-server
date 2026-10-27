@@ -102,6 +102,15 @@ jobs:
           tar xzf "$RUNNER_TEMP/grpcurl_1.9.4_linux_x86_64.tar.gz" -C "$RUNNER_TEMP" grpcurl
           cargo build --locked --release --manifest-path ci/e2e/grpc/Cargo.toml --bins
           ci/e2e/grpc.sh target/debug/rws ci/e2e/grpc/target/release/server ci/e2e/grpc/target/release/client "$RUNNER_TEMP/grpcurl"
+      - uses: actions/setup-node@v4
+        if: matrix.check == 'grpc'
+        with:
+          node-version: 24
+      - name: gRPC-web from a browser (headless Chromium, HTTP/1.1 and HTTP/2)
+        if: matrix.check == 'grpc'
+        run: |
+          (cd ci/e2e/grpc_web && npm install --no-save --no-audit --no-fund playwright@1.64.0 && npx playwright install --with-deps chromium)
+          ci/e2e/grpc_web.sh target/debug/rws ci/e2e/grpc/target/release/server
       - name: PROXY protocol v1/v2 behind HAProxy (plain and TLS)
         if: matrix.check == 'proxy-protocol'
         run: |

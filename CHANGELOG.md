@@ -26,6 +26,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   (`H2ReverseProxy::tls_ca_file`, `GrpcProxy::tls_ca_file`).
 - `Middleware::answers_streamed_body`: a layer that answers a request itself
   can take its body as a stream, whatever the inner application says.
+- gRPC-web bridge (#14): `GrpcWebLayer` translates `application/grpc-web`
+  and `-text` requests to gRPC and the responses back — the status as the
+  body's last frame — so browsers can call gRPC services through rws; the
+  config file's `grpc` action does it on its own. Checked from headless
+  Chromium over HTTP/1.1 and HTTP/2 (`ci/e2e/grpc_web.sh`).
 - Inbound PROXY protocol v1 and v2 (#20): `proxy_protocol = true`
   (`RWS_CONFIG_PROXY_PROTOCOL`) takes the client address from the header an
   L4 load balancer (HAProxy, AWS NLB, GCP) prepends to each connection, on

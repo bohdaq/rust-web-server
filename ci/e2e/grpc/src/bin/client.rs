@@ -33,7 +33,7 @@ async fn main() {
     let mut client = EchoClient::new(channel);
 
     let unary = client.unary(msg("hi")).await.map(|r| r.into_inner().text);
-    check("unary", unary.as_deref() == Ok("hi"), format!("{unary:?}"));
+    check("unary", matches!(unary.as_deref(), Ok("hi")), format!("{unary:?}"));
 
     let mut stream = client.server_stream(msg("s")).await.unwrap().into_inner();
     let mut got = Vec::new();
@@ -51,7 +51,7 @@ async fn main() {
 
     let outbound = tokio_stream::iter(["a", "b", "c"].map(msg));
     let joined = client.client_stream(outbound).await.map(|r| r.into_inner().text);
-    check("client streaming", joined.as_deref() == Ok("a,b,c"), format!("{joined:?}"));
+    check("client streaming", matches!(joined.as_deref(), Ok("a,b,c")), format!("{joined:?}"));
 
     // Bidirectional: the second message is sent only after the first echo.
     let (tx, rx) = tokio::sync::mpsc::channel(4);

@@ -1,6 +1,7 @@
 /target
 rws-macros/target
 ci/e2e/grpc/target
+ci/e2e/grpc_web/node_modules
 .idea
 /shelf/
 /workspace.xml

@@ -11173,6 +11173,8 @@ read_timeout_ms    = 30000   # per wait: a stream quiet for longer ends
 Requests go over HTTP/2 (since 18.3.0; before, this action used HTTP/1.1 and
 gRPC couldn't work): every call type streams and the `grpc-status` trailers
 reach the client — see [gRPC proxy](/proxy/grpc-proxy/#streaming-and-trailers).
+gRPC-web requests from browsers are translated to gRPC on the way
+([gRPC-web](/proxy/grpc-proxy/#grpc-web-from-browsers)).
 Upstream backends are `grpc://host:port` / `h2://host:port` (cleartext) or
 `grpcs://host:port` / `h2s://host:port` (TLS, with the upstream's
 `tls_ca_file` and `tls_client_cert_file` / `tls_client_key_file`).
@@ -13008,7 +13010,7 @@ Only requests whose `Content-Type` header starts with `application/grpc` are int
 | `application/grpc` | bare gRPC |
 | `application/grpc+proto` | Protocol Buffers encoding |
 | `application/grpc+json` | JSON-encoded gRPC |
-| `application/grpc-web` | gRPC-Web |
+| `application/grpc-web` | gRPC-Web (forwarded as is — put [`GrpcWebLayer`](#grpc-web-from-browsers) in front to translate it) |
 
 Any request whose `Content-Type` does not start with `application/grpc` is passed to `next.execute()` unchanged.
 
@@ -13142,6 +13144,37 @@ Supported backend URL schemes for `H2ReverseProxy`:
 | `h2://host:port` | plain TCP | 80 |
 | `h2s://host:port` | TLS + ALPN `h2` | 443 |
 | `https://host:port` | TLS + ALPN `h2` | 443 |
+
+## gRPC-web from browsers
+
+Browsers can't read HTTP trailers, so they speak gRPC-web: the status
+travels at the end of the body. `GrpcWebLayer` (since 18.3.0) translates it
+for the gRPC backend, as Envoy's `grpc_web` filter does — put it in front of
+`GrpcProxy`:
+
+```rust
+use rust_web_server::proxy::{GrpcProxy, GrpcWebLayer};
+
+let app = App::new()
+    .wrap(GrpcWebLayer::new())
+    .wrap(GrpcProxy::new(["grpc-svc:50051"]));
+```
+
+- `application/grpc-web[+proto|+json]` and `application/grpc-web-text`
+  (base64) requests go to the backend as `application/grpc…` with
+  `te: trailers`, the `-text` body decoded as it arrives.
+- The response comes back as gRPC-web: the content type renamed, the
+  trailers (`grpc-status`, `grpc-message`) appended as the final frame of the
+  body (flag `0x80`), base64 for `-text`. Messages stream as the backend sends
+  them, over HTTP/1.1, HTTP/2 and HTTP/3.
+- A trailers-only error keeps its status in the response headers.
+- Plain gRPC requests pass through untouched.
+
+The config file's `grpc` action does this on its own. A page on another
+origin needs CORS: allow the `content-type`, `x-grpc-web` and
+`x-user-agent` request headers and expose `grpc-status` and `grpc-message`
+([CORS](/features/cors-security/)). CI checks it from headless Chromium
+(`ci/e2e/grpc_web.sh`).
 
 ## Connections
 
@@ -18258,6 +18291,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `UpstreamTls` | `proxy` | TLS settings for upstreams: a PEM CA file instead of WebPKI and/or a client certificate (`UpstreamTls::new(ca, client)`; `tls_ca_file`, `tls_client_cert` on `ReverseProxy`/`H2ReverseProxy`/`GrpcProxy`, `[[upstream]] tls_ca_file`/`tls_client_cert_file`/`tls_client_key_file`); unloadable → 502 |
 | `H2ReverseProxy` | `proxy` (`http2`) | HTTP/2 upstream proxy: `h2://` plain, `h2s://`/`https://` TLS; pooled connections, bodies streamed both ways, trailers kept (18.3.0) |
 | `Trailers` | `response` | Trailer fields sent after a body (`Response::trailers`, HTTP/2 and HTTP/3): a shared slot a streamed body's producer fills before it ends (18.3.0) |
+| `GrpcWebLayer` | `proxy` (`http2`) | Translates gRPC-web (`application/grpc-web[-text]`) to gRPC for the layers after it and the response back, trailers as the body's last frame (18.3.0). See [gRPC-web](/proxy/grpc-proxy/#grpc-web-from-browsers) |
 | `GrpcProxy` | `proxy` (`http2`) | gRPC proxy (wraps `H2ReverseProxy`, filters on `application/grpc*`). See [gRPC proxy](/proxy/grpc-proxy/) |
 | `TcpProxy` | `tcp_proxy` | Standalone L4 TCP proxy with round-robin backends. See [TCP proxy](/proxy/tcp-proxy/) |
 | `UdpProxy` | `udp_proxy` | Standalone request-reply UDP proxy. See [UDP proxy](/proxy/udp-proxy/) |

@@ -207,6 +207,7 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `UpstreamTls` | `proxy` | TLS settings for upstreams: a PEM CA file instead of WebPKI and/or a client certificate (`UpstreamTls::new(ca, client)`; `tls_ca_file`, `tls_client_cert` on `ReverseProxy`/`H2ReverseProxy`/`GrpcProxy`, `[[upstream]] tls_ca_file`/`tls_client_cert_file`/`tls_client_key_file`); unloadable → 502 |
 | `H2ReverseProxy` | `proxy` (`http2`) | HTTP/2 upstream proxy: `h2://` plain, `h2s://`/`https://` TLS; pooled connections, bodies streamed both ways, trailers kept (18.3.0) |
 | `Trailers` | `response` | Trailer fields sent after a body (`Response::trailers`, HTTP/2 and HTTP/3): a shared slot a streamed body's producer fills before it ends (18.3.0) |
+| `GrpcWebLayer` | `proxy` (`http2`) | Translates gRPC-web (`application/grpc-web[-text]`) to gRPC for the layers after it and the response back, trailers as the body's last frame (18.3.0). See [gRPC-web](/proxy/grpc-proxy/#grpc-web-from-browsers) |
 | `GrpcProxy` | `proxy` (`http2`) | gRPC proxy (wraps `H2ReverseProxy`, filters on `application/grpc*`). See [gRPC proxy](/proxy/grpc-proxy/) |
 | `TcpProxy` | `tcp_proxy` | Standalone L4 TCP proxy with round-robin backends. See [TCP proxy](/proxy/tcp-proxy/) |
 | `UdpProxy` | `udp_proxy` | Standalone request-reply UDP proxy. See [UDP proxy](/proxy/udp-proxy/) |

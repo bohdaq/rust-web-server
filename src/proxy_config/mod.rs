@@ -1125,7 +1125,8 @@ impl Application for ConfigDrivenApp {
 // ── H2Route ───────────────────────────────────────────────────────────────────
 
 /// The `grpc` action: requests forwarded over HTTP/2 to the upstream's live
-/// backends in turn, bodies streamed both ways, trailers kept.
+/// backends in turn, bodies streamed both ways, trailers kept; gRPC-web
+/// requests translated to gRPC on the way ([`GrpcWebLayer`](crate::proxy::GrpcWebLayer)).
 #[cfg(feature = "http2")]
 pub(crate) struct H2Route {
     live: Arc<RwLock<Vec<String>>>,
@@ -1159,17 +1160,34 @@ impl H2Route {
 #[cfg(feature = "http2")]
 impl Application for H2Route {
     fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
-        let backends = self.live.read().unwrap_or_else(|e| e.into_inner()).clone();
+        use crate::middleware::Middleware;
+        crate::proxy::GrpcWebLayer::new().handle(request, conn, &H2Forward(self))
+    }
+
+    fn streams_body(&self, _request: &Request, _conn: &ConnectionInfo) -> bool {
+        true
+    }
+}
+
+/// [`H2Route`] after the gRPC-web translation.
+#[cfg(feature = "http2")]
+struct H2Forward<'a>(&'a H2Route);
+
+#[cfg(feature = "http2")]
+impl Application for H2Forward<'_> {
+    fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
+        let route = self.0;
+        let backends = route.live.read().unwrap_or_else(|e| e.into_inner()).clone();
         if backends.is_empty() {
             return Ok(crate::proxy::bad_gateway());
         }
         // A streamed request body can be sent once: no second backend then.
         let attempts = if matches!(request.body, crate::request::Body::Stream(_)) { 1 } else { backends.len() };
-        let start = self.counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let start = route.counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         for attempt in 0..attempts {
             let url = &backends[(start + attempt) % backends.len()];
             let result = crate::proxy::forward_h2(
-                request, &conn.client.ip, url, self.tls, self.trust.as_deref(), self.connect_timeout, self.read_timeout,
+                request, &conn.client.ip, url, route.tls, route.trust.as_deref(), route.connect_timeout, route.read_timeout,
             );
             match result {
                 Ok(response) => return Ok(response),
@@ -1177,10 +1195,6 @@ impl Application for H2Route {
             }
         }
         Ok(crate::proxy::bad_gateway())
-    }
-
-    fn streams_body(&self, _request: &Request, _conn: &ConnectionInfo) -> bool {
-        true
     }
 }
 

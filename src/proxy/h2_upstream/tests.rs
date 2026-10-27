@@ -376,3 +376,75 @@ async fn the_http1_reverse_proxy_presents_the_client_certificate_too() {
     .unwrap();
     assert_eq!((200, 502), statuses);
 }
+
+// ── gRPC-web through GrpcWebLayer ────────────────────────────────────────────
+
+async fn grpc_web_client() -> h2::client::SendRequest<Bytes> {
+    let backend = grpc_backend().await;
+    client(App::new().wrap(crate::proxy::GrpcWebLayer::new()).wrap(GrpcProxy::new([format!("grpc://{backend}")]))).await
+}
+
+async fn grpc_web_call(path: &str, content_type: &str, body: Vec<u8>) -> (http::response::Parts, Vec<u8>, Option<http::HeaderMap>) {
+    let rws = grpc_web_client().await;
+    let request = http::Request::post(format!("https://rws{path}")).header("content-type", content_type).header("x-grpc-web", "1").body(()).unwrap();
+    let (response, mut send) = within(rws.ready()).await.unwrap().send_request(request, false).unwrap();
+    send.send_data(Bytes::from(body), true).unwrap();
+    finish(response).await
+}
+
+fn status_frame(status: &str) -> Vec<u8> {
+    let lines = format!("grpc-status:{status}\r\nx-te-trailers:yes\r\n");
+    let mut frame = vec![0x80];
+    frame.extend_from_slice(&(lines.len() as u32).to_be_bytes());
+    frame.extend_from_slice(lines.as_bytes());
+    frame
+}
+
+#[tokio::test]
+async fn grpc_web_gets_the_status_as_the_last_frame_of_the_body() {
+    let (parts, body, trailers) = grpc_web_call("/test.Echo/ServerStream", "application/grpc-web+proto", message(b"go").to_vec()).await;
+    // The backend answers application/grpc: its format, as gRPC-web.
+    assert_eq!("application/grpc-web", parts.headers["content-type"]);
+    let mut expected = message(b"go").to_vec();
+    for i in 0..3u8 {
+        expected.extend_from_slice(&message(&[b'm', b'0' + i]));
+    }
+    expected.extend_from_slice(&status_frame("0"));
+    assert_eq!(expected, body);
+    assert!(trailers.is_none(), "the status is in the body, not in HTTP trailers");
+}
+
+#[tokio::test]
+async fn grpc_web_text_is_base64_both_ways() {
+    let request = crate::core::base64::Base64::encode(&message(b"ping")).unwrap().into_bytes();
+    let (parts, body, _) = grpc_web_call("/test.Echo/Unary", "application/grpc-web-text", request).await;
+    assert_eq!("application/grpc-web-text", parts.headers["content-type"]);
+    let decoded = crate::core::base64::Base64::decode(String::from_utf8(body).unwrap()).unwrap();
+    assert_eq!([message(b"ping").to_vec(), status_frame("0")].concat(), decoded);
+}
+
+#[tokio::test]
+async fn grpc_web_trailers_only_errors_keep_their_headers() {
+    let (parts, body, _) = grpc_web_call("/test.Echo/Fail", "application/grpc-web+proto", message(b"x").to_vec()).await;
+    assert_eq!("13", parts.headers["grpc-status"]);
+    // The backend answers application/grpc: its format, as gRPC-web.
+    assert_eq!("application/grpc-web", parts.headers["content-type"]);
+    assert!(body.is_empty(), "{body:?}");
+}
+
+#[tokio::test]
+async fn the_config_files_grpc_action_bridges_grpc_web() {
+    let backend = grpc_backend().await;
+    let toml = format!(
+        "[[upstream]]\nname = \"echo\"\nbackends = [\"grpc://{backend}\"]\n\n\
+         [[route]]\n[route.match]\npath_prefix = \"/test.Echo\"\n[route.action]\ntype = \"grpc\"\nupstream = \"echo\"\n"
+    );
+    let (app, _) = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(&toml));
+    let rws = client(app).await;
+    let request = http::Request::post("https://rws/test.Echo/Unary").header("content-type", "application/grpc-web+proto").body(()).unwrap();
+    let (response, mut send) = within(rws.ready()).await.unwrap().send_request(request, false).unwrap();
+    send.send_data(message(b"ping"), true).unwrap();
+    let (parts, body, _) = finish(response).await;
+    assert_eq!("application/grpc-web", parts.headers["content-type"]);
+    assert_eq!([message(b"ping").to_vec(), status_frame("0")].concat(), body);
+}

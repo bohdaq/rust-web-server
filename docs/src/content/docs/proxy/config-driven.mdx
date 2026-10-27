@@ -184,6 +184,8 @@ read_timeout_ms    = 30000   # per wait: a stream quiet for longer ends
 Requests go over HTTP/2 (since 18.3.0; before, this action used HTTP/1.1 and
 gRPC couldn't work): every call type streams and the `grpc-status` trailers
 reach the client — see [gRPC proxy](/proxy/grpc-proxy/#streaming-and-trailers).
+gRPC-web requests from browsers are translated to gRPC on the way
+([gRPC-web](/proxy/grpc-proxy/#grpc-web-from-browsers)).
 Upstream backends are `grpc://host:port` / `h2://host:port` (cleartext) or
 `grpcs://host:port` / `h2s://host:port` (TLS, with the upstream's
 `tls_ca_file` and `tls_client_cert_file` / `tls_client_key_file`).
