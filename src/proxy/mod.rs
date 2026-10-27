@@ -677,7 +677,7 @@ fn forward_upstream_untraced(
                 Some(t) => (t.pool, Arc::clone(&t.config)),
                 None => (shared_tls_pool(), tls_client_config()),
             };
-            return forward_via(pool, request, client_ip, host, port, read_timeout, || {
+            return forward_via(pool, request, client_ip, host, port, host, read_timeout, || {
                 connect_tls_with(Arc::clone(&config), host, port, connect_timeout)
             });
         }
@@ -851,7 +851,23 @@ pub(crate) fn forward_pooled(
     connect_timeout: Duration,
     read_timeout: Duration,
 ) -> Result<Response, String> {
-    forward_via(pool, request, client_ip, host, port, read_timeout, || connect_tcp(host, port, connect_timeout))
+    forward_via(pool, request, client_ip, host, port, host, read_timeout, || connect_tcp(host, port, connect_timeout))
+}
+
+/// [`forward_pooled`], sending `host_header` as the `Host` (the client's, for
+/// a gateway that must preserve it) instead of the backend's address.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn forward_pooled_with_host(
+    pool: &ConnPool,
+    request: &Request,
+    client_ip: &str,
+    host: &str,
+    port: u16,
+    host_header: &str,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
+    forward_via(pool, request, client_ip, host, port, host_header, read_timeout, || connect_tcp(host, port, connect_timeout))
 }
 
 /// The pooled request/response cycle, for any connection type.
@@ -860,25 +876,27 @@ pub(crate) fn forward_pooled(
 /// pooled connection that fails before *any* response byte arrives is
 /// retried once on a fresh connection — but only for idempotent methods
 /// (RFC 9110 §9.2.2): the request may already have reached the backend.
+#[allow(clippy::too_many_arguments)]
 fn forward_via<S: UpstreamIo>(
     pool: &Pool<S>,
     request: &Request,
     client_ip: &str,
     host: &str,
     port: u16,
+    host_header: &str,
     read_timeout: Duration,
     connect: impl Fn() -> Result<S, String>,
 ) -> Result<Response, String> {
     let key = format!("{}:{}", host, port);
     if let Some(stream) = pool.acquire(&key) {
-        match exchange(pool, &key, stream, request, host, client_ip, read_timeout) {
+        match exchange(pool, &key, stream, request, host_header, client_ip, read_timeout) {
             Exchange::Done(response) => return Ok(response),
             Exchange::NoResponse(_) if is_idempotent(&request.method) => {} // stale: retry fresh
             Exchange::NoResponse(e) | Exchange::Failed(e) => return Err(e),
         }
     }
     let stream = connect()?;
-    match exchange(pool, &key, stream, request, host, client_ip, read_timeout) {
+    match exchange(pool, &key, stream, request, host_header, client_ip, read_timeout) {
         Exchange::Done(response) => Ok(response),
         Exchange::NoResponse(e) | Exchange::Failed(e) => Err(e),
     }

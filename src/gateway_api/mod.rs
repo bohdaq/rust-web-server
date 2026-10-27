@@ -10,10 +10,14 @@
 //! - [`services`] — the Service each Gateway gets, and its port allocation.
 //! - [`routes`] — routes compiled for the data plane, backends resolved to
 //!   endpoints.
+//! - [`dataplane`] / [`router`] — the ports served and how a request on one
+//!   finds its listener, rule, backend and endpoint.
 //! - [`controller`] — watches, the reconcile loop and status writes.
 
 pub mod controller;
+pub mod dataplane;
 pub mod resources;
+pub mod router;
 pub mod routes;
 pub mod services;
 pub mod translate;

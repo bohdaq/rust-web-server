@@ -151,6 +151,16 @@ pub fn create_quinn_server_config(cert_path: &str, key_path: &str) -> Result<qui
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/// A certificate chain and key from PEM bytes (a Kubernetes TLS Secret's
+/// `tls.crt` / `tls.key`).
+#[cfg(feature = "gateway-api")]
+pub(crate) fn certified_key_from_pem(cert: &[u8], key: &[u8]) -> Result<CertifiedKey, String> {
+    let certs = CertificateDer::pem_slice_iter(cert).collect::<Result<Vec<_>, _>>().map_err(|e| format!("certificate: {e}"))?;
+    let key = PrivateKeyDer::from_pem_slice(key).map_err(|e| format!("key: {e}"))?;
+    let signing_key = rustls::crypto::aws_lc_rs::sign::any_supported_type(&key).map_err(|e| format!("unsupported key: {e}"))?;
+    Ok(CertifiedKey::new(certs, signing_key))
+}
+
 pub(crate) fn load_certified_key(cert_path: &str, key_path: &str) -> Result<CertifiedKey, String> {
     let certs = load_certs(cert_path)?;
     let key = load_key(key_path)?;

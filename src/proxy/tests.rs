@@ -977,7 +977,7 @@ pub(crate) fn tls_backend_with_pem(response: &'static [u8], responses_per_conn: 
 
 #[cfg(feature = "http2")]
 fn forward_tls(pool: &crate::proxy::Pool<super::TlsStream>, config: &Arc<rustls::ClientConfig>, port: u16, request: &Request) -> Result<crate::response::Response, String> {
-    super::forward_via(pool, request, "10.0.0.1", "localhost", port, Duration::from_secs(5), || {
+    super::forward_via(pool, request, "10.0.0.1", "localhost", port, "localhost", Duration::from_secs(5), || {
         super::connect_tls_with(Arc::clone(config), "localhost", port, Duration::from_secs(2))
     })
 }

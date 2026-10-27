@@ -904,7 +904,7 @@ impl Address {
 /// One accepted TLS connection: handshake (bounded by
 /// `TLS_HANDSHAKE_TIMEOUT`), then HTTP/2 or HTTP/1.1 by ALPN.
 #[cfg(feature = "http2")]
-async fn serve_tls_connection(
+pub(crate) async fn serve_tls_connection(
     mut tcp_stream: tokio::net::TcpStream,
     peer_addr: std::net::SocketAddr,
     acceptor: tokio_rustls::TlsAcceptor,
@@ -968,7 +968,7 @@ async fn serve_tls_connection(
 
 /// One accepted plain-HTTP connection.
 #[cfg(feature = "http2")]
-async fn serve_plain_connection(
+pub(crate) async fn serve_plain_connection(
     tcp_stream: tokio::net::TcpStream,
     peer_addr: std::net::SocketAddr,
     app: impl Application + Send + 'static + Clone,
