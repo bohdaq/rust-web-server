@@ -1,0 +1,191 @@
+[
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+   "name": "gateway-with-listenerset-hostname-conflict",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "gatewayClassName": "rws",
+   "allowedListeners": {
+    "namespaces": {
+     "from": "Same"
+    }
+   },
+   "listeners": [
+    {
+     "name": "gateway-listener",
+     "port": 80,
+     "protocol": "HTTP",
+     "hostname": "gateway-listener.com",
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "All"
+      }
+     }
+    },
+    {
+     "name": "hostname-conflict-with-gateway-listener",
+     "port": 80,
+     "protocol": "HTTP",
+     "hostname": "hostname-conflict-with-gateway-listener.com",
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "All"
+      }
+     }
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "ListenerSet",
+  "metadata": {
+   "name": "listenerset-with-hostname-conflict-with-gateway-1",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "parentRef": {
+    "kind": "Gateway",
+    "group": "gateway.networking.k8s.io",
+    "name": "gateway-with-listenerset-hostname-conflict",
+    "namespace": "gateway-conformance-infra"
+   },
+   "listeners": [
+    {
+     "name": "listener-set-1-listener",
+     "port": 80,
+     "protocol": "HTTP",
+     "hostname": "listener-set-1-listener.com",
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "All"
+      }
+     }
+    },
+    {
+     "name": "hostname-conflict-with-gateway-listener",
+     "port": 80,
+     "protocol": "HTTP",
+     "hostname": "hostname-conflict-with-gateway-listener.com",
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "All"
+      }
+     }
+    },
+    {
+     "name": "hostname-conflict-with-listener-set-listener",
+     "port": 80,
+     "protocol": "HTTP",
+     "hostname": "hostname-conflict-with-listener-set-listener.com",
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "All"
+      }
+     }
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "ListenerSet",
+  "metadata": {
+   "name": "listenerset-with-hostname-conflict-with-gateway-2",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "parentRef": {
+    "kind": "Gateway",
+    "group": "gateway.networking.k8s.io",
+    "name": "gateway-with-listenerset-hostname-conflict",
+    "namespace": "gateway-conformance-infra"
+   },
+   "listeners": [
+    {
+     "name": "hostname-conflict-with-gateway-listener",
+     "port": 80,
+     "protocol": "HTTP",
+     "hostname": "hostname-conflict-with-gateway-listener.com",
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "All"
+      }
+     }
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "ListenerSet",
+  "metadata": {
+   "name": "listenerset-with-hostname-conflict-with-listener-set-1",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "parentRef": {
+    "kind": "Gateway",
+    "group": "gateway.networking.k8s.io",
+    "name": "gateway-with-listenerset-hostname-conflict",
+    "namespace": "gateway-conformance-infra"
+   },
+   "listeners": [
+    {
+     "name": "listener-set-2-listener",
+     "port": 80,
+     "protocol": "HTTP",
+     "hostname": "listener-set-2-listener.com",
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "All"
+      }
+     }
+    },
+    {
+     "name": "hostname-conflict-with-listener-set-listener",
+     "port": 80,
+     "protocol": "HTTP",
+     "hostname": "hostname-conflict-with-listener-set-listener.com",
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "All"
+      }
+     }
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "ListenerSet",
+  "metadata": {
+   "name": "listenerset-with-hostname-conflict-with-listener-set-2",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "parentRef": {
+    "kind": "Gateway",
+    "group": "gateway.networking.k8s.io",
+    "name": "gateway-with-listenerset-hostname-conflict",
+    "namespace": "gateway-conformance-infra"
+   },
+   "listeners": [
+    {
+     "name": "hostname-conflict-with-listener-set-listener",
+     "port": 80,
+     "protocol": "HTTP",
+     "hostname": "hostname-conflict-with-listener-set-listener.com",
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "All"
+      }
+     }
+    }
+   ]
+  }
+ }
+]

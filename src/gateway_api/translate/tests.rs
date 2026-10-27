@@ -43,6 +43,7 @@ fn snapshot(fixtures: &[&str]) -> Snapshot {
             "TLSRoute" => s.tls_routes.push(serde_json::from_value(doc).unwrap()),
             "TCPRoute" => s.tcp_routes.push(serde_json::from_value(doc).unwrap()),
             "UDPRoute" => s.udp_routes.push(serde_json::from_value(doc).unwrap()),
+            "ListenerSet" => s.listener_sets.push(serde_json::from_value(doc).unwrap()),
             "ReferenceGrant" => s.reference_grants.push(serde_json::from_value(doc).unwrap()),
             "Service" => s.services.push(serde_json::from_value(doc).unwrap()),
             "Namespace" => s.namespaces.push(serde_json::from_value(doc).unwrap()),
@@ -406,4 +407,82 @@ fn a_gateway_is_accepted_while_any_listener_is() {
     assert_eq!(("False".to_string(), "ListenersNotValid".to_string()), accepted("gateway-only-unsupported-protocols"));
     assert_eq!(("True".to_string(), "ListenersNotValid".to_string()), accepted("gateway-supported-and-unsupported-protocols"));
     assert_eq!(("True".to_string(), "Accepted".to_string()), accepted("same-namespace"));
+}
+
+fn set_condition(desired: &Desired, set: &str, kind: &str) -> (String, String) {
+    let c = find(&desired.listener_sets[&(INFRA.to_string(), set.to_string())].conditions, kind).clone();
+    (c.status, c.reason)
+}
+
+fn set_listener<'a>(desired: &'a Desired, set: &str, name: &str) -> &'a ListenerStatus {
+    desired.listener_sets[&(INFRA.to_string(), set.to_string())].listeners.iter().find(|l| l.name == name).unwrap()
+}
+
+/// The suite applies a namespace's objects in order, a second apart.
+fn created_in_order(s: &mut Snapshot) {
+    for (i, set) in s.listener_sets.iter_mut().enumerate() {
+        set.metadata.creation_timestamp = Some(k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(k8s_openapi::jiff::Timestamp::from_second(1_700_000_000 + i as i64).unwrap()));
+    }
+}
+
+#[test]
+fn listener_sets_need_the_gateways_permission() {
+    let (_, desired) = run(&snapshot(&["listenerset-default-not-allowed"]));
+    let ok = |status: &str, reason: &str| (status.to_string(), reason.to_string());
+    assert_eq!(ok("False", "NotAllowed"), set_condition(&desired, "listenerset-default-not-allowed", "Accepted"));
+    assert_eq!(ok("False", "NotAllowed"), set_condition(&desired, "listenerset-default-not-allowed", "Programmed"));
+    assert_eq!(Some(0), desired.gateways[&(INFRA.to_string(), "gateway-default-does-not-allow-listenerset".to_string())].attached_listener_sets);
+}
+
+#[test]
+fn a_listener_sets_listener_loses_conflicts_to_earlier_listeners() {
+    let mut s = snapshot(&["listenerset-hostname-conflict"]);
+    created_in_order(&mut s);
+    let (_, desired) = run(&s);
+    let ok = |status: &str, reason: &str| (status.to_string(), reason.to_string());
+    let gateway = &desired.gateways[&(INFRA.to_string(), "gateway-with-listenerset-hostname-conflict".to_string())];
+    assert_eq!(Some(2), gateway.attached_listener_sets);
+    for name in ["gateway-listener", "hostname-conflict-with-gateway-listener"] {
+        let l = gateway.listeners.iter().find(|l| l.name == name).unwrap();
+        assert_eq!("True", find(&l.conditions, "Accepted").status, "{name}");
+        assert_eq!("False", find(&l.conditions, "Conflicted").status, "{name}: the Gateway's listeners win");
+    }
+    let conflicted = |set: &str, name: &str| {
+        let l = set_listener(&desired, set, name);
+        (find(&l.conditions, "Accepted").status.clone(), find(&l.conditions, "Programmed").reason.clone(), find(&l.conditions, "Conflicted").status.clone())
+    };
+    let lost = ("False".to_string(), "HostnameConflict".to_string(), "True".to_string());
+    assert_eq!(lost, conflicted("listenerset-with-hostname-conflict-with-gateway-1", "hostname-conflict-with-gateway-listener"));
+    assert_eq!("True", find(&set_listener(&desired, "listenerset-with-hostname-conflict-with-gateway-1", "hostname-conflict-with-listener-set-listener").conditions, "Accepted").status, "first of its name");
+    assert_eq!(lost, conflicted("listenerset-with-hostname-conflict-with-listener-set-2", "hostname-conflict-with-listener-set-listener"));
+    assert_eq!(ok("True", "Accepted"), set_condition(&desired, "listenerset-with-hostname-conflict-with-gateway-1", "Accepted"));
+    assert_eq!(ok("True", "Programmed"), set_condition(&desired, "listenerset-with-hostname-conflict-with-listener-set-1", "Programmed"));
+    assert_eq!(ok("False", "ListenersNotValid"), set_condition(&desired, "listenerset-with-hostname-conflict-with-gateway-2", "Accepted"));
+    assert_eq!(ok("False", "ListenersNotValid"), set_condition(&desired, "listenerset-with-hostname-conflict-with-listener-set-2", "Programmed"));
+}
+
+#[test]
+fn routes_reach_listener_set_listeners_only_through_the_set() {
+    let mut s = snapshot(&["listenerset-http-routing"]);
+    created_in_order(&mut s);
+    let (config, desired) = run(&s);
+    let gateway = &desired.gateways[&(INFRA.to_string(), "gateway-with-listener-sets-http-routing".to_string())];
+    assert_eq!(Some(2), gateway.attached_listener_sets);
+    for route in ["attaches-to-all-listeners", "gateway-route", "listener-set-http-routing-1-route", "listener-set-http-routing-2-route"] {
+        for parent in &desired.http_routes[&(INFRA.to_string(), route.to_string())] {
+            assert_eq!("True", find(&parent.conditions, "Accepted").status, "{route} {:?}", parent.parent_ref);
+        }
+    }
+    let served: Vec<(&str, Vec<&str>)> = config
+        .listeners
+        .iter()
+        .filter(|l| l.gateway.1 == "gateway-with-listener-sets-http-routing")
+        .map(|l| (l.hostname.as_deref().unwrap_or(""), l.http_routes.iter().map(|r| r.key.1.as_str()).collect()))
+        .collect();
+    let routes_on = |host: &str| served.iter().find(|(h, _)| *h == host).map(|(_, r)| r.clone()).unwrap_or_default();
+    assert!(routes_on("gateway-listener-1.com").contains(&"gateway-route"));
+    assert!(!routes_on("listener-set-http-routing-1-listener-1.com").contains(&"gateway-route"), "a Gateway parentRef doesn't reach a set's listeners");
+    assert!(routes_on("listener-set-http-routing-1-listener-1.com").contains(&"listener-set-http-routing-1-route"));
+    let service = desired.services.values().find(|svc| svc.labels().get(GATEWAY_NAME_LABEL).map(String::as_str) == Some("gateway-with-listener-sets-http-routing")).unwrap();
+    assert!(!service.spec.as_ref().unwrap().ports.as_ref().unwrap().is_empty());
 }

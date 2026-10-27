@@ -18408,7 +18408,9 @@ The GatewayClass's `status.supportedFeatures` lists what rws claims; the conform
 - **TLSRoute** on `TLS` listeners: in `Passthrough` mode rws reads the ClientHello's SNI, picks the route whose hostname matches best and relays the still-encrypted stream (the backend presents its own certificate); in `Terminate` mode (the default) it decrypts with the listener's certificate and relays the plaintext over TCP.
 - **TCPRoute** on `TCP` listeners and **UDPRoute** on `UDP` listeners: bytes, or datagrams, relayed to a backend of the route's first rule by weight. When several routes attach to one listener, the oldest serves it (TLSRoutes: the best hostname match first). Each UDP client gets its own socket to the backend, closed after 60 s without traffic.
 
-ListenerSet, BackendTLSPolicy, client certificates and the provisioned mode come in the following phases.
+- **ListenerSet**: a Gateway whose `spec.allowedListeners` admits a ListenerSet's namespace (`Same`, `All`, `Selector`; the default admits none) serves its listeners after its own, older sets first, on the Gateway's Service. A set's listener that conflicts with an earlier one (same port and hostname, or another protocol on the port) isn't accepted; the set is accepted while any of its listeners is, and the Gateway counts the attached sets in `status.attachedListenerSets`. Routes reach a set's listeners only with a `ListenerSet` parentRef.
+
+BackendTLSPolicy, client certificates and the provisioned mode come in the following phases.
 
 ## Settings
 
