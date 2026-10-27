@@ -181,6 +181,36 @@ zone "example.com" { type primary; file "example.com.zone";
 (`tsig-keygen rws-acme` prints a new key.) The secret is never printed in
 rws's startup log.
 
+## Several replicas
+
+Replicas of one site behind a load balancer each run ACME for the same
+domains. On their own they would each order a certificate — hitting the
+CA's rate limits — and each answer only the challenges they presented,
+while the CA's request may reach another replica. Give them one Redis
+(since 18.4.0):
+
+```toml
+[acme]
+domains = ["example.com"]
+redis   = "10.0.0.20:6379"       # RWS_CONFIG_ACME_REDIS
+# redis_password = "..."         # RWS_CONFIG_ACME_REDIS_PASSWORD; never printed
+# redis_prefix   = "rws:acme"    # several sites in one Redis
+```
+
+- One replica orders each certificate (a lock in Redis, held up to five
+  minutes); the others wait for it and install it.
+- A renewal by any replica reaches the rest at their next renewal check,
+  which they hot-swap like their own.
+- HTTP-01 and TLS-ALPN-01 challenges are answered by every replica, from
+  Redis, wherever the CA's request lands.
+- Redis down: each replica carries on alone with its own files, and says so
+  in its log.
+
+The certificate's private key is stored in Redis: keep Redis on a private
+network (and set a password). CI runs two replicas against one Redis and
+Pebble (`ci/e2e/acme_shared.sh`): one order per certificate, both serving
+the same one before and after a renewal.
+
 ## Configuration reference
 
 Every setting can go in the `[acme]` section of `rws.config.toml`, on the
@@ -203,6 +233,9 @@ command line (`--acme-domains=...`; not the last three), or in the environment.
 | `dns_tsig_algorithm` | `RWS_CONFIG_ACME_DNS_TSIG_ALGORITHM` | `hmac-sha256` | DNS-01 `rfc2136`: `hmac-sha256` or `hmac-sha512` |
 | `dns_exec` | `RWS_CONFIG_ACME_DNS_EXEC` | — | DNS-01 `exec`: the program |
 | `dns_propagation_secs` | `RWS_CONFIG_ACME_DNS_PROPAGATION_SECS` | `120` | DNS-01: how long to wait for the record to be visible |
+| `redis` | `RWS_CONFIG_ACME_REDIS` | — | Redis `host:port` shared by replicas — see [Several replicas](#several-replicas) |
+| `redis_password` | `RWS_CONFIG_ACME_REDIS_PASSWORD` | — | Its password (no command-line flag; never printed) |
+| `redis_prefix` | `RWS_CONFIG_ACME_REDIS_PREFIX` | `rws:acme` | Key prefix in that Redis |
 | `cert_path` | `RWS_CONFIG_ACME_CERT_PATH` | `tls_cert_file`, else `.rws/acme/cert.pem` | Where the certificate chain is stored |
 | `key_path` | `RWS_CONFIG_ACME_KEY_PATH` | `tls_key_file`, else `.rws/acme/key.pem` | Where the certificate key is stored (`0600`) |
 | `renew_before_days` | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | — | Renew this many days before expiry instead of at two-thirds of the lifetime (was `30` before 18.0.0) |

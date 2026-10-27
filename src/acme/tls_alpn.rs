@@ -34,9 +34,17 @@ pub fn enabled() -> bool {
 }
 
 /// The challenge certificate for `server_name`, if a challenge for it is in
-/// progress.
+/// progress — here, or (`[acme] redis`) on another replica. Called only for
+/// `acme-tls/1` handshakes.
 pub fn certificate(server_name: &str) -> Option<Arc<CertifiedKey>> {
-    store().read().unwrap_or_else(|e| e.into_inner()).get(&server_name.to_ascii_lowercase()).cloned()
+    let name = server_name.to_ascii_lowercase();
+    if let Some(certificate) = store().read().unwrap_or_else(|e| e.into_inner()).get(&name).cloned() {
+        return Some(certificate);
+    }
+    // Another replica's challenge: built from its key authorization (a
+    // validation is a handful of handshakes, so it isn't cached).
+    let key_authorization = super::shared::shared()?.tls_alpn(&name)?;
+    challenge_certificate(&name, &key_authorization).ok().map(Arc::new)
 }
 
 /// Whether a ClientHello is a TLS-ALPN-01 validation.

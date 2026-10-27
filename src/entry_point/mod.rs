@@ -187,6 +187,12 @@ impl Config {
     pub const RWS_CONFIG_ACME_DNS_EXEC: &'static str = "RWS_CONFIG_ACME_DNS_EXEC";
     /// DNS-01: how long to wait for the record to be visible (default 120).
     pub const RWS_CONFIG_ACME_DNS_PROPAGATION_SECS: &'static str = "RWS_CONFIG_ACME_DNS_PROPAGATION_SECS";
+    /// Redis (`host:port`) shared by replicas: one orders, all install.
+    pub const RWS_CONFIG_ACME_REDIS: &'static str = "RWS_CONFIG_ACME_REDIS";
+    /// Password for `RWS_CONFIG_ACME_REDIS` — never printed.
+    pub const RWS_CONFIG_ACME_REDIS_PASSWORD: &'static str = "RWS_CONFIG_ACME_REDIS_PASSWORD";
+    /// Key prefix in that Redis (default `rws:acme`).
+    pub const RWS_CONFIG_ACME_REDIS_PREFIX: &'static str = "RWS_CONFIG_ACME_REDIS_PREFIX";
 
 
     pub const RWS_DEFAULT_IP: &'static str = "127.0.0.1";

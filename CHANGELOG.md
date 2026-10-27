@@ -31,6 +31,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   Pebble and BIND (`ci/e2e/acme_dns01.sh`); the DNS reply parser — now one
   module, `dns`, shared with SRV service discovery — is fuzzed
   (`fuzz/fuzz_targets/dns_message.rs`).
+- Replicas sharing certificates through Redis (#18): with `[acme] redis`,
+  one replica orders each certificate (a lock in Redis) while the others
+  wait and install it, renewals reach every replica, and any replica answers
+  HTTP-01 and TLS-ALPN-01 challenges another presented. Redis being down
+  isn't fatal. Tested with two replicas against Pebble
+  (`ci/e2e/acme_shared.sh`): one order per certificate.
 - `[acme] challenge` (`RWS_CONFIG_ACME_CHALLENGE`: `http-01`, `tls-alpn-01`,
   `dns-01`) and the DNS-01 settings (`dns_provider`, `dns_server`,
   `dns_zone`, `dns_tsig_key`, `dns_tsig_secret`, `dns_tsig_algorithm`,

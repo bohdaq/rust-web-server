@@ -1374,7 +1374,7 @@ impl Server {
         // ACME HTTP-01 challenges must be answered over
         // plain HTTP, not redirected.
         #[cfg(feature = "acme")]
-        if let Some(challenge) = crate::acme::challenge_http_response(&uri) {
+        if let Some(challenge) = crate::acme::challenge_http_response_shared(&uri).await {
             let _ = stream.write_all(challenge.as_bytes()).await;
             return;
         }

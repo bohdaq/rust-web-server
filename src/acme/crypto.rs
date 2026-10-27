@@ -169,6 +169,11 @@ pub struct CertInfo {
 
 /// [`CertInfo`] of the first certificate in the PEM file at `cert_path`;
 /// `None` when it can't be read or parsed.
+/// [`CertInfo`] of the first certificate in PEM text.
+pub(crate) fn cert_info_from_pem(pem: &[u8]) -> Option<CertInfo> {
+    cert_info_from_der(&pem_to_first_cert_der(std::str::from_utf8(pem).ok()?)?)
+}
+
 pub fn read_cert_info(cert_path: &str) -> Option<CertInfo> {
     let pem = std::fs::read_to_string(cert_path).ok()?;
     cert_info_from_der(&pem_to_first_cert_der(&pem)?)

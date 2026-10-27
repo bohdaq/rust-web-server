@@ -38,10 +38,14 @@
 /// | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | — | Renew this many days before expiry instead of at two-thirds of the lifetime |
 /// | `RWS_CONFIG_ACME_PROFILE` | — | Certificate profile to order (`classic`, `tlsserver`, `shortlived`, … as the CA offers) |
 /// | `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `acme_account.key` | Persist the ACME account key |
+/// | `RWS_CONFIG_ACME_REDIS` | — | Redis `host:port` shared by replicas (see [`shared`]) |
+/// | `RWS_CONFIG_ACME_REDIS_PASSWORD` | — | Its password |
+/// | `RWS_CONFIG_ACME_REDIS_PREFIX` | `rws:acme` | Key prefix in that Redis |
 
 mod crypto;
 mod client;
 pub(crate) mod dns01;
+pub(crate) mod shared;
 pub mod tls_alpn;
 
 #[cfg(test)]
@@ -435,11 +439,30 @@ const CHALLENGE_PATH_PREFIX: &str = "/.well-known/acme-challenge/";
 pub(crate) fn challenge_http_response(uri: &str) -> Option<String> {
     let token = uri.strip_prefix(CHALLENGE_PATH_PREFIX)?;
     let key_auth = challenges().lock().unwrap().get(token)?.clone();
-    Some(format!(
+    Some(challenge_response(&key_auth))
+}
+
+/// [`challenge_http_response`], also answering a challenge another replica
+/// presented (`[acme] redis`).
+pub(crate) async fn challenge_http_response_shared(uri: &str) -> Option<String> {
+    if let Some(response) = challenge_http_response(uri) {
+        return Some(response);
+    }
+    let store = shared::shared()?;
+    let token = uri.strip_prefix(CHALLENGE_PATH_PREFIX)?.to_string();
+    if token.is_empty() || token.len() > 256 {
+        return None;
+    }
+    let key_auth = tokio::task::spawn_blocking(move || store.challenge(&token)).await.ok()??;
+    Some(challenge_response(&key_auth))
+}
+
+fn challenge_response(key_auth: &str) -> String {
+    format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         key_auth.len(),
         key_auth
-    ))
+    )
 }
 
 // ── Manager ───────────────────────────────────────────────────────────────────
@@ -469,6 +492,10 @@ impl AcmeManager {
     /// Renewal information that can't be fetched is not an error: the
     /// two-thirds point still applies.
     pub(crate) async fn check(&self) -> Result<RenewalCheck, String> {
+        // Another replica renewed it: install theirs (the caller hot-swaps).
+        if self.adopt_shared().await {
+            return Ok(RenewalCheck::Renewed);
+        }
         let Some(info) = crypto::read_cert_info(&self.config.cert_path) else {
             println!("[ACME] No valid certificate found at '{}', provisioning...", self.config.cert_path);
             self.provision().await?;
@@ -489,7 +516,7 @@ impl AcmeManager {
         if now >= due {
             println!("[ACME] Certificate at '{}' is due for renewal (expires {}), renewing...",
                 self.config.cert_path, crate::http::date::format(info.not_after.max(0) as u64));
-            self.provision_replacing(info.cert_id.as_deref()).await?;
+            self.provision_coordinated(info.cert_id.as_deref()).await?;
             return Ok(RenewalCheck::Renewed);
         }
         println!("[ACME] Certificate at '{}' is current; renewal due {}.",
@@ -524,7 +551,71 @@ impl AcmeManager {
 
     /// Provision a new certificate unconditionally.
     pub async fn provision(&self) -> Result<(), String> {
-        self.provision_replacing(None).await
+        self.provision_coordinated(None).await
+    }
+
+    /// [`provision_replacing`](Self::provision_replacing), coordinated with
+    /// other replicas when `[acme] redis` is set: the one that takes the lock
+    /// orders and stores the result, the others wait for it.
+    async fn provision_coordinated(&self, replaces: Option<&str>) -> Result<(), String> {
+        let Some(store) = shared::shared() else {
+            return self.provision_replacing(replaces).await;
+        };
+        let domains = self.config.domains.clone();
+        let locked = tokio::task::spawn_blocking(move || store.lock(&domains)).await.unwrap_or(None);
+        if locked == Some(false) {
+            println!("[ACME] Another replica is ordering the certificate for {:?}; waiting for it.", self.config.domains);
+            let deadline = tokio::time::Instant::now() + shared::WAIT_FOR_OTHER;
+            while tokio::time::Instant::now() < deadline {
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                if self.adopt_shared().await {
+                    return Ok(());
+                }
+            }
+            return Err("another replica held the ordering lock, but no certificate appeared".to_string());
+        }
+        let result = self.provision_replacing(replaces).await;
+        let (cert_path, key_path, domains) = (self.config.cert_path.clone(), self.config.key_path.clone(), self.config.domains.clone());
+        let stored = result.is_ok();
+        let _ = tokio::task::spawn_blocking(move || {
+            if stored {
+                if let (Ok(cert), Ok(key)) = (std::fs::read(&cert_path), std::fs::read(&key_path)) {
+                    store.store_certificate(&domains, &cert, &key);
+                }
+            }
+            if locked == Some(true) {
+                store.unlock(&domains);
+            }
+        })
+        .await;
+        result
+    }
+
+    /// Install the certificate another replica stored in Redis when it is
+    /// newer than the local one. `true`: the local files changed.
+    async fn adopt_shared(&self) -> bool {
+        let Some(store) = shared::shared() else { return false };
+        let domains = self.config.domains.clone();
+        let Ok(Some((cert, key))) = tokio::task::spawn_blocking(move || store.certificate(&domains)).await else {
+            return false;
+        };
+        let Some(theirs) = crypto::cert_info_from_pem(&cert) else { return false };
+        if crypto::read_cert_info(&self.config.cert_path).is_some_and(|ours| ours.not_after >= theirs.not_after) {
+            return false;
+        }
+        let written = ensure_state_dir(&self.config.cert_path)
+            .and_then(|_| std::fs::write(&self.config.cert_path, &cert))
+            .and_then(|_| write_private(&self.config.key_path, &key));
+        match written {
+            Ok(()) => {
+                println!("[ACME] Installed the certificate another replica stored (expires {}).", crate::http::date::format(theirs.not_after.max(0) as u64));
+                true
+            }
+            Err(e) => {
+                eprintln!("[ACME] Couldn't install the shared certificate: {e}");
+                false
+            }
+        }
     }
 
     /// [`provision`](Self::provision), telling the CA which certificate the
@@ -730,6 +821,10 @@ impl AcmeManager {
         match kind {
             ChallengeType::Http01 => {
                 challenges().lock().unwrap().insert(token.to_string(), key_auth.to_string());
+                if let Some(store) = shared::shared() {
+                    let (token, key_auth) = (token.to_string(), key_auth.to_string());
+                    let _ = tokio::task::spawn_blocking(move || store.put_challenge(&token, &key_auth)).await;
+                }
                 // The redirect listener answers challenges itself once it owns the
                 // port (renewals); otherwise (startup) run a temporary server.
                 let port = self.config.challenge_port;
@@ -752,6 +847,10 @@ impl AcmeManager {
             }
             ChallengeType::TlsAlpn01 => {
                 tls_alpn::add(domain, key_auth)?;
+                if let Some(store) = shared::shared() {
+                    let (domain, key_auth) = (domain.to_string(), key_auth.to_string());
+                    let _ = tokio::task::spawn_blocking(move || store.put_tls_alpn(&domain, &key_auth)).await;
+                }
                 let standalone = if tls_alpn::tls_listener_up() {
                     println!("[ACME] Answering TLS-ALPN-01 challenge for {domain} via the TLS listener.");
                     None
@@ -799,10 +898,16 @@ impl Presented {
         let standalone = match self {
             Presented::Http { token, standalone } => {
                 challenges().lock().unwrap().remove(&token);
+                if let Some(store) = shared::shared() {
+                    let _ = tokio::task::spawn_blocking(move || store.remove_challenge(&token)).await;
+                }
                 standalone
             }
             Presented::TlsAlpn { domain, standalone } => {
                 tls_alpn::remove(&domain);
+                if let Some(store) = shared::shared() {
+                    let _ = tokio::task::spawn_blocking(move || store.remove_tls_alpn(&domain)).await;
+                }
                 standalone
             }
             Presented::Dns { config, name, value } => {
@@ -1078,7 +1183,7 @@ async fn serve_challenges(listener: tokio::net::TcpListener) {
             let n = stream.read(&mut buf).await.unwrap_or(0);
             let req = String::from_utf8_lossy(&buf[..n]);
             let uri = req.lines().next().and_then(|l| l.split_whitespace().nth(1)).unwrap_or("");
-            let response = challenge_http_response(uri).unwrap_or_else(|| {
+            let response = challenge_http_response_shared(uri).await.unwrap_or_else(|| {
                 "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
             });
             let _ = stream.write_all(response.as_bytes()).await;

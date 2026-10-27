@@ -134,6 +134,8 @@ challenge_port = 80                # port the CA connects to for HTTP-01
 # dns_provider = "rfc2136"         # dns-01: rfc2136 or exec; dns_server, dns_zone,
 #                                  # dns_tsig_key, dns_tsig_secret, dns_tsig_algorithm,
 #                                  # dns_exec, dns_propagation_secs — see Automatic HTTPS
+# redis        = "10.0.0.20:6379"  # replicas share certificates and challenges
+#                                  # (redis_password, redis_prefix)
 cert_path      = ""                # default: tls_cert_file, else cert.pem
 key_path       = ""                # default: tls_key_file, else key.pem
 profile        = ""                # certificate profile, e.g. "shortlived"

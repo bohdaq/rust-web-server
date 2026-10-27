@@ -218,6 +218,10 @@ impl CommandLineArgument {
                 "DNS-01 exec: program run as <program> present|cleanup <fqdn> <value>"),
             ("acme-dns-propagation-secs", Config::RWS_CONFIG_ACME_DNS_PROPAGATION_SECS,
                 "DNS-01: seconds to wait for the record to be visible (default 120)"),
+            ("acme-redis", Config::RWS_CONFIG_ACME_REDIS,
+                "Redis host:port shared by replicas: one orders each certificate, all install it"),
+            ("acme-redis-prefix", Config::RWS_CONFIG_ACME_REDIS_PREFIX,
+                "Key prefix in that Redis (default rws:acme)"),
         ];
         for (long_form, environment_variable, hint) in long_only {
             argument_list.push(CommandLineArgument {
