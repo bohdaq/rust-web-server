@@ -4,8 +4,8 @@ description: Deploy rust-web-server (rws) — an HTTP/1.1, HTTP/2, and HTTP/3 we
 type: application
 # The release workflow publishes the chart with version and appVersion set
 # to the rws release tag (oci://ghcr.io/bohdaq/charts/rws:<tag>).
-version: 18.6.0
-appVersion: "18.6.0"
+version: 18.7.0
+appVersion: "18.7.0"
 home: https://rws8.tech/deployment/kubernetes/
 sources:
   - https://github.com/bohdaq/rust-web-server
