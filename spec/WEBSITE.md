@@ -161,3 +161,93 @@ static content reused from what already exists.
 - Root-marketing vs docs-at-root (checklist #1).
 - Blog vs plain changelog page.
 - Is a logo/wordmark refresh in scope, or keep the current `logo.svg`?
+
+## Hosting and the docs MCP server
+
+Added 2026-10-27. The new website is **hosted, not GitHub Pages**: rws serves
+it (the site is the showcase), which lets it run code — first of all an MCP
+server that coding agents query for rws's documentation. GitHub Pages can only
+serve the static parts below; until the move, rws8.tech keeps those.
+
+### Why
+
+Agents writing code on rws mostly get the API wrong — names from an older
+release, or axum's. `llms.txt` helps but is one big file for one version. A
+docs MCP server answers precisely, for the version the project uses, and is
+itself a live example of rws's MCP support (#60–#62).
+
+### Serving
+
+- One rws process (the release image) serves the built site (`docs/dist`) as
+  static files and `/mcp` as an `McpServer` mounted in front of it
+  (`app.mcp(...)`), on the same domain: `https://rws8.tech/mcp`.
+- Read-only and public: no token, every tool annotated `readOnlyHint`, a
+  per-IP rate limit (`RateLimitLayer`), `Origin` checked (browsers only from
+  the site itself), both MCP eras (2025-11-25 sessions and 2026-07-28
+  stateless) as `McpServer` already speaks.
+- Deployed by the release workflow after the docs build: a new image with the
+  site and the docs index baked in, rolled out with a health check
+  (`/healthz`, then one `tools/call`) before the old one is stopped.
+
+### Data
+
+- Built per release from `docs/src/content/docs/` (the same Markdown that
+  feeds `llms-full.txt`): one record per page and per `##` section — path,
+  title, text, code blocks — plus the rows of `reference/api.md`,
+  `configuration/env-vars.md` / `config-file.md` (every setting, its key and
+  default) and `CHANGELOG.md` split by release.
+- Kept for the current release and the previous minor releases of the current
+  major (18.x now), each under its version; `latest` follows the newest.
+- Loaded into memory at startup (a few MB); search is in-process (BM25 over
+  sections), no external index or service.
+
+### Tools
+
+| Tool | Returns |
+|---|---|
+| `search_docs(query, version?)` | the best-matching sections: page path, heading, an excerpt, a link |
+| `get_page(path, version?)` | one page as Markdown |
+| `get_example(name, version?)` | an `examples/*.rs` file and how to run it (from `getting-started/examples`) |
+| `api_item(name, version?)` | the `reference/api.md` row(s) for a type or function, and its docs.rs link |
+| `setting(name, version?)` | an `RWS_CONFIG_*` setting or `rws.config.toml` key: meaning, default, since |
+| `check_config(toml, version?)` | what `rws --check` reports for a config file (the same `ProxyConfig::validate` + `check_unknown_keys` + settings checks, run in-process — nothing is written or started) |
+| `changes(since, until?)` | CHANGELOG entries between two versions, breaking changes first — for upgrading |
+| `versions()` | the versions it has docs for, and `latest` |
+
+Resources mirror the pages (`rws-docs://18.7/building-apps/routing`) for
+clients that browse instead of calling tools. A prompt, `start_rws_app`,
+gives an agent the project shape from `AGENTS.md` for a version.
+
+`check_config` is the one tool that runs product code on input from the
+internet: it uses only the pure validators (no file system, no network, no
+`set_var`), with an input size limit (64 KiB) and a time limit, and is fuzzed
+like every config parser (`fuzz/fuzz_targets/config_file.rs`,
+`proxy_config.rs`).
+
+### Agent setup (what the site documents)
+
+```bash
+claude mcp add --transport http rws https://rws8.tech/mcp
+```
+
+plus the equivalents for Cursor, Codex and VS Code, on an "AI agents" page
+that also links the static `llms.txt` files and the agent skill.
+
+### Static parts (work on GitHub Pages too)
+
+- Per-release `llms.txt` / `llms-full.txt` under `/<major.minor>/` next to the
+  root ones (the newest).
+- The agent skill/rules pack (`agents/` in the repo) published at
+  `/agents/`.
+- Register the repository with Context7 as well: agents that already use it
+  get versioned rws docs with no setup.
+
+### Done when
+
+- `claude mcp add` against the hosted endpoint, then a coding agent answers
+  "add a route with a path parameter and test it" for 18.x correctly, using
+  `search_docs` and `get_example`.
+- The MCP conformance suites pass against the hosted endpoint (both eras).
+- Each tool has unit tests over a fixture docs index, `check_config` matches
+  `rws --check` on `ci/e2e/config_reload.sh`'s files, and the release
+  workflow's rollout check calls a tool before switching over.
