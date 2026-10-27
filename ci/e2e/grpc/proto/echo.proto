@@ -1,0 +1,18 @@
+syntax = "proto3";
+package echo;
+
+service Echo {
+  rpc Unary(Msg) returns (Msg);
+  // Three messages "<text>-0..2"; text "fail" sends one, then ABORTED.
+  rpc ServerStream(Msg) returns (stream Msg);
+  // The texts received, joined by ",".
+  rpc ClientStream(stream Msg) returns (Msg);
+  // Each message echoed as it arrives.
+  rpc Bidi(stream Msg) returns (stream Msg);
+  // INVALID_ARGUMENT "boom", with no message (trailers-only).
+  rpc Fail(Msg) returns (Msg);
+}
+
+message Msg {
+  string text = 1;
+}

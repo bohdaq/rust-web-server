@@ -31,6 +31,9 @@ cargo test --lib client_hint::tests::accept_client_hints_header -- --exact
 ci/e2e/acme_pebble.sh target/debug/rws <pebble-binary> <pebble-source-dir>
 #   HTTP/2 conformance with h2spec — must be 0 failed, 0 skipped
 ci/e2e/h2spec.sh target/debug/rws <h2spec-binary>
+#   gRPC against tonic (ci/e2e/grpc, its own crate + Cargo.lock; needs protoc): every call type, cleartext and mTLS upstreams
+cargo build --release --manifest-path ci/e2e/grpc/Cargo.toml --bins
+ci/e2e/grpc.sh target/debug/rws ci/e2e/grpc/target/release/server ci/e2e/grpc/target/release/client
 #   MCP conformance (official suite via npx, CI workflow mcp-conformance.yml); known failures in ci/mcp-conformance-baseline.yml
 ci/e2e/mcp_conformance.sh target/debug/examples/mcp_conformance ci/mcp-conformance-baseline.yml
 

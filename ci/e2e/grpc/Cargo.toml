@@ -1,0 +1,21 @@
+# gRPC end-to-end check for rws (ci/e2e/grpc.sh): a tonic echo server and a
+# tonic client that drive every call type through the rws binary. A crate of
+# its own (not in the rws workspace) with its own Cargo.lock; building it
+# needs protoc (protobuf-compiler).
+[package]
+name = "rws-grpc-e2e"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+tonic = { version = "=0.14.6", default-features = false, features = ["transport", "codegen", "router", "server", "channel", "tls-aws-lc"] }
+tonic-prost = "=0.14.6"
+prost = "=0.14.4"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+tokio-stream = "=0.1.19"
+
+[build-dependencies]
+tonic-prost-build = "=0.14.6"

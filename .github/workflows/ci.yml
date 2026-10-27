@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, h2spec, slow-clients, config-reload, access-log]
+        check: [acme-pebble, h2spec, slow-clients, config-reload, access-log, grpc]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -92,6 +92,12 @@ jobs:
       - name: Access log to a file (SIGUSR1 reopen, size rotation)
         if: matrix.check == 'access-log'
         run: ci/e2e/access_log.sh target/debug/rws
+      - name: gRPC against tonic (every call type, cleartext and mTLS upstreams)
+        if: matrix.check == 'grpc'
+        run: |
+          sudo apt-get install -y -q protobuf-compiler
+          cargo build --locked --release --manifest-path ci/e2e/grpc/Cargo.toml --bins
+          ci/e2e/grpc.sh target/debug/rws ci/e2e/grpc/target/release/server ci/e2e/grpc/target/release/client
 
   # Every parser that sees untrusted input — see fuzz/README.md. 30 s per
   # target on push; 10 minutes each in the weekly scheduled run.

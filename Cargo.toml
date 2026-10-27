@@ -19,7 +19,7 @@ categories = ["network-programming", "web-programming::http-server"]
 # it needs an explicit workspace membership instead. See spec/WASM_SHIM.md.
 members = ["rws-macros", "rws-wasm-shim"]
 # fuzz/ is its own workspace (cargo-fuzz, nightly-only) — see fuzz/README.md.
-exclude = ["fuzz"]
+exclude = ["fuzz", "ci/e2e/grpc"]
 
 [lints.rust]
 # `cargo fuzz` builds with --cfg fuzzing (see src/lib.rs fuzz_api).

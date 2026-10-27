@@ -1,5 +1,6 @@
 /target
 rws-macros/target
+ci/e2e/grpc/target
 .idea
 /shelf/
 /workspace.xml
