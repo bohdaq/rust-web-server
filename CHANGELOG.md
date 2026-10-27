@@ -35,6 +35,18 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   Pebble and BIND (`ci/e2e/acme_dns01.sh`); the DNS reply parser — now one
   module, `dns`, shared with SRV service discovery — is fuzzed
   (`fuzz/fuzz_targets/dns_message.rs`).
+- DNS-01 through the Cloudflare and Route 53 APIs (#17): `dns_provider =
+  "cloudflare"` (an API token, `dns_api_token`) or `"route53"` (requests
+  signed with AWS Signature V4 from `AWS_ACCESS_KEY_ID` /
+  `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`); the zone by
+  `dns_zone_id` or looked up; `dns_api_url` for a proxy or test double.
+  Tested against stand-in APIs writing into BIND, signatures checked
+  independently (`ci/e2e/acme_dns_api.sh`).
+- `challenge = "dns-persist-01"` (#17, draft-ietf-acme-dns-persist): one
+  TXT record at `_validation-persist.<domain>` you publish once — no port,
+  no DNS credentials on the server, wildcards too. rws prints the exact
+  record, checks it's visible before asking the CA, and never changes it.
+  Tested against Pebble.
 - On-demand TLS (#18): with `[acme] on_demand = true` and an
   `on_demand_ask` endpoint, rws orders a certificate at the first handshake
   for a name the endpoint allows (`GET <ask>?domain=<name>`, 2xx) — for

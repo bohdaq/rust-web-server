@@ -47,6 +47,7 @@
 mod crypto;
 mod client;
 pub(crate) mod dns01;
+pub mod dns_api;
 pub mod on_demand;
 pub(crate) mod shared;
 pub mod tls_alpn;
@@ -94,7 +95,8 @@ pub struct AcmeConfig {
     pub account_key_path: String,
     /// How control of the domains is proven (since 18.4.0; `Http01` before).
     pub challenge: ChallengeType,
-    /// DNS-01 settings; `Some` exactly when `challenge` is `Dns01`.
+    /// DNS settings; `Some` exactly when `challenge` is `Dns01` or
+    /// `DnsPersist01` (then only where to look the record up).
     pub dns: Option<DnsConfig>,
 }
 
@@ -109,15 +111,21 @@ pub enum ChallengeType {
     /// A TXT record at `_acme-challenge.<domain>`: the only way to get a
     /// wildcard certificate; no inbound port needed.
     Dns01,
+    /// A TXT record at `_validation-persist.<domain>` naming the CA and the
+    /// ACME account, published once by you (draft-ietf-acme-dns-persist):
+    /// wildcards too, and no DNS credentials on the server. rws checks
+    /// that it's there and prints it when it isn't.
+    DnsPersist01,
 }
 
 impl ChallengeType {
-    /// `http-01`, `tls-alpn-01` or `dns-01` (any case).
+    /// `http-01`, `tls-alpn-01`, `dns-01` or `dns-persist-01` (any case).
     pub fn parse(value: &str) -> Option<ChallengeType> {
         match value.trim().to_ascii_lowercase().as_str() {
             "http-01" => Some(ChallengeType::Http01),
             "tls-alpn-01" => Some(ChallengeType::TlsAlpn01),
             "dns-01" => Some(ChallengeType::Dns01),
+            "dns-persist-01" => Some(ChallengeType::DnsPersist01),
             _ => None,
         }
     }
@@ -128,6 +136,7 @@ impl ChallengeType {
             ChallengeType::Http01 => "http-01",
             ChallengeType::TlsAlpn01 => "tls-alpn-01",
             ChallengeType::Dns01 => "dns-01",
+            ChallengeType::DnsPersist01 => "dns-persist-01",
         }
     }
 
@@ -160,6 +169,15 @@ pub enum DnsProvider {
     /// (`dns_server`, optional) is where to look for the record; the system
     /// resolver without it.
     Exec { program: String, server: Option<String> },
+    /// Cloudflare's API with an API token; the zone by id or looked up.
+    /// `server` as for `Exec`.
+    Cloudflare { token: dns_api::Secret, api: String, zone_id: Option<String>, server: Option<String> },
+    /// Amazon Route 53 with the standard AWS credentials; the hosted zone by
+    /// id or looked up. `server` as for `Exec`.
+    Route53 { credentials: dns_api::AwsCredentials, api: String, zone_id: Option<String>, server: Option<String> },
+    /// Nobody: records are published by you (`dns-persist-01`). `server`
+    /// is where rws looks for them; the system resolver without it.
+    Manual { server: Option<String> },
 }
 
 /// A TSIG key: its name, algorithm and secret.
@@ -209,8 +227,22 @@ impl DnsConfig {
                 program: non_empty_env(Config::RWS_CONFIG_ACME_DNS_EXEC).ok_or("DNS-01 with exec needs RWS_CONFIG_ACME_DNS_EXEC (the program)")?,
                 server: non_empty_env(Config::RWS_CONFIG_ACME_DNS_SERVER),
             },
-            Some(other) => return Err(format!("RWS_CONFIG_ACME_DNS_PROVIDER {other:?}: expected rfc2136 or exec")),
-            None => return Err("DNS-01 needs RWS_CONFIG_ACME_DNS_PROVIDER (rfc2136 or exec)".to_string()),
+            Some("cloudflare") => DnsProvider::Cloudflare {
+                token: dns_api::Secret(
+                    non_empty_env(Config::RWS_CONFIG_ACME_DNS_API_TOKEN).ok_or("DNS-01 with cloudflare needs RWS_CONFIG_ACME_DNS_API_TOKEN (an API token with DNS edit permission)")?,
+                ),
+                api: non_empty_env(Config::RWS_CONFIG_ACME_DNS_API_URL).unwrap_or_else(|| dns_api::CLOUDFLARE_API.to_string()).trim_end_matches('/').to_string(),
+                zone_id: non_empty_env(Config::RWS_CONFIG_ACME_DNS_ZONE_ID),
+                server: non_empty_env(Config::RWS_CONFIG_ACME_DNS_SERVER),
+            },
+            Some("route53") => DnsProvider::Route53 {
+                credentials: dns_api::AwsCredentials::from_env().ok_or("DNS-01 with route53 needs AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY")?,
+                api: non_empty_env(Config::RWS_CONFIG_ACME_DNS_API_URL).unwrap_or_else(|| dns_api::ROUTE53_API.to_string()).trim_end_matches('/').to_string(),
+                zone_id: non_empty_env(Config::RWS_CONFIG_ACME_DNS_ZONE_ID),
+                server: non_empty_env(Config::RWS_CONFIG_ACME_DNS_SERVER),
+            },
+            Some(other) => return Err(format!("RWS_CONFIG_ACME_DNS_PROVIDER {other:?}: expected rfc2136, cloudflare, route53 or exec")),
+            None => return Err("DNS-01 needs RWS_CONFIG_ACME_DNS_PROVIDER (rfc2136, cloudflare, route53 or exec)".to_string()),
         };
         let zone = non_empty_env(Config::RWS_CONFIG_ACME_DNS_ZONE);
         let propagation_secs = non_empty_env(Config::RWS_CONFIG_ACME_DNS_PROPAGATION_SECS).and_then(|v| v.parse().ok()).unwrap_or(120);
@@ -274,16 +306,21 @@ impl AcmeConfig {
             .unwrap_or_else(|| DEFAULT_ACCOUNT_KEY_PATH.to_string());
 
         let challenge = ChallengeType::configured();
-        let dns = if challenge == ChallengeType::Dns01 {
-            match DnsConfig::from_env() {
+        let dns = match challenge {
+            ChallengeType::Dns01 => match DnsConfig::from_env() {
                 Ok(dns) => Some(dns),
                 Err(e) => {
                     eprintln!("[ACME] {e}; certificates can't be issued until it's fixed.");
                     return None;
                 }
-            }
-        } else {
-            None
+            },
+            // You publish the record; rws only looks for it.
+            ChallengeType::DnsPersist01 => Some(DnsConfig {
+                provider: DnsProvider::Manual { server: non_empty_env(Config::RWS_CONFIG_ACME_DNS_SERVER) },
+                zone: None,
+                propagation_secs: 0,
+            }),
+            _ => None,
         };
 
         Some(AcmeConfig {
@@ -800,7 +837,11 @@ impl AcmeManager {
         // The authorization's name: a wildcard's base name, without "*.".
         let domain = authz.identifier_value.clone();
 
-        let presented = self.present(kind, &challenge.token, &domain, &key_auth).await?;
+        let presented = if kind == ChallengeType::DnsPersist01 {
+            self.check_persist_record(&domain, &challenge.issuer_domain_names, account_url).await?
+        } else {
+            self.present(kind, &challenge.token, &domain, &key_auth).await?
+        };
 
         // Signal challenge ready, then poll for validation (up to 60 seconds).
         let poll_result = match signal_challenge(http, key, account_url, &challenge.url, &nonce).await {
@@ -885,7 +926,25 @@ impl AcmeManager {
                 }
                 Ok(Presented::Dns { config: dns, name, value })
             }
+            ChallengeType::DnsPersist01 => Err("dns-persist-01 records are published by you, not presented".to_string()),
         }
+    }
+
+    /// DNS-PERSIST-01: make sure the record you published for `domain` is
+    /// visible before asking the CA (a failed validation counts against its
+    /// limits); when it isn't, say exactly what to publish.
+    async fn check_persist_record(&self, domain: &str, issuers: &[String], account_url: &str) -> Result<Presented, String> {
+        let dns = self.config.dns.clone().ok_or("dns-persist-01 isn't configured")?;
+        let issuer = issuers.first().ok_or("the CA's dns-persist-01 challenge names no issuer-domain-names")?;
+        // One record covers the name and, with policy=wildcard, `*.name`.
+        let wildcard = self.config.domains.iter().any(|d| d.strip_prefix("*.").is_some_and(|base| base.eq_ignore_ascii_case(domain)));
+        let name = dns01::persist_record_name(domain);
+        if dns01::persist_record_published(&dns, &name, issuers, account_url, wildcard).await? {
+            println!("[ACME] Found the DNS-PERSIST-01 record at {name}.");
+            return Ok(Presented::Persistent);
+        }
+        let value = dns01::persist_record_value(issuer, account_url, wildcard);
+        Err(format!("dns-persist-01: publish this TXT record once (it stays; rws retries until it's visible): {name}. TXT \"{value}\""))
     }
 }
 
@@ -894,6 +953,8 @@ enum Presented {
     Http { token: String, standalone: Option<(tokio::sync::oneshot::Sender<()>, tokio::task::JoinHandle<()>)> },
     TlsAlpn { domain: String, standalone: Option<(tokio::sync::oneshot::Sender<()>, tokio::task::JoinHandle<()>)> },
     Dns { config: DnsConfig, name: String, value: String },
+    /// A DNS-PERSIST-01 record: yours, left in place.
+    Persistent,
 }
 
 impl Presented {
@@ -919,6 +980,7 @@ impl Presented {
                 }
                 None
             }
+            Presented::Persistent => None,
         };
         if let Some((shutdown_tx, handle)) = standalone {
             let _ = shutdown_tx.send(());
@@ -954,7 +1016,10 @@ struct Authorization {
 struct Challenge {
     challenge_type: String,
     url: String,
+    /// Empty for `dns-persist-01`, which has none.
     token: String,
+    /// `dns-persist-01`: the CA names its record may carry.
+    issuer_domain_names: Vec<String>,
 }
 
 async fn fetch_directory(http: &AcmeHttpClient, url: &str) -> Result<Directory, String> {
@@ -1428,9 +1493,23 @@ fn json_array_strings(json: &str, field: &str) -> Vec<String> {
 }
 
 fn parse_challenges(json: &str) -> Vec<Challenge> {
-    // Find all objects in the "challenges" array.
-    let marker = "\"challenges\"";
-    let start = match json.find(marker) {
+    json_objects(json, "challenges")
+        .into_iter()
+        .filter_map(|obj| {
+            Some(Challenge {
+                challenge_type: json_str(obj, "type")?,
+                url: json_str(obj, "url")?,
+                token: json_str(obj, "token").unwrap_or_default(),
+                issuer_domain_names: json_array_strings(obj, "issuer-domain-names"),
+            })
+        })
+        .collect()
+}
+
+/// The objects in the array `field` (the first one in `json`), as slices.
+pub(crate) fn json_objects<'a>(json: &'a str, field: &str) -> Vec<&'a str> {
+    let marker = format!("\"{field}\"");
+    let start = match json.find(&marker) {
         Some(s) => s + marker.len(),
         None => return vec![],
     };
@@ -1440,8 +1519,10 @@ fn parse_challenges(json: &str) -> Vec<Challenge> {
     let mut result = Vec::new();
     let mut pos = 1usize; // skip '['
     while pos < rest.len() {
-        let Some(obj_start) = rest[pos..].find('{') else { break };
-        let abs = pos + obj_start;
+        // The next object, unless the array ends first.
+        let ahead = rest[pos..].trim_start_matches([' ', '\n', '\r', '\t', ',']);
+        if !ahead.starts_with('{') { break; }
+        let abs = rest.len() - ahead.len();
         // Find the matching closing brace.
         let mut depth = 0usize;
         let mut obj_end = abs;
@@ -1456,14 +1537,7 @@ fn parse_challenges(json: &str) -> Vec<Challenge> {
             }
         }
         if obj_end <= abs { break; }
-        let obj = &rest[abs..obj_end];
-        if let (Some(ct), Some(url), Some(token)) = (
-            json_str(obj, "type"),
-            json_str(obj, "url"),
-            json_str(obj, "token"),
-        ) {
-            result.push(Challenge { challenge_type: ct, url, token });
-        }
+        result.push(&rest[abs..obj_end]);
         pos = obj_end;
     }
     result

@@ -8,11 +8,16 @@
 //! configured; the reply's RCODE and TSIG error are checked (its MAC is not
 //! verified: the update's effect is checked by looking the record up). The
 //! zone is configured or found from the SOA the server returns for the name.
+//! `cloudflare` and `route53` use those providers' APIs ([`super::dns_api`]);
 //! `exec` runs a program — any DNS API, scripted.
+//!
+//! DNS-PERSIST-01 (draft-ietf-acme-dns-persist) instead looks for the
+//! record you published once at `_validation-persist.<domain>`:
+//! `<issuer-domain-name>; accounturi=<account URL>[; policy=wildcard]`.
 
 use std::time::Duration;
 
-use super::{crypto, DnsConfig, DnsProvider, Tsig};
+use super::{crypto, dns_api, DnsConfig, DnsProvider, Tsig};
 use crate::dns;
 
 /// How long one exchange with a DNS server may take.
@@ -43,6 +48,12 @@ pub(crate) async fn present(config: &DnsConfig, name: &str, value: &str) -> Resu
             update(server, tsig.as_ref(), &zone, name, &[Change::DeleteAll, Change::Add(&rdata)]).await
         }
         DnsProvider::Exec { program, .. } => run_hook(program, "present", name, value).await,
+        DnsProvider::Cloudflare { token, api, zone_id, .. } => dns_api::cloudflare_present(&token.0, api, zone_id.as_deref(), name, value).await,
+        DnsProvider::Route53 { credentials, api, zone_id, .. } => {
+            let wait = Duration::from_secs(config.propagation_secs);
+            dns_api::route53_change(credentials, api, zone_id.as_deref(), "UPSERT", name, value, wait).await
+        }
+        DnsProvider::Manual { .. } => Err("no dns_provider to publish DNS-01 records with".to_string()),
     }
 }
 
@@ -55,6 +66,11 @@ pub(crate) async fn cleanup(config: &DnsConfig, name: &str, value: &str) -> Resu
             update(server, tsig.as_ref(), &zone, name, &[Change::Delete(&rdata)]).await
         }
         DnsProvider::Exec { program, .. } => run_hook(program, "cleanup", name, value).await,
+        DnsProvider::Cloudflare { token, api, zone_id, .. } => dns_api::cloudflare_cleanup(&token.0, api, zone_id.as_deref(), name, value).await,
+        DnsProvider::Route53 { credentials, api, zone_id, .. } => {
+            dns_api::route53_change(credentials, api, zone_id.as_deref(), "DELETE", name, value, Duration::ZERO).await
+        }
+        DnsProvider::Manual { .. } => Ok(()),
     }
 }
 
@@ -63,11 +79,7 @@ pub(crate) async fn cleanup(config: &DnsConfig, name: &str, value: &str) -> Resu
 /// else from the system resolver. `false` when it never did — the CA may
 /// still see it.
 pub(crate) async fn wait_visible(config: &DnsConfig, name: &str, value: &str) -> bool {
-    let (server, recursive) = match &config.provider {
-        DnsProvider::Rfc2136 { server, .. } | DnsProvider::Exec { server: Some(server), .. } => (Some(server_addr(server)), false),
-        DnsProvider::Exec { server: None, .. } => (dns::system_resolver().map(|a| a.to_string()), true),
-    };
-    let Some(server) = server else { return false };
+    let Some((server, recursive)) = lookup_server(config) else { return false };
     let deadline = tokio::time::Instant::now() + Duration::from_secs(config.propagation_secs);
     loop {
         if let Ok(values) = lookup_txt(&server, name, recursive).await {
@@ -80,6 +92,71 @@ pub(crate) async fn wait_visible(config: &DnsConfig, name: &str, value: &str) ->
         }
         tokio::time::sleep(Duration::from_secs(2)).await;
     }
+}
+
+/// Where records are looked up: `dns_server` (`rfc2136`'s primary, or the
+/// one given) without recursion, else the system resolver.
+fn lookup_server(config: &DnsConfig) -> Option<(String, bool)> {
+    let configured = match &config.provider {
+        DnsProvider::Rfc2136 { server, .. } => Some(server),
+        DnsProvider::Exec { server, .. }
+        | DnsProvider::Cloudflare { server, .. }
+        | DnsProvider::Route53 { server, .. }
+        | DnsProvider::Manual { server } => server.as_ref(),
+    };
+    match configured {
+        Some(server) => Some((server_addr(server), false)),
+        None => dns::system_resolver().map(|a| (a.to_string(), true)),
+    }
+}
+
+/// `_validation-persist.<domain>` — for a wildcard, its base name.
+pub(crate) fn persist_record_name(domain: &str) -> String {
+    format!("_validation-persist.{}", domain.trim_end_matches('.'))
+}
+
+/// The DNS-PERSIST-01 record value for `issuer` and `account_url`, with
+/// `policy=wildcard` when it must also cover `*.<domain>`.
+pub(crate) fn persist_record_value(issuer: &str, account_url: &str, wildcard: bool) -> String {
+    let mut value = format!("{issuer}; accounturi={account_url}");
+    if wildcard {
+        value.push_str("; policy=wildcard");
+    }
+    value
+}
+
+/// Whether TXT value `record` authorizes `account_url` for one of
+/// `issuers` (and wildcards, if `wildcard`) at `now`, as the CA checks it.
+pub(crate) fn persist_record_matches(record: &str, issuers: &[String], account_url: &str, wildcard: bool, now: i64) -> bool {
+    let mut parts = record.split(';');
+    let issuer = parts.next().unwrap_or("").trim_matches([' ', '\t']);
+    if !issuers.iter().any(|i| i == issuer) {
+        return false;
+    }
+    let (mut account, mut policy, mut until) = (None, None, None);
+    for param in parts {
+        let Some((tag, value)) = param.split_once('=') else { return false };
+        let value = value.trim_matches([' ', '\t']);
+        match tag.trim_matches([' ', '\t']).to_ascii_lowercase().as_str() {
+            "accounturi" => account = Some(value),
+            "policy" => policy = Some(value.to_ascii_lowercase()),
+            "persistuntil" => until = Some(value.parse::<i64>().unwrap_or(i64::MIN)),
+            _ => {}
+        }
+    }
+    account == Some(account_url)
+        && (!wildcard || policy.as_deref() == Some("wildcard"))
+        && until.is_none_or(|until| now <= until)
+}
+
+/// Whether a DNS-PERSIST-01 record for `account_url` is visible at `name`.
+pub(crate) async fn persist_record_published(config: &DnsConfig, name: &str, issuers: &[String], account_url: &str, wildcard: bool) -> Result<bool, String> {
+    let (server, recursive) = lookup_server(config).ok_or("no DNS server to look the record up (set dns_server)")?;
+    let now = unix_now() as i64;
+    Ok(lookup_txt(&server, name, recursive)
+        .await?
+        .iter()
+        .any(|value| persist_record_matches(&String::from_utf8_lossy(value), issuers, account_url, wildcard, now)))
 }
 
 /// `host[:port]` → `host:port` (port 53), brackets kept for IPv6.

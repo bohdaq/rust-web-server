@@ -125,6 +125,7 @@ ca_file   = "/etc/rws/internal-root.pem"
 | `http-01` (default) | `http://<domain>/.well-known/acme-challenge/…` | port 80 reachable | no |
 | `tls-alpn-01` | a TLS handshake on port 443 with ALPN `acme-tls/1` (RFC 8737) | port 443 reachable — nothing else | no |
 | `dns-01` | a TXT record `_acme-challenge.<domain>` | a way to change the domain's DNS | yes |
+| `dns-persist-01` | a TXT record `_validation-persist.<domain>` you publish once | nothing on the server: no port, no DNS credentials | yes |
 
 ### TLS-ALPN-01
 
@@ -168,6 +169,8 @@ dns_tsig_secret     = "base64secret=="     # better in RWS_CONFIG_ACME_DNS_TSIG_
 | `dns_provider` | Adds and removes the record by |
 |---|---|
 | `rfc2136` | a DNS UPDATE to `dns_server`, signed with the TSIG key — BIND, Knot, PowerDNS, Windows DNS, and many DNS hosts' "dynamic DNS" endpoints |
+| `cloudflare` | Cloudflare's API, with an API token (`dns_api_token`) |
+| `route53` | Amazon Route 53's API, signed with the credentials in `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (and `AWS_SESSION_TOKEN`) |
 | `exec` | running `dns_exec` as `<program> present <fqdn> <value>` and `<program> cleanup <fqdn> <value>`: any DNS API, in a script (exit status 0 = done) |
 
 A BIND key and the zone permission it needs:
@@ -180,6 +183,86 @@ zone "example.com" { type primary; file "example.com.zone";
 
 (`tsig-keygen rws-acme` prints a new key.) The secret is never printed in
 rws's startup log.
+
+#### Cloudflare
+
+```toml
+[acme]
+domains      = ["example.com", "*.example.com"]
+challenge    = "dns-01"
+dns_provider = "cloudflare"
+# dns_api_token = "..."     # better in RWS_CONFIG_ACME_DNS_API_TOKEN; never printed
+# dns_zone_id   = "023e105f4ecef8ad9ca31a8372d0c353"
+```
+
+Create the token under *My Profile → API Tokens* with **Zone → DNS → Edit**
+for the zone. rws finds the zone by asking for `example.com`'s parents in
+turn, which also needs **Zone → Zone → Read** — or set `dns_zone_id` (the
+zone's overview page shows it) and the DNS permission is enough. rws
+replaces the `_acme-challenge` TXT records and deletes its own afterwards.
+
+#### Route 53
+
+```toml
+[acme]
+domains      = ["example.com", "*.example.com"]
+challenge    = "dns-01"
+dns_provider = "route53"
+# dns_zone_id = "Z0123456789ABCDEFGHIJ"
+```
+
+Credentials come from the environment the AWS tools use —
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and, for temporary ones,
+`AWS_SESSION_TOKEN` (instance roles and profiles in `~/.aws` aren't read:
+export them, e.g. `eval "$(aws configure export-credentials --format env)"`).
+The IAM policy needs `route53:ChangeResourceRecordSets` and
+`route53:GetChange`, plus `route53:ListHostedZonesByName` unless
+`dns_zone_id` is set:
+
+```json
+{"Version": "2012-10-17", "Statement": [
+  {"Effect": "Allow", "Action": ["route53:ChangeResourceRecordSets"], "Resource": "arn:aws:route53:::hostedzone/Z0123456789ABCDEFGHIJ"},
+  {"Effect": "Allow", "Action": ["route53:GetChange", "route53:ListHostedZonesByName"], "Resource": "*"}]}
+```
+
+rws waits for Route 53 to report the change `INSYNC`, then for the record
+to be visible, as with every provider (`dns_server`, or the system resolver
+— set `dns_server` to one of the zone's name servers to skip resolver
+caches).
+
+CI tests both against a stand-in API that writes into BIND, with the
+request signatures checked independently, and Pebble validating
+(`ci/e2e/acme_dns_api.sh`).
+
+### DNS-PERSIST-01
+
+The CA looks up one TXT record that you publish once and leave in place:
+it names the CA and your ACME account, so nothing on the server needs DNS
+credentials or an open port, and renewals need no DNS change at all
+(draft-ietf-acme-dns-persist; Let's Encrypt is rolling it out — Pebble has
+it).
+
+```toml
+[acme]
+domains   = ["example.com", "*.example.com"]
+challenge = "dns-persist-01"
+# dns_server = "ns1.example.com"   # where to look for the record (else the system resolver)
+```
+
+The first time, rws creates its ACME account and logs the record to
+publish (one line):
+
+```text
+[ACME] Provisioning failed: dns-persist-01: publish this TXT record once (it stays; rws retries until it's visible): _validation-persist.example.com. TXT "letsencrypt.org; accounturi=https://acme-v02.api.letsencrypt.org/acme/acct/123456; policy=wildcard"
+```
+
+Publish it at your DNS host; rws retries on its own and issues as soon as
+it sees the record. `policy=wildcard` is there because `*.example.com` is
+in `domains`. The record belongs to the ACME account, so keep
+`account_key_path`'s file (`.rws/acme/account.key`) — with a new key comes a
+new account, and a new record to publish. Before asking the CA, rws checks
+that the record is visible, so a missing one never costs a failed
+validation. `dns_provider` is ignored: rws never changes this record.
 
 ## On-demand TLS
 
@@ -259,10 +342,13 @@ command line (`--acme-domains=...`; not the last three), or in the environment.
 | `staging` | `RWS_CONFIG_ACME_STAGING` | `false` | Use the Let's Encrypt staging CA |
 | `directory` | `RWS_CONFIG_ACME_DIRECTORY` | Let's Encrypt | ACME directory URL of another CA |
 | `ca_file` | `RWS_CONFIG_ACME_CA_FILE` | — | Extra root CA(s) to trust for the directory (private CAs) |
-| `challenge` | `RWS_CONFIG_ACME_CHALLENGE` | `http-01` | `http-01`, `tls-alpn-01` or `dns-01` — see [Challenge types](#challenge-types) |
+| `challenge` | `RWS_CONFIG_ACME_CHALLENGE` | `http-01` | `http-01`, `tls-alpn-01`, `dns-01` or `dns-persist-01` — see [Challenge types](#challenge-types) |
 | `challenge_port` | `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port the CA connects to for HTTP-01 |
-| `dns_provider` | `RWS_CONFIG_ACME_DNS_PROVIDER` | — | DNS-01: `rfc2136` or `exec` |
-| `dns_server` | `RWS_CONFIG_ACME_DNS_SERVER` | — | DNS-01: `rfc2136`'s primary server, `host[:port]`; with `exec`, optional: where to look for the record (else the system resolver) |
+| `dns_provider` | `RWS_CONFIG_ACME_DNS_PROVIDER` | — | DNS-01: `rfc2136`, `cloudflare`, `route53` or `exec` |
+| `dns_server` | `RWS_CONFIG_ACME_DNS_SERVER` | — | DNS-01: `rfc2136`'s primary server, `host[:port]`; otherwise optional: where to look for the record (else the system resolver) |
+| `dns_api_token` | `RWS_CONFIG_ACME_DNS_API_TOKEN` | — | DNS-01 `cloudflare`: the API token (no command-line flag; never printed) |
+| `dns_zone_id` | `RWS_CONFIG_ACME_DNS_ZONE_ID` | looked up | DNS-01 `cloudflare` / `route53`: the zone's id |
+| `dns_api_url` | `RWS_CONFIG_ACME_DNS_API_URL` | the provider's | DNS-01 `cloudflare` / `route53`: another API base URL (a proxy, a test double) |
 | `dns_zone` | `RWS_CONFIG_ACME_DNS_ZONE` | SOA lookup | DNS-01: the zone of the records |
 | `dns_tsig_key` | `RWS_CONFIG_ACME_DNS_TSIG_KEY` | — | DNS-01 `rfc2136`: TSIG key name |
 | `dns_tsig_secret` | `RWS_CONFIG_ACME_DNS_TSIG_SECRET` | — | DNS-01 `rfc2136`: TSIG secret, base64 (no command-line flag; never printed) |

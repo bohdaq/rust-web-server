@@ -361,6 +361,51 @@ fn json_array_strings_extracts_urls() {
     assert_eq!(arr[1], "https://example.com/authz/2");
 }
 
+#[test]
+fn dns_persist_challenges_have_issuers_and_no_token() {
+    let authz = r#"{"status":"pending","identifier":{"type":"dns","value":"example.com"},"challenges":[
+        {"type":"http-01","url":"https://ca/chall/1","token":"tok","status":"pending"},
+        {"type":"dns-persist-01","url":"https://ca/chall/2","status":"pending","accounturi":"https://ca/acct/7","issuer-domain-names":["ca.example","ca2.example"]}
+    ],"wildcard":false}"#;
+    let challenges = super::parse_challenges(authz);
+    assert_eq!(2, challenges.len());
+    assert_eq!("tok", challenges[0].token);
+    assert!(challenges[0].issuer_domain_names.is_empty());
+    assert_eq!("dns-persist-01", challenges[1].challenge_type);
+    assert_eq!("", challenges[1].token);
+    assert_eq!(vec!["ca.example", "ca2.example"], challenges[1].issuer_domain_names);
+}
+
+#[test]
+fn json_objects_stay_inside_their_array() {
+    let json = r#"{"result":[],"other":[{"id":"x"}]}"#;
+    assert!(super::json_objects(json, "result").is_empty());
+    let json = r#"{"result": [ {"id":"a","meta":{"n":1}} , {"id":"b"} ], "x":{"id":"c"}}"#;
+    let ids: Vec<_> = super::json_objects(json, "result").iter().filter_map(|o| super::json_str(o, "id")).collect();
+    assert_eq!(vec!["a", "b"], ids);
+}
+
+#[test]
+fn dns_config_for_the_api_providers() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_ACME_DNS_PROVIDER", "cloudflare");
+    std::env::remove_var("RWS_CONFIG_ACME_DNS_API_TOKEN");
+    assert!(super::DnsConfig::from_env().unwrap_err().contains("RWS_CONFIG_ACME_DNS_API_TOKEN"));
+    std::env::set_var("RWS_CONFIG_ACME_DNS_API_TOKEN", "secret-token");
+    let cloudflare = super::DnsConfig::from_env();
+    std::env::set_var("RWS_CONFIG_ACME_DNS_PROVIDER", "route53");
+    std::env::remove_var("RWS_CONFIG_ACME_DNS_API_TOKEN");
+    let route53 = super::DnsConfig::from_env();
+    std::env::remove_var("RWS_CONFIG_ACME_DNS_PROVIDER");
+    let cloudflare = cloudflare.unwrap();
+    assert!(matches!(&cloudflare.provider, super::DnsProvider::Cloudflare { api, zone_id: None, .. } if api == super::dns_api::CLOUDFLARE_API));
+    assert!(!format!("{cloudflare:?}").contains("secret-token"), "the token is never printed");
+    // Without AWS credentials in the environment (CI has none).
+    if std::env::var("AWS_ACCESS_KEY_ID").is_err() {
+        assert!(route53.unwrap_err().contains("AWS_ACCESS_KEY_ID"));
+    }
+}
+
 // ── AcmeConfig::from_env ──────────────────────────────────────────────────────
 
 #[test]

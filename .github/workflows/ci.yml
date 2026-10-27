@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, grpc, proxy-protocol]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, grpc, proxy-protocol]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -88,6 +88,19 @@ jobs:
           pebble_bin="$RUNNER_TEMP/pebble/pebble-linux-amd64/linux/amd64/pebble"
           chmod +x "$pebble_bin"
           ci/e2e/acme_dns01.sh target/debug/rws "$pebble_bin" "$RUNNER_TEMP/pebble/src" "$(command -v named)" "$(command -v nsupdate)"
+      - name: ACME DNS-01 through Cloudflare and Route 53 APIs (mocked into BIND), and DNS-PERSIST-01
+        if: matrix.check == 'acme-dns-api'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q bind9 bind9-dnsutils
+          mkdir -p "$RUNNER_TEMP/pebble/src"
+          gh release download v2.10.1 --repo letsencrypt/pebble --pattern 'pebble-linux-amd64.tar.gz' --dir "$RUNNER_TEMP/pebble"
+          tar xzf "$RUNNER_TEMP/pebble/pebble-linux-amd64.tar.gz" -C "$RUNNER_TEMP/pebble"
+          gh api repos/letsencrypt/pebble/tarball/v2.10.1 | tar xz -C "$RUNNER_TEMP/pebble/src" --strip-components=1
+          pebble_bin="$RUNNER_TEMP/pebble/pebble-linux-amd64/linux/amd64/pebble"
+          chmod +x "$pebble_bin"
+          ci/e2e/acme_dns_api.sh target/debug/rws "$pebble_bin" "$RUNNER_TEMP/pebble/src" "$(command -v named)" "$(command -v nsupdate)"
       - name: ACME with two replicas sharing certificates through Redis
         if: matrix.check == 'acme-shared'
         env:

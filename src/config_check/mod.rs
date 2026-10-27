@@ -327,8 +327,8 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
             report.warn("[acme] has no email: the CA can't warn you about expiring or revoked certificates");
         }
         let challenge = get(Config::RWS_CONFIG_ACME_CHALLENGE).map(str::trim).filter(|v| !v.is_empty()).unwrap_or("http-01").to_ascii_lowercase();
-        if !matches!(challenge.as_str(), "http-01" | "tls-alpn-01" | "dns-01") {
-            report.error(format!("[acme] challenge = {challenge:?}: expected http-01, tls-alpn-01 or dns-01"));
+        if !matches!(challenge.as_str(), "http-01" | "tls-alpn-01" | "dns-01" | "dns-persist-01") {
+            report.error(format!("[acme] challenge = {challenge:?}: expected http-01, tls-alpn-01, dns-01 or dns-persist-01"));
         }
         for domain in acme_domains.split(',').map(str::trim) {
             // A wildcard is one leading "*." label (RFC 8555 §7.1.3).
@@ -338,8 +338,8 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
             };
             if name.is_empty() || name.contains('*') || name.contains('/') || name.contains(':') || !name.contains('.') {
                 report.error(format!("[acme] domains: '{domain}' is not a domain name"));
-            } else if wildcard && challenge != "dns-01" {
-                report.error(format!("[acme] domains: the wildcard '{domain}' needs challenge = \"dns-01\""));
+            } else if wildcard && !challenge.starts_with("dns-") {
+                report.error(format!("[acme] domains: the wildcard '{domain}' needs challenge = \"dns-01\" or \"dns-persist-01\""));
             }
         }
         let port = get(Config::RWS_CONFIG_PORT).unwrap_or("7878");
@@ -353,6 +353,9 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
         if challenge == "dns-01" {
             check_acme_dns(&get, report);
         }
+        if challenge == "dns-persist-01" && get(Config::RWS_CONFIG_ACME_DNS_PROVIDER).is_some_and(|p| !p.trim().is_empty()) {
+            report.warn("[acme] dns_provider is ignored with dns-persist-01: you publish its record once yourself (rws prints it)");
+        }
         let on_demand = get(Config::RWS_CONFIG_ACME_ON_DEMAND).unwrap_or("").trim().to_ascii_lowercase();
         if !matches!(on_demand.as_str(), "" | "true" | "false") {
             report.error(format!("[acme] on_demand = {on_demand:?}: expected true or false"));
@@ -364,13 +367,20 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                 }
                 Some(_) => {}
             }
-            if challenge == "dns-01" {
-                report.error("[acme] on_demand works with http-01 and tls-alpn-01, not dns-01 (it would need every customer's DNS zone)");
+            if challenge.starts_with("dns-") {
+                report.error(format!("[acme] on_demand works with http-01 and tls-alpn-01, not {challenge} (it would need every customer's DNS zone)"));
             }
         }
         if port != "443" {
             report.warn(format!("[acme] with port = {port}: browsers expect HTTPS on 443 (fine if a port mapping forwards 443 here)"));
         }
+    }
+}
+
+/// `dns_api_url`, when set: an http(s) URL.
+fn check_api_url(url: Option<&str>, report: &mut ConfigReport) {
+    if let Some(url) = url.filter(|u| !(u.starts_with("https://") || u.starts_with("http://"))) {
+        report.error(format!("[acme] dns_api_url = {url:?}: expected an http:// or https:// URL"));
     }
 }
 
@@ -407,8 +417,21 @@ fn check_acme_dns<'a>(get: &dyn Fn(&str) -> Option<&'a str>, report: &mut Config
             Some(program) if !Path::new(program).is_file() => report.error(format!("[acme] dns_exec = {program:?}: file not found")),
             Some(_) => {}
         },
-        Some(other) => report.error(format!("[acme] dns_provider = {other:?}: expected rfc2136 or exec")),
-        None => report.error("[acme] challenge = \"dns-01\" needs dns_provider (rfc2136 or exec)"),
+        Some("cloudflare") => {
+            if set(Config::RWS_CONFIG_ACME_DNS_API_TOKEN).is_none() {
+                report.error("[acme] dns_provider = \"cloudflare\" needs dns_api_token (an API token with DNS edit permission; or RWS_CONFIG_ACME_DNS_API_TOKEN)");
+            }
+            check_api_url(set(Config::RWS_CONFIG_ACME_DNS_API_URL), report);
+        }
+        Some("route53") => {
+            let aws = |name: &str| std::env::var(name).is_ok_and(|v| !v.trim().is_empty());
+            if !(aws("AWS_ACCESS_KEY_ID") && aws("AWS_SECRET_ACCESS_KEY")) {
+                report.warn("[acme] dns_provider = \"route53\" reads AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from the environment, and they aren't set here");
+            }
+            check_api_url(set(Config::RWS_CONFIG_ACME_DNS_API_URL), report);
+        }
+        Some(other) => report.error(format!("[acme] dns_provider = {other:?}: expected rfc2136, cloudflare, route53 or exec")),
+        None => report.error("[acme] challenge = \"dns-01\" needs dns_provider (rfc2136, cloudflare, route53 or exec)"),
     }
     if let Some(secs) = set(Config::RWS_CONFIG_ACME_DNS_PROPAGATION_SECS) {
         if secs.parse::<u64>().is_err() {

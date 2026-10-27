@@ -187,6 +187,13 @@ impl Config {
     pub const RWS_CONFIG_ACME_DNS_EXEC: &'static str = "RWS_CONFIG_ACME_DNS_EXEC";
     /// DNS-01: how long to wait for the record to be visible (default 120).
     pub const RWS_CONFIG_ACME_DNS_PROPAGATION_SECS: &'static str = "RWS_CONFIG_ACME_DNS_PROPAGATION_SECS";
+    /// DNS-01 cloudflare: the API token (DNS edit) — never printed.
+    pub const RWS_CONFIG_ACME_DNS_API_TOKEN: &'static str = "RWS_CONFIG_ACME_DNS_API_TOKEN";
+    /// DNS-01 cloudflare / route53: the API base URL instead of the
+    /// provider's own (a proxy, a test double).
+    pub const RWS_CONFIG_ACME_DNS_API_URL: &'static str = "RWS_CONFIG_ACME_DNS_API_URL";
+    /// DNS-01 cloudflare / route53: the zone's id, instead of looking it up.
+    pub const RWS_CONFIG_ACME_DNS_ZONE_ID: &'static str = "RWS_CONFIG_ACME_DNS_ZONE_ID";
     /// Redis (`host:port`) shared by replicas: one orders, all install.
     pub const RWS_CONFIG_ACME_REDIS: &'static str = "RWS_CONFIG_ACME_REDIS";
     /// Password for `RWS_CONFIG_ACME_REDIS` — never printed.

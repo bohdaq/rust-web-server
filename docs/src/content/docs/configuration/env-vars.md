@@ -81,8 +81,11 @@ Continue the pattern (`_2_`, `_3_`, …) for as many domains as needed. The
 | `RWS_CONFIG_ACME_PROFILE` | `` (empty) | Certificate profile to order, e.g. `shortlived` (6-day certificates) or `tlsserver` at Let's Encrypt. Empty: the CA's default. A profile the CA doesn't offer stops provisioning with the list it offers. |
 | `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `.rws/acme/account.key` | Path to persist the ACME account key between restarts (written `0600`). |
 | `RWS_CONFIG_ACME_CA_FILE` | `` (empty) | PEM file of extra root CAs to trust for the ACME directory, on top of the public roots — for private ACME CAs (step-ca, Pebble). |
-| `RWS_CONFIG_ACME_CHALLENGE` | `http-01` | How the CA checks you control the domains: `http-01` (port 80), `tls-alpn-01` (on the HTTPS port, RFC 8737) or `dns-01` (a TXT record; needed for wildcards). Since 18.4.0. See [Challenge types](/features/acme/#challenge-types). |
-| `RWS_CONFIG_ACME_DNS_PROVIDER` | `` (empty) | DNS-01: `rfc2136` (a DNS UPDATE) or `exec` (a program). |
+| `RWS_CONFIG_ACME_CHALLENGE` | `http-01` | How the CA checks you control the domains: `http-01` (port 80), `tls-alpn-01` (on the HTTPS port, RFC 8737), `dns-01` (a TXT record; needed for wildcards) or `dns-persist-01` (a TXT record you publish once). Since 18.4.0. See [Challenge types](/features/acme/#challenge-types). |
+| `RWS_CONFIG_ACME_DNS_PROVIDER` | `` (empty) | DNS-01: `rfc2136` (a DNS UPDATE), `cloudflare`, `route53` (credentials from `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`) or `exec` (a program). |
+| `RWS_CONFIG_ACME_DNS_API_TOKEN` | `` (empty) | DNS-01 `cloudflare`: the API token (DNS edit). No command-line flag; never printed. |
+| `RWS_CONFIG_ACME_DNS_ZONE_ID` | `` (empty) | DNS-01 `cloudflare` / `route53`: the zone's id instead of looking it up. |
+| `RWS_CONFIG_ACME_DNS_API_URL` | `` (empty) | DNS-01 `cloudflare` / `route53`: another API base URL (a proxy, a test double). |
 | `RWS_CONFIG_ACME_DNS_SERVER` | `` (empty) | DNS-01: `rfc2136`'s primary server, `host[:port]` (port 53); with `exec`, optional: where to check that the record is visible (else the system resolver). |
 | `RWS_CONFIG_ACME_DNS_ZONE` | `` (empty) | DNS-01: the zone holding `_acme-challenge` records; found by an SOA lookup when empty. |
 | `RWS_CONFIG_ACME_DNS_TSIG_KEY` | `` (empty) | DNS-01 `rfc2136`: the TSIG key name. |

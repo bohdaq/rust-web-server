@@ -107,3 +107,24 @@ fn server_addresses_get_port_53() {
     assert_eq!("[::1]:53", server_addr("::1"));
     assert_eq!("[::1]:8053", server_addr("[::1]:8053"));
 }
+
+#[test]
+fn persist_records() {
+    assert_eq!("_validation-persist.example.com", persist_record_name("example.com."));
+    let account = "https://ca.example/acct/7";
+    let value = persist_record_value("ca.example", account, true);
+    assert_eq!("ca.example; accounturi=https://ca.example/acct/7; policy=wildcard", value);
+    let issuers = vec!["ca.example".to_string()];
+    assert!(persist_record_matches(&value, &issuers, account, true, 0));
+    assert!(persist_record_matches(&persist_record_value("ca.example", account, false), &issuers, account, false, 0));
+    // A wildcard needs policy=wildcard; another CA or account doesn't count.
+    assert!(!persist_record_matches(&persist_record_value("ca.example", account, false), &issuers, account, true, 0));
+    assert!(!persist_record_matches(&value, &["other.example".to_string()], account, true, 0));
+    assert!(!persist_record_matches(&value, &issuers, "https://ca.example/acct/8", true, 0));
+    // Tags case-insensitive, spaces allowed, persistUntil honoured.
+    assert!(persist_record_matches("ca.example;AccountURI=https://ca.example/acct/7 ; Policy=WILDCARD", &issuers, account, true, 0));
+    let until = "ca.example; accounturi=https://ca.example/acct/7; persistUntil=100";
+    assert!(persist_record_matches(until, &issuers, account, false, 100));
+    assert!(!persist_record_matches(until, &issuers, account, false, 101));
+    assert!(!persist_record_matches("ca.example; accounturi", &issuers, account, false, 0));
+}

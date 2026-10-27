@@ -68,8 +68,8 @@ pub fn enabled() -> bool {
 pub fn start(base: &AcmeConfig) -> Result<(), String> {
     let ask = super::non_empty_env(Config::RWS_CONFIG_ACME_ON_DEMAND_ASK)
         .ok_or("[acme] on_demand needs on_demand_ask: without it anyone could make rws order certificates for any name")?;
-    if base.challenge == super::ChallengeType::Dns01 {
-        return Err("[acme] on_demand works with http-01 and tls-alpn-01, not dns-01".to_string());
+    if matches!(base.challenge, super::ChallengeType::Dns01 | super::ChallengeType::DnsPersist01) {
+        return Err(format!("[acme] on_demand works with http-01 and tls-alpn-01, not {}", base.challenge.as_str()));
     }
     let dir = Path::new(&base.cert_path).parent().unwrap_or(Path::new(".")).join("on-demand");
     let mut configured: HashSet<String> = base.domains.iter().map(|d| d.to_ascii_lowercase()).collect();

@@ -325,7 +325,7 @@ fn acme_challenge_checks() {
     assert!(!has(&report.warnings, "http_redirect_port"), "TLS-ALPN-01 doesn't need port 80: {:?}", report.warnings);
 
     let report = check_str("[acme]\ndomains = [\"example.com\"]\nchallenge = \"dns-02\"\n");
-    assert!(has(&report.errors, "expected http-01, tls-alpn-01 or dns-01"), "{:?}", report.errors);
+    assert!(has(&report.errors, "expected http-01, tls-alpn-01, dns-01 or dns-persist-01"), "{:?}", report.errors);
 
     let dns = |extra: &str| check_str(&format!("port = 443\n[acme]\ndomains = [\"example.com\", \"*.example.com\"]\nemail = \"a@example.com\"\nchallenge = \"dns-01\"\n{extra}"));
     assert!(has(&dns("").errors, "needs dns_provider"), "{:?}", dns("").errors);
@@ -336,4 +336,22 @@ fn acme_challenge_checks() {
     assert!(has(&report.errors, "file not found"), "{:?}", report.errors);
     let report = dns("dns_provider = \"rfc2136\"\ndns_server = \"ns1.example.com:5353\"\ndns_tsig_key = \"k\"\ndns_tsig_secret = \"c2VjcmV0\"\n");
     assert!(report.errors.is_empty(), "a wildcard with DNS-01 is fine: {:?}", report.errors);
+
+    assert!(has(&dns("dns_provider = \"cloudflare\"\n").errors, "needs dns_api_token"));
+    let report = dns("dns_provider = \"cloudflare\"\ndns_api_token = \"t\"\ndns_api_url = \"api.example\"\n");
+    assert!(has(&report.errors, "dns_api_url"), "{:?}", report.errors);
+    let report = dns("dns_provider = \"cloudflare\"\ndns_api_token = \"t\"\ndns_zone_id = \"abc\"\n");
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    assert!(dns("dns_provider = \"route53\"\n").errors.is_empty());
+    assert!(has(&dns("dns_provider = \"gandi\"\n").errors, "expected rfc2136, cloudflare, route53 or exec"));
+}
+
+#[cfg(feature = "acme")]
+#[test]
+fn acme_dns_persist_checks() {
+    let persist = |extra: &str| check_str(&format!("port = 443\n[acme]\ndomains = [\"example.com\", \"*.example.com\"]\nemail = \"a@example.com\"\nchallenge = \"dns-persist-01\"\n{extra}"));
+    assert!(persist("").is_ok(), "no provider needed, wildcards fine: {:?}", persist(""));
+    assert!(has(&persist("dns_provider = \"rfc2136\"\n").warnings, "ignored"));
+    let report = persist("on_demand = true\non_demand_ask = \"http://127.0.0.1:9000/\"\n");
+    assert!(has(&report.errors, "not dns-persist-01"), "{:?}", report.errors);
 }
