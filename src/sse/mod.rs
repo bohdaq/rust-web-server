@@ -1,14 +1,14 @@
-//! Server-Sent Events (SSE) response builder.
+//! Server-Sent Events (SSE).
 //!
-//! [`Sse`] assembles a complete `text/event-stream` response body from a
-//! sequence of [`SseEvent`] values. The full body is buffered before any bytes
-//! are written to the socket, which suits pre-known event sequences (batch
-//! updates, enumerable progress steps, static push payloads).
+//! [`Sse::stream`] answers with a `text/event-stream` response at once and
+//! returns an [`SseSender`]: events sent through it reach the client as they
+//! are sent — AI token output, progress, live updates — over HTTP/1.1,
+//! HTTP/2 and HTTP/3 alike. The stream ends when every sender is dropped; a
+//! client that went away shows up as [`SseClosed`] on the next send (a
+//! keep-alive comment every 15 seconds finds it even when nothing is sent).
 //!
-//! For live streaming where events arrive over time (AI token output, real-time
-//! sensor data), write `text/event-stream` headers and the raw event lines
-//! directly to the TCP stream in a custom accept loop — the same approach used
-//! for WebSocket connections.
+//! [`Sse`] instead assembles a complete, buffered body from a known sequence
+//! of [`SseEvent`]s.
 //!
 //! # Wire format
 //!
@@ -24,7 +24,28 @@
 //! Lines with no field name (starting with `:`) are comments and are ignored
 //! by clients; they are used here as keep-alive pings.
 //!
-//! # Example
+//! # Streaming
+//!
+//! ```rust,no_run
+//! use rust_web_server::app::App;
+//! use rust_web_server::sse::{Sse, SseEvent};
+//!
+//! let app = App::with_state(()).get("/ticks", |_req, _params, _conn, _state| {
+//!     let (events, response) = Sse::stream();
+//!     std::thread::spawn(move || {
+//!         for n in 1.. {
+//!             let event = SseEvent::data(n.to_string()).id(n.to_string());
+//!             if events.send(event).is_err() {
+//!                 break; // the client went away
+//!             }
+//!             std::thread::sleep(std::time::Duration::from_secs(1));
+//!         }
+//!     });
+//!     response
+//! });
+//! ```
+//!
+//! # Buffered
 //!
 //! ```rust,no_run
 //! use rust_web_server::sse::{Sse, SseEvent};
@@ -39,6 +60,9 @@
 
 #[cfg(test)]
 mod tests;
+
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
+use std::time::Duration;
 
 use crate::core::New;
 use crate::header::Header;
@@ -86,26 +110,27 @@ impl SseEvent {
         self
     }
 
-    /// Encode this event as SSE wire-format bytes.
+    /// Encode this event as SSE wire-format bytes. `data` is split into
+    /// one `data:` line per line (at `\n`, `\r\n` or a lone `\r`, all line
+    /// ends to the client); line breaks in `id` and the event type are
+    /// dropped, so neither can add fields of its own.
     pub fn encode(&self) -> Vec<u8> {
+        let one_line = |value: &str| value.replace(['\r', '\n'], "");
         let mut out = String::new();
         if let Some(id) = &self.id {
             out.push_str("id: ");
-            out.push_str(id);
+            out.push_str(&one_line(id));
             out.push('\n');
         }
         if let Some(event) = &self.event {
             out.push_str("event: ");
-            out.push_str(event);
+            out.push_str(&one_line(event));
             out.push('\n');
         }
-        for line in self.data.lines() {
+        for line in self.data.replace("\r\n", "\n").split(['\n', '\r']) {
             out.push_str("data: ");
             out.push_str(line);
             out.push('\n');
-        }
-        if self.data.is_empty() {
-            out.push_str("data: \n");
         }
         if let Some(ms) = self.retry_ms {
             out.push_str("retry: ");
@@ -181,8 +206,15 @@ impl Sse {
     /// Append an SSE comment line (starts with `:`). Used as a keep-alive ping
     /// or annotation; browsers ignore comment content.
     pub fn comment(mut self, text: &str) -> Self {
-        self.chunks.push(format!(": {}\n\n", text).into_bytes());
+        self.chunks.push(comment_bytes(text));
         self
+    }
+
+    /// A streaming response and the [`SseSender`] that feeds it: 32 events
+    /// buffered, a keep-alive comment after 15 quiet seconds. See
+    /// [`SseStream`] to change either.
+    pub fn stream() -> (SseSender, Response) {
+        SseStream::new().start()
     }
 
     /// Finalise the builder and return a [`Response`] with the correct SSE
@@ -207,5 +239,178 @@ impl Sse {
             "text/event-stream".to_string(),
         )];
         response
+    }
+}
+
+/// `: text` — one comment line per line of `text`.
+fn comment_bytes(text: &str) -> Vec<u8> {
+    let mut out = String::new();
+    for line in text.replace("\r\n", "\n").split(['\n', '\r']) {
+        out.push_str(": ");
+        out.push_str(line);
+        out.push('\n');
+    }
+    out.push('\n');
+    out.into_bytes()
+}
+
+/// The `text/event-stream` response headers: no caching, no proxy buffering.
+fn stream_response(body: Option<Box<dyn std::io::Read + Send>>) -> Response {
+    let mut response = Response::new();
+    response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
+    response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
+    response.headers.push(Header { name: Header::_CONTENT_TYPE.into(), value: "text/event-stream".into() });
+    response.headers.push(Header { name: Header::_CACHE_CONTROL.into(), value: "no-cache".into() });
+    response.headers.push(Header { name: "X-Accel-Buffering".into(), value: "no".into() });
+    response.stream_pipe = body;
+    response
+}
+
+// ── Streaming ─────────────────────────────────────────────────────────────────
+
+/// Options for a streaming SSE response; [`Sse::stream`] uses the defaults.
+///
+/// ```rust,no_run
+/// use std::time::Duration;
+/// use rust_web_server::sse::SseStream;
+///
+/// let (events, response) = SseStream::new().buffer(256).keep_alive(Duration::from_secs(5)).start();
+/// ```
+pub struct SseStream {
+    buffer: usize,
+    keep_alive: Duration,
+}
+
+impl Default for SseStream {
+    fn default() -> Self {
+        SseStream::new()
+    }
+}
+
+impl SseStream {
+    /// 32 events buffered, keep-alive every 15 seconds.
+    pub fn new() -> Self {
+        SseStream { buffer: 32, keep_alive: Duration::from_secs(15) }
+    }
+
+    /// How many events may wait for a slow client before
+    /// [`SseSender::send`] blocks (and [`SseSender::try_send`] drops).
+    pub fn buffer(mut self, events: usize) -> Self {
+        self.buffer = events.max(1);
+        self
+    }
+
+    /// After this long with nothing sent, a `: keep-alive` comment goes out:
+    /// proxies keep the connection, and a client that left is noticed.
+    pub fn keep_alive(mut self, interval: Duration) -> Self {
+        self.keep_alive = interval.max(Duration::from_millis(10));
+        self
+    }
+
+    /// The sender and the response to return from the handler.
+    pub fn start(self) -> (SseSender, Response) {
+        let (tx, rx) = mpsc::sync_channel(self.buffer);
+        let response = stream_response(Some(Box::new(SseReader::new(rx, self.keep_alive))));
+        (SseSender { tx }, response)
+    }
+}
+
+/// Sends events to one streaming SSE response; clone it to send from
+/// several places. The stream ends when the last clone is dropped.
+#[derive(Clone)]
+pub struct SseSender {
+    tx: SyncSender<Vec<u8>>,
+}
+
+/// The client is gone (or the response was never sent): stop sending.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SseClosed;
+
+impl std::fmt::Display for SseClosed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the SSE stream is closed")
+    }
+}
+
+impl std::error::Error for SseClosed {}
+
+impl SseSender {
+    /// Send `event`, waiting while the buffer is full (a slow client slows
+    /// the sender down rather than growing memory). Blocks the thread: in
+    /// async code use [`Self::send_async`] or [`Self::try_send`].
+    pub fn send(&self, event: SseEvent) -> Result<(), SseClosed> {
+        self.tx.send(event.encode()).map_err(|_| SseClosed)
+    }
+
+    /// Send `event` if there's room: `Ok(false)` when the buffer is full and
+    /// the event was dropped.
+    pub fn try_send(&self, event: SseEvent) -> Result<bool, SseClosed> {
+        match self.tx.try_send(event.encode()) {
+            Ok(()) => Ok(true),
+            Err(TrySendError::Full(_)) => Ok(false),
+            Err(TrySendError::Disconnected(_)) => Err(SseClosed),
+        }
+    }
+
+    /// [`Self::send`] without blocking the async runtime: waits for room
+    /// with short sleeps.
+    #[cfg(feature = "http2")]
+    pub async fn send_async(&self, event: SseEvent) -> Result<(), SseClosed> {
+        let mut frame = event.encode();
+        loop {
+            match self.tx.try_send(frame) {
+                Ok(()) => return Ok(()),
+                Err(TrySendError::Disconnected(_)) => return Err(SseClosed),
+                Err(TrySendError::Full(back)) => {
+                    frame = back;
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            }
+        }
+    }
+
+    /// Send a data-only event (the client's `message` event).
+    pub fn data(&self, data: &str) -> Result<(), SseClosed> {
+        self.send(SseEvent::data(data))
+    }
+
+    /// Send a comment line (ignored by clients).
+    pub fn comment(&self, text: &str) -> Result<(), SseClosed> {
+        self.tx.send(comment_bytes(text)).map_err(|_| SseClosed)
+    }
+}
+
+/// The body of a streaming SSE response: a blocking [`std::io::Read`] over
+/// the channel of encoded events, so the server's streaming writers (HTTP/1.1
+/// chunked, HTTP/2 and HTTP/3 DATA) drive it. Waits for the next event;
+/// after `keep_alive` with none, yields a `: keep-alive` comment instead;
+/// at EOF when every sender is gone.
+pub(crate) struct SseReader {
+    rx: Receiver<Vec<u8>>,
+    leftover: Vec<u8>,
+    offset: usize,
+    keep_alive: Duration,
+}
+
+impl SseReader {
+    pub(crate) fn new(rx: Receiver<Vec<u8>>, keep_alive: Duration) -> Self {
+        SseReader { rx, leftover: Vec::new(), offset: 0, keep_alive }
+    }
+}
+
+impl std::io::Read for SseReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.offset >= self.leftover.len() {
+            self.leftover = match self.rx.recv_timeout(self.keep_alive) {
+                Ok(frame) => frame,
+                Err(RecvTimeoutError::Timeout) => b": keep-alive\n\n".to_vec(),
+                Err(RecvTimeoutError::Disconnected) => return Ok(0),
+            };
+            self.offset = 0;
+        }
+        let n = (self.leftover.len() - self.offset).min(buf.len());
+        buf[..n].copy_from_slice(&self.leftover[self.offset..self.offset + n]);
+        self.offset += n;
+        Ok(n)
     }
 }

@@ -40,6 +40,13 @@
 
 #[cfg(test)]
 mod tests;
+mod connection;
+
+pub use connection::{Message, WebSocketConnection, WebSocketSender};
+pub(crate) use connection::{take_upgrade, upgrade_head};
+#[cfg(feature = "http2")]
+pub(crate) use connection::hand_over_async;
+pub use connection::{MAX_MESSAGE, UPGRADE_TTL};
 
 use std::io::{Read, Write};
 
@@ -153,56 +160,7 @@ impl WebSocket {
     /// payload is read as it arrives, so memory follows what the peer
     /// actually sends, not what it claims.
     pub fn read_frame_limited(stream: &mut impl Read, max_payload: u64) -> Result<Frame, String> {
-        let mut header = [0u8; 2];
-        read_exact(stream, &mut header)?;
-
-        let fin = (header[0] & 0x80) != 0;
-        let opcode = header[0] & 0x0F;
-        let masked = (header[1] & 0x80) != 0;
-        let payload_len_byte = (header[1] & 0x7F) as usize;
-
-        let payload_len: u64 = match payload_len_byte {
-            126 => {
-                let mut ext = [0u8; 2];
-                read_exact(stream, &mut ext)?;
-                u16::from_be_bytes(ext) as u64
-            }
-            127 => {
-                let mut ext = [0u8; 8];
-                read_exact(stream, &mut ext)?;
-                u64::from_be_bytes(ext)
-            }
-            n => n as u64,
-        };
-        if payload_len > max_payload {
-            return Err(format!("frame payload of {payload_len} bytes exceeds the {max_payload}-byte limit"));
-        }
-
-        let mask_key = if masked {
-            let mut mk = [0u8; 4];
-            read_exact(stream, &mut mk)?;
-            Some(mk)
-        } else {
-            None
-        };
-
-        let mut payload = Vec::new();
-        if payload_len > 0 {
-            stream
-                .take(payload_len)
-                .read_to_end(&mut payload)
-                .map_err(|e| format!("read error: {}", e))?;
-            if payload.len() as u64 != payload_len {
-                return Err("read error: stream ended inside a frame".to_string());
-            }
-        }
-
-        if let Some(key) = mask_key {
-            for (i, byte) in payload.iter_mut().enumerate() {
-                *byte ^= key[i % 4];
-            }
-        }
-
+        let RawFrame { fin, opcode, payload, .. } = read_raw_frame(stream, max_payload)?;
         let frame = match opcode {
             0x0 => Frame::Continuation { fin, data: payload },
             0x1 => {
@@ -212,20 +170,7 @@ impl WebSocket {
             }
             0x2 => Frame::Binary(payload),
             0x8 => {
-                let code = if payload.len() >= 2 {
-                    Some(u16::from_be_bytes([payload[0], payload[1]]))
-                } else {
-                    None
-                };
-                // RFC 6455 §7.1.6: the reason is UTF-8, else the connection
-                // fails — as for text frames (it used to be decoded lossily,
-                // growing invalid bytes threefold).
-                let reason = if payload.len() > 2 {
-                    String::from_utf8(payload[2..].to_vec())
-                        .map_err(|_| "close frame reason contains invalid UTF-8".to_string())?
-                } else {
-                    String::new()
-                };
+                let (code, reason) = close_payload(&payload)?;
                 Frame::Close(code, reason)
             }
             0x9 => Frame::Ping(payload),
@@ -238,44 +183,7 @@ impl WebSocket {
 
     /// Write a WebSocket frame to `stream` (server→client, unmasked).
     pub fn write_frame(stream: &mut impl Write, frame: Frame) -> Result<(), String> {
-        let (opcode, payload, fin) = match frame {
-            Frame::Text(s)          => (0x1u8, s.into_bytes(), true),
-            Frame::Binary(b)        => (0x2, b, true),
-            Frame::Ping(b)          => (0x9, b, true),
-            Frame::Pong(b)          => (0xA, b, true),
-            Frame::Close(code, reason) => {
-                let mut payload = Vec::new();
-                if let Some(c) = code {
-                    payload.extend_from_slice(&c.to_be_bytes());
-                    payload.extend_from_slice(reason.as_bytes());
-                }
-                (0x8, payload, true)
-            }
-            Frame::Continuation { fin, data } => (0x0, data, fin),
-        };
-
-        let fin_bit: u8 = if fin { 0x80 } else { 0x00 };
-        let byte0 = fin_bit | opcode;
-
-        let payload_len = payload.len();
-        let mut header = Vec::with_capacity(10);
-        header.push(byte0);
-        match payload_len {
-            0..=125 => header.push(payload_len as u8),
-            126..=65535 => {
-                header.push(126u8);
-                header.extend_from_slice(&(payload_len as u16).to_be_bytes());
-            }
-            _ => {
-                header.push(127u8);
-                header.extend_from_slice(&(payload_len as u64).to_be_bytes());
-            }
-        }
-
-        stream.write_all(&header).map_err(|e| format!("write error: {}", e))?;
-        if !payload.is_empty() {
-            stream.write_all(&payload).map_err(|e| format!("write error: {}", e))?;
-        }
+        stream.write_all(&encode_frame(frame)).map_err(|e| format!("write error: {}", e))?;
         stream.flush().map_err(|e| format!("flush error: {}", e))?;
         Ok(())
     }
@@ -294,6 +202,123 @@ impl WebSocket {
     pub fn send_pong(stream: &mut impl Write, payload: Vec<u8>) -> Result<(), String> {
         Self::write_frame(stream, Frame::Pong(payload))
     }
+}
+
+/// A frame as read: header fields and the unmasked payload.
+pub(crate) struct RawFrame {
+    pub(crate) fin: bool,
+    /// RSV1–3 (no extension is negotiated, so they must be 0).
+    pub(crate) rsv: u8,
+    pub(crate) opcode: u8,
+    pub(crate) masked: bool,
+    pub(crate) payload: Vec<u8>,
+}
+
+/// A close frame's status code and reason (RFC 6455 §5.5.1: the reason is
+/// UTF-8, else the connection fails — it used to be decoded lossily,
+/// growing invalid bytes threefold).
+pub(crate) fn close_payload(payload: &[u8]) -> Result<(Option<u16>, String), String> {
+    let code = if payload.len() >= 2 { Some(u16::from_be_bytes([payload[0], payload[1]])) } else { None };
+    let reason = if payload.len() > 2 {
+        String::from_utf8(payload[2..].to_vec()).map_err(|_| "close frame reason contains invalid UTF-8".to_string())?
+    } else {
+        String::new()
+    };
+    Ok((code, reason))
+}
+
+/// Read one frame, unmasking its payload; a payload over `max_payload` is
+/// refused before any of it is read.
+pub(crate) fn read_raw_frame(stream: &mut impl Read, max_payload: u64) -> Result<RawFrame, String> {
+    let mut header = [0u8; 2];
+    read_exact(stream, &mut header)?;
+
+    let fin = (header[0] & 0x80) != 0;
+    let rsv = (header[0] >> 4) & 0x07;
+    let opcode = header[0] & 0x0F;
+    let masked = (header[1] & 0x80) != 0;
+    let payload_len_byte = (header[1] & 0x7F) as usize;
+
+    let payload_len: u64 = match payload_len_byte {
+        126 => {
+            let mut ext = [0u8; 2];
+            read_exact(stream, &mut ext)?;
+            u16::from_be_bytes(ext) as u64
+        }
+        127 => {
+            let mut ext = [0u8; 8];
+            read_exact(stream, &mut ext)?;
+            u64::from_be_bytes(ext)
+        }
+        n => n as u64,
+    };
+    if payload_len > max_payload {
+        return Err(format!("frame payload of {payload_len} bytes exceeds the {max_payload}-byte limit"));
+    }
+
+    let mask_key = if masked {
+        let mut mk = [0u8; 4];
+        read_exact(stream, &mut mk)?;
+        Some(mk)
+    } else {
+        None
+    };
+
+    let mut payload = Vec::new();
+    if payload_len > 0 {
+        stream
+            .take(payload_len)
+            .read_to_end(&mut payload)
+            .map_err(|e| format!("read error: {}", e))?;
+        if payload.len() as u64 != payload_len {
+            return Err("read error: stream ended inside a frame".to_string());
+        }
+    }
+
+    if let Some(key) = mask_key {
+        for (i, byte) in payload.iter_mut().enumerate() {
+            *byte ^= key[i % 4];
+        }
+    }
+
+    Ok(RawFrame { fin, rsv, opcode, masked, payload })
+}
+
+/// A frame's bytes on the wire (server→client, unmasked).
+pub(crate) fn encode_frame(frame: Frame) -> Vec<u8> {
+    let (opcode, payload, fin) = match frame {
+        Frame::Text(s)          => (0x1u8, s.into_bytes(), true),
+        Frame::Binary(b)        => (0x2, b, true),
+        Frame::Ping(b)          => (0x9, b, true),
+        Frame::Pong(b)          => (0xA, b, true),
+        Frame::Close(code, reason) => {
+            let mut payload = Vec::new();
+            if let Some(c) = code {
+                payload.extend_from_slice(&c.to_be_bytes());
+                payload.extend_from_slice(reason.as_bytes());
+            }
+            (0x8, payload, true)
+        }
+        Frame::Continuation { fin, data } => (0x0, data, fin),
+    };
+
+    let fin_bit: u8 = if fin { 0x80 } else { 0x00 };
+    let payload_len = payload.len();
+    let mut out = Vec::with_capacity(10 + payload_len);
+    out.push(fin_bit | opcode);
+    match payload_len {
+        0..=125 => out.push(payload_len as u8),
+        126..=65535 => {
+            out.push(126u8);
+            out.extend_from_slice(&(payload_len as u16).to_be_bytes());
+        }
+        _ => {
+            out.push(127u8);
+            out.extend_from_slice(&(payload_len as u64).to_be_bytes());
+        }
+    }
+    out.extend_from_slice(&payload);
+    out
 }
 
 // ── Internal utilities ─────────────────────────────────────────────────────────

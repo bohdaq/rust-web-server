@@ -286,9 +286,22 @@ impl Server {
         Response::generate_response(error_response, error_request)
     }
 
-    pub fn process(mut stream: impl Read + Write + Unpin,
+    pub fn process(stream: impl Read + Write + Unpin,
                    connection: ConnectionInfo,
                    app: impl Application) -> Result<(), String> {
+        // Without an owned socket a WebSocket upgrade can't be handed over.
+        Self::process_upgradable(stream, connection, app, |_| None)
+    }
+
+    /// [`Self::process`], with `split` giving an upgraded connection
+    /// (`WebSocket::upgrade`) its own reader and writer — `None` when this
+    /// stream can't be handed over (the upgrade is refused with a 500).
+    fn process_upgradable<S: Read + Write + Unpin>(
+        mut stream: S,
+        connection: ConnectionInfo,
+        app: impl Application,
+        split: impl Fn(&mut S) -> Option<(Box<dyn Read + Send>, Box<dyn Write + Send>)>,
+    ) -> Result<(), String> {
 
         let request_allocation_size = connection.request_size;
         let client = connection.client.clone();
@@ -443,6 +456,20 @@ impl Server {
             };
 
             crate::metrics::record_request();
+            // A WebSocket upgrade: send the 101, then the connection is the
+            // handler's, on a thread of its own.
+            if let Some(upgrade) = crate::websocket::take_upgrade(&mut response) {
+                let Some((reader, writer)) = split(&mut stream) else {
+                    let _ = stream.write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                    let _ = stream.flush();
+                    return Err("WebSocket upgrade on a connection that can't be handed over".to_string());
+                };
+                Log::log_access(&request, &response, &client_addr);
+                stream.write_all(&crate::websocket::upgrade_head(&response)).and_then(|_| stream.flush()).map_err(|e| e.to_string())?;
+                let reader = std::io::Cursor::new(std::mem::take(&mut pending)).chain(reader);
+                std::thread::spawn(move || upgrade.run(Box::new(reader), writer));
+                return Ok(());
+            }
             crate::compression::apply_compression(&request, &mut response);
             response.drop_content_for_status();
 
@@ -815,7 +842,13 @@ impl Server {
                 }
             }
             crate::metrics::connection_open();
-            let result = Server::process(stream, connection, app);
+            let result = Server::process_upgradable(stream, connection, app, |stream| {
+                let reader = stream.try_clone().ok()?;
+                let writer = stream.try_clone().ok()?;
+                // The 30 s request read timeout doesn't apply to a WebSocket.
+                let _ = reader.set_read_timeout(None);
+                Some((Box::new(reader) as Box<dyn Read + Send>, Box::new(writer) as Box<dyn Write + Send>))
+            });
             crate::metrics::connection_close();
             if let Err(msg) = result {
                 crate::metrics::record_error();

@@ -1,9 +1,60 @@
 ---
 title: Server-Sent Events
-description: Push a stream of typed events to browser clients over a single HTTP connection with the Sse builder.
+description: Stream events to browsers as they happen with Sse::stream, or send a known sequence with the Sse builder.
 ---
 
-## Quick start
+## Streaming
+
+`Sse::stream()` gives a handler the response to return and an `SseSender`
+that pushes events to the client as they are sent — AI tokens, progress,
+live updates — over HTTP/1.1, HTTP/2 and HTTP/3 (since 18.5.0):
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::sse::{Sse, SseEvent};
+
+let app = App::with_state(()).get("/tokens", |_req, _params, _conn, _state| {
+    let (events, response) = Sse::stream();
+    std::thread::spawn(move || {
+        for (n, token) in ["Hello", ",", " world"].iter().enumerate() {
+            let event = SseEvent::data(*token).id(n.to_string()).event_type("token");
+            if events.send(event).is_err() {
+                return; // the client went away
+            }
+        }
+        // Dropping the last sender ends the stream.
+    });
+    response
+});
+```
+
+| `SseSender` | |
+|---|---|
+| `.send(event)` | waits while the buffer is full: a slow client slows the sender, memory stays bounded |
+| `.try_send(event)` | `Ok(false)` and the event dropped when the buffer is full |
+| `.send_async(event).await` | `send` for async handlers (`http2` builds) |
+| `.data(text)`, `.comment(text)` | shortcuts |
+| `.clone()` | several producers; the stream ends when the last clone is dropped |
+
+Every method returns `Err(SseClosed)` once the client is gone. When nothing
+is sent for 15 seconds a `: keep-alive` comment goes out, which keeps
+proxies from timing the connection out and notices a client that left. To
+change the buffer (32 events) or the interval:
+
+```rust
+use std::time::Duration;
+use rust_web_server::sse::SseStream;
+
+let (events, response) = SseStream::new().buffer(256).keep_alive(Duration::from_secs(5)).start();
+```
+
+The MCP server's `GET /mcp` stream is built on the same writer.
+`examples/realtime.rs` serves one, and `ci/e2e/realtime.sh` checks that its
+events arrive as they are sent, over plain HTTP, TLS and HTTP/2.
+
+## Buffered
+
+For a sequence known up front, `Sse` builds the whole body at once:
 
 ```rust
 use rust_web_server::sse::{Sse, SseEvent};
@@ -18,7 +69,7 @@ fn handle_updates(_req: &Request, _conn: &ConnectionInfo) -> Response {
 }
 ```
 
-## `Sse` builder
+### `Sse` builder
 
 `Sse::new()` creates an empty builder. Every method takes `self` and returns `Self` for chaining. Call `.into_response()` at the end to get a `Response`.
 
@@ -57,30 +108,11 @@ let event = SseEvent::data(r#"{"token":"Hello"}"#)
 
 ### Multi-line data
 
-Newlines in the `data` string are split into separate `data:` lines per the SSE specification. The client concatenates them with `\n`:
+Line breaks in the `data` string (`\n`, `\r\n` or a lone `\r`) are split into separate `data:` lines per the SSE specification; the client joins them with `\n`. Line breaks in `id` and the event type are dropped, so a value can't add fields of its own:
 
 ```rust
 SseEvent::data("line one\nline two\nline three")
 // Wire: data: line one\ndata: line two\ndata: line three\n\n
-```
-
-## Use case: streaming AI tokens
-
-For live token-by-token output where events arrive over time, write the SSE headers and raw event lines directly to the TCP stream. The buffered `Sse` builder is for pre-known event sequences; live streaming requires a custom accept loop:
-
-```rust
-// 1. Emit SSE headers
-response.headers.push(Header::new("Content-Type", "text/event-stream"));
-response.headers.push(Header::new("Cache-Control", "no-cache"));
-response.headers.push(Header::new("X-Accel-Buffering", "no"));
-write_headers(&mut stream, &response);
-
-// 2. Loop over model output and push each token
-for token in model_stream {
-    let event = SseEvent::data(&token).encode();
-    stream.write_all(&event)?;
-    stream.flush()?;
-}
 ```
 
 ## Client-side JavaScript
@@ -102,7 +134,3 @@ source.addEventListener("update", (e) => {
 // Reconnection — browser retries automatically; Last-Event-ID is sent
 source.onerror = () => console.warn("SSE connection lost, retrying…");
 ```
-
-:::note[Buffered vs. live streaming]
-`Sse::into_response()` buffers all events before writing. It suits pre-known sequences like progress steps or batch pushes. For continuous output (AI tokens, sensor feeds) write raw SSE frames directly to the open TCP connection instead.
-:::

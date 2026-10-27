@@ -125,3 +125,72 @@ fn into_response_content_type_is_event_stream() {
     let ct = response.content_range_list[0].content_type.clone();
     assert_eq!("text/event-stream", ct);
 }
+
+// ── Streaming ─────────────────────────────────────────────────────────────────
+
+use std::io::Read;
+use std::time::Duration;
+
+use crate::sse::{SseClosed, SseStream};
+
+fn read_some(response: &mut crate::response::Response) -> String {
+    let reader = response.stream_pipe.as_mut().expect("a streaming body");
+    let mut buf = [0u8; 256];
+    let n = reader.read(&mut buf).unwrap();
+    String::from_utf8_lossy(&buf[..n]).into_owned()
+}
+
+#[test]
+fn a_stream_delivers_events_as_they_are_sent_and_ends_with_its_senders() {
+    let (events, mut response) = Sse::stream();
+    assert_eq!(200, response.status_code);
+    assert!(response.headers.iter().any(|h| &*h.name == "Content-Type" && &*h.value == "text/event-stream"));
+    events.send(SseEvent::data("one").id("1")).unwrap();
+    assert_eq!("id: 1\ndata: one\n\n", read_some(&mut response));
+    let clone = events.clone();
+    drop(events);
+    clone.data("two").unwrap();
+    assert_eq!("data: two\n\n", read_some(&mut response));
+    drop(clone);
+    assert_eq!("", read_some(&mut response), "EOF once every sender is gone");
+}
+
+#[test]
+fn a_quiet_stream_sends_keep_alive_comments() {
+    let (_events, mut response) = SseStream::new().keep_alive(Duration::from_millis(20)).start();
+    assert_eq!(": keep-alive\n\n", read_some(&mut response));
+}
+
+#[test]
+fn a_gone_client_closes_the_sender_and_a_full_buffer_drops() {
+    let (events, mut response) = SseStream::new().buffer(1).start();
+    assert_eq!(Ok(true), events.try_send(SseEvent::data("a")));
+    assert_eq!(Ok(false), events.try_send(SseEvent::data("b")), "full: dropped");
+    assert_eq!("data: a\n\n", read_some(&mut response));
+    drop(response);
+    assert_eq!(Err(SseClosed), events.send(SseEvent::data("c")));
+    assert_eq!(Err(SseClosed), events.try_send(SseEvent::data("c")));
+}
+
+#[test]
+fn line_breaks_cannot_add_fields() {
+    let encoded = SseEvent::data("a\rretry: 1\r\nb").id("1\nevent: evil").event_type("x\r\ndata: y").encode();
+    assert_eq!("id: 1event: evil\nevent: xdata: y\ndata: a\ndata: retry: 1\ndata: b\n\n", String::from_utf8(encoded).unwrap());
+    assert_eq!(b": a\n: b\n\n".to_vec(), Sse::new().comment("a\rb").into_response().content_range_list[0].body);
+}
+
+#[cfg(feature = "http2")]
+#[tokio::test]
+async fn send_async_waits_for_room() {
+    let (events, mut response) = SseStream::new().buffer(1).start();
+    events.send_async(SseEvent::data("a")).await.unwrap();
+    let reader = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(30));
+        let first = read_some(&mut response);
+        let second = read_some(&mut response);
+        (first, second)
+    });
+    events.send_async(SseEvent::data("b")).await.unwrap();
+    drop(events);
+    assert_eq!(("data: a\n\n".to_string(), "data: b\n\n".to_string()), reader.join().unwrap());
+}

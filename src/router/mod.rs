@@ -117,6 +117,33 @@ impl Router {
         self.add("GET", pattern, handler)
     }
 
+    /// Serve WebSocket connections at `pattern`: an upgrade request's
+    /// connection goes to `handler` with the route's parameters, anything
+    /// else gets `426 Upgrade Required` (see
+    /// [`WebSocket::upgrade`](crate::websocket::WebSocket::upgrade)).
+    ///
+    /// ```rust,no_run
+    /// use rust_web_server::router::Router;
+    /// use rust_web_server::websocket::Message;
+    ///
+    /// let router = Router::new().websocket("/rooms/:room", |mut ws, params| {
+    ///     let room = params.get("room").unwrap_or("lobby").to_string();
+    ///     while let Ok(Some(Message::Text(text))) = ws.recv() {
+    ///         let _ = ws.send_text(&format!("{room}: {text}"));
+    ///     }
+    /// });
+    /// ```
+    pub fn websocket<F>(self, pattern: &str, handler: F) -> Self
+    where
+        F: Fn(crate::websocket::WebSocketConnection, PathParams) + Send + Sync + 'static,
+    {
+        let handler = Arc::new(handler);
+        self.get(pattern, move |req, params, _| {
+            let (handler, params) = (Arc::clone(&handler), params.clone());
+            crate::websocket::WebSocket::upgrade(req, move |ws| handler(ws, params))
+        })
+    }
+
     /// Register a `POST` handler for `pattern`.
     pub fn post<F>(self, pattern: &str, handler: F) -> Self
     where F: Fn(&Request, &PathParams, &ConnectionInfo) -> Response + Send + Sync + 'static {

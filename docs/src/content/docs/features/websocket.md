@@ -1,21 +1,87 @@
 ---
 title: WebSocket
-description: Add WebSocket endpoints with RFC 6455 frame-level I/O built in — no third-party WebSocket crates required.
+description: WebSocket routes with whole messages, pings and the closing handshake handled, plus RFC 6455 frame-level I/O — no third-party WebSocket crates.
 ---
 
-## Overview
+## WebSocket routes
 
-`rust-web-server` includes a complete WebSocket implementation in
-`src/websocket/mod.rs`. It covers upgrade detection, the RFC 6455 opening
-handshake (SHA-1 + base64 key derivation), and frame-level read/write for all
-standard opcodes.
+Since 18.5.0 a WebSocket endpoint is an ordinary route. The handler gets a
+`WebSocketConnection` once the `101 Switching Protocols` response is out,
+and runs on a thread of its own for the connection's life:
 
-## Integration pattern
+```rust
+use rust_web_server::app::App;
+use rust_web_server::websocket::Message;
 
-WebSocket connections require taking over the raw TCP stream after the 101
-upgrade response. They are handled in a custom accept loop rather than through
-the normal `Controller` / `Application` pipeline (which has no access to the
-underlying stream).
+let app = App::with_state(()).websocket("/chat/:room", |mut ws, params, _state| {
+    let room = params.get("room").unwrap_or("lobby").to_string();
+    while let Ok(Some(message)) = ws.recv() {
+        let _ = match message {
+            Message::Text(text) => ws.send_text(&format!("{room}: {text}")),
+            Message::Binary(data) => ws.send_binary(&data),
+        };
+    }
+});
+```
+
+`Router::websocket(pattern, |ws, params| ...)` does the same in a `Router`,
+and inside any handler `WebSocket::upgrade(request, |ws| ...)` returns the
+`101` response and runs the closure with the connection. A request that
+isn't a WebSocket upgrade gets `426 Upgrade Required`.
+
+`ws.recv()` returns `Ok(Some(Message::Text | Message::Binary))` per message,
+`Ok(None)` after the closing handshake, and `Err` when the client
+disappeared or broke the protocol. Along the way it
+
+- joins fragmented messages (text is checked to be UTF-8 once whole),
+- answers pings with pongs and drops pongs,
+- answers the client's close frame, and finishes one you started with
+  `ws.close(code, reason)`,
+- fails the connection with the right close code: 1002 for an unmasked
+  frame, reserved bits or a bad fragment, 1007 for invalid UTF-8, 1009 for
+  a message over `max_message_size` (16 MiB by default).
+
+To send while `recv` waits, take a `WebSocketSender` — cloneable, usable
+from any thread:
+
+```rust
+.websocket("/ticker", |mut ws, _params, _state| {
+    let sender = ws.sender();
+    std::thread::spawn(move || {
+        for n in 1.. {
+            if sender.send_text(&format!("tick {n}")).is_err() { return; }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    });
+    while let Ok(Some(_)) = ws.recv() {}
+})
+```
+
+`sender.send_text`, `send_binary`, `ping` and `close` all return `Err` once
+the connection is closed.
+
+Notes:
+
+- HTTP/1.1 only, plain or TLS. Browsers open WebSockets over HTTP/1.1
+  unless the server offers RFC 8441 (WebSocket over HTTP/2), which rws
+  doesn't, so this is what they use.
+- Each connection holds a thread while it's open: tokio's blocking pool
+  in async builds (up to 512 by default), a new thread in the `http1`
+  build.
+- No idle timeout: send pings yourself if connections can go quiet
+  behind a proxy that drops them.
+- `Server::process` called directly, on a stream it can't hand over,
+  answers an upgrade with `500`.
+
+`examples/realtime.rs` has both routes above. `ci/e2e/realtime.sh` drives
+them from Node's WebSocket client over plain HTTP and TLS, on the shared
+and per-core runtimes: echo with a 400 KB message, server-pushed messages
+from another thread, and clean closes started by either side.
+
+## Frame-level API
+
+The building blocks below are for connections you manage yourself, in a
+custom accept loop:
 
 ```rust
 use std::io::{Read, Write};
@@ -58,6 +124,9 @@ for stream in listener.incoming() {
     }
 }
 ```
+
+`read_frame` returns frames as they come — fragments, pings and all; use
+`WebSocketConnection` (above) for whole messages.
 
 ## Detecting upgrade requests
 
@@ -143,54 +212,6 @@ WebSocket::send_close(&mut stream, 1000, "normal closure")?;
 
 // Reply to a Ping with a Pong
 WebSocket::send_pong(&mut stream, ping_payload)?;
-```
-
-## Complete echo server example
-
-```rust
-use std::net::TcpListener;
-use std::io::Read;
-use rust_web_server::request::Request;
-use rust_web_server::websocket::{WebSocket, Frame};
-
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("WebSocket echo server listening on ws://127.0.0.1:7878");
-
-    for stream in listener.incoming() {
-        std::thread::spawn(|| {
-            let mut stream = stream.unwrap();
-            let mut buf = vec![0u8; 4096];
-            let n = stream.read(&mut buf).unwrap();
-
-            let request = Request::parse(&buf[..n]).unwrap();
-            if !WebSocket::is_upgrade_request(&request) { return; }
-
-            let mut handshake = WebSocket::handshake_response(&request).unwrap();
-            use std::io::Write;
-            stream.write_all(&handshake.generate()).unwrap();
-
-            loop {
-                match WebSocket::read_frame(&mut stream) {
-                    Ok(Frame::Text(msg)) => {
-                        WebSocket::write_frame(&mut stream, Frame::Text(msg)).unwrap();
-                    }
-                    Ok(Frame::Binary(data)) => {
-                        WebSocket::write_frame(&mut stream, Frame::Binary(data)).unwrap();
-                    }
-                    Ok(Frame::Ping(data)) => {
-                        WebSocket::send_pong(&mut stream, data).unwrap();
-                    }
-                    Ok(Frame::Close(code, reason)) => {
-                        WebSocket::send_close(&mut stream, code.unwrap_or(1000), &reason).ok();
-                        break;
-                    }
-                    _ => break,
-                }
-            }
-        });
-    }
-}
 ```
 
 :::note[WebSocket proxy]

@@ -119,7 +119,7 @@ Speak the current MCP revision (2026-07-28) next to 2025 clients on the same end
 
 - **#15** **MCP 2026-07-28 alongside 2025** — `server/discover`, per-request `_meta` version, multi-round-trip requests, `subscriptions/listen`, `Mcp-Method` / `Mcp-Name` headers, `ttlMs` / `cacheScope`, deterministic ordering, the new error codes, and the Tasks extension for async tools. Serve old and new clients on one endpoint ([Cloudflare's approach](https://blog.cloudflare.com/mcp-v2/)).
 - **#16** *server suite in CI since 2026-10-26 (`.github/workflows/mcp-conformance.yml`, 2025-11-25 active scenarios: 28/31, elicitation baselined); the 2026 scenarios and the client suite remain* **MCP conformance suite in CI** ([modelcontextprotocol/conformance](https://github.com/modelcontextprotocol/conformance)) with the pass rate published per protocol version.
-- **#24** **Streaming SSE writer and router-level WebSocket upgrade** — the `stream_pipe` primitive exists; the `Sse` builder still buffers, and WebSocket needs its own accept loop.
+- **#24** ✅ *main: `Sse::stream()` + `SseSender` (bounded, keep-alive, MCP `GET /mcp` uses it); WebSocket routes via `WebSocket::upgrade` / `.websocket()` (whole messages, pings, close handshake, a sender for other threads; async and `http1` builds); e2e `ci/e2e/realtime.sh` with Node clients (plain/TLS, shared/per-core, SSE over HTTP/2)* **Streaming SSE writer and router-level WebSocket upgrade** — the `stream_pipe` primitive exists; the `Sse` builder still buffers, and WebSocket needs its own accept loop.
 
 **Done when:** Conformance suite in CI with a published pass rate per protocol version; a 2025-06-18 client and a 2026-07-28 client served by one `/mcp` endpoint; SSE writer used by the MCP server and documented.
 

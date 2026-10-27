@@ -188,6 +188,36 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
         self
     }
 
+    /// Serve WebSocket connections at `pattern`: an upgrade request's
+    /// connection goes to `handler` with the route's parameters and the
+    /// state, anything else gets `426 Upgrade Required`. The handler runs
+    /// on a thread of its own for the connection's life.
+    ///
+    /// ```rust,no_run
+    /// use std::sync::Mutex;
+    /// use rust_web_server::app::App;
+    /// use rust_web_server::websocket::Message;
+    ///
+    /// let app = App::with_state(Mutex::new(0u64)).websocket("/count", |mut ws, _params, state| {
+    ///     while let Ok(Some(Message::Text(_))) = ws.recv() {
+    ///         let n = { let mut n = state.lock().unwrap(); *n += 1; *n };
+    ///         let _ = ws.send_text(&n.to_string());
+    ///     }
+    /// });
+    /// ```
+    pub fn websocket<F>(mut self, pattern: &str, handler: F) -> Self
+    where
+        F: Fn(crate::websocket::WebSocketConnection, PathParams, Arc<S>) + Send + Sync + 'static,
+    {
+        let state = Arc::clone(&self.state);
+        let handler = Arc::new(handler);
+        self.router = self.router.get(pattern, move |req, params, _conn| {
+            let (handler, params, state) = (Arc::clone(&handler), params.clone(), Arc::clone(&state));
+            crate::websocket::WebSocket::upgrade(req, move |ws| handler(ws, params, state))
+        });
+        self
+    }
+
     /// Return a snapshot of all registered routes as `(method, pattern)` pairs.
     /// Hand requests to `method` `pattern` (same pattern syntax as the route)
     /// their body as a stream instead of reading it into memory first

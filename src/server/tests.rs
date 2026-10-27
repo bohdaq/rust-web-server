@@ -1925,3 +1925,58 @@ async fn the_plain_listener_serves_cleartext_http2_beside_http1() {
     assert!(replies[0].starts_with("HTTP/1.1 200"), "{}", replies[0]);
     assert!(replies[1].starts_with("HTTP/1.1 200") && replies[1].ends_with("put"), "{}", replies[1]);
 }
+
+// ── WebSocket hand-over (sync loop) ───────────────────────────────────────────
+
+fn websocket_echo_app() -> crate::state::AppWithState<()> {
+    crate::app::App::with_state(()).websocket("/echo", |mut ws, _params, _state| {
+        while let Ok(Some(crate::websocket::Message::Text(text))) = ws.recv() {
+            let _ = ws.send_text(&format!("echo: {text}"));
+        }
+    })
+}
+
+const UPGRADE: &str = "GET /echo HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\
+    Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
+
+#[test]
+fn the_sync_loop_hands_an_upgraded_socket_to_the_handler() {
+    let _g = crate::test_env::lock(); // Server::process reads RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        Server::process_upgradable(stream, make_connection(), websocket_echo_app(), |s| {
+            Some((Box::new(s.try_clone().ok()?) as Box<dyn Read + Send>, Box::new(s.try_clone().ok()?) as Box<dyn Write + Send>))
+        })
+    });
+    let mut client = std::net::TcpStream::connect(addr).unwrap();
+    client.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+    // The first frame in the same write as the request: it must reach the handler.
+    let mask = [1u8, 2, 3, 4];
+    let mut bytes = UPGRADE.as_bytes().to_vec();
+    bytes.extend([0x81, 0x80 | 2]);
+    bytes.extend(mask);
+    bytes.extend(b"hi".iter().enumerate().map(|(i, b)| b ^ mask[i % 4]));
+    client.write_all(&bytes).unwrap();
+    server.join().unwrap().unwrap();
+    let mut head = Vec::new();
+    while !head.ends_with(b"\r\n\r\n") {
+        let mut byte = [0u8; 1];
+        client.read_exact(&mut byte).unwrap();
+        head.push(byte[0]);
+    }
+    let head = String::from_utf8(head).unwrap();
+    assert!(head.starts_with("HTTP/1.1 101 Switching Protocols\r\n"), "{head}");
+    assert!(head.contains("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"), "{head}");
+    assert!(!head.to_ascii_lowercase().contains("x-rws-websocket-upgrade"), "the internal header isn't sent: {head}");
+    assert_eq!(crate::websocket::Frame::Text("echo: hi".to_string()), crate::websocket::WebSocket::read_frame(&mut client).unwrap());
+}
+
+#[test]
+fn server_process_without_a_socket_to_hand_over_refuses_the_upgrade() {
+    let _g = crate::test_env::lock();
+    let mut stream = MockTcpStream { read_data: UPGRADE.as_bytes().to_vec(), write_data: vec![] };
+    assert!(Server::process(&mut stream, make_connection(), websocket_echo_app()).is_err());
+    assert!(String::from_utf8_lossy(&stream.write_data).starts_with("HTTP/1.1 500 "));
+}

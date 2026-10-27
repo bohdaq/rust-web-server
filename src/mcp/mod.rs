@@ -1450,7 +1450,7 @@ impl McpServer {
             name: "X-Accel-Buffering".into(),
             value: "no".into(),
         });
-        response.stream_pipe = Some(Box::new(SseChannelReader::new(rx)));
+        response.stream_pipe = Some(Box::new(crate::sse::SseReader::new(rx, SSE_KEEPALIVE_INTERVAL)));
         response
     }
 
@@ -2938,7 +2938,7 @@ impl McpServer {
         response.headers.push(Header { name: Header::_CONTENT_TYPE.into(), value: "text/event-stream".into() });
         response.headers.push(Header { name: Header::_CACHE_CONTROL.into(), value: "no-cache".into() });
         response.headers.push(Header { name: "X-Accel-Buffering".into(), value: "no".into() });
-        response.stream_pipe = Some(Box::new(SseChannelReader::new(rx)));
+        response.stream_pipe = Some(Box::new(crate::sse::SseReader::new(rx, SSE_KEEPALIVE_INTERVAL)));
         response
     }
 
@@ -3043,51 +3043,6 @@ fn send_sse_to_sessions(clients: &Arc<Mutex<Vec<SseClient>>>, session_ids: &[Str
 /// How often a server-to-client request checks for the session's SSE stream
 /// while waiting for the client to open it.
 const SSE_STREAM_WAIT_POLL: Duration = Duration::from_millis(20);
-
-// ── SSE channel reader ────────────────────────────────────────────────────────
-
-/// Adapts an `mpsc::Receiver<Vec<u8>>` of pre-framed SSE bytes into a
-/// blocking [`std::io::Read`], so `Server::pipe_stream` (already written for
-/// proxy passthrough streaming) can drive a `GET /mcp` SSE connection with no
-/// changes to the server's write loop.
-///
-/// Blocks in [`Self::read`] until either a frame arrives, the sender side is
-/// dropped (all `McpServer` clones gone — EOF, closing the connection), or
-/// [`SSE_KEEPALIVE_INTERVAL`] elapses with nothing to send (writes a `:
-/// keep-alive` comment instead, both to satisfy proxies that time out
-/// silent connections and to surface a dead peer on the next write attempt).
-struct SseChannelReader {
-    rx: mpsc::Receiver<Vec<u8>>,
-    leftover: Vec<u8>,
-}
-
-impl SseChannelReader {
-    fn new(rx: mpsc::Receiver<Vec<u8>>) -> Self {
-        SseChannelReader { rx, leftover: Vec::new() }
-    }
-}
-
-impl std::io::Read for SseChannelReader {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if self.leftover.is_empty() {
-            loop {
-                match self.rx.recv_timeout(SSE_KEEPALIVE_INTERVAL) {
-                    Ok(frame) => { self.leftover = frame; break; }
-                    Err(mpsc::RecvTimeoutError::Timeout) => {
-                        self.leftover = b": keep-alive\n\n".to_vec();
-                        break;
-                    }
-                    Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(0),
-                }
-            }
-        }
-
-        let n = self.leftover.len().min(buf.len());
-        buf[..n].copy_from_slice(&self.leftover[..n]);
-        self.leftover.drain(..n);
-        Ok(n)
-    }
-}
 
 // ── Application ───────────────────────────────────────────────────────────────
 

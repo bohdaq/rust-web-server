@@ -6986,19 +6986,85 @@ traffic on the server port (default 7878) in addition to TCP.
 
 <https://rws8.tech/features/websocket/>
 
-## Overview
+## WebSocket routes
 
-`rust-web-server` includes a complete WebSocket implementation in
-`src/websocket/mod.rs`. It covers upgrade detection, the RFC 6455 opening
-handshake (SHA-1 + base64 key derivation), and frame-level read/write for all
-standard opcodes.
+Since 18.5.0 a WebSocket endpoint is an ordinary route. The handler gets a
+`WebSocketConnection` once the `101 Switching Protocols` response is out,
+and runs on a thread of its own for the connection's life:
 
-## Integration pattern
+```rust
+use rust_web_server::app::App;
+use rust_web_server::websocket::Message;
 
-WebSocket connections require taking over the raw TCP stream after the 101
-upgrade response. They are handled in a custom accept loop rather than through
-the normal `Controller` / `Application` pipeline (which has no access to the
-underlying stream).
+let app = App::with_state(()).websocket("/chat/:room", |mut ws, params, _state| {
+    let room = params.get("room").unwrap_or("lobby").to_string();
+    while let Ok(Some(message)) = ws.recv() {
+        let _ = match message {
+            Message::Text(text) => ws.send_text(&format!("{room}: {text}")),
+            Message::Binary(data) => ws.send_binary(&data),
+        };
+    }
+});
+```
+
+`Router::websocket(pattern, |ws, params| ...)` does the same in a `Router`,
+and inside any handler `WebSocket::upgrade(request, |ws| ...)` returns the
+`101` response and runs the closure with the connection. A request that
+isn't a WebSocket upgrade gets `426 Upgrade Required`.
+
+`ws.recv()` returns `Ok(Some(Message::Text | Message::Binary))` per message,
+`Ok(None)` after the closing handshake, and `Err` when the client
+disappeared or broke the protocol. Along the way it
+
+- joins fragmented messages (text is checked to be UTF-8 once whole),
+- answers pings with pongs and drops pongs,
+- answers the client's close frame, and finishes one you started with
+  `ws.close(code, reason)`,
+- fails the connection with the right close code: 1002 for an unmasked
+  frame, reserved bits or a bad fragment, 1007 for invalid UTF-8, 1009 for
+  a message over `max_message_size` (16 MiB by default).
+
+To send while `recv` waits, take a `WebSocketSender` — cloneable, usable
+from any thread:
+
+```rust
+.websocket("/ticker", |mut ws, _params, _state| {
+    let sender = ws.sender();
+    std::thread::spawn(move || {
+        for n in 1.. {
+            if sender.send_text(&format!("tick {n}")).is_err() { return; }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    });
+    while let Ok(Some(_)) = ws.recv() {}
+})
+```
+
+`sender.send_text`, `send_binary`, `ping` and `close` all return `Err` once
+the connection is closed.
+
+Notes:
+
+- HTTP/1.1 only, plain or TLS. Browsers open WebSockets over HTTP/1.1
+  unless the server offers RFC 8441 (WebSocket over HTTP/2), which rws
+  doesn't, so this is what they use.
+- Each connection holds a thread while it's open: tokio's blocking pool
+  in async builds (up to 512 by default), a new thread in the `http1`
+  build.
+- No idle timeout: send pings yourself if connections can go quiet
+  behind a proxy that drops them.
+- `Server::process` called directly, on a stream it can't hand over,
+  answers an upgrade with `500`.
+
+`examples/realtime.rs` has both routes above. `ci/e2e/realtime.sh` drives
+them from Node's WebSocket client over plain HTTP and TLS, on the shared
+and per-core runtimes: echo with a 400 KB message, server-pushed messages
+from another thread, and clean closes started by either side.
+
+## Frame-level API
+
+The building blocks below are for connections you manage yourself, in a
+custom accept loop:
 
 ```rust
 use std::io::{Read, Write};
@@ -7041,6 +7107,9 @@ for stream in listener.incoming() {
     }
 }
 ```
+
+`read_frame` returns frames as they come — fragments, pings and all; use
+`WebSocketConnection` (above) for whole messages.
 
 ## Detecting upgrade requests
 
@@ -7125,54 +7194,6 @@ WebSocket::send_close(&mut stream, 1000, "normal closure")?;
 WebSocket::send_pong(&mut stream, ping_payload)?;
 ```
 
-## Complete echo server example
-
-```rust
-use std::net::TcpListener;
-use std::io::Read;
-use rust_web_server::request::Request;
-use rust_web_server::websocket::{WebSocket, Frame};
-
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("WebSocket echo server listening on ws://127.0.0.1:7878");
-
-    for stream in listener.incoming() {
-        std::thread::spawn(|| {
-            let mut stream = stream.unwrap();
-            let mut buf = vec![0u8; 4096];
-            let n = stream.read(&mut buf).unwrap();
-
-            let request = Request::parse(&buf[..n]).unwrap();
-            if !WebSocket::is_upgrade_request(&request) { return; }
-
-            let mut handshake = WebSocket::handshake_response(&request).unwrap();
-            use std::io::Write;
-            stream.write_all(&handshake.generate()).unwrap();
-
-            loop {
-                match WebSocket::read_frame(&mut stream) {
-                    Ok(Frame::Text(msg)) => {
-                        WebSocket::write_frame(&mut stream, Frame::Text(msg)).unwrap();
-                    }
-                    Ok(Frame::Binary(data)) => {
-                        WebSocket::write_frame(&mut stream, Frame::Binary(data)).unwrap();
-                    }
-                    Ok(Frame::Ping(data)) => {
-                        WebSocket::send_pong(&mut stream, data).unwrap();
-                    }
-                    Ok(Frame::Close(code, reason)) => {
-                        WebSocket::send_close(&mut stream, code.unwrap_or(1000), &reason).ok();
-                        break;
-                    }
-                    _ => break,
-                }
-            }
-        });
-    }
-}
-```
-
 :::note[WebSocket proxy]
 `src/ws_proxy/mod.rs` provides `WsProxy` — a standalone WebSocket proxy that
 forwards upgrade requests and relays raw bytes bidirectionally between the
@@ -7185,7 +7206,58 @@ client and a backend server.
 
 <https://rws8.tech/features/sse/>
 
-## Quick start
+## Streaming
+
+`Sse::stream()` gives a handler the response to return and an `SseSender`
+that pushes events to the client as they are sent — AI tokens, progress,
+live updates — over HTTP/1.1, HTTP/2 and HTTP/3 (since 18.5.0):
+
+```rust
+use rust_web_server::app::App;
+use rust_web_server::sse::{Sse, SseEvent};
+
+let app = App::with_state(()).get("/tokens", |_req, _params, _conn, _state| {
+    let (events, response) = Sse::stream();
+    std::thread::spawn(move || {
+        for (n, token) in ["Hello", ",", " world"].iter().enumerate() {
+            let event = SseEvent::data(*token).id(n.to_string()).event_type("token");
+            if events.send(event).is_err() {
+                return; // the client went away
+            }
+        }
+        // Dropping the last sender ends the stream.
+    });
+    response
+});
+```
+
+| `SseSender` | |
+|---|---|
+| `.send(event)` | waits while the buffer is full: a slow client slows the sender, memory stays bounded |
+| `.try_send(event)` | `Ok(false)` and the event dropped when the buffer is full |
+| `.send_async(event).await` | `send` for async handlers (`http2` builds) |
+| `.data(text)`, `.comment(text)` | shortcuts |
+| `.clone()` | several producers; the stream ends when the last clone is dropped |
+
+Every method returns `Err(SseClosed)` once the client is gone. When nothing
+is sent for 15 seconds a `: keep-alive` comment goes out, which keeps
+proxies from timing the connection out and notices a client that left. To
+change the buffer (32 events) or the interval:
+
+```rust
+use std::time::Duration;
+use rust_web_server::sse::SseStream;
+
+let (events, response) = SseStream::new().buffer(256).keep_alive(Duration::from_secs(5)).start();
+```
+
+The MCP server's `GET /mcp` stream is built on the same writer.
+`examples/realtime.rs` serves one, and `ci/e2e/realtime.sh` checks that its
+events arrive as they are sent, over plain HTTP, TLS and HTTP/2.
+
+## Buffered
+
+For a sequence known up front, `Sse` builds the whole body at once:
 
 ```rust
 use rust_web_server::sse::{Sse, SseEvent};
@@ -7200,7 +7272,7 @@ fn handle_updates(_req: &Request, _conn: &ConnectionInfo) -> Response {
 }
 ```
 
-## `Sse` builder
+### `Sse` builder
 
 `Sse::new()` creates an empty builder. Every method takes `self` and returns `Self` for chaining. Call `.into_response()` at the end to get a `Response`.
 
@@ -7239,30 +7311,11 @@ let event = SseEvent::data(r#"{"token":"Hello"}"#)
 
 ### Multi-line data
 
-Newlines in the `data` string are split into separate `data:` lines per the SSE specification. The client concatenates them with `\n`:
+Line breaks in the `data` string (`\n`, `\r\n` or a lone `\r`) are split into separate `data:` lines per the SSE specification; the client joins them with `\n`. Line breaks in `id` and the event type are dropped, so a value can't add fields of its own:
 
 ```rust
 SseEvent::data("line one\nline two\nline three")
 // Wire: data: line one\ndata: line two\ndata: line three\n\n
-```
-
-## Use case: streaming AI tokens
-
-For live token-by-token output where events arrive over time, write the SSE headers and raw event lines directly to the TCP stream. The buffered `Sse` builder is for pre-known event sequences; live streaming requires a custom accept loop:
-
-```rust
-// 1. Emit SSE headers
-response.headers.push(Header::new("Content-Type", "text/event-stream"));
-response.headers.push(Header::new("Cache-Control", "no-cache"));
-response.headers.push(Header::new("X-Accel-Buffering", "no"));
-write_headers(&mut stream, &response);
-
-// 2. Loop over model output and push each token
-for token in model_stream {
-    let event = SseEvent::data(&token).encode();
-    stream.write_all(&event)?;
-    stream.flush()?;
-}
 ```
 
 ## Client-side JavaScript
@@ -7284,10 +7337,6 @@ source.addEventListener("update", (e) => {
 // Reconnection — browser retries automatically; Last-Event-ID is sent
 source.onerror = () => console.warn("SSE connection lost, retrying…");
 ```
-
-:::note[Buffered vs. live streaming]
-`Sse::into_response()` buffers all events before writing. It suits pre-known sequences like progress steps or batch pushes. For continuous output (AI tokens, sensor feeds) write raw SSE frames directly to the open TCP connection instead.
-:::
 
 ---
 
@@ -18525,9 +18574,12 @@ This page is a quick-reference index — click through to docs.rs for the comple
 
 | Type / Trait | Module | Description |
 |---|---|---|
-| `Sse` | `sse` | Builds a buffered `text/event-stream` response. See [SSE](/features/sse/) |
+| `Sse` | `sse` | `Sse::stream()` → a streaming response and its `SseSender`; `Sse::new()` builds a buffered `text/event-stream` body. See [SSE](/features/sse/) |
+| `SseStream` | `sse` | Options for a streaming response: `.buffer(events)`, `.keep_alive(interval)`, `.start()` |
+| `SseSender` / `SseClosed` | `sse` | Feeds a streaming response: `send` (waits for room), `try_send`, `send_async` (`http2`), `data`, `comment`; `Err(SseClosed)` once the client is gone |
 | `SseEvent` | `sse` | One event: data plus optional `event`, `id`, `retry` |
-| `WebSocket` | `websocket` | RFC 6455 handshake and frame read/write. See [WebSocket](/features/websocket/) |
+| `WebSocket` | `websocket` | RFC 6455: `WebSocket::upgrade(request, handler)` for a route, plus the handshake and frame read/write. See [WebSocket](/features/websocket/) |
+| `WebSocketConnection` / `WebSocketSender` / `Message` | `websocket` | An upgraded connection: `recv()` → whole `Message::Text`/`Binary` (pings, fragments and the close handshake handled); `sender()` for other threads |
 | `Frame` | `websocket` | A WebSocket frame: `Text`, `Binary`, `Ping`, `Pong`, `Close`, `Continuation` |
 
 ## MCP

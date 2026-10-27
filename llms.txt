@@ -67,8 +67,8 @@ Use it as:
 - [Virtual Hosting](https://rws8.tech/features/virtual-hosting/): Serve multiple domains from a single server instance, each with its own TLS certificate, using SNI-based routing.
 - [HTTP/2](https://rws8.tech/features/http2/): Serve HTTP/2 and HTTP/1.1 on the same TLS port with automatic ALPN negotiation, no extra configuration required.
 - [HTTP/3 / QUIC](https://rws8.tech/features/http3-quic/): The default build serves HTTP/3 over QUIC on the same port number as TCP, with automatic client negotiation.
-- [WebSocket](https://rws8.tech/features/websocket/): Add WebSocket endpoints with RFC 6455 frame-level I/O built in — no third-party WebSocket crates required.
-- [Server-Sent Events](https://rws8.tech/features/sse/): Push a stream of typed events to browser clients over a single HTTP connection with the Sse builder.
+- [WebSocket](https://rws8.tech/features/websocket/): WebSocket routes with whole messages, pings and the closing handshake handled, plus RFC 6455 frame-level I/O — no third-party WebSocket crates.
+- [Server-Sent Events](https://rws8.tech/features/sse/): Stream events to browsers as they happen with Sse::stream, or send a known sequence with the Sse builder.
 - [Authentication](https://rws8.tech/features/auth/): HTTP Basic Auth, HS256/RS256/ES256 JWT, and forward-auth middleware with helper functions for issuing and verifying tokens.
 - [OAuth2 / OIDC SSO](https://rws8.tech/features/sso/): Authorization code flow with PKCE, session management, RS256/ES256 JWT verification via JWKS, and rws as its own OAuth 2.0 Authorization Server.
 - [SAML 2.0 SSO](https://rws8.tech/features/saml/): SAML 2.0 Service Provider — ACS handler, XML signature verification, and attribute mapping, for enterprise IdPs that don't speak OIDC.

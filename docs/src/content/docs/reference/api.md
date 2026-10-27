@@ -180,9 +180,12 @@ This page is a quick-reference index — click through to docs.rs for the comple
 
 | Type / Trait | Module | Description |
 |---|---|---|
-| `Sse` | `sse` | Builds a buffered `text/event-stream` response. See [SSE](/features/sse/) |
+| `Sse` | `sse` | `Sse::stream()` → a streaming response and its `SseSender`; `Sse::new()` builds a buffered `text/event-stream` body. See [SSE](/features/sse/) |
+| `SseStream` | `sse` | Options for a streaming response: `.buffer(events)`, `.keep_alive(interval)`, `.start()` |
+| `SseSender` / `SseClosed` | `sse` | Feeds a streaming response: `send` (waits for room), `try_send`, `send_async` (`http2`), `data`, `comment`; `Err(SseClosed)` once the client is gone |
 | `SseEvent` | `sse` | One event: data plus optional `event`, `id`, `retry` |
-| `WebSocket` | `websocket` | RFC 6455 handshake and frame read/write. See [WebSocket](/features/websocket/) |
+| `WebSocket` | `websocket` | RFC 6455: `WebSocket::upgrade(request, handler)` for a route, plus the handshake and frame read/write. See [WebSocket](/features/websocket/) |
+| `WebSocketConnection` / `WebSocketSender` / `Message` | `websocket` | An upgraded connection: `recv()` → whole `Message::Text`/`Binary` (pings, fragments and the close handshake handled); `sender()` for other threads |
 | `Frame` | `websocket` | A WebSocket frame: `Text`, `Binary`, `Ping`, `Pong`, `Close`, `Continuation` |
 
 ## MCP

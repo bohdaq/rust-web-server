@@ -295,3 +295,160 @@ fn read_frame_limited_applies_its_own_limit() {
         other => panic!("{other:?}"),
     }
 }
+
+// ── WebSocketConnection ───────────────────────────────────────────────────────
+
+use std::sync::{Arc, Mutex};
+
+use crate::websocket::{Message, WebSocketConnection};
+
+/// A client frame: masked, with `fin` and `opcode` as given.
+fn client_frame(fin: bool, opcode: u8, payload: &[u8]) -> Vec<u8> {
+    let mask = [0x12, 0x34, 0x56, 0x78];
+    let mut out = vec![if fin { 0x80 } else { 0 } | opcode];
+    match payload.len() {
+        n @ 0..=125 => out.push(0x80 | n as u8),
+        n => {
+            out.push(0x80 | 126);
+            out.extend_from_slice(&(n as u16).to_be_bytes());
+        }
+    }
+    out.extend_from_slice(&mask);
+    out.extend(payload.iter().enumerate().map(|(i, b)| b ^ mask[i % 4]));
+    out
+}
+
+#[derive(Clone, Default)]
+struct Sent(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for Sent {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Sent {
+    /// The server's frames, decoded.
+    fn frames(&self) -> Vec<Frame> {
+        let bytes = self.0.lock().unwrap().clone();
+        let mut cursor = Cursor::new(bytes);
+        let mut frames = Vec::new();
+        while (cursor.position() as usize) < cursor.get_ref().len() {
+            frames.push(WebSocket::read_frame(&mut cursor).unwrap());
+        }
+        frames
+    }
+}
+
+fn connection(input: Vec<u8>) -> (WebSocketConnection, Sent) {
+    let sent = Sent::default();
+    (WebSocketConnection::new(Box::new(Cursor::new(input)), Box::new(sent.clone())), sent)
+}
+
+#[test]
+fn messages_are_reassembled_and_pings_answered() {
+    let snowman = "a☃b".as_bytes(); // the snowman's 3 bytes split across fragments
+    let mut input = client_frame(false, 0x1, &snowman[..2]);
+    input.extend(client_frame(true, 0x9, b"ping!"));
+    input.extend(client_frame(true, 0x0, &snowman[2..]));
+    input.extend(client_frame(true, 0x2, &[1, 2, 3]));
+    input.extend(client_frame(true, 0x8, &[0x03, 0xE8]));
+    let (mut ws, sent) = connection(input);
+    assert_eq!(Some(Message::Text("a☃b".to_string())), ws.recv().unwrap());
+    assert_eq!(Some(Message::Binary(vec![1, 2, 3])), ws.recv().unwrap());
+    assert_eq!(None, ws.recv().unwrap(), "closed cleanly");
+    assert_eq!(None, ws.recv().unwrap());
+    assert_eq!(vec![Frame::Pong(b"ping!".to_vec()), Frame::Close(Some(1000), String::new())], sent.frames());
+    assert!(ws.send_text("late").is_err(), "nothing after the close");
+}
+
+fn fails_with(input: Vec<u8>, code: u16) {
+    let (mut ws, sent) = connection(input);
+    assert!(ws.recv().is_err());
+    assert_eq!(Some(&Frame::Close(Some(code), String::new())), sent.frames().last());
+}
+
+#[test]
+fn protocol_errors_close_with_their_code() {
+    let mut unmasked = client_frame(true, 0x1, b"hi");
+    unmasked[1] &= 0x7F;
+    unmasked.drain(2..6);
+    for (i, b) in unmasked.iter_mut().skip(2).enumerate() {
+        *b ^= [0x12, 0x34, 0x56, 0x78][i % 4];
+    }
+    fails_with(unmasked, 1002);
+    fails_with(client_frame(true, 0x1, &[0xFF, 0xFE]), 1007);
+    fails_with(client_frame(true, 0x0, b"orphan"), 1002);
+    fails_with([client_frame(false, 0x1, b"a"), client_frame(true, 0x1, b"b")].concat(), 1002);
+    fails_with(client_frame(false, 0x9, b""), 1002);
+    fails_with(client_frame(true, 0x8, &[0x03, 0xED]), 1002); // 1005 is never sent
+    fails_with(client_frame(true, 0x1 | 0x40, b"x"), 1002); // RSV1 without permessage-deflate
+    let (ws, _) = connection(client_frame(true, 0x2, &[0u8; 200]));
+    let mut ws = ws.max_message_size(100);
+    assert!(ws.recv().is_err());
+}
+
+#[test]
+fn a_server_close_ends_when_the_client_answers() {
+    let (mut ws, sent) = connection(client_frame(true, 0x8, &[0x03, 0xE8, b'o', b'k']));
+    ws.close(1001, "going away").unwrap();
+    assert_eq!(None, ws.recv().unwrap());
+    assert_eq!(vec![Frame::Close(Some(1001), "going away".to_string())], sent.frames(), "no second close");
+}
+
+#[test]
+fn a_sender_works_from_another_thread() {
+    let (ws, sent) = connection(Vec::new());
+    let sender = ws.sender();
+    std::thread::spawn(move || sender.send_text("from a thread").unwrap()).join().unwrap();
+    assert_eq!(vec![Frame::Text("from a thread".to_string())], sent.frames());
+}
+
+// ── WebSocket::upgrade ────────────────────────────────────────────────────────
+
+fn versioned_upgrade_request(version: &str) -> Request {
+    let header = |name: &str, value: &str| Header { name: name.to_string().into(), value: value.to_string().into() };
+    Request {
+        method: "GET".to_string(),
+        request_uri: "/ws".to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![
+            header("Upgrade", "websocket"),
+            header("Connection", "Upgrade"),
+            header("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ=="),
+            header("Sec-WebSocket-Version", version),
+        ],
+        body: Default::default(),
+    }
+}
+
+#[test]
+fn upgrade_answers_101_and_waits_for_the_server() {
+    let mut response = WebSocket::upgrade(&versioned_upgrade_request("13"), |_ws| {});
+    assert_eq!(101, response.status_code);
+    let token = response.headers.iter().find(|h| h.name.eq_ignore_ascii_case("X-Rws-WebSocket-Upgrade")).unwrap().value.to_string();
+    assert_eq!(32, token.len());
+    let mut copy = WebSocket::upgrade(&versioned_upgrade_request("13"), |_ws| {});
+    assert!(crate::websocket::take_upgrade(&mut response).is_some());
+    assert!(!response.headers.iter().any(|h| h.name.eq_ignore_ascii_case("X-Rws-WebSocket-Upgrade")), "the header is removed");
+    let head = String::from_utf8(crate::websocket::upgrade_head(&response)).unwrap();
+    assert!(head.starts_with("HTTP/1.1 101 Switching Protocols\r\n") && head.contains("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"), "{head}");
+    // Each token once; one replayed onto another response does nothing.
+    response.headers.push(Header { name: "X-Rws-WebSocket-Upgrade".into(), value: token.into() });
+    assert!(crate::websocket::take_upgrade(&mut response).is_none());
+    copy.status_code = 200;
+    assert!(crate::websocket::take_upgrade(&mut copy).is_none(), "only a 101 hands over");
+}
+
+#[test]
+fn a_request_that_cannot_upgrade_gets_426() {
+    for request in [versioned_upgrade_request("8"), Request { headers: vec![], ..versioned_upgrade_request("13") }] {
+        let response = WebSocket::upgrade(&request, |_ws| panic!("never runs"));
+        assert_eq!(426, response.status_code);
+        assert!(response.headers.iter().any(|h| &*h.name == "Sec-WebSocket-Version" && &*h.value == "13"));
+    }
+}

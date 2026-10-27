@@ -286,6 +286,15 @@ where
         };
 
         crate::metrics::record_request();
+        // A WebSocket upgrade: send the 101, then the connection is the
+        // handler's (`WebSocket::upgrade`).
+        if let Some(upgrade) = crate::websocket::take_upgrade(&mut response) {
+            Log::log_access(&request, &response, &peer_addr);
+            stream.write_all(&crate::websocket::upgrade_head(&response)).await.map_err(|e| e.to_string())?;
+            stream.flush().await.map_err(|e| e.to_string())?;
+            crate::websocket::hand_over_async(stream, std::mem::take(&mut pending), upgrade);
+            return Ok(());
+        }
         crate::compression::apply_compression(&request, &mut response);
         response.drop_content_for_status();
         if is_tls {

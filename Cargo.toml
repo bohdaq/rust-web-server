@@ -41,6 +41,11 @@ required-features = ["http2"]
 test = true
 
 [[example]]
+name = "realtime"
+required-features = ["http2"]
+test = true
+
+[[example]]
 name = "rest_api"
 required-features = ["http2", "serde"]
 test = true

@@ -5,6 +5,32 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased (18.5.0)
+
+### Added
+
+- Streaming Server-Sent Events (#24): `Sse::stream()` returns the response
+  and an `SseSender`; events reach the client as they are sent, over
+  HTTP/1.1, HTTP/2 and HTTP/3. `send` waits for room (bounded memory),
+  `try_send` drops, `send_async` for async code; `Err(SseClosed)` once the
+  client is gone, found by a keep-alive comment every 15 s. `SseStream`
+  sets the buffer and interval. The MCP server's `GET /mcp` stream now uses
+  it.
+- WebSocket routes (#24): `AppWithState::websocket` / `Router::websocket`,
+  or `WebSocket::upgrade(request, handler)` in any handler, hand the
+  upgraded connection to the handler on a thread of its own.
+  `WebSocketConnection::recv` returns whole messages (fragments joined,
+  pings answered, the closing handshake done, protocol errors closed with
+  1002/1007/1009); `WebSocketSender` sends from other threads. HTTP/1.1,
+  plain and TLS, async and `http1` builds. `examples/realtime.rs`; e2e with
+  Node's WebSocket and fetch (`ci/e2e/realtime.sh`).
+
+### Fixed
+
+- `SseEvent` encoding: a lone `\r` in `data`, or a line break in `id` or
+  the event type, could add SSE fields of its own; `data` is now split at
+  every line end and `id`/event type keep one line.
+
 ## 18.4.0 — 2026-10-27
 
 ### Fixed

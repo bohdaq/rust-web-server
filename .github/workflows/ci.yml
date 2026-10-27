@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, grpc, proxy-protocol]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, grpc, proxy-protocol, realtime]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -168,6 +168,15 @@ jobs:
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q haproxy
           ci/e2e/proxy_protocol.sh target/debug/rws "$(command -v haproxy)"
+      - uses: actions/setup-node@v4
+        if: matrix.check == 'realtime'
+        with:
+          node-version: 24
+      - name: WebSocket routes and streaming SSE (Node clients; plain/TLS, shared/per-core, SSE over HTTP/2)
+        if: matrix.check == 'realtime'
+        run: |
+          cargo build --example realtime
+          ci/e2e/realtime.sh target/debug/examples/realtime
 
   # Every parser that sees untrusted input — see fuzz/README.md. 30 s per
   # target on push; 10 minutes each in the weekly scheduled run.
