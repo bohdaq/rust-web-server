@@ -299,7 +299,7 @@ impl Exchange {
         // repeated: an HTTP/1.1 client gets it chunked.
         response.headers.retain(|h| !h.name.eq_ignore_ascii_case("content-length"));
         let (tx, rx) = tokio::sync::mpsc::channel(BODY_CHANNEL);
-        response.stream_pipe = Some(Box::new(BodyReader { rx, chunk: Vec::new(), pos: 0 }));
+        response.stream_pipe = Some(Box::new(crate::server::body_stream::ChannelReader::new(rx)));
         if head_tx.try_send(Ok(response)).is_err() {
             return; // the handler gave up waiting
         }
@@ -420,34 +420,6 @@ async fn send_data(stream: &mut h2::SendStream<Bytes>, mut data: Bytes, end: boo
         stream.send_data(chunk, end && data.is_empty())?;
     }
     Ok(())
-}
-
-/// The response body for the connection writer: chunks from the upstream
-/// task, ending (`Ok(0)`) when the task drops its sender, failing when the
-/// upstream did.
-struct BodyReader {
-    rx: tokio::sync::mpsc::Receiver<std::io::Result<Vec<u8>>>,
-    chunk: Vec<u8>,
-    pos: usize,
-}
-
-impl Read for BodyReader {
-    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
-        while self.pos >= self.chunk.len() {
-            match self.rx.blocking_recv() {
-                Some(Ok(next)) => {
-                    self.chunk = next;
-                    self.pos = 0;
-                }
-                Some(Err(e)) => return Err(e),
-                None => return Ok(0),
-            }
-        }
-        let n = out.len().min(self.chunk.len() - self.pos);
-        out[..n].copy_from_slice(&self.chunk[self.pos..self.pos + n]);
-        self.pos += n;
-        Ok(n)
-    }
 }
 
 #[cfg(test)]

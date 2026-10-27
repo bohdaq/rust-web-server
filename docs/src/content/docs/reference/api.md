@@ -325,6 +325,10 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 |---|---|---|
 | `TestClient` | `test_client` | In-process test client — dispatches requests without a TCP socket. See [TestClient](/testing/test-client/) |
 | `OpenApiConfig` / `build_spec` | `openapi` (`openapi`) | OpenAPI 3.1 from registered routes; `AppWithState::openapi(config)` adds `/openapi.json` and `/docs`; `.operation(method, pattern, Operation)` adds bodies, responses and parameters. See [OpenAPI](/features/openapi/) |
+| `tower::mount`, `TowerApp` | `tower` (`tower`) | A Tower service (tonic, tower-http, axum) as an rws `Application`, under a path prefix or alone. See [Tower interop](/features/tower/) |
+| `TowerLayer`, `tower::Next` | `tower` (`tower`) | A Tower layer as rws middleware; `Next` is the rest of the stack it wraps |
+| `TowerService` | `tower` (`tower`) | An rws app as a Tower `Service<http::Request<B>>`; `.connection(...)` |
+| `tower::Body`, `to_http_request` / `from_http_request` / `to_http_response` / `from_http_response` | `tower` (`tower`) | The `http_body::Body` both ways, and the conversions |
 | `Operation` | `openapi` (`openapi`) | One operation's summary, request body, responses, query and path parameters, with schemas from `JsonSchema` types |
 | `AcmeConfig` | `acme` (`acme`) | ACME / Let's Encrypt settings; `AcmeConfig::from_env()` reads `RWS_CONFIG_ACME_*`. See [ACME](/features/acme/) |
 | `AcmeManager` | `acme` (`acme`) | HTTP-01 provisioning and renewal: `.provision_until_ready().await`, `.run_renewal_loop()` |

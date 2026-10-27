@@ -17,6 +17,15 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   renames are followed. `examples/mcp_inventory.rs` describes its REST API;
   `ci/e2e/openapi.sh` validates the document with openapi-spec-validator.
 
+- Tower interop, opt-in (#23, `tower` feature): `tower::mount` / `TowerApp`
+  serve a Tower service (a tonic gRPC server, tower-http's `ServeDir`, an axum
+  `Router`) from an rws app, bodies streaming both ways with gRPC trailers;
+  `TowerLayer` uses a Tower layer (tower-http) as rws middleware;
+  `TowerService` serves an rws app from hyper or axum. Tower futures run on a
+  dedicated `rws-tower` runtime. rws's own request path is unchanged, and the
+  default build gets no new dependency. `examples/tower.rs` (tonic-health +
+  tower-http); `ci/e2e/tower.sh` calls it with grpcurl over h2c.
+
 ### Changed
 
 - `/openapi.json` is OpenAPI 3.1.0 (was 3.0.3): `JsonSchema` emits JSON Schema

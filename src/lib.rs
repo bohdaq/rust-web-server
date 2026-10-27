@@ -170,6 +170,8 @@ pub mod jobs;
 pub mod storage;
 #[cfg(feature = "openapi")]
 pub mod openapi;
+#[cfg(feature = "tower")]
+pub mod tower;
 #[cfg(feature = "webhook")]
 pub mod webhook;
 #[cfg(feature = "secrets")]

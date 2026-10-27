@@ -41,6 +41,11 @@ required-features = ["http2"]
 test = true
 
 [[example]]
+name = "tower"
+required-features = ["tower"]
+test = true
+
+[[example]]
 name = "realtime"
 required-features = ["http2"]
 test = true
@@ -131,6 +136,10 @@ jobs   = []  # in-memory JobQueue; PersistentJobQueue additionally requires a mo
 storage-local = []  # LocalStorage; no new deps
 storage-s3    = ["dep:hmac", "dep:sha2", "http-client"]  # S3Storage; AWS SigV4 via hmac+sha2, no AWS SDK
 storage-azure = ["dep:hmac", "dep:sha2", "http-client"]  # AzureBlobStorage; Shared Key HMAC signing + Managed Identity, no Azure SDK
+# Opt-in Tower interop (18.7.0, #23): tower layers as rws middleware, tower
+# services (tonic) as rws apps, an rws app as a tower service. Adapters only —
+# nothing in the default build changes.
+tower = ["http2", "dep:tower-service", "dep:tower-layer", "dep:http-body", "dep:http-body-util"]
 openapi = []  # AppWithState::openapi() / AsyncAppWithState::openapi(); no new deps
 webhook = ["dep:hmac", "dep:sha2"]  # verify_webhook_signature: GitHub, Shopify, Stripe
 rewrite-regex = ["dep:regex"]  # RewriteLayer::request_uri_regex_rewrite
@@ -152,6 +161,10 @@ tokio-rustls = { version = "0.26", optional = true }
 h2 = { version = "0.4", optional = true }
 bytes = { version = "1", optional = true }
 http = { version = "1", optional = true }
+tower-service = { version = "0.3.3", optional = true }
+tower-layer = { version = "0.3.3", optional = true }
+http-body = { version = "1.1", optional = true }
+http-body-util = { version = "0.1.5", optional = true }
 # Not quinn's default "rustls-ring": two rustls crypto providers in one build
 # make rustls::ClientConfig::builder() panic ("Could not automatically
 # determine the process-level CryptoProvider") for every outbound TLS client.
@@ -190,6 +203,13 @@ tokio = { version = "1", features = ["test-util", "macros", "rt"] }
 rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }
 # RSA keys and signatures for tests of rsa_key (src/rsa_key/test_support.rs).
 aws-lc-rs = "1"
+# Real Tower layers and a real tonic service for the `tower` adapters
+# (src/tower/tests.rs, examples/tower.rs). tonic pinned with no default
+# features: tonic-health only needs its generated-code support, not hyper.
+tower-http = { version = "0.7.1", default-features = false, features = ["set-header", "validate-request", "timeout"] }
+tonic = { version = "=0.14.6", default-features = false }
+tonic-prost = { version = "=0.14.6", default-features = false }
+tonic-health = { version = "=0.14.6", default-features = false }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 webpki-roots = { version = "1.0.11", optional = true }

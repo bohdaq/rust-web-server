@@ -28,6 +28,7 @@ command-line flags apply as they do to `rws` (see
 | [`sse_ticker`](https://github.com/bohdaq/rust-web-server/blob/main/examples/sse_ticker.rs) | Server-sent events written as they are produced | `cargo run --example sse_ticker` | [Server-sent events](/features/sse/) |
 | [`upload`](https://github.com/bohdaq/rust-web-server/blob/main/examples/upload.rs) | Large uploads streamed to disk, not buffered | `cargo run --example upload` | [Forms and uploads](/building-apps/forms-uploads/) |
 | [`mcp_inventory`](https://github.com/bohdaq/rust-web-server/blob/main/examples/mcp_inventory.rs) | One domain served as a REST API (described in OpenAPI 3.1) and as MCP tools for agents | `cargo run --example mcp_inventory --features "macros serde sso openapi"` | [Agent tools](/mcp/agent-tools/) |
+| [`tower`](https://github.com/bohdaq/rust-web-server/blob/main/examples/tower.rs) | A tonic gRPC service and a tower-http layer in an rws app | `cargo run --example tower --features tower` | [Tower interop](/features/tower/) |
 | [`mcp_gateway`](https://github.com/bohdaq/rust-web-server/blob/main/examples/mcp_gateway.rs) | One authenticated MCP endpoint in front of several MCP servers | `cargo run --example mcp_gateway` | [MCP gateway](/mcp/gateway/) |
 | [`mcp_conformance`](https://github.com/bohdaq/rust-web-server/blob/main/examples/mcp_conformance.rs) | The server the official MCP conformance suite tests | `cargo run --example mcp_conformance` | [MCP overview](/mcp/overview/) |
 

@@ -94,6 +94,7 @@ export default defineConfig({
             { label: 'Background Scheduler',   link: '/features/scheduler/' },
             { label: 'Background Job Queue',   link: '/features/jobs/' },
             { label: 'OpenAPI / Swagger',      link: '/features/openapi/' },
+            { label: 'Tower interop',          link: '/features/tower/' },
             { label: 'Per-Route Timeouts',     link: '/features/timeouts/' },
             { label: 'Typed Config Binding',   link: '/features/config-binding/' },
             { label: 'Webhook Verification',   link: '/features/webhooks/' },

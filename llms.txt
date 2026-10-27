@@ -86,6 +86,7 @@ Use it as:
 - [Background Scheduler](https://rws8.tech/features/scheduler/): Run background tasks on a fixed rate, fixed delay, or 6-field cron schedule without an external crate.
 - [Background Job Queue](https://rws8.tech/features/jobs/): Run one-shot, fire-and-forget work from request handlers, with retry-with-backoff and optional crash-safe persistence.
 - [OpenAPI / Swagger](https://rws8.tech/features/openapi/): Generate an OpenAPI 3.1 document, with request and response schemas from your serde types, and a browsable Swagger UI.
+- [Tower interop](https://rws8.tech/features/tower/): Use tonic gRPC services and tower-http layers in an rws app, and serve an rws app from a Tower stack — opt-in adapters, with rws's own request path unchanged.
 - [Per-Route Timeouts](https://rws8.tech/features/timeouts/): Give individual routes their own deadline instead of one global read timeout for everything.
 - [Typed Config Binding](https://rws8.tech/features/config-binding/): Derive a load() method that reads environment variables into a strongly-typed config struct at startup.
 - [Webhook Signature Verification](https://rws8.tech/features/webhooks/): Verify inbound webhook signatures from GitHub, Shopify, and Stripe with built-in HMAC helpers.

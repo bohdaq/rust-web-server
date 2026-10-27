@@ -9,6 +9,40 @@ use std::io::Read;
 
 use crate::response::Response;
 
+/// A blocking `Read` over chunks a task sends through a tokio channel: how a
+/// body produced asynchronously (an HTTP/2 upstream, a tower service) becomes
+/// a `Response::stream_pipe`. An `Err` chunk surfaces as a read error.
+pub(crate) struct ChannelReader {
+    rx: tokio::sync::mpsc::Receiver<std::io::Result<Vec<u8>>>,
+    chunk: Vec<u8>,
+    pos: usize,
+}
+
+impl ChannelReader {
+    pub(crate) fn new(rx: tokio::sync::mpsc::Receiver<std::io::Result<Vec<u8>>>) -> Self {
+        ChannelReader { rx, chunk: Vec::new(), pos: 0 }
+    }
+}
+
+impl Read for ChannelReader {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        while self.pos >= self.chunk.len() {
+            match self.rx.blocking_recv() {
+                Some(Ok(next)) => {
+                    self.chunk = next;
+                    self.pos = 0;
+                }
+                Some(Err(e)) => return Err(e),
+                None => return Ok(0),
+            }
+        }
+        let n = out.len().min(self.chunk.len() - self.pos);
+        out[..n].copy_from_slice(&self.chunk[self.pos..self.pos + n]);
+        self.pos += n;
+        Ok(n)
+    }
+}
+
 /// Bytes per chunk read from a file or upstream stream.
 const CHUNK: usize = 64 * 1024;
 

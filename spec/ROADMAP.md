@@ -137,7 +137,7 @@ Everything the library proxy can do, configurable from `rws.config.toml`, and me
 Bring the library side up to what Rust web developers expect: typed OpenAPI, tower interop, and a project generator.
 
 - **#22** ✅ *main: `Operation` (body/response/query/path schemas from `JsonSchema`), OpenAPI 3.1.0, `examples/mcp_inventory.rs` described, validated by openapi-spec-validator 0.9.0 (`ci/e2e/openapi.sh`)* **OpenAPI with request/response schemas** from serde types (paths only today), sharing one schema derivation with MCP `outputSchema`.
-- **#23** **Opt-in tower compatibility** — tower `Layer` / `Service` usable as rws middleware and handlers, and an rws `Application` usable as a tower `Service`; opens tower-http and tonic (gRPC serving) without building them.
+- **#23** ✅ *main: adapters only, decided 2026-10-27 — Tower stays out of rws's own request path (performance): `tower` feature with `mount`/`TowerApp`, `TowerLayer`, `TowerService`, dedicated `rws-tower` runtime; `examples/tower.rs` mounts tonic-health + a tower-http layer, `ci/e2e/tower.sh` (grpcurl over h2c: unary, trailers-only, server streaming)* **Opt-in tower compatibility** — tower `Layer` / `Service` usable as rws middleware and handlers, and an rws `Application` usable as a tower `Service`; opens tower-http and tonic (gRPC serving) without building them.
 - **#42** **Scaffolding and routing DX** — `rws new` with generators and starters (Loco), `{param}` path syntax next to `:param` (what axum 0.8 users expect).
 
 **Done when:** OpenAPI output validated with an OpenAPI 3.1 validator for an example app; a tower-http layer and a tonic service mounted in an example; `rws new` creates a project that builds and passes its own tests.
