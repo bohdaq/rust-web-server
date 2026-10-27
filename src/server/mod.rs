@@ -932,9 +932,13 @@ async fn serve_tls_connection(
     };
     match handshake.await {
         Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {} // client never finished the handshake
-        Err(e) => eprintln!("TLS handshake failed: {}", e),
+        Err(e) => {
+            crate::metrics::tls::record_handshake_failure();
+            eprintln!("TLS handshake failed: {}", e)
+        }
         Ok(tls_stream) => {
             let server_conn = tls_stream.get_ref().1;
+            crate::metrics::tls::record_rustls(server_conn);
             let sni = server_conn.server_name().map(|s| s.to_string());
             let protocol = server_conn.alpn_protocol().map(|p| p.to_vec());
 

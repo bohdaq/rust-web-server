@@ -43,6 +43,7 @@ use crate::server::ConnectionInfo;
 
 pub mod exposition;
 pub mod http;
+pub mod tls;
 
 // ── server-wide atomics ───────────────────────────────────────────────────────
 
@@ -248,6 +249,11 @@ fn prometheus_text_without_http() -> String {
         out.push_str(&upstream_text);
     }
 
+    let tls_text = tls::prometheus_text();
+    if !tls_text.is_empty() {
+        out.push('\n');
+        out.push_str(&tls_text);
+    }
     let breaker_text = circuit_breaker_prometheus_text();
     if !breaker_text.is_empty() {
         out.push('\n');

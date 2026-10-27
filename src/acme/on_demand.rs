@@ -171,6 +171,9 @@ impl OnDemand {
         let config = self.config_for(name);
         match crate::tls::load_certified_key(&config.cert_path, &config.key_path) {
             Ok(key) => {
+                if let Some(leaf) = key.cert.first() {
+                    crate::metrics::tls::set_on_demand_certificate(name, leaf.as_ref());
+                }
                 self.certificates.write().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Arc::new(key));
                 true
             }

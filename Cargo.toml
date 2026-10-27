@@ -193,7 +193,9 @@ aws-lc-rs = "1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 webpki-roots = { version = "1.0.11", optional = true }
-rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "tls12", "logging", "std"], optional = true }
+# prefer-post-quantum (a rustls default): X25519MLKEM768 ranks first, so a
+# client offering the hybrid gets it rather than plain X25519.
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "tls12", "logging", "std", "prefer-post-quantum"], optional = true }
 
 # wasm32-wasip2 outbound HTTP backend for http_client::Client::send() — see
 # the #[cfg(target_arch = "wasm32")] send_once in src/http_client/mod.rs and

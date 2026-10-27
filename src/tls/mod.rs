@@ -45,6 +45,9 @@ impl SniCertResolver {
             Some(Arc::new(load_certified_key(default_cert, default_key)?))
         };
 
+        let leaves = certs.iter().map(|(name, key)| (name.clone(), key)).chain(default.iter().map(|key| ("default".to_string(), key)));
+        crate::metrics::tls::set_configured_certificates(leaves.filter_map(|(name, key)| Some((name, key.cert.first()?.as_ref()))));
+
         Ok(SniCertResolver { certs, default })
     }
 }

@@ -3,6 +3,7 @@
 
 pub mod base64;
 pub mod sha256;
+pub mod x509;
 
 pub trait New {
     fn new() -> Self;

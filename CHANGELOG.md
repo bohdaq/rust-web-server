@@ -37,6 +37,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   everything in `OtelLayer`) when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
   `OTEL_EXPORTER_OTLP_{METRICS,TRACES}_ENDPOINT` and `…_HEADERS` are honoured.
   `ci/e2e/otlp.sh` checks it against otelcol-contrib 0.162.
+- TLS metrics (#25): `rws_tls_handshakes_total{tls_protocol_version,tls_cipher,tls_group}`,
+  `rws_tls_handshake_failures_total` and
+  `rws_tls_certificate_expiry_timestamp_seconds{name}` (default certificate,
+  virtual hosts, on-demand names).
 
 ### Fixed
 
@@ -47,6 +51,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   values in its JSON.
 
 ### Changed
+
+- rustls is built with `prefer-post-quantum` (its own default, which rws's
+  `default-features = false` had dropped): the server now picks the
+  X25519MLKEM768 hybrid key exchange when a client offers it (current Chrome,
+  Firefox, Safari, curl with OpenSSL 3.5), instead of plain X25519, and
+  outbound connections (proxy, ACME, HTTP client) offer it first.
 
 - `proxy_config::UpstreamConfig` has new public fields (`weights`, `sticky`,
   `circuit_breaker`, `retry`); code that builds it with a struct literal must

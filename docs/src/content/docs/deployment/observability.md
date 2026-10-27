@@ -47,6 +47,10 @@ Present automatically — no `MetricsLayer` or other opt-in needed — for every
 
 Wire `ReverseProxy::with_circuit_breaker(Arc::new(circuit_breaker::global()))` to get this metric for free alongside [automatic breaker integration](/proxy/circuit-breaker/#automatic-reverseproxy-wiring).
 
+### TLS
+
+`rws_tls_handshakes_total{tls_protocol_version,tls_cipher,tls_group}`, `rws_tls_handshake_failures_total` and `rws_tls_certificate_expiry_timestamp_seconds{name}` — see [TLS metrics](/features/metrics/#tls). Alert on `rws_tls_certificate_expiry_timestamp_seconds - time() < 14 * 86400`.
+
 ### Upstreams
 
 Config-file proxies export `rws_upstream_requests_total`, `rws_upstream_request_duration_seconds`, `rws_upstream_retries_total`, `rws_upstream_backend_up` and `rws_upstream_circuit_breaker_state` per `upstream` and `backend` — see [Upstream metrics](/features/metrics/#upstream-metrics).

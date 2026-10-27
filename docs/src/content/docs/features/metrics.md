@@ -151,6 +151,26 @@ use rust_web_server::metrics;
 metrics::record_route("GET", "/jobs/run", 200, 0.042);
 ```
 
+## TLS
+
+With a certificate configured, the TLS listener reports what each handshake negotiated and when the certificates it serves expire:
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `rws_tls_handshakes_total` | Counter | `tls_protocol_version`, `tls_cipher`, `tls_group` | Completed handshakes (HTTP/1.1 and HTTP/2 over TLS). `tls_group` is the key exchange: `X25519MLKEM768` (post-quantum hybrid, preferred when the client offers it), `X25519`, `secp256r1`, … |
+| `rws_tls_handshake_failures_total` | Counter | — | Handshakes that failed (not counting clients that never finished) |
+| `rws_tls_certificate_expiry_timestamp_seconds` | Gauge | `name` | The leaf certificate's notAfter, Unix seconds: `default`, each `[[virtual_host]]` domain, each [on-demand](/features/acme/) name; updated when certificates are reloaded (SIGHUP, ACME renewal) |
+
+HTTP/3 handshakes aren't counted: the QUIC library doesn't expose what its TLS session negotiated.
+
+```promql
+# Certificates expiring within 14 days
+rws_tls_certificate_expiry_timestamp_seconds - time() < 14 * 86400
+
+# Share of handshakes with a post-quantum key exchange
+sum(rate(rws_tls_handshakes_total{tls_group=~".*MLKEM.*"}[1h])) / sum(rate(rws_tls_handshakes_total[1h]))
+```
+
 ## Circuit breaker state
 
 `rws_circuit_breaker_state{backend}` is included automatically — no `MetricsLayer` or other opt-in needed — for every backend known to [`circuit_breaker::global()`](/proxy/circuit-breaker/):
