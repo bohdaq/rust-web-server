@@ -60,7 +60,7 @@ pub mod metrics;
 pub use baggage::Baggage;
 
 use std::cell::{Cell, RefCell};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -72,9 +72,6 @@ use crate::response::Response;
 use crate::server::ConnectionInfo;
 
 // ── ID generation ─────────────────────────────────────────────────────────────
-
-/// Drives the sampling decision (`GlobalTracer::should_sample`).
-static COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// 64 random bits: splitmix64 over a per-thread state seeded from the
 /// standard library's OS-random hash keys. Not for secrets — IDs only have to
@@ -97,6 +94,18 @@ fn random_u64() -> u64 {
         z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
         z ^ (z >> 31)
     })
+}
+
+/// The head-sampling decision for a new trace: `roll` (random) lands below
+/// `rate` in parts per ten thousand.
+fn sampled(roll: u64, rate: f64) -> bool {
+    if rate >= 1.0 {
+        return true;
+    }
+    if rate <= 0.0 {
+        return false;
+    }
+    roll % 10_000 < (rate * 10_000.0) as u64
 }
 
 /// Generate a new random 128-bit trace ID (never all zeros).
@@ -952,11 +961,7 @@ struct GlobalTracer {
 
 impl GlobalTracer {
     fn should_sample(&self) -> bool {
-        if self.sample_rate >= 1.0 { return true; }
-        if self.sample_rate <= 0.0 { return false; }
-        // Use the counter as a pseudo-random source — cheap and uniform enough.
-        let n = COUNTER.load(Ordering::Relaxed);
-        (n % 10000) < (self.sample_rate * 10000.0) as u64
+        sampled(random_u64(), self.sample_rate)
     }
 
     fn record(&self, span: SpanData) {

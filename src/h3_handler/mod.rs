@@ -128,11 +128,13 @@ async fn handle_stream(
     };
 
     let started = std::time::Instant::now();
+    let method = rws_request.method.clone();
     let (rws_request, result) =
         match crate::server::http1_async::execute_request(app, rws_request, &connection).await {
             Ok(done) => done,
             Err(e) => {
                 eprintln!("Handler panicked on H3 stream: {}", e);
+                crate::metrics::http::observe(&method, 500, true, "HTTP/3", started);
                 send_error_response(stream, StatusCode::INTERNAL_SERVER_ERROR).await;
                 return;
             }
@@ -141,6 +143,7 @@ async fn handle_stream(
         Ok(r) => r,
         Err(message) => {
             eprintln!("App error on H3 stream: {}", message);
+            crate::metrics::http::observe(&method, 500, true, "HTTP/3", started);
             send_error_response(stream, StatusCode::INTERNAL_SERVER_ERROR).await;
             return;
         }

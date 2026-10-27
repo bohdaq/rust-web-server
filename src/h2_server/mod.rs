@@ -1357,10 +1357,12 @@ fn finish(request: Request, result: Result<Result<Response, String>, String>, pe
         Ok(Ok(r)) => r,
         Ok(Err(message)) => {
             eprintln!("App error on H2 stream: {}", message);
+            crate::metrics::http::observe(&request.method, 500, https, "HTTP/2", started);
             return None;
         }
         Err(e) => {
             eprintln!("Handler panicked on H2 stream: {}", e);
+            crate::metrics::http::observe(&request.method, 500, https, "HTTP/2", started);
             return None;
         }
     };

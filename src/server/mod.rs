@@ -449,6 +449,7 @@ impl Server {
             let mut response = match app.execute(&request, &connection) {
                 Ok(r) => r,
                 Err(message) => {
+                    crate::metrics::http::observe(&request.method, 400, false, &request.http_version, started);
                     let raw_response = Server::bad_request_response(message.clone());
                     let boxed_stream = stream.write(raw_response.borrow());
                     if boxed_stream.is_ok() { stream.flush().unwrap(); }

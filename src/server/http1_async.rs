@@ -178,6 +178,7 @@ where
             let mut response = match result {
                 Ok(r) => r,
                 Err(message) => {
+                    crate::metrics::http::observe(&request.method, 400, is_tls, &request.http_version, started);
                     write_and_flush(&mut stream, &Server::bad_request_response(message.clone())).await;
                     return Err(message);
                 }
@@ -283,6 +284,7 @@ where
         let mut response = match result {
             Ok(r) => r,
             Err(message) => {
+                crate::metrics::http::observe(&request.method, 400, is_tls, &request.http_version, started);
                 write_and_flush(&mut stream, &Server::bad_request_response(message.clone())).await;
                 return Err(message);
             }

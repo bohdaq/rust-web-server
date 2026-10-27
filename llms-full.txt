@@ -9343,7 +9343,7 @@ Every request on every protocol — HTTP/1.1, HTTP/2 (TLS and h2c), HTTP/3 — i
 | `network_protocol_version` | `1.0`, `1.1`, `2`, `3` |
 | `url_scheme` | `http` or `https` |
 
-There is no path label, so the number of series stays bounded however many URLs are requested ([`MetricsLayer`](#per-route-metrics-with-metricslayer) has per-path series). Buckets are the convention's advised boundaries: 5 ms, 10 ms, 25 ms, 50 ms, 75 ms, 100 ms, 250 ms, 500 ms, 750 ms, 1 s, 2.5 s, 5 s, 7.5 s, 10 s. The duration runs from when the request is handed to the application until its response is ready to write — the transfer of a streamed body (a large file, a proxied stream, SSE) isn't included.
+There is no path label, so the number of series stays bounded however many URLs are requested ([`MetricsLayer`](#per-route-metrics-with-metricslayer) has per-path series). Buckets are the convention's advised boundaries: 5 ms, 10 ms, 25 ms, 50 ms, 75 ms, 100 ms, 250 ms, 500 ms, 750 ms, 1 s, 2.5 s, 5 s, 7.5 s, 10 s. The duration runs from when the request is handed to the application until its response is ready to write — the transfer of a streamed body (a large file, a proxied stream, SSE) isn't included. A request the application fails is counted with the status rws sends for it (`400` on HTTP/1.1, `500` on HTTP/2 and HTTP/3); a request rejected before it reaches the application (malformed, too large, timed out) isn't.
 
 ```promql
 # p99 per protocol

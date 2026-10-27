@@ -758,3 +758,17 @@ fn http_client_attributes_follow_the_conventions() {
     assert_eq!((Some(200), None), http_client_outcome(Ok(200)));
     assert_eq!((None, Some("refused".to_string())), http_client_outcome(Err("refused")));
 }
+
+#[test]
+fn sampling_follows_the_rate() {
+    use super::sampled;
+    assert!((0..10_000).all(|roll| sampled(roll, 1.0)));
+    assert!(!(0..10_000).any(|roll| sampled(roll, 0.0)));
+    let admitted: Vec<u64> = (0..10_000).filter(|roll| sampled(*roll, 0.25)).collect();
+    assert_eq!(2_500, admitted.len());
+    assert_eq!(Some(&2_499), admitted.last(), "exactly the rolls below 2500");
+    assert!(sampled(12_345, 0.25) == sampled(2_345, 0.25), "rolls wrap at ten thousand");
+    // With random rolls, a rate of 0.1 samples about a tenth.
+    let hits = (0..20_000).filter(|_| sampled(super::random_u64(), 0.1)).count();
+    assert!((1_500..2_500).contains(&hits), "{hits}");
+}
