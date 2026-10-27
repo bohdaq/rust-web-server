@@ -9330,6 +9330,51 @@ rws_active_connections 7
 
 When `MetricsLayer` is active, per-route metrics are appended to the same response body.
 
+A scraper whose `Accept` header asks for `application/vnd.google.protobuf; proto=io.prometheus.client.MetricFamily` (Prometheus does when `scrape_native_histograms` is on) gets the same metrics in the Prometheus protobuf format instead — the only format that carries [native histograms](#native-histograms).
+
+## HTTP server duration (OpenTelemetry)
+
+Every request on every protocol — HTTP/1.1, HTTP/2 (TLS and h2c), HTTP/3 — is recorded by the server core in `http_server_request_duration_seconds`, the OpenTelemetry [`http.server.request.duration`](https://opentelemetry.io/docs/specs/semconv/http/http-metrics/#metric-httpserverrequestduration) metric under its Prometheus name. No layer or setting is needed.
+
+| Label | Values |
+|---|---|
+| `http_request_method` | `GET`, `POST`, … (the nine standard methods); anything else `_OTHER` |
+| `http_response_status_code` | the status sent |
+| `network_protocol_version` | `1.0`, `1.1`, `2`, `3` |
+| `url_scheme` | `http` or `https` |
+
+There is no path label, so the number of series stays bounded however many URLs are requested ([`MetricsLayer`](#per-route-metrics-with-metricslayer) has per-path series). Buckets are the convention's advised boundaries: 5 ms, 10 ms, 25 ms, 50 ms, 75 ms, 100 ms, 250 ms, 500 ms, 750 ms, 1 s, 2.5 s, 5 s, 7.5 s, 10 s. The duration runs from when the request is handed to the application until its response is ready to write — the transfer of a streamed body (a large file, a proxied stream, SSE) isn't included.
+
+```promql
+# p99 per protocol
+histogram_quantile(0.99, sum by (le, network_protocol_version) (rate(http_server_request_duration_seconds_bucket[5m])))
+
+# 5xx ratio
+sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m]))
+  / sum(rate(http_server_request_duration_seconds_count[5m]))
+```
+
+### Native histograms
+
+`http_server_request_duration_seconds` also has exponential buckets (schema 3: eight per power of two, each about 9% wider than the last), served as a [native histogram](https://prometheus.io/docs/specs/native_histograms/) when Prometheus scrapes in the protobuf format. Prometheus 3.9 and later need `scrape_native_histograms` set on the job:
+
+```yaml
+scrape_configs:
+  - job_name: rws
+    scrape_native_histograms: true
+    static_configs:
+      - targets: ["localhost:7878"]
+```
+
+Prometheus then stores the native form only (unless `always_scrape_classic_histograms` is set), and queries drop `_bucket` and `le`:
+
+```promql
+histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds[5m])))
+histogram_count(rate(http_server_request_duration_seconds{http_response_status_code="200"}[5m]))
+```
+
+Without `scrape_native_histograms` nothing changes: Prometheus asks for the text format and gets the classic buckets.
+
 ## Per-route metrics with `MetricsLayer`
 
 Wrap your application once at startup to enable per-route request counts and latency histograms:
@@ -18122,6 +18167,7 @@ Server-wide counters updated by the request loop:
 | `rws_requests_total` | Counter | Total HTTP requests received |
 | `rws_errors_total` | Counter | Connections whose handling ended in an error (I/O or application error, or a panicked handler) — not a count of 5xx responses |
 | `rws_active_connections` | Gauge | Number of currently open connections |
+| `http_server_request_duration_seconds` | Histogram | OpenTelemetry `http.server.request.duration` by method, status, scheme and protocol version — a [native histogram](/features/metrics/#native-histograms) for a protobuf scrape |
 
 ### Per-route metrics with MetricsLayer
 

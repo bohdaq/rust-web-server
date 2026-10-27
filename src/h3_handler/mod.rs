@@ -127,6 +127,7 @@ async fn handle_stream(
         body: body.into(),
     };
 
+    let started = std::time::Instant::now();
     let (rws_request, result) =
         match crate::server::http1_async::execute_request(app, rws_request, &connection).await {
             Ok(done) => done,
@@ -147,6 +148,7 @@ async fn handle_stream(
 
     let mut rws_response = rws_response;
     crate::metrics::record_request();
+    crate::metrics::http::observe(&rws_request.method, rws_response.status_code, true, "HTTP/3", started);
     crate::compression::apply_compression(&rws_request, &mut rws_response);
     rws_response.drop_content_for_status();
     rws_response.headers.push(Header::get_hsts_header());

@@ -155,6 +155,7 @@ where
             let keep_alive = framing::keep_alive(&request);
             let handler_app = app.clone();
             let handler_connection = connection.clone();
+            let started = std::time::Instant::now();
             let mut handler = tokio::task::spawn_blocking(move || {
                 let result = handler_app.execute(&request, &handler_connection);
                 (request, result)
@@ -182,6 +183,7 @@ where
                 }
             };
             crate::metrics::record_request();
+            crate::metrics::http::observe(&request.method, response.status_code, is_tls, &request.http_version, started);
             crate::compression::apply_compression(&request, &mut response);
             response.drop_content_for_status();
             if is_tls {
@@ -273,6 +275,7 @@ where
 
         let keep_alive = framing::keep_alive(&request);
 
+        let started = std::time::Instant::now();
         let (request, result) = execute_request(app.clone(), request, &connection)
             .await
             .map_err(|e| format!("request handler panicked: {}", e))?;
@@ -286,6 +289,7 @@ where
         };
 
         crate::metrics::record_request();
+        crate::metrics::http::observe(&request.method, response.status_code, is_tls, &request.http_version, started);
         // A WebSocket upgrade: send the 101, then the connection is the
         // handler's (`WebSocket::upgrade`).
         if let Some(upgrade) = crate::websocket::take_upgrade(&mut response) {

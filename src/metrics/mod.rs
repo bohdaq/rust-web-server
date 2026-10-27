@@ -9,6 +9,11 @@
 //! - `rws_route_requests_total{method,path,status}` — request counts
 //! - `rws_route_duration_seconds{method,path}` — latency histogram
 //!
+//! **HTTP server duration** — `http_server_request_duration_seconds`, the
+//! OpenTelemetry `http.server.request.duration` metric, recorded by the server
+//! core for every request ([`http`]); native-histogram buckets are served in
+//! the protobuf format ([`exposition`]) to a scraper that asks for it.
+//!
 //! **Circuit breaker state** — `rws_circuit_breaker_state{backend}` (gauge,
 //! `0`=closed, `1`=half_open, `2`=open) is emitted automatically for every
 //! backend known to [`crate::circuit_breaker::global`], with no opt-in layer
@@ -35,6 +40,9 @@ use crate::middleware::Middleware;
 use crate::request::Request;
 use crate::response::Response;
 use crate::server::ConnectionInfo;
+
+pub mod exposition;
+pub mod http;
 
 // ── server-wide atomics ───────────────────────────────────────────────────────
 
@@ -199,6 +207,18 @@ mod tests;
 
 /// Returns a Prometheus text-format snapshot of all server-wide and per-route metrics.
 pub fn prometheus_text() -> String {
+    let mut out = prometheus_text_without_http();
+    let http_text = http::prometheus_text();
+    if !http_text.is_empty() {
+        out.push('\n');
+        out.push_str(&http_text);
+    }
+    out
+}
+
+/// Everything but `http_server_request_duration_seconds` (which the protobuf
+/// format builds itself, with its native buckets).
+fn prometheus_text_without_http() -> String {
     let requests = REQUESTS_TOTAL.load(Ordering::Relaxed);
     let errors   = ERRORS_TOTAL.load(Ordering::Relaxed);
     let active   = ACTIVE_CONNECTIONS.load(Ordering::Relaxed);

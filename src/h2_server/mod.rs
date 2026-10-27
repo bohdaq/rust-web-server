@@ -169,6 +169,8 @@ impl Stream {
 type Completed = (u32, Option<(Response, bool)>);
 
 struct Conn {
+    /// Over TLS (not h2c).
+    https: bool,
     out: Vec<u8>,
     decoder: hpack::Decoder,
     encoder: hpack::Encoder,
@@ -196,9 +198,25 @@ struct Conn {
 
 /// Serve one HTTP/2 connection (after ALPN chose `h2`).
 pub async fn handle_connection<S>(
+    io: S,
+    peer_addr: SocketAddr,
+    sni_hostname: Option<String>,
+    app: impl Application + Send + Clone + 'static,
+) -> Result<(), String>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+{
+    serve(io, peer_addr, sni_hostname, true, app).await
+}
+
+/// [`handle_connection`] for a connection over TLS (`https`) or cleartext
+/// (h2c): that decides `url.scheme` in the request metrics and whether
+/// responses carry `Strict-Transport-Security`.
+pub(crate) async fn serve<S>(
     mut io: S,
     peer_addr: SocketAddr,
     sni_hostname: Option<String>,
+    https: bool,
     app: impl Application + Send + Clone + 'static,
 ) -> Result<(), String>
 where
@@ -230,6 +248,7 @@ where
         max_body_size: crate::entry_point::get_max_body_size(),
         in_flight: 0,
         credit_tx,
+        https,
     };
     let (done_tx, mut done_rx) = mpsc::unbounded_channel::<Completed>();
 
@@ -756,10 +775,11 @@ impl Conn {
             s.streamed = Some(StreamedBody { tx, content_length, received: 0 });
         }
         self.in_flight += 1;
-        let (app, connection, done) = (app.clone(), connection.clone(), done.clone());
+        let (app, connection, done, https) = (app.clone(), connection.clone(), done.clone(), self.https);
+        let started = Instant::now();
         tokio::spawn(async move {
             let response = match crate::server::http1_async::execute_blocking(app, request, connection).await {
-                Ok((request, result)) => finish(request, Ok(result), peer),
+                Ok((request, result)) => finish(request, Ok(result), peer, started, https),
                 Err(e) => {
                     eprintln!("Handler panicked on H2 stream: {}", e);
                     None
@@ -906,18 +926,19 @@ impl Conn {
         // As on HTTP/1.1: a quick bodiless request the app answers inline
         // runs on this task; anything else (bodies, proxying, handlers that
         // may block) in its own.
+        let started = Instant::now();
         if request.body.is_empty() && app.runs_inline(&request, connection) {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.execute(&request, connection)))
                 .map_err(|_| "handler panicked".to_string());
-            let response = finish(request, result, peer);
+            let response = finish(request, result, peer, started, self.https);
             self.respond(stream, response);
             return Ok(());
         }
         self.in_flight += 1;
-        let (app, connection, done) = (app.clone(), connection.clone(), done.clone());
+        let (app, connection, done, https) = (app.clone(), connection.clone(), done.clone(), self.https);
         tokio::spawn(async move {
             let response = match crate::server::http1_async::execute_request(app, request, &connection).await {
-                Ok((request, result)) => finish(request, Ok(result), peer),
+                Ok((request, result)) => finish(request, Ok(result), peer, started, https),
                 Err(e) => {
                     eprintln!("Handler panicked on H2 stream: {}", e);
                     None
@@ -1329,9 +1350,9 @@ fn promote_body_headers(response: &mut Response) {
     }
 }
 
-/// After the app ran: metrics, gzip, HSTS and the access log; `None` (a
-/// 500) for an error.
-fn finish(request: Request, result: Result<Result<Response, String>, String>, peer: SocketAddr) -> Option<(Response, bool)> {
+/// After the app ran: metrics, gzip, HSTS (over TLS) and the access log;
+/// `None` (a 500) for an error.
+fn finish(request: Request, result: Result<Result<Response, String>, String>, peer: SocketAddr, started: Instant, https: bool) -> Option<(Response, bool)> {
     let mut response = match result {
         Ok(Ok(r)) => r,
         Ok(Err(message)) => {
@@ -1344,10 +1365,13 @@ fn finish(request: Request, result: Result<Result<Response, String>, String>, pe
         }
     };
     crate::metrics::record_request();
+    crate::metrics::http::observe(&request.method, response.status_code, https, "HTTP/2", started);
     crate::compression::apply_compression(&request, &mut response);
     // 1xx/204/304: no DATA frame, no content-length (#54).
     response.drop_content_for_status();
-    response.headers.push(Header::get_hsts_header());
+    if https {
+        response.headers.push(Header::get_hsts_header());
+    }
     Log::log_access(&request, &response, &peer);
     let is_head = request.method == crate::request::METHOD.head;
     Some((response, is_head))

@@ -9,8 +9,9 @@ use crate::server::ConnectionInfo;
 
 /// Prometheus metrics endpoint: `GET /metrics`.
 ///
-/// Returns request counters and active-connection gauge in Prometheus
-/// text exposition format (`text/plain; version=0.0.4`).
+/// Returns every metric in the Prometheus text exposition format
+/// (`text/plain; version=0.0.4`), or the protobuf format — the one that
+/// carries native histograms — when the scraper's `Accept` prefers it.
 pub struct MetricsController;
 
 const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4";
@@ -20,19 +21,24 @@ impl Controller for MetricsController {
         request.method == METHOD.get && request.request_uri == "/metrics"
     }
 
-    fn process(_request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
-        MetricsController::fill_response(&mut response);
+    fn process(request: &Request, mut response: Response, _connection: &ConnectionInfo) -> Response {
+        MetricsController::fill_response(request, &mut response);
         response
     }
 }
 
 impl MetricsController {
-    fn fill_response(response: &mut Response) {
-        let body = crate::metrics::prometheus_text().into_bytes();
+    /// Text format, or protobuf (with native histograms) when `Accept` asks for it.
+    fn fill_response(request: &Request, response: &mut Response) {
+        use crate::metrics::exposition;
+        let (body, content_type) = match request.header("Accept").map(|h| &*h.value) {
+            Some(accept) if exposition::accepts_protobuf(accept) => (exposition::protobuf(), exposition::PROTOBUF_CONTENT_TYPE),
+            _ => (crate::metrics::prometheus_text().into_bytes(), PROMETHEUS_CONTENT_TYPE),
+        };
         response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
         response.content_range_list = vec![
-            Range::get_content_range(body, PROMETHEUS_CONTENT_TYPE.to_string())
+            Range::get_content_range(body, content_type.to_string())
         ];
     }
 
@@ -40,8 +46,8 @@ impl MetricsController {
         request.method == METHOD.get && request.request_uri == "/metrics"
     }
 
-    pub fn process_request(_request: &Request, mut response: Response) -> Response {
-        MetricsController::fill_response(&mut response);
+    pub fn process_request(request: &Request, mut response: Response) -> Response {
+        MetricsController::fill_response(request, &mut response);
         response
     }
 }

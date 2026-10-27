@@ -445,6 +445,7 @@ impl Server {
 
             let keep_alive = framing::keep_alive(&request);
 
+            let started = std::time::Instant::now();
             let mut response = match app.execute(&request, &connection) {
                 Ok(r) => r,
                 Err(message) => {
@@ -456,6 +457,7 @@ impl Server {
             };
 
             crate::metrics::record_request();
+            crate::metrics::http::observe(&request.method, response.status_code, false, &request.http_version, started);
             // A WebSocket upgrade: send the 101, then the connection is the
             // handler's, on a thread of its own.
             if let Some(upgrade) = crate::websocket::take_upgrade(&mut response) {
@@ -972,7 +974,7 @@ async fn serve_plain_connection(
     let _ = tcp_stream.set_nodelay(true);
     let Some(peer_addr) = client_address(&mut tcp_stream, peer_addr).await else { return };
     if starts_with_h2_preface(&tcp_stream).await {
-        if let Err(e) = crate::h2_server::handle_connection(tcp_stream, peer_addr, None, app).await {
+        if let Err(e) = crate::h2_server::serve(tcp_stream, peer_addr, None, false, app).await {
             eprintln!("H2C connection error: {}", e);
         }
         return;

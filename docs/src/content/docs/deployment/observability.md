@@ -16,6 +16,7 @@ Server-wide counters updated by the request loop:
 | `rws_requests_total` | Counter | Total HTTP requests received |
 | `rws_errors_total` | Counter | Connections whose handling ended in an error (I/O or application error, or a panicked handler) — not a count of 5xx responses |
 | `rws_active_connections` | Gauge | Number of currently open connections |
+| `http_server_request_duration_seconds` | Histogram | OpenTelemetry `http.server.request.duration` by method, status, scheme and protocol version — a [native histogram](/features/metrics/#native-histograms) for a protobuf scrape |
 
 ### Per-route metrics with MetricsLayer
 

@@ -21,6 +21,19 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `rws_upstream_request_duration_seconds`, `rws_upstream_retries_total`,
   `rws_upstream_backend_up`, `rws_upstream_circuit_breaker_state`.
 - `ci/e2e/proxy_policies.sh` runs these against real backends.
+- `http_server_request_duration_seconds` (#25): the OpenTelemetry
+  `http.server.request.duration` metric, recorded by the server core for every
+  request on HTTP/1.1, HTTP/2 and HTTP/3, labelled by method, status, scheme
+  and protocol version.
+- Prometheus native histograms (#25): `/metrics` answers in the protobuf
+  format when the scraper asks for it (Prometheus with
+  `scrape_native_histograms`), with exponential buckets for
+  `http_server_request_duration_seconds`. `ci/e2e/native_histograms.sh`
+  checks it against Prometheus 3.15.
+
+### Fixed
+
+- HTTP/2 over cleartext (h2c) no longer sends `Strict-Transport-Security`.
 
 ### Changed
 

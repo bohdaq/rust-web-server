@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, grpc, proxy-protocol, realtime]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, native-histograms, grpc, proxy-protocol, realtime]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -147,6 +147,14 @@ jobs:
       - name: Upstream weights, stickiness, retries, circuit breaker, metrics
         if: matrix.check == 'proxy-policies'
         run: ci/e2e/proxy_policies.sh target/debug/rws
+      - name: Native histograms scraped by Prometheus 3 (protobuf /metrics)
+        if: matrix.check == 'native-histograms'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v3.15.0 --repo prometheus/prometheus --pattern 'prometheus-3.15.0.linux-amd64.tar.gz' --dir "$RUNNER_TEMP"
+          tar xzf "$RUNNER_TEMP/prometheus-3.15.0.linux-amd64.tar.gz" -C "$RUNNER_TEMP"
+          ci/e2e/native_histograms.sh target/debug/rws "$RUNNER_TEMP/prometheus-3.15.0.linux-amd64/prometheus"
       - name: gRPC against tonic (every call type, cleartext and mTLS upstreams; h2c with grpcurl)
         if: matrix.check == 'grpc'
         env:
