@@ -199,7 +199,7 @@ impl<S: Send + Sync + 'static> AsyncAppWithState<S> {
         self.add("DELETE", pattern, handler)
     }
 
-    /// Add `GET /openapi.json` (a generated OpenAPI 3.0 document covering
+    /// Add `GET /openapi.json` (a generated OpenAPI 3.1 document covering
     /// every route registered so far) and `GET /docs` (Swagger UI, loaded
     /// from a CDN, pointed at `/openapi.json`).
     ///

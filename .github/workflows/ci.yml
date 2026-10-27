@@ -29,7 +29,7 @@ jobs:
           - name: http1 only
             args: --no-default-features --features http1
           - name: tls + auth + sso + serde
-            args: --features "sso sso-server sso-saml auth-asymmetric http-client acme serde macros"
+            args: --features "sso sso-server sso-saml auth-asymmetric http-client acme serde macros openapi"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, native-histograms, otlp, grpc, proxy-protocol, realtime]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -196,6 +196,13 @@ jobs:
         run: |
           cargo build --example realtime
           ci/e2e/realtime.sh target/debug/examples/realtime
+      - name: OpenAPI 3.1 document validated by openapi-spec-validator
+        if: matrix.check == 'openapi'
+        run: |
+          cargo build --example mcp_inventory --features "macros serde sso openapi"
+          python3 -m venv "$RUNNER_TEMP/oasv"
+          "$RUNNER_TEMP/oasv/bin/pip" install --quiet openapi-spec-validator==0.9.0
+          ci/e2e/openapi.sh target/debug/examples/mcp_inventory "$RUNNER_TEMP/oasv/bin/python"
 
   # Every parser that sees untrusted input — see fuzz/README.md. 30 s per
   # target on push; 10 minutes each in the weekly scheduled run.

@@ -1,9 +1,12 @@
 //! An inventory service whose domain functions are both a REST API and MCP
-//! tools an AI agent can call — the same code behind both.
+//! tools an AI agent can call — the same code behind both. The REST API is
+//! described in OpenAPI 3.1 from the same `JsonSchema` types (`/openapi.json`,
+//! Swagger UI at `/docs`).
 //!
 //! ```sh
-//! MCP_TOKEN=$(openssl rand -hex 32) cargo run --example mcp_inventory --features "macros serde sso"
+//! MCP_TOKEN=$(openssl rand -hex 32) cargo run --example mcp_inventory --features "macros serde sso openapi"
 //! curl localhost:7878/items
+//! curl localhost:7878/openapi.json
 //! claude mcp add --transport http inventory http://localhost:7878/mcp --header "Authorization: Bearer $MCP_TOKEN"
 //! ```
 //!
@@ -15,6 +18,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use rust_web_server::mcp::{McpContent, McpServer, ToolAnnotations};
+use rust_web_server::openapi::{OpenApiConfig, Operation};
 use rust_web_server::prelude::*;
 use rust_web_server::response::StatusCodeReasonPhrase;
 use rust_web_server::state::AppWithState;
@@ -64,6 +68,19 @@ pub struct AdjustStock {
     pub sku: String,
     /// Units to add (positive) or remove (negative).
     pub delta: i64,
+}
+
+/// The body of `POST /items/:sku/adjust`.
+#[derive(Deserialize, JsonSchema)]
+pub struct StockDelta {
+    /// Units to add (positive) or remove (negative).
+    pub delta: i64,
+}
+
+/// What a failed REST call answers.
+#[derive(Serialize, JsonSchema)]
+pub struct ApiError {
+    pub error: String,
 }
 
 /// The items, the one place both the REST routes and the MCP tools change.
@@ -137,16 +154,43 @@ fn rest(inventory: Arc<Inventory>) -> AppWithState<Arc<Inventory>> {
             result_response(inventory.get(params.get("sku").unwrap_or_default()), STATUS_CODE_REASON_PHRASE.n404_not_found)
         })
         .post("/items/:sku/adjust", |request, params, _, inventory| {
-            #[derive(Deserialize)]
-            struct Body {
-                delta: i64,
-            }
-            let Ok(body) = serde_json::from_slice::<Body>(&request.body) else {
+            let Ok(body) = serde_json::from_slice::<StockDelta>(&request.body) else {
                 return json_response(STATUS_CODE_REASON_PHRASE.n400_bad_request, r#"{"error":"expected {\"delta\": n}"}"#.into());
             };
             let change = AdjustStock { sku: params.get("sku").unwrap_or_default().to_string(), delta: body.delta };
             result_response(inventory.adjust(&change, None), STATUS_CODE_REASON_PHRASE.n409_conflict)
         })
+        .openapi(openapi())
+}
+
+/// The REST API's OpenAPI description: the same types the handlers and the
+/// MCP tools use.
+fn openapi() -> OpenApiConfig {
+    OpenApiConfig::new("Inventory", env!("CARGO_PKG_VERSION"))
+        .description("Stock levels, as a REST API (and as MCP tools at `/mcp`).")
+        .operation("GET", "/items", Operation::new("List every item").operation_id("listItems").tag("items").response::<Items>(200, "The items"))
+        .operation(
+            "GET",
+            "/items/:sku",
+            Operation::new("Look up one item")
+                .operation_id("getItem")
+                .tag("items")
+                .path_param_schema("sku", r#"{"type":"string"}"#, "Stock keeping unit, e.g. MUG-01")
+                .response::<Item>(200, "The item")
+                .response::<ApiError>(404, "No item with that SKU"),
+        )
+        .operation(
+            "POST",
+            "/items/:sku/adjust",
+            Operation::new("Add or remove stock")
+                .operation_id("adjustStock")
+                .tag("items")
+                .path_param_schema("sku", r#"{"type":"string"}"#, "Stock keeping unit")
+                .body::<StockDelta>()
+                .response::<Item>(200, "The item after the change")
+                .response::<ApiError>(400, "The body isn't {\"delta\": n}")
+                .response::<ApiError>(409, "Unknown SKU, or the change would take stock below zero"),
+        )
 }
 
 // ── MCP ──────────────────────────────────────────────────────────────────────
@@ -310,5 +354,21 @@ mod tests {
         assert_eq!(Some("1".to_string()), caller(Some(r#"{"sub":"1"}"#)));
         assert_eq!(None, caller(None));
         assert_eq!(None, caller(Some("not json")));
+    }
+
+    #[test]
+    fn the_rest_api_is_described_in_openapi_3_1() {
+        let (client, _) = client();
+        let response = client.get("/openapi.json").send();
+        assert_eq!(200, response.status());
+        let spec: serde_json::Value = serde_json::from_slice(response.body_bytes()).unwrap();
+        assert_eq!("3.1.0", spec["openapi"]);
+        let adjust = &spec["paths"]["/items/{sku}/adjust"]["post"];
+        assert_eq!("adjustStock", adjust["operationId"]);
+        assert_eq!("integer", adjust["requestBody"]["content"]["application/json"]["schema"]["properties"]["delta"]["type"]);
+        let item = &adjust["responses"]["200"]["content"]["application/json"]["schema"];
+        assert!(item["properties"]["onHand"].is_object(), "serde's camelCase names: {item}");
+        assert!(adjust["responses"]["409"]["content"]["application/json"]["schema"]["properties"]["error"].is_object());
+        assert_eq!("sku", spec["paths"]["/items/{sku}"]["get"]["parameters"][0]["name"]);
     }
 }

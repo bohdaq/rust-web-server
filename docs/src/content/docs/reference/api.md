@@ -324,7 +324,8 @@ All model-layer types need `model-sqlite`, `model-postgres` or `model-mysql` (ea
 | Type / Trait | Module | Description |
 |---|---|---|
 | `TestClient` | `test_client` | In-process test client — dispatches requests without a TCP socket. See [TestClient](/testing/test-client/) |
-| `OpenApiConfig` / `build_spec` | `openapi` (`openapi`) | OpenAPI 3.0 from registered routes; `AppWithState::openapi(config)` adds `/openapi.json` and `/docs`. Paths, methods and path parameters only — no body schemas. See [OpenAPI](/features/openapi/) |
+| `OpenApiConfig` / `build_spec` | `openapi` (`openapi`) | OpenAPI 3.1 from registered routes; `AppWithState::openapi(config)` adds `/openapi.json` and `/docs`; `.operation(method, pattern, Operation)` adds bodies, responses and parameters. See [OpenAPI](/features/openapi/) |
+| `Operation` | `openapi` (`openapi`) | One operation's summary, request body, responses, query and path parameters, with schemas from `JsonSchema` types |
 | `AcmeConfig` | `acme` (`acme`) | ACME / Let's Encrypt settings; `AcmeConfig::from_env()` reads `RWS_CONFIG_ACME_*`. See [ACME](/features/acme/) |
 | `AcmeManager` | `acme` (`acme`) | HTTP-01 provisioning and renewal: `.provision_until_ready().await`, `.run_renewal_loop()` |
 

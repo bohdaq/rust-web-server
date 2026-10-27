@@ -5,6 +5,26 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased (18.7.0)
+
+### Added
+
+- OpenAPI request and response schemas (#22): `OpenApiConfig::operation(method,
+  pattern, Operation)` describes an operation's summary, `operationId`, tags,
+  JSON request body (`.body::<T>()`), responses (`.response::<T>(status, …)`,
+  `.status(…)`), query parameters (`.query::<T>()`) and path parameter types,
+  with schemas from `JsonSchema` — the derivation MCP tools use, so serde
+  renames are followed. `examples/mcp_inventory.rs` describes its REST API;
+  `ci/e2e/openapi.sh` validates the document with openapi-spec-validator.
+
+### Changed
+
+- `/openapi.json` is OpenAPI 3.1.0 (was 3.0.3): `JsonSchema` emits JSON Schema
+  2020-12, which 3.1 uses as is. `OpenApiConfig` has a new public field,
+  `operations`; code that builds it with a struct literal must set it
+  (`Vec::new()`), or use `OpenApiConfig::new`.
+- `examples/mcp_inventory.rs` needs the `openapi` feature too.
+
 ## 18.6.0 — 2026-10-27
 
 ### Added

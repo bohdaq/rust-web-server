@@ -12,7 +12,7 @@ app. The runnable version is
 
 ```bash
 MCP_TOKEN=$(openssl rand -hex 32) \
-  cargo run --example mcp_inventory --features "macros serde sso"
+  cargo run --example mcp_inventory --features "macros serde sso openapi"
 curl localhost:7878/items
 claude mcp add --transport http inventory http://localhost:7878/mcp \
   --header "Authorization: Bearer $MCP_TOKEN"
@@ -95,4 +95,4 @@ assert!(adjusted.contains(r#""onHand":1"#));
 assert!(client.get("/items/TEE-02").send().body_text().contains(r#""onHand":1"#));
 ```
 
-`cargo test --example mcp_inventory --features "macros serde sso"` runs them.
+`cargo test --example mcp_inventory --features "macros serde sso openapi"` runs them.

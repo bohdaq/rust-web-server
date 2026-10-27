@@ -72,7 +72,7 @@ test = true
 
 [[example]]
 name = "mcp_inventory"
-required-features = ["macros", "serde", "sso"]
+required-features = ["macros", "serde", "sso", "openapi"]
 test = true
 
 [[example]]

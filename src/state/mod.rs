@@ -292,7 +292,7 @@ impl<S: Send + Sync + 'static> AppWithState<S> {
         WithMiddleware::new(self).wrap(layer)
     }
 
-    /// Add `GET /openapi.json` (a generated OpenAPI 3.0 document covering
+    /// Add `GET /openapi.json` (a generated OpenAPI 3.1 document covering
     /// every route registered so far) and `GET /docs` (Swagger UI, loaded
     /// from a CDN, pointed at `/openapi.json`).
     ///

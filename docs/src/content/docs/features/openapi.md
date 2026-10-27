@@ -1,6 +1,6 @@
 ---
 title: OpenAPI / Swagger
-description: Generate an OpenAPI 3.0 spec and browsable Swagger UI directly from your registered routes.
+description: Generate an OpenAPI 3.1 document, with request and response schemas from your serde types, and a browsable Swagger UI.
 ---
 
 Requires the `openapi` feature:
@@ -32,7 +32,7 @@ let app = App::with_state(Db)
 
 This adds two routes on top of whatever you already registered:
 
-- **`GET /openapi.json`** — the generated OpenAPI 3.0.3 document (`Content-Type: application/json`)
+- **`GET /openapi.json`** — the generated OpenAPI 3.1 document (`Content-Type: application/json`)
 - **`GET /docs`** — Swagger UI, loaded from the `unpkg.com/swagger-ui-dist` CDN, pointed at `/openapi.json`
 
 `AsyncAppWithState::openapi(config)` (requires `http2`) works identically for apps with `async fn` handlers.
@@ -53,25 +53,57 @@ The spec is built once, at the point `.openapi()` is called, from whatever route
 
 Multiple HTTP methods on the same path are merged into a single `paths` entry, matching the OpenAPI structure — e.g. `GET /users` and `POST /users` both appear under `"paths": { "/users": { "get": {...}, "post": {...} } }`.
 
-## Scope: paths and methods, not request/response bodies
+## Request and response schemas
 
-Every generated operation has a generic `200 OK` response and no request or response body schema:
+Describe an operation with an `Operation` and the generated document gets its request body, responses and query parameters, with schemas from your types. They come from `JsonSchema` — `#[derive(JsonSchema)]` (`macros` feature), the derivation [MCP tools](/mcp/agent-tools/) use — so the schema follows `#[serde(rename_all)]` and friends and describes the JSON your handlers really read and write. Rust has no runtime reflection, so the types are named where the operation is described rather than read off the handler:
 
-```json
-{
-  "get": {
-    "summary": "GET /users/{id}",
-    "responses": { "200": { "description": "OK" } },
-    "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
-  }
-}
+```rust
+use rust_web_server::app::App;
+use rust_web_server::openapi::{OpenApiConfig, Operation};
+use rust_web_server::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+/// A stocked item.
+#[derive(Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct Item { sku: String, on_hand: u32 }
+
+/// The body of a stock change.
+#[derive(Deserialize, JsonSchema)]
+struct StockDelta { delta: i64 }
+
+#[derive(Serialize, JsonSchema)]
+struct ApiError { error: String }
+
+let app = App::with_state(inventory)
+    .get("/items/:sku", get_item)
+    .post("/items/:sku/adjust", adjust)
+    .openapi(
+        OpenApiConfig::new("Inventory", "1.0.0")
+            .operation("GET", "/items/:sku", Operation::new("Look up one item")
+                .response::<Item>(200, "The item")
+                .response::<ApiError>(404, "No item with that SKU"))
+            .operation("POST", "/items/:sku/adjust", Operation::new("Add or remove stock")
+                .operation_id("adjustStock")
+                .tag("items")
+                .body::<StockDelta>()
+                .response::<Item>(200, "The item after the change")
+                .status(409, "Stock would go below zero")),
+    );
 ```
 
-This is a deliberate scope boundary, not an oversight: Rust has no runtime type reflection, so producing a JSON Schema for a handler's request body type or a `#[derive(Validate)]` struct would require deriving schema metadata at the macro level — a substantially larger, separate feature. If you need full body schemas today:
+| `Operation` method | In the document |
+|---|---|
+| `new(summary)`, `.description(text)`, `.operation_id(id)`, `.tag(name)`, `.deprecated()` | the operation's summary, description, `operationId`, `tags`, `deprecated` |
+| `.body::<T>()` | a required `application/json` `requestBody` with `T`'s schema; `.body_schema(content_type, schema, required)` for anything else |
+| `.response::<T>(status, description)` | a response with an `application/json` body of `T`; `.response_schema(status, description, content_type, schema)` for other types |
+| `.status(status, description)` | a response without a body (an error, `204`) |
+| `.query::<T>()` | one `in: query` parameter per property of struct `T`, required as `T` requires it; `.query_param(name, schema, required)` for one |
+| `.path_param::<T>(name)` | the path parameter's schema (default: a string); `.path_param_schema(name, schema, description)` |
 
-- Post-process the generated JSON string to inject `requestBody`/response schemas for specific operations, or
-- Build the spec yourself with [`build_spec`](#using-build_spec-directly) from a hand-written `Vec<RouteInfo>`, or
-- Maintain a small hand-written OpenAPI fragment for the handful of routes where body shape matters most, and merge it with the generated output.
+Operations are keyed by method and the route pattern as registered (`/items/:sku`, not `/items/{sku}`); describing one twice keeps the last. A route with no `Operation` still appears, with a generic `200 OK`. An `Operation` for a pattern no route has is documented anyway — for routes served outside the router. Schemas are inline (no `components`); `JsonSchema` emits JSON Schema 2020-12, which is why the document is OpenAPI 3.1 (`Option<T>` becomes `anyOf` with `null`, which 3.0 can't express).
+
+[`examples/mcp_inventory.rs`](https://github.com/bohdaq/rust-web-server/blob/main/examples/mcp_inventory.rs) describes its REST API this way; CI checks its document with an OpenAPI 3.1 validator (`ci/e2e/openapi.sh`, `openapi-spec-validator`).
 
 ## Using `build_spec` directly
 
