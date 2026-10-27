@@ -5,13 +5,16 @@
 # the config file's grpc action — once to a cleartext upstream (grpc://), once
 # to a TLS upstream that requires a client certificate (grpcs:// with
 # tls_ca_file and tls_client_cert_file/tls_client_key_file). The client talks
-# HTTP/2 over TLS to rws.
+# HTTP/2 over TLS to rws. With grpcurl, also cleartext HTTP/2 (h2c) to rws:
+# `grpcurl -plaintext` against the plain listener.
 #
-#   ci/e2e/grpc.sh <path-to-rws> <path-to-e2e-server> <path-to-e2e-client>
+#   ci/e2e/grpc.sh <path-to-rws> <path-to-e2e-server> <path-to-e2e-client> [<path-to-grpcurl>]
 set -euo pipefail
 
 abs() { echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; }
 RWS="$(abs "$1")"; SERVER="$(abs "$2")"; CLIENT="$(abs "$3")"
+GRPCURL="${4:+$(abs "$4")}"
+PROTO_DIR="$(cd "$(dirname "$0")/grpc/proto" && pwd)"
 WORK="$(mktemp -d)"
 PIDS=()
 cleanup() {
@@ -49,12 +52,14 @@ wait_port() { # <port>
 wait_port 50061
 wait_port 50062
 
-run() { # <label> <upstream TOML lines>
+start_rws() { # <label> <upstream TOML lines> [tls]
+  local tls=""
+  [ "${3:-tls}" = tls ] && tls="tls_cert_file = '$WORK/server.pem'
+tls_key_file = '$WORK/server.key'"
   cat > rws.config.toml <<TOML
 ip = '127.0.0.1'
 port = 8761
-tls_cert_file = '$WORK/server.pem'
-tls_key_file = '$WORK/server.key'
+$tls
 
 [[upstream]]
 name = "echo"
@@ -72,10 +77,15 @@ TOML
   local pid=$!
   PIDS+=($pid)
   wait_port 8761
+  RWS_PID=$pid
+}
+stop_rws() { kill "$RWS_PID"; wait "$RWS_PID" 2>/dev/null || true; }
+
+run() { # <label> <upstream TOML lines>
+  start_rws "$1" "$2"
   echo "── $1"
   "$CLIENT" https://localhost:8761 ca.pem || fail "$1"
-  kill "$pid"
-  wait "$pid" 2>/dev/null || true
+  stop_rws
 }
 
 run cleartext-upstream 'backends = ["grpc://127.0.0.1:50061"]'
@@ -84,3 +94,17 @@ tls_ca_file = '$WORK/ca.pem'
 tls_client_cert_file = '$WORK/client.pem'
 tls_client_key_file = '$WORK/client.key'"
 echo "ok: gRPC through rws, cleartext and mutual-TLS upstreams"
+
+if [ -n "$GRPCURL" ]; then
+  start_rws h2c 'backends = ["grpc://127.0.0.1:50061"]' plain
+  echo "── h2c (grpcurl -plaintext)"
+  call() { "$GRPCURL" -plaintext -import-path "$PROTO_DIR" -proto echo.proto -d "$2" 127.0.0.1:8761 "echo.Echo/$1"; }
+  out=$(call Unary '{"text":"hi"}') || fail "h2c unary: $out"
+  echo "$out" | grep -q '"text": "hi"' || fail "h2c unary: $out"
+  out=$(call ServerStream '{"text":"s"}') || fail "h2c server stream: $out"
+  [ "$(echo "$out" | grep -c '"text": "s-')" = 3 ] || fail "h2c server stream: $out"
+  if out=$(call Fail '{}' 2>&1); then fail "h2c error status: $out"; fi
+  echo "$out" | grep -q "InvalidArgument" || fail "h2c error status: $out"
+  stop_rws
+  echo "ok: cleartext HTTP/2 (h2c) from grpcurl -plaintext"
+fi

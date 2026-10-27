@@ -1887,3 +1887,41 @@ fn framing_body_cut_short_is_not_dispatched() {
     Server::process(&mut stream, make_connection(), EchoFraming).unwrap();
     assert!(stream.written.is_empty(), "{}", String::from_utf8_lossy(&stream.written));
 }
+
+#[cfg(feature = "http2")]
+#[tokio::test]
+async fn the_plain_listener_serves_cleartext_http2_beside_http1() {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = crate::app::App::with_state(()).put("/p", |_, _, _, _| {
+        crate::response::Response::text(crate::response::STATUS_CODE_REASON_PHRASE.n200_ok, "put")
+    });
+    tokio::spawn(crate::server::Server::run_plain(listener, app));
+
+    // Prior knowledge: the HTTP/2 preface straight away.
+    let tcp = tokio::net::TcpStream::connect(addr).await.unwrap();
+    let (send, connection) = h2::client::handshake(tcp).await.unwrap();
+    tokio::spawn(connection);
+    let request = http::Request::get(format!("http://{addr}/healthz")).body(()).unwrap();
+    let (response, _) = send.ready().await.unwrap().send_request(request, true).unwrap();
+    assert_eq!(200, response.await.unwrap().status().as_u16());
+
+    // HTTP/1.1 on the same listener, including a method starting with 'P'.
+    let replies = tokio::task::spawn_blocking(move || {
+        let mut replies = Vec::new();
+        for request in ["GET /healthz HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n", "PUT /p HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"] {
+            let mut stream = std::net::TcpStream::connect(addr).unwrap();
+            stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+            stream.write_all(request.as_bytes()).unwrap();
+            let mut reply = String::new();
+            let _ = stream.read_to_string(&mut reply);
+            replies.push(reply);
+        }
+        replies
+    })
+    .await
+    .unwrap();
+    assert!(replies[0].starts_with("HTTP/1.1 200"), "{}", replies[0]);
+    assert!(replies[1].starts_with("HTTP/1.1 200") && replies[1].ends_with("put"), "{}", replies[1]);
+}

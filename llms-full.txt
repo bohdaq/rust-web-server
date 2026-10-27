@@ -1112,6 +1112,7 @@ don't use them.
 
 | Variable | Default | Options | Description |
 |----------|---------|---------|-------------|
+| `RWS_CONFIG_PROXY_PROTOCOL` | `false` | boolean | Every connection to the main listener starts with a PROXY protocol v1 or v2 header (HAProxy `send-proxy`, AWS NLB, GCP); its source address becomes the client address. Connections without one are closed. Since 18.3.0; read at startup. See [Behind a load balancer](/proxy/overview/#behind-an-l4-load-balancer-proxy-protocol). |
 | `RWS_CONFIG_WATCH` | `false` | boolean | Reload when `rws.config.toml` (or `RWS_CONFIG_FILE`) or a configured TLS certificate or key changes — the same validated reload as `SIGHUP`, checked once a second (since 18.1.0). Read at startup. See [Hot reload](/features/hot-reload/#reloading-when-the-file-changes). |
 | `RWS_CONFIG_ACCESS_LOG` | (stdout) | path | Append access-log lines to this file instead of stdout (since 18.1.0). Opened at the first line; `SIGUSR1` reopens it (for logrotate). Read at startup. See [Logs](/deployment/observability/#writing-to-a-file). |
 | `RWS_CONFIG_ACCESS_LOG_MAX_SIZE` | `0` | bytes (`K`/`M`/`G` suffixes) | Rotate the access-log file when the next lines would take it past this size: `access.log` → `access.log.1` …. `0` never rotates (leave it to logrotate). |
@@ -1363,6 +1364,7 @@ window_secs  = 60     # Sliding window length in seconds (default: 60)
 ```toml
 log_format              = "json"     # RWS_CONFIG_LOG_FORMAT: "json" (default) | "combined" | "off"
 watch                   = true       # RWS_CONFIG_WATCH: reload when this file or a certificate changes (default false)
+proxy_protocol          = true       # RWS_CONFIG_PROXY_PROTOCOL: connections start with a PROXY protocol header (default false)
 access_log              = "/var/log/rws/access.log"  # RWS_CONFIG_ACCESS_LOG: write the access log here instead of stdout
 access_log_max_size     = "100M"     # RWS_CONFIG_ACCESS_LOG_MAX_SIZE: rotate past this size; 0 (default) = never (use logrotate + SIGUSR1)
 access_log_keep         = 5          # RWS_CONFIG_ACCESS_LOG_KEEP: rotated files kept (access.log.1 … .5)
@@ -6498,6 +6500,20 @@ alpn_protocols = ["h2", "http/1.1"]
 Both protocols share the same port. Browsers, `curl`, and other HTTP/2-capable
 clients negotiate HTTP/2 automatically.
 
+## Cleartext HTTP/2 (h2c)
+
+Without TLS, a client can still speak HTTP/2 by sending the HTTP/2
+connection preface straight away ("prior knowledge") — gRPC clients and
+`grpcurl -plaintext` do. Since 18.3.0 rws's plain-HTTP listener recognises
+the preface and serves the connection as HTTP/2; anything else is HTTP/1.1
+as before. The `Upgrade: h2c` handshake (removed from HTTP/2 in RFC 9113)
+isn't supported.
+
+```bash
+curl --http2-prior-knowledge http://localhost:7878/healthz
+grpcurl -plaintext -proto echo.proto localhost:7878 echo.Echo/Unary
+```
+
 ## Request pipeline
 
 `rws` has its own HTTP/2 server (`h2_server`, since 18.0.0 — the `h2` crate is
@@ -10923,6 +10939,34 @@ Server::run(listener, pool, app); // async builds: Server::run_tls(listener, poo
 | Canary / traffic splitting | No (planned) | Yes (`CanaryLayer`) |
 | Service discovery | No (planned) | Yes (`BackendPool`) |
 | Circuit breaker / retry | No (planned) | Yes (`CircuitBreaker`, `RetryLayer`) |
+
+## Behind an L4 load balancer (PROXY protocol)
+
+A TCP load balancer (HAProxy in `mode tcp`, AWS NLB, GCP's TCP proxy) hides
+the client's address: rws sees the balancer's. With the PROXY protocol the
+balancer prepends the client's address to each connection; turn it on in rws
+(since 18.3.0):
+
+```toml
+proxy_protocol = true   # RWS_CONFIG_PROXY_PROTOCOL
+```
+
+Every connection to the main listener must then start with a version 1 or
+version 2 header — before the TLS handshake on HTTPS — and the address in it
+is the client address: in access logs, rate limits, IP filters and
+`X-Forwarded-For` to upstreams. A connection without a valid header within
+10 seconds is closed, so only enable it when every client comes through the
+balancer. The balancer's own health checks (v2 `LOCAL`, v1 `UNKNOWN`) keep
+its address. The setting is read at startup.
+
+```text
+# HAProxy
+backend rws
+    mode tcp
+    server rws1 10.0.0.5:443 send-proxy-v2   # or send-proxy for version 1
+```
+
+HTTP/3 (QUIC) has no PROXY protocol; it is unaffected.
 
 ## Detection logic
 

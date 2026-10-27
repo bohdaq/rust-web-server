@@ -23,6 +23,7 @@ pub(crate) mod sendfile;
 #[cfg(feature = "http2")]
 pub mod per_core;
 pub(crate) mod framing;
+pub mod proxy_protocol;
 
 // The TCP/thread-pool accept loop below (`Server::setup`/`run`/`process`/…) needs
 // `std::net::TcpListener` and OS threads, neither available on `wasm32-wasip2`.
@@ -798,6 +799,21 @@ impl Server {
         }
 
         pool.execute(move || {
+            let mut stream = stream;
+            let mut connection = connection;
+            if proxy_protocol::enabled() {
+                // Read on the worker: a slow load balancer mustn't hold the accept loop.
+                match proxy_protocol::read_blocking(&mut stream) {
+                    Ok(Some(source)) => {
+                        connection.client = Address { ip: source.ip().to_string(), port: source.port() as i32 };
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        eprintln!("PROXY protocol header from {}: {}", peer_addr, e);
+                        return;
+                    }
+                }
+            }
             crate::metrics::connection_open();
             let result = Server::process(stream, connection, app);
             crate::metrics::connection_close();
@@ -853,12 +869,13 @@ impl Address {
 /// `TLS_HANDSHAKE_TIMEOUT`), then HTTP/2 or HTTP/1.1 by ALPN.
 #[cfg(feature = "http2")]
 async fn serve_tls_connection(
-    tcp_stream: tokio::net::TcpStream,
+    mut tcp_stream: tokio::net::TcpStream,
     peer_addr: std::net::SocketAddr,
     acceptor: tokio_rustls::TlsAcceptor,
     app: impl Application + Send + 'static + Clone,
 ) {
     let _ = tcp_stream.set_nodelay(true);
+    let Some(peer_addr) = client_address(&mut tcp_stream, peer_addr).await else { return };
     let handshake = tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, acceptor.accept(tcp_stream));
     match handshake.await {
         Err(_) => {} // client never finished the handshake
@@ -897,13 +914,64 @@ async fn serve_plain_connection(
 ) {
     // Head and body go out as separate writes: don't let Nagle hold the
     // body back waiting for an ACK.
+    let mut tcp_stream = tcp_stream;
     let _ = tcp_stream.set_nodelay(true);
+    let Some(peer_addr) = client_address(&mut tcp_stream, peer_addr).await else { return };
+    if starts_with_h2_preface(&tcp_stream).await {
+        if let Err(e) = crate::h2_server::handle_connection(tcp_stream, peer_addr, None, app).await {
+            eprintln!("H2C connection error: {}", e);
+        }
+        return;
+    }
     crate::metrics::connection_open();
     let result = http1_async::serve(tcp_stream, peer_addr, None, false, app).await;
     crate::metrics::connection_close();
     if let Err(e) = result {
         crate::metrics::record_error();
         eprintln!("{}", e);
+    }
+}
+
+/// The client's address: the peer's, or with `proxy_protocol = true` the one
+/// in the PROXY protocol header the connection starts with. `None`: no valid
+/// header (in time) — close the connection.
+#[cfg(feature = "http2")]
+async fn client_address(tcp_stream: &mut tokio::net::TcpStream, peer_addr: std::net::SocketAddr) -> Option<std::net::SocketAddr> {
+    if !proxy_protocol::enabled() {
+        return Some(peer_addr);
+    }
+    match tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, proxy_protocol::read_async(tcp_stream)).await {
+        Ok(Ok(source)) => Some(source.unwrap_or(peer_addr)),
+        Ok(Err(e)) => {
+            eprintln!("PROXY protocol header from {}: {}", peer_addr, e);
+            None
+        }
+        Err(_) => None,
+    }
+}
+
+/// Whether a plain connection opens with the HTTP/2 connection preface —
+/// cleartext HTTP/2 with prior knowledge (h2c), as `grpcurl -plaintext` and
+/// gRPC clients without TLS speak it. Looks without consuming; an HTTP/1.1
+/// request differs within its first two bytes.
+#[cfg(feature = "http2")]
+async fn starts_with_h2_preface(tcp_stream: &tokio::net::TcpStream) -> bool {
+    const PREFACE: &[u8; 24] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+    let mut seen = [0u8; 24];
+    let deadline = tokio::time::Instant::now() + http1_async::READ_TIMEOUT;
+    loop {
+        let n = match tokio::time::timeout_at(deadline, tcp_stream.peek(&mut seen)).await {
+            Ok(Ok(n)) => n,
+            _ => return false,
+        };
+        if n == 0 || seen[..n] != PREFACE[..n] {
+            return false;
+        }
+        if n == PREFACE.len() {
+            return true;
+        }
+        // A preface arriving in pieces: look again shortly.
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     }
 }
 

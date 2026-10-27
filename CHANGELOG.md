@@ -26,6 +26,16 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   (`H2ReverseProxy::tls_ca_file`, `GrpcProxy::tls_ca_file`).
 - `Middleware::answers_streamed_body`: a layer that answers a request itself
   can take its body as a stream, whatever the inner application says.
+- Inbound PROXY protocol v1 and v2 (#20): `proxy_protocol = true`
+  (`RWS_CONFIG_PROXY_PROTOCOL`) takes the client address from the header an
+  L4 load balancer (HAProxy, AWS NLB, GCP) prepends to each connection, on
+  the plain and TLS listeners; connections without one are closed. Tested
+  behind HAProxy (`ci/e2e/proxy_protocol.sh`); parser fuzzed
+  (`fuzz/fuzz_targets/proxy_protocol.rs`).
+- Cleartext HTTP/2 (h2c, prior knowledge) on the plain listener (#20): a
+  connection opening with the HTTP/2 preface is served as HTTP/2 — gRPC
+  without TLS, `grpcurl -plaintext`, `curl --http2-prior-knowledge`.
+  Anything else is HTTP/1.1 as before.
 
 ### Changed
 

@@ -32,6 +32,20 @@ alpn_protocols = ["h2", "http/1.1"]
 Both protocols share the same port. Browsers, `curl`, and other HTTP/2-capable
 clients negotiate HTTP/2 automatically.
 
+## Cleartext HTTP/2 (h2c)
+
+Without TLS, a client can still speak HTTP/2 by sending the HTTP/2
+connection preface straight away ("prior knowledge") — gRPC clients and
+`grpcurl -plaintext` do. Since 18.3.0 rws's plain-HTTP listener recognises
+the preface and serves the connection as HTTP/2; anything else is HTTP/1.1
+as before. The `Upgrade: h2c` handshake (removed from HTTP/2 in RFC 9113)
+isn't supported.
+
+```bash
+curl --http2-prior-knowledge http://localhost:7878/healthz
+grpcurl -plaintext -proto echo.proto localhost:7878 echo.Echo/Unary
+```
+
 ## Request pipeline
 
 `rws` has its own HTTP/2 server (`h2_server`, since 18.0.0 — the `h2` crate is

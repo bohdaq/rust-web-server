@@ -71,6 +71,34 @@ Server::run(listener, pool, app); // async builds: Server::run_tls(listener, poo
 | Service discovery | No (planned) | Yes (`BackendPool`) |
 | Circuit breaker / retry | No (planned) | Yes (`CircuitBreaker`, `RetryLayer`) |
 
+## Behind an L4 load balancer (PROXY protocol)
+
+A TCP load balancer (HAProxy in `mode tcp`, AWS NLB, GCP's TCP proxy) hides
+the client's address: rws sees the balancer's. With the PROXY protocol the
+balancer prepends the client's address to each connection; turn it on in rws
+(since 18.3.0):
+
+```toml
+proxy_protocol = true   # RWS_CONFIG_PROXY_PROTOCOL
+```
+
+Every connection to the main listener must then start with a version 1 or
+version 2 header — before the TLS handshake on HTTPS — and the address in it
+is the client address: in access logs, rate limits, IP filters and
+`X-Forwarded-For` to upstreams. A connection without a valid header within
+10 seconds is closed, so only enable it when every client comes through the
+balancer. The balancer's own health checks (v2 `LOCAL`, v1 `UNKNOWN`) keep
+its address. The setting is read at startup.
+
+```text
+# HAProxy
+backend rws
+    mode tcp
+    server rws1 10.0.0.5:443 send-proxy-v2   # or send-proxy for version 1
+```
+
+HTTP/3 (QUIC) has no PROXY protocol; it is unaffected.
+
 ## Detection logic
 
 At startup `main()` calls `ProxyConfig::is_proxy_mode()`, which reads `rws.config.toml` (or the path in `RWS_CONFIG_FILE`) and returns `true` if the text contains `[[route]]` or `[[upstream]]`. When `true`, `build_from_file()` compiles the config into a `ConfigDrivenApp` that replaces the default `App`.

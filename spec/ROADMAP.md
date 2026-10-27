@@ -100,7 +100,7 @@ Make the HTTP/2 upstream path as good as the HTTP/1.1 one, so gRPC works end to 
 
 - **#13** *main (in progress): pooling, streaming both ways, trailers (h2/h3), `te`, tls_ca_file + client certs on both paths, config `grpc` action over HTTP/2 — in-process tests against an h2 gRPC echo backend and an mTLS backend; tonic e2e `ci/e2e/grpc.sh` (CI e2e matrix `grpc`)* **HTTP/2 upstream path at parity with HTTP/1.1** — `grpc-status` trailers (dropped today), streaming bodies (only unary gRPC works), connection pooling (a new handshake per request), `tls_ca_file`, and upstream client certificates on both paths (old "upstream client certs" item).
 - **#14** **gRPC-web bridge** — browsers speak gRPC-web; translate it to gRPC upstreams (Envoy, Pingora 0.4). Needs #13.
-- **#20** **Inbound PROXY protocol v1/v2 and h2c** — client addresses behind L4 load balancers; cleartext HTTP/2 for gRPC.
+- **#20** ✅ *main: `server::proxy_protocol` (v1/v2, `proxy_protocol = true`, plain + TLS + http1 build, fuzz target), h2c prior knowledge on the plain listener (peek for the preface); e2e: `ci/e2e/proxy_protocol.sh` behind HAProxy (v1/v2, plain/TLS), h2c with `grpcurl -plaintext` in `ci/e2e/grpc.sh`* **Inbound PROXY protocol v1/v2 and h2c** — client addresses behind L4 load balancers; cleartext HTTP/2 for gRPC.
 
 **Done when:** Streaming gRPC (client, server and bidirectional) and `grpc-status` trailers verified against a tonic server; gRPC-web verified from a browser client; PROXY protocol v1/v2 tested behind HAProxy; h2c tested with `grpcurl -plaintext`.
 
