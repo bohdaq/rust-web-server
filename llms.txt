@@ -24,6 +24,7 @@ Use it as:
 
 - [Quick Start](https://rws8.tech/getting-started/quick-start/): Four paths to a running rust-web-server in under five minutes — static files, a first route, a config-driven proxy, and automatic HTTPS.
 - [Examples](https://rws8.tech/getting-started/examples/): Runnable example apps in the repository — a first route, a JSON API, a static site, a reverse proxy, server-sent events, streamed uploads and MCP servers — each with its own test.
+- [AI coding agents](https://rws8.tech/getting-started/ai-agents/): Starters, an agent skill, and per-release llms.txt so Claude Code, Codex, Cursor and Copilot write correct rust-web-server code.
 - [Installation](https://rws8.tech/getting-started/installation/): How to install rust-web-server as a library crate, as a standalone binary, or from source — including feature flags and MSRV.
 - [Auto-Rebuild on Change (cargo-watch)](https://rws8.tech/getting-started/dev-workflow/): Automatically rebuild and restart your rws app whenever source files change, so you're always running the latest code.
 - [Frontend Dev Server Proxy (React / Vite / webpack)](https://rws8.tech/getting-started/frontend-dev-proxy/): How to run a React (or Vue/Svelte) dev server side-by-side with rws during local development, so API calls reach the backend and everything else keeps fast HMR.

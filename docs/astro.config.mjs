@@ -24,6 +24,7 @@ export default defineConfig({
           items: [
             { label: 'Quick Start',   link: '/getting-started/quick-start/' },
             { label: 'Examples',      link: '/getting-started/examples/' },
+            { label: 'AI Coding Agents', link: '/getting-started/ai-agents/' },
             { label: 'Installation',  link: '/getting-started/installation/' },
             { label: 'Dev Workflow',  link: '/getting-started/dev-workflow/' },
             { label: 'Frontend Dev Proxy', link: '/getting-started/frontend-dev-proxy/' },

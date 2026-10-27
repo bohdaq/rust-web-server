@@ -32,6 +32,17 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   and `}}` are literal braces. OpenAPI operations match routes in either
   spelling.
 
+- Starters (#42): `starters/api` (JSON API + OpenAPI 3.1) and
+  `starters/mcp` (MCP server), standalone projects with their own `AGENTS.md`,
+  copyable with `cargo generate`; `ci/e2e/starters.sh` builds and tests them
+  against the checkout on every push.
+- An agent pack (#42): `agents/skills/rws/SKILL.md` (Agent Skills: Claude
+  Code, Codex, …) with a Cursor rule and Copilot instructions generated from
+  it (`ci/gen_agents.py`), published at `rws8.tech/agents/`.
+- `llms.txt` / `llms-full.txt` on the site, at the root and per release under
+  `/<major.minor>/` (they were only in the repository: the site's links to them
+  were broken). Docs page: getting-started/ai-agents.
+
 ### Changed
 
 - `/openapi.json` is OpenAPI 3.1.0 (was 3.0.3): `JsonSchema` emits JSON Schema

@@ -438,6 +438,16 @@ jobs:
         if: steps.key.outputs.ok == 'true'
         working-directory: docs
         run: npm ci --no-audit --no-fund && npm run build
+      - name: llms.txt and the agent pack
+        if: steps.key.outputs.ok == 'true'
+        run: |
+          # At the root for the newest release, and under /<major.minor>/ for
+          # agents that want the docs of the release their project uses.
+          release="${TAG%.*}"
+          mkdir -p "docs/dist/$release"
+          cp llms.txt llms-full.txt docs/dist/
+          cp llms.txt llms-full.txt "docs/dist/$release/"
+          cp -r agents docs/dist/agents
       - name: Package repositories
         if: steps.key.outputs.ok == 'true'
         env:
@@ -465,7 +475,8 @@ jobs:
         run: |
           # Everything but the repo's own CNAME, .nojekyll and .gitignore — and
           # the package repositories, unless this build has new ones.
-          keep=(! -name .git ! -name CNAME ! -name .nojekyll ! -name .gitignore)
+          # Earlier releases' /<major.minor>/ llms files stay.
+          keep=(-regextype posix-extended ! -name .git ! -name CNAME ! -name .nojekyll ! -name .gitignore ! -regex '\./[0-9]+\.[0-9]+')
           [ -d ../docs/dist/apt ] || keep+=(! -name apt ! -name rpm)
           find . -mindepth 1 -maxdepth 1 "${keep[@]}" -exec rm -rf {} +
           cp -r ../docs/dist/. .

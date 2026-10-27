@@ -6,7 +6,10 @@ crate itself? Read `CLAUDE.md` and `CONTRIBUTING.md` instead.)
 Full docs: https://rws8.tech — all of it in one file:
 [`llms-full.txt`](llms-full.txt). API: https://docs.rs/rust-web-server.
 Working apps to copy from: [`examples/`](examples/), listed on
-https://rws8.tech/getting-started/examples/.
+https://rws8.tech/getting-started/examples/; standalone starter projects in
+[`starters/`](starters/) (`cargo generate --git https://github.com/bohdaq/rust-web-server starters/api`);
+the same guidance as a skill / Cursor rule / Copilot instructions in
+[`agents/`](agents/).
 
 ## Setup
 

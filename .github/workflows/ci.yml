@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, native-histograms, otlp, grpc, proxy-protocol, realtime, openapi, tower, starters]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -196,6 +196,9 @@ jobs:
         run: |
           cargo build --example realtime
           ci/e2e/realtime.sh target/debug/examples/realtime
+      - name: Starters build and pass their own tests against this checkout
+        if: matrix.check == 'starters'
+        run: ci/e2e/starters.sh
       - name: Tower interop — tonic-health over h2c (grpcurl) and a tower-http layer
         if: matrix.check == 'tower'
         env:
@@ -282,3 +285,5 @@ jobs:
       - run: python3 ci/check_docs.py
       # llms.txt / llms-full.txt are generated from docs/ — fails when not regenerated
       - run: python3 ci/gen_llms.py --check
+      # The Cursor rule and Copilot instructions are generated from the agent skill
+      - run: python3 ci/gen_agents.py --check
