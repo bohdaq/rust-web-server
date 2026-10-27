@@ -134,3 +134,15 @@ fn cors_wildcards_without_credentials() {
     assert_eq!(Some("https://a.com".to_string()), value(&headers, "access-control-allow-origin"), "credentials echo the origin");
     assert_eq!(Some("POST".to_string()), value(&headers, "access-control-allow-methods"));
 }
+
+#[test]
+fn durations_follow_the_gateway_api_format() {
+    use std::time::Duration;
+    assert_eq!(Some(Duration::from_millis(500)), duration("500ms"));
+    assert_eq!(Some(Duration::from_secs(90)), duration("1m30s"));
+    assert_eq!(Some(Duration::from_secs(3600)), duration("1h"));
+    assert_eq!(Some(Duration::ZERO), duration("0s"));
+    for bad in ["", "1", "1d", "s", "123456s", "1h1m1s1ms1h", "-1s", "1.5s"] {
+        assert_eq!(None, duration(bad), "{bad:?}");
+    }
+}

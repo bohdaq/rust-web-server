@@ -18395,7 +18395,9 @@ With the `gateway-api` build feature and `RWS_CONFIG_GATEWAY_API_ENABLED=true`, 
 - **HTTPRoute routing**: hostnames, `Exact`/`PathPrefix` paths, exact header and query-parameter matches, methods, the spec's precedence between routes and rules, weighted backends over the Services' ready endpoints. The client's `Host` is kept.
 - **HTTPRoute filters**, applied in the order listed: `RequestHeaderModifier` and `ResponseHeaderModifier` (`set` replaces, `add` appends, `remove` drops — names case-insensitive), `RequestHeaderModifier` on a `backendRef` (only for requests sent to that backend), `RequestRedirect` (scheme, hostname, port, `ReplaceFullPath`/`ReplacePrefixMatch` path, status 301/302/303/307/308; the port defaults to the scheme's well-known port when the scheme is set, else the listener's, and a well-known port isn't written into `Location`), `URLRewrite` (hostname, path) and `CORS` (preflights answered with `204` by rws, actual requests get `Access-Control-Allow-Origin` and the exposed headers; `*` in an origin matches one or more labels). An `ExtensionRef` or unknown filter answers `500`, as the spec requires.
 
-Mirroring, timeouts and retries, GRPCRoute, TLSRoute, TCPRoute and UDPRoute come in the following phases.
+- **Timeouts and retries**: `timeouts.request` bounds the whole exchange, retries included, and `timeouts.backendRequest` each attempt; past either the client gets `504`, and `0s` turns a timeout off. `retry.attempts` is the number of retries (the first try isn't counted) on the listed `retry.codes`, on connection errors and on backend timeouts, `retry.backoff` apart (25 ms when unset).
+
+Mirroring, GRPCRoute, TLSRoute, TCPRoute and UDPRoute come in the following phases.
 
 ## Settings
 

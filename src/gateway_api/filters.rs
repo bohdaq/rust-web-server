@@ -174,5 +174,35 @@ pub fn cors(request: &Request, filter: &HttpCorsFilter) -> Cors {
     Cors::Preflight(headers)
 }
 
+/// A Gateway API duration (`1h`, `500ms`, `1m30s`: up to four
+/// number-unit pairs, units `h`/`m`/`s`/`ms`); `None` when malformed.
+pub fn duration(value: &str) -> Option<std::time::Duration> {
+    let mut total = 0u64;
+    let mut rest = value;
+    let mut parts = 0;
+    while !rest.is_empty() {
+        let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+        if digits == 0 || digits > 5 {
+            return None;
+        }
+        let n: u64 = rest[..digits].parse().ok()?;
+        rest = &rest[digits..];
+        let (millis, unit_len) = if rest.starts_with("ms") {
+            (1, 2)
+        } else {
+            match rest.as_bytes().first()? {
+                b'h' => (3_600_000, 1),
+                b'm' => (60_000, 1),
+                b's' => (1_000, 1),
+                _ => return None,
+            }
+        };
+        total += n * millis;
+        rest = &rest[unit_len..];
+        parts += 1;
+    }
+    (1..=4).contains(&parts).then(|| std::time::Duration::from_millis(total))
+}
+
 #[cfg(test)]
 mod tests;

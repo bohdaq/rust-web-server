@@ -158,13 +158,64 @@ pub(crate) fn select<'a>(listener: &'a ListenerConfig, request: &Request, host: 
     best.map(|(_, route, rule, m)| (route, rule, m))
 }
 
+/// How one attempt ended.
+enum Attempt {
+    /// A response to send (or to retry on its status).
+    Response(Response),
+    /// No response: the connection failed, or the attempt's timeout passed.
+    Failed { timed_out: bool },
+}
+
+/// Read timeout of an attempt without a route timeout.
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
+/// Wait between retries without `retry.backoff`.
+const DEFAULT_BACKOFF: Duration = Duration::from_millis(25);
+
 impl PortRouter {
-    /// Pick a backend by weight, then an endpoint, and forward.
+    /// Forward within the rule's `timeouts` (`request` for the whole
+    /// exchange, `backendRequest` per attempt; `0s` disables — passing either
+    /// is a `504`) and `retry` (`attempts` retries on the listed `codes`,
+    /// connection errors and backend timeouts, `backoff` apart).
     fn forward(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo) -> Response {
+        let limit = |value: Option<&String>| value.and_then(|v| filters::duration(v)).filter(|d| !d.is_zero());
+        let timeouts = rule.timeouts.as_ref();
+        let deadline = limit(timeouts.and_then(|t| t.request.as_ref())).map(|d| std::time::Instant::now() + d);
+        let per_attempt = limit(timeouts.and_then(|t| t.backend_request.as_ref()));
+        let retries = rule.retry.as_ref().map(|r| r.attempts.unwrap_or(1).max(0) as u32).unwrap_or(0);
+        let backoff = rule.retry.as_ref().and_then(|r| r.backoff.as_deref()).and_then(filters::duration).unwrap_or(DEFAULT_BACKOFF);
+        let retry_on = |code: i16| rule.retry.as_ref().is_some_and(|r| r.codes.contains(&(code as i32)));
+        let mut attempt = 0;
+        loop {
+            let left = deadline.map(|d| d.saturating_duration_since(std::time::Instant::now()));
+            if left.is_some_and(|l| l.is_zero()) {
+                return status(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout);
+            }
+            let timeout = [per_attempt, left].into_iter().flatten().min().unwrap_or(DEFAULT_TIMEOUT);
+            let outcome = self.attempt(rule, request, connection, timeout);
+            let retry = attempt < retries
+                && match &outcome {
+                    Attempt::Response(response) => retry_on(response.status_code),
+                    Attempt::Failed { .. } => true,
+                };
+            if !retry {
+                return match outcome {
+                    Attempt::Response(response) => response,
+                    Attempt::Failed { timed_out: true } => status(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout),
+                    Attempt::Failed { timed_out: false } => status(STATUS_CODE_REASON_PHRASE.n502_bad_gateway),
+                };
+            }
+            attempt += 1;
+            let pause = deadline.map_or(backoff, |d| backoff.min(d.saturating_duration_since(std::time::Instant::now())));
+            std::thread::sleep(pause);
+        }
+    }
+
+    /// Pick a backend by weight, then an endpoint, and forward once.
+    fn attempt(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, timeout: Duration) -> Attempt {
         let total: u32 = rule.backends.iter().map(|b| b.weight).sum();
         if total == 0 {
             // No backends, or all weighted 0: the spec's 500.
-            return status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error);
+            return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error));
         }
         let roll = (self.counter.fetch_add(1, Ordering::Relaxed) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32;
         let mut pick = (roll % total as u64) as u32;
@@ -194,19 +245,20 @@ impl PortRouter {
             &modified
         };
         let endpoints = match &backend.endpoints {
-            Err(_) => return status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error),
-            Ok(e) if e.is_empty() => return status(STATUS_CODE_REASON_PHRASE.n503_service_unavailable),
+            Err(_) => return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
+            Ok(e) if e.is_empty() => return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n503_service_unavailable)),
             Ok(e) => e,
         };
         let endpoint = &endpoints[self.counter.fetch_add(1, Ordering::Relaxed) % endpoints.len()];
         let Some((ip, port)) = endpoint.rsplit_once(':') else {
-            return status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error);
+            return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error));
         };
         let ip = ip.trim_start_matches('[').trim_end_matches(']');
         let Ok(port) = port.parse::<u16>() else {
-            return status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error);
+            return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error));
         };
         let host_header = request.header("host").map(|h| h.value.to_string()).unwrap_or_else(|| endpoint.clone());
+        let started = std::time::Instant::now();
         match crate::proxy::forward_pooled_with_host(
             crate::proxy::shared_pool(),
             request,
@@ -214,11 +266,11 @@ impl PortRouter {
             ip,
             port,
             &host_header,
-            Duration::from_secs(10),
-            Duration::from_secs(60),
+            timeout.min(Duration::from_secs(10)),
+            timeout,
         ) {
-            Ok(response) => response,
-            Err(_) => status(STATUS_CODE_REASON_PHRASE.n502_bad_gateway),
+            Ok(response) => Attempt::Response(response),
+            Err(_) => Attempt::Failed { timed_out: started.elapsed() >= timeout },
         }
     }
 }

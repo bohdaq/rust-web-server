@@ -188,3 +188,79 @@ fn rule_filters_answer_redirects_preflights_and_unknown_filters_here() {
     let unknown = filtered(HttpRouteFilter { filter_type: "ExtensionRef".to_string(), ..Default::default() });
     assert_eq!(500, run(&unknown, &request("GET", "/", &[])).status_code);
 }
+
+/// A backend answering each connection's first request: the first `fail`
+/// requests with `code`, the rest with 200 — after `delay`.
+fn flaky_backend(fail: usize, code: u16, delay: std::time::Duration) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let seen = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = Arc::clone(&seen);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { break };
+            let n = counter.fetch_add(1, Ordering::SeqCst);
+            std::thread::spawn(move || {
+                let mut buffer = [0u8; 4096];
+                let _ = stream.read(&mut buffer);
+                std::thread::sleep(delay);
+                let code = if n < fail { code } else { 200 };
+                let _ = stream.write_all(format!("HTTP/1.1 {code} X\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok").as_bytes());
+            });
+        }
+    });
+    (address, seen)
+}
+
+fn connection() -> ConnectionInfo {
+    ConnectionInfo {
+        client: crate::server::Address { ip: "127.0.0.1".to_string(), port: 1 },
+        server: crate::server::Address { ip: "127.0.0.1".to_string(), port: 2 },
+        request_size: 0,
+        sni_hostname: None,
+    }
+}
+
+fn with_policy(address: &str, timeouts: Option<(&str, &str)>, retry: Option<(i32, Vec<i32>)>) -> CompiledRule {
+    use crate::gateway_api::types::{HttpRouteRetry, HttpRouteTimeouts};
+    let mut r = rule("x", vec![path("PathPrefix", "/")], vec![backend(1, Ok(vec![address.to_string()]))]);
+    r.timeouts = timeouts.map(|(request, backend_request)| HttpRouteTimeouts {
+        request: Some(request.to_string()).filter(|s| !s.is_empty()),
+        backend_request: Some(backend_request.to_string()).filter(|s| !s.is_empty()),
+    });
+    r.retry = retry.map(|(attempts, codes)| HttpRouteRetry { attempts: Some(attempts), codes, backoff: Some("1ms".to_string()) });
+    r
+}
+
+#[test]
+fn retries_listed_codes_up_to_attempts() {
+    let router = PortRouter::new(Arc::new(RwLock::new(Arc::new(vec![]))));
+    let r = request("GET", "/", &[("host", "example.org")]);
+    let (address, seen) = flaky_backend(2, 500, std::time::Duration::ZERO);
+    assert_eq!(200, router.forward(&with_policy(&address, None, Some((3, vec![500]))), &r, &connection()).status_code);
+    assert_eq!(3, seen.load(Ordering::SeqCst), "two retries");
+
+    let (address, seen) = flaky_backend(4, 500, std::time::Duration::ZERO);
+    assert_eq!(500, router.forward(&with_policy(&address, None, Some((3, vec![500]))), &r, &connection()).status_code);
+    assert_eq!(4, seen.load(Ordering::SeqCst), "the first try and three retries");
+
+    let (address, seen) = flaky_backend(2, 503, std::time::Duration::ZERO);
+    assert_eq!(503, router.forward(&with_policy(&address, None, Some((3, vec![500]))), &r, &connection()).status_code, "an unlisted code isn't retried");
+    assert_eq!(1, seen.load(Ordering::SeqCst));
+
+    let (address, seen) = flaky_backend(1, 500, std::time::Duration::ZERO);
+    assert_eq!(500, router.forward(&with_policy(&address, None, None), &r, &connection()).status_code, "no retry policy");
+    assert_eq!(1, seen.load(Ordering::SeqCst));
+}
+
+#[test]
+fn timeouts_answer_504_and_zero_disables_them() {
+    let router = PortRouter::new(Arc::new(RwLock::new(Arc::new(vec![]))));
+    let r = request("GET", "/", &[("host", "example.org")]);
+    let (slow, _) = flaky_backend(0, 200, std::time::Duration::from_millis(400));
+    assert_eq!(504, router.forward(&with_policy(&slow, Some(("100ms", "")), None), &r, &connection()).status_code, "request timeout");
+    assert_eq!(504, router.forward(&with_policy(&slow, Some(("", "100ms")), None), &r, &connection()).status_code, "backend timeout");
+    assert_eq!(200, router.forward(&with_policy(&slow, Some(("0s", "0s")), None), &r, &connection()).status_code, "0s disables");
+    assert_eq!(200, router.forward(&with_policy(&slow, Some(("2s", "")), None), &r, &connection()).status_code);
+}
