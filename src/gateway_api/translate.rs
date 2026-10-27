@@ -210,7 +210,7 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
         .chain([("TLSRoute", &snapshot.tls_routes), ("TCPRoute", &snapshot.tcp_routes), ("UDPRoute", &snapshot.udp_routes)].into_iter().flat_map(|(kind, routes)| {
             routes.iter().map(move |r| RouteIn::new(kind, r, &r.spec.parent_refs, &r.spec.hostnames, l4_references(&r.spec.rules), super::routes::compile_l4(r, kind, snapshot)))
         }));
-    let mut attached: BTreeMap<((String, String), Option<(String, String)>, String), i32> = BTreeMap::new();
+    let mut attached: BTreeMap<ListenerKey, i32> = BTreeMap::new();
     for route in routes {
         let namespace = route.namespace.clone();
         let resolved = resolve_references(route.kind, &namespace, &route.references, snapshot);
@@ -360,6 +360,9 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
 }
 
 // ── listeners ─────────────────────────────────────────────────────────────────
+
+/// (Gateway, ListenerSet or `None` for the Gateway's own, listener name).
+type ListenerKey = ((String, String), Option<(String, String)>, String);
 
 struct ListenerView {
     gateway: (String, String),
