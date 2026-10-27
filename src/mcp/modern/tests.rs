@@ -21,6 +21,12 @@ fn server() -> McpServer {
             let request = SamplingRequest { messages: vec![PromptMessage::user("hi")], max_tokens: 5, system_prompt: None };
             Ok(McpContent::input_required(InputRequired::new().sample("q", &request)))
         })
+        .tool(
+            "weather",
+            "Weather by region",
+            r#"{"type":"object","properties":{"region":{"type":"string","x-mcp-header":"Region"},"opts":{"type":"object","properties":{"days":{"type":"integer","x-mcp-header":"Days"}}}}}"#,
+            |args| Ok(McpContent::text(args.to_string())),
+        )
         .resource("test://a", "a", "A", |_| Ok(McpContent::text("A")))
         .prompt_with_context("p", "Asks first", vec![], |ctx, _| {
             Ok(match ctx.input_response("c") {
@@ -216,7 +222,7 @@ fn a_missing_resource_names_its_uri() {
 fn listen_acknowledges_then_delivers_only_what_was_asked() {
     use std::io::Read;
     let server = server();
-    let mut stream = server.listen("5", r#"{"notifications":{"toolsListChanged":true,"resourceSubscriptions":["test://a"]}}"#);
+    let mut stream = server.listen("5", r#"{"notifications":{"toolsListChanged":true,"resourceSubscriptions":["test://a"]}}"#, false);
     let mut read = || {
         let mut buf = [0u8; 2048];
         let n = stream.stream_pipe.as_mut().unwrap().read(&mut buf).unwrap();
@@ -249,4 +255,39 @@ fn header_values_decode_the_base64_sentinel() {
     assert_eq!(Some("plain".to_string()), header_value("plain"));
     assert_eq!(None, header_value("bad\u{1}value"));
     assert_eq!(None, header_value("=?base64?!!!?="));
+}
+
+#[test]
+fn header_params_follow_only_properties() {
+    let schema = r#"{"type":"object","properties":{"a":{"type":"string","x-mcp-header":"A"},"o":{"type":"object","properties":{"b":{"type":"integer","x-mcp-header":"B"}}},"l":{"type":"array","items":{"x-mcp-header":"C"}}}}"#;
+    let mut params = header_params(schema);
+    params.sort();
+    assert_eq!(vec![(vec!["a".to_string()], "A".to_string()), (vec!["o".to_string(), "b".to_string()], "B".to_string())], params);
+}
+
+/// `tools/call weather` with `arguments` and extra headers.
+fn weather(arguments: &str, headers: &[(&str, &str)]) -> (u16, String) {
+    let mut all = vec![("MCP-Protocol-Version", V), ("Mcp-Method", "tools/call"), ("Mcp-Name", "weather")];
+    all.extend_from_slice(headers);
+    post(&all, &format!(r#"{{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{{"name":"weather","arguments":{arguments},{}}}}}"#, meta("{}")))
+}
+
+#[test]
+fn param_headers_must_match_the_arguments() {
+    let ok = |arguments: &str, headers: &[(&str, &str)]| weather(arguments, headers).0 == 200;
+    assert!(ok(r#"{"region":"us-west1"}"#, &[("Mcp-Param-Region", "us-west1")]));
+    assert!(ok(r#"{"region":"Hello"}"#, &[("mcp-param-region", "=?base64?SGVsbG8=?=")]), "base64, header names case-insensitive");
+    assert!(ok(r#"{"region":"x","opts":{"days":3}}"#, &[("Mcp-Param-Region", "x"), ("Mcp-Param-Days", "3.0")]), "integers compared as numbers");
+    assert!(ok(r#"{"region":null}"#, &[]), "a null argument needs no header");
+    assert!(ok("{}", &[]), "nor an absent one");
+    for (arguments, headers) in [
+        (r#"{"region":"us-west1"}"#, &[][..]),
+        (r#"{"region":"us-west1"}"#, &[("Mcp-Param-Region", "eu-west1")][..]),
+        (r#"{"region":"Hello"}"#, &[("Mcp-Param-Region", "=?base64?SGVsbG8?=")][..]),
+        (r#"{"region":"Hello"}"#, &[("Mcp-Param-Region", "=?base64?SGV!bG8=?=")][..]),
+        (r#"{"region":"x","opts":{"days":3}}"#, &[("Mcp-Param-Region", "x"), ("Mcp-Param-Days", "4")][..]),
+    ] {
+        let (status, body) = weather(arguments, headers);
+        assert_eq!((400, true), (status, body.contains(r#""code":-32020"#)), "{arguments} {headers:?}: {body}");
+    }
 }

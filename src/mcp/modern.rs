@@ -68,6 +68,8 @@ pub(crate) struct ModernRequest {
     request_state: Option<String>,
     /// `_meta.io.modelcontextprotocol/logLevel`: no log messages without it.
     log_level: Option<LogLevel>,
+    /// The client declared the tasks extension.
+    tasks_extension: bool,
 }
 
 /// A handler's request for input from the client (MCP 2026-07-28 multi
@@ -135,6 +137,11 @@ impl InputRequired {
     pub fn state(mut self, state: impl Into<String>) -> Self {
         self.state = Some(state.into());
         self
+    }
+
+    /// The requests as `(key, {"method":...,"params":...})`.
+    pub(crate) fn requests_json(&self) -> Vec<(String, String)> {
+        self.requests.iter().map(|(key, method, params)| (key.clone(), format!(r#"{{"method":"{method}","params":{params}}}"#))).collect()
     }
 
     /// `{"inputRequests":{...},"requestState":"<unsigned>"}` — how it rides
@@ -266,15 +273,89 @@ pub(crate) fn is_modern(request: &Request, body: &str) -> bool {
 }
 
 /// A header value as sent, or decoded from `=?base64?...?=`; `None` when
-/// it has characters a header value can't, or bad base64.
+/// it has characters a header value can't, or isn't canonical base64
+/// (padding included).
 fn header_value(raw: &str) -> Option<String> {
     if raw.bytes().any(|b| !(b == b'\t' || (0x20..=0x7e).contains(&b))) {
         return None;
     }
     match raw.strip_prefix("=?base64?").and_then(|rest| rest.strip_suffix("?=")) {
-        Some(encoded) => String::from_utf8(base64_decode(encoded)?).ok(),
+        Some(encoded) => {
+            let decoded = base64_decode(encoded).filter(|bytes| base64_encode(bytes) == encoded)?;
+            String::from_utf8(decoded).ok()
+        }
         None => Some(raw.to_string()),
     }
+}
+
+/// The parameters of a tool's input schema mirrored into headers
+/// (`x-mcp-header`): the property path and the header name's suffix. Only
+/// properties reached through `properties` keys count.
+pub(crate) fn header_params(schema: &str) -> Vec<(Vec<String>, String)> {
+    let mut found = Vec::new();
+    // (path so far, schema object), depth-bounded.
+    let mut pending: Vec<(Vec<String>, String)> = vec![(Vec::new(), schema.to_string())];
+    while let Some((path, object)) = pending.pop() {
+        if path.len() > 32 {
+            continue;
+        }
+        let Some(properties) = member(&members(&object), "properties").map(members) else { continue };
+        for (key, sub) in properties {
+            let mut at = path.clone();
+            at.push(key);
+            let sub_members = members(&sub);
+            if let Some(name) = member_str(&sub_members, "x-mcp-header") {
+                found.push((at.clone(), name));
+            }
+            pending.push((at, sub));
+        }
+    }
+    found
+}
+
+/// The raw JSON value at `path` in `arguments`.
+fn value_at(arguments: &str, path: &[String]) -> Option<String> {
+    let mut value = arguments.to_string();
+    for key in path {
+        value = member(&members(&value), key)?.to_string();
+    }
+    Some(value)
+}
+
+/// Whether the header text `header` stands for the JSON value `raw`:
+/// strings as is, booleans as `true`/`false`, numbers compared as numbers.
+fn header_matches(raw: &str, header: &str) -> bool {
+    if raw.starts_with('"') {
+        return json_rpc::extract_str(&format!(r#"{{"v":{raw}}}"#), "v").as_deref() == Some(header);
+    }
+    if raw == "true" || raw == "false" {
+        return raw == header;
+    }
+    matches!((raw.parse::<f64>(), header.parse::<f64>()), (Ok(a), Ok(b)) if a == b)
+}
+
+/// `tools/call`: every `Mcp-Param-{name}` header a tool's schema asks for
+/// must be present when its argument has a value, and match it.
+fn check_param_headers(request: &Request, schema: &str, arguments: &str) -> Result<(), ModernError> {
+    for (path, name) in header_params(schema) {
+        let header_name = format!("Mcp-Param-{name}");
+        let sent = match header(request, &header_name) {
+            Some(raw) => Some(header_value(&raw).ok_or_else(|| {
+                ModernError::bad_request(HEADER_MISMATCH, format!("Header mismatch: {header_name} isn't a valid header value (or valid =?base64?...?=)"))
+            })?),
+            None => None,
+        };
+        match (value_at(arguments, &path).filter(|v| v != "null"), sent) {
+            (Some(_), None) => {
+                return Err(ModernError::bad_request(HEADER_MISMATCH, format!("Header mismatch: {header_name} is required, the argument {} has a value", path.join("."))))
+            }
+            (Some(value), Some(sent)) if !header_matches(&value, &sent) => {
+                return Err(ModernError::bad_request(HEADER_MISMATCH, format!("Header mismatch: {header_name} {sent:?} doesn't match the argument {}", path.join("."))))
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// An error answered on the modern path: a JSON-RPC error with `data`, and
@@ -311,6 +392,14 @@ impl From<(i32, String)> for ModernError {
 enum Answer {
     Complete { result: String, cacheable: bool },
     InputRequired(String),
+    /// A task was started: its id.
+    Task(String),
+}
+
+/// `-32021` naming the tasks extension.
+fn tasks_extension_required() -> ModernError {
+    ModernError::bad_request(MISSING_CLIENT_CAPABILITY, "Missing required client capability: the io.modelcontextprotocol/tasks extension")
+        .data(format!(r#"{{"requiredCapabilities":{{"extensions":{{"{}":{{}}}}}}}}"#, super::tasks::EXTENSION))
 }
 
 /// One `subscriptions/listen` stream.
@@ -321,6 +410,8 @@ pub(crate) struct Listener {
     prompts: bool,
     resources: bool,
     uris: Vec<String>,
+    /// Tasks whose status changes it gets (`notifications/tasks`).
+    task_ids: Vec<String>,
     tx: SyncSender<Vec<u8>>,
 }
 
@@ -407,7 +498,10 @@ impl McpServer {
     fn capabilities_json(&self) -> String {
         let logging = if self.logging_enabled { r#","logging":{}"# } else { "" };
         let completions = if self.completions.read().unwrap().is_empty() { "" } else { r#","completions":{}"# };
-        format!(r#"{{"tools":{{"listChanged":true}},"resources":{{"subscribe":true,"listChanged":true}},"prompts":{{"listChanged":true}}{logging}{completions}}}"#)
+        format!(
+            r#"{{"tools":{{"listChanged":true}},"resources":{{"subscribe":true,"listChanged":true}},"prompts":{{"listChanged":true}}{logging}{completions},"extensions":{{"{}":{{}}}}}}"#,
+            super::tasks::EXTENSION
+        )
     }
 
     /// Every version this endpoint serves: modern ones statelessly, the
@@ -468,7 +562,16 @@ impl McpServer {
         };
 
         if method == "subscriptions/listen" {
-            return self.listen(&id, &params);
+            return self.listen(&id, &params, modern.tasks_extension);
+        }
+        if method == "tools/call" {
+            if let Err(error) = self.check_tool_headers(request, &params) {
+                return status_response(error.status, error_json(&id, &error));
+            }
+            let tool = member_str(&members(&params), "name").unwrap_or_default();
+            if !modern.tasks_extension && self.is_task_required(&tool) {
+                return status_response(400, error_json(&id, &tasks_extension_required()));
+            }
         }
 
         let principal = ctx.auth_claims.as_deref().and_then(|claims| json_rpc::extract_str(claims, "sub")).unwrap_or_default();
@@ -477,6 +580,9 @@ impl McpServer {
             member_str(&params, "name").or_else(|| member_str(&params, "uri")).unwrap_or_default()
         };
         let mut modern = modern;
+        if modern.tasks_extension {
+            ctx.tasks = Some(super::tasks::TaskHandle { server: self.clone(), principal: principal.clone() });
+        }
         if let Some(token) = member_str(&members(&params), "requestState") {
             match self.verify_state(&token, &method, &target, &principal) {
                 Some(state) => modern.request_state = Some(state),
@@ -521,6 +627,19 @@ impl McpServer {
         status_response(status, json)
     }
 
+    /// `Mcp-Param-*` headers against the arguments of the tool called.
+    fn check_tool_headers(&self, request: &Request, params: &str) -> Result<(), ModernError> {
+        let params = members(params);
+        let Some(name) = member_str(&params, "name") else { return Ok(()) };
+        let schema = self.tools.read().unwrap().iter().find(|t| t.name == name).map(|t| t.input_schema.clone());
+        #[cfg(feature = "http2")]
+        let schema = schema.or_else(|| self.async_tools.read().unwrap().iter().find(|t| t.name == name).map(|t| t.input_schema.clone()));
+        match schema {
+            Some(schema) if schema.contains("x-mcp-header") => check_param_headers(request, &schema, member(&params, "arguments").unwrap_or("{}")),
+            _ => Ok(()),
+        }
+    }
+
     /// The `_meta` and header checks every modern request passes first.
     fn validate_modern(&self, request: &Request, method: &str, params: &str) -> Result<ModernRequest, ModernError> {
         let params = members(params);
@@ -556,6 +675,7 @@ impl McpServer {
         let named = match method {
             "tools/call" | "prompts/get" => member_str(&params, "name"),
             "resources/read" => member_str(&params, "uri"),
+            "tasks/get" | "tasks/update" | "tasks/cancel" => member_str(&params, "taskId"),
             _ => None,
         };
         if let Some(body_name) = named {
@@ -567,9 +687,11 @@ impl McpServer {
                 None => return Err(ModernError::bad_request(HEADER_MISMATCH, "The Mcp-Name header is required for this method")),
             }
         }
+        let tasks_extension = member(&members(capabilities), "extensions").is_some_and(|ext| member(&members(ext), super::tasks::EXTENSION).is_some());
         Ok(ModernRequest {
             client_capabilities: capabilities.to_string(),
             log_level: member_str(&meta, META_LOG_LEVEL).and_then(|level| LogLevel::parse(&level)),
+            tasks_extension,
             ..ModernRequest::default()
         })
     }
@@ -590,6 +712,10 @@ impl McpServer {
                 Ok(with_fields(&result, &fields))
             }
             Ok(Answer::InputRequired(input)) => self.input_required_result(&input, &capabilities, method, target, principal, &server_info),
+            Ok(Answer::Task(task_id)) => match self.create_task_fields(&task_id, principal) {
+                Some(fields) => Ok(format!(r#"{{"resultType":"task",{server_info},{fields}}}"#)),
+                None => Err(ModernError::new(json_rpc::INTERNAL_ERROR, "the task disappeared")),
+            },
             Err(error) => Err(error),
         };
         match result {
@@ -642,6 +768,7 @@ impl McpServer {
             "tools/list" => complete(self.do_tools_list(body, &ctx)?, true),
             "tools/call" => match self.call_tool(body, ctx)? {
                 Ok(content) if content.kind == "input_required" => Answer::InputRequired(content.text),
+                Ok(content) if content.kind == "task" => Answer::Task(content.text),
                 other => complete(Self::format_tool_result(other), false),
             },
             "resources/list" => complete(self.do_resources_list(body)?, true),
@@ -663,6 +790,22 @@ impl McpServer {
                 }
             },
             "completion/complete" => complete(self.do_completion(body)?, false),
+            "tasks/get" | "tasks/update" | "tasks/cancel" => {
+                let principal = ctx.tasks.as_ref().map(|handle| handle.principal.clone()).ok_or_else(tasks_extension_required)?;
+                let params = members(&json_rpc::object_members(body).and_then(|m| m.into_iter().find(|(k, _)| k == "params").map(|(_, v)| v)).unwrap_or_default());
+                let task_id = member_str(&params, "taskId").ok_or_else(|| ModernError::new(json_rpc::INVALID_PARAMS, "taskId is required"))?;
+                match method {
+                    "tasks/get" => complete(format!("{{{}}}", self.task_get(&task_id, &principal)?), false),
+                    "tasks/update" => {
+                        self.task_update(&task_id, &principal, member(&params, "inputResponses").unwrap_or("{}"))?;
+                        complete("{}".to_string(), false)
+                    }
+                    _ => {
+                        self.task_cancel(&task_id, &principal)?;
+                        complete("{}".to_string(), false)
+                    }
+                }
+            }
             _ => {
                 let mut error = ModernError::new(json_rpc::METHOD_NOT_FOUND, format!("Method not found: {method}"));
                 error.status = 404;
@@ -672,13 +815,19 @@ impl McpServer {
     }
 
     /// `subscriptions/listen`: an SSE stream, the acknowledgment first.
-    fn listen(&self, id: &str, params: &str) -> Response {
+    pub(crate) fn listen(&self, id: &str, params: &str, tasks_extension: bool) -> Response {
         let filter = member(&members(params), "notifications").map(members).unwrap_or_default();
         let flag = |key: &str| member(&filter, key) == Some("true");
         let uris: Vec<String> = member(&filter, "resourceSubscriptions")
             .map(|list| json_rpc::split_array_elements(list).iter().filter_map(|u| json_rpc::extract_str(&format!(r#"{{"v":{u}}}"#), "v")).collect())
             .unwrap_or_default();
         let (tools, prompts, resources) = (flag("toolsListChanged"), flag("promptsListChanged"), flag("resourcesListChanged"));
+        let task_ids: Vec<String> = member(&filter, "taskIds")
+            .map(|list| json_rpc::split_array_elements(list).iter().filter_map(|t| json_rpc::extract_str(&format!(r#"{{"v":{t}}}"#), "v")).collect())
+            .unwrap_or_default();
+        if !task_ids.is_empty() && !tasks_extension {
+            return status_response(400, error_json(id, &tasks_extension_required()));
+        }
         let mut honoured: Vec<String> = Vec::new();
         for (on, key) in [(tools, "toolsListChanged"), (prompts, "promptsListChanged"), (resources, "resourcesListChanged")] {
             if on {
@@ -689,13 +838,17 @@ impl McpServer {
             let list: Vec<String> = uris.iter().map(|u| format!(r#""{}""#, json_escape(u))).collect();
             honoured.push(format!(r#""resourceSubscriptions":[{}]"#, list.join(",")));
         }
+        if !task_ids.is_empty() {
+            let list: Vec<String> = task_ids.iter().map(|t| format!(r#""{}""#, json_escape(t))).collect();
+            honoured.push(format!(r#""taskIds":[{}]"#, list.join(",")));
+        }
         let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(super::SSE_CHANNEL_CAPACITY);
         let ack = format!(
             r#"{{"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged","params":{{"_meta":{{"io.modelcontextprotocol/subscriptionId":{id}}},"notifications":{{{}}}}}}}"#,
             honoured.join(",")
         );
         let _ = tx.try_send(format!("data: {ack}\n\n").into_bytes());
-        self.listeners.lock().unwrap().push(Listener { id: id.to_string(), tools, prompts, resources, uris, tx });
+        self.listeners.lock().unwrap().push(Listener { id: id.to_string(), tools, prompts, resources, uris, task_ids, tx });
         let mut response = Response::new();
         response.status_code = *STATUS_CODE_REASON_PHRASE.n200_ok.status_code;
         response.reason_phrase = STATUS_CODE_REASON_PHRASE.n200_ok.reason_phrase.to_string();
@@ -704,6 +857,20 @@ impl McpServer {
         response.headers.push(Header { name: "X-Accel-Buffering".into(), value: "no".into() });
         response.stream_pipe = Some(Box::new(crate::sse::SseReader::new(rx, super::SSE_KEEPALIVE_INTERVAL)));
         response
+    }
+
+    /// `notifications/tasks` for the task `task_id` to the streams listening
+    /// for it.
+    pub(crate) fn deliver_task_notification(&self, task_id: &str, params_json: &str) {
+        let mut listeners = self.listeners.lock().unwrap();
+        listeners.retain(|listener| {
+            if !listener.task_ids.iter().any(|t| t == task_id) {
+                return true;
+            }
+            let tag = format!(r#""_meta":{{"io.modelcontextprotocol/subscriptionId":{}}}"#, listener.id);
+            let frame = format!("data: {}\n\n", super::render_notification("notifications/tasks", Some(&with_fields(params_json, &tag))));
+            !matches!(listener.tx.try_send(frame.into_bytes()), Err(TrySendError::Disconnected(_)))
+        });
     }
 
     /// Send a change notification to the `subscriptions/listen` streams that

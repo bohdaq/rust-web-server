@@ -90,8 +90,10 @@
 pub(crate) mod json_rpc;
 pub mod gateway;
 mod modern;
+mod tasks;
 
 pub use modern::{InputRequired, PromptReply};
+pub use tasks::{TaskContext, TaskError};
 
 #[cfg(test)]
 mod tests;
@@ -375,6 +377,9 @@ pub struct McpContext {
     /// capabilities, `inputResponses`, the verified `requestState` and the
     /// log level. `None` on earlier protocol versions.
     modern: Option<Arc<modern::ModernRequest>>,
+    /// Where [`Self::start_task`] puts tasks — set when the client declared
+    /// the tasks extension on this request (MCP 2026-07-28).
+    tasks: Option<tasks::TaskHandle>,
 }
 
 impl McpContext {
@@ -1129,6 +1134,11 @@ pub struct McpServer {
     /// `ttlMs` / `cacheScope` on cacheable results ([`Self::cache_hints`]).
     cache_ttl_ms: u64,
     cache_scope: &'static str,
+    /// Tasks started by tools (MCP Tasks extension).
+    task_store: Arc<tasks::TaskStore>,
+    task_ttl_ms: u64,
+    /// Tools usable only as tasks ([`Self::task_required`]).
+    task_required_tools: Arc<RwLock<Vec<String>>>,
 }
 
 /// One `GET /mcp` SSE client: its outbound channel plus the
@@ -1203,6 +1213,9 @@ impl McpServer {
             state_key: Arc::new(modern::random_key()),
             cache_ttl_ms: 0,
             cache_scope: "private",
+            task_store: Arc::new(tasks::TaskStore::default()),
+            task_ttl_ms: 3_600_000,
+            task_required_tools: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -3055,6 +3068,7 @@ impl McpServer {
             sessions: Some(self.sessions.clone()),
             request_stream: None,
             modern: None,
+            tasks: None,
         }
     }
 }

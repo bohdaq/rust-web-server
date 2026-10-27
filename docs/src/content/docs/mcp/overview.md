@@ -386,18 +386,27 @@ On the 2026-07-28 path:
   `resourceSubscriptions`), each tagged with
   `_meta.io.modelcontextprotocol/subscriptionId`. `register_tool`,
   `notify_resource_updated` and the rest feed both kinds of stream.
+- **Long-running tools** can answer with a task (the Tasks extension,
+  `io.modelcontextprotocol/tasks`, advertised in `server/discover`):
+  `ctx.start_task(...)` — see [Long-running work: tasks](/mcp/tools/#long-running-work-tasks-mcp-tasks-extension);
+  `tasks/get`, `tasks/update` and `tasks/cancel` (with `Mcp-Name` = the
+  task id) serve it.
+- **`Mcp-Param-*` headers.** For a tool whose `inputSchema` marks
+  parameters with `"x-mcp-header": "Name"`, `tools/call` must carry
+  `Mcp-Param-Name` with that argument's value (plain or
+  `=?base64?…?=`, canonical base64 only) whenever the argument is set, else
+  `400 -32020`.
 - **Request-scoped notifications** go on the request's own SSE response:
   progress (`ctx.report_progress`) when `_meta.progressToken` is set, log
   messages (`ctx.log(level, data)`) only when `_meta` sets
   `io.modelcontextprotocol/logLevel`.
 
 The official conformance suite runs in CI for both eras
-(`.github/workflows/mcp-conformance.yml`, suite 0.2.0-alpha.12): all 37
-server scenarios 2026-07-28 requires pass; for 2025-11-25, 69 of 72
-checks, the three failures being server-initiated elicitation, which
-rws doesn't implement for that version. Not yet: the Tasks extension
-(`io.modelcontextprotocol/tasks`) and checking `Mcp-Param-*` headers
-against `x-mcp-header` tool parameters — both outside the scored set.
+(`.github/workflows/mcp-conformance.yml`, suite 0.2.0-alpha.12): for
+2026-07-28 every check passes — 196, the 37 required scenarios and the 13
+run beside them (the Tasks extension, `Mcp-Param-*` validation, JSON Schema
+2020-12); for 2025-11-25, 69 of 72 checks, the three failures being
+server-initiated elicitation, which rws doesn't implement for that version.
 
 ## Protocol version negotiation
 

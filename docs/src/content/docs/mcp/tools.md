@@ -245,6 +245,73 @@ flows: put the step in the state).
   `ctx.is_modern()` to choose, and `ctx.sample()` / `ctx.list_roots()`
   (below) for those clients.
 
+## Long-running work: tasks (MCP Tasks extension)
+
+A tool whose work takes long — a build, a batch job, a human approval —
+returns `ctx.start_task(...)`. When the client declared the
+`io.modelcontextprotocol/tasks` extension (MCP 2026-07-28), the call answers
+at once with a task handle (`resultType: "task"`) and the work runs on a
+thread of its own; the client polls `tasks/get` until the task is
+`completed`, `failed` or `cancelled`, and the result is what the tool would
+have returned. Any other client — or an earlier protocol version — gets the
+work run there and then, so the tool needs no second code path (since
+18.5.0):
+
+```rust
+use rust_web_server::mcp::{InputRequired, McpContent, McpServer, TaskError};
+
+let server = McpServer::new("ops", "1.0")
+    .tool_with_context("rebuild_index", "Rebuilds the search index", "{}", |ctx, _args| {
+        ctx.start_task(|task| {
+            for step in 1..=10 {
+                if task.is_cancelled() {
+                    return Err(TaskError::Cancelled);
+                }
+                task.status_message(&format!("step {step} of 10"));
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+            Ok(McpContent::text("index rebuilt"))
+        })
+    })
+    .tool_with_context("delete_bucket", "Deletes a bucket after confirmation", "{}", |ctx, _args| {
+        ctx.start_task(|task| {
+            // Parks the task as input_required until tasks/update answers.
+            let answers = task.input(InputRequired::new().elicit(
+                "confirm",
+                "Delete the bucket?",
+                r#"{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}"#,
+            ))?;
+            let ok = answers.iter().any(|(_, answer)| answer.contains(r#""ok":true"#));
+            Ok(McpContent::text(if ok { "deleted" } else { "kept" }))
+        })
+    })
+    // Only as a task: other clients get -32021 naming the extension.
+    .task_required("delete_bucket");
+```
+
+- **Outcomes.** `Ok(content)` completes the task with that result;
+  `Err(TaskError::Tool(message))` (or `Err("...".into())`) completes it with
+  `isError: true`, as a synchronous call would; `TaskError::Failed { code, message }`
+  — or a panic — makes it `failed` with that JSON-RPC error; `TaskError::Cancelled`
+  ends it as `cancelled`.
+- **Input during the task.** `task.input(InputRequired)` shows the task as
+  `input_required` with those requests and waits until `tasks/update` has
+  answered every key (answers may come one at a time); it returns the answers
+  `(key, raw JSON)`. Keys can't be reused within a task. Run inline (no
+  extension), it returns an error.
+- **Cancellation.** `tasks/cancel` makes a running task `cancelled` at once;
+  the work sees `task.is_cancelled()` and should stop. Cancelling a finished
+  task is acknowledged and changes nothing.
+- **Lifetime.** Tasks are kept in memory for an hour after they start
+  (`.task_ttl(Duration)`), at most 10 000 (the oldest finished go first), and
+  only the caller that started a task — the same OAuth / bearer-token `sub` —
+  can see, update or cancel it. A server restart loses them.
+- **Notifications.** A `subscriptions/listen` asking for `taskIds` gets
+  `notifications/tasks` with the full task at each status change.
+- A tool can also ask for input before deciding to start a task — return
+  `McpContent::input_required` on the first call, and `ctx.start_task` on the
+  retry. `ctx.supports_tasks()` says whether a task would be created.
+
 ## Server-side sampling
 
 :::caution[Deprecated by MCP 2026-07-28]

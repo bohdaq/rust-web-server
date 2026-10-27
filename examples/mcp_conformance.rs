@@ -13,7 +13,7 @@
 //! baseline rather than faked. The `test_input_required_result_*` tools are
 //! MCP 2026-07-28's multi round-trip requests.
 
-use rust_web_server::mcp::{InputRequired, LogLevel, McpContent, McpContext, McpServer, PromptArgDef, PromptMessage, PromptReply, SamplingRequest};
+use rust_web_server::mcp::{InputRequired, LogLevel, McpContent, McpContext, McpServer, PromptArgDef, PromptMessage, PromptReply, SamplingRequest, TaskError};
 use rust_web_server::server::Server;
 
 const TEST_IMAGE_BASE64: &str =
@@ -236,12 +236,75 @@ pub fn server() -> McpServer {
                 None => McpContent::input_required(InputRequired::new().elicit("answer", "Say something", &form("value", "string"))),
             })
         })
+        .tool(
+            "test_custom_headers",
+            "Its region and priority are mirrored into Mcp-Param-* headers",
+            r#"{"type":"object","properties":{"region":{"type":"string","x-mcp-header":"Region"},"priority":{"type":"integer","x-mcp-header":"Priority"}},"required":["region"]}"#,
+            |args| Ok(McpContent::text(format!("region {}", arg(args, "region")))),
+        )
         .tool_with_context("test_logging_tool", "Logs three messages about this request", NO_ARGS, |ctx, _| {
             for message in ["Tool execution started", "Tool processing data", "Tool execution completed"] {
                 ctx.log(LogLevel::Info, &format!(r#""{message}""#));
             }
             Ok(McpContent::text("Logged"))
         })
+        // ── the Tasks extension (io.modelcontextprotocol/tasks) ──
+        .tool("greet", "Sync-only greeting", r#"{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}"#, |args| {
+            Ok(McpContent::text(format!("Hello, {}!", arg(args, "name"))))
+        })
+        .tool_with_context("slow_compute", "Sleeps `seconds`, then answers; as a task when the client can", r#"{"type":"object","properties":{"seconds":{"type":"number"},"label":{"type":"string"}}}"#, |ctx, args| {
+            let seconds: f64 = arg(args, "seconds").parse().unwrap_or(1.0);
+            let label = Some(arg(args, "label")).filter(|l| !l.is_empty()).unwrap_or_else(|| "compute".into());
+            ctx.start_task(move |task| {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds.max(0.0));
+                while std::time::Instant::now() < deadline {
+                    if task.is_cancelled() {
+                        return Err(TaskError::Cancelled);
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                Ok(McpContent::text(format!("slow_compute({label}) done after {seconds}s")))
+            })
+        })
+        .tool_with_context("failing_job", "Always a tool execution error, after a second", NO_ARGS, |ctx, _| {
+            ctx.start_task(|_task| {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                Err(TaskError::Tool("failing_job: intentional tool execution error".into()))
+            })
+        })
+        .tool_with_context("protocol_error_job", "Fails with a protocol-level error", NO_ARGS, |ctx, _| {
+            ctx.start_task(|_task| {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                Err(TaskError::Failed { code: -32603, message: "protocol_error_job: intentional protocol-level failure".into() })
+            })
+        })
+        .tool_with_context("confirm_delete", "Asks to confirm, inside the task", r#"{"type":"object","properties":{"filename":{"type":"string"}}}"#, |ctx, args| {
+            let filename = Some(arg(args, "filename")).filter(|f| !f.is_empty()).unwrap_or_else(|| "file.txt".into());
+            ctx.start_task(move |task| {
+                let answers = task.input(InputRequired::new().elicit("confirm", &format!("Delete {filename}?"), &form("confirm", "boolean")))?;
+                let confirmed = answers.iter().any(|(_, answer)| answer.contains(r#""confirm":true"#));
+                Ok(McpContent::text(format!("confirm_delete({filename}): confirmed = {confirmed}")))
+            })
+        })
+        .tool_with_context("multi_input", "Asks two questions at once, inside the task", NO_ARGS, |ctx, _| {
+            ctx.start_task(|task| {
+                let answers = task.input(InputRequired::new().elicit("input-a", "Provide value A", &form("value", "string")).elicit("input-b", "Provide value B", &form("value", "string")))?;
+                Ok(McpContent::text(format!("multi_input: {} answers", answers.len())))
+            })
+        })
+        .tool_with_context("test_tool_with_task", "Asks your name, then works on it as a task", NO_ARGS, |ctx, _| {
+            match elicited(&ctx, "user_name", "name") {
+                None => Ok(McpContent::input_required(InputRequired::new().elicit("user_name", "What is your name?", &form("name", "string")))),
+                Some(name) => ctx.start_task(move |_task| {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    Ok(McpContent::text(format!("Hello, {name}! (async)")))
+                }),
+            }
+        })
+        .task_required("failing_job")
+        .task_required("confirm_delete")
+        .task_required("multi_input")
+        .task_required("test_tool_with_task")
         .prompt_with_context("test_input_required_result_prompt", "A prompt that asks for context first", vec![], |ctx, _| {
             Ok(match elicited(&ctx, "user_context", "context") {
                 Some(context) => PromptReply::Messages(vec![PromptMessage::user(format!("Use this context: {context}"))]),

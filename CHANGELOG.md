@@ -24,6 +24,19 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   undeclared capability is `-32021`. Removed methods are `404 -32601` there.
   Official conformance suite 0.2.0-alpha.12 in CI: every scenario 2026-07-28
   requires passes, and 2025-11-25 stays at its baseline (#16).
+- The MCP Tasks extension (`io.modelcontextprotocol/tasks`, #15): a tool
+  returns `ctx.start_task(|task| ...)` — a task handle for clients that
+  declared the extension (`tasks/get`, `tasks/update`, `tasks/cancel`,
+  `notifications/tasks` on `subscriptions/listen`), the work run inline for
+  any other. `TaskContext::input` parks the task as `input_required` until
+  `tasks/update` answers; `TaskError` maps to completed-with-error, failed or
+  cancelled; `.task_required(name)` refuses non-declaring clients (`-32021`);
+  `.task_ttl`. Tasks belong to their caller.
+- `Mcp-Param-*` headers (MCP 2026-07-28, SEP-2243): tool parameters marked
+  `x-mcp-header` must be mirrored in matching headers on `tools/call`
+  (`400 -32020` otherwise); base64 header values must be canonical. The
+  conformance suite's 2026-07-28 run now passes every check, 196, including
+  the unscored ones.
 - `resources/templates/list`: resources registered with a URI template are
   listed there; `resources/list` holds only concrete resources (it listed
   templates as resources before, which the suite flags).
