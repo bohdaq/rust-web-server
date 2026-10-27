@@ -1,0 +1,46 @@
+[
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+   "name": "gateway-only-unsupported-protocols",
+   "namespace": "gateway-conformance-infra",
+   "annotations": {
+    "gateway-api/skip-this-for-readiness": "true"
+   }
+  },
+  "spec": {
+   "gatewayClassName": "rws",
+   "listeners": [
+    {
+     "name": "invalid",
+     "port": 1111,
+     "protocol": "INVALID"
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+   "name": "gateway-supported-and-unsupported-protocols",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "gatewayClassName": "rws",
+   "listeners": [
+    {
+     "name": "http",
+     "port": 80,
+     "protocol": "HTTP"
+    },
+    {
+     "name": "invalid",
+     "port": 1111,
+     "protocol": "INVALID"
+    }
+   ]
+  }
+ }
+]

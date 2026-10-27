@@ -14,6 +14,7 @@ pub type TlsRoute = Object<L4RouteSpec, RouteStatus>;
 pub type TcpRoute = Object<L4RouteSpec, RouteStatus>;
 pub type UdpRoute = Object<L4RouteSpec, RouteStatus>;
 pub type ReferenceGrant = Object<ReferenceGrantSpec, NoStatus>;
+pub type ListenerSet = Object<ListenerSetSpec, ListenerSetStatus>;
 
 fn resource(version: &str, kind: &str, plural: &str) -> ApiResource {
     ApiResource::from_gvk_with_plural(&GroupVersionKind::gvk(GATEWAY_GROUP, version, kind), plural)
@@ -45,6 +46,10 @@ pub fn tcp_routes() -> ApiResource {
 
 pub fn udp_routes() -> ApiResource {
     resource("v1", "UDPRoute", "udproutes")
+}
+
+pub fn listener_sets() -> ApiResource {
+    resource("v1", "ListenerSet", "listenersets")
 }
 
 pub fn reference_grants() -> ApiResource {

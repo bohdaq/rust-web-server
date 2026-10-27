@@ -25,7 +25,7 @@ use kube::{Client, Resource, ResourceExt};
 use serde::de::DeserializeOwned;
 use tokio::sync::Notify;
 
-use super::resources::{self, Gateway, GatewayClass, GrpcRoute, HttpRoute, ReferenceGrant, TcpRoute, TlsRoute, UdpRoute};
+use super::resources::{self, Gateway, GatewayClass, GrpcRoute, HttpRoute, ListenerSet, ReferenceGrant, TcpRoute, TlsRoute, UdpRoute};
 use super::translate::{translate, GatewayConfig, Settings, Snapshot};
 use super::types::RouteParentStatus;
 
@@ -54,6 +54,7 @@ pub struct Stores {
     pub tls_routes: Store<TlsRoute>,
     pub tcp_routes: Store<TcpRoute>,
     pub udp_routes: Store<UdpRoute>,
+    pub listener_sets: Store<ListenerSet>,
     pub reference_grants: Store<ReferenceGrant>,
     pub services: Store<Service>,
     pub namespaces: Store<Namespace>,
@@ -77,6 +78,7 @@ impl Stores {
             tls_routes: all(&self.tls_routes),
             tcp_routes: all(&self.tcp_routes),
             udp_routes: all(&self.udp_routes),
+            listener_sets: all(&self.listener_sets),
             reference_grants: all(&self.reference_grants),
             services: all(&self.services),
             namespaces: all(&self.namespaces),
@@ -118,6 +120,7 @@ pub fn start_watches(client: &Client) -> (Stores, Arc<Notify>) {
         tls_routes: watch(Api::all_with(client.clone(), &resources::tls_routes()), resources::tls_routes(), Arc::clone(&changed)),
         tcp_routes: watch(Api::all_with(client.clone(), &resources::tcp_routes()), resources::tcp_routes(), Arc::clone(&changed)),
         udp_routes: watch(Api::all_with(client.clone(), &resources::udp_routes()), resources::udp_routes(), Arc::clone(&changed)),
+        listener_sets: watch(Api::all_with(client.clone(), &resources::listener_sets()), resources::listener_sets(), Arc::clone(&changed)),
         reference_grants: watch(Api::all_with(client.clone(), &resources::reference_grants()), resources::reference_grants(), Arc::clone(&changed)),
         services: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         namespaces: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
@@ -195,6 +198,17 @@ pub async fn reconcile(client: &Client, stores: &Stores, options: &Options) -> R
         }
         let api: Api<Gateway> = Api::namespaced_with(client.clone(), &namespace, &resources::gateways());
         if let Err(e) = patch_status(&api, &gateway.name_any(), status, None).await {
+            failures.push(e);
+        }
+    }
+    for set in &snapshot.listener_sets {
+        let namespace = set.namespace().unwrap_or_default();
+        let Some(status) = desired.listener_sets.get(&(namespace.clone(), set.name_any())) else { continue };
+        if set.status.as_ref() == Some(status) {
+            continue;
+        }
+        let api: Api<ListenerSet> = Api::namespaced_with(client.clone(), &namespace, &resources::listener_sets());
+        if let Err(e) = patch_status(&api, &set.name_any(), status, None).await {
             failures.push(e);
         }
     }

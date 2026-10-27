@@ -594,6 +594,37 @@ pub struct L4RouteRule {
     pub backend_refs: Vec<BackendRef>,
 }
 
+// ── ListenerSet (v1) ──────────────────────────────────────────────────────────
+
+/// More listeners for a Gateway that allows them (`spec.allowedListeners`).
+/// Its entries have a Gateway listener's shape.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListenerSetSpec {
+    pub parent_ref: ParentGatewayReference,
+    #[serde(default)]
+    pub listeners: Vec<Listener>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ParentGatewayReference {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ListenerSetStatus {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditions: Vec<Condition>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub listeners: Vec<ListenerStatus>,
+}
+
 /// The status every route kind has.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct RouteStatus {

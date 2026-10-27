@@ -11,7 +11,7 @@ use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{Condition, LabelSelector, Time};
 use kube::ResourceExt;
 
-use super::resources::{Gateway, GatewayClass, GrpcRoute, HttpRoute, ReferenceGrant, TcpRoute, TlsRoute, UdpRoute};
+use super::resources::{Gateway, GatewayClass, GrpcRoute, HttpRoute, ListenerSet, ReferenceGrant, TcpRoute, TlsRoute, UdpRoute};
 use super::routes::CompiledHttpRoute;
 use super::services::ServiceSettings;
 use super::types::*;
@@ -39,6 +39,7 @@ pub struct Snapshot {
     pub tls_routes: Vec<TlsRoute>,
     pub tcp_routes: Vec<TcpRoute>,
     pub udp_routes: Vec<UdpRoute>,
+    pub listener_sets: Vec<ListenerSet>,
     pub reference_grants: Vec<ReferenceGrant>,
     pub services: Vec<Service>,
     pub namespaces: Vec<Namespace>,
@@ -85,6 +86,8 @@ pub struct Desired {
     pub tls_routes: BTreeMap<(String, String), Vec<RouteParentStatus>>,
     pub tcp_routes: BTreeMap<(String, String), Vec<RouteParentStatus>>,
     pub udp_routes: BTreeMap<(String, String), Vec<RouteParentStatus>>,
+    /// (namespace, name) → status of the ListenerSets attached to our Gateways.
+    pub listener_sets: BTreeMap<(String, String), ListenerSetStatus>,
     /// (namespace, name) → the Service each of our Gateways should have.
     pub services: BTreeMap<(String, String), Service>,
 }
@@ -168,17 +171,34 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
         desired.classes.insert(name, GatewayClassStatus { conditions, supported_features });
     }
 
-    // Gateways of our classes, and what each listener accepts.
+    // Gateways of our classes, and what each listener accepts: their own,
+    // then those of the ListenerSets they allow (oldest first).
     let mut listeners: Vec<ListenerView> = Vec::new();
+    let mut listener_sets: Vec<(&ListenerSet, (String, String), bool)> = Vec::new();
+    let mut merged_gateways: Vec<Gateway> = Vec::new();
     for gateway in &snapshot.gateways {
         if !our_classes.contains(&gateway.spec.gateway_class_name) {
             continue;
         }
-        listeners.extend(listener_views(gateway, snapshot));
+        let key = (gateway.namespace().unwrap_or_default(), gateway.name_any());
+        let mut views = listener_views(&gateway.spec.listeners, &key, &key.0, None, snapshot);
+        let mut merged = gateway.clone();
+        for (set, allowed) in attached_listener_sets(gateway, snapshot) {
+            let set_key = (set.namespace().unwrap_or_default(), set.name_any());
+            if allowed {
+                views.extend(listener_views(&set.spec.listeners, &key, &set_key.0, Some(set_key.clone()), snapshot));
+                merged.spec.listeners.extend(set.spec.listeners.iter().cloned());
+            }
+            listener_sets.push((set, key.clone(), allowed));
+        }
+        mark_conflicts(&mut views);
+        listeners.extend(views);
+        merged_gateways.push(merged);
     }
 
-    // Every Gateway of ours gets its Service.
-    let our_gateways: Vec<&Gateway> = snapshot.gateways.iter().filter(|g| our_classes.contains(&g.spec.gateway_class_name)).collect();
+    // Every Gateway of ours gets its Service, with a port for every listener
+    // (its ListenerSets' too).
+    let our_gateways: Vec<&Gateway> = merged_gateways.iter().collect();
     desired.services = super::services::desired(snapshot, &our_gateways, &settings.services);
 
     // Routes: attach to listeners, resolve backends.
@@ -190,18 +210,26 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
         .chain([("TLSRoute", &snapshot.tls_routes), ("TCPRoute", &snapshot.tcp_routes), ("UDPRoute", &snapshot.udp_routes)].into_iter().flat_map(|(kind, routes)| {
             routes.iter().map(move |r| RouteIn::new(kind, r, &r.spec.parent_refs, &r.spec.hostnames, l4_references(&r.spec.rules), super::routes::compile_l4(r, kind, snapshot)))
         }));
-    let mut attached: BTreeMap<(String, String, String), i32> = BTreeMap::new();
+    let mut attached: BTreeMap<((String, String), Option<(String, String)>, String), i32> = BTreeMap::new();
     for route in routes {
         let namespace = route.namespace.clone();
         let resolved = resolve_references(route.kind, &namespace, &route.references, snapshot);
         let mut parents = Vec::new();
         for parent_ref in route.parent_refs {
-            if parent_ref.group() != GATEWAY_GROUP || parent_ref.kind() != "Gateway" {
+            if parent_ref.group() != GATEWAY_GROUP {
                 continue;
             }
-            let gateway_namespace = parent_ref.namespace.clone().unwrap_or_else(|| namespace.clone());
-            let gateway_key = (gateway_namespace.clone(), parent_ref.name.clone());
-            let candidates: Vec<&ListenerView> = listeners.iter().filter(|l| l.gateway == gateway_key).collect();
+            let parent_key = (parent_ref.namespace.clone().unwrap_or_else(|| namespace.clone()), parent_ref.name.clone());
+            // The Gateway, and for a ListenerSet parent the set whose listeners it means.
+            let (gateway_key, owner) = match parent_ref.kind() {
+                "Gateway" => (parent_key.clone(), None),
+                "ListenerSet" => match listener_sets.iter().find(|(set, _, _)| is_named(*set, &parent_key)) {
+                    Some((_, gateway, _)) => (gateway.clone(), Some(parent_key.clone())),
+                    None => continue, // not attached to a Gateway of ours
+                },
+                _ => continue,
+            };
+            let candidates: Vec<&ListenerView> = listeners.iter().filter(|l| l.gateway == gateway_key && l.owner == owner).collect();
             if candidates.is_empty() && !snapshot.gateways.iter().any(|g| is_named(g, &gateway_key) && our_classes.contains(&g.spec.gateway_class_name)) {
                 continue; // not one of ours: another controller reports it
             }
@@ -213,8 +241,8 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
                 .unwrap_or_default();
             let (accepted, reason, message, attached_to) = attach(route.kind, route.hostnames, parent_ref, &namespace, &candidates, snapshot);
             for listener in &attached_to {
-                *attached.entry((gateway_key.0.clone(), gateway_key.1.clone(), listener.clone())).or_default() += 1;
-                if let Some(view) = listeners.iter_mut().find(|l| l.gateway == gateway_key && &l.name == listener) {
+                *attached.entry((gateway_key.clone(), owner.clone(), listener.clone())).or_default() += 1;
+                if let Some(view) = listeners.iter_mut().find(|l| l.gateway == gateway_key && l.owner == owner && &l.name == listener) {
                     view.http_routes.push(route.compiled.clone());
                 }
             }
@@ -249,22 +277,26 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
         let previous = gateway.status.clone().unwrap_or_default();
         let container_ports = super::services::container_ports(super::services::current(snapshot, gateway));
         let mut listener_statuses = Vec::new();
+        let mut set_statuses: BTreeMap<(String, String), Vec<ListenerStatus>> = BTreeMap::new();
         let mut any_valid = false;
+        let (mut any_accepted, mut any_rejected) = (false, false);
         for view in listeners.iter().filter(|l| l.gateway == key) {
-            let old = previous.listeners.iter().find(|l| l.name == view.name).map(|l| l.conditions.as_slice()).unwrap_or_default();
-            let count = attached.get(&(key.0.clone(), key.1.clone(), view.name.clone())).copied().unwrap_or(0);
-            any_valid |= view.accepted && view.programmed;
-            listener_statuses.push(ListenerStatus {
-                name: view.name.clone(),
-                supported_kinds: view.supported_kinds.clone(),
-                attached_routes: count,
-                conditions: vec![
-                    condition(old, "Accepted", view.accepted, view.accepted_reason, &view.message, generation, now),
-                    condition(old, "Programmed", view.programmed, if view.programmed { "Programmed" } else { "Invalid" }, &view.message, generation, now),
-                    condition(old, "ResolvedRefs", view.resolved_refs.is_ok(), view.resolved_refs.as_ref().err().map_or("ResolvedRefs", |(r, _)| r), view.resolved_refs.as_ref().err().map_or("", |(_, m)| m.as_str()), generation, now),
-                    condition(old, "Conflicted", view.conflicted.is_some(), view.conflicted.unwrap_or("NoConflicts"), "", generation, now),
-                ],
-            });
+            let count = attached.get(&(key.clone(), view.owner.clone(), view.name.clone())).copied().unwrap_or(0);
+            match &view.owner {
+                None => {
+                    any_valid |= view.accepted && view.programmed;
+                    any_accepted |= view.accepted;
+                    any_rejected |= !view.accepted;
+                    let old = previous.listeners.iter().find(|l| l.name == view.name).map(|l| l.conditions.as_slice()).unwrap_or_default();
+                    listener_statuses.push(listener_status(view, count, old, generation, now));
+                }
+                Some(set_key) => {
+                    let set = snapshot.listener_sets.iter().find(|s| is_named(*s, set_key));
+                    let old = set.and_then(|s| s.status.as_ref()).and_then(|s| s.listeners.iter().find(|l| l.name == view.name)).map(|l| l.conditions.clone()).unwrap_or_default();
+                    let set_generation = set.and_then(|s| s.metadata.generation);
+                    set_statuses.entry(set_key.clone()).or_default().push(listener_status(view, count, &old, set_generation, now));
+                }
+            }
             let container_port = container_ports.get(&(view.port, super::services::transport(&view.protocol).to_string()));
             if let (true, true, Some(container_port)) = (view.accepted, view.programmed, container_port) {
                 config.listeners.push(ListenerConfig {
@@ -289,14 +321,39 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
         } else {
             ("Programmed", "Serving")
         };
-        let accepted_reason = if gateway.spec.listeners.is_empty() || any_valid { "Accepted" } else { "ListenersNotValid" };
+        // Accepted unless no listener is; `ListenersNotValid` when any isn't.
+        let gateway_accepted = gateway.spec.listeners.is_empty() || any_accepted;
+        let accepted_reason = if any_rejected { "ListenersNotValid" } else { "Accepted" };
+
+        // Its ListenerSets: accepted with at least one valid listener.
+        let mut attached_sets = 0;
+        for (set, _, allowed) in listener_sets.iter().filter(|(_, gateway, _)| *gateway == key) {
+            let set_key = (set.namespace().unwrap_or_default(), set.name_any());
+            let statuses = set_statuses.remove(&set_key).unwrap_or_default();
+            let valid = statuses.iter().any(|l| l.conditions.iter().all(|c| c.type_ == "Conflicted" || c.type_ == "ResolvedRefs" || c.status == "True"));
+            let (ok, reason, message) = if !allowed {
+                (false, "NotAllowed", "The Gateway's allowedListeners doesn't admit this ListenerSet")
+            } else if !valid {
+                (false, "ListenersNotValid", "No valid listener")
+            } else {
+                (true, "Accepted", "")
+            };
+            attached_sets += ok as i32;
+            let old = set.status.as_ref().map(|s| s.conditions.as_slice()).unwrap_or_default();
+            let set_generation = set.metadata.generation;
+            let conditions = vec![
+                condition(old, "Accepted", ok, reason, message, set_generation, now),
+                condition(old, "Programmed", ok, if ok { "Programmed" } else { reason }, message, set_generation, now),
+            ];
+            desired.listener_sets.insert(set_key, ListenerSetStatus { conditions, listeners: statuses });
+        }
         let conditions = vec![
-            condition(&previous.conditions, "Accepted", true, accepted_reason, "", generation, now),
+            condition(&previous.conditions, "Accepted", gateway_accepted, accepted_reason, "", generation, now),
             condition(&previous.conditions, "Programmed", programmed, programmed_reason, programmed_message, generation, now),
         ];
         desired.gateways.insert(
             key,
-            GatewayStatus { addresses, conditions, listeners: listener_statuses, attached_listener_sets: None },
+            GatewayStatus { addresses, conditions, listeners: listener_statuses, attached_listener_sets: Some(attached_sets) },
         );
     }
     (config, desired)
@@ -306,6 +363,10 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
 
 struct ListenerView {
     gateway: (String, String),
+    /// The ListenerSet it comes from; `None` for the Gateway's own.
+    owner: Option<(String, String)>,
+    /// Its object's namespace (`from: Same` for routes, Secrets).
+    namespace: String,
     name: String,
     port: i32,
     protocol: String,
@@ -343,12 +404,11 @@ fn kinds_for(protocol: &str) -> &'static [&'static str] {
     }
 }
 
-fn listener_views(gateway: &Gateway, snapshot: &Snapshot) -> Vec<ListenerView> {
-    let gateway_namespace = gateway.namespace().unwrap_or_default();
-    let key = (gateway_namespace.clone(), gateway.name_any());
-    let mut views: Vec<ListenerView> = gateway
-        .spec
-        .listeners
+/// The views of `listeners`, of the Gateway `key` (from the ListenerSet
+/// `owner`, if any, in `namespace`); conflicts are marked later, over the
+/// Gateway's merged list ([`mark_conflicts`]).
+fn listener_views(listeners: &[Listener], key: &(String, String), namespace: &str, owner: Option<(String, String)>, snapshot: &Snapshot) -> Vec<ListenerView> {
+    listeners
         .iter()
         .map(|l| {
             let allowed = l.allowed_routes.clone().unwrap_or_default();
@@ -374,7 +434,7 @@ fn listener_views(gateway: &Gateway, snapshot: &Snapshot) -> Vec<ListenerView> {
             };
             let mut tls = None;
             if accepted && terminates_tls(l) {
-                match certificates(l, &gateway_namespace, snapshot) {
+                match certificates(l, namespace, snapshot) {
                     Ok(material) => tls = Some(material),
                     Err(e) => resolved_refs = Err(e),
                 }
@@ -383,6 +443,8 @@ fn listener_views(gateway: &Gateway, snapshot: &Snapshot) -> Vec<ListenerView> {
             let programmed = accepted && resolved_refs.as_ref().err().is_none_or(|(reason, _)| *reason == "InvalidRouteKinds");
             ListenerView {
                 gateway: key.clone(),
+                owner: owner.clone(),
+                namespace: namespace.to_string(),
                 name: l.name.clone(),
                 port: l.port,
                 protocol: l.protocol.clone(),
@@ -399,12 +461,17 @@ fn listener_views(gateway: &Gateway, snapshot: &Snapshot) -> Vec<ListenerView> {
                 http_routes: Vec::new(),
             }
         })
-        .collect();
+        .collect()
+}
 
-    // Conflicts: listeners on one port must agree on the protocol (HTTP vs
-    // HTTPS/TLS) and differ in hostname.
-    for i in 0..views.len() {
-        for j in 0..views.len() {
+/// Listeners on one port must agree on the protocol and differ in hostname.
+/// Among the Gateway's own listeners every party to a conflict is marked; a
+/// ListenerSet's listener that conflicts with one earlier in the merged list
+/// (the Gateway's, then older ListenerSets') is the one that loses, and
+/// isn't accepted.
+fn mark_conflicts(views: &mut [ListenerView]) {
+    for j in 0..views.len() {
+        for i in 0..views.len() {
             if i == j || views[i].port != views[j].port {
                 continue;
             }
@@ -412,20 +479,91 @@ fn listener_views(gateway: &Gateway, snapshot: &Snapshot) -> Vec<ListenerView> {
             if super::services::transport(&views[i].protocol) != super::services::transport(&views[j].protocol) {
                 continue;
             }
+            // A ListenerSet's listener only loses to earlier ones.
+            if views[j].owner.is_some() && (i > j || views[i].conflicted.is_some()) {
+                continue;
+            }
+            if views[j].owner.is_none() && views[i].owner.is_some() {
+                continue;
+            }
             let reason = if views[i].protocol != views[j].protocol {
-                Some("ProtocolConflict")
+                "ProtocolConflict"
             } else if views[i].hostname == views[j].hostname {
-                Some("HostnameConflict")
+                "HostnameConflict"
             } else {
-                None
+                continue;
             };
-            if let Some(reason) = reason {
-                views[i].conflicted = Some(reason);
-                views[i].programmed = false;
+            views[j].conflicted = Some(reason);
+            views[j].programmed = false;
+            if views[j].owner.is_some() {
+                views[j].accepted = false;
+                views[j].accepted_reason = reason;
             }
         }
     }
-    views
+}
+
+/// The ListenerSets naming `gateway` as their parent, oldest first, and
+/// whether its `allowedListeners` admits each.
+fn attached_listener_sets<'a>(gateway: &Gateway, snapshot: &'a Snapshot) -> Vec<(&'a ListenerSet, bool)> {
+    let gateway_namespace = gateway.namespace().unwrap_or_default();
+    let mut sets: Vec<&ListenerSet> = snapshot
+        .listener_sets
+        .iter()
+        .filter(|set| {
+            let parent = &set.spec.parent_ref;
+            let namespace = parent.namespace.clone().or_else(|| set.namespace()).unwrap_or_default();
+            parent.group.as_deref().unwrap_or(GATEWAY_GROUP) == GATEWAY_GROUP
+                && parent.kind.as_deref().unwrap_or("Gateway") == "Gateway"
+                && parent.name == gateway.name_any()
+                && namespace == gateway_namespace
+        })
+        .collect();
+    sets.sort_by_key(|set| (set.metadata.creation_timestamp.as_ref().map(|t| t.0.to_string()).unwrap_or_default(), set.namespace(), set.name_any()));
+    let admitted = gateway.spec.allowed_listeners.as_ref().and_then(|a| a.namespaces.as_ref());
+    sets.into_iter()
+        .map(|set| {
+            let namespace = set.namespace().unwrap_or_default();
+            let allowed = namespace_admitted(admitted.and_then(|n| n.from.as_deref()).unwrap_or("None"), admitted.and_then(|n| n.selector.as_ref()), &namespace, &gateway_namespace, snapshot);
+            (set, allowed)
+        })
+        .collect()
+}
+
+/// `from` (`All`, `Same`, `Selector`, `None`) admits objects in `namespace`
+/// for an object in `home`.
+fn namespace_admitted(from: &str, selector: Option<&LabelSelector>, namespace: &str, home: &str, snapshot: &Snapshot) -> bool {
+    match from {
+        "All" => true,
+        "Same" => namespace == home,
+        "Selector" => {
+            let mut labels = snapshot.namespaces.iter().find(|n| n.name_any() == namespace).map(|n| n.labels().clone()).unwrap_or_default();
+            // The API server sets this on every namespace; selectors use it.
+            labels.entry("kubernetes.io/metadata.name".to_string()).or_insert_with(|| namespace.to_string());
+            selector.is_some_and(|s| selector_matches(s, &labels))
+        }
+        _ => false,
+    }
+}
+
+/// A listener's status from its view.
+fn listener_status(view: &ListenerView, attached_routes: i32, old: &[Condition], generation: Option<i64>, now: &Time) -> ListenerStatus {
+    let programmed_reason = match (view.programmed, view.conflicted) {
+        (true, _) => "Programmed",
+        (false, Some(reason)) if view.owner.is_some() => reason,
+        _ => "Invalid",
+    };
+    ListenerStatus {
+        name: view.name.clone(),
+        supported_kinds: view.supported_kinds.clone(),
+        attached_routes,
+        conditions: vec![
+            condition(old, "Accepted", view.accepted, view.accepted_reason, &view.message, generation, now),
+            condition(old, "Programmed", view.programmed, programmed_reason, &view.message, generation, now),
+            condition(old, "ResolvedRefs", view.resolved_refs.is_ok(), view.resolved_refs.as_ref().err().map_or("ResolvedRefs", |(r, _)| r), view.resolved_refs.as_ref().err().map_or("", |(_, m)| m.as_str()), generation, now),
+            condition(old, "Conflicted", view.conflicted.is_some(), view.conflicted.unwrap_or("NoConflicts"), "", generation, now),
+        ],
+    }
 }
 
 /// An HTTPS listener's certificates resolve: TLS Secrets in its namespace,
@@ -516,19 +654,9 @@ fn allows(listener: &ListenerView, kind: &str, namespace: &str, snapshot: &Snaps
     if !listener.supported_kinds.iter().any(|k| k.kind == kind) {
         return false;
     }
-    let from = listener.allowed.namespaces.as_ref().and_then(|n| n.from.as_deref()).unwrap_or("Same");
-    match from {
-        "All" => true,
-        "Same" => namespace == listener.gateway.0,
-        "Selector" => {
-            let selector = listener.allowed.namespaces.as_ref().and_then(|n| n.selector.as_ref());
-            let mut labels = snapshot.namespaces.iter().find(|n| n.name_any() == namespace).map(|n| n.labels().clone()).unwrap_or_default();
-            // The API server sets this on every namespace; selectors use it.
-            labels.entry("kubernetes.io/metadata.name".to_string()).or_insert_with(|| namespace.to_string());
-            selector.is_some_and(|s| selector_matches(s, &labels))
-        }
-        _ => false,
-    }
+    let namespaces = listener.allowed.namespaces.as_ref();
+    let from = namespaces.and_then(|n| n.from.as_deref()).unwrap_or("Same");
+    namespace_admitted(from, namespaces.and_then(|n| n.selector.as_ref()), namespace, &listener.namespace, snapshot)
 }
 
 pub(crate) fn selector_matches(selector: &LabelSelector, labels: &BTreeMap<String, String>) -> bool {

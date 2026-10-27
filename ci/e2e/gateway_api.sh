@@ -20,13 +20,17 @@ CLUSTER=rws-gateway-api
 METALLB_VERSION=v0.16.0
 
 dump() {
-  echo "── rws pods"; kubectl get pods -A -o wide || true
-  echo "── rws logs"; kubectl logs -l app.kubernetes.io/name=rws --tail=200 --prefix || true
-  echo "── gateways"; kubectl get gateways -A -o yaml | head -200 || true
+  echo "── pods"; kubectl get pods -A -o wide || true
+  echo "── rws logs"; kubectl logs -n rws-system -l app.kubernetes.io/name=rws --tail=300 --prefix || true
+  echo "── gateway Services"; kubectl get services -A -l app.kubernetes.io/managed-by=rws-gateway -o wide || true
+  echo "── gateways"; kubectl get gateways -A -o yaml | head -300 || true
 }
 trap dump ERR
 
 kind create cluster --name "$CLUSTER" --wait 120s
+# kind marks its single node as excluded from external load balancers, and
+# MetalLB honours that: without this no LoadBalancer address answers ARP.
+kubectl label nodes --all node.kubernetes.io/exclude-from-external-load-balancers- || true
 kubectl apply --server-side -f "$GWAPI/standard-install.yaml"
 kubectl wait --for=condition=Established crd --all --timeout=60s
 

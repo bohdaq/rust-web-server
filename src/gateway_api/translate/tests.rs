@@ -395,3 +395,15 @@ fn tcp_and_udp_routes_attach_to_their_listeners() {
     let protocols: BTreeSet<&str> = config.listeners.iter().filter(|l| l.gateway.1.contains("tcp") || l.gateway.1.contains("udp")).map(|l| l.protocol.as_str()).collect();
     assert_eq!(BTreeSet::from(["TCP", "UDP"]), protocols);
 }
+
+#[test]
+fn a_gateway_is_accepted_while_any_listener_is() {
+    let (_, desired) = run(&snapshot(&["gateway-invalid-listeners-unsupported-protocol"]));
+    let accepted = |gateway: &str| {
+        let c = find(&desired.gateways[&(INFRA.to_string(), gateway.to_string())].conditions, "Accepted").clone();
+        (c.status, c.reason)
+    };
+    assert_eq!(("False".to_string(), "ListenersNotValid".to_string()), accepted("gateway-only-unsupported-protocols"));
+    assert_eq!(("True".to_string(), "ListenersNotValid".to_string()), accepted("gateway-supported-and-unsupported-protocols"));
+    assert_eq!(("True".to_string(), "Accepted".to_string()), accepted("same-namespace"));
+}
