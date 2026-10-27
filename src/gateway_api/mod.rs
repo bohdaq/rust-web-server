@@ -16,6 +16,7 @@
 
 pub mod controller;
 pub mod dataplane;
+pub mod lease;
 pub mod resources;
 pub mod router;
 pub mod routes;
@@ -28,3 +29,110 @@ pub const CONTROLLER_NAME: &str = "rws8.tech/gateway-controller";
 
 /// The field manager rws writes status with.
 pub const FIELD_MANAGER: &str = "rws-gateway";
+
+use std::collections::BTreeMap;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+
+/// `RWS_CONFIG_GATEWAY_API_ENABLED` (`[gateway_api] enabled`): run the
+/// controller and serve Gateways.
+pub const RWS_CONFIG_GATEWAY_API_ENABLED: &str = "RWS_CONFIG_GATEWAY_API_ENABLED";
+/// The `controllerName` handled (default [`CONTROLLER_NAME`]).
+pub const RWS_CONFIG_GATEWAY_API_CONTROLLER_NAME: &str = "RWS_CONFIG_GATEWAY_API_CONTROLLER_NAME";
+/// The labels of the pods Gateways' Services select, `key=value,…`.
+pub const RWS_CONFIG_GATEWAY_API_POD_SELECTOR: &str = "RWS_CONFIG_GATEWAY_API_POD_SELECTOR";
+/// Container ports to allocate, `first-last` (default `10000-10999`).
+pub const RWS_CONFIG_GATEWAY_API_PORT_RANGE: &str = "RWS_CONFIG_GATEWAY_API_PORT_RANGE";
+/// Gateways' Service type (default `LoadBalancer`).
+pub const RWS_CONFIG_GATEWAY_API_SERVICE_TYPE: &str = "RWS_CONFIG_GATEWAY_API_SERVICE_TYPE";
+/// Where the leader-election Lease lives (default: the pod's namespace).
+pub const RWS_CONFIG_GATEWAY_API_LEASE_NAMESPACE: &str = "RWS_CONFIG_GATEWAY_API_LEASE_NAMESPACE";
+
+fn setting(key: &str) -> Option<String> {
+    std::env::var(key).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+/// Whether the controller is turned on.
+pub fn enabled() -> bool {
+    setting(RWS_CONFIG_GATEWAY_API_ENABLED).is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "yes" | "on"))
+}
+
+/// `key=value,key=value`.
+pub fn parse_labels(value: &str) -> BTreeMap<String, String> {
+    value.split(',').filter_map(|pair| pair.split_once('=')).map(|(k, v)| (k.trim().to_string(), v.trim().to_string())).filter(|(k, _)| !k.is_empty()).collect()
+}
+
+/// `first-last`.
+pub fn parse_port_range(value: &str) -> Option<(u16, u16)> {
+    let (first, last) = value.split_once('-')?;
+    let (first, last) = (first.trim().parse::<u16>().ok()?, last.trim().parse::<u16>().ok()?);
+    (first >= 1024 && first <= last).then_some((first, last))
+}
+
+/// The translation settings, from `RWS_CONFIG_GATEWAY_API_*`.
+pub fn settings_from_env() -> translate::Settings {
+    let mut settings = translate::Settings::default();
+    if let Some(name) = setting(RWS_CONFIG_GATEWAY_API_CONTROLLER_NAME) {
+        settings.controller_name = name;
+    }
+    if let Some(selector) = setting(RWS_CONFIG_GATEWAY_API_POD_SELECTOR).map(|v| parse_labels(&v)).filter(|l| !l.is_empty()) {
+        settings.services.pod_selector = selector;
+    }
+    if let Some(range) = setting(RWS_CONFIG_GATEWAY_API_PORT_RANGE).and_then(|v| parse_port_range(&v)) {
+        settings.services.port_range = range;
+    }
+    if let Some(kind) = setting(RWS_CONFIG_GATEWAY_API_SERVICE_TYPE) {
+        settings.services.service_type = kind;
+    }
+    settings
+}
+
+/// The pod's namespace: the setting, `POD_NAMESPACE`, or the service account's.
+fn lease_namespace() -> String {
+    setting(RWS_CONFIG_GATEWAY_API_LEASE_NAMESPACE)
+        .or_else(|| setting("POD_NAMESPACE"))
+        .or_else(|| std::fs::read_to_string("/var/run/secrets/kubernetes.io/serviceaccount/namespace").ok().map(|n| n.trim().to_string()))
+        .unwrap_or_else(|| "default".to_string())
+}
+
+/// When enabled, start the controller, leader election and data plane on
+/// the current tokio runtime, against the cluster rws runs in (or the
+/// kubeconfig). Returns at once.
+pub fn start_from_env() {
+    if !enabled() {
+        return;
+    }
+    tokio::spawn(async {
+        let client = match kube::Client::try_default().await {
+            Ok(client) => client,
+            Err(e) => {
+                eprintln!("[gateway-api] no Kubernetes API: {e}");
+                return;
+            }
+        };
+        let settings = settings_from_env();
+        println!("[gateway-api] serving GatewayClasses with controllerName {}", settings.controller_name);
+        let identity = setting("POD_NAME").or_else(|| setting("HOSTNAME")).unwrap_or_else(|| format!("rws-{}", std::process::id()));
+        let leader = Arc::new(AtomicBool::new(false));
+        let became_leader = Arc::new(tokio::sync::Notify::new());
+        let lease = lease::LeaseSettings { namespace: lease_namespace(), name: "rws-gateway-controller".to_string(), identity };
+        tokio::spawn(lease::run(client.clone(), lease, Arc::clone(&leader), Arc::clone(&became_leader)));
+        let plane = Arc::new(dataplane::DataPlane::new("0.0.0.0"));
+        let options = controller::Options { settings, leader, on_config: Arc::new(move |config| plane.apply(&config)) };
+        controller::run(client, options, became_leader).await;
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_parse() {
+        assert_eq!(BTreeMap::from([("a".to_string(), "1".to_string()), ("b".to_string(), "x".to_string())]), parse_labels(" a=1, b = x ,junk"));
+        assert_eq!(Some((10000, 10999)), parse_port_range("10000-10999"));
+        assert_eq!(None, parse_port_range("80-90"), "no privileged ports");
+        assert_eq!(None, parse_port_range("2000-1000"));
+        assert_eq!(None, parse_port_range("x"));
+    }
+}

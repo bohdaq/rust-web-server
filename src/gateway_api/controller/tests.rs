@@ -99,7 +99,7 @@ fn fake_with(fixtures: &[&str]) -> FakeApi {
 fn options(write_status: bool, configs: Arc<Mutex<Vec<GatewayConfig>>>) -> Options {
     Options {
         settings: Default::default(),
-        write_status,
+        leader: Arc::new(std::sync::atomic::AtomicBool::new(write_status)),
         on_config: Arc::new(move |config| configs.lock().unwrap().push(config)),
     }
 }

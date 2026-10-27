@@ -637,6 +637,8 @@ async fn serve() {
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
     rust_web_server::config_watch::start();
     telemetry();
+    #[cfg(feature = "gateway-api")]
+    rust_web_server::gateway_api::start_from_env();
 
     start_acme(Some(&listener)).await;
 
@@ -666,6 +668,8 @@ async fn serve() {
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
     rust_web_server::config_watch::start();
     telemetry();
+    #[cfg(feature = "gateway-api")]
+    rust_web_server::gateway_api::start_from_env();
 
     start_acme(Some(&listener)).await;
 

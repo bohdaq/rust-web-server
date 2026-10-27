@@ -214,6 +214,13 @@ serve_dotfiles          = false        # RWS_CONFIG_SERVE_DOTFILES: serve .git/,
 spa_fallback            = "index.html"   # RWS_CONFIG_SPA_FALLBACK: file served for client-side routes
 spa_fallback_exclude_prefixes = ["/api"]   # RWS_CONFIG_SPA_FALLBACK_EXCLUDE_PREFIXES
 
+[gateway_api]                        # RWS_CONFIG_GATEWAY_API_*: the Kubernetes Gateway API controller (gateway-api feature)
+enabled         = true
+controller_name = "rws8.tech/gateway-controller"
+pod_selector    = "app.kubernetes.io/name=rws"
+port_range      = "10000-10999"
+service_type    = "LoadBalancer"
+
 [circuit_breaker]                    # RWS_CONFIG_CIRCUIT_BREAKER_*: read by RedisCircuitBreaker::from_env()
 failure_threshold      = 5
 recovery_secs          = 30

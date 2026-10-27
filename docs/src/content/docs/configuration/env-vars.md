@@ -154,6 +154,19 @@ don't use them.
 
 The log format is hot-reloadable.
 
+## Kubernetes Gateway API
+
+The `gateway-api` build feature's controller (in progress, 18.8.0). Read at startup. See [Kubernetes Gateway API](/deployment/kubernetes-gateway-api/).
+
+| Variable | Default | Type | Description |
+|----------|---------|------|-------------|
+| `RWS_CONFIG_GATEWAY_API_ENABLED` | `false` | boolean | Watch the cluster's Gateway API objects, serve the Gateways of this controller's GatewayClasses and report their status |
+| `RWS_CONFIG_GATEWAY_API_CONTROLLER_NAME` | `rws8.tech/gateway-controller` | string | The `spec.controllerName` of the GatewayClasses this instance handles |
+| `RWS_CONFIG_GATEWAY_API_POD_SELECTOR` | `app.kubernetes.io/name=rws` | `key=value,…` | Labels of the rws pods; every Gateway's Service selects them |
+| `RWS_CONFIG_GATEWAY_API_PORT_RANGE` | `10000-10999` | `first-last` | Container ports Gateway listeners are served on (each Service maps a listener port to one) |
+| `RWS_CONFIG_GATEWAY_API_SERVICE_TYPE` | `LoadBalancer` | string | The type of the Service each Gateway gets |
+| `RWS_CONFIG_GATEWAY_API_LEASE_NAMESPACE` | the pod's namespace | string | Where the `rws-gateway-controller` leader-election Lease lives |
+
 ## Templates
 
 | Variable | Default | Description |

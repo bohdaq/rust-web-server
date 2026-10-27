@@ -163,6 +163,7 @@ export default defineConfig({
             { label: 'Docker',               link: '/deployment/docker/' },
             { label: 'Kubernetes',           link: '/deployment/kubernetes/' },
             { label: 'Kubernetes Ingress',   link: '/deployment/kubernetes-ingress/' },
+            { label: 'Kubernetes Gateway API', link: '/deployment/kubernetes-gateway-api/' },
             { label: 'Observability',        link: '/deployment/observability/' },
             { label: 'systemd',              link: '/deployment/systemd/' },
             { label: 'Windows',              link: '/deployment/windows/' },

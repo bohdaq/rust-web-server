@@ -223,7 +223,7 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
             Config::RWS_CONFIG_CORS_ALLOW_ALL | Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS | Config::RWS_CONFIG_ACME_STAGING
             | "RWS_CONFIG_CLIENT_HINTS" | "RWS_CONFIG_OPEN_FILE_CACHE_STRICT"
             | "RWS_CONFIG_SECURITY_HEADERS" | "RWS_CONFIG_NANOS_HEADERS" | "RWS_CONFIG_SERVE_DOTFILES" | "RWS_CONFIG_WATCH"
-            | "RWS_CONFIG_PROXY_PROTOCOL" => {
+            | "RWS_CONFIG_PROXY_PROTOCOL" | "RWS_CONFIG_GATEWAY_API_ENABLED" => {
                 if !matches!(value.to_ascii_lowercase().as_str(), "true" | "false") {
                     report.error(format!("{key} = {value:?}: expected true or false"));
                 }

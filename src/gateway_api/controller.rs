@@ -10,6 +10,7 @@
 //! server refuse ours (`409`) rather than lose theirs; the next reconcile
 //! retries from fresh state.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,12 +31,15 @@ use super::types::RouteParentStatus;
 
 /// How long changes are gathered before a reconcile.
 pub const DEBOUNCE: Duration = Duration::from_millis(100);
+/// A reconcile at least this often, changes or not (status drift, a lost event).
+pub const RESYNC: Duration = Duration::from_secs(30);
 
 /// What the controller needs besides the cluster.
 pub struct Options {
     pub settings: Settings,
-    /// Write status (the leader does; others only serve).
-    pub write_status: bool,
+    /// Whether this replica holds the Lease: the leader writes status and
+    /// Services, every replica serves ([`super::lease`]).
+    pub leader: Arc<AtomicBool>,
     /// Called with every new configuration.
     pub on_config: Arc<dyn Fn(GatewayConfig) + Send + Sync>,
 }
@@ -111,11 +115,16 @@ pub fn start_watches(client: &Client) -> (Stores, Arc<Notify>) {
     (stores, changed)
 }
 
-/// Reconcile on every change, forever.
-pub async fn run(client: Client, options: Options) {
+/// Reconcile on every change, when this replica becomes the leader, and
+/// every [`RESYNC`], forever.
+pub async fn run(client: Client, options: Options, became_leader: Arc<Notify>) {
     let (stores, changed) = start_watches(&client);
     loop {
-        changed.notified().await;
+        tokio::select! {
+            _ = changed.notified() => {}
+            _ = became_leader.notified() => {}
+            _ = tokio::time::sleep(RESYNC) => {}
+        }
         tokio::time::sleep(DEBOUNCE).await;
         if let Err(e) = reconcile(&client, &stores, &options).await {
             eprintln!("[gateway-api] reconcile: {e}");
@@ -135,7 +144,7 @@ pub async fn reconcile(client: &Client, stores: &Stores, options: &Options) -> R
     let now = Time(k8s_openapi::jiff::Timestamp::now());
     let (config, desired) = translate(&snapshot, &options.settings, &now);
     (options.on_config)(config);
-    if !options.write_status {
+    if !options.leader.load(Ordering::SeqCst) {
         return Ok(());
     }
     let mut failures = Vec::new();
