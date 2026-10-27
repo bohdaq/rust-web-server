@@ -55,6 +55,14 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - HTTP/2 requests keep `te: trailers` for the application (it was validated,
   then dropped).
 
+### Fixed
+
+- An HTTP/1.1 response with no body (a handler returning
+  `Response::new()`, a gRPC-web trailers-only error) had no
+  `Content-Length`, so a keep-alive client waited for a body until the
+  connection closed. It now says `Content-Length: 0` (not for 1xx, 204 and
+  304, which never have content, nor for streamed bodies).
+
 ## 18.2.0 — 2026-10-26
 
 ### Security

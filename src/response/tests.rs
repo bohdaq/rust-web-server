@@ -628,7 +628,7 @@ fn generate_response_parts_partial_and_multipart_headers() {
     odd.status_code = 599;
     odd.reason_phrase = "Custom".to_string();
     let (head, body) = Response::generate_response_parts(odd, request.clone());
-    assert_eq!("HTTP/1.1 599 Custom\r\n\r\n", String::from_utf8(head).unwrap());
+    assert_eq!("HTTP/1.1 599 Custom\r\nContent-Length: 0\r\n\r\n", String::from_utf8(head).unwrap());
     assert!(body.is_empty());
 
     let mut negative = Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None);
@@ -890,4 +890,30 @@ fn drop_content_for_status_clears_streamed_bodies() {
     let mut ok = with_body(STATUS_CODE_REASON_PHRASE.n200_ok);
     ok.drop_content_for_status();
     assert_eq!(1, ok.content_range_list.len());
+}
+
+#[test]
+fn a_bodiless_response_says_its_length_is_zero() {
+    use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
+    let request = crate::request::Request { method: "GET".to_string(), request_uri: "/".to_string(), http_version: "HTTP/1.1".to_string(), headers: vec![], body: Default::default() };
+    let head = |response: Response| String::from_utf8(Response::generate_response_parts(response, request.clone()).0).unwrap();
+
+    // Without it a keep-alive client waits for a body until the connection closes.
+    let empty = Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None);
+    assert!(head(empty).ends_with("Content-Length: 0\r\n\r\n"));
+
+    // Statuses without content never carry one.
+    for status in [STATUS_CODE_REASON_PHRASE.n204_no_content, STATUS_CODE_REASON_PHRASE.n304_not_modified] {
+        assert!(!head(Response::get_response(status, None, None)).contains("Content-Length"));
+    }
+
+    // A streamed body is framed by its writer (chunked).
+    let mut streamed = Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None);
+    streamed.stream_pipe = Some(Box::new(std::io::empty()));
+    assert!(!head(streamed).contains("Content-Length"));
+
+    // A length the handler set is kept, not doubled.
+    let mut set = Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None);
+    set.headers.push(crate::header::Header::new("Content-Length", "0".to_string()));
+    assert_eq!(1, head(set).matches("Content-Length").count());
 }

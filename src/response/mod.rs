@@ -521,6 +521,7 @@ impl Response {
     /// buffer for one `write`, without growing the head afterwards.
     pub(crate) fn generate_response_coalesced(mut response: Response, request: Request, coalesce_limit: usize) -> (Vec<u8>, Vec<u8>) {
         response.drop_content_for_status();
+        let streamed = response.stream_pipe.is_some() || response.stream_file.is_some();
         let Response { http_version, status_code, reason_phrase, headers, mut content_range_list, .. } = response;
 
         // Content-Type, Content-Range and Content-Length follow the other
@@ -555,6 +556,17 @@ impl Response {
             // Without it a keep-alive client can't tell where the body ends
             // (RFC 9112 §6.3; #53). A HEAD gets the GET's length.
             content_length = Some(Decimal::new(body.len() as u128));
+        }
+        // No body at all: say so, or a keep-alive client waits for one until
+        // the connection closes (a gRPC-web trailers-only error hung a
+        // browser). Not for statuses that never have content, nor when the
+        // handler set the length itself, nor for a streamed body.
+        if content_length.is_none()
+            && !streamed
+            && !Response::status_has_no_content(status_code)
+            && !headers.iter().any(|h| h.name.eq_ignore_ascii_case(Header::_CONTENT_LENGTH))
+        {
+            content_length = Some(Decimal::new(0));
         }
         let body = if is_head { Vec::new() } else { body };
         let coalesce = body.len() <= coalesce_limit;

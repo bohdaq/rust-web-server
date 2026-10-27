@@ -501,3 +501,34 @@ async fn grpc_web_over_http1() {
     assert!(reply.0.is_none(), "read error {:?} after: {text}", reply.0);
     assert!(text.starts_with("HTTP/1.1 200") && text.contains("grpc-status:0"), "{text}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_grpc_web_trailers_only_error_is_framed_over_http1_keep_alive() {
+    use std::io::{Read, Write};
+    let backend = grpc_backend().await;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = App::new().wrap(crate::proxy::GrpcWebLayer::new()).wrap(GrpcProxy::new([format!("grpc://{backend}")]));
+    tokio::spawn(crate::server::Server::run_plain(listener, app));
+    let head = tokio::task::spawn_blocking(move || {
+        let body = message(b"x");
+        let mut stream = std::net::TcpStream::connect(addr).unwrap();
+        stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let request = format!(
+            "POST /test.Echo/Fail HTTP/1.1\r\nHost: x\r\nContent-Type: application/grpc-web+proto\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        );
+        stream.write_all(request.as_bytes()).unwrap();
+        stream.write_all(&body).unwrap();
+        let mut head = Vec::new();
+        let mut byte = [0u8; 1];
+        while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).unwrap_or(0) == 1 {
+            head.push(byte[0]);
+        }
+        String::from_utf8_lossy(&head).to_string()
+    })
+    .await
+    .unwrap();
+    let lower = head.to_ascii_lowercase();
+    assert!(lower.contains("grpc-status: 13") && lower.contains("content-length: 0"), "{head}");
+}
