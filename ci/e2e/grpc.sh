@@ -77,6 +77,12 @@ TOML
   local pid=$!
   PIDS+=($pid)
   wait_port 8761
+  # The port answers before the per-core runtimes take it over (the setup
+  # listener closes first): wait until they have.
+  for _ in $(seq 1 60); do
+    grep -qE "Started [0-9]+ per-core runtimes" "rws-$1.log" && break
+    sleep 0.25
+  done
   RWS_PID=$pid
 }
 stop_rws() { kill "$RWS_PID"; wait "$RWS_PID" 2>/dev/null || true; }

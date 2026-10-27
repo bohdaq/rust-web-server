@@ -88,7 +88,10 @@ pub(crate) fn bind(addr: SocketAddr) -> std::io::Result<tokio::net::TcpListener>
 }
 
 /// Start `count` threads, each running `accept_loop(listener)` on its own
-/// single-threaded runtime until `stop` turns `true`. A thread whose
+/// single-threaded runtime until `stop` turns `true`. Returns once every
+/// thread has bound its socket (or failed to), so the port accepts
+/// connections again when it returns — the setup listener was closed just
+/// before, and a client let in by it in between was reset. A thread whose
 /// runtime or socket can't be set up reports it and ends; the others keep
 /// serving.
 #[cfg(unix)]
@@ -103,7 +106,9 @@ where
     Fut: std::future::Future<Output = ()>,
 {
     let mut handles = Vec::with_capacity(count);
+    let (bound_tx, bound_rx) = std::sync::mpsc::channel::<()>();
     for slot in 1..=count {
+        let bound = bound_tx.clone();
         let stop = stop.clone();
         let accept_loop = accept_loop.clone();
         let spawned = std::thread::Builder::new().name(format!("rws-core-{}", slot)).spawn(move || {
@@ -113,7 +118,9 @@ where
                 Err(e) => return eprintln!("per-core runtime {}: {}", slot, e),
             };
             runtime.block_on(async move {
-                match bind(addr) {
+                let listener = bind(addr);
+                drop(bound);
+                match listener {
                     Ok(listener) => accept_loop(listener, stop).await,
                     Err(e) => eprintln!("per-core runtime {}: unable to listen on {}: {}", slot, addr, e),
                 }
@@ -124,6 +131,10 @@ where
             Err(e) => eprintln!("per-core runtime {}: {}", slot, e),
         }
     }
+    // Every sender dropped: each thread has bound (or given up). Bounded,
+    // in case a thread never gets that far.
+    drop(bound_tx);
+    let _ = bound_rx.recv_timeout(std::time::Duration::from_secs(5));
     handles
 }
 
@@ -135,6 +146,25 @@ pub(crate) async fn stopped(stop: &mut watch::Receiver<bool>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn the_port_accepts_connections_when_spawn_returns() {
+        let addr = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+        let (stop_tx, stop_rx) = watch::channel(false);
+        let handles = spawn(addr, 2, stop_rx, |listener: tokio::net::TcpListener, mut stop: watch::Receiver<bool>| async move {
+            tokio::select! {
+                _ = async { while listener.accept().await.is_ok() {} } => {}
+                _ = stopped(&mut stop) => {}
+            }
+        });
+        assert_eq!(2, handles.len());
+        std::net::TcpStream::connect(addr).expect("listening as soon as spawn returns");
+        stop_tx.send(true).unwrap();
+        for handle in handles {
+            handle.join().unwrap();
+        }
+    }
 
     #[test]
     fn pool_key_is_shared_off_the_per_core_runtimes() {

@@ -36,7 +36,7 @@ log_format = "combined"
 access_log = "access.log"'
 hit 3 first
 [ "$(lines access.log first)" = 3 ] || fail "expected 3 lines in access.log: $(cat access.log 2>/dev/null)"
-! grep -q "first" rws.log || fail "access log lines went to stdout too"
+! grep -q "index.html?first" rws.log || fail "access log lines went to stdout too"
 mv access.log access.log.1
 hit 2 moved
 [ "$(lines access.log.1 moved)" = 2 ] || fail "before SIGUSR1 lines go on to the moved file"

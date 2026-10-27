@@ -9,6 +9,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Fixed
 
+- Per-core runtimes: startup returns only once every runtime's socket is
+  bound. Between the setup listener closing and those sockets opening, a
+  connection could be refused or reset; the gap is now microseconds, and
+  "Started N per-core runtimes" is printed once the port is served again.
 - A WebSocket Close frame whose reason isn't UTF-8 now fails the frame, as
   RFC 6455 §7.1.6 requires (text frames already did). It was decoded
   lossily, which could make the reason up to three times the frame payload
