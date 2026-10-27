@@ -265,7 +265,9 @@ Defines a named backend pool. Upstreams are referenced by name from routes.
 name      = "api"
 backends  = ["localhost:3000", "localhost:3001"]
 strategy  = "round_robin"   # "round_robin" | "random" | "ip_hash" | "least_connections" (default: round_robin)
-# tls_ca_file = "/etc/rws/internal-ca.pem"  # https:// backends: trust this CA instead of the public roots
+# tls_ca_file = "/etc/rws/internal-ca.pem"  # TLS backends: trust this CA instead of the public roots
+# tls_client_cert_file = "/etc/rws/client.pem"  # TLS backends that require a client certificate (mutual TLS),
+# tls_client_key_file  = "/etc/rws/client.key"  #   with its private key — since 18.3.0
 
 [upstream.health_check]
 path                = "/health"  # HTTP path polled on each backend (default: /health)

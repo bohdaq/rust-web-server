@@ -56,6 +56,7 @@ fn ok_response() -> Response {
         content_range_list: vec![],
         stream_file: None,
         stream_pipe: None,
+        trailers: None,
     }
 }
 
@@ -88,6 +89,7 @@ fn response_with_status(status: i16) -> Response {
         content_range_list: vec![],
         stream_file: None,
         stream_pipe: None,
+        trailers: None,
     }
 }
 

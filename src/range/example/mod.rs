@@ -23,6 +23,7 @@ fn as_response() {
         content_range_list: vec![content_range],
         stream_file: None,
         stream_pipe: None,
+        trailers: None,
     };
 }
 

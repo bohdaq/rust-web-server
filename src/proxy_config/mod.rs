@@ -71,6 +71,11 @@ pub struct UpstreamConfig {
     /// upstream's `https://` backends **instead of** the public WebPKI roots
     /// (a private CA or a self-signed certificate). `None` = WebPKI.
     pub tls_ca_file: Option<String>,
+    /// `tls_client_cert_file` / `tls_client_key_file` — a client certificate
+    /// (PEM chain and key) presented to TLS backends that require one.
+    /// Since 18.3.0.
+    pub tls_client_cert_file: Option<String>,
+    pub tls_client_key_file: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -311,9 +316,13 @@ impl ProxyConfig {
             } else {
                 None
             };
-            let tls = backends.iter().any(|b| b.starts_with("https://"));
+            let tls = backends.iter().any(|b| ["https://", "h2s://", "grpcs://"].iter().any(|s| b.starts_with(s)));
             let tls_ca_file = Some(get_str(&map, &sec, "tls_ca_file")).filter(|v| !v.is_empty());
-            upstreams.push(UpstreamConfig { name, backends, strategy, health_check, tls, tls_ca_file });
+            let tls_client_cert_file = Some(get_str(&map, &sec, "tls_client_cert_file")).filter(|v| !v.is_empty());
+            let tls_client_key_file = Some(get_str(&map, &sec, "tls_client_key_file")).filter(|v| !v.is_empty());
+            upstreams.push(UpstreamConfig {
+                name, backends, strategy, health_check, tls, tls_ca_file, tls_client_cert_file, tls_client_key_file,
+            });
             i += 1;
         }
 
@@ -812,6 +821,13 @@ impl Application for RouteDispatch {
         }
         self.fallback.execute(request, conn)
     }
+
+    fn streams_body(&self, request: &Request, conn: &ConnectionInfo) -> bool {
+        match self.routes.iter().find(|r| r.matcher.matches(request, conn)) {
+            Some(route) => route.handler.streams_body(request, conn),
+            None => self.fallback.streams_body(request, conn),
+        }
+    }
 }
 
 impl MiddlewareConfig {
@@ -1068,6 +1084,17 @@ impl Application for ConfigDrivenApp {
         }
     }
 
+    /// The matched route decides: a `grpc` route streams request bodies
+    /// (client-streaming and bidirectional calls), the others don't yet.
+    fn streams_body(&self, request: &Request, conn: &ConnectionInfo) -> bool {
+        let request = normalized(request);
+        let generation = self.current();
+        match &generation.entry {
+            Some(entry) => entry.streams_body(&request, conn),
+            None => generation.dispatch.streams_body(&request, conn),
+        }
+    }
+
     /// Routes proxy upstream or run configured middleware: only requests
     /// that match no route and fall through to the static files run inline,
     /// and only without a global `[middleware]` table.
@@ -1092,6 +1119,68 @@ impl Application for ConfigDrivenApp {
         let route = generation.dispatch.routes.iter().find(|r| r.matcher.matches(&request, conn))?;
         let proxy = Arc::clone(route.async_proxy.as_ref()?);
         Some(Box::pin(async move { proxy.execute_async(&request, conn).await }))
+    }
+}
+
+// ── H2Route ───────────────────────────────────────────────────────────────────
+
+/// The `grpc` action: requests forwarded over HTTP/2 to the upstream's live
+/// backends in turn, bodies streamed both ways, trailers kept.
+#[cfg(feature = "http2")]
+pub(crate) struct H2Route {
+    live: Arc<RwLock<Vec<String>>>,
+    tls: bool,
+    trust: Option<Arc<crate::proxy::UpstreamTls>>,
+    connect_timeout: std::time::Duration,
+    read_timeout: std::time::Duration,
+    counter: std::sync::atomic::AtomicUsize,
+}
+
+#[cfg(feature = "http2")]
+impl H2Route {
+    pub(crate) fn new(
+        live: Arc<RwLock<Vec<String>>>,
+        tls: bool,
+        trust: Option<Arc<crate::proxy::UpstreamTls>>,
+        connect_timeout_ms: u64,
+        read_timeout_ms: u64,
+    ) -> H2Route {
+        H2Route {
+            live,
+            tls,
+            trust,
+            connect_timeout: std::time::Duration::from_millis(connect_timeout_ms),
+            read_timeout: std::time::Duration::from_millis(read_timeout_ms),
+            counter: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+}
+
+#[cfg(feature = "http2")]
+impl Application for H2Route {
+    fn execute(&self, request: &Request, conn: &ConnectionInfo) -> Result<Response, String> {
+        let backends = self.live.read().unwrap_or_else(|e| e.into_inner()).clone();
+        if backends.is_empty() {
+            return Ok(crate::proxy::bad_gateway());
+        }
+        // A streamed request body can be sent once: no second backend then.
+        let attempts = if matches!(request.body, crate::request::Body::Stream(_)) { 1 } else { backends.len() };
+        let start = self.counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        for attempt in 0..attempts {
+            let url = &backends[(start + attempt) % backends.len()];
+            let result = crate::proxy::forward_h2(
+                request, &conn.client.ip, url, self.tls, self.trust.as_deref(), self.connect_timeout, self.read_timeout,
+            );
+            match result {
+                Ok(response) => return Ok(response),
+                Err(e) => eprintln!("grpc route: {e}"),
+            }
+        }
+        Ok(crate::proxy::bad_gateway())
+    }
+
+    fn streams_body(&self, _request: &Request, _conn: &ConnectionInfo) -> bool {
+        true
     }
 }
 

@@ -140,6 +140,15 @@ pub trait Middleware: Send + Sync {
     fn accepts_streamed_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
         false
     }
+
+    /// `true` when this layer answers `request` itself — it doesn't call
+    /// `next` — and reads its body as a stream (a proxy forwarding it as it
+    /// arrives). The body is then streamed whatever the layers after it and
+    /// the application would say. Requires `accepts_streamed_body`. Since
+    /// 18.3.0.
+    fn answers_streamed_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        false
+    }
 }
 
 /// An [`Application`] that applies a stack of [`Middleware`] layers before
@@ -201,7 +210,15 @@ impl<A: Application> Application for WithMiddleware<A> {
         }
     }
     fn streams_body(&self, request: &Request, connection: &ConnectionInfo) -> bool {
-        self.layers.iter().all(|l| l.accepts_streamed_body(request, connection)) && self.inner.streams_body(request, connection)
+        for layer in self.layers.iter() {
+            if !layer.accepts_streamed_body(request, connection) {
+                return false;
+            }
+            if layer.answers_streamed_body(request, connection) {
+                return true;
+            }
+        }
+        self.inner.streams_body(request, connection)
     }
 }
 

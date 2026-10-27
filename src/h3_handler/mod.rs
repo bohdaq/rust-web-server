@@ -254,6 +254,28 @@ async fn send_h3_response(
         }
     }
 
+    // Trailers (gRPC status): complete once the body has been produced.
+    let trailers = if is_head { Vec::new() } else { rws_response.trailers.as_ref().map(|t| t.get()).unwrap_or_default() };
+    if !trailers.is_empty() {
+        let mut fields = http::HeaderMap::new();
+        for header in &trailers {
+            let lower = header.name.to_lowercase();
+            if FORBIDDEN_H3_RESPONSE_HEADERS.contains(&lower.as_str()) {
+                continue;
+            }
+            if let (Ok(name), Ok(value)) = (
+                http::header::HeaderName::from_bytes(header.name.as_bytes()),
+                http::header::HeaderValue::from_str(&header.value),
+            ) {
+                fields.append(name, value);
+            }
+        }
+        if let Err(e) = stream.send_trailers(fields).await {
+            eprintln!("H3 send trailers error: {}", e);
+            return;
+        }
+    }
+
     if let Err(e) = stream.finish().await {
         eprintln!("H3 finish stream error: {}", e);
     }

@@ -113,6 +113,7 @@ impl WebSocket {
             content_range_list: vec![],
             stream_file: None,
             stream_pipe: None,
+            trailers: None,
         };
 
         if let Some(proto) = request.get_header("Sec-WebSocket-Protocol".to_string()) {

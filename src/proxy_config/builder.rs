@@ -62,8 +62,10 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
         let live = Arc::new(RwLock::new(upstream.backends.clone()));
         upstream_lives.insert(upstream.name.clone(), Arc::clone(&live));
 
-        let trust = upstream.tls_ca_file.as_ref().map(|path| {
-            Arc::new(crate::proxy::UpstreamTls::from_ca_file(path).unwrap_or_else(|e| {
+        let client = upstream.tls_client_cert_file.as_deref().zip(upstream.tls_client_key_file.as_deref());
+        let configured = upstream.tls_ca_file.is_some() || upstream.tls_client_cert_file.is_some() || upstream.tls_client_key_file.is_some();
+        let trust = configured.then(|| {
+            Arc::new(crate::proxy::UpstreamTls::new(upstream.tls_ca_file.as_deref(), client).unwrap_or_else(|e| {
                 eprintln!("[proxy_config] ERROR: upstream '{}': {e} — its TLS backends answer 502 until this is fixed", upstream.name);
                 crate::proxy::UpstreamTls::reject_all(&upstream.name)
             }))
@@ -141,8 +143,8 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                     arc_app(StaticAdapter::new(root.clone(), index.clone()))
                 }
 
-                // Grpc action — use DynamicProxy (it forwards over HTTP/1.1;
-                // a future version could plug in H2ReverseProxy here)
+                // Grpc action: HTTP/2 to the upstream (HTTP/1.1 only in builds
+                // without the http2 feature, where gRPC can't work anyway).
                 ActionConfig::Grpc { upstream, connect_timeout_ms, read_timeout_ms } => {
                     let live = upstream_lives
                         .get(upstream.as_str())
@@ -150,13 +152,27 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                         .unwrap_or_else(|| Arc::new(RwLock::new(vec![upstream.clone()])));
                     let upstream_cfg = config.upstreams.iter().find(|u| u.name == *upstream);
                     let upstream_tls = upstream_cfg.map_or_else(|| upstream.starts_with("https://"), |u| u.tls);
-                    let upstream_strategy = upstream_cfg
-                        .map(|u| u.strategy.clone())
-                        .unwrap_or_else(|| "round_robin".to_string());
-                    arc_app(
-                        DynamicProxy::new(live, *connect_timeout_ms, *read_timeout_ms, None, None, upstream_tls, upstream_strategy)
-                            .with_trust(upstream_trust.get(upstream.as_str()).cloned()),
-                    )
+                    #[cfg(feature = "http2")]
+                    {
+                        let _ = upstream_cfg;
+                        arc_app(crate::proxy_config::H2Route::new(
+                            live,
+                            upstream_tls,
+                            upstream_trust.get(upstream.as_str()).cloned(),
+                            *connect_timeout_ms,
+                            *read_timeout_ms,
+                        ))
+                    }
+                    #[cfg(not(feature = "http2"))]
+                    {
+                        let upstream_strategy = upstream_cfg
+                            .map(|u| u.strategy.clone())
+                            .unwrap_or_else(|| "round_robin".to_string());
+                        arc_app(
+                            DynamicProxy::new(live, *connect_timeout_ms, *read_timeout_ms, None, None, upstream_tls, upstream_strategy)
+                                .with_trust(upstream_trust.get(upstream.as_str()).cloned()),
+                        )
+                    }
                 }
 
                 ActionConfig::Mcp | ActionConfig::Unknown(_) => {
@@ -470,6 +486,10 @@ impl crate::application::Application for ArcApp {
         conn: &crate::server::ConnectionInfo,
     ) -> Result<crate::response::Response, String> {
         self.0.execute(request, conn)
+    }
+
+    fn streams_body(&self, request: &crate::request::Request, conn: &crate::server::ConnectionInfo) -> bool {
+        self.0.streams_body(request, conn)
     }
 }
 

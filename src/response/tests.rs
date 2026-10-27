@@ -191,6 +191,7 @@ fn it_generates_successful_response_with_additional_headers() {
         content_range_list: vec![content_range],
         stream_file: None,
         stream_pipe: None,
+        trailers: None,
     };
 
 
@@ -260,6 +261,7 @@ fn it_generates_successful_response_with_additional_headers_and_non_utf8_file() 
         content_range_list: vec![content_range],
         stream_file: None,
         stream_pipe: None,
+        trailers: None,
     };
 
     let request = Request {

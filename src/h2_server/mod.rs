@@ -130,6 +130,9 @@ struct Outgoing {
     /// END_STREAM once `data` is out and (if any) the producer is done.
     finish: bool,
     producer: Option<mpsc::Receiver<Result<Vec<u8>, String>>>,
+    /// Sent as a final HEADERS frame (with END_STREAM) after the body, when
+    /// it holds fields by then.
+    trailers: Option<crate::response::Trailers>,
 }
 
 struct Stream {
@@ -940,7 +943,8 @@ impl Conn {
         }
         promote_body_headers(&mut response);
         let body = if is_head { Vec::new() } else { Response::generate_body(std::mem::take(&mut response.content_range_list)) };
-        let end_stream = body.is_empty() && producer.is_none();
+        let trailers = if is_head { None } else { response.trailers.take() };
+        let end_stream = body.is_empty() && producer.is_none() && trailers.is_none();
 
         let mut block = Vec::with_capacity(256);
         self.encoder.begin(&mut block);
@@ -964,7 +968,7 @@ impl Conn {
             if end_stream {
                 s.done_sending = true;
             } else {
-                s.outgoing = Some(Outgoing { data: body, sent: 0, finish: true, producer });
+                s.outgoing = Some(Outgoing { data: body, sent: 0, finish: true, producer, trailers });
             }
         }
         if end_stream {
@@ -1014,12 +1018,23 @@ impl Conn {
         let max = self.peer_max_frame_size;
         let Some(s) = self.streams.get_mut(&stream) else { return };
         let Some(out) = s.outgoing.as_mut() else { return };
+        // Trailers are complete once the producer has ended.
+        let mut trailers = Vec::new();
         loop {
             let remaining = out.data.len() - out.sent;
             let last = out.finish && out.producer.is_none();
+            if last && trailers.is_empty() {
+                if let Some(slot) = out.trailers.as_ref() {
+                    trailers = slot.get();
+                }
+            }
+            // With trailers, their HEADERS frame ends the stream instead.
+            let end_flag = if trailers.is_empty() { frame::END_STREAM } else { 0 };
             if remaining == 0 {
                 if last && !s.done_sending {
-                    write_frame_header(&mut self.out, 0, frame::DATA, frame::END_STREAM, stream);
+                    if trailers.is_empty() {
+                        write_frame_header(&mut self.out, 0, frame::DATA, frame::END_STREAM, stream);
+                    }
                     s.done_sending = true;
                 }
                 break;
@@ -1030,7 +1045,7 @@ impl Conn {
             }
             let n = remaining.min(window as usize).min(max);
             let end = last && n == remaining;
-            write_frame_header(&mut self.out, n, frame::DATA, if end { frame::END_STREAM } else { 0 }, stream);
+            write_frame_header(&mut self.out, n, frame::DATA, if end { end_flag } else { 0 }, stream);
             self.out.extend_from_slice(&out.data[out.sent..out.sent + n]);
             out.sent += n;
             self.conn_send_window -= n as i64;
@@ -1046,8 +1061,30 @@ impl Conn {
         }
         if s.done_sending {
             s.outgoing = None;
+            if !trailers.is_empty() {
+                self.send_trailers(stream, &trailers);
+            }
             self.close_if_done(stream);
         }
+    }
+
+    /// The trailer section: a HEADERS frame with END_STREAM, no pseudo-headers.
+    fn send_trailers(&mut self, stream: u32, trailers: &[crate::header::Header]) {
+        let mut block = Vec::with_capacity(64);
+        self.encoder.begin(&mut block);
+        let mut name = Vec::with_capacity(32);
+        for header in trailers {
+            if CONNECTION_SPECIFIC.iter().any(|f| header.name.eq_ignore_ascii_case(f)) {
+                continue;
+            }
+            name.clear();
+            name.extend(header.name.bytes().map(|b| b.to_ascii_lowercase()));
+            if name.is_empty() || !name.iter().all(|b| is_tchar(*b)) || !header.value.bytes().all(is_value_byte) {
+                continue;
+            }
+            self.encoder.field(&mut block, &name, header.value.as_bytes(), true);
+        }
+        self.send_header_block(stream, &block, true);
     }
 
     fn pump_all(&mut self) {
@@ -1196,6 +1233,9 @@ impl Fields {
         if name == b"te" {
             if value != b"trailers" {
                 self.malformed = true;
+            } else {
+                // Kept for the app: a gRPC upstream needs it forwarded.
+                self.headers.push(Header { name: "te".into(), value: "trailers".into() });
             }
             return;
         }

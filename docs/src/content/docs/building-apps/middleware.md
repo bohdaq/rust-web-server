@@ -168,6 +168,13 @@ Through a `WithMiddleware` stack that happens only if every layer returns
 `request.body`, so return `true` only from a layer that never reads it. The
 built-in header-only layers do; the default is `false`.
 
+A layer that answers a request itself — a proxy forwarding it, without
+calling `next` — can claim the stream with `answers_streamed_body` (since
+18.3.0): the body then streams whatever the layers after it and the
+application would say, provided the layers before it accept it.
+`H2ReverseProxy` and `GrpcProxy` do, for the requests they forward (gRPC
+client streaming).
+
 ### Passing requests through (`is_passthrough`)
 
 Some applications can answer a request asynchronously (`Application::execute_async`,

@@ -2157,7 +2157,7 @@ tls_ca_file = "{ca_file}"
 fn tls_ca_file_on_a_plain_upstream_is_a_warning() {
     let mut report = crate::config_check::ConfigReport::default();
     ProxyConfig::from_str("[[upstream]]\nname = \"app\"\nbackends = [\"127.0.0.1:3000\"]\ntls_ca_file = \"/x.pem\"\n").validate(&mut report);
-    assert!(report.warnings.iter().any(|w| w.contains("isn't used")), "{:?}", report.warnings);
+    assert!(report.warnings.iter().any(|w| w.contains("aren't used")), "{:?}", report.warnings);
 }
 
 // ── #50: routes match a normalized path ──────────────────────────────────────
@@ -2254,4 +2254,27 @@ body = "site"
     other.headers.push(Header { name: "Host".into(), value: "example.com.evil".into() });
     let body: Vec<u8> = app.execute(&other, &conn).unwrap().content_range_list.into_iter().flat_map(|cr| cr.body).collect();
     assert_ne!(b"site".to_vec(), body);
+}
+
+#[cfg(feature = "http2")]
+#[test]
+fn upstream_client_certificate_keys_are_checked() {
+    let toml = |extra: &str| format!("[[upstream]]\nname = \"api\"\nbackends = [\"grpcs://api.internal:443\"]\n{extra}");
+    // A gRPC TLS backend is host:port, and TLS.
+    let mut report = crate::config_check::ConfigReport::default();
+    ProxyConfig::from_str(&toml("")).validate(&mut report);
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    assert!(ProxyConfig::from_str(&toml("")).upstreams[0].tls);
+
+    let mut report = crate::config_check::ConfigReport::default();
+    ProxyConfig::from_str(&toml("tls_client_cert_file = \"/x.pem\"\n")).validate(&mut report);
+    assert!(report.errors.iter().any(|e| e.contains("go together")), "{:?}", report.errors);
+
+    let mut report = crate::config_check::ConfigReport::default();
+    ProxyConfig::from_str(&toml("tls_client_cert_file = \"/x.pem\"\ntls_client_key_file = \"/x.key\"\n")).validate(&mut report);
+    assert!(report.errors.iter().any(|e| e.contains("client certificate")), "{:?}", report.errors);
+
+    let mut report = crate::config_check::ConfigReport::default();
+    crate::proxy_config::validate::check_unknown_keys(&toml("tls_client_cert_file = \"/x.pem\"\ntls_client_key_file = \"/x.key\"\n"), &mut report);
+    assert!(report.warnings.is_empty() && report.errors.is_empty(), "{:?} {:?}", report.warnings, report.errors);
 }

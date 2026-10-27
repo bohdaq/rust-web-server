@@ -26,6 +26,8 @@
 pub mod pool;
 #[cfg(feature = "http2")]
 pub(crate) mod async_upstream;
+#[cfg(feature = "http2")]
+pub(crate) mod h2_upstream;
 
 #[cfg(test)]
 mod tests;
@@ -92,6 +94,9 @@ pub struct ReverseProxy {
     pool: Arc<ConnPool>,
     breaker: Option<Arc<dyn crate::circuit_breaker::Breaker>>,
     trust: Option<Arc<UpstreamTls>>,
+    /// What `trust` was built from, so each TLS option adds to the others.
+    tls_ca: Option<String>,
+    tls_client: Option<(String, String)>,
 }
 
 impl ReverseProxy {
@@ -115,6 +120,8 @@ impl ReverseProxy {
             pool: Arc::new(ConnPool::new(POOL_MAX_IDLE, Duration::from_secs(60))),
             breaker: None,
             trust: None,
+            tls_ca: None,
+            tls_client: None,
         }
     }
 
@@ -179,8 +186,24 @@ impl ReverseProxy {
     /// backends, **instead of** the public WebPKI roots — for internal
     /// services behind a private CA or a self-signed certificate.
     pub fn tls_ca_file(mut self, path: &str) -> Result<Self, String> {
-        self.trust = Some(Arc::new(UpstreamTls::from_ca_file(path)?));
+        self.tls_ca = Some(path.to_string());
+        self.rebuild_trust()?;
         Ok(self)
+    }
+
+    /// Present the client certificate in the PEM file `cert` (with its
+    /// private key in `key`) to `https://` backends that require one —
+    /// mutual TLS to the upstream. Since 18.3.0.
+    pub fn tls_client_cert(mut self, cert: &str, key: &str) -> Result<Self, String> {
+        self.tls_client = Some((cert.to_string(), key.to_string()));
+        self.rebuild_trust()?;
+        Ok(self)
+    }
+
+    fn rebuild_trust(&mut self) -> Result<(), String> {
+        let client = self.tls_client.as_ref().map(|(c, k)| (c.as_str(), k.as_str()));
+        self.trust = Some(Arc::new(UpstreamTls::new(self.tls_ca.as_deref(), client)?));
+        Ok(())
     }
 
     /// Set the maximum number of idle connections per backend (default: 64).
@@ -478,7 +501,7 @@ pub(crate) fn normalize_upstream_response(mut response: Response) -> Response {
     response
 }
 
-fn bad_gateway() -> Response {
+pub(crate) fn bad_gateway() -> Response {
     let cr = Range::get_content_range(
         b"502 Bad Gateway".to_vec(),
         MimeType::TEXT_PLAIN.to_string(),
@@ -616,8 +639,10 @@ pub(crate) fn forward_upstream_trusting(
 /// Trust settings for one upstream's TLS backends: the certificates in a CA
 /// file **instead of** the WebPKI roots — for internal services behind a
 /// private CA or a self-signed certificate (nginx's
-/// `proxy_ssl_trusted_certificate`). Connections are pooled per CA file, so
-/// two upstreams at the same address with different CAs never share one.
+/// `proxy_ssl_trusted_certificate`) — and/or a client certificate rws
+/// presents to backends that require one (`proxy_ssl_certificate`, since
+/// 18.3.0). Connections are pooled per setting, so two upstreams at the same
+/// address with different trust never share one.
 pub struct UpstreamTls {
     #[cfg(any(feature = "http-client", feature = "http2"))]
     config: Arc<rustls::ClientConfig>,
@@ -626,35 +651,85 @@ pub struct UpstreamTls {
     /// Connections for the non-blocking forwarder, made with `config`.
     #[cfg(feature = "http2")]
     async_pool: &'static Pool<async_upstream::AsyncTlsStream>,
+    /// `config` offering HTTP/2 by ALPN, for HTTP/2 and gRPC upstreams.
+    #[cfg(feature = "http2")]
+    h2_config: Arc<rustls::ClientConfig>,
 }
 
 impl UpstreamTls {
     /// Load the PEM certificates in `path` as the only trusted roots.
     pub fn from_ca_file(path: &str) -> Result<UpstreamTls, String> {
+        UpstreamTls::new(Some(path), None)
+    }
+
+    /// Trust the PEM certificates in `ca_file` (the WebPKI roots when `None`)
+    /// and, with `client_cert` = `(certificate chain PEM, private key PEM)`,
+    /// present that certificate to backends that ask for one.
+    pub fn new(ca_file: Option<&str>, client_cert: Option<(&str, &str)>) -> Result<UpstreamTls, String> {
         #[cfg(any(feature = "http-client", feature = "http2"))]
         {
-            use rustls::pki_types::{pem::PemObject, CertificateDer};
-            let bytes = std::fs::read(path).map_err(|e| format!("cannot read CA file '{path}': {e}"))?;
-            let certs = CertificateDer::pem_slice_iter(&bytes)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| format!("cannot parse CA file '{path}': {e}"))?;
-            if certs.is_empty() {
-                return Err(format!("no certificates in CA file '{path}'"));
-            }
-            let mut roots = rustls::RootCertStore::empty();
-            for cert in certs {
-                roots.add(cert).map_err(|e| format!("invalid CA certificate in '{path}': {e}"))?;
-            }
-            let config = Arc::new(crate::tls_client_builder().with_root_certificates(roots).with_no_client_auth());
-            Ok(UpstreamTls {
-                config,
-                pool: tls_pool_for_ca(path),
-                #[cfg(feature = "http2")]
-                async_pool: async_tls_pool_for_ca(path),
-            })
+            use rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
+            let roots = match ca_file {
+                Some(path) => {
+                    let bytes = std::fs::read(path).map_err(|e| format!("cannot read CA file '{path}': {e}"))?;
+                    let certs = CertificateDer::pem_slice_iter(&bytes)
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|e| format!("cannot parse CA file '{path}': {e}"))?;
+                    if certs.is_empty() {
+                        return Err(format!("no certificates in CA file '{path}'"));
+                    }
+                    let mut roots = rustls::RootCertStore::empty();
+                    for cert in certs {
+                        roots.add(cert).map_err(|e| format!("invalid CA certificate in '{path}': {e}"))?;
+                    }
+                    roots
+                }
+                None => rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned()),
+            };
+            let builder = crate::tls_client_builder().with_root_certificates(roots);
+            let config = match client_cert {
+                None => builder.with_no_client_auth(),
+                Some((cert_path, key_path)) => {
+                    let bytes = std::fs::read(cert_path).map_err(|e| format!("cannot read client certificate '{cert_path}': {e}"))?;
+                    let chain = CertificateDer::pem_slice_iter(&bytes)
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|e| format!("cannot parse client certificate '{cert_path}': {e}"))?;
+                    if chain.is_empty() {
+                        return Err(format!("no certificate in '{cert_path}'"));
+                    }
+                    let bytes = std::fs::read(key_path).map_err(|e| format!("cannot read client key '{key_path}': {e}"))?;
+                    let key = PrivateKeyDer::from_pem_slice(&bytes).map_err(|e| format!("cannot parse client key '{key_path}': {e}"))?;
+                    builder.with_client_auth_cert(chain, key).map_err(|e| format!("client certificate '{cert_path}': {e}"))?
+                }
+            };
+            let label = format!("{}|{}", ca_file.unwrap_or("webpki"), client_cert.map_or("", |(cert, _)| cert));
+            Ok(UpstreamTls::with_config(config, &label))
         }
         #[cfg(not(any(feature = "http-client", feature = "http2")))]
-        Err(format!("tls_ca_file '{path}': HTTPS backends need the http2 or http-client feature"))
+        {
+            let _ = client_cert;
+            Err(format!("tls_ca_file '{}': HTTPS backends need the http2 or http-client feature", ca_file.unwrap_or("")))
+        }
+    }
+
+    #[cfg(any(feature = "http-client", feature = "http2"))]
+    fn with_config(config: rustls::ClientConfig, label: &str) -> UpstreamTls {
+        #[cfg(feature = "http2")]
+        let h2_config = Arc::new(h2_upstream::with_h2_alpn(config.clone()));
+        UpstreamTls {
+            config: Arc::new(config),
+            pool: tls_pool_for_ca(label),
+            #[cfg(feature = "http2")]
+            async_pool: async_tls_pool_for_ca(label),
+            #[cfg(feature = "http2")]
+            h2_config,
+        }
+    }
+
+    /// The client configuration for HTTP/2 upstreams (ALPN `h2`).
+    #[cfg(feature = "http2")]
+    pub(crate) fn h2_config(&self) -> &Arc<rustls::ClientConfig> {
+        &self.h2_config
     }
 
     /// Trust nothing: every TLS handshake fails, so the upstream answers 502.
@@ -663,15 +738,8 @@ impl UpstreamTls {
     pub(crate) fn reject_all(label: &str) -> UpstreamTls {
         #[cfg(any(feature = "http-client", feature = "http2"))]
         {
-            let config = Arc::new(
-                crate::tls_client_builder().with_root_certificates(rustls::RootCertStore::empty()).with_no_client_auth(),
-            );
-            UpstreamTls {
-                config,
-                pool: tls_pool_for_ca(&format!("reject-all:{label}")),
-                #[cfg(feature = "http2")]
-                async_pool: async_tls_pool_for_ca(&format!("reject-all:{label}")),
-            }
+            let config = crate::tls_client_builder().with_root_certificates(rustls::RootCertStore::empty()).with_no_client_auth();
+            UpstreamTls::with_config(config, &format!("reject-all:{label}"))
         }
         #[cfg(not(any(feature = "http-client", feature = "http2")))]
         {
@@ -1094,6 +1162,7 @@ fn parse_status_and_headers(header_bytes: &[u8]) -> Result<Response, String> {
         content_range_list: vec![],
         stream_file: None,
         stream_pipe: None,
+        trailers: None,
     })
 }
 
@@ -1239,10 +1308,31 @@ impl H2ReverseProxy {
         self
     }
 
-    /// Override the response read timeout (default: 30 s).
+    /// Override the read timeout (default: 30 s). It bounds each wait for
+    /// the upstream — the handshake, the response head, every body frame — so
+    /// a streaming response (a gRPC server stream) ends only when it goes
+    /// quiet for that long.
     pub fn read_timeout_ms(mut self, ms: u64) -> Self {
         self.inner = self.inner.read_timeout_ms(ms);
         self
+    }
+
+    /// Trust the CA certificates in the PEM file `path` for `h2s://` /
+    /// `https://` backends instead of the WebPKI roots. Since 18.3.0.
+    pub fn tls_ca_file(mut self, path: &str) -> Result<Self, String> {
+        self.inner = self.inner.tls_ca_file(path)?;
+        Ok(self)
+    }
+
+    /// Present a client certificate to TLS backends that require one (mutual
+    /// TLS). Since 18.3.0.
+    pub fn tls_client_cert(mut self, cert: &str, key: &str) -> Result<Self, String> {
+        self.inner = self.inner.tls_client_cert(cert, key)?;
+        Ok(self)
+    }
+
+    fn matches(&self, request: &Request) -> bool {
+        self.inner.path_prefix.as_ref().is_none_or(|prefix| request.request_uri.starts_with(prefix.as_str()))
     }
 }
 
@@ -1254,196 +1344,68 @@ impl crate::middleware::Middleware for H2ReverseProxy {
         connection: &crate::server::ConnectionInfo,
         next: &dyn crate::application::Application,
     ) -> Result<crate::response::Response, String> {
-        if let Some(prefix) = &self.inner.path_prefix {
-            if !request.request_uri.starts_with(prefix.as_str()) {
-                return next.execute(request, connection);
-            }
+        if !self.matches(request) {
+            return next.execute(request, connection);
         }
         if self.inner.backends.is_empty() {
             return Ok(bad_gateway());
         }
+        // A streamed request body can be sent once: no second backend then.
+        let attempts = if matches!(request.body, crate::request::Body::Stream(_)) { 1 } else { self.inner.backends.len() };
         let n = self.inner.backends.len();
         let start = self.inner.counter.fetch_add(1, Ordering::Relaxed);
-        for attempt in 0..n {
-            let idx = (start + attempt) % n;
-            match try_backend_h2(request, &connection.client.ip, &self.inner.backends[idx],
-                                  self.inner.connect_timeout, self.inner.read_timeout) {
-                Ok(resp) => return Ok(resp),
-                Err(_) if attempt + 1 < n => continue,
-                Err(_) => break,
+        for attempt in 0..attempts {
+            let backend = &self.inner.backends[(start + attempt) % n];
+            let tls = backend.tls.then(|| match &self.inner.trust {
+                Some(trust) => trust.h2_config(),
+                None => h2_upstream::default_tls(),
+            });
+            let target = h2_upstream::Target {
+                backend,
+                tls,
+                connect_timeout: self.inner.connect_timeout,
+                read_timeout: self.inner.read_timeout,
+            };
+            if let Ok(response) = h2_upstream::forward(request, &connection.client.ip, &target) {
+                return Ok(response);
             }
         }
         Ok(bad_gateway())
     }
-}
 
-#[cfg(feature = "http2")]
-fn try_backend_h2(
-    request: &Request,
-    client_ip: &str,
-    backend: &Backend,
-    connect_timeout: Duration,
-    read_timeout: Duration,
-) -> Result<Response, String> {
-    // `block_on_isolated` works on any tokio runtime flavor (including
-    // `current_thread`, unlike `tokio::task::block_in_place`, which requires
-    // `multi_thread` and panics otherwise) and doesn't pull a worker thread
-    // out of a shared pool; it also works with no runtime at all (HTTP/1.1
-    // thread pool), unlike the previous implementation, which just gave up.
-    crate::async_bridge::block_on_isolated(|| forward_h2_async(request, client_ip, backend, connect_timeout, read_timeout))
-}
+    /// Headers only: a request this proxy doesn't forward passes through
+    /// untouched.
+    fn accepts_streamed_body(&self, _request: &Request, _connection: &crate::server::ConnectionInfo) -> bool {
+        true
+    }
 
-#[cfg(feature = "http2")]
-async fn forward_h2_async(
-    request: &Request,
-    client_ip: &str,
-    backend: &Backend,
-    connect_timeout: Duration,
-    read_timeout: Duration,
-) -> Result<Response, String> {
-    let addr = format!("{}:{}", backend.host, backend.port);
-    let tcp = tokio::time::timeout(
-        connect_timeout,
-        tokio::net::TcpStream::connect(&addr),
-    )
-    .await
-    .map_err(|_| format!("h2 proxy: connect to {} timed out", addr))?
-    .map_err(|e| format!("h2 proxy: connect to {} failed: {}", addr, e))?;
-
-    if backend.tls {
-        use rustls::pki_types::ServerName;
-        use std::sync::Arc;
-        use tokio_rustls::TlsConnector;
-
-        let root_store = rustls::RootCertStore::from_iter(
-            webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
-        );
-        let mut config = crate::tls_client_builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
-        // Advertise h2 via ALPN so the server selects HTTP/2.
-        config.alpn_protocols = vec![b"h2".to_vec()];
-        let connector = TlsConnector::from(Arc::new(config));
-        let server_name = ServerName::try_from(backend.host.as_str())
-            .map_err(|e| format!("invalid upstream hostname '{}': {}", backend.host, e))?
-            .to_owned();
-        let tls_stream = within(read_timeout, &addr, connector.connect(server_name, tcp))
-            .await?
-            .map_err(|e| format!("h2 proxy: TLS handshake with {} failed: {}", addr, e))?;
-        send_h2_request(request, client_ip, backend, tls_stream, read_timeout).await
-    } else {
-        send_h2_request(request, client_ip, backend, tcp, read_timeout).await
+    /// Requests this proxy forwards are sent as their body arrives (gRPC
+    /// client streaming and bidirectional calls).
+    fn answers_streamed_body(&self, request: &Request, _connection: &crate::server::ConnectionInfo) -> bool {
+        self.matches(request)
     }
 }
 
-/// Await `f`, failing after `limit` — the h2 counterpart of a socket read
-/// timeout, applied to each wait for the upstream (handshake, response head,
-/// every body frame), so a slow but progressing response isn't cut off.
+/// Forward `request` over HTTP/2 to `url` (`h2://`, `grpc://`, `h2s://`,
+/// `grpcs://`, `https://` or `host:port`) — the config file's `grpc` action.
+/// `tls` forces TLS for a bare `host:port` (`[[upstream]] tls = true`).
 #[cfg(feature = "http2")]
-async fn within<F: std::future::Future>(limit: Duration, addr: &str, f: F) -> Result<F::Output, String> {
-    tokio::time::timeout(limit, f)
-        .await
-        .map_err(|_| format!("h2 proxy: {} sent nothing for {} ms", addr, limit.as_millis()))
-}
-
-/// Drive the h2 client handshake + request/response over any async I/O stream.
-///
-/// Accepts both plain `TcpStream` and `TlsStream<TcpStream>` — anything that
-/// satisfies `AsyncRead + AsyncWrite + Unpin + Send + 'static`.
-#[cfg(feature = "http2")]
-async fn send_h2_request<T>(
+pub(crate) fn forward_h2(
     request: &Request,
     client_ip: &str,
-    backend: &Backend,
-    stream: T,
+    url: &str,
+    tls: bool,
+    trust: Option<&UpstreamTls>,
+    connect_timeout: Duration,
     read_timeout: Duration,
-) -> Result<Response, String>
-where
-    T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
-{
-    use bytes::Bytes;
-    use http as hc;
-
-    let addr = format!("{}:{}", backend.host, backend.port);
-
-    let (send_req, conn) = within(read_timeout, &addr, h2::client::handshake(stream))
-        .await?
-        .map_err(|e| format!("h2 proxy: handshake with {} failed: {}", addr, e))?;
-
-    tokio::spawn(async move {
-        let _ = conn.await;
+) -> Result<Response, String> {
+    let mut backend = Backend::parse(url).ok_or_else(|| format!("invalid upstream address '{url}'"))?;
+    backend.tls |= tls;
+    let tls = backend.tls.then(|| match trust {
+        Some(t) => t.h2_config(),
+        None => h2_upstream::default_tls(),
     });
-
-    let scheme = if backend.tls { "https" } else { "http" };
-    let uri_str = format!("{}://{}{}", scheme, addr, request.request_uri);
-    let uri: hc::Uri = uri_str.parse().map_err(|e: hc::uri::InvalidUri| e.to_string())?;
-    let method = hc::Method::from_bytes(request.method.as_bytes()).map_err(|e| e.to_string())?;
-
-    let mut builder = hc::Request::builder().method(method).uri(uri);
-    builder = builder.header("host", &backend.host);
-    for h in &request.headers {
-        let lower = h.name.to_lowercase();
-        // An empty name would be sent as a malformed ": value" line.
-        if lower.is_empty() || HOP_BY_HOP.contains(&lower.as_str()) || lower == "host" {
-            continue;
-        }
-        builder = builder.header(h.name.as_ref(), h.value.as_ref());
-    }
-    builder = builder.header("x-forwarded-for", client_ip);
-    builder = builder.header("via", "2 rws");
-
-    let body_bytes = Bytes::from(request.body.to_vec());
-    let end_of_stream = body_bytes.is_empty();
-    let http_req = builder.body(()).map_err(|e| e.to_string())?;
-
-    let mut send_req = within(read_timeout, &addr, send_req.ready()).await?.map_err(|e| e.to_string())?;
-    let (resp_future, mut req_body) = send_req
-        .send_request(http_req, end_of_stream)
-        .map_err(|e| e.to_string())?;
-    if !end_of_stream {
-        req_body.send_data(body_bytes, true).map_err(|e| e.to_string())?;
-    }
-
-    let resp = within(read_timeout, &addr, resp_future).await?.map_err(|e| e.to_string())?;
-    let (parts, mut body) = resp.into_parts();
-
-    let content_type = parts
-        .headers
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("application/octet-stream")
-        .to_string();
-
-    let mut body_bytes: Vec<u8> = Vec::new();
-    while let Some(chunk) = within(read_timeout, &addr, body.data()).await? {
-        body_bytes.extend_from_slice(&chunk.map_err(|e| e.to_string())?);
-    }
-
-    let mut response = Response::new();
-    response.status_code = parts.status.as_u16() as i16;
-    response.reason_phrase = parts.status.canonical_reason().unwrap_or("").to_string();
-
-    const H2_HOP: &[&str] = &[
-        "connection", "keep-alive", "transfer-encoding", "upgrade", "proxy-connection", "te",
-    ];
-    for (name, value) in &parts.headers {
-        let lower = name.as_str().to_lowercase();
-        if H2_HOP.contains(&lower.as_str()) {
-            continue;
-        }
-        if let Ok(v) = value.to_str() {
-            response.headers.push(crate::header::Header {
-                name: name.as_str().to_string().into(),
-                value: v.to_string().into(),
-            });
-        }
-    }
-
-    if !body_bytes.is_empty() {
-        response.content_range_list = vec![Range::get_content_range(body_bytes, content_type)];
-    }
-
-    Ok(normalize_upstream_response(response))
+    h2_upstream::forward(request, client_ip, &h2_upstream::Target { backend: &backend, tls, connect_timeout, read_timeout })
 }
 
 // ── gRPC proxy ────────────────────────────────────────────────────────────────
@@ -1494,6 +1456,31 @@ impl GrpcProxy {
         self.inner = self.inner.path_prefix(prefix);
         self
     }
+
+    /// See [`H2ReverseProxy::connect_timeout_ms`].
+    pub fn connect_timeout_ms(mut self, ms: u64) -> Self {
+        self.inner = self.inner.connect_timeout_ms(ms);
+        self
+    }
+
+    /// See [`H2ReverseProxy::read_timeout_ms`]: a stream quiet for longer ends.
+    pub fn read_timeout_ms(mut self, ms: u64) -> Self {
+        self.inner = self.inner.read_timeout_ms(ms);
+        self
+    }
+
+    /// Trust this CA for `grpcs://` backends. Since 18.3.0.
+    pub fn tls_ca_file(mut self, path: &str) -> Result<Self, String> {
+        self.inner = self.inner.tls_ca_file(path)?;
+        Ok(self)
+    }
+
+    /// Present a client certificate to `grpcs://` backends (mutual TLS).
+    /// Since 18.3.0.
+    pub fn tls_client_cert(mut self, cert: &str, key: &str) -> Result<Self, String> {
+        self.inner = self.inner.tls_client_cert(cert, key)?;
+        Ok(self)
+    }
 }
 
 #[cfg(feature = "http2")]
@@ -1504,16 +1491,25 @@ impl crate::middleware::Middleware for GrpcProxy {
         connection: &crate::server::ConnectionInfo,
         next: &dyn crate::application::Application,
     ) -> Result<crate::response::Response, String> {
-        let ct = request
-            .get_header("content-type".to_string())
-            .map(|h| h.value.as_ref())
-            .unwrap_or("");
-        if ct.starts_with("application/grpc") {
+        if is_grpc(request) {
             self.inner.handle(request, connection, next)
         } else {
             next.execute(request, connection)
         }
     }
+
+    fn accepts_streamed_body(&self, _request: &Request, _connection: &crate::server::ConnectionInfo) -> bool {
+        true
+    }
+
+    fn answers_streamed_body(&self, request: &Request, _connection: &crate::server::ConnectionInfo) -> bool {
+        is_grpc(request) && self.inner.matches(request)
+    }
+}
+
+#[cfg(feature = "http2")]
+fn is_grpc(request: &Request) -> bool {
+    request.header(crate::header::Header::_CONTENT_TYPE).is_some_and(|h| h.value.starts_with("application/grpc"))
 }
 
 // ── Backend::parse unit tests ─────────────────────────────────────────────────

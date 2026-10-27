@@ -5,6 +5,41 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased (18.3.0)
+
+### Added
+
+- gRPC and HTTP/2 upstreams at parity with HTTP/1.1 (#13): `H2ReverseProxy`,
+  `GrpcProxy` and the config file's `grpc` action keep one pooled,
+  multiplexed connection per backend (a new handshake per request before);
+  stream response bodies as they arrive and request bodies as they arrive, so
+  server-streaming, client-streaming and bidirectional gRPC calls work; and
+  pass the backend's trailers (`grpc-status`, `grpc-message`) to HTTP/2 and
+  HTTP/3 clients, with `te: trailers` forwarded. A backend failing mid-call
+  resets the client's stream.
+- `Response::trailers` and `response::Trailers`: trailer fields sent after a
+  body over HTTP/2 and HTTP/3 (HTTP/1.1 drops them).
+- Upstream client certificates (mutual TLS): `tls_client_cert(cert, key)` on
+  `ReverseProxy`, `H2ReverseProxy` and `GrpcProxy`, `[[upstream]]
+  tls_client_cert_file` / `tls_client_key_file`, `UpstreamTls::new(ca,
+  client)`. `tls_ca_file` now also applies to HTTP/2 and gRPC upstreams
+  (`H2ReverseProxy::tls_ca_file`, `GrpcProxy::tls_ca_file`).
+- `Middleware::answers_streamed_body`: a layer that answers a request itself
+  can take its body as a stream, whatever the inner application says.
+
+### Changed
+
+- `Response` and `proxy_config::UpstreamConfig` have new public fields
+  (`trailers`; `tls_client_cert_file`, `tls_client_key_file`): code that
+  builds them as struct literals adds them (`trailers: None`) — the
+  constructors (`Response::new`, `text`, `json`, `get_response`) are
+  unaffected. As with `stream_pipe` in 17.110.0.
+- The config file's `grpc` action forwards over HTTP/2 (it used HTTP/1.1, so
+  gRPC didn't work through it), and `grpc://`, `grpcs://` and `h2s://`
+  backends pass `rws --check`.
+- HTTP/2 requests keep `te: trailers` for the application (it was validated,
+  then dropped).
+
 ## 18.2.0 — 2026-10-26
 
 ### Security

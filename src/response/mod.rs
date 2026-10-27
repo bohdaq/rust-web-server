@@ -66,6 +66,40 @@ pub struct Response {
     /// immediately after sending the response headers. Takes precedence over
     /// `content_range_list` and `stream_file`. The reader is consumed and not cloned.
     pub stream_pipe: Option<Box<dyn std::io::Read + Send>>,
+    /// Header fields sent after the body (HTTP/2 and HTTP/3; HTTP/1.1 drops
+    /// them) — gRPC's `grpc-status` and `grpc-message`. A streamed body's
+    /// producer fills the slot before it ends the stream. Since 18.3.0.
+    pub trailers: Option<Trailers>,
+}
+
+/// Trailer fields shared between whoever produces a body and the connection
+/// writer that sends them after it (see [`Response::trailers`]). Clones share
+/// the one slot.
+#[derive(Clone, Default, Debug)]
+pub struct Trailers(std::sync::Arc<std::sync::Mutex<Vec<Header>>>);
+
+impl Trailers {
+    /// An empty slot.
+    pub fn new() -> Self {
+        Trailers::default()
+    }
+
+    /// Trailers already known, e.g. for a buffered body.
+    pub fn with(fields: Vec<Header>) -> Self {
+        let trailers = Trailers::new();
+        trailers.set(fields);
+        trailers
+    }
+
+    /// Replace the fields; call before the body's last byte is produced.
+    pub fn set(&self, fields: Vec<Header>) {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = fields;
+    }
+
+    /// The fields set so far.
+    pub fn get(&self) -> Vec<Header> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
 }
 
 impl Clone for Response {
@@ -78,6 +112,7 @@ impl Clone for Response {
             content_range_list: self.content_range_list.clone(),
             stream_file: self.stream_file.clone(),
             stream_pipe: None,
+            trailers: self.trailers.clone(),
         }
     }
 }
@@ -299,6 +334,7 @@ impl Response {
             content_range_list: Vec::new(),
             stream_file: None,
             stream_pipe: None,
+            trailers: None,
         }
     }
 
@@ -318,6 +354,7 @@ impl Response {
             content_range_list: body,
             stream_file: None,
             stream_pipe: None,
+            trailers: None,
         }
     }
 
@@ -577,6 +614,7 @@ impl Response {
             content_range_list: vec![],
             stream_file: None,
             stream_pipe: None,
+            trailers: None,
         };
 
         let content_length: usize = 0;
@@ -770,6 +808,7 @@ impl Response {
             content_range_list,
             stream_file: None,
             stream_pipe: None,
+            trailers: None,
         };
 
         response
@@ -894,6 +933,7 @@ impl Response {
             content_range_list: vec![],
             stream_file: None,
             stream_pipe: None,
+            trailers: None,
         };
 
         let content_length: usize = 0;
@@ -932,6 +972,7 @@ impl Response {
             content_range_list: vec![],
             stream_file: None,
             stream_pipe: None,
+            trailers: None,
         };
         let mut content_type: Option<&str> = None;
         let mut pos = 0usize;
@@ -1102,6 +1143,7 @@ impl New for Response {
             content_range_list: vec![],
             stream_file: None,
             stream_pipe: None,
+            trailers: None,
         }
     }
 }

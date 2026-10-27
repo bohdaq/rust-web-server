@@ -163,6 +163,14 @@ self-signed certificate, trust that CA instead of the public roots:
 let proxy = ReverseProxy::new(["https://billing.internal:8443"])
     .tls_ca_file("/etc/rws/internal-ca.pem")?;   // PEM; replaces the WebPKI roots
 ```
+
+A backend that requires a client certificate (mutual TLS) gets the one you
+give it (since 18.3.0):
+
+```rust
+let proxy = ReverseProxy::new(["https://billing.internal:8443"])
+    .tls_client_cert("/etc/rws/client.pem", "/etc/rws/client.key")?;  // PEM chain + private key
+```
 :::
 
 ## Streaming responses

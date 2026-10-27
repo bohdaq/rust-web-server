@@ -1443,7 +1443,9 @@ Defines a named backend pool. Upstreams are referenced by name from routes.
 name      = "api"
 backends  = ["localhost:3000", "localhost:3001"]
 strategy  = "round_robin"   # "round_robin" | "random" | "ip_hash" | "least_connections" (default: round_robin)
-# tls_ca_file = "/etc/rws/internal-ca.pem"  # https:// backends: trust this CA instead of the public roots
+# tls_ca_file = "/etc/rws/internal-ca.pem"  # TLS backends: trust this CA instead of the public roots
+# tls_client_cert_file = "/etc/rws/client.pem"  # TLS backends that require a client certificate (mutual TLS),
+# tls_client_key_file  = "/etc/rws/client.key"  #   with its private key — since 18.3.0
 
 [upstream.health_check]
 path                = "/health"  # HTTP path polled on each backend (default: /health)
@@ -3370,6 +3372,13 @@ Through a `WithMiddleware` stack that happens only if every layer returns
 `true` from `accepts_streamed_body` — the layer then sees an empty
 `request.body`, so return `true` only from a layer that never reads it. The
 built-in header-only layers do; the default is `false`.
+
+A layer that answers a request itself — a proxy forwarding it, without
+calling `next` — can claim the stream with `answers_streamed_body` (since
+18.3.0): the body then streams whatever the layers after it and the
+application would say, provided the layers before it accept it.
+`H2ReverseProxy` and `GrpcProxy` do, for the requests they forward (gRPC
+client streaming).
 
 ### Passing requests through (`is_passthrough`)
 
@@ -11114,8 +11123,15 @@ type = "grpc"
 [route.action.grpc]
 upstream           = "grpc-svc"
 connect_timeout_ms = 5000
-read_timeout_ms    = 30000
+read_timeout_ms    = 30000   # per wait: a stream quiet for longer ends
 ```
+
+Requests go over HTTP/2 (since 18.3.0; before, this action used HTTP/1.1 and
+gRPC couldn't work): every call type streams and the `grpc-status` trailers
+reach the client — see [gRPC proxy](/proxy/grpc-proxy/#streaming-and-trailers).
+Upstream backends are `grpc://host:port` / `h2://host:port` (cleartext) or
+`grpcs://host:port` / `h2s://host:port` (TLS, with the upstream's
+`tls_ca_file` and `tls_client_cert_file` / `tls_client_key_file`).
 
 #### `type = "redirect"` — HTTP redirect
 
@@ -11636,6 +11652,14 @@ self-signed certificate, trust that CA instead of the public roots:
 ```rust
 let proxy = ReverseProxy::new(["https://billing.internal:8443"])
     .tls_ca_file("/etc/rws/internal-ca.pem")?;   // PEM; replaces the WebPKI roots
+```
+
+A backend that requires a client certificate (mutual TLS) gets the one you
+give it (since 18.3.0):
+
+```rust
+let proxy = ReverseProxy::new(["https://billing.internal:8443"])
+    .tls_client_cert("/etc/rws/client.pem", "/etc/rws/client.key")?;  // PEM chain + private key
 ```
 :::
 
@@ -13006,11 +13030,43 @@ When no port is given, `grpcs://` defaults to 443. You can also write `https://`
 | `grpcs://host:port` | TLS | 443 |
 | `https://host:port` | TLS | 443 |
 
-TLS certificate verification uses the system WebPKI trust store (`webpki-roots`). Self-signed or private CA certificates are not supported without a custom build. TLS backends require the `http2` Cargo feature (already required for `GrpcProxy`).
+Certificates are verified against the WebPKI roots unless you trust a CA of
+your own, and a backend that requires a client certificate (mutual TLS) gets
+the one you configure (both since 18.3.0, also on `H2ReverseProxy` and
+`ReverseProxy`):
 
-## gRPC trailers
+```rust
+GrpcProxy::new(["grpcs://billing.internal:50051"])
+    .tls_ca_file("/etc/rws/internal-ca.pem")?          // trust this CA instead of the public roots
+    .tls_client_cert("/etc/rws/client.pem", "/etc/rws/client.key")?;  // present this certificate
+```
 
-gRPC uses HTTP/2 trailers to carry `grpc-status` and `grpc-message` at the end of a response stream. The current implementation forwards DATA frames as-is, but HTTP/2 trailers are not yet propagated from upstream to the client.
+In `rws.config.toml` they are the upstream's `tls_ca_file`,
+`tls_client_cert_file` and `tls_client_key_file`.
+
+## Streaming and trailers
+
+Since 18.3.0 every kind of gRPC call works through the proxy:
+
+- **Unary and server streaming** — the response head is passed on as soon as
+  it arrives and each message as the backend sends it.
+- **Client streaming and bidirectional** — the request body is forwarded as
+  it arrives, while the response streams back, so messages cross in both
+  directions on one call.
+- **Status** — the backend's trailers (`grpc-status`, `grpc-message`,
+  `grpc-status-details-bin`) reach the client after the last message, over
+  HTTP/2 and HTTP/3; an error answered with headers only (trailers-only) keeps
+  its status too. `te: trailers` is forwarded, as gRPC servers require.
+- **Errors** — a backend that fails mid-call resets the client's stream
+  (`INTERNAL_ERROR`), so the client sees an error rather than a truncated
+  success.
+
+HTTP/1.1 has no trailers, so gRPC needs HTTP/2 or HTTP/3 between the client
+and rws (any gRPC client negotiates it).
+
+`.read_timeout_ms()` applies to each wait for the backend, so a stream that
+goes quiet for longer than that (30 s by default) is ended with an error —
+raise it for long-lived streams that can be idle.
 
 ## H2ReverseProxy
 
@@ -13043,7 +13099,20 @@ Supported backend URL schemes for `H2ReverseProxy`:
 | `h2s://host:port` | TLS + ALPN `h2` | 443 |
 | `https://host:port` | TLS + ALPN `h2` | 443 |
 
-`H2ReverseProxy` bridges the synchronous `Middleware` interface into the async tokio runtime required for HTTP/2 upstream connections via an internal `block_on_isolated` helper: it spawns a scoped OS thread running its own single-threaded tokio runtime and blocks that thread, rather than using `tokio::task::block_in_place`. This works correctly under any tokio runtime flavor — including `current_thread`, where `block_in_place` would panic — and even when called with no tokio runtime active at all (the HTTP/1.1 thread pool).
+## Connections
+
+Since 18.3.0 each backend gets one HTTP/2 connection, reused and multiplexed
+by every request (up to the backend's stream limit) instead of a new
+handshake per request; a connection the backend closes is replaced on the
+next request. Requests are retried on another backend only before anything
+was sent, and never when the request body was streaming.
+
+The connections live on a small runtime of their own (two threads named
+`rws-h2-upstream`), so the proxy works the same under the shared, per-core
+or no tokio runtime (a test client).
+
+Responses that aren't gRPC, up to 1 MiB and with a `content-length`, are
+buffered (and keep their length); the rest stream.
 
 ---
 
@@ -18142,8 +18211,9 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `ReverseProxy` | `proxy` | HTTP/1.1 reverse proxy middleware: round-robin with failover (502 when all fail), pooled connections, unbuffered streaming of SSE/chunked/large bodies; `.with_circuit_breaker(Arc<dyn Breaker>)`. See [Reverse proxy](/proxy/reverse-proxy/) |
 | `LoadBalancing` | `proxy` | Strategy enum passed to `ReverseProxy::strategy()` |
 | `ConnPool` / `Pool` | `proxy` | Per-backend idle-connection pool (`ConnPool = Pool`); `ConnPool::new(max_idle, idle_timeout)`, share with `ReverseProxy::with_pool`. A stale pooled connection is retried once only for idempotent methods |
-| `UpstreamTls` | `proxy` | Trusts a PEM CA file for `https://` backends instead of WebPKI (`ReverseProxy::tls_ca_file`, `[[upstream]] tls_ca_file`); unloadable file → 502 |
-| `H2ReverseProxy` | `proxy` (`http2`) | HTTP/2 upstream proxy: `h2://` plain, `h2s://`/`https://` TLS |
+| `UpstreamTls` | `proxy` | TLS settings for upstreams: a PEM CA file instead of WebPKI and/or a client certificate (`UpstreamTls::new(ca, client)`; `tls_ca_file`, `tls_client_cert` on `ReverseProxy`/`H2ReverseProxy`/`GrpcProxy`, `[[upstream]] tls_ca_file`/`tls_client_cert_file`/`tls_client_key_file`); unloadable → 502 |
+| `H2ReverseProxy` | `proxy` (`http2`) | HTTP/2 upstream proxy: `h2://` plain, `h2s://`/`https://` TLS; pooled connections, bodies streamed both ways, trailers kept (18.3.0) |
+| `Trailers` | `response` | Trailer fields sent after a body (`Response::trailers`, HTTP/2 and HTTP/3): a shared slot a streamed body's producer fills before it ends (18.3.0) |
 | `GrpcProxy` | `proxy` (`http2`) | gRPC proxy (wraps `H2ReverseProxy`, filters on `application/grpc*`). See [gRPC proxy](/proxy/grpc-proxy/) |
 | `TcpProxy` | `tcp_proxy` | Standalone L4 TCP proxy with round-robin backends. See [TCP proxy](/proxy/tcp-proxy/) |
 | `UdpProxy` | `udp_proxy` | Standalone request-reply UDP proxy. See [UDP proxy](/proxy/udp-proxy/) |

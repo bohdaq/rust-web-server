@@ -98,7 +98,7 @@ With a few hundred downloads per quarter, discoverability is the bottleneck: run
 
 Make the HTTP/2 upstream path as good as the HTTP/1.1 one, so gRPC works end to end, and accept traffic from L4 load balancers.
 
-- **#13** **HTTP/2 upstream path at parity with HTTP/1.1** — `grpc-status` trailers (dropped today), streaming bodies (only unary gRPC works), connection pooling (a new handshake per request), `tls_ca_file`, and upstream client certificates on both paths (old "upstream client certs" item).
+- **#13** *main (in progress): pooling, streaming both ways, trailers (h2/h3), `te`, tls_ca_file + client certs on both paths, config `grpc` action over HTTP/2 — in-process tests against an h2 gRPC echo backend and an mTLS backend; left: the tonic e2e in CI* **HTTP/2 upstream path at parity with HTTP/1.1** — `grpc-status` trailers (dropped today), streaming bodies (only unary gRPC works), connection pooling (a new handshake per request), `tls_ca_file`, and upstream client certificates on both paths (old "upstream client certs" item).
 - **#14** **gRPC-web bridge** — browsers speak gRPC-web; translate it to gRPC upstreams (Envoy, Pingora 0.4). Needs #13.
 - **#20** **Inbound PROXY protocol v1/v2 and h2c** — client addresses behind L4 load balancers; cleartext HTTP/2 for gRPC.
 

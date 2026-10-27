@@ -32,6 +32,14 @@ impl Application for TestApp {
             let mut r = Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "");
             r.content_range_list[0].body = request.body.to_vec();
             r
+        } else if request.request_uri == "/trailers" {
+            let mut r = Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "body");
+            r.trailers = Some(crate::response::Trailers::with(vec![Header::new("grpc-status", "0".to_string())]));
+            r
+        } else if request.request_uri == "/only-trailers" {
+            let mut r = Response::get_response(STATUS_CODE_REASON_PHRASE.n200_ok, None, None);
+            r.trailers = Some(crate::response::Trailers::with(vec![Header::new("grpc-status", "5".to_string())]));
+            r
         } else if request.request_uri == "/big" {
             let mut r = Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, "");
             r.content_range_list[0].body = big_body();
@@ -426,4 +434,21 @@ async fn a_wrong_content_length_is_an_error_for_the_handler() {
     let error = tokio::task::spawn_blocking(move || errors.recv_timeout(std::time::Duration::from_secs(5))).await.unwrap()
         .expect("the handler never saw an error");
     assert!(error.contains("content-length"), "{error}");
+}
+
+#[tokio::test]
+async fn trailers_follow_the_body_in_their_own_header_block() {
+    let send = client(TestApp(None)).await;
+    for (path, body, status) in [("/trailers", b"body".to_vec(), "0"), ("/only-trailers", Vec::new(), "5")] {
+        let request = http::Request::get(format!("https://x{}", path)).body(()).unwrap();
+        let (response, _) = send.clone().ready().await.unwrap().send_request(request, true).unwrap();
+        let (_, mut stream) = response.await.unwrap().into_parts();
+        let mut got = Vec::new();
+        while let Some(chunk) = stream.data().await {
+            got.extend_from_slice(&chunk.unwrap());
+        }
+        assert_eq!(body, got, "{path}");
+        let trailers = stream.trailers().await.unwrap().expect("trailers");
+        assert_eq!(status, trailers["grpc-status"], "{path}");
+    }
 }

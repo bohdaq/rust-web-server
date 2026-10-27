@@ -104,7 +104,7 @@ Use it as:
 - [TCP Proxy](https://rws8.tech/proxy/tcp-proxy/): Forward raw TCP connections to backend servers with round-robin load balancing and no protocol overhead.
 - [UDP Proxy](https://rws8.tech/proxy/udp-proxy/): Forward UDP datagrams to backend servers with round-robin load balancing for DNS, syslog, and other request-reply UDP protocols.
 - [WebSocket Proxy](https://rws8.tech/proxy/websocket-proxy/): Proxy WebSocket upgrade requests to backend servers and relay all frames bidirectionally with round-robin load balancing.
-- [gRPC Proxy](https://rws8.tech/proxy/grpc-proxy/): Route gRPC traffic to HTTP/2 backends with content-type filtering and round-robin load balancing.
+- [gRPC Proxy](https://rws8.tech/proxy/grpc-proxy/): Route gRPC traffic to HTTP/2 backends — every call type streaming, status trailers kept, pooled connections, private CAs and client certificates.
 
 ## Database / ORM
 

@@ -1,6 +1,6 @@
 ---
 title: gRPC Proxy
-description: Route gRPC traffic to HTTP/2 backends with content-type filtering and round-robin load balancing.
+description: Route gRPC traffic to HTTP/2 backends — every call type streaming, status trailers kept, pooled connections, private CAs and client certificates.
 ---
 
 `GrpcProxy` is a middleware that forwards requests with `Content-Type: application/grpc*` to HTTP/2 backends, passing all other requests through to the next layer. It wraps `H2ReverseProxy` and adds a content-type filter so that gRPC and non-gRPC traffic can share the same application.
@@ -97,11 +97,43 @@ When no port is given, `grpcs://` defaults to 443. You can also write `https://`
 | `grpcs://host:port` | TLS | 443 |
 | `https://host:port` | TLS | 443 |
 
-TLS certificate verification uses the system WebPKI trust store (`webpki-roots`). Self-signed or private CA certificates are not supported without a custom build. TLS backends require the `http2` Cargo feature (already required for `GrpcProxy`).
+Certificates are verified against the WebPKI roots unless you trust a CA of
+your own, and a backend that requires a client certificate (mutual TLS) gets
+the one you configure (both since 18.3.0, also on `H2ReverseProxy` and
+`ReverseProxy`):
 
-## gRPC trailers
+```rust
+GrpcProxy::new(["grpcs://billing.internal:50051"])
+    .tls_ca_file("/etc/rws/internal-ca.pem")?          // trust this CA instead of the public roots
+    .tls_client_cert("/etc/rws/client.pem", "/etc/rws/client.key")?;  // present this certificate
+```
 
-gRPC uses HTTP/2 trailers to carry `grpc-status` and `grpc-message` at the end of a response stream. The current implementation forwards DATA frames as-is, but HTTP/2 trailers are not yet propagated from upstream to the client.
+In `rws.config.toml` they are the upstream's `tls_ca_file`,
+`tls_client_cert_file` and `tls_client_key_file`.
+
+## Streaming and trailers
+
+Since 18.3.0 every kind of gRPC call works through the proxy:
+
+- **Unary and server streaming** — the response head is passed on as soon as
+  it arrives and each message as the backend sends it.
+- **Client streaming and bidirectional** — the request body is forwarded as
+  it arrives, while the response streams back, so messages cross in both
+  directions on one call.
+- **Status** — the backend's trailers (`grpc-status`, `grpc-message`,
+  `grpc-status-details-bin`) reach the client after the last message, over
+  HTTP/2 and HTTP/3; an error answered with headers only (trailers-only) keeps
+  its status too. `te: trailers` is forwarded, as gRPC servers require.
+- **Errors** — a backend that fails mid-call resets the client's stream
+  (`INTERNAL_ERROR`), so the client sees an error rather than a truncated
+  success.
+
+HTTP/1.1 has no trailers, so gRPC needs HTTP/2 or HTTP/3 between the client
+and rws (any gRPC client negotiates it).
+
+`.read_timeout_ms()` applies to each wait for the backend, so a stream that
+goes quiet for longer than that (30 s by default) is ended with an error —
+raise it for long-lived streams that can be idle.
 
 ## H2ReverseProxy
 
@@ -134,4 +166,17 @@ Supported backend URL schemes for `H2ReverseProxy`:
 | `h2s://host:port` | TLS + ALPN `h2` | 443 |
 | `https://host:port` | TLS + ALPN `h2` | 443 |
 
-`H2ReverseProxy` bridges the synchronous `Middleware` interface into the async tokio runtime required for HTTP/2 upstream connections via an internal `block_on_isolated` helper: it spawns a scoped OS thread running its own single-threaded tokio runtime and blocks that thread, rather than using `tokio::task::block_in_place`. This works correctly under any tokio runtime flavor — including `current_thread`, where `block_in_place` would panic — and even when called with no tokio runtime active at all (the HTTP/1.1 thread pool).
+## Connections
+
+Since 18.3.0 each backend gets one HTTP/2 connection, reused and multiplexed
+by every request (up to the backend's stream limit) instead of a new
+handshake per request; a connection the backend closes is replaced on the
+next request. Requests are retried on another backend only before anything
+was sent, and never when the request body was streaming.
+
+The connections live on a small runtime of their own (two threads named
+`rws-h2-upstream`), so the proxy works the same under the shared, per-core
+or no tokio runtime (a test client).
+
+Responses that aren't gRPC, up to 1 MiB and with a `content-length`, are
+buffered (and keep their length); the rest stream.

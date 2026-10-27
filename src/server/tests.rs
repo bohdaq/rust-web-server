@@ -1412,6 +1412,7 @@ fn write_chunked_file_produces_valid_chunked_encoding() {
         content_range_list: vec![],
         stream_file: None,
         stream_pipe: None,
+        trailers: None,
     };
 
     let request = Request {
@@ -1795,6 +1796,7 @@ fn write_chunked_file_with_known_length_sends_raw_body_not_chunked() {
         content_range_list: vec![],
         stream_file: None,
         stream_pipe: None,
+        trailers: None,
     };
     let request = Request { method: METHOD.get.to_string(), request_uri: "/".to_string(), http_version: VERSION.http_1_1.to_string(), headers: vec![], body: Default::default() };
     let mut out = Vec::new();

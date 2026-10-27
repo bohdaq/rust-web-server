@@ -32,7 +32,7 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         section
     };
     let keys: Vec<&'static str> = match section {
-        "upstream" => vec!["name", "backends", "strategy", "tls_ca_file"],
+        "upstream" => vec!["name", "backends", "strategy", "tls_ca_file", "tls_client_cert_file", "tls_client_key_file"],
         "upstream.health_check" | "ws_proxy.health_check" => HEALTH_CHECK_KEYS.to_vec(),
         "route" => vec!["name"],
         "route.match" => vec!["host", "path", "method", "content_type"],
@@ -109,7 +109,7 @@ pub fn check_unknown_keys(toml: &str, report: &mut ConfigReport) {
 /// `host:port`, or a URL with an `http://`, `https://`, `h2://`, `ws://` or
 /// `wss://` scheme, whose port may be left to the scheme's default.
 fn is_host_port(backend: &str) -> bool {
-    let (rest, has_scheme) = match ["http://", "https://", "h2://", "ws://", "wss://"]
+    let (rest, has_scheme) = match ["http://", "https://", "h2://", "h2s://", "grpc://", "grpcs://", "ws://", "wss://"]
         .iter()
         .find_map(|scheme| backend.strip_prefix(scheme))
     {
@@ -147,12 +147,20 @@ impl ProxyConfig {
                     report.error(format!("{label}: backend '{backend}' is not host:port"));
                 }
             }
-            if let Some(ca) = &upstream.tls_ca_file {
-                if let Err(e) = crate::proxy::UpstreamTls::from_ca_file(ca) {
-                    report.error(format!("{label}: {e}; its https:// backends would answer 502"));
+            let client = match (&upstream.tls_client_cert_file, &upstream.tls_client_key_file) {
+                (Some(cert), Some(key)) => Some((cert.as_str(), key.as_str())),
+                (None, None) => None,
+                _ => {
+                    report.error(format!("{label}: tls_client_cert_file and tls_client_key_file go together"));
+                    None
+                }
+            };
+            if upstream.tls_ca_file.is_some() || client.is_some() {
+                if let Err(e) = crate::proxy::UpstreamTls::new(upstream.tls_ca_file.as_deref(), client) {
+                    report.error(format!("{label}: {e}; its TLS backends would answer 502"));
                 }
                 if !upstream.tls {
-                    report.warn(format!("{label}: tls_ca_file is set but no backend is https://, so it isn't used"));
+                    report.warn(format!("{label}: TLS settings are set but no backend is https://, h2s:// or grpcs://, so they aren't used"));
                 }
             }
             if !STRATEGIES.contains(&upstream.strategy.as_str()) {

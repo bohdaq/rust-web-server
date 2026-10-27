@@ -30,6 +30,7 @@ fn make_response(body: &[u8], mime: &str) -> Response {
         content_range_list: vec![Range::get_content_range(body.to_vec(), mime.to_string())],
         stream_file: None,
         stream_pipe: None,
+        trailers: None,
     }
 }
 
