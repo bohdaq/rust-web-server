@@ -3,7 +3,7 @@ title: MCP Server Overview
 description: Expose tools, resources, and prompts to AI agents via the Model Context Protocol over HTTP.
 ---
 
-The Model Context Protocol (MCP) is a JSON-RPC 2.0 standard that lets AI agents (Claude Desktop, Cursor, custom agents) call server-defined **tools**, read **resources**, and retrieve **prompt templates** over plain HTTP. `rust-web-server` ships a first-class `McpServer` that implements the MCP specification up to 2025-11-25 with no external dependencies, and speaks each version from 2024-11-05 on to the clients that ask for it — see [Protocol version negotiation](#protocol-version-negotiation) below.
+The Model Context Protocol (MCP) is a JSON-RPC 2.0 standard that lets AI agents (Claude Desktop, Cursor, custom agents) call server-defined **tools**, read **resources**, and retrieve **prompt templates** over plain HTTP. `rust-web-server` ships a first-class `McpServer` that implements the MCP specification up to 2026-07-28 with no external dependencies, and speaks each version from 2024-11-05 on to the clients that ask for it, on one endpoint — see [MCP 2026-07-28](#mcp-2026-07-28) and [Protocol version negotiation](#protocol-version-negotiation) below.
 
 ## Creating an MCP server
 
@@ -345,9 +345,64 @@ Nothing proactively notices a `GET /mcp` connection closing and removes its subs
 
 `initialize`'s `resources` capability now advertises `"subscribe":true` unconditionally, alongside the already-unconditional `listChanged:true`.
 
+## MCP 2026-07-28
+
+MCP 2026-07-28 is stateless: no `initialize`, no session. Every request
+carries its protocol version and the client's capabilities in
+`params._meta`, mirrored in HTTP headers. The same `/mcp` endpoint serves
+it beside the session-based versions (since 18.5.0) — a request whose
+`_meta` names a protocol version, or whose `MCP-Protocol-Version` header
+isn't one of the earlier versions, is served statelessly; `initialize` and
+the requests of a session work as before. Nothing changes in how you
+register tools, resources and prompts.
+
+On the 2026-07-28 path:
+
+- **Validation.** Missing `_meta` fields are `-32602`; an
+  `MCP-Protocol-Version`, `Mcp-Method` or `Mcp-Name` header that is missing
+  or disagrees with the body is `-32020` (`Mcp-Name` may be
+  `=?base64?…?=`); an unknown version is `-32022` with
+  `data: {"supported": [...], "requested": "..."}` — all `400`.
+- **Discovery.** `server/discover` returns every supported version
+  (2026-07-28 and the four earlier ones), the capabilities and
+  `_meta.io.modelcontextprotocol/serverInfo`. `initialize`, `ping`,
+  `logging/setLevel`, `resources/subscribe`/`unsubscribe` and unknown
+  methods are `404` with `-32601`. `GET` and `DELETE` belong to sessions.
+- **Results** carry `resultType` and `serverInfo` in `_meta`; discovery,
+  the lists and `resources/read` also `ttlMs` and `cacheScope`, by default
+  `0` and `"private"` — set them with `.cache_hints(ttl_ms, public)` when
+  the lists are the same for every caller. A missing resource is `-32602`
+  with `data.uri`.
+- **Input from the client** — elicitation, sampling, roots — is asked for
+  by returning `McpContent::input_required(...)` from the tool (or
+  `PromptReply::InputRequired` from a prompt), not by sending requests:
+  see [Asking the client for input](/mcp/tools/#asking-the-client-for-input-mcp-2026-07-28).
+  A request for a capability the client didn't declare is refused with
+  `-32021` and `data.requiredCapabilities`.
+- **`subscriptions/listen`** replaces the `GET` stream: the response is an
+  SSE stream that starts with `notifications/subscriptions/acknowledged`
+  and then carries only the types the client asked for
+  (`toolsListChanged`, `promptsListChanged`, `resourcesListChanged`,
+  `resourceSubscriptions`), each tagged with
+  `_meta.io.modelcontextprotocol/subscriptionId`. `register_tool`,
+  `notify_resource_updated` and the rest feed both kinds of stream.
+- **Request-scoped notifications** go on the request's own SSE response:
+  progress (`ctx.report_progress`) when `_meta.progressToken` is set, log
+  messages (`ctx.log(level, data)`) only when `_meta` sets
+  `io.modelcontextprotocol/logLevel`.
+
+The official conformance suite runs in CI for both eras
+(`.github/workflows/mcp-conformance.yml`, suite 0.2.0-alpha.12): all 37
+server scenarios 2026-07-28 requires pass; for 2025-11-25, 69 of 72
+checks, the three failures being server-initiated elicitation, which
+rws doesn't implement for that version. Not yet: the Tasks extension
+(`io.modelcontextprotocol/tasks`) and checking `Mcp-Param-*` headers
+against `x-mcp-header` tool parameters — both outside the scored set.
+
 ## Protocol version negotiation
 
-The server speaks MCP 2024-11-05, 2025-03-26, 2025-06-18 and 2025-11-25.
+The server speaks MCP 2024-11-05, 2025-03-26, 2025-06-18 and 2025-11-25
+through `initialize` (and 2026-07-28 without it, above).
 `initialize` confirms the client's `params.protocolVersion` when it is one of
 those, and answers anything else — older, newer, malformed or missing — with
 the newest, 2025-11-25; the client then decides whether it can continue:

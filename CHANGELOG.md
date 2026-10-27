@@ -9,6 +9,25 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- MCP 2026-07-28 beside the session-based versions, on one endpoint (#15):
+  stateless requests (`_meta` version and capabilities, `MCP-Protocol-Version`
+  / `Mcp-Method` / `Mcp-Name` checked against the body: `-32602`, `-32020`,
+  `-32022`, all `400`), `server/discover`, `resultType` and `serverInfo` on
+  every result, `ttlMs`/`cacheScope` on cacheable ones (`.cache_hints`),
+  `subscriptions/listen` (acknowledged, filtered, tagged), request-scoped
+  progress and log messages (`ctx.log`, only with a `logLevel`), and multi
+  round-trip requests: `McpContent::input_required(InputRequired::new()
+  .elicit(..).sample(..).list_roots(..).state(..))`, `PromptReply` with
+  `.prompt_with_context`, `ctx.input_response` / `elicitation_content` /
+  `request_state` (HMAC-signed, bound to method, name, caller and 10 min;
+  `.request_state_key` for replicas) / `client_supports`; a request for an
+  undeclared capability is `-32021`. Removed methods are `404 -32601` there.
+  Official conformance suite 0.2.0-alpha.12 in CI: every scenario 2026-07-28
+  requires passes, and 2025-11-25 stays at its baseline (#16).
+- `resources/templates/list`: resources registered with a URI template are
+  listed there; `resources/list` holds only concrete resources (it listed
+  templates as resources before, which the suite flags).
+- `crate::core::sha256`: SHA-256 and HMAC-SHA256, no dependency.
 - Streaming Server-Sent Events (#24): `Sse::stream()` returns the response
   and an `SseSender`; events reach the client as they are sent, over
   HTTP/1.1, HTTP/2 and HTTP/3. `send` waits for room (bounded memory),

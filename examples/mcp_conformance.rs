@@ -8,10 +8,12 @@
 //!   --expected-failures ci/mcp-conformance-baseline.yml
 //! ```
 //!
-//! Fixtures rws can't express yet (elicitation) are left out, so their
-//! scenarios fail and are listed in the baseline rather than faked.
+//! Fixtures rws can't express yet (server-initiated elicitation on
+//! 2025-11-25) are left out, so their scenarios fail and are listed in the
+//! baseline rather than faked. The `test_input_required_result_*` tools are
+//! MCP 2026-07-28's multi round-trip requests.
 
-use rust_web_server::mcp::{LogLevel, McpContent, McpServer, PromptArgDef, PromptMessage, SamplingRequest};
+use rust_web_server::mcp::{InputRequired, LogLevel, McpContent, McpContext, McpServer, PromptArgDef, PromptMessage, PromptReply, SamplingRequest};
 use rust_web_server::server::Server;
 
 const TEST_IMAGE_BASE64: &str =
@@ -22,6 +24,22 @@ const TEST_AUDIO_BASE64: &str = "UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABA
 fn arg(args: &str, name: &str) -> String {
     rust_web_server::mcp::extract_arg(args, name).unwrap_or_default()
 }
+
+/// `{"type":"object","properties":{"<field>":{"type":"<kind>"}},"required":["<field>"]}`
+fn form(field: &str, kind: &str) -> String {
+    format!(r#"{{"type":"object","properties":{{"{field}":{{"type":"{kind}"}}}},"required":["{field}"]}}"#)
+}
+
+/// A field of an accepted elicitation's content.
+fn elicited(ctx: &McpContext, key: &str, field: &str) -> Option<String> {
+    rust_web_server::mcp::extract_arg(&ctx.elicitation_content(key)?, field)
+}
+
+fn sampling(prompt: &str, max_tokens: u32) -> SamplingRequest {
+    SamplingRequest { messages: vec![PromptMessage::user(prompt)], max_tokens, system_prompt: None }
+}
+
+const NO_ARGS: &str = r#"{"type":"object"}"#;
 
 /// The fixtures.
 pub fn server() -> McpServer {
@@ -81,7 +99,15 @@ pub fn server() -> McpServer {
         .tool(
             "json_schema_2020_12_tool",
             "Tool with JSON Schema 2020-12 features for conformance testing (SEP-1613)",
-            r#"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"name":{"type":"string"},"address":{"type":"object","properties":{"street":{"type":"string"},"city":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}"#,
+            concat!(
+                r##"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","##,
+                r##""$defs":{"address":{"$anchor":"addressDef","type":"object","properties":{"street":{"type":"string"},"city":{"type":"string"}}}},"##,
+                r##""properties":{"name":{"type":"string"},"address":{"$ref":"#/$defs/address"},"contactMethod":{"type":"string","enum":["phone","email"]},"##,
+                r##""phone":{"type":"string"},"email":{"type":"string"}},"##,
+                r##""allOf":[{"anyOf":[{"required":["phone"]},{"required":["email"]}]}],"##,
+                r##""if":{"properties":{"contactMethod":{"const":"phone"}},"required":["contactMethod"]},"then":{"required":["phone"]},"else":{"required":["email"]},"##,
+                r##""additionalProperties":false}"##
+            ),
             |args| Ok(McpContent::text(format!("JSON Schema 2020-12 tool called with: {args}"))),
         )
         // ── resources ──
@@ -128,7 +154,100 @@ pub fn server() -> McpServer {
                 PromptMessage::user("Please analyze the image above."),
             ])
         })
-        .completion("ref/prompt", "test_prompt_with_arguments", |_, _| Ok(Vec::new()));
+        .completion("ref/prompt", "test_prompt_with_arguments", |_, _| Ok(Vec::new()))
+        // ── MCP 2026-07-28: multi round-trip requests ──
+        .tool_with_context("test_input_required_result_elicitation", "Asks for your name, then greets you", NO_ARGS, |ctx, _| {
+            Ok(match elicited(&ctx, "user_name", "name") {
+                Some(name) => McpContent::text(format!("Hello, {name}!")),
+                None => McpContent::input_required(InputRequired::new().elicit("user_name", "What is your name?", &form("name", "string"))),
+            })
+        })
+        .tool_with_context("test_input_required_result_sampling", "Asks the client's LLM a question", NO_ARGS, |ctx, _| {
+            Ok(match ctx.input_response("capital_question") {
+                Some(reply) => McpContent::text(format!("The LLM said: {}", arg(&reply, "text"))),
+                None => McpContent::input_required(InputRequired::new().sample("capital_question", &sampling("What is the capital of France?", 100))),
+            })
+        })
+        .tool_with_context("test_input_required_result_list_roots", "Asks for the client's roots", NO_ARGS, |ctx, _| {
+            Ok(match ctx.input_response("client_roots") {
+                Some(roots) => McpContent::text(format!("Client roots: {roots}")),
+                None => McpContent::input_required(InputRequired::new().list_roots("client_roots")),
+            })
+        })
+        .tool_with_context("test_input_required_result_request_state", "Round-trips a requestState", NO_ARGS, |ctx, _| {
+            Ok(match (ctx.request_state(), ctx.input_response("confirm")) {
+                (Some("confirm-state"), Some(_)) => McpContent::text("state-ok: the requestState came back intact"),
+                _ => McpContent::input_required(InputRequired::new().elicit("confirm", "Please confirm", &form("ok", "boolean")).state("confirm-state")),
+            })
+        })
+        .tool_with_context("test_input_required_result_tampered_state", "Signs its requestState; an altered one is refused", NO_ARGS, |ctx, _| {
+            Ok(match (ctx.request_state(), ctx.input_response("confirm")) {
+                (Some("signed-state"), Some(_)) => McpContent::text("state-ok"),
+                _ => McpContent::input_required(InputRequired::new().elicit("confirm", "Please confirm", &form("ok", "boolean")).state("signed-state")),
+            })
+        })
+        .tool_with_context("test_input_required_result_multi_round", "Asks two questions, one per round", NO_ARGS, |ctx, _| {
+            Ok(match ctx.request_state() {
+                Some("round-2") if ctx.input_response("step2").is_some() => McpContent::text("Both steps complete"),
+                Some("round-1") if ctx.input_response("step1").is_some() => McpContent::input_required(
+                    InputRequired::new().elicit("step2", "Step 2: What is your favorite color?", &form("color", "string")).state("round-2"),
+                ),
+                _ => McpContent::input_required(InputRequired::new().elicit("step1", "Step 1: What is your name?", &form("name", "string")).state("round-1")),
+            })
+        })
+        .tool_with_context("test_input_required_result_multiple_inputs", "Asks for a name, a greeting and the roots at once", NO_ARGS, |ctx, _| {
+            let answered = ["user_name", "greeting", "client_roots"].iter().all(|key| ctx.input_response(key).is_some());
+            Ok(if answered && ctx.request_state() == Some("multi") {
+                McpContent::text("All three inputs received")
+            } else {
+                McpContent::input_required(
+                    InputRequired::new()
+                        .elicit("user_name", "What is your name?", &form("name", "string"))
+                        .sample("greeting", &sampling("Generate a greeting", 50))
+                        .list_roots("client_roots")
+                        .state("multi"),
+                )
+            })
+        })
+        .tool_with_context("test_input_required_result_capabilities", "Asks only for what the client declared", NO_ARGS, |ctx, _| {
+            let answered = ctx.input_response("question").is_some() || ctx.input_response("name").is_some();
+            Ok(if answered {
+                McpContent::text("Thanks")
+            } else {
+                let mut input = InputRequired::new();
+                if ctx.client_supports("sampling") {
+                    input = input.sample("question", &sampling("Say hi", 10));
+                }
+                if ctx.client_supports("elicitation") {
+                    input = input.elicit("name", "What is your name?", &form("name", "string"));
+                }
+                McpContent::input_required(input)
+            })
+        })
+        .tool_with_context("test_missing_capability", "Needs the client's sampling capability", NO_ARGS, |ctx, _| {
+            Ok(match ctx.input_response("question") {
+                Some(_) => McpContent::text("sampled"),
+                None => McpContent::input_required(InputRequired::new().sample("question", &sampling("Say hi", 10))),
+            })
+        })
+        .tool_with_context("test_streaming_elicitation", "Asks for input (on 2026-07-28, as a result, never as a request)", NO_ARGS, |ctx, _| {
+            Ok(match elicited(&ctx, "answer", "value") {
+                Some(value) => McpContent::text(format!("You said {value}")),
+                None => McpContent::input_required(InputRequired::new().elicit("answer", "Say something", &form("value", "string"))),
+            })
+        })
+        .tool_with_context("test_logging_tool", "Logs three messages about this request", NO_ARGS, |ctx, _| {
+            for message in ["Tool execution started", "Tool processing data", "Tool execution completed"] {
+                ctx.log(LogLevel::Info, &format!(r#""{message}""#));
+            }
+            Ok(McpContent::text("Logged"))
+        })
+        .prompt_with_context("test_input_required_result_prompt", "A prompt that asks for context first", vec![], |ctx, _| {
+            Ok(match elicited(&ctx, "user_context", "context") {
+                Some(context) => PromptReply::Messages(vec![PromptMessage::user(format!("Use this context: {context}"))]),
+                None => PromptReply::InputRequired(InputRequired::new().elicit("user_context", "What context should the prompt use?", &form("context", "string"))),
+            })
+        });
 
     // Logging goes through the server, so register it on the built server.
     let logger = server.clone();
@@ -138,6 +257,19 @@ pub fn server() -> McpServer {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         Ok(McpContent::text("Tool with logging executed successfully"))
+    });
+    // Change the tool and prompt lists, so list_changed notifications go out.
+    let tools = server.clone();
+    server.register_tool("test_trigger_tool_change", "Adds and removes a tool", NO_ARGS, move |_| {
+        tools.register_tool("test_transient_tool", "Here for a moment", NO_ARGS, |_| Ok(McpContent::text("transient")));
+        tools.remove_tool("test_transient_tool");
+        Ok(McpContent::text("The tool list changed"))
+    });
+    let prompts = server.clone();
+    server.register_tool("test_trigger_prompt_change", "Adds and removes a prompt", NO_ARGS, move |_| {
+        prompts.register_prompt("test_transient_prompt", "Here for a moment", |_| Ok(vec![PromptMessage::user("transient")]));
+        prompts.remove_prompt("test_transient_prompt");
+        Ok(McpContent::text("The prompt list changed"))
     });
     server
 }

@@ -10,7 +10,19 @@ on:
 
 jobs:
   server:
+    # One protocol revision per run: the 2025-11-25 suite CI has always run,
+    # and the 0.2 suite's frozen requirement sets for 2025-11-25 (session
+    # based) and 2026-07-28 (stateless). Each run's total goes to the job
+    # summary: the pass rate per protocol version.
+    name: server (${{ matrix.revision }}, suite ${{ matrix.suite }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { revision: 2025-11-25, suite: 0.1.16, requirements: "", baseline: ci/mcp-conformance-baseline.yml }
+          - { revision: 2025-11-25, suite: 0.2.0-alpha.12, requirements: 2025-11-25, baseline: ci/mcp-conformance-baseline.yml }
+          - { revision: 2026-07-28, suite: 0.2.0-alpha.12, requirements: 2026-07-28, baseline: "" }
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -21,13 +33,19 @@ jobs:
         with:
           node-version: 22
       - run: cargo build --example mcp_conformance
-      - run: |
-          baseline=ci/mcp-conformance-baseline.yml
-          [ -f "$baseline" ] || baseline=""
-          RESULTS_DIR="$RUNNER_TEMP/mcp-conformance" ci/e2e/mcp_conformance.sh target/debug/examples/mcp_conformance $baseline
+      - env:
+          CONFORMANCE_VERSION: ${{ matrix.suite }}
+          REQUIREMENTS: ${{ matrix.requirements }}
+          RESULTS_DIR: ${{ runner.temp }}/mcp-conformance
+        run: ci/e2e/mcp_conformance.sh target/debug/examples/mcp_conformance ${{ matrix.baseline }}
+      - name: Pass rate
+        if: always()
+        run: |
+          total="$(grep -h '^Total:' "$RUNNER_TEMP/mcp-conformance/conformance.out" | tail -1 || true)"
+          echo "MCP ${{ matrix.revision }} (suite ${{ matrix.suite }}): ${total:-no result}" >> "$GITHUB_STEP_SUMMARY"
       - name: Keep the results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mcp-conformance-results
+          name: mcp-conformance-${{ matrix.revision }}-${{ matrix.suite }}
           path: ${{ runner.temp }}/mcp-conformance

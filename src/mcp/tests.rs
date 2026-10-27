@@ -697,11 +697,24 @@ fn tools_call_embedded_resource_serializes_uri_mime_type_and_text() {
 
 #[test]
 fn resources_list_contains_registered_resource() {
+    // A URI template is a resource template, not a resource (MCP spec):
+    // it's listed by resources/templates/list.
     let srv = make_server();
     let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"resources/list","id":7}"#);
+    assert!(!body_of(&resp).contains("docs://"), "a template in resources/list: {}", body_of(&resp));
+    let resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"resources/templates/list","id":8}"#);
     let body = body_of(&resp);
-    assert!(body.contains("docs://"), "uri template missing: {body}");
+    assert!(body.contains(r#""uriTemplate":"docs://"#), "uri template missing: {body}");
     assert!(body.contains("Documentation"), "name missing: {body}");
+}
+
+#[test]
+fn resources_list_holds_plain_resources() {
+    let srv = McpServer::new("t", "1").resource("config://main", "Config", "The config", |_| Ok(McpContent::text("x")));
+    let body = body_of(&srv.handle_request(r#"{"jsonrpc":"2.0","method":"resources/list","id":1}"#));
+    assert!(body.contains(r#""uri":"config://main""#), "{body}");
+    let body = body_of(&srv.handle_request(r#"{"jsonrpc":"2.0","method":"resources/templates/list","id":2}"#));
+    assert!(body.contains(r#""resourceTemplates":[]"#), "{body}");
 }
 
 // ── resources/read ────────────────────────────────────────────────────────────
@@ -1462,8 +1475,8 @@ fn register_resource_makes_it_immediately_readable() {
         Ok(McpContent::text(format!("late content for {uri}")))
     });
 
-    let list_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"resources/list","id":1}"#);
-    assert!(body_of(&list_resp).contains("late://{id}"), "new resource missing from resources/list");
+    let list_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"resources/templates/list","id":1}"#);
+    assert!(body_of(&list_resp).contains("late://{id}"), "new resource template missing from resources/templates/list");
 
     let read_resp = srv.handle_request(r#"{"jsonrpc":"2.0","method":"resources/read","id":2,"params":{"uri":"late://42"}}"#);
     assert!(body_of(&read_resp).contains("late content for late://42"), "new resource did not run");

@@ -8,6 +8,8 @@
 #   ci/e2e/mcp_conformance.sh <path-to-mcp_conformance-example> [baseline.yml]
 #
 # Needs Node (npx). CONFORMANCE_VERSION pins the suite (default below);
+# REQUIREMENTS=<revision> (suite 0.2+) runs exactly the scenarios that
+# protocol revision requires, e.g. 2026-07-28 (stateless) or 2025-11-25;
 # per-scenario checks land in $RESULTS_DIR (default ./mcp-conformance-results).
 set -euo pipefail
 
@@ -34,6 +36,7 @@ done
 curl -s -o /dev/null "http://127.0.0.1:$PORT/healthz" || { echo "fixture server did not start:"; cat server.log; exit 1; }
 
 args=(server --url "http://127.0.0.1:$PORT/mcp")
+[ -n "${REQUIREMENTS:-}" ] && args+=(--requirements "$REQUIREMENTS")
 [ -n "$BASELINE" ] && args+=(--expected-failures "$BASELINE")
 status=0
 npx -y "@modelcontextprotocol/conformance@$VERSION" "${args[@]}" 2>&1 | tee conformance.out || status=$?

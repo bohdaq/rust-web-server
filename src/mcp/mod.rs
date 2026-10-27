@@ -89,6 +89,9 @@
 
 pub(crate) mod json_rpc;
 pub mod gateway;
+mod modern;
+
+pub use modern::{InputRequired, PromptReply};
 
 #[cfg(test)]
 mod tests;
@@ -190,6 +193,16 @@ impl McpContent {
     pub fn blocks(items: impl IntoIterator<Item = McpContent>) -> Self {
         let rendered: Vec<String> = items.into_iter().map(|item| item.to_content_json()).collect();
         McpContent { kind: "blocks", text: rendered.join(","), mime_type: None, uri: None }
+    }
+
+    /// The tool needs input from the client before it can finish (MCP
+    /// 2026-07-28 multi round-trip requests): the client answers
+    /// `input`'s requests and calls the tool again, with the answers in
+    /// [`McpContext::input_response`] and the state in
+    /// [`McpContext::request_state`]. A client on an earlier protocol
+    /// version gets a tool error instead.
+    pub fn input_required(input: InputRequired) -> Self {
+        McpContent { kind: "input_required", text: input.to_json(), mime_type: None, uri: None }
     }
 
     /// A complete `tools/call` result (`{"content":[...],...}`), sent as is —
@@ -358,6 +371,10 @@ pub struct McpContext {
     /// the client asked for progress and accepts `text/event-stream`:
     /// progress notifications go there, ahead of the result.
     request_stream: Option<SseSender>,
+    /// What an MCP 2026-07-28 request carries per request: the client's
+    /// capabilities, `inputResponses`, the verified `requestState` and the
+    /// log level. `None` on earlier protocol versions.
+    modern: Option<Arc<modern::ModernRequest>>,
 }
 
 impl McpContext {
@@ -855,7 +872,7 @@ impl LogLevel {
 
 type ToolFn     = Arc<dyn Fn(McpContext, &str) -> Result<McpContent, String>    + Send + Sync>;
 type ResourceFn = Arc<dyn Fn(&str) -> Result<McpContent, String>    + Send + Sync>;
-type PromptFn   = Arc<dyn Fn(&str) -> Result<Vec<PromptMessage>, String> + Send + Sync>;
+type PromptFn   = Arc<dyn Fn(McpContext, &str) -> Result<PromptReply, String> + Send + Sync>;
 /// `Fn(argument_name, partial_value) -> candidate completion strings`.
 type CompletionFn = Arc<dyn Fn(&str, &str) -> Result<Vec<String>, String> + Send + Sync>;
 type ToolFilter = Arc<dyn Fn(&McpContext, &str) -> bool + Send + Sync>;
@@ -1105,6 +1122,13 @@ pub struct McpServer {
     /// than an invalid request. See [`McpContext::sample`] for the
     /// send-and-block side.
     pending_replies: Arc<Mutex<HashMap<String, mpsc::Sender<Result<String, String>>>>>,
+    /// Open `subscriptions/listen` streams (MCP 2026-07-28).
+    listeners: Arc<Mutex<Vec<modern::Listener>>>,
+    /// The HMAC key protecting `requestState` ([`Self::request_state_key`]).
+    state_key: Arc<Vec<u8>>,
+    /// `ttlMs` / `cacheScope` on cacheable results ([`Self::cache_hints`]).
+    cache_ttl_ms: u64,
+    cache_scope: &'static str,
 }
 
 /// One `GET /mcp` SSE client: its outbound channel plus the
@@ -1175,6 +1199,10 @@ impl McpServer {
             cancellations: Arc::new(Mutex::new(HashMap::new())),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
             pending_replies: Arc::new(Mutex::new(HashMap::new())),
+            listeners: Arc::new(Mutex::new(Vec::new())),
+            state_key: Arc::new(modern::random_key()),
+            cache_ttl_ms: 0,
+            cache_scope: "private",
         }
     }
 
@@ -1371,6 +1399,7 @@ impl McpServer {
     pub fn notify(&self, method: &str, params_json: Option<&str>) {
         let json = render_notification(method, params_json);
         broadcast_sse_to(&self.sse_clients, &json);
+        self.deliver_to_listeners(method, params_json, None);
     }
 
     /// Push `notifications/resources/updated` for `uri` to every session
@@ -1395,6 +1424,8 @@ impl McpServer {
     /// server.notify_resource_updated("config://main");
     /// ```
     pub fn notify_resource_updated(&self, uri: &str) {
+        let params = format!(r#"{{"uri":"{}"}}"#, json_escape(uri));
+        self.deliver_to_listeners("notifications/resources/updated", Some(&params), Some(uri));
         let session_ids = match self.subscriptions.lock().unwrap().get(uri) {
             Some(ids) if !ids.is_empty() => ids.clone(),
             _ => return,
@@ -1665,7 +1696,7 @@ impl McpServer {
             name: name.to_string(),
             description: description.to_string(),
             arguments: vec![],
-            handler: Arc::new(handler),
+            handler: Arc::new(move |_ctx: McpContext, args: &str| handler(args).map(PromptReply::Messages)),
         });
         self.notify("notifications/prompts/list_changed", None);
     }
@@ -2126,7 +2157,7 @@ impl McpServer {
             name: name.to_string(),
             description: description.to_string(),
             arguments: vec![],
-            handler: Arc::new(handler),
+            handler: Arc::new(move |_ctx: McpContext, args: &str| handler(args).map(PromptReply::Messages)),
         });
         self
     }
@@ -2141,6 +2172,28 @@ impl McpServer {
     ) -> Self
     where
         F: Fn(&str) -> Result<Vec<PromptMessage>, String> + Send + Sync + 'static,
+    {
+        self.prompts.write().unwrap().push(PromptDef {
+            name: name.to_string(),
+            description: description.to_string(),
+            arguments: args,
+            handler: Arc::new(move |_ctx: McpContext, args: &str| handler(args).map(PromptReply::Messages)),
+        });
+        self
+    }
+
+    /// [`Self::prompt_with_args`] whose handler also gets the request's
+    /// [`McpContext`] and may answer [`PromptReply::InputRequired`] to ask
+    /// the client for input first (MCP 2026-07-28).
+    pub fn prompt_with_context<F>(
+        self,
+        name: &str,
+        description: &str,
+        args: Vec<PromptArgDef>,
+        handler: F,
+    ) -> Self
+    where
+        F: Fn(McpContext, &str) -> Result<PromptReply, String> + Send + Sync + 'static,
     {
         self.prompts.write().unwrap().push(PromptDef {
             name: name.to_string(),
@@ -2362,10 +2415,11 @@ impl McpServer {
             "tools/call"     => self.do_tools_call(body, ctx),
             "resources/list" => self.do_resources_list(body),
             "resources/read" => self.do_resources_read(body),
+            "resources/templates/list" => self.do_resource_templates_list(body),
             "resources/subscribe"   => self.do_resource_subscribe(body, ctx.session_id),
             "resources/unsubscribe" => self.do_resource_unsubscribe(body, ctx.session_id),
             "prompts/list"   => self.do_prompts_list(body),
-            "prompts/get"    => self.do_prompts_get(body),
+            "prompts/get"    => self.do_prompts_get(body, ctx),
             "logging/setLevel" => self.do_set_log_level(body),
             "completion/complete" => self.do_completion(body),
             _                => Err((json_rpc::METHOD_NOT_FOUND, format!("Unknown method: {method}"))),
@@ -2633,6 +2687,17 @@ impl McpServer {
     }
 
     fn do_tools_call(&self, body: &str, ctx: McpContext) -> Result<String, (i32, String)> {
+        let result = match self.call_tool(body, ctx)? {
+            // Only an MCP 2026-07-28 request can carry input requests.
+            Ok(c) if c.kind == "input_required" => Err("this tool needs input from the client, which needs MCP protocol version 2026-07-28".to_string()),
+            other => other,
+        };
+        Ok(Self::format_tool_result(result))
+    }
+
+    /// Run `tools/call`: the handler's result, unformatted; `Err` for a
+    /// call that never reached a handler (unknown tool, no params).
+    fn call_tool(&self, body: &str, ctx: McpContext) -> Result<Result<McpContent, String>, (i32, String)> {
         let params = json_rpc::extract_raw(body, "params")
             .ok_or((json_rpc::INVALID_PARAMS, "Missing params".to_string()))?;
         let name = json_rpc::extract_str(&params, "name")
@@ -2655,9 +2720,9 @@ impl McpServer {
         };
         if let Some((handler, schema)) = sync_handler {
             if let Err(invalid) = Self::validate_arguments(&schema, &args) {
-                return Ok(Self::format_tool_result(Err(invalid)));
+                return Ok(Err(invalid));
             }
-            return Ok(Self::format_tool_result(handler(ctx, &args)));
+            return Ok(handler(ctx, &args));
         }
 
         #[cfg(feature = "http2")]
@@ -2668,11 +2733,10 @@ impl McpServer {
             };
             if let Some((handler, schema)) = async_handler {
                 if let Err(invalid) = Self::validate_arguments(&schema, &args) {
-                    return Ok(Self::format_tool_result(Err(invalid)));
+                    return Ok(Err(invalid));
                 }
                 let args_owned = args.clone();
-                let result = crate::async_bridge::block_on_isolated(move || handler(args_owned));
-                return Ok(Self::format_tool_result(result));
+                return Ok(crate::async_bridge::block_on_isolated(move || handler(args_owned)));
             }
         }
 
@@ -2706,7 +2770,7 @@ impl McpServer {
     }
 
     fn do_resources_list(&self, body: &str) -> Result<String, (i32, String)> {
-        let items: Vec<String> = self.resources.read().unwrap().iter().map(|r| {
+        let items: Vec<String> = self.resources.read().unwrap().iter().filter(|r| !r.uri_template.contains('{')).map(|r| {
             format!(
                 r#"{{"uri":"{}","name":"{}","description":"{}","mimeType":"text/plain"}}"#,
                 json_escape(&r.uri_template),
@@ -2716,6 +2780,21 @@ impl McpServer {
         }).collect();
         let (page, next_cursor) = self.paginate(&items, body)?;
         Ok(format!(r#"{{"resources":[{}]{}}}"#, page.join(","), next_cursor_json(&next_cursor)))
+    }
+
+    /// `resources/templates/list`: the resources registered with a URI
+    /// template (`{...}` placeholders), which `resources/list` leaves out.
+    fn do_resource_templates_list(&self, body: &str) -> Result<String, (i32, String)> {
+        let items: Vec<String> = self.resources.read().unwrap().iter().filter(|r| r.uri_template.contains('{')).map(|r| {
+            format!(
+                r#"{{"uriTemplate":"{}","name":"{}","description":"{}","mimeType":"text/plain"}}"#,
+                json_escape(&r.uri_template),
+                json_escape(&r.name),
+                json_escape(&r.description),
+            )
+        }).collect();
+        let (page, next_cursor) = self.paginate(&items, body)?;
+        Ok(format!(r#"{{"resourceTemplates":[{}]{}}}"#, page.join(","), next_cursor_json(&next_cursor)))
     }
 
     fn do_resources_read(&self, body: &str) -> Result<String, (i32, String)> {
@@ -2844,7 +2923,21 @@ impl McpServer {
         Ok((&items[offset..end], next_cursor))
     }
 
-    fn do_prompts_get(&self, body: &str) -> Result<String, (i32, String)> {
+    fn do_prompts_get(&self, body: &str, ctx: McpContext) -> Result<String, (i32, String)> {
+        match self.get_prompt(body, ctx)? {
+            (description, PromptReply::Messages(msgs)) => {
+                let msg_jsons: Vec<String> = msgs.iter().map(|m| m.to_json()).collect();
+                Ok(format!(r#"{{"description":"{}","messages":[{}]}}"#, json_escape(&description), msg_jsons.join(",")))
+            }
+            (_, PromptReply::InputRequired(_)) => Err((
+                json_rpc::INVALID_PARAMS,
+                "this prompt needs input from the client, which needs MCP protocol version 2026-07-28".to_string(),
+            )),
+        }
+    }
+
+    /// Run `prompts/get`: the prompt's description and the handler's reply.
+    fn get_prompt(&self, body: &str, ctx: McpContext) -> Result<(String, PromptReply), (i32, String)> {
         let params = json_rpc::extract_raw(body, "params")
             .ok_or((json_rpc::INVALID_PARAMS, "Missing params".to_string()))?;
         let name = json_rpc::extract_str(&params, "name")
@@ -2857,17 +2950,7 @@ impl McpServer {
             prompts.iter().find(|p| p.name == name).map(|p| (p.description.clone(), p.handler.clone()))
         }.ok_or_else(|| (json_rpc::INVALID_PARAMS, format!("Unknown prompt: {name}")))?;
 
-        match handler(&args) {
-            Ok(msgs) => {
-                let msg_jsons: Vec<String> = msgs.iter().map(|m| m.to_json()).collect();
-                Ok(format!(
-                    r#"{{"description":"{}","messages":[{}]}}"#,
-                    json_escape(&description),
-                    msg_jsons.join(","),
-                ))
-            }
-            Err(e) => Err((json_rpc::INVALID_PARAMS, e)),
-        }
+        handler(ctx, &args).map(|reply| (description, reply)).map_err(|e| (json_rpc::INVALID_PARAMS, e))
     }
 
     /// Handle `completion/complete`: look up the registered
@@ -2971,6 +3054,7 @@ impl McpServer {
             roots_supported,
             sessions: Some(self.sessions.clone()),
             request_stream: None,
+            modern: None,
         }
     }
 }
@@ -3115,6 +3199,20 @@ impl Application for McpServer {
                 match self.check_bearer(request) {
                     Ok(claims) => auth_claims_json = claims,
                     Err(response) => return Ok(response),
+                }
+            }
+
+            // MCP 2026-07-28: stateless, every request self-contained (no
+            // session lookup, `Mcp-Session-Id` ignored).
+            if request.method == "POST" {
+                let body = std::str::from_utf8(&request.body).unwrap_or("");
+                if modern::is_modern(request, body) {
+                    let mut ctx = self.context_for(request);
+                    ctx.session_id = None;
+                    ctx.client_name = None;
+                    ctx.client_version = None;
+                    ctx.auth_claims = auth_claims_json;
+                    return Ok(self.handle_modern(request, body, ctx));
                 }
             }
 

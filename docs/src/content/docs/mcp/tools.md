@@ -184,6 +184,67 @@ Rust cannot forcibly interrupt a running synchronous closure — there is no mec
 
 Only `.tool_with_context()` handlers can check cancellation — a plain `.tool()` handler never receives `McpContext`. `is_cancelled()` is always safe to call: it returns `false` if the client never sent a cancellation, if this wasn't a `tools/call` (the only method cancellation applies to), or if `ctx` has no live server behind it.
 
+## Asking the client for input (MCP 2026-07-28)
+
+On MCP 2026-07-28 a tool that needs something from the client — the user's
+answer to a form, an LLM completion, the client's roots — returns
+`McpContent::input_required(...)` naming what it needs. The client gathers
+it and calls the tool again with the answers (multi round-trip requests,
+since 18.5.0):
+
+```rust
+use rust_web_server::mcp::{InputRequired, McpContent, McpServer};
+
+let server = McpServer::new("deploy", "1.0").tool_with_context(
+    "deploy",
+    "Deploys after the user confirms",
+    r#"{"type":"object","properties":{"env":{"type":"string"}}}"#,
+    |ctx, args| {
+        match ctx.elicitation_content("confirm") {
+            // Second call: the user's form, as JSON.
+            Some(form) if form.contains(r#""ok":true"#) => Ok(McpContent::text(format!("deployed {args}"))),
+            Some(_) => Ok(McpContent::text("cancelled")),
+            // First call: ask.
+            None => Ok(McpContent::input_required(
+                InputRequired::new()
+                    .elicit("confirm", "Deploy now?", r#"{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}"#)
+                    .state("step-1"),
+            )),
+        }
+    },
+);
+```
+
+| `InputRequired` | Asks for | Client capability |
+|---|---|---|
+| `.elicit(key, message, schema)` | a form (`elicitation/create`) | `elicitation` |
+| `.sample(key, &SamplingRequest)` | an LLM completion (`sampling/createMessage`) | `sampling` |
+| `.list_roots(key)` | the client's roots (`roots/list`) | `roots` |
+| `.state(text)` | nothing: text the next call gets back | — |
+
+On the next call `ctx.input_response(key)` has the client's answer as raw
+JSON (`ctx.elicitation_content(key)` the submitted form when the user
+accepted), and `ctx.request_state()` the state. Keys the client didn't
+answer are `None` — ask again. Several requests can go in one
+`InputRequired`, and a handler can ask again on the next call (multi-step
+flows: put the step in the state).
+
+- **Capabilities.** rws refuses (`-32021`) an `InputRequired` asking for
+  a capability the client didn't declare; check `ctx.client_supports("sampling")`
+  to ask only for what the client can answer.
+- **The state is signed.** The client sees an opaque token: HMAC-SHA256 over
+  your text, the method, the tool (or prompt) name, the caller's `sub` and a
+  ten-minute expiry. An altered, expired or misplaced one is refused with
+  `-32602` before your handler runs, so `ctx.request_state()` is exactly what
+  you set. The key is random per process: give replicas the same one with
+  `.request_state_key(bytes)`.
+- **Prompts** can do the same: register with `.prompt_with_context(name, description, args, |ctx, args| ...)`
+  and return `PromptReply::InputRequired(...)`, or messages (`vec![...].into()`).
+- **Earlier protocol versions** have no such retry: a tool that returns
+  `input_required` to a 2025-11-25 client becomes a tool error. Use
+  `ctx.is_modern()` to choose, and `ctx.sample()` / `ctx.list_roots()`
+  (below) for those clients.
+
 ## Server-side sampling
 
 :::caution[Deprecated by MCP 2026-07-28]
