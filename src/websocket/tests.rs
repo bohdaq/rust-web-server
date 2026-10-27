@@ -196,6 +196,16 @@ fn read_frame_close_with_code() {
 }
 
 #[test]
+fn a_close_reason_that_isnt_utf8_fails_the_frame() {
+    // RFC 6455 §7.1.6. Decoded lossily it grew threefold past the payload
+    // limit (found by the websocket_frame fuzz target).
+    let payload = [0x03, 0xE8, 0xFF, 0xFE, 0xFD];
+    let raw = masked_frame(0x8, &payload, true);
+    let error = WebSocket::read_frame(&mut Cursor::new(raw)).unwrap_err();
+    assert!(error.contains("invalid UTF-8"), "{error}");
+}
+
+#[test]
 fn write_frame_text() {
     let mut buf: Vec<u8> = Vec::new();
     WebSocket::write_frame(&mut buf, Frame::Text("hi".to_string())).unwrap();

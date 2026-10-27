@@ -7,6 +7,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ## Unreleased (18.4.0)
 
+### Fixed
+
+- A WebSocket Close frame whose reason isn't UTF-8 now fails the frame, as
+  RFC 6455 §7.1.6 requires (text frames already did). It was decoded
+  lossily, which could make the reason up to three times the frame payload
+  limit (found by the `websocket_frame` fuzz target).
+
 ### Added
 
 - TLS-ALPN-01 (RFC 8737, #17): `[acme] challenge = "tls-alpn-01"` gets and

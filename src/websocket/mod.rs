@@ -217,8 +217,12 @@ impl WebSocket {
                 } else {
                     None
                 };
+                // RFC 6455 §7.1.6: the reason is UTF-8, else the connection
+                // fails — as for text frames (it used to be decoded lossily,
+                // growing invalid bytes threefold).
                 let reason = if payload.len() > 2 {
-                    String::from_utf8_lossy(&payload[2..]).into_owned()
+                    String::from_utf8(payload[2..].to_vec())
+                        .map_err(|_| "close frame reason contains invalid UTF-8".to_string())?
                 } else {
                     String::new()
                 };

@@ -73,6 +73,9 @@ static TLS_LISTENER_UP: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn note_tls_listener() {
     TLS_LISTENER_UP.store(true, Ordering::SeqCst);
+    // Release the startup socket's clone: per-core runtimes bind the port
+    // anew (SO_REUSEPORT), which an open plain socket on it would block.
+    startup_listener().lock().unwrap_or_else(|e| e.into_inner()).take();
 }
 
 pub(crate) fn tls_listener_up() -> bool {
