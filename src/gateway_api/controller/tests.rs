@@ -37,6 +37,7 @@ impl FakeApi {
             "Service" => "/api/v1/services",
             "Namespace" => "/api/v1/namespaces",
             "Secret" => "/api/v1/secrets",
+            "EndpointSlice" => "/apis/discovery.k8s.io/v1/endpointslices",
             other => panic!("{other}"),
         };
         self.lists.lock().unwrap().push((path.to_string(), object));
@@ -52,9 +53,12 @@ impl FakeApi {
             // Answer with the object as patched, as the API server does.
             let base = path.trim_end_matches("/status");
             let name = base.rsplit('/').next().unwrap();
-            let object = self.lists.lock().unwrap().iter().map(|(_, o)| o.clone()).find(|o| o["metadata"]["name"] == name).unwrap();
-            let mut object = object;
-            object["status"] = patch["status"].clone();
+            let found = self.lists.lock().unwrap().iter().map(|(_, o)| o.clone()).find(|o| o["metadata"]["name"] == name);
+            // A server-side apply may create the object: answer with the body.
+            let Some(mut object) = found else { return json(patch) };
+            if path.ends_with("/status") {
+                object["status"] = patch["status"].clone();
+            }
             return json(object);
         }
         if query.contains("watch=true") {
@@ -94,7 +98,7 @@ fn fake_with(fixtures: &[&str]) -> FakeApi {
 
 fn options(write_status: bool, configs: Arc<Mutex<Vec<GatewayConfig>>>) -> Options {
     Options {
-        controller_name: crate::gateway_api::CONTROLLER_NAME.to_string(),
+        settings: Default::default(),
         write_status,
         on_config: Arc::new(move |config| configs.lock().unwrap().push(config)),
     }
@@ -108,6 +112,7 @@ async fn ready(stores: &Stores) {
     stores.services.wait_until_ready().await.unwrap();
     stores.namespaces.wait_until_ready().await.unwrap();
     stores.secrets.wait_until_ready().await.unwrap();
+    stores.endpoint_slices.wait_until_ready().await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -131,6 +136,10 @@ async fn a_reconcile_writes_class_gateway_and_route_status() {
     assert_eq!(1, route["status"]["parents"][0]["conditions"][0]["observedGeneration"], "{route}");
     assert!(route["metadata"]["resourceVersion"].is_string(), "optimistic concurrency on the shared parents list: {route}");
     assert_eq!(1, configs.lock().unwrap().len(), "the data plane got the configuration");
+    let service = patch_for(&format!("/namespaces/{INFRA}/services/rws-same-namespace"));
+    assert_eq!("LoadBalancer", service["spec"]["type"], "{service}");
+    assert_eq!("same-namespace", service["metadata"]["labels"]["gateway.networking.k8s.io/gateway-name"]);
+    assert!((10000..=10999).contains(&service["spec"]["ports"][0]["targetPort"].as_i64().unwrap()));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

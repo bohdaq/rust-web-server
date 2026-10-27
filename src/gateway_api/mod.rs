@@ -7,10 +7,15 @@
 //! - [`resources`] — where each kind lives in the API, and the object types.
 //! - [`translate`] — the pure step from a snapshot of the cluster to the
 //!   configuration rws serves and the status every object should have.
+//! - [`services`] — the Service each Gateway gets, and its port allocation.
+//! - [`routes`] — routes compiled for the data plane, backends resolved to
+//!   endpoints.
 //! - [`controller`] — watches, the reconcile loop and status writes.
 
 pub mod controller;
 pub mod resources;
+pub mod routes;
+pub mod services;
 pub mod translate;
 pub mod types;
 

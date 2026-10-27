@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use k8s_openapi::api::core::v1::{Namespace, Secret, Service};
+use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 use kube::api::{Api, Patch, PatchParams};
 use kube::runtime::reflector::{self, store::Writer, Store};
@@ -24,7 +25,7 @@ use serde::de::DeserializeOwned;
 use tokio::sync::Notify;
 
 use super::resources::{self, Gateway, GatewayClass, HttpRoute, ReferenceGrant};
-use super::translate::{translate, GatewayConfig, Snapshot};
+use super::translate::{translate, GatewayConfig, Settings, Snapshot};
 use super::types::RouteParentStatus;
 
 /// How long changes are gathered before a reconcile.
@@ -32,7 +33,7 @@ pub const DEBOUNCE: Duration = Duration::from_millis(100);
 
 /// What the controller needs besides the cluster.
 pub struct Options {
-    pub controller_name: String,
+    pub settings: Settings,
     /// Write status (the leader does; others only serve).
     pub write_status: bool,
     /// Called with every new configuration.
@@ -49,6 +50,7 @@ pub struct Stores {
     pub services: Store<Service>,
     pub namespaces: Store<Namespace>,
     pub secrets: Store<Secret>,
+    pub endpoint_slices: Store<EndpointSlice>,
 }
 
 impl Stores {
@@ -67,6 +69,7 @@ impl Stores {
             services: all(&self.services),
             namespaces: all(&self.namespaces),
             secrets: all(&self.secrets),
+            endpoint_slices: all(&self.endpoint_slices),
         }
     }
 }
@@ -103,6 +106,7 @@ pub fn start_watches(client: &Client) -> (Stores, Arc<Notify>) {
         services: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         namespaces: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         secrets: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
+        endpoint_slices: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
     };
     (stores, changed)
 }
@@ -129,12 +133,28 @@ pub async fn run(client: Client, options: Options) {
 pub async fn reconcile(client: &Client, stores: &Stores, options: &Options) -> Result<(), String> {
     let snapshot = stores.snapshot();
     let now = Time(k8s_openapi::jiff::Timestamp::now());
-    let (config, desired) = translate(&snapshot, &options.controller_name, &now);
+    let (config, desired) = translate(&snapshot, &options.settings, &now);
     (options.on_config)(config);
     if !options.write_status {
         return Ok(());
     }
     let mut failures = Vec::new();
+
+    // Each Gateway's Service, applied when it differs from what's there
+    // (rws owns these objects outright: server-side apply, forced).
+    for ((namespace, name), service) in &desired.services {
+        let current = snapshot.services.iter().find(|s| s.namespace().as_deref() == Some(namespace.as_str()) && s.name_any() == *name);
+        if current.is_some_and(|c| super::services::same(c, service)) {
+            continue;
+        }
+        let api: Api<Service> = Api::namespaced(client.clone(), namespace);
+        let mut applied = service.clone();
+        applied.metadata.managed_fields = None;
+        let body = serde_json::json!({"apiVersion": "v1", "kind": "Service", "metadata": applied.metadata, "spec": applied.spec});
+        if let Err(e) = api.patch(name, &PatchParams::apply(super::FIELD_MANAGER).force(), &Patch::Apply(&body)).await {
+            failures.push(format!("Service {namespace}/{name}: {e}"));
+        }
+    }
 
     for class in &snapshot.classes {
         let Some(status) = desired.classes.get(&class.name_any()) else { continue };
@@ -161,7 +181,7 @@ pub async fn reconcile(client: &Client, stores: &Stores, options: &Options) -> R
         let namespace = route.namespace().unwrap_or_default();
         let Some(ours) = desired.http_routes.get(&(namespace.clone(), route.name_any())) else { continue };
         let current = route.status.as_ref().map(|s| s.parents.clone()).unwrap_or_default();
-        let parents = merge_parents(&current, ours, &options.controller_name);
+        let parents = merge_parents(&current, ours, &options.settings.controller_name);
         if parents == current {
             continue;
         }

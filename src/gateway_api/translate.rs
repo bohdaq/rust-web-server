@@ -7,11 +7,27 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use k8s_openapi::api::core::v1::{Namespace, Secret, Service};
+use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{Condition, LabelSelector, Time};
 use kube::ResourceExt;
 
 use super::resources::{Gateway, GatewayClass, HttpRoute, ReferenceGrant};
+use super::routes::CompiledHttpRoute;
+use super::services::ServiceSettings;
 use super::types::*;
+
+/// What translation needs besides the cluster.
+#[derive(Clone, Debug)]
+pub struct Settings {
+    pub controller_name: String,
+    pub services: ServiceSettings,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings { controller_name: super::CONTROLLER_NAME.to_string(), services: ServiceSettings::default() }
+    }
+}
 
 /// Everything the controller watches, as last seen.
 #[derive(Clone, Default)]
@@ -23,6 +39,7 @@ pub struct Snapshot {
     pub services: Vec<Service>,
     pub namespaces: Vec<Namespace>,
     pub secrets: Vec<Secret>,
+    pub endpoint_slices: Vec<EndpointSlice>,
 }
 
 /// The label rws puts on the Service it creates for a Gateway (the name the
@@ -59,6 +76,8 @@ pub struct Desired {
     /// (namespace, name) → this controller's parent statuses (other
     /// controllers' entries are kept when written).
     pub http_routes: BTreeMap<(String, String), Vec<RouteParentStatus>>,
+    /// (namespace, name) → the Service each of our Gateways should have.
+    pub services: BTreeMap<(String, String), Service>,
 }
 
 /// What the data plane serves.
@@ -67,23 +86,28 @@ pub struct GatewayConfig {
     pub listeners: Vec<ListenerConfig>,
 }
 
-/// One accepted listener and the routes attached to it.
-#[derive(Clone, Debug, Default, PartialEq)]
+/// One accepted listener, the container port it's served on, and the
+/// routes attached to it. Only listeners whose Gateway's Service already maps
+/// their port are served, so every replica agrees on the port.
+#[derive(Clone, Debug, PartialEq)]
 pub struct ListenerConfig {
     pub gateway: (String, String),
     pub name: String,
     pub port: i32,
     pub protocol: String,
     pub hostname: Option<String>,
-    /// HTTPRoutes attached here: (namespace, name).
-    pub http_routes: Vec<(String, String)>,
+    pub container_port: u16,
+    /// PEM certificate chain and key, for HTTPS.
+    pub tls: Option<(Vec<u8>, Vec<u8>)>,
+    pub http_routes: Vec<CompiledHttpRoute>,
 }
 
 /// The features rws reports on its GatewayClasses (names as in the suite's
 /// `pkg/features` at Gateway API v1.6.3). Grows with each phase.
 pub const SUPPORTED_FEATURES: &[&str] = &["Gateway", "HTTPRoute", "ReferenceGrant"];
 
-pub fn translate(snapshot: &Snapshot, controller_name: &str, now: &Time) -> (GatewayConfig, Desired) {
+pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (GatewayConfig, Desired) {
+    let controller_name = settings.controller_name.as_str();
     let mut desired = Desired::default();
     let mut config = GatewayConfig::default();
 
@@ -111,6 +135,10 @@ pub fn translate(snapshot: &Snapshot, controller_name: &str, now: &Time) -> (Gat
         listeners.extend(listener_views(gateway, snapshot));
     }
 
+    // Every Gateway of ours gets its Service.
+    let our_gateways: Vec<&Gateway> = snapshot.gateways.iter().filter(|g| our_classes.contains(&g.spec.gateway_class_name)).collect();
+    desired.services = super::services::desired(snapshot, &our_gateways, &settings.services);
+
     // HTTPRoutes: attach to listeners, resolve backends.
     let mut attached: BTreeMap<(String, String, String), i32> = BTreeMap::new();
     for route in &snapshot.http_routes {
@@ -119,6 +147,7 @@ pub fn translate(snapshot: &Snapshot, controller_name: &str, now: &Time) -> (Gat
         let generation = route.metadata.generation;
         let previous: Vec<RouteParentStatus> = route.status.as_ref().map(|s| s.parents.clone()).unwrap_or_default();
         let resolved = resolve_backends(route, snapshot);
+        let compiled = super::routes::compile(route, snapshot);
         let mut parents = Vec::new();
         for parent_ref in &route.spec.parent_refs {
             if parent_ref.group() != GATEWAY_GROUP || parent_ref.kind() != "Gateway" {
@@ -139,7 +168,7 @@ pub fn translate(snapshot: &Snapshot, controller_name: &str, now: &Time) -> (Gat
             for listener in &attached_to {
                 *attached.entry((gateway_key.0.clone(), gateway_key.1.clone(), listener.clone())).or_default() += 1;
                 if let Some(view) = listeners.iter_mut().find(|l| l.gateway == gateway_key && &l.name == listener) {
-                    view.http_routes.push(key.clone());
+                    view.http_routes.push(compiled.clone());
                 }
             }
             let conditions = vec![
@@ -164,6 +193,7 @@ pub fn translate(snapshot: &Snapshot, controller_name: &str, now: &Time) -> (Gat
         let key = (gateway.namespace().unwrap_or_default(), gateway.name_any());
         let generation = gateway.metadata.generation;
         let previous = gateway.status.clone().unwrap_or_default();
+        let container_ports = super::services::container_ports(super::services::current(snapshot, gateway));
         let mut listener_statuses = Vec::new();
         let mut any_valid = false;
         for view in listeners.iter().filter(|l| l.gateway == key) {
@@ -181,13 +211,16 @@ pub fn translate(snapshot: &Snapshot, controller_name: &str, now: &Time) -> (Gat
                     condition(old, "Conflicted", view.conflicted.is_some(), view.conflicted.unwrap_or("NoConflicts"), "", generation, now),
                 ],
             });
-            if view.accepted && view.programmed {
+            let container_port = container_ports.get(&(view.port, super::services::transport(&view.protocol).to_string()));
+            if let (true, true, Some(container_port)) = (view.accepted, view.programmed, container_port) {
                 config.listeners.push(ListenerConfig {
                     gateway: key.clone(),
                     name: view.name.clone(),
                     port: view.port,
                     protocol: view.protocol.clone(),
                     hostname: view.hostname.clone(),
+                    container_port: *container_port,
+                    tls: view.tls.clone(),
                     http_routes: view.http_routes.clone(),
                 });
             }
@@ -231,7 +264,8 @@ struct ListenerView {
     resolved_refs: Result<(), (&'static str, String)>,
     conflicted: Option<&'static str>,
     message: String,
-    http_routes: Vec<(String, String)>,
+    tls: Option<(Vec<u8>, Vec<u8>)>,
+    http_routes: Vec<CompiledHttpRoute>,
 }
 
 /// The route kinds a protocol carries.
@@ -271,9 +305,11 @@ fn listener_views(gateway: &Gateway, snapshot: &Snapshot) -> Vec<ListenerView> {
             } else {
                 (true, "Accepted", String::new())
             };
+            let mut tls = None;
             if accepted && l.protocol == "HTTPS" {
-                if let Err(e) = certificates(l, &gateway_namespace, snapshot) {
-                    resolved_refs = Err(e);
+                match certificates(l, &gateway_namespace, snapshot) {
+                    Ok(material) => tls = Some(material),
+                    Err(e) => resolved_refs = Err(e),
                 }
             }
             // Invalid route kinds alone don't stop the listener serving the valid ones.
@@ -292,6 +328,7 @@ fn listener_views(gateway: &Gateway, snapshot: &Snapshot) -> Vec<ListenerView> {
                 resolved_refs,
                 conflicted: None,
                 message,
+                tls,
                 http_routes: Vec::new(),
             }
         })
@@ -322,13 +359,17 @@ fn listener_views(gateway: &Gateway, snapshot: &Snapshot) -> Vec<ListenerView> {
 
 /// An HTTPS listener's certificates resolve: TLS Secrets in its namespace,
 /// or in another one a ReferenceGrant opens.
-fn certificates(listener: &Listener, gateway_namespace: &str, snapshot: &Snapshot) -> Result<(), (&'static str, String)> {
+/// A listener's PEM certificate chain and key.
+type TlsMaterial = (Vec<u8>, Vec<u8>);
+
+fn certificates(listener: &Listener, gateway_namespace: &str, snapshot: &Snapshot) -> Result<TlsMaterial, (&'static str, String)> {
     let Some(tls) = &listener.tls else {
         return Err(("InvalidCertificateRef", "an HTTPS listener needs tls.certificateRefs".to_string()));
     };
     if tls.certificate_refs.is_empty() {
         return Err(("InvalidCertificateRef", "an HTTPS listener needs tls.certificateRefs".to_string()));
     }
+    let mut material = None;
     for cert in &tls.certificate_refs {
         let group = cert.group.as_deref().unwrap_or("");
         let kind = cert.kind.as_deref().unwrap_or("Secret");
@@ -348,8 +389,12 @@ fn certificates(listener: &Listener, gateway_namespace: &str, snapshot: &Snapsho
         if !valid {
             return Err(("InvalidCertificateRef", format!("Secret {namespace}/{} isn't a valid TLS Secret", cert.name)));
         }
+        if material.is_none() {
+            let data = secret.and_then(|s| s.data.as_ref()).expect("checked above");
+            material = Some((data["tls.crt"].0.clone(), data["tls.key"].0.clone()));
+        }
     }
-    Ok(())
+    material.ok_or(("InvalidCertificateRef", "no certificate".to_string()))
 }
 
 // ── routes ────────────────────────────────────────────────────────────────────
@@ -476,7 +521,7 @@ fn resolve_backends(route: &HttpRoute, snapshot: &Snapshot) -> Result<(), (&'sta
 /// A ReferenceGrant in `to_namespace` lets `from_kind`s in `from_namespace`
 /// refer to the `to_kind` named `to_name`.
 #[allow(clippy::too_many_arguments)]
-fn granted(snapshot: &Snapshot, from_group: &str, from_kind: &str, from_namespace: &str, to_group: &str, to_kind: &str, to_namespace: &str, to_name: &str) -> bool {
+pub(crate) fn granted(snapshot: &Snapshot, from_group: &str, from_kind: &str, from_namespace: &str, to_group: &str, to_kind: &str, to_namespace: &str, to_name: &str) -> bool {
     snapshot.reference_grants.iter().filter(|g| g.namespace().as_deref() == Some(to_namespace)).any(|g| {
         g.spec.from.iter().any(|f| f.group == from_group && f.kind == from_kind && f.namespace == from_namespace)
             && g.spec.to.iter().any(|t| t.group == to_group && t.kind == to_kind && t.name.as_deref().is_none_or(|n| n == to_name))

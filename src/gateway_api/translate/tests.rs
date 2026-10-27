@@ -22,15 +22,13 @@ fn class(name: &str, controller: &str) -> GatewayClass {
     .unwrap()
 }
 
-/// A Service rws created for a Gateway, with a load-balancer address.
-fn gateway_service(name: &str, ip: &str) -> Service {
-    serde_json::from_value(serde_json::json!({
-        "apiVersion": "v1", "kind": "Service",
-        "metadata": {"name": format!("{name}-rws"), "namespace": INFRA,
-            "labels": {GATEWAY_NAME_LABEL: name, "app.kubernetes.io/managed-by": MANAGED_BY}},
-        "status": {"loadBalancer": {"ingress": [{"ip": ip}]}}
-    }))
-    .unwrap()
+/// The Service rws created for a Gateway: what translation wants, with a
+/// load-balancer address, as the API server would show it.
+fn gateway_service(s: &Snapshot, gateway: &Gateway, ip: &str) -> Service {
+    let wanted = super::super::services::desired(s, &[gateway], &Default::default());
+    let mut service = wanted.into_values().next().unwrap();
+    service.status = Some(serde_json::from_value(serde_json::json!({"loadBalancer": {"ingress": [{"ip": ip}]}})).unwrap());
+    service
 }
 
 /// base.json plus each named fixture, the GatewayClass `rws`, and a Service
@@ -48,9 +46,10 @@ fn snapshot(fixtures: &[&str]) -> Snapshot {
             other => panic!("unexpected kind {other}"),
         }
     }
-    let names: Vec<String> = s.gateways.iter().map(|g| g.name_any()).collect();
-    for (i, name) in names.iter().enumerate() {
-        s.services.push(gateway_service(name, &format!("10.0.0.{}", i + 1)));
+    let gateways = s.gateways.clone();
+    for (i, gateway) in gateways.iter().enumerate() {
+        let service = gateway_service(&s, gateway, &format!("10.0.0.{}", i + 1));
+        s.services.push(service);
     }
     s
 }
@@ -60,7 +59,7 @@ fn now() -> Time {
 }
 
 fn run(s: &Snapshot) -> (GatewayConfig, Desired) {
-    translate(s, CONTROLLER, &now())
+    translate(s, &Settings::default(), &now())
 }
 
 fn find<'a>(conditions: &'a [Condition], kind: &str) -> &'a Condition {
@@ -99,7 +98,8 @@ fn a_simple_route_attaches_and_resolves() {
     assert!(gateway.addresses[0].value.starts_with("10.0.0."));
     assert_eq!(1, listener(&desired, "same-namespace", "http").attached_routes);
     let served = config.listeners.iter().find(|l| l.gateway.1 == "same-namespace").unwrap();
-    assert_eq!(vec![(INFRA.to_string(), "gateway-conformance-infra-test".to_string())], served.http_routes);
+    assert_eq!(vec![(INFRA.to_string(), "gateway-conformance-infra-test".to_string())], served.http_routes.iter().map(|r| r.key.clone()).collect::<Vec<_>>());
+    assert!((10000..=10999).contains(&served.container_port));
 }
 
 #[test]
@@ -203,7 +203,7 @@ fn transition_times_are_kept_while_the_status_holds() {
     route.status = Some(RouteStatus { parents: first.http_routes[&(INFRA.to_string(), "gateway-conformance-infra-test".to_string())].clone() });
     route.metadata.generation = Some(2);
     let later = Time(k8s_openapi::jiff::Timestamp::from_second(1_900_000_000).unwrap());
-    let (_, second) = translate(&s2, CONTROLLER, &later);
+    let (_, second) = translate(&s2, &Settings::default(), &later);
     let accepted = find(&second.http_routes[&(INFRA.to_string(), "gateway-conformance-infra-test".to_string())][0].conditions, "Accepted");
     assert_eq!(now(), accepted.last_transition_time, "unchanged status keeps its time");
     assert_eq!(Some(2), accepted.observed_generation, "but follows the generation");
@@ -223,8 +223,9 @@ fn listeners_conflict_on_port_protocol_and_hostname() {
     }))
     .unwrap();
     let mut s = snapshot(&[]);
+    let service = gateway_service(&s, &gateway, "10.0.1.1");
     s.gateways.push(gateway);
-    s.services.push(gateway_service("conflicts", "10.0.1.1"));
+    s.services.push(service);
     let (_, desired) = run(&s);
     assert_eq!("HostnameConflict", find(&listener(&desired, "conflicts", "a").conditions, "Conflicted").reason);
     assert_eq!("ProtocolConflict", find(&listener(&desired, "conflicts", "c").conditions, "Conflicted").reason);
