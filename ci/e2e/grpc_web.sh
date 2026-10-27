@@ -54,7 +54,7 @@ backends = ["grpc://127.0.0.1:50071"]
 
 [[route]]
   [route.match]
-  path_prefix = "/echo.Echo/"
+  path = "/echo.Echo/*"
   [route.action]
   type = "grpc"
   upstream = "echo"

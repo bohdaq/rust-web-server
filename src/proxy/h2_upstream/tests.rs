@@ -204,8 +204,11 @@ async fn the_config_files_grpc_action_streams_over_http2() {
     let backend = grpc_backend().await;
     let toml = format!(
         "[[upstream]]\nname = \"echo\"\nbackends = [\"grpc://{backend}\"]\n\n\
-         [[route]]\n[route.match]\npath_prefix = \"/test.Echo\"\n[route.action]\ntype = \"grpc\"\nupstream = \"echo\"\n"
+         [[route]]\n[route.match]\npath = \"/test.Echo/*\"\n[route.action]\ntype = \"grpc\"\nupstream = \"echo\"\n"
     );
+    let mut report = crate::config_check::ConfigReport::default();
+    crate::proxy_config::validate::check_unknown_keys(&toml, &mut report);
+    assert!(report.errors.is_empty() && report.warnings.is_empty(), "{:?} {:?}", report.errors, report.warnings);
     let (app, _) = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(&toml));
     let rws = client(app).await;
     let (response, mut send) = within(rws.ready()).await.unwrap().send_request(grpc_call("/test.Echo/Bidi"), false).unwrap();
@@ -437,7 +440,7 @@ async fn the_config_files_grpc_action_bridges_grpc_web() {
     let backend = grpc_backend().await;
     let toml = format!(
         "[[upstream]]\nname = \"echo\"\nbackends = [\"grpc://{backend}\"]\n\n\
-         [[route]]\n[route.match]\npath_prefix = \"/test.Echo\"\n[route.action]\ntype = \"grpc\"\nupstream = \"echo\"\n"
+         [[route]]\n[route.match]\npath = \"/test.Echo/*\"\n[route.action]\ntype = \"grpc\"\nupstream = \"echo\"\n"
     );
     let (app, _) = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(&toml));
     let rws = client(app).await;

@@ -67,7 +67,7 @@ $2
 
 [[route]]
   [route.match]
-  path_prefix = "/echo.Echo/"
+  path = "/echo.Echo/*"
   [route.action]
   type = "grpc"
   upstream = "echo"
