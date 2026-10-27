@@ -1,0 +1,67 @@
+[
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+   "annotations": {
+    "gateway-api/skip-this-for-readiness": "true"
+   },
+   "name": "gateway-only-invalid-route-kind",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "gatewayClassName": "rws",
+   "listeners": [
+    {
+     "allowedRoutes": {
+      "kinds": [
+       {
+        "kind": "InvalidRoute"
+       }
+      ],
+      "namespaces": {
+       "from": "All"
+      }
+     },
+     "name": "http",
+     "port": 80,
+     "protocol": "HTTP"
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+   "annotations": {
+    "gateway-api/skip-this-for-readiness": "true"
+   },
+   "name": "gateway-supported-and-invalid-route-kind",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "gatewayClassName": "rws",
+   "listeners": [
+    {
+     "allowedRoutes": {
+      "kinds": [
+       {
+        "kind": "InvalidRoute"
+       },
+       {
+        "kind": "HTTPRoute"
+       }
+      ],
+      "namespaces": {
+       "from": "All"
+      }
+     },
+     "name": "http",
+     "port": 80,
+     "protocol": "HTTP"
+    }
+   ]
+  }
+ }
+]

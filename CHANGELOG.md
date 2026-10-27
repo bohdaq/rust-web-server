@@ -5,6 +5,18 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased (18.8.0)
+
+### Added
+
+- Kubernetes Gateway API controller, in progress (#19, `gateway-api`
+  feature; plan and status in `spec/GATEWAY_API.md`). So far: typed Gateway
+  API v1.6 objects, watches through kube-rs, and the translation from the
+  cluster's GatewayClasses, Gateways, HTTPRoutes and ReferenceGrants to the
+  status the Gateway API requires (acceptance, listener conditions, attached
+  routes, reference resolution), tested against the conformance suite's own
+  manifests and a fake API server. Not yet serving traffic.
+
 ## 18.7.0 — 2026-10-27
 
 ### Added

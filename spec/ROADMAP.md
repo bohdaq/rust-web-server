@@ -146,9 +146,9 @@ Bring the library side up to what Rust web developers expect: typed OpenAPI, tow
 
 Give clusters leaving Ingress-NGINX a place to go.
 
-- **#19** **Kubernetes Gateway API controller** — HTTPRoute, then GRPCRoute / TLSRoute, with a conformance report. Ingress-NGINX was retired in March 2026 with ["no drop-in replacement"](https://www.kubernetes.io/blog/2026/01/29/ingress-nginx-statement/); rws only watches Ingress.
+- **#19** *in progress — plan and status: [GATEWAY_API.md](GATEWAY_API.md); all five route types (HTTP, GRPC, TLS, TCP, UDP), every standard-channel extended feature at Gateway API v1.6.3, shared and provisioned modes* **Kubernetes Gateway API controller** — HTTPRoute, GRPCRoute, TLSRoute, TCPRoute, UDPRoute, with conformance reports. Ingress-NGINX was retired in March 2026 with ["no drop-in replacement"](https://www.kubernetes.io/blog/2026/01/29/ingress-nginx-statement/); rws only watches Ingress.
 
-**Done when:** Gateway API conformance report (HTTPRoute core profile) published and listed on the Gateway API implementations page.
+**Done when:** Conformant reports (shared and provisioned modes, every profile and claimed feature passing at Gateway API v1.6.3) accepted into kubernetes-sigs/gateway-api and rws listed on the implementations page.
 
 ## 18.9.0 — AI gateway
 

@@ -140,6 +140,11 @@ storage-azure = ["dep:hmac", "dep:sha2", "http-client"]  # AzureBlobStorage; Sha
 # services (tonic) as rws apps, an rws app as a tower service. Adapters only —
 # nothing in the default build changes.
 tower = ["http2", "dep:tower-service", "dep:tower-layer", "dep:http-body", "dep:http-body-util"]
+# Kubernetes Gateway API controller (18.8.0, #19, spec/GATEWAY_API.md): kube-rs
+# on the aws-lc-rs provider (one rustls provider, as everywhere), kube 4.0 —
+# the last line on MSRV 1.88 — and k8s-openapi pinned to the oldest
+# Kubernetes it supports, for the widest range of clusters.
+gateway-api = ["http2", "serde", "dep:kube", "dep:k8s-openapi", "dep:futures-util"]
 openapi = []  # AppWithState::openapi() / AsyncAppWithState::openapi(); no new deps
 webhook = ["dep:hmac", "dep:sha2"]  # verify_webhook_signature: GitHub, Shopify, Stripe
 rewrite-regex = ["dep:regex"]  # RewriteLayer::request_uri_regex_rewrite
@@ -165,6 +170,9 @@ tower-service = { version = "0.3.3", optional = true }
 tower-layer = { version = "0.3.3", optional = true }
 http-body = { version = "1.1", optional = true }
 http-body-util = { version = "0.1.5", optional = true }
+kube = { version = "~4.0", default-features = false, features = ["client", "runtime", "rustls-tls", "aws-lc-rs"], optional = true }
+k8s-openapi = { version = "0.28", default-features = false, features = ["v1_32", "std"], optional = true }
+futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
 # Not quinn's default "rustls-ring": two rustls crypto providers in one build
 # make rustls::ClientConfig::builder() panic ("Could not automatically
 # determine the process-level CryptoProvider") for every outbound TLS client.
@@ -210,6 +218,11 @@ tower-http = { version = "0.7.1", default-features = false, features = ["set-hea
 tonic = { version = "=0.14.6", default-features = false }
 tonic-prost = { version = "=0.14.6", default-features = false }
 tonic-health = { version = "=0.14.6", default-features = false }
+# A fake Kubernetes API server for the gateway-api controller's tests
+# (src/gateway_api/controller/tests.rs): kube's Client takes any tower Service.
+tower = { version = "0.5", default-features = false, features = ["util"] }
+http-body-util = "0.1.5"
+bytes = "1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 webpki-roots = { version = "1.0.11", optional = true }

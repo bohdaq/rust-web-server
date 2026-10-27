@@ -172,6 +172,8 @@ pub mod storage;
 pub mod openapi;
 #[cfg(feature = "tower")]
 pub mod tower;
+#[cfg(feature = "gateway-api")]
+pub mod gateway_api;
 #[cfg(feature = "webhook")]
 pub mod webhook;
 #[cfg(feature = "secrets")]

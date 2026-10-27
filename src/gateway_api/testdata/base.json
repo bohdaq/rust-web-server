@@ -1,0 +1,511 @@
+[
+ {
+  "apiVersion": "v1",
+  "kind": "Namespace",
+  "metadata": {
+   "labels": {
+    "gateway-conformance": "infra"
+   },
+   "name": "gateway-conformance-infra"
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+   "name": "same-namespace",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "gatewayClassName": "rws",
+   "listeners": [
+    {
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "Same"
+      }
+     },
+     "name": "http",
+     "port": 80,
+     "protocol": "HTTP"
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+   "name": "same-namespace-with-https-listener",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "gatewayClassName": "rws",
+   "listeners": [
+    {
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "Same"
+      }
+     },
+     "name": "https",
+     "port": 443,
+     "protocol": "HTTPS",
+     "tls": {
+      "certificateRefs": [
+       {
+        "group": "",
+        "kind": "Secret",
+        "name": "tls-validity-checks-certificate",
+        "namespace": "gateway-conformance-infra"
+       }
+      ]
+     }
+    },
+    {
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "Same"
+      }
+     },
+     "hostname": "second-example.org",
+     "name": "https-with-hostname",
+     "port": 443,
+     "protocol": "HTTPS",
+     "tls": {
+      "certificateRefs": [
+       {
+        "group": "",
+        "kind": "Secret",
+        "name": "tls-validity-checks-certificate",
+        "namespace": "gateway-conformance-infra"
+       }
+      ]
+     }
+    },
+    {
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "Same"
+      }
+     },
+     "hostname": "*.wildcard.org",
+     "name": "https-with-wildcard-hostname",
+     "port": 443,
+     "protocol": "HTTPS",
+     "tls": {
+      "certificateRefs": [
+       {
+        "group": "",
+        "kind": "Secret",
+        "name": "tls-validity-checks-certificate",
+        "namespace": "gateway-conformance-infra"
+       }
+      ]
+     }
+    },
+    {
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "Same"
+      }
+     },
+     "hostname": "fourth-example.wildcard.org",
+     "name": "https-with-hostname-matching-wildcard",
+     "port": 443,
+     "protocol": "HTTPS",
+     "tls": {
+      "certificateRefs": [
+       {
+        "group": "",
+        "kind": "Secret",
+        "name": "tls-validity-checks-certificate",
+        "namespace": "gateway-conformance-infra"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+   "name": "all-namespaces",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "gatewayClassName": "rws",
+   "listeners": [
+    {
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "All"
+      }
+     },
+     "name": "http",
+     "port": 80,
+     "protocol": "HTTP"
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+   "name": "backend-namespaces",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "gatewayClassName": "rws",
+   "listeners": [
+    {
+     "allowedRoutes": {
+      "namespaces": {
+       "from": "Selector",
+       "selector": {
+        "matchLabels": {
+         "gateway-conformance": "backend"
+        }
+       }
+      }
+     },
+     "name": "http",
+     "port": 80,
+     "protocol": "HTTP"
+    }
+   ]
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "infra-backend-v1",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "ports": [
+    {
+     "name": "first-port",
+     "port": 8080,
+     "protocol": "TCP",
+     "targetPort": 3000
+    },
+    {
+     "appProtocol": "kubernetes.io/h2c",
+     "name": "second-port",
+     "port": 8081,
+     "protocol": "TCP",
+     "targetPort": 3001
+    },
+    {
+     "appProtocol": "kubernetes.io/ws",
+     "name": "third-port",
+     "port": 8082,
+     "protocol": "TCP",
+     "targetPort": 3000
+    }
+   ],
+   "selector": {
+    "app": "infra-backend-v1"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "infra-backend-v2",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "ports": [
+    {
+     "port": 8080,
+     "protocol": "TCP",
+     "targetPort": 3000
+    }
+   ],
+   "selector": {
+    "app": "infra-backend-v2"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "infra-backend-v3",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "ports": [
+    {
+     "port": 8080,
+     "protocol": "TCP",
+     "targetPort": 3000
+    }
+   ],
+   "selector": {
+    "app": "infra-backend-v3"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "tls-backend",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "ports": [
+    {
+     "port": 443,
+     "protocol": "TCP",
+     "targetPort": 8443
+    }
+   ],
+   "selector": {
+    "app": "tls-backend"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "tls-backend-2",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "ports": [
+    {
+     "port": 443,
+     "protocol": "TCP",
+     "targetPort": 8443
+    }
+   ],
+   "selector": {
+    "app": "tls-backend-2"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Namespace",
+  "metadata": {
+   "labels": {
+    "gateway-conformance": "backend"
+   },
+   "name": "gateway-conformance-app-backend"
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "tls-backend",
+   "namespace": "gateway-conformance-app-backend"
+  },
+  "spec": {
+   "ports": [
+    {
+     "port": 443,
+     "protocol": "TCP",
+     "targetPort": 8443
+    }
+   ],
+   "selector": {
+    "app": "tls-backend"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "app-backend-v1",
+   "namespace": "gateway-conformance-app-backend"
+  },
+  "spec": {
+   "ports": [
+    {
+     "port": 8080,
+     "protocol": "TCP",
+     "targetPort": 3000
+    }
+   ],
+   "selector": {
+    "app": "app-backend-v1"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "app-backend-v2",
+   "namespace": "gateway-conformance-app-backend"
+  },
+  "spec": {
+   "ports": [
+    {
+     "port": 8080,
+     "protocol": "TCP",
+     "targetPort": 3000
+    }
+   ],
+   "selector": {
+    "app": "app-backend-v2"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Namespace",
+  "metadata": {
+   "labels": {
+    "gateway-conformance": "backend"
+   },
+   "name": "gateway-conformance-web-backend"
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "web-backend",
+   "namespace": "gateway-conformance-web-backend"
+  },
+  "spec": {
+   "ports": [
+    {
+     "port": 8080,
+     "protocol": "TCP",
+     "targetPort": 3000
+    }
+   ],
+   "selector": {
+    "app": "web-backend"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "grpc-infra-backend-v1",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "ports": [
+    {
+     "appProtocol": "kubernetes.io/h2c",
+     "port": 8080,
+     "protocol": "TCP",
+     "targetPort": 3000
+    }
+   ],
+   "selector": {
+    "app": "grpc-infra-backend-v1"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "grpc-infra-backend-v2",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "ports": [
+    {
+     "appProtocol": "kubernetes.io/h2c",
+     "port": 8080,
+     "protocol": "TCP",
+     "targetPort": 3000
+    }
+   ],
+   "selector": {
+    "app": "grpc-infra-backend-v2"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "grpc-infra-backend-v3",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "ports": [
+    {
+     "appProtocol": "kubernetes.io/h2c",
+     "port": 8080,
+     "protocol": "TCP",
+     "targetPort": 3000
+    }
+   ],
+   "selector": {
+    "app": "grpc-infra-backend-v3"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "labels": {
+    "app": "udp"
+   },
+   "name": "coredns",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "ports": [
+    {
+     "name": "udp-dns",
+     "port": 53,
+     "protocol": "UDP",
+     "targetPort": 53
+    }
+   ],
+   "selector": {
+    "app": "udp"
+   }
+  }
+ },
+ {
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+   "name": "tcp-backend",
+   "namespace": "gateway-conformance-infra"
+  },
+  "spec": {
+   "ports": [
+    {
+     "name": "echo-tcp-plain",
+     "port": 3000,
+     "protocol": "TCP",
+     "targetPort": 3000
+    },
+    {
+     "name": "echo-tcp-tls",
+     "port": 8443,
+     "protocol": "TCP",
+     "targetPort": 8443
+    }
+   ],
+   "selector": {
+    "app": "tcp-backend"
+   }
+  }
+ }
+]
