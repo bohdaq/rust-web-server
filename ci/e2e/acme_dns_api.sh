@@ -105,7 +105,7 @@ ca_file    = "$MINICA"
 dns_server = "127.0.0.1:8053"
 $lines
 CFG
-  "$RWS" --check rws.config.toml > check.log || fail "$dir: rws --check: $(cat check.log)"
+  env "$@" "$RWS" --check rws.config.toml > check.log || fail "$dir: rws --check: $(cat check.log)"
   env "$@" "$RWS" > rws.log 2>&1 &
   PIDS+=($!)
 }
