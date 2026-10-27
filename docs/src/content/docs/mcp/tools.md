@@ -254,8 +254,8 @@ at once with a task handle (`resultType: "task"`) and the work runs on a
 thread of its own; the client polls `tasks/get` until the task is
 `completed`, `failed` or `cancelled`, and the result is what the tool would
 have returned. Any other client — or an earlier protocol version — gets the
-work run there and then, so the tool needs no second code path (since
-18.5.0):
+work run there and then, so the tool needs no second code path (a
+`TaskError::Failed` then becomes a tool error; since 18.5.0):
 
 ```rust
 use rust_web_server::mcp::{InputRequired, McpContent, McpServer, TaskError};
@@ -302,8 +302,11 @@ let server = McpServer::new("ops", "1.0")
 - **Cancellation.** `tasks/cancel` makes a running task `cancelled` at once;
   the work sees `task.is_cancelled()` and should stop. Cancelling a finished
   task is acknowledged and changes nothing.
-- **Lifetime.** Tasks are kept in memory for an hour after they start
-  (`.task_ttl(Duration)`), at most 10 000 (the oldest finished go first), and
+- **Lifetime.** Each running task holds a thread: at most 256 run at once
+  (`.max_running_tasks(n)`) — past that `start_task` returns an error the
+  client sees as a tool error. Tasks are kept in memory for an hour after
+  they start (`.task_ttl(Duration)`), at most 10 000 (the oldest finished go
+  first), and
   only the caller that started a task — the same OAuth / bearer-token `sub` —
   can see, update or cancel it. A server restart loses them.
 - **Notifications.** A `subscriptions/listen` asking for `taskIds` gets

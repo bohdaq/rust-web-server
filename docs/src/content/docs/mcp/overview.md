@@ -403,8 +403,8 @@ On the 2026-07-28 path:
 
 The official conformance suite runs in CI for both eras
 (`.github/workflows/mcp-conformance.yml`, suite 0.2.0-alpha.12): for
-2026-07-28 every check passes — 196, the 37 required scenarios and the 13
-run beside them (the Tasks extension, `Mcp-Param-*` validation, JSON Schema
+2026-07-28 every check passes — the required scenarios and those run
+beside them (the Tasks extension, `Mcp-Param-*` validation, JSON Schema
 2020-12); for 2025-11-25, 69 of 72 checks, the three failures being
 server-initiated elicitation, which rws doesn't implement for that version.
 

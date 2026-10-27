@@ -19,6 +19,17 @@ pub(crate) const EXTENSION: &str = "io.modelcontextprotocol/tasks";
 /// At most this many tasks are kept; the oldest finished ones go first.
 const MAX_TASKS: usize = 10_000;
 const POLL_INTERVAL_MS: u64 = 1000;
+/// Tasks whose work may run at once, by default: each holds a thread.
+pub const DEFAULT_MAX_RUNNING_TASKS: usize = 256;
+
+/// Releases a running-task slot when the work ends, however it ends.
+struct RunningSlot(Arc<std::sync::atomic::AtomicUsize>);
+
+impl Drop for RunningSlot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
 
 /// Why a task's work ended without a result.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -249,8 +260,10 @@ impl McpContext {
     /// `io.modelcontextprotocol/tasks` on this MCP 2026-07-28 request, the
     /// call answers at once with the task's handle and `work` runs on a
     /// thread of its own; the client polls `tasks/get` for its result.
-    /// Otherwise `work` runs now and its result is the call's. Return this
-    /// from a tool handler:
+    /// Otherwise `work` runs now and its result is the call's (a
+    /// [`TaskError::Failed`] then becomes a tool error). With
+    /// [`McpServer::max_running_tasks`] tasks already running, it's an
+    /// error instead. Return this from a tool handler:
     ///
     /// ```rust
     /// use rust_web_server::mcp::{McpContent, McpServer};
@@ -274,6 +287,13 @@ impl McpContext {
                 Err(TaskError::Cancelled) => Err("cancelled".to_string()),
             };
         };
+        // A slot first: every task's work holds a thread.
+        let running = Arc::clone(&server.running_tasks);
+        if running.fetch_add(1, Ordering::AcqRel) >= server.max_running_tasks {
+            running.fetch_sub(1, Ordering::AcqRel);
+            return Err(format!("too many tasks running (at most {}); try again later", server.max_running_tasks));
+        }
+        let slot = RunningSlot(running);
         let now = now_ms();
         let task = Arc::new(Task {
             id: task_id(),
@@ -295,6 +315,7 @@ impl McpContext {
         server.task_store.insert(Arc::clone(&task));
         let id = task.id.clone();
         std::thread::spawn(move || {
+            let _slot = slot;
             let context = TaskContext { task: Some((Arc::clone(&task), server.clone())) };
             let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(context)));
             task.set(&server, |state| {
@@ -361,6 +382,14 @@ impl McpServer {
     /// How long a task is kept after it starts (default an hour).
     pub fn task_ttl(mut self, ttl: Duration) -> Self {
         self.task_ttl_ms = ttl.as_millis() as u64;
+        self
+    }
+
+    /// How many tasks' work may run at once (default
+    /// [`DEFAULT_MAX_RUNNING_TASKS`]): each holds a thread. Past it,
+    /// [`McpContext::start_task`] answers with an error.
+    pub fn max_running_tasks(mut self, n: usize) -> Self {
+        self.max_running_tasks = n;
         self
     }
 

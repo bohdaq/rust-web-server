@@ -185,6 +185,24 @@ fn listen_streams_status_changes_of_its_tasks() {
 }
 
 #[test]
+fn running_tasks_are_capped() {
+    let server = server().max_running_tasks(1);
+    let first = start(&server, "slow");
+    let (_, refused) = call(&server, "tools/call", Some("slow"), r#""name":"slow","arguments":{}"#, true);
+    assert!(refused.contains(r#""isError":true"#) && refused.contains("too many tasks running"), "{refused}");
+    call(&server, "tasks/cancel", Some(&first), &format!(r#""taskId":"{first}""#), true);
+    // The slot frees when the cancelled work actually stops.
+    for _ in 0..100 {
+        let (_, body) = call(&server, "tools/call", Some("slow"), r#""name":"slow","arguments":{}"#, true);
+        if body.contains(r#""resultType":"task""#) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!("the slot never freed");
+}
+
+#[test]
 fn timestamps_are_iso_8601() {
     assert_eq!("1970-01-01T00:00:00.000Z", iso8601(0));
     assert_eq!("2026-07-28T10:30:00.123Z", iso8601(1_785_234_600_123));

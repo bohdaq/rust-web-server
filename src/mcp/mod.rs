@@ -1137,6 +1137,10 @@ pub struct McpServer {
     /// Tasks started by tools (MCP Tasks extension).
     task_store: Arc<tasks::TaskStore>,
     task_ttl_ms: u64,
+    /// Tasks whose work is still running, and the cap
+    /// ([`Self::max_running_tasks`]).
+    running_tasks: Arc<std::sync::atomic::AtomicUsize>,
+    max_running_tasks: usize,
     /// Tools usable only as tasks ([`Self::task_required`]).
     task_required_tools: Arc<RwLock<Vec<String>>>,
 }
@@ -1215,6 +1219,8 @@ impl McpServer {
             cache_scope: "private",
             task_store: Arc::new(tasks::TaskStore::default()),
             task_ttl_ms: 3_600_000,
+            running_tasks: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            max_running_tasks: tasks::DEFAULT_MAX_RUNNING_TASKS,
             task_required_tools: Arc::new(RwLock::new(Vec::new())),
         }
     }

@@ -31,7 +31,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   any other. `TaskContext::input` parks the task as `input_required` until
   `tasks/update` answers; `TaskError` maps to completed-with-error, failed or
   cancelled; `.task_required(name)` refuses non-declaring clients (`-32021`);
-  `.task_ttl`. Tasks belong to their caller.
+  `.task_ttl`, `.max_running_tasks` (256: each running task holds a thread).
+  Tasks belong to their caller.
 - `Mcp-Param-*` headers (MCP 2026-07-28, SEP-2243): tool parameters marked
   `x-mcp-header` must be mirrored in matching headers on `tools/call`
   (`400 -32020` otherwise); base64 header values must be canonical. The
