@@ -14,6 +14,16 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   temporary acceptor answers on the HTTPS socket; afterwards the TLS
   listener answers `acme-tls/1` handshakes with the challenge certificate
   (and only those). Tested against Pebble, first issuance and renewal.
+- DNS-01 and wildcard certificates (#17): `[acme] challenge = "dns-01"`
+  publishes `_acme-challenge` TXT records through `dns_provider = "rfc2136"`
+  (a DNS UPDATE to the zone's primary server, signed with TSIG
+  HMAC-SHA256/512 — BIND, Knot, PowerDNS, …) or `"exec"` (a program, for any
+  DNS API), waits until the record is visible, and removes it afterwards;
+  `*.example.com` in `domains` gets a wildcard certificate. Refusals are
+  explained (REFUSED, NOTAUTH, TSIG BADSIG/BADKEY/BADTIME). Tested against
+  Pebble and BIND (`ci/e2e/acme_dns01.sh`); the DNS reply parser — now one
+  module, `dns`, shared with SRV service discovery — is fuzzed
+  (`fuzz/fuzz_targets/dns_message.rs`).
 - `[acme] challenge` (`RWS_CONFIG_ACME_CHALLENGE`: `http-01`, `tls-alpn-01`,
   `dns-01`) and the DNS-01 settings (`dns_provider`, `dns_server`,
   `dns_zone`, `dns_tsig_key`, `dns_tsig_secret`, `dns_tsig_algorithm`,

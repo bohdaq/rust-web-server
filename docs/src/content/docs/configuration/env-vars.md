@@ -83,7 +83,7 @@ Continue the pattern (`_2_`, `_3_`, …) for as many domains as needed. The
 | `RWS_CONFIG_ACME_CA_FILE` | `` (empty) | PEM file of extra root CAs to trust for the ACME directory, on top of the public roots — for private ACME CAs (step-ca, Pebble). |
 | `RWS_CONFIG_ACME_CHALLENGE` | `http-01` | How the CA checks you control the domains: `http-01` (port 80), `tls-alpn-01` (on the HTTPS port, RFC 8737) or `dns-01` (a TXT record; needed for wildcards). Since 18.4.0. See [Challenge types](/features/acme/#challenge-types). |
 | `RWS_CONFIG_ACME_DNS_PROVIDER` | `` (empty) | DNS-01: `rfc2136` (a DNS UPDATE) or `exec` (a program). |
-| `RWS_CONFIG_ACME_DNS_SERVER` | `` (empty) | DNS-01 `rfc2136`: the zone's primary server, `host[:port]` (port 53). |
+| `RWS_CONFIG_ACME_DNS_SERVER` | `` (empty) | DNS-01: `rfc2136`'s primary server, `host[:port]` (port 53); with `exec`, optional: where to check that the record is visible (else the system resolver). |
 | `RWS_CONFIG_ACME_DNS_ZONE` | `` (empty) | DNS-01: the zone holding `_acme-challenge` records; found by an SOA lookup when empty. |
 | `RWS_CONFIG_ACME_DNS_TSIG_KEY` | `` (empty) | DNS-01 `rfc2136`: the TSIG key name. |
 | `RWS_CONFIG_ACME_DNS_TSIG_SECRET` | `` (empty) | DNS-01 `rfc2136`: the TSIG secret, base64. Set it here or in `rws.config.toml` — there is no command-line flag — and it is never printed. |

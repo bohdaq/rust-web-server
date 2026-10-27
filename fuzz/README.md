@@ -27,6 +27,7 @@ cargo install cargo-fuzz
 | `proxy_config` | proxy route parser | operator files |
 | `websocket_frame` | `WebSocket::read_frame_limited` | WebSocket clients |
 | `dns_srv_response` | the DNS SRV response parser (`service_discovery`) | DNS servers |
+| `dns_message` | the shared DNS message parser (`dns::parse`), TXT values, DNS UPDATE replies (ACME DNS-01) | DNS servers |
 | `redis_reply` | the RESP reply reader (`redis_protocol`) | Redis servers |
 | `cookie_header` | `CookieJar::parse` | any client |
 | `accept_encoding` | `Accept-Encoding` negotiation for gzip / br / zstd (via `fuzz_api`) | any client |

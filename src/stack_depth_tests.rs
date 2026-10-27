@@ -119,3 +119,21 @@ fn h2_connection_with_thousands_of_frames() {
         crate::h2_server::fuzz::connection(&data);
     });
 }
+
+#[test]
+fn dns_message_with_tens_of_thousands_of_records() {
+    on_small_stack(|| {
+        let mut raw = vec![0, 1, 0x80, 0, 0, 0, 0xFF, 0xFF, 0, 0, 0, 0];
+        for _ in 0..0xFFFF {
+            // Each owner name a compression pointer back to... itself: the
+            // per-name hop limit, not the stack, stops it.
+            raw.extend_from_slice(&[0xC0, 12, 0, 16, 0, 1, 0, 0, 0, 0, 0, 0]);
+        }
+        assert!(crate::dns::parse(&raw).is_err());
+        let mut ok = vec![0, 1, 0x80, 0, 0, 0, 0xFF, 0xFF, 0, 0, 0, 0];
+        for _ in 0..0xFFFF {
+            ok.extend_from_slice(&[0, 0, 16, 0, 1, 0, 0, 0, 0, 0, 1, 0]);
+        }
+        assert_eq!(0xFFFF, crate::dns::parse(&ok).unwrap().answers.len());
+    });
+}

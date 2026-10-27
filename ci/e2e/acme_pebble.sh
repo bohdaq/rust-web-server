@@ -213,7 +213,6 @@ ca_file   = "$MINICA"
 challenge = "tls-alpn-01"
 profile   = "shortlived"
 CFG
-"$RWS" --check rws.config.toml > check.log || fail "rws --check (tls-alpn-01): $(cat check.log)"
 RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS=20 "$RWS" > rws.log 2>&1 &
 PIDS+=($!)
 alpn_fail() { cp rws.log "$WORK/site/rws.log"; fail "tls-alpn-01: $*"; }

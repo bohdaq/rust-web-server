@@ -41,6 +41,7 @@
 
 mod crypto;
 mod client;
+pub(crate) mod dns01;
 pub mod tls_alpn;
 
 #[cfg(test)]
@@ -148,8 +149,10 @@ pub enum DnsProvider {
     /// TSIG key (RFC 8945) when one is given — BIND, Knot, PowerDNS, ...
     Rfc2136 { server: String, tsig: Option<Tsig> },
     /// A program, run as `<program> present <fqdn> <value>` and
-    /// `<program> cleanup <fqdn> <value>`; exit status 0 = done.
-    Exec { program: String },
+    /// `<program> cleanup <fqdn> <value>`; exit status 0 = done. `server`
+    /// (`dns_server`, optional) is where to look for the record; the system
+    /// resolver without it.
+    Exec { program: String, server: Option<String> },
 }
 
 /// A TSIG key: its name, algorithm and secret.
@@ -197,6 +200,7 @@ impl DnsConfig {
             }
             Some("exec") => DnsProvider::Exec {
                 program: non_empty_env(Config::RWS_CONFIG_ACME_DNS_EXEC).ok_or("DNS-01 with exec needs RWS_CONFIG_ACME_DNS_EXEC (the program)")?,
+                server: non_empty_env(Config::RWS_CONFIG_ACME_DNS_SERVER),
             },
             Some(other) => return Err(format!("RWS_CONFIG_ACME_DNS_PROVIDER {other:?}: expected rfc2136 or exec")),
             None => return Err("DNS-01 needs RWS_CONFIG_ACME_DNS_PROVIDER (rfc2136 or exec)".to_string()),
@@ -766,7 +770,19 @@ impl AcmeManager {
                 };
                 Ok(Presented::TlsAlpn { domain: domain.to_string(), standalone })
             }
-            ChallengeType::Dns01 => Err("DNS-01 isn't implemented yet".to_string()),
+            ChallengeType::Dns01 => {
+                let dns = self.config.dns.clone().ok_or("DNS-01 isn't configured (RWS_CONFIG_ACME_DNS_PROVIDER)")?;
+                let name = dns01::record_name(domain);
+                let value = dns01::record_value(key_auth);
+                println!("[ACME] Publishing the DNS-01 record {name} TXT {value}...");
+                dns01::present(&dns, &name, &value).await?;
+                if dns01::wait_visible(&dns, &name, &value).await {
+                    println!("[ACME] {name} is visible.");
+                } else {
+                    eprintln!("[ACME] {name} isn't visible after {}s; asking the CA to check anyway.", dns.propagation_secs);
+                }
+                Ok(Presented::Dns { config: dns, name, value })
+            }
         }
     }
 }
@@ -775,6 +791,7 @@ impl AcmeManager {
 enum Presented {
     Http { token: String, standalone: Option<(tokio::sync::oneshot::Sender<()>, tokio::task::JoinHandle<()>)> },
     TlsAlpn { domain: String, standalone: Option<(tokio::sync::oneshot::Sender<()>, tokio::task::JoinHandle<()>)> },
+    Dns { config: DnsConfig, name: String, value: String },
 }
 
 impl Presented {
@@ -787,6 +804,12 @@ impl Presented {
             Presented::TlsAlpn { domain, standalone } => {
                 tls_alpn::remove(&domain);
                 standalone
+            }
+            Presented::Dns { config, name, value } => {
+                if let Err(e) = dns01::cleanup(&config, &name, &value).await {
+                    eprintln!("[ACME] Couldn't remove the DNS-01 record {name}: {e}");
+                }
+                None
             }
         };
         if let Some((shutdown_tx, handle)) = standalone {

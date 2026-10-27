@@ -10,8 +10,9 @@ mod tests;
 use std::net::UdpSocket;
 use std::time::Duration;
 
-const SRV_QTYPE: u16 = 33;
-const IN_QCLASS: u16 = 1;
+use crate::dns::read_name;
+
+const SRV_QTYPE: u16 = crate::dns::TYPE_SRV;
 /// Each SRV target is repeated up to this many times in the returned backend
 /// list so a plain round-robin consumer sees roughly proportional selection
 /// frequency, without letting a single very-high-weight record blow up the
@@ -31,7 +32,7 @@ pub(crate) struct SrvRecord {
 /// any failure (no resolver configured, network error, NXDOMAIN, etc.) —
 /// logged, not propagated, matching every other `DiscoverySource`.
 pub(super) fn resolve(record: &str) -> Vec<String> {
-    let resolver = match system_resolver() {
+    let resolver = match crate::dns::system_resolver() {
         Some(r) => r,
         None => {
             eprintln!("service_discovery: no DNS resolver found (checked /etc/resolv.conf)");
@@ -48,22 +49,6 @@ pub(super) fn resolve(record: &str) -> Vec<String> {
     }
 }
 
-/// Reads the first `nameserver` line from `/etc/resolv.conf`. Unix-only
-/// resolver discovery — there's no config-file equivalent to parse on
-/// Windows; pass a resolver explicitly via [`query`] in that case.
-fn system_resolver() -> Option<std::net::SocketAddr> {
-    let contents = std::fs::read_to_string("/etc/resolv.conf").ok()?;
-    for line in contents.lines() {
-        let line = line.trim();
-        if let Some(rest) = line.strip_prefix("nameserver") {
-            let ip = rest.trim();
-            if let Ok(addr) = format!("{}:53", ip).parse() {
-                return Some(addr);
-            }
-        }
-    }
-    None
-}
 
 /// Sends one SRV query for `record` to `resolver` over UDP and parses the
 /// response. Exposed at `pub(crate)` (not just `pub(super)`) so tests can
@@ -73,8 +58,8 @@ pub(crate) fn query(record: &str, resolver: std::net::SocketAddr, timeout: Durat
     socket.connect(resolver).map_err(|e| format!("connect to {} failed: {}", resolver, e))?;
     socket.set_read_timeout(Some(timeout)).map_err(|e| format!("set_read_timeout failed: {}", e))?;
 
-    let id = query_id();
-    let packet = build_query(id, record);
+    let id = crate::dns::query_id();
+    let packet = crate::dns::build_query(id, record, SRV_QTYPE, true)?;
     socket.send(&packet).map_err(|e| format!("send failed: {}", e))?;
 
     let mut buf = [0u8; 4096];
@@ -83,83 +68,9 @@ pub(crate) fn query(record: &str, resolver: std::net::SocketAddr, timeout: Durat
     parse_response(&buf[..n], id)
 }
 
-/// Not cryptographically random — this only needs to distinguish our own
-/// in-flight query from an unrelated stray UDP packet, the same bar
-/// `request_id::generate_request_id` sets for its own counter-based ID.
-fn query_id() -> u16 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    (nanos & 0xFFFF) as u16
-}
 
-fn encode_name(name: &str, buf: &mut Vec<u8>) {
-    for label in name.trim_end_matches('.').split('.') {
-        if label.is_empty() {
-            continue;
-        }
-        buf.push(label.len() as u8);
-        buf.extend_from_slice(label.as_bytes());
-    }
-    buf.push(0);
-}
 
-fn build_query(id: u16, name: &str) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(32 + name.len());
-    buf.extend_from_slice(&id.to_be_bytes());
-    buf.extend_from_slice(&0x0100u16.to_be_bytes()); // flags: standard query, recursion desired
-    buf.extend_from_slice(&1u16.to_be_bytes()); // QDCOUNT
-    buf.extend_from_slice(&0u16.to_be_bytes()); // ANCOUNT
-    buf.extend_from_slice(&0u16.to_be_bytes()); // NSCOUNT
-    buf.extend_from_slice(&0u16.to_be_bytes()); // ARCOUNT
 
-    encode_name(name, &mut buf);
-    buf.extend_from_slice(&SRV_QTYPE.to_be_bytes());
-    buf.extend_from_slice(&IN_QCLASS.to_be_bytes());
-    buf
-}
-
-/// Reads a (possibly compressed, RFC 1035 §4.1.4) name starting at `pos`.
-/// Returns the decoded name and the position immediately after it in the
-/// *original* buffer (i.e. after following any first compression pointer,
-/// not after any pointer target — that's the wire-format rule: a pointer is
-/// always the last thing in a name).
-fn read_name(buf: &[u8], mut pos: usize) -> Result<(String, usize), String> {
-    let mut labels = Vec::new();
-    let mut jumped = false;
-    let mut return_pos = pos;
-    let mut hops = 0u32;
-
-    loop {
-        hops += 1;
-        if hops > 128 {
-            return Err("DNS name compression pointer loop".to_string());
-        }
-        let len = *buf.get(pos).ok_or("truncated name")?;
-        if len == 0 {
-            if !jumped {
-                return_pos = pos + 1;
-            }
-            break;
-        }
-        if len & 0xC0 == 0xC0 {
-            let b2 = *buf.get(pos + 1).ok_or("truncated compression pointer")?;
-            let offset = (((len as usize) & 0x3F) << 8) | b2 as usize;
-            if !jumped {
-                return_pos = pos + 2;
-            }
-            jumped = true;
-            pos = offset;
-            continue;
-        }
-        let start = pos + 1;
-        let end = start + len as usize;
-        let label = buf.get(start..end).ok_or("truncated label")?;
-        labels.push(String::from_utf8_lossy(label).to_string());
-        pos = end;
-    }
-
-    Ok((labels.join("."), return_pos))
-}
 
 pub(crate) fn parse_response(buf: &[u8], expected_id: u16) -> Result<Vec<SrvRecord>, String> {
     if buf.len() < 12 {

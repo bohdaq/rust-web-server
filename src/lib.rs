@@ -131,6 +131,8 @@ pub mod circuit_breaker;
 // because `json_lite` (a plain JSON parser, no sockets) must stay available
 // for `secrets`'s Vault/AWS-SM/Key-Vault backends on every target.
 pub mod service_discovery;
+/// DNS wire format, shared by the SRV service discovery and ACME's DNS-01.
+pub(crate) mod dns;
 pub mod config_binding;
 pub mod di;
 #[cfg(not(target_arch = "wasm32"))]
@@ -352,6 +354,18 @@ pub mod fuzz_api {
     pub fn dns_srv_response(data: &[u8]) {
         let id = data.get(..2).map_or(0, |b| u16::from_be_bytes([b[0], b[1]]));
         let _ = crate::service_discovery::dns_srv::parse_response(data, id);
+    }
+
+    /// A DNS message: the shared parser (SRV discovery, ACME DNS-01), TXT
+    /// values and, with `acme`, a DNS UPDATE reply. Must never panic.
+    pub fn dns_message(data: &[u8]) {
+        if let Ok(message) = crate::dns::parse(data) {
+            for record in message.answers.iter().chain(&message.authority).chain(&message.additional) {
+                let _ = crate::dns::txt_value(&data[record.rdata.clone()]);
+            }
+        }
+        #[cfg(feature = "acme")]
+        let _ = crate::acme::dns01::check_update_reply(data, 0);
     }
 
     /// A Redis (RESP) reply (#8). Must never panic.

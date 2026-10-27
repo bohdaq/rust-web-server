@@ -2,6 +2,15 @@ use super::*;
 use std::net::UdpSocket;
 use std::thread;
 
+// The wire helpers moved to crate::dns; these tests still pin them.
+fn build_query(id: u16, name: &str) -> Vec<u8> {
+    crate::dns::build_query(id, name, SRV_QTYPE, true).unwrap()
+}
+fn encode_name(name: &str, buf: &mut Vec<u8>) {
+    crate::dns::encode_name(name, buf).unwrap()
+}
+const IN_QCLASS: u16 = crate::dns::CLASS_IN;
+
 // ── build_query ───────────────────────────────────────────────────────────────
 
 #[test]

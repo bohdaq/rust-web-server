@@ -1067,7 +1067,7 @@ Continue the pattern (`_2_`, `_3_`, …) for as many domains as needed. The
 | `RWS_CONFIG_ACME_CA_FILE` | `` (empty) | PEM file of extra root CAs to trust for the ACME directory, on top of the public roots — for private ACME CAs (step-ca, Pebble). |
 | `RWS_CONFIG_ACME_CHALLENGE` | `http-01` | How the CA checks you control the domains: `http-01` (port 80), `tls-alpn-01` (on the HTTPS port, RFC 8737) or `dns-01` (a TXT record; needed for wildcards). Since 18.4.0. See [Challenge types](/features/acme/#challenge-types). |
 | `RWS_CONFIG_ACME_DNS_PROVIDER` | `` (empty) | DNS-01: `rfc2136` (a DNS UPDATE) or `exec` (a program). |
-| `RWS_CONFIG_ACME_DNS_SERVER` | `` (empty) | DNS-01 `rfc2136`: the zone's primary server, `host[:port]` (port 53). |
+| `RWS_CONFIG_ACME_DNS_SERVER` | `` (empty) | DNS-01: `rfc2136`'s primary server, `host[:port]` (port 53); with `exec`, optional: where to check that the record is visible (else the system resolver). |
 | `RWS_CONFIG_ACME_DNS_ZONE` | `` (empty) | DNS-01: the zone holding `_acme-challenge` records; found by an SOA lookup when empty. |
 | `RWS_CONFIG_ACME_DNS_TSIG_KEY` | `` (empty) | DNS-01 `rfc2136`: the TSIG key name. |
 | `RWS_CONFIG_ACME_DNS_TSIG_SECRET` | `` (empty) | DNS-01 `rfc2136`: the TSIG secret, base64. Set it here or in `rws.config.toml` — there is no command-line flag — and it is never printed. |
@@ -6246,7 +6246,7 @@ command line (`--acme-domains=...`; not the last three), or in the environment.
 | `challenge` | `RWS_CONFIG_ACME_CHALLENGE` | `http-01` | `http-01`, `tls-alpn-01` or `dns-01` — see [Challenge types](#challenge-types) |
 | `challenge_port` | `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port the CA connects to for HTTP-01 |
 | `dns_provider` | `RWS_CONFIG_ACME_DNS_PROVIDER` | — | DNS-01: `rfc2136` or `exec` |
-| `dns_server` | `RWS_CONFIG_ACME_DNS_SERVER` | — | DNS-01 `rfc2136`: the zone's primary server, `host[:port]` |
+| `dns_server` | `RWS_CONFIG_ACME_DNS_SERVER` | — | DNS-01: `rfc2136`'s primary server, `host[:port]`; with `exec`, optional: where to look for the record (else the system resolver) |
 | `dns_zone` | `RWS_CONFIG_ACME_DNS_ZONE` | SOA lookup | DNS-01: the zone of the records |
 | `dns_tsig_key` | `RWS_CONFIG_ACME_DNS_TSIG_KEY` | — | DNS-01 `rfc2136`: TSIG key name |
 | `dns_tsig_secret` | `RWS_CONFIG_ACME_DNS_TSIG_SECRET` | — | DNS-01 `rfc2136`: TSIG secret, base64 (no command-line flag; never printed) |

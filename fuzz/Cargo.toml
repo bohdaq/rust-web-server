@@ -190,3 +190,10 @@ path = "fuzz_targets/proxy_protocol.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "dns_message"
+path = "fuzz_targets/dns_message.rs"
+test = false
+doc = false
+bench = false

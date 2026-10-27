@@ -108,7 +108,7 @@ Make the HTTP/2 upstream path as good as the HTTP/1.1 one, so gRPC works end to 
 
 Every certificate a user can ask for: wildcards, TLS-ALPN-01, on-demand issuance for customer domains, and replicas that share one set of certificates.
 
-- **#17** **More ACME challenges** — TLS-ALPN-01; DNS-01 (RFC 2136, Cloudflare, Route 53, an exec hook) with wildcard certificates (`rws --check` rejects wildcards today); then DNS-PERSIST-01. nginx, HAProxy and Caddy cover these.
+- **#17** *main (in progress): TLS-ALPN-01 (temporary acceptor at startup, live resolver at renewal), DNS-01 via RFC 2136 + TSIG and an exec hook, wildcard certificates; e2e: Pebble (TLS-ALPN-01 issuance + renewal) and Pebble + BIND (`ci/e2e/acme_dns01.sh`: wildcard, BADSIG reported, exec hook). Remaining: Cloudflare and Route 53 providers, DNS-PERSIST-01* **More ACME challenges** — TLS-ALPN-01; DNS-01 (RFC 2136, Cloudflare, Route 53, an exec hook) with wildcard certificates (`rws --check` rejects wildcards today); then DNS-PERSIST-01. nginx, HAProxy and Caddy cover these.
 - **#18** **On-demand TLS and shared certificate storage** — issue a certificate at the first handshake for names an "ask" endpoint allows (Caddy, for SaaS custom domains), and keep certificates and challenge tokens in Redis so replicas share them (Ferron v3, HAProxy 3.3).
 
 **Done when:** DNS-01 and TLS-ALPN-01 issuance against Pebble in CI (DNS-01 with an RFC 2136 test server); wildcard certificates accepted by `rws --check`; two replicas sharing certificates through Redis without double issuance.

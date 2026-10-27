@@ -196,7 +196,7 @@ command line (`--acme-domains=...`; not the last three), or in the environment.
 | `challenge` | `RWS_CONFIG_ACME_CHALLENGE` | `http-01` | `http-01`, `tls-alpn-01` or `dns-01` — see [Challenge types](#challenge-types) |
 | `challenge_port` | `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port the CA connects to for HTTP-01 |
 | `dns_provider` | `RWS_CONFIG_ACME_DNS_PROVIDER` | — | DNS-01: `rfc2136` or `exec` |
-| `dns_server` | `RWS_CONFIG_ACME_DNS_SERVER` | — | DNS-01 `rfc2136`: the zone's primary server, `host[:port]` |
+| `dns_server` | `RWS_CONFIG_ACME_DNS_SERVER` | — | DNS-01: `rfc2136`'s primary server, `host[:port]`; with `exec`, optional: where to look for the record (else the system resolver) |
 | `dns_zone` | `RWS_CONFIG_ACME_DNS_ZONE` | SOA lookup | DNS-01: the zone of the records |
 | `dns_tsig_key` | `RWS_CONFIG_ACME_DNS_TSIG_KEY` | — | DNS-01 `rfc2136`: TSIG key name |
 | `dns_tsig_secret` | `RWS_CONFIG_ACME_DNS_TSIG_SECRET` | — | DNS-01 `rfc2136`: TSIG secret, base64 (no command-line flag; never printed) |
