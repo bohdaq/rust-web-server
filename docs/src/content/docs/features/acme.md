@@ -181,6 +181,42 @@ zone "example.com" { type primary; file "example.com.zone";
 (`tsig-keygen rws-acme` prints a new key.) The secret is never printed in
 rws's startup log.
 
+## On-demand TLS
+
+For a SaaS whose customers point their own domains at it: rws orders a
+certificate at the first TLS handshake for a name nobody configured, once
+your *ask* endpoint allows that name (since 18.4.0).
+
+```toml
+http_redirect_port = 80                  # answers HTTP-01
+
+[acme]
+domains       = ["saas.example.com"]     # rws's own certificate, the default
+on_demand     = true                     # RWS_CONFIG_ACME_ON_DEMAND
+on_demand_ask = "http://127.0.0.1:9000/allowed"   # RWS_CONFIG_ACME_ON_DEMAND_ASK
+```
+
+- Before each order rws asks `GET <on_demand_ask>?domain=<name>`; a 2xx
+  answer allows it, anything else (or no answer in five seconds) refuses
+  it. Answer from your list of customer domains. `on_demand` without
+  `on_demand_ask` is refused: anyone could make rws order certificates for
+  every name they point at it.
+- The first handshake for a new name waits for its certificate (up to 90
+  seconds; with Let's Encrypt usually a few). A refused name gets the
+  default certificate and isn't asked about again for a minute; a failed
+  order isn't retried for ten. At most four orders run at once, and one per
+  name however many clients arrive together.
+- Certificates are kept in `.rws/acme/on-demand/<name>/` (next to the
+  `cert_path`), loaded at startup and renewed like the main one; with
+  [`redis`](#several-replicas) replicas share them too.
+- HTTP-01 or TLS-ALPN-01 (DNS-01 would need every customer's zone). Over
+  HTTP/3 a name is served once a TCP handshake has ordered it.
+
+CI checks it against Pebble with an ask endpoint (`ci/e2e/acme_on_demand.sh`):
+an allowed name is served its certificate on the first request, a refused
+one the default, five simultaneous first requests make one order, and a
+restart orders nothing.
+
 ## Several replicas
 
 Replicas of one site behind a load balancer each run ACME for the same
@@ -236,6 +272,8 @@ command line (`--acme-domains=...`; not the last three), or in the environment.
 | `redis` | `RWS_CONFIG_ACME_REDIS` | — | Redis `host:port` shared by replicas — see [Several replicas](#several-replicas) |
 | `redis_password` | `RWS_CONFIG_ACME_REDIS_PASSWORD` | — | Its password (no command-line flag; never printed) |
 | `redis_prefix` | `RWS_CONFIG_ACME_REDIS_PREFIX` | `rws:acme` | Key prefix in that Redis |
+| `on_demand` | `RWS_CONFIG_ACME_ON_DEMAND` | `false` | Order certificates at the first handshake — see [On-demand TLS](#on-demand-tls) |
+| `on_demand_ask` | `RWS_CONFIG_ACME_ON_DEMAND_ASK` | — | URL asked `?domain=<name>` before each such order; 2xx allows it |
 | `cert_path` | `RWS_CONFIG_ACME_CERT_PATH` | `tls_cert_file`, else `.rws/acme/cert.pem` | Where the certificate chain is stored |
 | `key_path` | `RWS_CONFIG_ACME_KEY_PATH` | `tls_key_file`, else `.rws/acme/key.pem` | Where the certificate key is stored (`0600`) |
 | `renew_before_days` | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | — | Renew this many days before expiry instead of at two-thirds of the lifetime (was `30` before 18.0.0) |

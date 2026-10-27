@@ -353,6 +353,21 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
         if challenge == "dns-01" {
             check_acme_dns(&get, report);
         }
+        let on_demand = get(Config::RWS_CONFIG_ACME_ON_DEMAND).unwrap_or("").trim().to_ascii_lowercase();
+        if !matches!(on_demand.as_str(), "" | "true" | "false") {
+            report.error(format!("[acme] on_demand = {on_demand:?}: expected true or false"));
+        } else if on_demand == "true" {
+            match get(Config::RWS_CONFIG_ACME_ON_DEMAND_ASK).map(str::trim).filter(|v| !v.is_empty()) {
+                None => report.error("[acme] on_demand needs on_demand_ask: without it anyone could make rws order certificates for any name pointed at it"),
+                Some(ask) if !(ask.starts_with("http://") || ask.starts_with("https://")) => {
+                    report.error(format!("[acme] on_demand_ask = {ask:?}: expected an http:// or https:// URL"))
+                }
+                Some(_) => {}
+            }
+            if challenge == "dns-01" {
+                report.error("[acme] on_demand works with http-01 and tls-alpn-01, not dns-01 (it would need every customer's DNS zone)");
+            }
+        }
         if port != "443" {
             report.warn(format!("[acme] with port = {port}: browsers expect HTTPS on 443 (fine if a port mapping forwards 443 here)"));
         }

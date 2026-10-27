@@ -31,6 +31,14 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   Pebble and BIND (`ci/e2e/acme_dns01.sh`); the DNS reply parser — now one
   module, `dns`, shared with SRV service discovery — is fuzzed
   (`fuzz/fuzz_targets/dns_message.rs`).
+- On-demand TLS (#18): with `[acme] on_demand = true` and an
+  `on_demand_ask` endpoint, rws orders a certificate at the first handshake
+  for a name the endpoint allows (`GET <ask>?domain=<name>`, 2xx) — for
+  customers' own domains. Refused names get the default certificate; one
+  order per name, at most four at once; certificates kept under
+  `.rws/acme/on-demand/`, loaded at startup and renewed. `rws --check`
+  requires the ask endpoint and refuses DNS-01 with it. Tested against
+  Pebble (`ci/e2e/acme_on_demand.sh`).
 - Replicas sharing certificates through Redis (#18): with `[acme] redis`,
   one replica orders each certificate (a lock in Redis) while the others
   wait and install it, renewals reach every replica, and any replica answers

@@ -57,9 +57,11 @@ impl ResolvesServerCert for SniCertResolver {
         if crate::acme::tls_alpn::is_challenge(&hello) {
             return hello.server_name().and_then(crate::acme::tls_alpn::certificate);
         }
-        hello.server_name()
-            .and_then(|sni| self.certs.get(sni).cloned())
-            .or_else(|| self.default.clone())
+        let sni = hello.server_name();
+        let configured = sni.and_then(|sni| self.certs.get(sni).cloned());
+        #[cfg(feature = "acme")]
+        let configured = configured.or_else(|| sni.and_then(crate::acme::on_demand::certificate));
+        configured.or_else(|| self.default.clone())
     }
 }
 
@@ -146,7 +148,7 @@ pub fn create_quinn_server_config(cert_path: &str, key_path: &str) -> Result<qui
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn load_certified_key(cert_path: &str, key_path: &str) -> Result<CertifiedKey, String> {
+pub(crate) fn load_certified_key(cert_path: &str, key_path: &str) -> Result<CertifiedKey, String> {
     let certs = load_certs(cert_path)?;
     let key = load_key(key_path)?;
     let signing_key = rustls::crypto::aws_lc_rs::sign::any_supported_type(&key)

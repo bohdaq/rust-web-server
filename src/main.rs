@@ -535,9 +535,14 @@ async fn start_acme(listener: Option<&std::net::TcpListener>) {
                     rust_web_server::acme::tls_alpn::set_startup_listener(socket);
                 }
             }
-            let mgr = AcmeManager::new(cfg);
+            let mgr = AcmeManager::new(cfg.clone());
             mgr.provision_until_ready().await;
             tokio::spawn(mgr.run_renewal_loop());
+            if rust_web_server::acme::on_demand::configured() {
+                if let Err(e) = rust_web_server::acme::on_demand::start(&cfg) {
+                    eprintln!("[ACME] {e}");
+                }
+            }
         }
     }
     #[cfg(not(feature = "acme"))]

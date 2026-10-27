@@ -222,6 +222,10 @@ impl CommandLineArgument {
                 "Redis host:port shared by replicas: one orders each certificate, all install it"),
             ("acme-redis-prefix", Config::RWS_CONFIG_ACME_REDIS_PREFIX,
                 "Key prefix in that Redis (default rws:acme)"),
+            ("acme-on-demand", Config::RWS_CONFIG_ACME_ON_DEMAND,
+                "true: order a certificate at the first handshake for a name the ask endpoint allows"),
+            ("acme-on-demand-ask", Config::RWS_CONFIG_ACME_ON_DEMAND_ASK,
+                "On-demand TLS: URL asked ?domain=<name> before each order; 2xx allows it"),
         ];
         for (long_form, environment_variable, hint) in long_only {
             argument_list.push(CommandLineArgument {

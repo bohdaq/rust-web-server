@@ -41,10 +41,13 @@
 /// | `RWS_CONFIG_ACME_REDIS` | — | Redis `host:port` shared by replicas (see [`shared`]) |
 /// | `RWS_CONFIG_ACME_REDIS_PASSWORD` | — | Its password |
 /// | `RWS_CONFIG_ACME_REDIS_PREFIX` | `rws:acme` | Key prefix in that Redis |
+/// | `RWS_CONFIG_ACME_ON_DEMAND` | `false` | Order certificates at the first handshake (see [`on_demand`]) |
+/// | `RWS_CONFIG_ACME_ON_DEMAND_ASK` | — | URL asked `?domain=<name>` before each such order; 2xx allows it |
 
 mod crypto;
 mod client;
 pub(crate) mod dns01;
+pub mod on_demand;
 pub(crate) mod shared;
 pub mod tls_alpn;
 

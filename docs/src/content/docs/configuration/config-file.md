@@ -136,6 +136,8 @@ challenge_port = 80                # port the CA connects to for HTTP-01
 #                                  # dns_exec, dns_propagation_secs — see Automatic HTTPS
 # redis        = "10.0.0.20:6379"  # replicas share certificates and challenges
 #                                  # (redis_password, redis_prefix)
+# on_demand     = true             # certificates for names on_demand_ask allows,
+# on_demand_ask = "http://127.0.0.1:9000/allowed"   # at their first handshake
 cert_path      = ""                # default: tls_cert_file, else cert.pem
 key_path       = ""                # default: tls_key_file, else key.pem
 profile        = ""                # certificate profile, e.g. "shortlived"

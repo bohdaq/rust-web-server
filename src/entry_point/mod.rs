@@ -193,6 +193,11 @@ impl Config {
     pub const RWS_CONFIG_ACME_REDIS_PASSWORD: &'static str = "RWS_CONFIG_ACME_REDIS_PASSWORD";
     /// Key prefix in that Redis (default `rws:acme`).
     pub const RWS_CONFIG_ACME_REDIS_PREFIX: &'static str = "RWS_CONFIG_ACME_REDIS_PREFIX";
+    /// `true`: order a certificate at the first TLS handshake for a name
+    /// `RWS_CONFIG_ACME_ON_DEMAND_ASK` allows (since 18.4.0).
+    pub const RWS_CONFIG_ACME_ON_DEMAND: &'static str = "RWS_CONFIG_ACME_ON_DEMAND";
+    /// On-demand TLS: URL asked `?domain=<name>` before each order; 2xx allows it.
+    pub const RWS_CONFIG_ACME_ON_DEMAND_ASK: &'static str = "RWS_CONFIG_ACME_ON_DEMAND_ASK";
 
 
     pub const RWS_DEFAULT_IP: &'static str = "127.0.0.1";

@@ -305,6 +305,20 @@ fn render_json_escapes_quotes_and_stays_valid_looking() {
 
 #[cfg(feature = "acme")]
 #[test]
+fn acme_on_demand_checks() {
+    let base = "port = 443\nhttp_redirect_port = 80\n[acme]\ndomains = [\"saas.example\"]\nemail = \"a@example.com\"\n";
+    let report = check_str(&format!("{base}on_demand = true\non_demand_ask = \"http://127.0.0.1:9000/allowed\"\n"));
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    let report = check_str(&format!("{base}on_demand = true\n"));
+    assert!(report.errors.iter().any(|e| e.contains("on_demand_ask")), "{:?}", report.errors);
+    let report = check_str(&format!("{base}on_demand = true\non_demand_ask = \"127.0.0.1:9000\"\n"));
+    assert!(report.errors.iter().any(|e| e.contains("http://")), "{:?}", report.errors);
+    let report = check_str(&format!("{base}on_demand = yes\n"));
+    assert!(report.errors.iter().any(|e| e.contains("true or false")), "{:?}", report.errors);
+}
+
+#[cfg(feature = "acme")]
+#[test]
 fn acme_challenge_checks() {
     let report = check_str("port = 443\n[acme]\ndomains = [\"example.com\"]\nemail = \"a@example.com\"\nchallenge = \"tls-alpn-01\"\n");
     assert!(report.is_ok(), "{:?}", report);

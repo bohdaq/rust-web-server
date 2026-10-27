@@ -90,6 +90,8 @@ Continue the pattern (`_2_`, `_3_`, …) for as many domains as needed. The
 | `RWS_CONFIG_ACME_DNS_TSIG_ALGORITHM` | `hmac-sha256` | DNS-01 `rfc2136`: `hmac-sha256` or `hmac-sha512`. |
 | `RWS_CONFIG_ACME_DNS_EXEC` | `` (empty) | DNS-01 `exec`: run as `<program> present <fqdn> <value>` and `<program> cleanup <fqdn> <value>`. |
 | `RWS_CONFIG_ACME_DNS_PROPAGATION_SECS` | `120` | DNS-01: how long to wait for the record to be visible before the CA checks it. |
+| `RWS_CONFIG_ACME_ON_DEMAND` | `false` | `true`: order a certificate at the first TLS handshake for a name `RWS_CONFIG_ACME_ON_DEMAND_ASK` allows. Since 18.4.0. See [On-demand TLS](/features/acme/#on-demand-tls). |
+| `RWS_CONFIG_ACME_ON_DEMAND_ASK` | `` (empty) | URL asked `?domain=<name>` before each on-demand order; a 2xx answer allows it. Required with `RWS_CONFIG_ACME_ON_DEMAND`. |
 | `RWS_CONFIG_ACME_REDIS` | `` (empty) | Redis `host:port` shared by replicas: one orders each certificate, all install it, and any answers the CA's challenges. Since 18.4.0. See [Several replicas](/features/acme/#several-replicas). |
 | `RWS_CONFIG_ACME_REDIS_PASSWORD` | `` (empty) | Password for `RWS_CONFIG_ACME_REDIS`. No command-line flag; never printed. |
 | `RWS_CONFIG_ACME_REDIS_PREFIX` | `rws:acme` | Key prefix in that Redis, for several sites in one. |
