@@ -55,7 +55,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 The ServiceAccount name to use.
 */}}
 {{- define "rws.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create }}
+{{- if or .Values.serviceAccount.create .Values.gatewayAPI.enabled }}
 {{- default (include "rws.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}

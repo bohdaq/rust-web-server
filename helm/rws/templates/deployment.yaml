@@ -69,6 +69,26 @@ spec:
             - name: RWS_CONFIG_TLS_KEY_FILE
               value: {{ .Values.tls.keyPath | quote }}
             {{- end }}
+            {{- if .Values.gatewayAPI.enabled }}
+            - name: RWS_CONFIG_GATEWAY_API_ENABLED
+              value: "true"
+            - name: RWS_CONFIG_GATEWAY_API_CONTROLLER_NAME
+              value: {{ .Values.gatewayAPI.controllerName | quote }}
+            - name: RWS_CONFIG_GATEWAY_API_POD_SELECTOR
+              value: {{ printf "app.kubernetes.io/name=%s,app.kubernetes.io/instance=%s" (include "rws.name" .) .Release.Name | quote }}
+            - name: RWS_CONFIG_GATEWAY_API_PORT_RANGE
+              value: {{ .Values.gatewayAPI.portRange | quote }}
+            - name: RWS_CONFIG_GATEWAY_API_SERVICE_TYPE
+              value: {{ .Values.gatewayAPI.serviceType | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

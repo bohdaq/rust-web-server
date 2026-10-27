@@ -29,6 +29,7 @@ jobs:
           }
           check
           check --set tls.enabled=false --set quic.enabled=false
+          check --set gatewayAPI.enabled=true --set tls.enabled=false
           check --set ingress.enabled=true --set metrics.serviceMonitor.enabled=true \
                 --set autoscaling.enabled=true --set autoscaling.customMetric.enabled=true
           check --set tls.enabled=false --set ingress.enabled=true --set ingress.className=nginx \

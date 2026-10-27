@@ -94,6 +94,21 @@ tls:
 quic:
   enabled: true
 
+# Kubernetes Gateway API controller — needs an image built with the
+# `gateway-api` feature and the Gateway API CRDs (standard channel, v1.6)
+# installed; see docs/deployment/kubernetes-gateway-api.md. Creates the
+# GatewayClass, a ServiceAccount (whatever serviceAccount.create says) and
+# the RBAC the controller needs. Every Gateway gets its own Service.
+gatewayAPI:
+  enabled: false
+  className: rws
+  controllerName: rws8.tech/gateway-controller
+  # Container ports for Gateway listeners (each Gateway Service maps a
+  # listener port to one of these).
+  portRange: "10000-10999"
+  # Type of each Gateway's Service.
+  serviceType: LoadBalancer
+
 service:
   type: ClusterIP
   # Port "https" when tls.enabled, else port "http".

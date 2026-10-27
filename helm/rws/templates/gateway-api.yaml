@@ -1,0 +1,79 @@
+{{- if .Values.gatewayAPI.enabled }}
+{{- /*
+Kubernetes Gateway API controller (gateway-api build feature): the
+GatewayClass, and the permissions the controller needs. The Gateway API CRDs
+(standard channel, v1.6) must already be installed in the cluster.
+*/}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ .Values.gatewayAPI.className }}
+  labels:
+    {{- include "rws.labels" . | nindent 4 }}
+spec:
+  controllerName: {{ .Values.gatewayAPI.controllerName }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "rws.fullname" . }}-gateway
+  labels:
+    {{- include "rws.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gatewayclasses", "gateways", "httproutes", "grpcroutes", "tlsroutes", "tcproutes", "udproutes", "referencegrants", "backendtlspolicies", "listenersets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gatewayclasses/status", "gateways/status", "httproutes/status", "grpcroutes/status", "tlsroutes/status", "tcproutes/status", "udproutes/status", "backendtlspolicies/status", "listenersets/status"]
+    verbs: ["patch", "update"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["namespaces", "secrets", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "rws.fullname" . }}-gateway
+  labels:
+    {{- include "rws.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "rws.fullname" . }}-gateway
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "rws.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "rws.fullname" . }}-gateway-lease
+  labels:
+    {{- include "rws.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "create", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "rws.fullname" . }}-gateway-lease
+  labels:
+    {{- include "rws.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "rws.fullname" . }}-gateway-lease
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "rws.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
