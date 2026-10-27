@@ -418,7 +418,9 @@ fn check_acme_dns<'a>(get: &dyn Fn(&str) -> Option<&'a str>, report: &mut Config
             Some(_) => {}
         },
         Some("cloudflare") => {
-            if set(Config::RWS_CONFIG_ACME_DNS_API_TOKEN).is_none() {
+            // Usually kept out of the file, in the environment.
+            let in_env = std::env::var(Config::RWS_CONFIG_ACME_DNS_API_TOKEN).is_ok_and(|v| !v.trim().is_empty());
+            if set(Config::RWS_CONFIG_ACME_DNS_API_TOKEN).is_none() && !in_env {
                 report.error("[acme] dns_provider = \"cloudflare\" needs dns_api_token (an API token with DNS edit permission; or RWS_CONFIG_ACME_DNS_API_TOKEN)");
             }
             check_api_url(set(Config::RWS_CONFIG_ACME_DNS_API_URL), report);

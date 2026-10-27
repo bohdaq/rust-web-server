@@ -337,7 +337,15 @@ fn acme_challenge_checks() {
     let report = dns("dns_provider = \"rfc2136\"\ndns_server = \"ns1.example.com:5353\"\ndns_tsig_key = \"k\"\ndns_tsig_secret = \"c2VjcmV0\"\n");
     assert!(report.errors.is_empty(), "a wildcard with DNS-01 is fine: {:?}", report.errors);
 
-    assert!(has(&dns("dns_provider = \"cloudflare\"\n").errors, "needs dns_api_token"));
+    {
+        let _g = crate::test_env::lock();
+        std::env::remove_var("RWS_CONFIG_ACME_DNS_API_TOKEN");
+        assert!(has(&dns("dns_provider = \"cloudflare\"\n").errors, "needs dns_api_token"));
+        std::env::set_var("RWS_CONFIG_ACME_DNS_API_TOKEN", "from-env");
+        let report = dns("dns_provider = \"cloudflare\"\n");
+        std::env::remove_var("RWS_CONFIG_ACME_DNS_API_TOKEN");
+        assert!(report.errors.is_empty(), "a token in the environment counts: {:?}", report.errors);
+    }
     let report = dns("dns_provider = \"cloudflare\"\ndns_api_token = \"t\"\ndns_api_url = \"api.example\"\n");
     assert!(has(&report.errors, "dns_api_url"), "{:?}", report.errors);
     let report = dns("dns_provider = \"cloudflare\"\ndns_api_token = \"t\"\ndns_zone_id = \"abc\"\n");
