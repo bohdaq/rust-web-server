@@ -5,13 +5,13 @@ description: How to install rust-web-server as a library crate, as a standalone 
 
 ## Requirements
 
-**Minimum Supported Rust Version (MSRV): 1.88**
+**Minimum Supported Rust Version (MSRV): 1.99**
 
 Install or update Rust via [rustup](https://rustup.rs/):
 
 ```bash
 rustup update stable
-rustc --version   # should print 1.88.0 or newer
+rustc --version   # should print 1.99.0 or newer
 ```
 
 ## As a library crate
@@ -53,7 +53,7 @@ Every release ships prebuilt binaries, so no Rust toolchain is needed:
 | apt / dnf | `sudo apt install rws`, `sudo dnf install rws` after adding the repository — [systemd: install from a package](/deployment/systemd/#install-from-a-package); installs and starts the `rws` service (since 18.2.0) | Debian, Ubuntu, Fedora, RHEL and derivatives (x86_64, arm64) |
 | Docker | `docker run -p 7878:7878 -v "$PWD:/srv" bohdaq/rws` (also `ghcr.io/bohdaq/rws`) | linux/amd64, linux/arm64 |
 | Download | [GitHub Releases](https://github.com/bohdaq/rust-web-server/releases/latest) | `x86_64`/`aarch64-unknown-linux-musl`, `x86_64`/`aarch64-apple-darwin`, `x86_64-pc-windows-msvc` |
-| From source | `cargo install rust-web-server` | anywhere Rust 1.88+ runs |
+| From source | `cargo install rust-web-server` | anywhere Rust 1.99+ runs |
 
 On Windows, `rws.exe` also runs as a Windows service — see [Windows](/deployment/windows/).
 

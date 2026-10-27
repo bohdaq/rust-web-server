@@ -57,7 +57,7 @@ Build `rws` with `--features "acme auth"` first for the ACME script. Pebble: `gh
 
 Tests that write files use `crate::test_env::TempPath::new(name)` — it deletes the file/dir on drop, even when an assertion fails — never a bare path under `temp_dir()`.
 
-MSRV is 1.88 (the highest `rust-version` among current dependencies across all features — tokio needs 1.85, `time`/`icu` via sqlx/tera need 1.88). CI checks it with the `msrv` job in `.github/workflows/ci.yml`; raise `rust-version` there and in `Cargo.toml` together.
+MSRV is 1.99, the latest stable at the time (raised from 1.88 for 18.8.0, the user's call: kube 4.2 and its tree need 1.89+; keep it at a stable release at least two weeks old). CI checks it with the `msrv` job in `.github/workflows/ci.yml`; raise `rust-version` there and in `Cargo.toml` together.
 
 ## Required for every change
 
@@ -366,7 +366,7 @@ When built with the `http3` feature (which implies `http2`), a second listener s
 
 ### Kubernetes Gateway API controller (`gateway-api` feature, 18.8.0, #19, in progress)
 
-Plan, decisions and a status table per phase: `spec/GATEWAY_API.md` — update it as each phase lands. `src/gateway_api/`: `types` (serde structs for the v1.6 fields rws reads, read as `kube::core::Object<Spec, Status>` via `resources`' `ApiResource`s — not the `gateway-api` crate, which needs Rust 1.92), `translate` (pure: `Snapshot` → `GatewayConfig` + `Desired` status; conditions keep `lastTransitionTime` while the status holds and carry `observedGeneration`; a Gateway's address is its own Service's load-balancer ingress — every Gateway gets its own Service, found by `gateway.networking.k8s.io/gateway-name` + `app.kubernetes.io/managed-by: rws-gateway`), `controller` (a kube-runtime watcher + store per kind, debounced `reconcile`, status by JSON merge patch only when it differs; route `status.parents` keeps other controllers' entries and is sent with the `resourceVersion`). Tests: `translate/tests.rs` against the suite's manifests in `testdata/` (v1.6.3, Apache-2.0, converted to JSON), `controller/tests.rs` against a fake API server (`kube::Client::new` over a `tower::service_fn`). kube is `~4.0` (4.2 needs Rust 1.89) and Cargo.lock pins `enum-ordinalize`/`-derive` 4.3.2 (4.4 needs 1.89) — don't `cargo update` them past the MSRV.
+Plan, decisions and a status table per phase: `spec/GATEWAY_API.md` — update it as each phase lands. `src/gateway_api/`: `types` (serde structs for the v1.6 fields rws reads, read as `kube::core::Object<Spec, Status>` via `resources`' `ApiResource`s — not the `gateway-api` crate, which needs Rust 1.92), `translate` (pure: `Snapshot` → `GatewayConfig` + `Desired` status; conditions keep `lastTransitionTime` while the status holds and carry `observedGeneration`; a Gateway's address is its own Service's load-balancer ingress — every Gateway gets its own Service, found by `gateway.networking.k8s.io/gateway-name` + `app.kubernetes.io/managed-by: rws-gateway`), `controller` (a kube-runtime watcher + store per kind, debounced `reconcile`, status by JSON merge patch only when it differs; route `status.parents` keeps other controllers' entries and is sent with the `resourceVersion`). Tests: `translate/tests.rs` against the suite's manifests in `testdata/` (v1.6.3, Apache-2.0, converted to JSON), `controller/tests.rs` against a fake API server (`kube::Client::new` over a `tower::service_fn`). kube is 4.2 (the MSRV went to 1.99 for it).
 
 ### Starters and the agent pack (18.7.0, #42)
 

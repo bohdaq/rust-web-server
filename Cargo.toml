@@ -6,7 +6,7 @@ repository = "https://github.com/bohdaq/rust-web-server"
 homepage = "https://rws8.tech/"
 description = "Single-binary web server and reverse proxy: automatic HTTPS (Let's Encrypt), HTTP/1.1, HTTP/2 and HTTP/3, load balancing, auth and rate limiting, configured in one TOML file. Also a Rust library: routing, middleware, MCP server, ORM, background jobs. No hyper, no Tower; HTTP/2 and HTTP/3 framing via h2 and quinn."
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.99"
 license = "MIT"
 keywords = ["web-server", "reverse-proxy", "https", "http3", "acme"]
 categories = ["network-programming", "web-programming::http-server"]
@@ -141,9 +141,9 @@ storage-azure = ["dep:hmac", "dep:sha2", "http-client"]  # AzureBlobStorage; Sha
 # nothing in the default build changes.
 tower = ["http2", "dep:tower-service", "dep:tower-layer", "dep:http-body", "dep:http-body-util"]
 # Kubernetes Gateway API controller (18.8.0, #19, spec/GATEWAY_API.md): kube-rs
-# on the aws-lc-rs provider (one rustls provider, as everywhere), kube 4.0 —
-# the last line on MSRV 1.88 — and k8s-openapi pinned to the oldest
-# Kubernetes it supports, for the widest range of clusters.
+# on the aws-lc-rs provider (one rustls provider, as everywhere), and
+# k8s-openapi pinned to the oldest Kubernetes it supports, for the widest
+# range of clusters.
 gateway-api = ["http2", "serde", "dep:kube", "dep:k8s-openapi", "dep:futures-util"]
 openapi = []  # AppWithState::openapi() / AsyncAppWithState::openapi(); no new deps
 webhook = ["dep:hmac", "dep:sha2"]  # verify_webhook_signature: GitHub, Shopify, Stripe
@@ -170,7 +170,7 @@ tower-service = { version = "0.3.3", optional = true }
 tower-layer = { version = "0.3.3", optional = true }
 http-body = { version = "1.1", optional = true }
 http-body-util = { version = "0.1.5", optional = true }
-kube = { version = "~4.0", default-features = false, features = ["client", "runtime", "rustls-tls", "aws-lc-rs"], optional = true }
+kube = { version = "4.2", default-features = false, features = ["client", "runtime", "rustls-tls", "aws-lc-rs"], optional = true }
 k8s-openapi = { version = "0.28", default-features = false, features = ["v1_32", "std"], optional = true }
 futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
 # Not quinn's default "rustls-ring": two rustls crypto providers in one build

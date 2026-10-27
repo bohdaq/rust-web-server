@@ -17,6 +17,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   routes, reference resolution), tested against the conformance suite's own
   manifests and a fake API server. Not yet serving traffic.
 
+### Changed
+
+- The minimum supported Rust version is 1.99 (was 1.88): kube 4.2, under the
+  `gateway-api` feature, and its dependencies need 1.89+, and the project
+  now tracks the latest stable release.
+
 ## 18.7.0 — 2026-10-27
 
 ### Added

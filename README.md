@@ -4,7 +4,7 @@
 [![Crates.io](https://img.shields.io/crates/v/rust-web-server.svg)](https://crates.io/crates/rust-web-server)
 [![docs.rs](https://docs.rs/rust-web-server/badge.svg)](https://docs.rs/rust-web-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![MSRV: 1.88](https://img.shields.io/badge/rust-1.88%2B-blue.svg)](https://www.rust-lang.org)
+[![MSRV: 1.99](https://img.shields.io/badge/rust-1.99%2B-blue.svg)](https://www.rust-lang.org)
 
 **A single-binary web server and reverse proxy, written in Rust.** Automatic HTTPS from Let's Encrypt, HTTP/3, load balancing with health checks, auth and rate limiting — configured in one TOML file, no code required. When you outgrow configuration, the same engine is a Rust library.
 
@@ -183,7 +183,7 @@ see the [MCP server](https://rws8.tech/mcp/overview/).
 ```bash
 git clone https://github.com/bohdaq/rust-web-server.git
 cd rust-web-server
-cargo build --release      # target/release/rws; MSRV 1.88
+cargo build --release      # target/release/rws; MSRV 1.99
 ```
 
 `--no-default-features --features http2` drops HTTP/3; `--features http1`

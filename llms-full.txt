@@ -365,13 +365,13 @@ The library's own conventions for agents working **on** the crate (rather than w
 
 ## Requirements
 
-**Minimum Supported Rust Version (MSRV): 1.88**
+**Minimum Supported Rust Version (MSRV): 1.99**
 
 Install or update Rust via [rustup](https://rustup.rs/):
 
 ```bash
 rustup update stable
-rustc --version   # should print 1.88.0 or newer
+rustc --version   # should print 1.99.0 or newer
 ```
 
 ## As a library crate
@@ -413,7 +413,7 @@ Every release ships prebuilt binaries, so no Rust toolchain is needed:
 | apt / dnf | `sudo apt install rws`, `sudo dnf install rws` after adding the repository — [systemd: install from a package](/deployment/systemd/#install-from-a-package); installs and starts the `rws` service (since 18.2.0) | Debian, Ubuntu, Fedora, RHEL and derivatives (x86_64, arm64) |
 | Docker | `docker run -p 7878:7878 -v "$PWD:/srv" bohdaq/rws` (also `ghcr.io/bohdaq/rws`) | linux/amd64, linux/arm64 |
 | Download | [GitHub Releases](https://github.com/bohdaq/rust-web-server/releases/latest) | `x86_64`/`aarch64-unknown-linux-musl`, `x86_64`/`aarch64-apple-darwin`, `x86_64-pc-windows-msvc` |
-| From source | `cargo install rust-web-server` | anywhere Rust 1.88+ runs |
+| From source | `cargo install rust-web-server` | anywhere Rust 1.99+ runs |
 
 On Windows, `rws.exe` also runs as a Windows service — see [Windows](/deployment/windows/).
 
@@ -17809,11 +17809,11 @@ Build your own image with the Dockerfile below if you need non-default Cargo fea
 
 ## Multi-stage Dockerfile
 
-The recommended Dockerfile uses a two-stage build: a `rust:1.88` builder compiles the binary, then a slim Debian image carries only the final executable.
+The recommended Dockerfile uses a two-stage build: a `rust:1.99` builder compiles the binary, then a slim Debian image carries only the final executable.
 
 ```dockerfile
 # ── Stage 1: build ────────────────────────────────────────────────────────────
-FROM rust:1.88 AS builder
+FROM rust:1.99 AS builder
 WORKDIR /app
 
 # Cache dependencies before copying source.
@@ -19420,9 +19420,9 @@ sudo pacman -S base-devel                   # Arch
 
 Stale build artifacts from another toolchain: `cargo clean && cargo build`.
 
-### `error: package … requires rustc 1.88`
+### `error: package … requires rustc 1.99`
 
-The minimum supported Rust version is 1.88: `rustup update stable`.
+The minimum supported Rust version is 1.99: `rustup update stable`.
 
 ### `failed open - '…/FETCH_HEAD' is locked: Permission denied`
 

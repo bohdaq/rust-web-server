@@ -3,10 +3,10 @@ name = "rws-wasm-shim"
 version = "0.1.0"
 authors = ["Bohdan Tsap <bohdan.tsap@tutanota.com>"]
 edition = "2021"
-# wasm32-wasip2 reached Rust Tier 2 in 1.82; the main crate's own 1.88 MSRV
+# wasm32-wasip2 reached Rust Tier 2 in 1.82; the main crate's own 1.99 MSRV
 # is the binding floor. This package is only ever built for that target; see
 # spec/WASM_SHIM.md for the full plan this implements (Foundation + Phase 1).
-rust-version = "1.88"
+rust-version = "1.99"
 license = "MIT"
 description = "wasi:http/proxy guest adapter that runs rust-web-server's Application/Request/Response inside a WASM component (Wasmtime, Spin, Fastly Compute)"
 publish = false

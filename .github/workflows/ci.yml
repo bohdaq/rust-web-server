@@ -39,11 +39,11 @@ jobs:
       - run: cargo test ${{ matrix.args }}
 
   msrv:
-    name: msrv (1.88, all features)
+    name: msrv (1.99, all features)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.88
+      - uses: dtolnay/rust-toolchain@1.99
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --all-features
 

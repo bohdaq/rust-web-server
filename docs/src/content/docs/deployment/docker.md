@@ -38,11 +38,11 @@ Build your own image with the Dockerfile below if you need non-default Cargo fea
 
 ## Multi-stage Dockerfile
 
-The recommended Dockerfile uses a two-stage build: a `rust:1.88` builder compiles the binary, then a slim Debian image carries only the final executable.
+The recommended Dockerfile uses a two-stage build: a `rust:1.99` builder compiles the binary, then a slim Debian image carries only the final executable.
 
 ```dockerfile
 # ── Stage 1: build ────────────────────────────────────────────────────────────
-FROM rust:1.88 AS builder
+FROM rust:1.99 AS builder
 WORKDIR /app
 
 # Cache dependencies before copying source.

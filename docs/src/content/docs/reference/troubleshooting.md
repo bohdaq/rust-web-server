@@ -145,9 +145,9 @@ sudo pacman -S base-devel                   # Arch
 
 Stale build artifacts from another toolchain: `cargo clean && cargo build`.
 
-### `error: package … requires rustc 1.88`
+### `error: package … requires rustc 1.99`
 
-The minimum supported Rust version is 1.88: `rustup update stable`.
+The minimum supported Rust version is 1.99: `rustup update stable`.
 
 ### `failed open - '…/FETCH_HEAD' is locked: Permission denied`
 
