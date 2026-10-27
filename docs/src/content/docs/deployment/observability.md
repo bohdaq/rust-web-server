@@ -51,6 +51,29 @@ Wire `ReverseProxy::with_circuit_breaker(Arc::new(circuit_breaker::global()))` t
 
 Config-file proxies export `rws_upstream_requests_total`, `rws_upstream_request_duration_seconds`, `rws_upstream_retries_total`, `rws_upstream_backend_up` and `rws_upstream_circuit_breaker_state` per `upstream` and `backend` — see [Upstream metrics](/features/metrics/#upstream-metrics).
 
+### OTLP metrics export
+
+`http.server.request.duration` can also be pushed to an OpenTelemetry Collector (or any OTLP/HTTP endpoint: Grafana Cloud, Honeycomb, Datadog's OTLP intake) — the same data `/metrics` serves, so the two never disagree. The `rws` binary starts the exporter when an endpoint is set:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # metrics go to /v1/metrics, spans to /v1/traces
+export OTEL_SERVICE_NAME=edge-1                                   # default rws
+export OTEL_METRIC_EXPORT_INTERVAL=15000                          # ms, default 60000
+export OTEL_EXPORTER_OTLP_HEADERS="api-key=secret"               # optional, key=value,…
+rws
+```
+
+| Variable | Meaning |
+|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Collector base URL; `/v1/metrics` and `/v1/traces` are appended |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | Full metrics URL, used as is (wins over the base) |
+| `OTEL_METRIC_EXPORT_INTERVAL` | Milliseconds between exports (default `60000`) |
+| `OTEL_METRICS_EXPORTER` | `none` turns metrics export off |
+| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_METRICS_HEADERS` | Request headers, `key=value` pairs separated by commas (values percent-decoded) |
+| `OTEL_SERVICE_NAME` | `service.name` resource attribute |
+
+Each export is an OTLP/HTTP JSON `ExportMetricsServiceRequest` with cumulative temporality and the convention's explicit buckets, attributes `http.request.method`, `http.response.status_code`, `url.scheme`, `network.protocol.name` and `network.protocol.version`. A last export is sent on SIGTERM/SIGINT. From Rust: `otel::metrics::start(MetricsExportConfig { .. })` or `otel::metrics::start_from_env()`, and `otel::shutdown()` before exit.
+
 ### Grafana / PromQL queries
 
 ```promql
@@ -190,6 +213,8 @@ let app = App::new().wrap(OtelLayer);
 ```
 
 The layer reads the incoming `traceparent` header, creates a span for each request (a child of the caller's span when one was sent), and exports completed spans to the configured OTLP endpoint. Start nested spans inside a request with `otel::span(name)` / `otel::client_span(name)` — see [Distributed Tracing](/features/tracing/#child-spans).
+
+The `rws` binary adds `OtelLayer` and exports spans by itself when `OTEL_EXPORTER_OTLP_ENDPOINT` is set — see [Environment variable setup](/features/tracing/#environment-variable-setup).
 
 ### Supported backends
 

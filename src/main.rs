@@ -117,12 +117,42 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
         Served::Mcp(rws_mcp_tools(mcp, registered_routes, cache2, cache3))
     };
 
-    // 5. Outermost — for /mcp as well: access log, IP blocklist, global
-    //    rate limit.
-    rust_web_server::middleware::WithMiddleware::new(served)
+    // 5. Outermost — for /mcp as well: tracing (when configured), access
+    //    log, IP blocklist, global rate limit.
+    traced(rust_web_server::middleware::WithMiddleware::new(served))
         .wrap(LogLayer)
         .wrap(BlocklistLayer)
         .wrap(GlobalRateLimit::from_env())
+}
+
+/// Whether requests are traced: `OTEL_EXPORTER_OTLP_ENDPOINT` (or the
+/// traces one) set and `OTEL_TRACES_EXPORTER` not `none` — see [`telemetry`].
+static TRACING: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+/// Start OpenTelemetry export as the environment asks: metrics
+/// (`http.server.request.duration`) and traces, each to its OTLP endpoint.
+/// Nothing is exported, and no layer added, without an endpoint.
+fn telemetry() {
+    if rust_web_server::otel::metrics::start_from_env() {
+        println!("OTLP metrics export on.");
+    }
+    let tracing = rust_web_server::otel::traces_configured();
+    if tracing {
+        rust_web_server::otel::setup_from_env();
+        println!("OTLP trace export on.");
+    }
+    let _ = TRACING.set(tracing);
+}
+
+/// `app` with `OtelLayer` outermost when tracing is on.
+fn traced<A: rust_web_server::application::Application>(
+    app: rust_web_server::middleware::WithMiddleware<A>,
+) -> rust_web_server::middleware::WithMiddleware<A> {
+    if TRACING.get().copied().unwrap_or(false) {
+        app.wrap(rust_web_server::otel::OtelLayer)
+    } else {
+        app
+    }
 }
 
 /// Either the MCP server (with the app behind it) or the app alone.
@@ -586,15 +616,17 @@ fn main() {
     let (listener, pool) = Server::setup().expect("server setup failed");
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
     rust_web_server::config_watch::start();
+    telemetry();
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
-        let proxy_app = rust_web_server::middleware::WithMiddleware::new(proxy_app).wrap(GlobalRateLimit::from_env());
+        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(GlobalRateLimit::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
         Server::run(listener, pool, proxy_app);
-        return;
+    } else {
+        SERVER_READY.store(true, Ordering::SeqCst);
+        Server::run(listener, pool, build_app());
     }
-    SERVER_READY.store(true, Ordering::SeqCst);
-    Server::run(listener, pool, build_app());
+    rust_web_server::otel::shutdown();
 }
 
 /// The server: everything `main` runs once the runtime is up.
@@ -604,24 +636,26 @@ async fn serve() {
     let (listener, pool) = Server::setup().expect("server setup failed");
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
     rust_web_server::config_watch::start();
+    telemetry();
 
     start_acme(Some(&listener)).await;
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
-        let proxy_app = rust_web_server::middleware::WithMiddleware::new(proxy_app).wrap(GlobalRateLimit::from_env());
+        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(GlobalRateLimit::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
         tokio::join!(
             Server::run_tls(listener, pool, proxy_app.clone()),
             Server::run_redirect(),
         );
-        return;
+    } else {
+        SERVER_READY.store(true, Ordering::SeqCst);
+        tokio::join!(
+            Server::run_tls(listener, pool, build_app()),
+            Server::run_redirect(),
+        );
     }
-    SERVER_READY.store(true, Ordering::SeqCst);
-    tokio::join!(
-        Server::run_tls(listener, pool, build_app()),
-        Server::run_redirect(),
-    );
+    let _ = tokio::task::spawn_blocking(rust_web_server::otel::shutdown).await;
 }
 
 /// The server: everything `main` runs once the runtime is up.
@@ -631,26 +665,30 @@ async fn serve() {
     let (listener, pool) = Server::setup().expect("server setup failed");
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
     rust_web_server::config_watch::start();
+    telemetry();
 
     start_acme(Some(&listener)).await;
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
-        let proxy_app = rust_web_server::middleware::WithMiddleware::new(proxy_app).wrap(GlobalRateLimit::from_env());
+        let proxy_app = traced(rust_web_server::middleware::WithMiddleware::new(proxy_app)).wrap(GlobalRateLimit::from_env());
         SERVER_READY.store(true, Ordering::SeqCst);
         tokio::join!(
             Server::run_tls(listener, pool, proxy_app.clone()),
             Server::run_quic(proxy_app),
             Server::run_redirect(),
         );
-        return;
+    } else {
+        SERVER_READY.store(true, Ordering::SeqCst);
+        tokio::join!(
+            Server::run_tls(listener, pool, build_app()),
+            Server::run_quic(build_app()),
+            Server::run_redirect(),
+        );
     }
-    SERVER_READY.store(true, Ordering::SeqCst);
-    tokio::join!(
-        Server::run_tls(listener, pool, build_app()),
-        Server::run_quic(build_app()),
-        Server::run_redirect(),
-    );
+    // Last metrics and spans out before the process ends; blocking, so off
+    // the runtime's workers.
+    let _ = tokio::task::spawn_blocking(rust_web_server::otel::shutdown).await;
 }
 
 /// A multi-threaded tokio runtime, as `#[tokio::main]` builds one.

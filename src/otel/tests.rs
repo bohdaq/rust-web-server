@@ -604,3 +604,36 @@ fn setup_with_exporter_is_callable_and_does_not_panic() {
         Box::new(crate::otel::CapturingExporter::new()),
     );
 }
+
+// ── OTLP endpoints and headers ───────────────────────────────────────────────
+
+#[test]
+fn trace_endpoints_get_the_traces_path() {
+    use crate::otel::OtlpHttpExporter;
+    assert_eq!("http://c:4318/v1/traces", OtlpHttpExporter::new("http://c:4318", "s", "1").url());
+    assert_eq!("https://c/v1/traces", OtlpHttpExporter::new("https://c/", "s", "1").url());
+    assert_eq!("https://c/otlp/v1/traces", OtlpHttpExporter::new("https://c/otlp/v1/traces", "s", "1").url());
+    assert_eq!("http://c:4318/v1/traces", OtlpHttpExporter::new("c:4318", "s", "1").url());
+}
+
+#[test]
+fn otlp_headers_are_parsed_and_decoded() {
+    assert_eq!(
+        vec![("api-key".to_string(), "a b".to_string()), ("x".to_string(), "1=2".to_string())],
+        crate::otel::parse_headers(" api-key = a%20b ,x=1=2,=nokey,novalue"),
+    );
+}
+
+#[test]
+fn span_json_escapes_names_and_attributes() {
+    use crate::otel::OtlpHttpExporter;
+    let exp = OtlpHttpExporter::new("http://localhost:4318", "svc", "1.0");
+    let span = crate::otel::SpanData {
+        name: "GET /a\"b".to_string(),
+        attributes: vec![("k\"".to_string(), AttributeValue::String("v\"\n".to_string()))],
+        ..crate::otel::SpanData::default()
+    };
+    let body = exp.build_body(&[span]);
+    assert!(body.contains(r#""name":"GET /a\"b""#), "{body}");
+    assert!(body.contains(r#"{"key":"k\"","value":{"stringValue":"v\"\n"}}"#), "{body}");
+}

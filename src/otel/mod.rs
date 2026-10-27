@@ -54,14 +54,15 @@
 #[cfg(test)]
 mod tests;
 
+pub mod metrics;
+
 use std::cell::{Cell, RefCell};
-use std::io::{Read, Write};
-use std::net::TcpStream;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::application::Application;
+use crate::mcp::json_escape;
 use crate::middleware::Middleware;
 use crate::request::Request;
 use crate::response::Response;
@@ -502,7 +503,7 @@ pub trait Exporter: Send + Sync {
 /// `Int` is string-encoded per the OTLP JSON mapping for `int64`.
 fn attr_value_json(v: &AttributeValue) -> String {
     match v {
-        AttributeValue::String(s) => format!("{{\"stringValue\":\"{s}\"}}"),
+        AttributeValue::String(s) => format!("{{\"stringValue\":\"{}\"}}", json_escape(s)),
         AttributeValue::Int(i) => format!("{{\"intValue\":\"{i}\"}}"),
         AttributeValue::Float(f) => format!("{{\"doubleValue\":{f}}}"),
         AttributeValue::Bool(b) => format!("{{\"boolValue\":{b}}}"),
@@ -511,7 +512,7 @@ fn attr_value_json(v: &AttributeValue) -> String {
 
 /// Renders one `(key, value)` pair as an OTLP `KeyValue` JSON object.
 fn attr_json(key: &str, value: &AttributeValue) -> String {
-    format!("{{\"key\":\"{key}\",\"value\":{}}}", attr_value_json(value))
+    format!("{{\"key\":\"{}\",\"value\":{}}}", json_escape(key), attr_value_json(value))
 }
 
 /// Print one JSON line per span to stdout. Useful for development and for
@@ -561,32 +562,42 @@ impl Exporter for StdoutExporter {
 /// Compatible with Jaeger ≥ 1.35, Grafana Tempo, and OpenTelemetry Collector.
 /// Point at `http://localhost:4318` (the default OTLP HTTP port).
 pub struct OtlpHttpExporter {
-    host: String,
-    port: u16,
-    timeout: Duration,
+    url: String,
+    headers: Vec<(String, String)>,
     service_name: String,
     service_version: String,
 }
 
 impl OtlpHttpExporter {
+    /// `endpoint` is the collector's base URL (`http://localhost:4318`, spans
+    /// go to `/v1/traces` under it) or the full traces URL ending in
+    /// `/v1/traces`. `https://` works too.
     pub fn new(endpoint: &str, service_name: &str, service_version: &str) -> Self {
-        // Parse "http://host:port" or "host:port"
-        let stripped = endpoint
-            .trim_start_matches("http://")
-            .trim_start_matches("https://");
-        let (host, port) = if let Some(i) = stripped.rfind(':') {
-            let p = stripped[i + 1..].parse().unwrap_or(4318);
-            (stripped[..i].to_string(), p)
+        let endpoint = endpoint.trim_end_matches('/');
+        let url = if endpoint.ends_with("/v1/traces") {
+            endpoint.to_string()
+        } else if endpoint.contains("://") {
+            format!("{endpoint}/v1/traces")
         } else {
-            (stripped.to_string(), 4318)
+            format!("http://{endpoint}/v1/traces")
         };
         OtlpHttpExporter {
-            host,
-            port,
-            timeout: Duration::from_secs(5),
+            url,
+            headers: Vec::new(),
             service_name: service_name.to_string(),
             service_version: service_version.to_string(),
         }
+    }
+
+    /// Send these headers with every export (an API key, for instance).
+    pub fn with_headers(mut self, headers: Vec<(String, String)>) -> Self {
+        self.headers = headers;
+        self
+    }
+
+    /// The URL spans are POSTed to.
+    pub fn url(&self) -> &str {
+        &self.url
     }
 
     pub fn build_body(&self, spans: &[SpanData]) -> String {
@@ -599,8 +610,8 @@ impl OtlpHttpExporter {
 
             let mut attrs: Vec<String> = Vec::new();
             if !s.http_method.is_empty() {
-                attrs.push(format!("{{\"key\":\"http.method\",\"value\":{{\"stringValue\":\"{}\"}} }}", s.http_method));
-                attrs.push(format!("{{\"key\":\"http.target\",\"value\":{{\"stringValue\":\"{}\"}} }}", s.http_target));
+                attrs.push(format!("{{\"key\":\"http.method\",\"value\":{{\"stringValue\":\"{}\"}} }}", json_escape(&s.http_method)));
+                attrs.push(format!("{{\"key\":\"http.target\",\"value\":{{\"stringValue\":\"{}\"}} }}", json_escape(&s.http_target)));
                 attrs.push(format!("{{\"key\":\"http.status_code\",\"value\":{{\"intValue\":\"{}\"}} }}", s.http_status));
             }
             attrs.extend(s.attributes.iter().map(|(k, v)| attr_json(k, v)));
@@ -613,7 +624,7 @@ impl OtlpHttpExporter {
                  \"status\":{{\"code\":{scode},\"message\":\"{smsg}\"}} }}",
                 trace = hex16(&s.trace_id),
                 span  = hex8(&s.span_id),
-                name  = s.name,
+                name  = json_escape(&s.name),
                 kind  = s.kind as i32,
                 start = s.start_ns,
                 end   = s.end_ns,
@@ -628,38 +639,22 @@ impl OtlpHttpExporter {
                {{\"key\":\"service.name\",\"value\":{{\"stringValue\":\"{svc}\"}} }},\
                {{\"key\":\"service.version\",\"value\":{{\"stringValue\":\"{ver}\"}} }}\
              ]}},\"scopeSpans\":[{{\"scope\":{{\"name\":\"rws\"}},\"spans\":[{spans}]}}]}}]}}",
-            svc   = self.service_name,
-            ver   = self.service_version,
+            svc   = json_escape(&self.service_name),
+            ver   = json_escape(&self.service_version),
             spans = span_jsons.join(","),
         )
     }
 
     fn post(&self, body: &str) {
-        use std::net::ToSocketAddrs;
-        let addr = format!("{}:{}", self.host, self.port);
-        let Some(socket_addr) = addr.to_socket_addrs().ok().and_then(|mut i| i.next()) else {
-            return;
-        };
-        let Ok(mut stream) = TcpStream::connect_timeout(&socket_addr, self.timeout) else {
-            return;
-        };
-        let _ = stream.set_write_timeout(Some(self.timeout));
-        let _ = stream.set_read_timeout(Some(self.timeout));
-        let request = format!(
-            "POST /v1/traces HTTP/1.1\r\n\
-             Host: {host}:{port}\r\n\
-             Content-Type: application/json\r\n\
-             Content-Length: {len}\r\n\
-             Connection: close\r\n\r\n\
-             {body}",
-            host = self.host,
-            port = self.port,
-            len  = body.len(),
-            body = body,
-        );
-        if stream.write_all(request.as_bytes()).is_ok() {
-            let mut _buf = [0u8; 256];
-            let _ = stream.read(&mut _buf); // drain response
+        let client = crate::http_client::Client::new().timeout_ms(10_000);
+        let mut request = client.post(&self.url).body_json(body);
+        for (name, value) in &self.headers {
+            request = request.header(name, value);
+        }
+        match request.send() {
+            Ok(response) if response.is_success() => {}
+            Ok(response) => eprintln!("OTLP trace export to {}: HTTP {}", self.url, response.status()),
+            Err(e) => eprintln!("OTLP trace export to {}: {}", self.url, e),
         }
     }
 }
@@ -675,7 +670,11 @@ impl Exporter for OtlpHttpExporter {
 // ── global tracer ─────────────────────────────────────────────────────────────
 
 struct GlobalTracer {
-    exporter: Box<dyn Exporter>,
+    exporter: std::sync::Arc<dyn Exporter>,
+    /// Full batches go to the `rws-otel-export` thread, so a request never
+    /// waits for the collector.
+    full_batches: Mutex<Option<std::sync::mpsc::SyncSender<Vec<SpanData>>>>,
+    export_thread: Mutex<Option<std::thread::JoinHandle<()>>>,
     batch: Mutex<Vec<SpanData>>,
     batch_size: usize,
     sample_rate: f64,
@@ -697,7 +696,16 @@ impl GlobalTracer {
         if guard.len() >= self.batch_size {
             let spans = std::mem::take(&mut *guard);
             drop(guard);
-            self.exporter.export(&spans);
+            let sender = self.full_batches.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            match sender {
+                // A collector that can't keep up loses batches, not requests.
+                Some(sender) => {
+                    if sender.try_send(spans).is_err() {
+                        eprintln!("OTLP trace export is behind: a batch of spans was dropped");
+                    }
+                }
+                None => self.exporter.export(&spans),
+            }
         }
     }
 
@@ -710,6 +718,10 @@ impl GlobalTracer {
 }
 
 static TRACER: OnceLock<GlobalTracer> = OnceLock::new();
+
+/// Spans waiting in a partial batch are exported after this long (the
+/// OpenTelemetry batch span processor's default schedule delay).
+const SCHEDULE_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
 
 fn tracer() -> Option<&'static GlobalTracer> {
     TRACER.get()
@@ -782,8 +794,28 @@ pub fn setup(config: TracingConfig) {
 ///
 /// Calling this (or [`setup`]) more than once is a no-op (the first call wins).
 pub fn setup_with_exporter(config: TracingConfig, exporter: Box<dyn Exporter>) {
+    let exporter: std::sync::Arc<dyn Exporter> = exporter.into();
+    let (sender, batches) = std::sync::mpsc::sync_channel::<Vec<SpanData>>(8);
+    let background = std::sync::Arc::clone(&exporter);
+    let spawned = std::thread::Builder::new().name("rws-otel-export".to_string()).spawn(move || loop {
+        match batches.recv_timeout(SCHEDULE_DELAY) {
+            Ok(spans) => background.export(&spans),
+            // A quiet server's spans don't wait for a full batch.
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                if let Some(tracer) = tracer() {
+                    let spans = std::mem::take(&mut *tracer.batch.lock().unwrap_or_else(|e| e.into_inner()));
+                    if !spans.is_empty() {
+                        background.export(&spans);
+                    }
+                }
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+        }
+    });
     let _ = TRACER.set(GlobalTracer {
         exporter,
+        full_batches: Mutex::new(spawned.as_ref().ok().map(|_| sender)),
+        export_thread: Mutex::new(spawned.ok()),
         batch: Mutex::new(Vec::new()),
         batch_size: config.batch_size.max(1),
         sample_rate: config.sample_rate.clamp(0.0, 1.0),
@@ -794,33 +826,75 @@ pub fn setup_with_exporter(config: TracingConfig, exporter: Box<dyn Exporter>) {
 /// Initialize tracing from standard OpenTelemetry environment variables:
 ///
 /// - `OTEL_SERVICE_NAME` — service name (default `"rws"`)
-/// - `OTEL_EXPORTER_OTLP_ENDPOINT` — OTLP endpoint URL (default: stdout)
+/// - `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` — full traces URL, used as is; else
+///   `OTEL_EXPORTER_OTLP_ENDPOINT` (the collector's base URL, `/v1/traces`
+///   appended); neither set → stdout
+/// - `OTEL_EXPORTER_OTLP_HEADERS` — `key=value,…` sent with every export
+///   (`OTEL_EXPORTER_OTLP_TRACES_HEADERS` wins)
 /// - `OTEL_TRACES_SAMPLER_ARG` — sample rate `0.0`–`1.0` (default `1.0`)
+///
+/// Metrics export is separate: [`metrics::start_from_env`].
 pub fn setup_from_env() {
-    let service_name = std::env::var("OTEL_SERVICE_NAME")
-        .unwrap_or_else(|_| "rws".to_string());
-    let sample_rate: f64 = std::env::var("OTEL_TRACES_SAMPLER_ARG")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(1.0);
-    let exporter = match std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok() {
-        Some(ep) if !ep.is_empty() => ExporterConfig::Otlp { endpoint: ep },
-        _ => ExporterConfig::Stdout,
-    };
-    setup(TracingConfig {
+    let var = |name: &str| std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+    let service_name = var("OTEL_SERVICE_NAME").unwrap_or_else(|| "rws".to_string());
+    let sample_rate: f64 = var("OTEL_TRACES_SAMPLER_ARG").and_then(|v| v.parse().ok()).unwrap_or(1.0);
+    let config = TracingConfig {
         service_name,
         service_version: env!("CARGO_PKG_VERSION").to_string(),
-        exporter,
+        exporter: ExporterConfig::Stdout,
         sample_rate,
         batch_size: 128,
-    });
+    };
+    let endpoint = var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+        .map(|url| if url.trim_end_matches('/').ends_with("/v1/traces") { url } else { format!("{}/v1/traces", url.trim_end_matches('/')) })
+        .or_else(|| var("OTEL_EXPORTER_OTLP_ENDPOINT"));
+    match endpoint {
+        Some(endpoint) => {
+            let headers = var("OTEL_EXPORTER_OTLP_TRACES_HEADERS").or_else(|| var("OTEL_EXPORTER_OTLP_HEADERS")).map(|h| parse_headers(&h)).unwrap_or_default();
+            let exporter = OtlpHttpExporter::new(&endpoint, &config.service_name, &config.service_version).with_headers(headers);
+            setup_with_exporter(config, Box::new(exporter));
+        }
+        None => setup(config),
+    }
+}
+
+/// Whether the environment asks for OTLP trace export: an endpoint is set
+/// and `OTEL_TRACES_EXPORTER` isn't `none`. The `rws` binary traces requests
+/// only then.
+pub fn traces_configured() -> bool {
+    let var = |name: &str| std::env::var(name).ok().filter(|v| !v.trim().is_empty());
+    !var("OTEL_TRACES_EXPORTER").is_some_and(|v| v.trim().eq_ignore_ascii_case("none"))
+        && (var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_some() || var("OTEL_EXPORTER_OTLP_ENDPOINT").is_some())
+}
+
+/// `OTEL_EXPORTER_OTLP_HEADERS` syntax: `key=value` pairs separated by
+/// commas, values percent-decoded.
+pub fn parse_headers(value: &str) -> Vec<(String, String)> {
+    value
+        .split(',')
+        .filter_map(|pair| {
+            let (name, value) = pair.split_once('=')?;
+            let name = name.trim();
+            if name.is_empty() {
+                return None;
+            }
+            let value = crate::url::URL::percent_decode(value.trim());
+            Some((name.to_string(), value))
+        })
+        .collect()
 }
 
 /// Flush all buffered spans to the exporter. Call before the process exits
 /// to ensure no spans are lost.
 pub fn shutdown() {
+    metrics::shutdown();
     if let Some(t) = tracer() {
         t.shutdown_flag.store(true, Ordering::Relaxed);
+        // Close the queue and wait for the batches already in it.
+        t.full_batches.lock().unwrap_or_else(|e| e.into_inner()).take();
+        if let Some(thread) = t.export_thread.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            let _ = thread.join();
+        }
         t.flush();
         t.exporter.shutdown();
     }
@@ -879,6 +953,16 @@ impl Middleware for OtelLayer {
         result
         // `root` drops here: pops the thread-local stack and records the
         // span (if sampled) — the exact same path a child `Span` follows.
+    }
+    /// Spans are recorded in memory (export runs on its own thread): safe on
+    /// the event loop.
+    fn runs_inline(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
+    }
+
+    /// Headers only: a streamed body passes through untouched.
+    fn accepts_streamed_body(&self, _request: &Request, _connection: &ConnectionInfo) -> bool {
+        true
     }
 }
 

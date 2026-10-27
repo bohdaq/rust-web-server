@@ -45,7 +45,7 @@ rust_web_server::otel::setup(TracingConfig {
 });
 ```
 
-The OTLP exporter sends spans to `POST {endpoint}/v1/traces` using JSON encoding. It is compatible with Jaeger >= 1.35, Grafana Tempo, and the OpenTelemetry Collector. The default OTLP HTTP port is `4318`.
+The OTLP exporter sends spans to `POST {endpoint}/v1/traces` (an `endpoint` already ending in `/v1/traces` is used as is; `https://` works) using JSON encoding, from a background thread: a full batch or one that has waited 5 seconds goes out without holding up a request, and a batch the collector can't take in time is dropped rather than queued without bound. `OtlpHttpExporter::new(..).with_headers(..)` adds headers such as an API key, through `setup_with_exporter`. It is compatible with Jaeger >= 1.35, Grafana Tempo, and the OpenTelemetry Collector. The default OTLP HTTP port is `4318`.
 
 ### Environment variable setup
 
@@ -55,6 +55,8 @@ The OTLP exporter sends spans to `POST {endpoint}/v1/traces` using JSON encoding
 export OTEL_SERVICE_NAME=my-service
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 export OTEL_TRACES_SAMPLER_ARG=0.1   # 0.0–1.0, default 1.0
+export OTEL_EXPORTER_OTLP_HEADERS="api-key=secret"   # optional, key=value,…
+# OTEL_EXPORTER_OTLP_TRACES_ENDPOINT / _TRACES_HEADERS override the shared ones
 ```
 
 ```rust
@@ -62,7 +64,9 @@ rust_web_server::otel::setup_from_env();
 let app = App::new().wrap(OtelLayer);
 ```
 
-When `OTEL_EXPORTER_OTLP_ENDPOINT` is absent or empty, the exporter falls back to stdout.
+When no endpoint is set, the exporter falls back to stdout.
+
+The `rws` binary does this by itself: with `OTEL_EXPORTER_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`) set, and `OTEL_TRACES_EXPORTER` not `none`, it wraps everything — static files, `/mcp`, config-file proxy routes — in `OtelLayer` and exports to it; without one it adds no layer. Proxy routes then go through the thread-pool forwarder rather than the [non-blocking one](/proxy/config-driven/#performance). The same endpoint turns on [OTLP metrics](/deployment/observability/#otlp-metrics-export).
 
 ## `TracingConfig` fields
 
@@ -164,7 +168,7 @@ Flush all buffered spans before the process exits:
 rust_web_server::otel::shutdown();
 ```
 
-Calling `shutdown()` flushes the internal batch and invokes the exporter's own shutdown hook. Without this call, the last batch of spans may not be delivered.
+Calling `shutdown()` waits for batches already handed to the export thread, flushes the partial one, invokes the exporter's own shutdown hook, and sends a last [metrics export](/deployment/observability/#otlp-metrics-export). Without this call, the last batch of spans may not be delivered. The `rws` binary calls it on SIGTERM/SIGINT.
 
 ## Testing
 

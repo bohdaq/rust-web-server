@@ -9537,7 +9537,7 @@ rust_web_server::otel::setup(TracingConfig {
 });
 ```
 
-The OTLP exporter sends spans to `POST {endpoint}/v1/traces` using JSON encoding. It is compatible with Jaeger >= 1.35, Grafana Tempo, and the OpenTelemetry Collector. The default OTLP HTTP port is `4318`.
+The OTLP exporter sends spans to `POST {endpoint}/v1/traces` (an `endpoint` already ending in `/v1/traces` is used as is; `https://` works) using JSON encoding, from a background thread: a full batch or one that has waited 5 seconds goes out without holding up a request, and a batch the collector can't take in time is dropped rather than queued without bound. `OtlpHttpExporter::new(..).with_headers(..)` adds headers such as an API key, through `setup_with_exporter`. It is compatible with Jaeger >= 1.35, Grafana Tempo, and the OpenTelemetry Collector. The default OTLP HTTP port is `4318`.
 
 ### Environment variable setup
 
@@ -9547,6 +9547,8 @@ The OTLP exporter sends spans to `POST {endpoint}/v1/traces` using JSON encoding
 export OTEL_SERVICE_NAME=my-service
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 export OTEL_TRACES_SAMPLER_ARG=0.1   # 0.0–1.0, default 1.0
+export OTEL_EXPORTER_OTLP_HEADERS="api-key=secret"   # optional, key=value,…
+# OTEL_EXPORTER_OTLP_TRACES_ENDPOINT / _TRACES_HEADERS override the shared ones
 ```
 
 ```rust
@@ -9554,7 +9556,9 @@ rust_web_server::otel::setup_from_env();
 let app = App::new().wrap(OtelLayer);
 ```
 
-When `OTEL_EXPORTER_OTLP_ENDPOINT` is absent or empty, the exporter falls back to stdout.
+When no endpoint is set, the exporter falls back to stdout.
+
+The `rws` binary does this by itself: with `OTEL_EXPORTER_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`) set, and `OTEL_TRACES_EXPORTER` not `none`, it wraps everything — static files, `/mcp`, config-file proxy routes — in `OtelLayer` and exports to it; without one it adds no layer. Proxy routes then go through the thread-pool forwarder rather than the [non-blocking one](/proxy/config-driven/#performance). The same endpoint turns on [OTLP metrics](/deployment/observability/#otlp-metrics-export).
 
 ## `TracingConfig` fields
 
@@ -9656,7 +9660,7 @@ Flush all buffered spans before the process exits:
 rust_web_server::otel::shutdown();
 ```
 
-Calling `shutdown()` flushes the internal batch and invokes the exporter's own shutdown hook. Without this call, the last batch of spans may not be delivered.
+Calling `shutdown()` waits for batches already handed to the export thread, flushes the partial one, invokes the exporter's own shutdown hook, and sends a last [metrics export](/deployment/observability/#otlp-metrics-export). Without this call, the last batch of spans may not be delivered. The `rws` binary calls it on SIGTERM/SIGINT.
 
 ## Testing
 
@@ -18202,6 +18206,29 @@ Wire `ReverseProxy::with_circuit_breaker(Arc::new(circuit_breaker::global()))` t
 
 Config-file proxies export `rws_upstream_requests_total`, `rws_upstream_request_duration_seconds`, `rws_upstream_retries_total`, `rws_upstream_backend_up` and `rws_upstream_circuit_breaker_state` per `upstream` and `backend` — see [Upstream metrics](/features/metrics/#upstream-metrics).
 
+### OTLP metrics export
+
+`http.server.request.duration` can also be pushed to an OpenTelemetry Collector (or any OTLP/HTTP endpoint: Grafana Cloud, Honeycomb, Datadog's OTLP intake) — the same data `/metrics` serves, so the two never disagree. The `rws` binary starts the exporter when an endpoint is set:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # metrics go to /v1/metrics, spans to /v1/traces
+export OTEL_SERVICE_NAME=edge-1                                   # default rws
+export OTEL_METRIC_EXPORT_INTERVAL=15000                          # ms, default 60000
+export OTEL_EXPORTER_OTLP_HEADERS="api-key=secret"               # optional, key=value,…
+rws
+```
+
+| Variable | Meaning |
+|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Collector base URL; `/v1/metrics` and `/v1/traces` are appended |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | Full metrics URL, used as is (wins over the base) |
+| `OTEL_METRIC_EXPORT_INTERVAL` | Milliseconds between exports (default `60000`) |
+| `OTEL_METRICS_EXPORTER` | `none` turns metrics export off |
+| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_METRICS_HEADERS` | Request headers, `key=value` pairs separated by commas (values percent-decoded) |
+| `OTEL_SERVICE_NAME` | `service.name` resource attribute |
+
+Each export is an OTLP/HTTP JSON `ExportMetricsServiceRequest` with cumulative temporality and the convention's explicit buckets, attributes `http.request.method`, `http.response.status_code`, `url.scheme`, `network.protocol.name` and `network.protocol.version`. A last export is sent on SIGTERM/SIGINT. From Rust: `otel::metrics::start(MetricsExportConfig { .. })` or `otel::metrics::start_from_env()`, and `otel::shutdown()` before exit.
+
 ### Grafana / PromQL queries
 
 ```promql
@@ -18341,6 +18368,8 @@ let app = App::new().wrap(OtelLayer);
 ```
 
 The layer reads the incoming `traceparent` header, creates a span for each request (a child of the caller's span when one was sent), and exports completed spans to the configured OTLP endpoint. Start nested spans inside a request with `otel::span(name)` / `otel::client_span(name)` — see [Distributed Tracing](/features/tracing/#child-spans).
+
+The `rws` binary adds `OtelLayer` and exports spans by itself when `OTEL_EXPORTER_OTLP_ENDPOINT` is set — see [Environment variable setup](/features/tracing/#environment-variable-setup).
 
 ### Supported backends
 
@@ -18962,6 +18991,10 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `AttributeValue` | `otel` | `String`, `Int`, `Float`, `Bool`, with `From` impls |
 | `TracingConfig` | `otel` | Service name, exporter, sample rate, batch size |
 | `ExporterConfig` | `otel` | Built-in exporter choice |
+| `otel::metrics::MetricsExportConfig`, `otel::metrics::start` / `start_from_env` | `otel` | Push `http.server.request.duration` over OTLP/HTTP every interval. See [OTLP metrics export](/deployment/observability/#otlp-metrics-export) |
+| `otel::parse_headers`, `otel::traces_configured` | `otel` | `OTEL_EXPORTER_OTLP_HEADERS` syntax; whether the environment asks for trace export |
+| `metrics::http::observe` | `metrics` | Record a request in `http_server_request_duration_seconds` (the server core does it for every request) |
+| `metrics::exposition::protobuf` / `accepts_protobuf` | `metrics` | Prometheus protobuf exposition (native histograms) and its `Accept` negotiation |
 | `Exporter` | `otel` | Trait for span exporters, accepted by `setup_with_exporter` |
 | `StdoutExporter` / `OtlpHttpExporter` | `otel` | Built-in exporters; `OtlpHttpExporter::new(endpoint, service_name, service_version)` |
 | `TraceContext` | `otel` | Parsed `traceparent`: `TraceContext::parse`, `.as_header(span_id)` |

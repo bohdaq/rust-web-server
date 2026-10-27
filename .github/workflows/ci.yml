@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, native-histograms, grpc, proxy-protocol, realtime]
+        check: [acme-pebble, acme-dns01, acme-dns-api, acme-shared, acme-on-demand, h2spec, slow-clients, config-reload, access-log, proxy-policies, native-histograms, otlp, grpc, proxy-protocol, realtime]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -155,6 +155,14 @@ jobs:
           gh release download v3.15.0 --repo prometheus/prometheus --pattern 'prometheus-3.15.0.linux-amd64.tar.gz' --dir "$RUNNER_TEMP"
           tar xzf "$RUNNER_TEMP/prometheus-3.15.0.linux-amd64.tar.gz" -C "$RUNNER_TEMP"
           ci/e2e/native_histograms.sh target/debug/rws "$RUNNER_TEMP/prometheus-3.15.0.linux-amd64/prometheus"
+      - name: OTLP metrics and traces into an OpenTelemetry Collector
+        if: matrix.check == 'otlp'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.162.0 --repo open-telemetry/opentelemetry-collector-releases --pattern 'otelcol-contrib_0.162.0_linux_amd64.tar.gz' --dir "$RUNNER_TEMP"
+          tar xzf "$RUNNER_TEMP/otelcol-contrib_0.162.0_linux_amd64.tar.gz" -C "$RUNNER_TEMP"
+          ci/e2e/otlp.sh target/debug/rws "$RUNNER_TEMP/otelcol-contrib"
       - name: gRPC against tonic (every call type, cleartext and mTLS upstreams; h2c with grpcurl)
         if: matrix.check == 'grpc'
         env:

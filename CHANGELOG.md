@@ -30,10 +30,21 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `scrape_native_histograms`), with exponential buckets for
   `http_server_request_duration_seconds`. `ci/e2e/native_histograms.sh`
   checks it against Prometheus 3.15.
+- OTLP metrics export (#25): `otel::metrics::start` / `start_from_env` push
+  `http.server.request.duration` to an OpenTelemetry collector over
+  OTLP/HTTP (JSON, cumulative) every `OTEL_METRIC_EXPORT_INTERVAL`, with a
+  last export on shutdown. The `rws` binary exports metrics and traces (wrapping
+  everything in `OtelLayer`) when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+  `OTEL_EXPORTER_OTLP_{METRICS,TRACES}_ENDPOINT` and `…_HEADERS` are honoured.
+  `ci/e2e/otlp.sh` checks it against otelcol-contrib 0.162.
 
 ### Fixed
 
 - HTTP/2 over cleartext (h2c) no longer sends `Strict-Transport-Security`.
+- OTLP span export no longer runs on the request thread when a batch fills
+  (a background thread sends it; partial batches go out after 5 s), honours
+  the endpoint's path and `https://`, and escapes span names and attribute
+  values in its JSON.
 
 ### Changed
 

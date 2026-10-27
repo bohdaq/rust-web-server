@@ -261,6 +261,10 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `AttributeValue` | `otel` | `String`, `Int`, `Float`, `Bool`, with `From` impls |
 | `TracingConfig` | `otel` | Service name, exporter, sample rate, batch size |
 | `ExporterConfig` | `otel` | Built-in exporter choice |
+| `otel::metrics::MetricsExportConfig`, `otel::metrics::start` / `start_from_env` | `otel` | Push `http.server.request.duration` over OTLP/HTTP every interval. See [OTLP metrics export](/deployment/observability/#otlp-metrics-export) |
+| `otel::parse_headers`, `otel::traces_configured` | `otel` | `OTEL_EXPORTER_OTLP_HEADERS` syntax; whether the environment asks for trace export |
+| `metrics::http::observe` | `metrics` | Record a request in `http_server_request_duration_seconds` (the server core does it for every request) |
+| `metrics::exposition::protobuf` / `accepts_protobuf` | `metrics` | Prometheus protobuf exposition (native histograms) and its `Accept` negotiation |
 | `Exporter` | `otel` | Trait for span exporters, accepted by `setup_with_exporter` |
 | `StdoutExporter` / `OtlpHttpExporter` | `otel` | Built-in exporters; `OtlpHttpExporter::new(endpoint, service_name, service_version)` |
 | `TraceContext` | `otel` | Parsed `traceparent`: `TraceContext::parse`, `.as_header(span_id)` |
