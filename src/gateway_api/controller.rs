@@ -25,7 +25,7 @@ use kube::{Client, Resource, ResourceExt};
 use serde::de::DeserializeOwned;
 use tokio::sync::Notify;
 
-use super::resources::{self, Gateway, GatewayClass, HttpRoute, ReferenceGrant};
+use super::resources::{self, Gateway, GatewayClass, GrpcRoute, HttpRoute, ReferenceGrant};
 use super::translate::{translate, GatewayConfig, Settings, Snapshot};
 use super::types::RouteParentStatus;
 
@@ -50,6 +50,7 @@ pub struct Stores {
     pub classes: Store<GatewayClass>,
     pub gateways: Store<Gateway>,
     pub http_routes: Store<HttpRoute>,
+    pub grpc_routes: Store<GrpcRoute>,
     pub reference_grants: Store<ReferenceGrant>,
     pub services: Store<Service>,
     pub namespaces: Store<Namespace>,
@@ -69,6 +70,7 @@ impl Stores {
             classes: all(&self.classes),
             gateways: all(&self.gateways),
             http_routes: all(&self.http_routes),
+            grpc_routes: all(&self.grpc_routes),
             reference_grants: all(&self.reference_grants),
             services: all(&self.services),
             namespaces: all(&self.namespaces),
@@ -106,6 +108,7 @@ pub fn start_watches(client: &Client) -> (Stores, Arc<Notify>) {
         classes: watch(Api::all_with(client.clone(), &resources::gateway_classes()), resources::gateway_classes(), Arc::clone(&changed)),
         gateways: watch(Api::all_with(client.clone(), &resources::gateways()), resources::gateways(), Arc::clone(&changed)),
         http_routes: watch(Api::all_with(client.clone(), &resources::http_routes()), resources::http_routes(), Arc::clone(&changed)),
+        grpc_routes: watch(Api::all_with(client.clone(), &resources::grpc_routes()), resources::grpc_routes(), Arc::clone(&changed)),
         reference_grants: watch(Api::all_with(client.clone(), &resources::reference_grants()), resources::reference_grants(), Arc::clone(&changed)),
         services: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         namespaces: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
@@ -186,25 +189,44 @@ pub async fn reconcile(client: &Client, stores: &Stores, options: &Options) -> R
             failures.push(e);
         }
     }
-    for route in &snapshot.http_routes {
-        let namespace = route.namespace().unwrap_or_default();
-        let Some(ours) = desired.http_routes.get(&(namespace.clone(), route.name_any())) else { continue };
-        let current = route.status.as_ref().map(|s| s.parents.clone()).unwrap_or_default();
-        let parents = merge_parents(&current, ours, &options.settings.controller_name);
-        if parents == current {
-            continue;
-        }
-        let api: Api<HttpRoute> = Api::namespaced_with(client.clone(), &namespace, &resources::http_routes());
-        let status = super::types::RouteStatus { parents };
-        if let Err(e) = patch_status(&api, &route.name_any(), &status, route.resource_version()).await {
-            failures.push(e);
-        }
-    }
+    let controller_name = options.settings.controller_name.as_str();
+    failures.extend(write_route_status(client, &snapshot.http_routes, &desired.http_routes, &resources::http_routes(), controller_name).await);
+    failures.extend(write_route_status(client, &snapshot.grpc_routes, &desired.grpc_routes, &resources::grpc_routes(), controller_name).await);
     if failures.is_empty() {
         Ok(())
     } else {
         Err(failures.join("; "))
     }
+}
+
+/// Write our part of `status.parents` on every route of one kind where it
+/// changed; returns the failures.
+async fn write_route_status<S>(
+    client: &Client,
+    routes: &[kube::core::Object<S, super::types::RouteStatus>],
+    desired: &std::collections::BTreeMap<(String, String), Vec<RouteParentStatus>>,
+    resource: &kube::core::ApiResource,
+    controller_name: &str,
+) -> Vec<String>
+where
+    S: Clone + DeserializeOwned + std::fmt::Debug,
+{
+    let mut failures = Vec::new();
+    for route in routes {
+        let namespace = route.namespace().unwrap_or_default();
+        let Some(ours) = desired.get(&(namespace.clone(), route.name_any())) else { continue };
+        let current = route.status.as_ref().map(|s| s.parents.clone()).unwrap_or_default();
+        let parents = merge_parents(&current, ours, controller_name);
+        if parents == current {
+            continue;
+        }
+        let api: Api<kube::core::Object<S, super::types::RouteStatus>> = Api::namespaced_with(client.clone(), &namespace, resource);
+        let status = super::types::RouteStatus { parents };
+        if let Err(e) = patch_status(&api, &route.name_any(), &status, route.resource_version()).await {
+            failures.push(e);
+        }
+    }
+    failures
 }
 
 /// Other controllers' entries as they are, then ours.

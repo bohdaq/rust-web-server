@@ -11,7 +11,7 @@ use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{Condition, LabelSelector, Time};
 use kube::ResourceExt;
 
-use super::resources::{Gateway, GatewayClass, HttpRoute, ReferenceGrant};
+use super::resources::{Gateway, GatewayClass, GrpcRoute, HttpRoute, ReferenceGrant};
 use super::routes::CompiledHttpRoute;
 use super::services::ServiceSettings;
 use super::types::*;
@@ -35,6 +35,7 @@ pub struct Snapshot {
     pub classes: Vec<GatewayClass>,
     pub gateways: Vec<Gateway>,
     pub http_routes: Vec<HttpRoute>,
+    pub grpc_routes: Vec<GrpcRoute>,
     pub reference_grants: Vec<ReferenceGrant>,
     pub services: Vec<Service>,
     pub namespaces: Vec<Namespace>,
@@ -76,6 +77,8 @@ pub struct Desired {
     /// (namespace, name) → this controller's parent statuses (other
     /// controllers' entries are kept when written).
     pub http_routes: BTreeMap<(String, String), Vec<RouteParentStatus>>,
+    /// The same for GRPCRoutes.
+    pub grpc_routes: BTreeMap<(String, String), Vec<RouteParentStatus>>,
     /// (namespace, name) → the Service each of our Gateways should have.
     pub services: BTreeMap<(String, String), Service>,
 }
@@ -106,6 +109,8 @@ pub struct ListenerConfig {
 /// `pkg/features` at Gateway API v1.6.3; sorted). Grows with each phase;
 /// `FEATURES` in `.github/workflows/gateway-api.yml` must match.
 pub const SUPPORTED_FEATURES: &[&str] = &[
+    "GRPCRoute",
+    "GRPCRouteNamedRouteRule",
     "Gateway",
     "HTTPRoute",
     "HTTPRoute303RedirectStatusCode",
@@ -166,17 +171,18 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
     let our_gateways: Vec<&Gateway> = snapshot.gateways.iter().filter(|g| our_classes.contains(&g.spec.gateway_class_name)).collect();
     desired.services = super::services::desired(snapshot, &our_gateways, &settings.services);
 
-    // HTTPRoutes: attach to listeners, resolve backends.
+    // Routes: attach to listeners, resolve backends.
+    let routes = snapshot
+        .http_routes
+        .iter()
+        .map(|r| RouteIn::new("HTTPRoute", r, &r.spec.parent_refs, &r.spec.hostnames, http_references(&r.spec.rules), super::routes::compile(r, snapshot)))
+        .chain(snapshot.grpc_routes.iter().map(|r| RouteIn::new("GRPCRoute", r, &r.spec.parent_refs, &r.spec.hostnames, grpc_references(&r.spec.rules), super::routes::compile_grpc(r, snapshot))));
     let mut attached: BTreeMap<(String, String, String), i32> = BTreeMap::new();
-    for route in &snapshot.http_routes {
-        let namespace = route.namespace().unwrap_or_default();
-        let key = (namespace.clone(), route.name_any());
-        let generation = route.metadata.generation;
-        let previous: Vec<RouteParentStatus> = route.status.as_ref().map(|s| s.parents.clone()).unwrap_or_default();
-        let resolved = resolve_backends(route, snapshot);
-        let compiled = super::routes::compile(route, snapshot);
+    for route in routes {
+        let namespace = route.namespace.clone();
+        let resolved = resolve_references(route.kind, &namespace, &route.references, snapshot);
         let mut parents = Vec::new();
-        for parent_ref in &route.spec.parent_refs {
+        for parent_ref in route.parent_refs {
             if parent_ref.group() != GATEWAY_GROUP || parent_ref.kind() != "Gateway" {
                 continue;
             }
@@ -186,29 +192,31 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
             if candidates.is_empty() && !snapshot.gateways.iter().any(|g| is_named(g, &gateway_key) && our_classes.contains(&g.spec.gateway_class_name)) {
                 continue; // not one of ours: another controller reports it
             }
-            let old = previous
+            let old = route
+                .previous
                 .iter()
                 .find(|p| p.controller_name == controller_name && same_parent(&p.parent_ref, parent_ref, &namespace))
                 .map(|p| p.conditions.as_slice())
                 .unwrap_or_default();
-            let (accepted, reason, message, attached_to) = attach(route, parent_ref, &namespace, &candidates, snapshot);
+            let (accepted, reason, message, attached_to) = attach(route.kind, route.hostnames, parent_ref, &namespace, &candidates, snapshot);
             for listener in &attached_to {
                 *attached.entry((gateway_key.0.clone(), gateway_key.1.clone(), listener.clone())).or_default() += 1;
                 if let Some(view) = listeners.iter_mut().find(|l| l.gateway == gateway_key && &l.name == listener) {
-                    view.http_routes.push(compiled.clone());
+                    view.http_routes.push(route.compiled.clone());
                 }
             }
             let conditions = vec![
-                condition(old, "Accepted", accepted, reason, &message, generation, now),
+                condition(old, "Accepted", accepted, reason, &message, route.generation, now),
                 match &resolved {
-                    Ok(()) => condition(old, "ResolvedRefs", true, "ResolvedRefs", "All references resolved", generation, now),
-                    Err((reason, message)) => condition(old, "ResolvedRefs", false, reason, message, generation, now),
+                    Ok(()) => condition(old, "ResolvedRefs", true, "ResolvedRefs", "All references resolved", route.generation, now),
+                    Err((reason, message)) => condition(old, "ResolvedRefs", false, reason, message, route.generation, now),
                 },
             ];
             parents.push(RouteParentStatus { parent_ref: parent_ref.clone(), controller_name: controller_name.to_string(), conditions });
         }
         if !parents.is_empty() {
-            desired.http_routes.insert(key, parents);
+            let statuses = if route.kind == "GRPCRoute" { &mut desired.grpc_routes } else { &mut desired.http_routes };
+            statuses.insert((namespace, route.name), parents);
         }
     }
 
@@ -298,7 +306,7 @@ struct ListenerView {
 /// The route kinds a protocol carries.
 fn kinds_for(protocol: &str) -> &'static [&'static str] {
     match protocol {
-        "HTTP" | "HTTPS" => &["HTTPRoute"],
+        "HTTP" | "HTTPS" => &["HTTPRoute", "GRPCRoute"],
         _ => &[],
     }
 }
@@ -442,7 +450,7 @@ fn is_named<K: kube::Resource>(object: &K, key: &(String, String)) -> bool {
 
 /// Attach `route` through `parent_ref` to the matching listeners: (accepted,
 /// reason, message, listener names).
-fn attach(route: &HttpRoute, parent_ref: &ParentReference, route_namespace: &str, candidates: &[&ListenerView], snapshot: &Snapshot) -> (bool, &'static str, String, Vec<String>) {
+fn attach(kind: &str, hostnames: &[String], parent_ref: &ParentReference, route_namespace: &str, candidates: &[&ListenerView], snapshot: &Snapshot) -> (bool, &'static str, String, Vec<String>) {
     let mut named: Vec<&&ListenerView> = candidates
         .iter()
         .filter(|l| parent_ref.section_name.as_ref().is_none_or(|s| *s == l.name))
@@ -452,13 +460,13 @@ fn attach(route: &HttpRoute, parent_ref: &ParentReference, route_namespace: &str
         return (false, "NoMatchingParent", "no listener matches the parentRef's sectionName/port".to_string(), Vec::new());
     }
     named.retain(|l| l.accepted && l.conflicted.is_none());
-    let allowed: Vec<&&ListenerView> = named.iter().copied().filter(|l| allows(l, route_namespace, snapshot)).collect();
+    let allowed: Vec<&&ListenerView> = named.iter().copied().filter(|l| allows(l, kind, route_namespace, snapshot)).collect();
     if allowed.is_empty() {
         return (false, "NotAllowedByListeners", "no listener allows this route".to_string(), Vec::new());
     }
     let matching: Vec<String> = allowed
         .iter()
-        .filter(|l| hostnames_intersect(l.hostname.as_deref(), &route.spec.hostnames))
+        .filter(|l| hostnames_intersect(l.hostname.as_deref(), hostnames))
         .map(|l| l.name.clone())
         .collect();
     if matching.is_empty() {
@@ -467,9 +475,9 @@ fn attach(route: &HttpRoute, parent_ref: &ParentReference, route_namespace: &str
     (true, "Accepted", String::new(), matching)
 }
 
-/// A listener allows HTTPRoutes from `namespace`.
-fn allows(listener: &ListenerView, namespace: &str, snapshot: &Snapshot) -> bool {
-    if !listener.supported_kinds.iter().any(|k| k.kind == "HTTPRoute") {
+/// A listener allows routes of `kind` from `namespace`.
+fn allows(listener: &ListenerView, kind: &str, namespace: &str, snapshot: &Snapshot) -> bool {
+    if !listener.supported_kinds.iter().any(|k| k.kind == kind) {
         return false;
     }
     let from = listener.allowed.namespaces.as_ref().and_then(|n| n.from.as_deref()).unwrap_or("Same");
@@ -523,25 +531,74 @@ fn hostname_overlap(a: &str, b: &str) -> bool {
     }
 }
 
-/// Every backendRef of the route resolves: a Service, in the route's
-/// namespace or one a ReferenceGrant opens, that exists.
-fn resolve_backends(route: &HttpRoute, snapshot: &Snapshot) -> Result<(), (&'static str, String)> {
-    let namespace = route.namespace().unwrap_or_default();
-    for rule in &route.spec.rules {
-        // backendRefs, then the Services `RequestMirror` filters send copies to.
-        let mirrors = rule.filters.iter().chain(rule.backend_refs.iter().flat_map(|b| &b.filters)).filter_map(|f| f.request_mirror.as_ref());
-        let references = rule.backend_refs.iter().map(|b| &b.backend_ref.object).chain(mirrors.map(|m| &m.backend_ref));
-        for reference in references {
-            if !reference.group().is_empty() || reference.kind() != "Service" {
-                return Err(("InvalidKind", format!("{} isn't a supported backend kind", reference.kind())));
-            }
-            let target = reference.namespace.clone().unwrap_or_else(|| namespace.clone());
-            if target != namespace && !granted(snapshot, GATEWAY_GROUP, "HTTPRoute", &namespace, "", "Service", &target, &reference.name) {
-                return Err(("RefNotPermitted", format!("no ReferenceGrant in {target} lets HTTPRoutes in {namespace} use Service {}", reference.name)));
-            }
-            if !snapshot.services.iter().any(|s| s.namespace().as_deref() == Some(target.as_str()) && s.name_any() == reference.name) {
-                return Err(("BackendNotFound", format!("Service {target}/{} doesn't exist", reference.name)));
-            }
+/// A route of any kind, as the attachment loop needs it.
+struct RouteIn<'a> {
+    kind: &'static str,
+    namespace: String,
+    name: String,
+    generation: Option<i64>,
+    parent_refs: &'a [ParentReference],
+    hostnames: &'a [String],
+    previous: Vec<RouteParentStatus>,
+    /// Every Service the route sends to (backendRefs and mirrors).
+    references: Vec<&'a BackendObjectReference>,
+    compiled: CompiledHttpRoute,
+}
+
+impl<'a> RouteIn<'a> {
+    fn new<S>(
+        kind: &'static str,
+        route: &'a kube::core::Object<S, RouteStatus>,
+        parent_refs: &'a [ParentReference],
+        hostnames: &'a [String],
+        references: Vec<&'a BackendObjectReference>,
+        compiled: CompiledHttpRoute,
+    ) -> RouteIn<'a>
+    where
+        S: Clone,
+    {
+        RouteIn {
+            kind,
+            namespace: route.namespace().unwrap_or_default(),
+            name: route.name_any(),
+            generation: route.metadata.generation,
+            parent_refs,
+            hostnames,
+            previous: route.status.as_ref().map(|s| s.parents.clone()).unwrap_or_default(),
+            references,
+            compiled,
+        }
+    }
+}
+
+/// The Services a rule's backendRefs and `RequestMirror` filters (on the
+/// rule or a backendRef) name.
+fn rule_references<'a>(backend_refs: &'a [HttpBackendRef], filters: &'a [HttpRouteFilter]) -> impl Iterator<Item = &'a BackendObjectReference> {
+    let mirrors = filters.iter().chain(backend_refs.iter().flat_map(|b| &b.filters)).filter_map(|f| f.request_mirror.as_ref());
+    backend_refs.iter().map(|b| &b.backend_ref.object).chain(mirrors.map(|m| &m.backend_ref))
+}
+
+fn http_references(rules: &[HttpRouteRule]) -> Vec<&BackendObjectReference> {
+    rules.iter().flat_map(|r| rule_references(&r.backend_refs, &r.filters)).collect()
+}
+
+fn grpc_references(rules: &[GrpcRouteRule]) -> Vec<&BackendObjectReference> {
+    rules.iter().flat_map(|r| rule_references(&r.backend_refs, &r.filters)).collect()
+}
+
+/// Every reference resolves: a Service, in the route's namespace or one a
+/// ReferenceGrant opens to routes of `kind`, that exists.
+fn resolve_references(kind: &str, namespace: &str, references: &[&BackendObjectReference], snapshot: &Snapshot) -> Result<(), (&'static str, String)> {
+    for reference in references {
+        if !reference.group().is_empty() || reference.kind() != "Service" {
+            return Err(("InvalidKind", format!("{} isn't a supported backend kind", reference.kind())));
+        }
+        let target = reference.namespace.clone().unwrap_or_else(|| namespace.to_string());
+        if target != namespace && !granted(snapshot, GATEWAY_GROUP, kind, namespace, "", "Service", &target, &reference.name) {
+            return Err(("RefNotPermitted", format!("no ReferenceGrant in {target} lets {kind}s in {namespace} use Service {}", reference.name)));
+        }
+        if !snapshot.services.iter().any(|s| s.namespace().as_deref() == Some(target.as_str()) && s.name_any() == reference.name) {
+            return Err(("BackendNotFound", format!("Service {target}/{} doesn't exist", reference.name)));
         }
     }
     Ok(())

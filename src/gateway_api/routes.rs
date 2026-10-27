@@ -5,7 +5,7 @@
 use k8s_openapi::api::discovery::v1::EndpointSlice;
 use kube::ResourceExt;
 
-use super::resources::HttpRoute;
+use super::resources::{GrpcRoute, HttpRoute};
 use super::translate::Snapshot;
 use super::types::*;
 
@@ -94,6 +94,81 @@ pub fn compile(route: &HttpRoute, snapshot: &Snapshot) -> CompiledHttpRoute {
                 .filter_map(|f| f.request_mirror.as_ref())
                 .map(|f| Mirror::from_filter(f, &namespace, snapshot))
                 .collect(),
+        })
+        .collect();
+    CompiledHttpRoute {
+        key: (namespace, route.name_any()),
+        hostnames: route.spec.hostnames.clone(),
+        created: route.metadata.creation_timestamp.as_ref().map(|t| t.0.to_string()).unwrap_or_default(),
+        rules,
+    }
+}
+
+/// The `matches.path` type a gRPC `method` match with only a method
+/// compiles to: the value is the method, matched as the path's second
+/// segment of `/<service>/<method>` (not an API type; internal).
+pub const GRPC_METHOD_MATCH: &str = "rws.GRPCMethod";
+
+/// A GRPCRoute compiled to the same form as an HTTPRoute: a `method` match
+/// becomes a path match on `/<service>/<method>` (`Exact` for both,
+/// `PathPrefix` `/<service>` for a service alone, [`GRPC_METHOD_MATCH`] for
+/// a method alone); `RegularExpression` matches nothing (implementation
+/// specific, not supported). Backends are reached over h2c.
+pub fn compile_grpc(route: &GrpcRoute, snapshot: &Snapshot) -> CompiledHttpRoute {
+    let namespace = route.namespace().unwrap_or_default();
+    let path = |kind: &str, value: String| Some(HttpPathMatch { match_type: Some(kind.to_string()), value: Some(value) });
+    let rules = route
+        .spec
+        .rules
+        .iter()
+        .map(|rule| {
+            let matches = if rule.matches.is_empty() {
+                vec![HttpRouteMatch { path: path("PathPrefix", "/".to_string()), ..Default::default() }]
+            } else {
+                rule.matches
+                    .iter()
+                    .map(|m| {
+                        let path = match &m.method {
+                            None => path("PathPrefix", "/".to_string()),
+                            Some(method) if method.match_type.as_deref().unwrap_or("Exact") != "Exact" => path("rws.Unsupported", String::new()),
+                            Some(method) => match (&method.service, &method.method) {
+                                (Some(service), Some(name)) => path("Exact", format!("/{service}/{name}")),
+                                (Some(service), None) => path("PathPrefix", format!("/{service}")),
+                                (None, Some(name)) => path(GRPC_METHOD_MATCH, name.clone()),
+                                (None, None) => path("PathPrefix", "/".to_string()),
+                            },
+                        };
+                        HttpRouteMatch { path, headers: m.headers.clone(), ..Default::default() }
+                    })
+                    .collect()
+            };
+            CompiledRule {
+                name: rule.name.clone(),
+                matches,
+                filters: rule.filters.clone(),
+                backends: rule
+                    .backend_refs
+                    .iter()
+                    .map(|b| {
+                        let (endpoints, _) = resolve(&b.backend_ref.object, &namespace, "GRPCRoute", snapshot);
+                        Backend {
+                            weight: b.backend_ref.weight.unwrap_or(1).max(0) as u32,
+                            endpoints,
+                            app_protocol: Some("kubernetes.io/h2c".to_string()),
+                            filters: b.filters.clone(),
+                        }
+                    })
+                    .collect(),
+                timeouts: None,
+                retry: None,
+                mirrors: rule
+                    .filters
+                    .iter()
+                    .filter(|f| f.filter_type == "RequestMirror")
+                    .filter_map(|f| f.request_mirror.as_ref())
+                    .map(|f| Mirror::from_filter(f, &namespace, snapshot))
+                    .collect(),
+            }
         })
         .collect();
     CompiledHttpRoute {

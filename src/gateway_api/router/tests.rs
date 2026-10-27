@@ -330,3 +330,16 @@ fn mirrors_get_a_copy_after_the_request_filters() {
     let head = copy.join().unwrap();
     assert!(head.starts_with("GET /m HTTP/1.1") && head.contains("X-Set: yes"), "{head}");
 }
+
+#[test]
+fn grpc_method_matches_take_the_second_path_segment() {
+    assert_eq!(Some("Echo"), grpc_method("/pkg.Service/Echo"));
+    assert_eq!(None, grpc_method("/pkg.Service/"));
+    assert_eq!(None, grpc_method("/Echo"));
+    assert_eq!(None, grpc_method("/a/b/Echo"));
+    let l = listener(None, vec![route("r", "1", &[], vec![rule("method", vec![path(crate::gateway_api::routes::GRPC_METHOD_MATCH, "Echo")], vec![])])]);
+    assert_eq!(Some("method".to_string()), picked(&l, &request("POST", "/any.Service/Echo", &[])));
+    assert_eq!(None, picked(&l, &request("POST", "/any.Service/Other", &[])));
+    let unsupported = listener(None, vec![route("r", "1", &[], vec![rule("re", vec![path("rws.Unsupported", "")], vec![])])]);
+    assert_eq!(None, picked(&unsupported, &request("POST", "/a/b", &[])));
+}

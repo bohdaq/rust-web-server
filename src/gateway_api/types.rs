@@ -524,6 +524,53 @@ pub struct HttpBackendRef {
     pub filters: Vec<HttpRouteFilter>,
 }
 
+// ── GRPCRoute (v1) ────────────────────────────────────────────────────────────
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrpcRouteSpec {
+    #[serde(default)]
+    pub parent_refs: Vec<ParentReference>,
+    #[serde(default)]
+    pub hostnames: Vec<String>,
+    #[serde(default)]
+    pub rules: Vec<GrpcRouteRule>,
+}
+
+/// Its filters and backendRefs have HTTPRoute's shape (GRPCRoute allows
+/// the header modifiers, `RequestMirror` and `ExtensionRef`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrpcRouteRule {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub matches: Vec<GrpcRouteMatch>,
+    #[serde(default)]
+    pub filters: Vec<HttpRouteFilter>,
+    #[serde(default)]
+    pub backend_refs: Vec<HttpBackendRef>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct GrpcRouteMatch {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<GrpcMethodMatch>,
+    #[serde(default)]
+    pub headers: Vec<HttpHeaderMatch>,
+}
+
+/// `type` `Exact` (default) or `RegularExpression`; `service` and/or `method`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct GrpcMethodMatch {
+    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
+    pub match_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+}
+
 /// The status every route kind has.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct RouteStatus {

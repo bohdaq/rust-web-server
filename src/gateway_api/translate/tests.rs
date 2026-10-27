@@ -39,6 +39,7 @@ fn snapshot(fixtures: &[&str]) -> Snapshot {
         match doc["kind"].as_str().unwrap() {
             "Gateway" => s.gateways.push(serde_json::from_value(doc).unwrap()),
             "HTTPRoute" => s.http_routes.push(serde_json::from_value(doc).unwrap()),
+            "GRPCRoute" => s.grpc_routes.push(serde_json::from_value(doc).unwrap()),
             "ReferenceGrant" => s.reference_grants.push(serde_json::from_value(doc).unwrap()),
             "Service" => s.services.push(serde_json::from_value(doc).unwrap()),
             "Namespace" => s.namespaces.push(serde_json::from_value(doc).unwrap()),
@@ -297,4 +298,31 @@ fn mirror_targets_are_resolved_like_backends() {
     let (_, desired) = mirrored("no-such-service");
     let refs = find(&route_parent(&desired, "gateway-conformance-infra-test").conditions, "ResolvedRefs");
     assert_eq!(("False", "BackendNotFound"), (refs.status.as_str(), refs.reason.as_str()));
+}
+
+#[test]
+fn grpc_routes_attach_beside_http_routes_and_compile_methods_to_paths() {
+    let (config, desired) = run(&snapshot(&["grpcroute-exact-method-matching"]));
+    let parent = &desired.grpc_routes[&(INFRA.to_string(), "exact-matching".to_string())][0];
+    assert_eq!("True", find(&parent.conditions, "Accepted").status);
+    assert_eq!("True", find(&parent.conditions, "ResolvedRefs").status);
+    assert!(desired.http_routes.is_empty());
+    let http = listener(&desired, "same-namespace", "http");
+    assert!(http.supported_kinds.iter().any(|k| k.kind == "GRPCRoute"));
+    assert_eq!(1, http.attached_routes);
+    let served = config.listeners.iter().find(|l| l.gateway.1 == "same-namespace").unwrap();
+    let rule = &served.http_routes[0].rules[0];
+    let path = rule.matches[0].path.as_ref().unwrap();
+    assert_eq!((Some("Exact"), Some("/gateway_api_conformance.echo_basic.grpcecho.GrpcEcho/Echo")), (path.match_type.as_deref(), path.value.as_deref()));
+    assert_eq!(Some("kubernetes.io/h2c"), rule.backends[0].app_protocol.as_deref(), "gRPC backends are h2c");
+}
+
+#[test]
+fn grpc_routes_match_listener_hostnames() {
+    let (_, desired) = run(&snapshot(&["grpcroute-listener-hostname-matching"]));
+    for name in ["backend-v1", "backend-v2", "backend-v3"] {
+        let parents = &desired.grpc_routes[&(INFRA.to_string(), name.to_string())];
+        assert!(parents.iter().all(|p| find(&p.conditions, "Accepted").status == "True"), "{name}: {parents:?}");
+    }
+    assert_eq!(1, listener(&desired, "grpcroute-listener-hostname-matching", "listener-1").attached_routes);
 }

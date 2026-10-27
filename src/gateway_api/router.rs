@@ -88,6 +88,12 @@ fn query_value(request: &Request, name: &str) -> Option<String> {
     })
 }
 
+/// The method of a gRPC path `/<service>/<method>`.
+fn grpc_method(path: &str) -> Option<&str> {
+    let (service, method) = path.strip_prefix('/')?.split_once('/')?;
+    (!service.is_empty() && !method.is_empty() && !method.contains('/')).then_some(method)
+}
+
 /// A path prefix matches whole segments: `/foo` matches `/foo` and
 /// `/foo/bar`, not `/foobar`; a trailing `/` on the prefix is ignored.
 pub(crate) fn prefix_matches(prefix: &str, path: &str) -> bool {
@@ -106,6 +112,7 @@ fn match_score(m: &HttpRouteMatch, request: &Request) -> Option<(u8, usize, u8, 
             match p.match_type.as_deref().unwrap_or("PathPrefix") {
                 "Exact" if path == value => (1, value.len()),
                 "PathPrefix" if prefix_matches(value, path) => (0, value.len()),
+                super::routes::GRPC_METHOD_MATCH if grpc_method(path) == Some(value) => (0, value.len()),
                 _ => return None,
             }
         }
