@@ -21,7 +21,11 @@ cleanup() {
   rm -rf "$WORK"
 }
 trap cleanup EXIT
-fail() { echo "FAIL: $*"; tail -20 "$WORK"/*.log 2>/dev/null || true; exit 1; }
+fail() {
+  echo "FAIL: $*"
+  for log in "$WORK"/*.log; do echo "── $log"; tail -30 "$log" || true; done
+  exit 1
+}
 cd "$WORK"
 
 wait_port() {

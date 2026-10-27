@@ -456,3 +456,48 @@ async fn the_config_files_grpc_action_bridges_grpc_web() {
     assert_eq!("application/grpc-web", parts.headers["content-type"]);
     assert_eq!([message(b"ping").to_vec(), status_frame("0")].concat(), body);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn grpc_web_over_http1() {
+    use std::io::{Read, Write};
+    let backend = grpc_backend().await;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let toml = format!(
+        "[[upstream]]\nname = \"echo\"\nbackends = [\"grpc://{backend}\"]\n\n\
+         [[route]]\n[route.match]\npath = \"/test.Echo/*\"\n[route.action]\ntype = \"grpc\"\nupstream = \"echo\"\n"
+    );
+    let (app, _) = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(&toml));
+    tokio::spawn(crate::server::Server::run_plain(listener, app));
+    let reply = tokio::task::spawn_blocking(move || {
+        let body = message(b"ping");
+        let mut stream = std::net::TcpStream::connect(addr).unwrap();
+        stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let head = format!(
+            "POST /test.Echo/Unary HTTP/1.1\r\nHost: x\r\nOrigin: http://x\r\nContent-Type: application/grpc-web+proto\r\nX-Grpc-Web: 1\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        );
+        stream.write_all(head.as_bytes()).unwrap();
+        stream.write_all(&body).unwrap();
+        // Keep-alive, as a browser: read until the chunked body ends.
+        let mut reply = Vec::new();
+        let mut buf = [0u8; 4096];
+        let mut error = None;
+        while !reply.ends_with(b"0\r\n\r\n") {
+            match stream.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => reply.extend_from_slice(&buf[..n]),
+                Err(e) => {
+                    error = Some(e.to_string());
+                    break;
+                }
+            }
+        }
+        (error, reply)
+    })
+    .await
+    .unwrap();
+    let text = String::from_utf8_lossy(&reply.1).to_string();
+    assert!(reply.0.is_none(), "read error {:?} after: {text}", reply.0);
+    assert!(text.starts_with("HTTP/1.1 200") && text.contains("grpc-status:0"), "{text}");
+}

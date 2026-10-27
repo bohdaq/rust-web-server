@@ -37,14 +37,19 @@ function frames(bytes) { // -> { messages: [text], trailers: {name: value} }
 const b64 = bytes => btoa(String.fromCharCode(...bytes));
 const unb64 = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
 
+window.progress = [];
 async function call(method, text, mode) {
+  window.progress.push(`${method}(${text}, ${mode})`);
   const body = frame(msg(text));
   const response = await fetch(`/echo.Echo/${method}`, {
+    signal: AbortSignal.timeout(10000),
     method: "POST",
     headers: { "content-type": mode === "text" ? "application/grpc-web-text" : "application/grpc-web+proto", "x-grpc-web": "1" },
     body: mode === "text" ? b64(body) : body,
   });
+  window.progress.push(`  head ${response.status} ${response.headers.get("content-type")}`);
   let bytes = new Uint8Array(await response.arrayBuffer());
+  window.progress.push(`  body ${bytes.length} bytes`);
   if (mode === "text") bytes = unb64(decoder.decode(bytes));
   return { status: response.status, headers: response.headers, ...frames(bytes) };
 }
