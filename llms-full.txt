@@ -18401,7 +18401,9 @@ With the `gateway-api` build feature and `RWS_CONFIG_GATEWAY_API_ENABLED=true`, 
 
 The GatewayClass's `status.supportedFeatures` lists what rws claims; the conformance job checks the same list.
 
-Mirroring, GRPCRoute, TLSRoute, TCPRoute and UDPRoute come in the following phases.
+- **Mirroring**: each `RequestMirror` filter sends a copy of the request, as the rule's other request filters left it, to one ready endpoint of its Service, for `percent` or `fraction` of requests (all when neither is set); the copy's response is dropped and never delays the client's.
+
+GRPCRoute, TLSRoute, TCPRoute and UDPRoute come in the following phases.
 
 ## Settings
 

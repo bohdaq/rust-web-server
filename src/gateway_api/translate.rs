@@ -124,6 +124,9 @@ pub const SUPPORTED_FEATURES: &[&str] = &[
     "HTTPRoutePathRewrite",
     "HTTPRoutePortRedirect",
     "HTTPRouteQueryParamMatching",
+    "HTTPRouteRequestMirror",
+    "HTTPRouteRequestMultipleMirrors",
+    "HTTPRouteRequestPercentageMirror",
     "HTTPRouteRequestTimeout",
     "HTTPRouteResponseHeaderModification",
     "HTTPRouteSchemeRedirect",
@@ -525,8 +528,10 @@ fn hostname_overlap(a: &str, b: &str) -> bool {
 fn resolve_backends(route: &HttpRoute, snapshot: &Snapshot) -> Result<(), (&'static str, String)> {
     let namespace = route.namespace().unwrap_or_default();
     for rule in &route.spec.rules {
-        for backend in &rule.backend_refs {
-            let reference = &backend.backend_ref.object;
+        // backendRefs, then the Services `RequestMirror` filters send copies to.
+        let mirrors = rule.filters.iter().chain(rule.backend_refs.iter().flat_map(|b| &b.filters)).filter_map(|f| f.request_mirror.as_ref());
+        let references = rule.backend_refs.iter().map(|b| &b.backend_ref.object).chain(mirrors.map(|m| &m.backend_ref));
+        for reference in references {
             if !reference.group().is_empty() || reference.kind() != "Service" {
                 return Err(("InvalidKind", format!("{} isn't a supported backend kind", reference.kind())));
             }

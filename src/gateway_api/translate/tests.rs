@@ -273,3 +273,28 @@ fn claimed_features_are_sorted_and_match_the_conformance_job() {
     let line = workflow.lines().find_map(|l| l.trim().strip_prefix("FEATURES: ")).expect("FEATURES in the workflow");
     assert_eq!(SUPPORTED_FEATURES.join(","), line);
 }
+
+#[test]
+fn mirror_targets_are_resolved_like_backends() {
+    let mirrored = |service: &str| {
+        let mut s = snapshot(&["httproute-simple-same-namespace"]);
+        let filter = HttpRouteFilter {
+            filter_type: "RequestMirror".to_string(),
+            request_mirror: Some(HttpRequestMirrorFilter {
+                backend_ref: BackendObjectReference { name: service.to_string(), port: Some(8080), ..Default::default() },
+                percent: Some(35),
+                fraction: None,
+            }),
+            ..Default::default()
+        };
+        s.http_routes[0].spec.rules[0].filters.push(filter);
+        run(&s)
+    };
+    let (config, desired) = mirrored("infra-backend-v2");
+    assert_eq!("True", find(&route_parent(&desired, "gateway-conformance-infra-test").conditions, "ResolvedRefs").status);
+    let served = config.listeners.iter().find(|l| l.gateway.1 == "same-namespace").unwrap();
+    assert_eq!(0.35, served.http_routes[0].rules[0].mirrors[0].share);
+    let (_, desired) = mirrored("no-such-service");
+    let refs = find(&route_parent(&desired, "gateway-conformance-infra-test").conditions, "ResolvedRefs");
+    assert_eq!(("False", "BackendNotFound"), (refs.status.as_str(), refs.reason.as_str()));
+}

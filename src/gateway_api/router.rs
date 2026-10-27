@@ -19,7 +19,7 @@ use crate::response::{Response, STATUS_CODE_REASON_PHRASE};
 use super::filters::{self, status, Cors};
 use crate::server::ConnectionInfo;
 
-use super::routes::{CompiledHttpRoute, CompiledRule};
+use super::routes::{CompiledHttpRoute, CompiledRule, Mirror};
 use super::translate::ListenerConfig;
 use super::types::{HttpRouteFilter, HttpRouteMatch};
 
@@ -158,6 +158,37 @@ pub(crate) fn select<'a>(listener: &'a ListenerConfig, request: &Request, host: 
     best.map(|(_, route, rule, m)| (route, rule, m))
 }
 
+/// True for about `share` (0.0–1.0) of calls.
+fn sample(share: f64) -> bool {
+    use std::hash::{BuildHasher, Hasher};
+    static KEYS: std::sync::OnceLock<std::collections::hash_map::RandomState> = std::sync::OnceLock::new();
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    if share >= 1.0 {
+        return true;
+    }
+    let mut hasher = KEYS.get_or_init(Default::default).build_hasher();
+    hasher.write_usize(COUNTER.fetch_add(1, Ordering::Relaxed));
+    ((hasher.finish() >> 11) as f64 / (1u64 << 53) as f64) < share
+}
+
+/// Send a copy of `request` to one of the mirror's endpoints on a thread
+/// of its own; the response is dropped.
+fn send_mirror(mirror: &Mirror, request: &Request, client_ip: &str) {
+    let Ok(endpoints) = &mirror.endpoints else { return };
+    let Some(endpoint) = endpoints.get(MIRROR_COUNTER.fetch_add(1, Ordering::Relaxed) % endpoints.len().max(1)).cloned() else { return };
+    let request = request.clone();
+    let client_ip = client_ip.to_string();
+    std::thread::spawn(move || {
+        let Some((ip, port)) = endpoint.rsplit_once(':') else { return };
+        let ip = ip.trim_start_matches('[').trim_end_matches(']');
+        let Ok(port) = port.parse::<u16>() else { return };
+        let host = request.header("host").map(|h| h.value.to_string()).unwrap_or_else(|| endpoint.clone());
+        let _ = crate::proxy::forward_pooled_with_host(crate::proxy::shared_pool(), &request, &client_ip, ip, port, &host, Duration::from_secs(2), Duration::from_secs(10));
+    });
+}
+
+static MIRROR_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
 /// How one attempt ended.
 enum Attempt {
     /// A response to send (or to retry on its status).
@@ -293,6 +324,7 @@ impl PortRouter {
         let mut request = request.clone();
         let mut response_filters: Vec<&HttpRouteFilter> = Vec::new();
         let mut cors_headers = Vec::new();
+        let mut mirrored = 0;
         for filter in &rule.filters {
             match filter.filter_type.as_str() {
                 "RequestHeaderModifier" => {
@@ -331,9 +363,15 @@ impl PortRouter {
                         }
                     }
                 }
-                "RequestMirror" => {} // Phase 4
+                "RequestMirror" => mirrored += filter.request_mirror.is_some() as usize,
                 // ExtensionRef and anything unknown: the spec's 500.
                 _ => return status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error),
+            }
+        }
+        // Mirrors get the request as the filters left it.
+        for mirror in rule.mirrors.iter().take(mirrored) {
+            if sample(mirror.share) {
+                send_mirror(mirror, &request, &connection.client.ip);
             }
         }
         let mut response = self.forward(rule, &request, connection);

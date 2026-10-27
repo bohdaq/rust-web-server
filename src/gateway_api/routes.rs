@@ -28,6 +28,28 @@ pub struct CompiledRule {
     pub backends: Vec<Backend>,
     pub timeouts: Option<HttpRouteTimeouts>,
     pub retry: Option<HttpRouteRetry>,
+    /// The rule's `RequestMirror` filters, resolved.
+    pub mirrors: Vec<Mirror>,
+}
+
+/// Where a `RequestMirror` filter sends copies, and how many.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Mirror {
+    pub endpoints: Result<Vec<String>, String>,
+    /// Share of requests mirrored, 0.0–1.0 (`percent` or `fraction`;
+    /// all when neither is set).
+    pub share: f64,
+}
+
+impl Mirror {
+    fn from_filter(filter: &HttpRequestMirrorFilter, namespace: &str, snapshot: &Snapshot) -> Mirror {
+        let share = match (&filter.fraction, filter.percent) {
+            (Some(f), _) => f.numerator as f64 / f.denominator.unwrap_or(100).max(1) as f64,
+            (None, Some(percent)) => percent as f64 / 100.0,
+            (None, None) => 1.0,
+        };
+        Mirror { endpoints: resolve(&filter.backend_ref, namespace, "HTTPRoute", snapshot).0, share: share.clamp(0.0, 1.0) }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -65,6 +87,13 @@ pub fn compile(route: &HttpRoute, snapshot: &Snapshot) -> CompiledHttpRoute {
                 .collect(),
             timeouts: rule.timeouts.clone(),
             retry: rule.retry.clone(),
+            mirrors: rule
+                .filters
+                .iter()
+                .filter(|f| f.filter_type == "RequestMirror")
+                .filter_map(|f| f.request_mirror.as_ref())
+                .map(|f| Mirror::from_filter(f, &namespace, snapshot))
+                .collect(),
         })
         .collect();
     CompiledHttpRoute {

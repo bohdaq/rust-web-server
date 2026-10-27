@@ -37,6 +37,7 @@ fn config(container_port: u16, backend: u16, protocol: &str, tls: Option<(Vec<u8
         backends: vec![Backend { weight: 1, endpoints: Ok(vec![format!("127.0.0.1:{backend}")]), app_protocol: None, filters: vec![] }],
         timeouts: None,
         retry: None,
+        mirrors: vec![],
     };
     GatewayConfig {
         listeners: vec![ListenerConfig {

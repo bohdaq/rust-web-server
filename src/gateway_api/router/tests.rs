@@ -17,7 +17,7 @@ fn path(kind: &str, value: &str) -> HttpRouteMatch {
 }
 
 fn rule(name: &str, matches: Vec<HttpRouteMatch>, backends: Vec<Backend>) -> CompiledRule {
-    CompiledRule { name: Some(name.to_string()), matches, filters: vec![], backends, timeouts: None, retry: None }
+    CompiledRule { name: Some(name.to_string()), matches, filters: vec![], backends, timeouts: None, retry: None, mirrors: vec![] }
 }
 
 fn backend(weight: u32, endpoints: Result<Vec<String>, String>) -> Backend {
@@ -283,4 +283,50 @@ fn h2c_backends_get_http2_with_prior_knowledge() {
     r.timeouts = Some(crate::gateway_api::types::HttpRouteTimeouts { request: Some("300ms".to_string()), backend_request: None });
     let _ = router.forward(&r, &request("GET", "/", &[("host", "example.org")]), &connection());
     assert_eq!(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".to_vec(), preface.join().unwrap());
+}
+
+#[test]
+fn sampling_follows_the_share() {
+    let hits = (0..20_000).filter(|_| sample(0.35)).count();
+    assert!((6_400..7_600).contains(&hits), "{hits}");
+    assert!((0..1000).all(|_| sample(1.0)));
+    assert!((0..1000).all(|_| !sample(0.0)));
+}
+
+#[test]
+fn mirrors_get_a_copy_after_the_request_filters() {
+    use crate::gateway_api::routes::Mirror;
+    use crate::gateway_api::types::{HttpHeader, HttpHeaderFilter, HttpRouteFilter};
+    use std::io::{Read, Write};
+    let mirror = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let mirror_address = mirror.local_addr().unwrap().to_string();
+    let copy = std::thread::spawn(move || {
+        let (mut stream, _) = mirror.accept().unwrap();
+        let mut head = Vec::new();
+        let mut byte = [0u8; 1];
+        while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).unwrap_or(0) == 1 {
+            head.push(byte[0]);
+        }
+        let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+        String::from_utf8_lossy(&head).to_string()
+    });
+    let (primary, seen) = flaky_backend(0, 200, std::time::Duration::ZERO);
+    let mut r = rule("x", vec![path("PathPrefix", "/")], vec![backend(1, Ok(vec![primary]))]);
+    r.filters = vec![
+        HttpRouteFilter { filter_type: "RequestMirror".to_string(), request_mirror: Some(Default::default()), ..Default::default() },
+        HttpRouteFilter {
+            filter_type: "RequestHeaderModifier".to_string(),
+            request_header_modifier: Some(HttpHeaderFilter { set: vec![HttpHeader { name: "X-Set".to_string(), value: "yes".to_string() }], ..Default::default() }),
+            ..Default::default()
+        },
+    ];
+    r.mirrors = vec![Mirror { endpoints: Ok(vec![mirror_address]), share: 1.0 }];
+    let l = listener(None, vec![route("r", "1", &[], vec![r])]);
+    let router = PortRouter::new(Arc::new(RwLock::new(Arc::new(vec![]))));
+    let req = request("GET", "/m", &[("host", "example.org")]);
+    let (_, rule, matched) = select(&l, &req, "example.org").unwrap();
+    assert_eq!(200, router.route(&l, rule, matched, &req, "example.org", &connection()).status_code);
+    assert_eq!(1, seen.load(Ordering::SeqCst));
+    let head = copy.join().unwrap();
+    assert!(head.starts_with("GET /m HTTP/1.1") && head.contains("X-Set: yes"), "{head}");
 }
