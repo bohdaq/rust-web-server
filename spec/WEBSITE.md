@@ -239,8 +239,9 @@ that also links the static `llms.txt` files and the agent skill.
   root ones (the newest).
 - The agent skill/rules pack (`agents/` in the repo) published at
   `/agents/`.
-- Register the repository with Context7 as well: agents that already use it
-  get versioned rws docs with no setup.
+
+Third-party docs indexes (Context7 and the like) are deliberately not used:
+versioned docs for agents come from rws's own server on the new site.
 
 ### Done when
 
