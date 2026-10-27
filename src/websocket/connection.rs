@@ -33,7 +33,8 @@ pub const UPGRADE_TTL: Duration = Duration::from_secs(60);
 /// The default limit on one message (all its fragments): 16 MiB.
 pub const MAX_MESSAGE: usize = 16 * 1024 * 1024;
 
-type Handler = Box<dyn FnOnce(WebSocketConnection) + Send>;
+/// Runs on the upgraded connection's reader and writer.
+type Handler = Box<dyn FnOnce(Box<dyn Read + Send>, Box<dyn Write + Send>) + Send>;
 
 /// A complete message from the client: fragments joined, text checked to
 /// be UTF-8.
@@ -239,7 +240,7 @@ impl Upgrade {
     /// Run the handler on `reader` / `writer` (blocks for the connection's
     /// life).
     pub(crate) fn run(self, reader: Box<dyn Read + Send>, writer: Box<dyn Write + Send>) {
-        (self.0)(WebSocketConnection::new(reader, writer))
+        (self.0)(reader, writer)
     }
 }
 
@@ -303,12 +304,29 @@ impl WebSocket {
                 return refused;
             }
         };
+        Self::register(&mut response, Box::new(move |reader, writer| handler(WebSocketConnection::new(reader, writer))));
+        response
+    }
+
+    /// Put `handler` behind `response` (a `101`): the server gives it the
+    /// raw connection once the response is sent.
+    fn register(response: &mut Response, handler: Handler) {
         let token = token();
         let mut waiting = waiting().lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
         waiting.retain(|_, (since, _)| now.duration_since(*since) < UPGRADE_TTL);
-        waiting.insert(token.clone(), (now, Box::new(handler)));
+        waiting.insert(token.clone(), (now, handler));
         response.headers.push(Header { name: UPGRADE_HEADER.into(), value: token.into() });
+    }
+
+    /// Like [`WebSocket::upgrade`] for a proxy: `response` is the backend's
+    /// `101`, and `relay` gets the client connection's raw bytes.
+    #[cfg(feature = "gateway-api")]
+    pub(crate) fn upgrade_raw<F>(mut response: Response, relay: F) -> Response
+    where
+        F: FnOnce(Box<dyn Read + Send>, Box<dyn Write + Send>) + Send + 'static,
+    {
+        Self::register(&mut response, Box::new(relay));
         response
     }
 }

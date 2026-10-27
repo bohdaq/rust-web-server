@@ -264,3 +264,23 @@ fn timeouts_answer_504_and_zero_disables_them() {
     assert_eq!(200, router.forward(&with_policy(&slow, Some(("0s", "0s")), None), &r, &connection()).status_code, "0s disables");
     assert_eq!(200, router.forward(&with_policy(&slow, Some(("2s", "")), None), &r, &connection()).status_code);
 }
+
+#[test]
+fn h2c_backends_get_http2_with_prior_knowledge() {
+    use std::io::Read;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let preface = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buffer = [0u8; 24];
+        stream.read_exact(&mut buffer).unwrap();
+        buffer.to_vec()
+    });
+    let router = PortRouter::new(Arc::new(RwLock::new(Arc::new(vec![]))));
+    let mut b = backend(1, Ok(vec![address]));
+    b.app_protocol = Some("kubernetes.io/h2c".to_string());
+    let mut r = rule("x", vec![path("PathPrefix", "/")], vec![b]);
+    r.timeouts = Some(crate::gateway_api::types::HttpRouteTimeouts { request: Some("300ms".to_string()), backend_request: None });
+    let _ = router.forward(&r, &request("GET", "/", &[("host", "example.org")]), &connection());
+    assert_eq!(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".to_vec(), preface.join().unwrap());
+}

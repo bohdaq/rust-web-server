@@ -263,3 +263,13 @@ fn label_selectors_match_labels_and_expressions() {
     assert!(selector_matches(&selector(None, vec![req("Exists", &[])]), &labels));
     assert!(!selector_matches(&selector(None, vec![req("DoesNotExist", &[])]), &labels));
 }
+
+#[test]
+fn claimed_features_are_sorted_and_match_the_conformance_job() {
+    let mut sorted = SUPPORTED_FEATURES.to_vec();
+    sorted.sort();
+    assert_eq!(sorted, SUPPORTED_FEATURES);
+    let workflow = include_str!("../../../.github/workflows/gateway-api.yml");
+    let line = workflow.lines().find_map(|l| l.trim().strip_prefix("FEATURES: ")).expect("FEATURES in the workflow");
+    assert_eq!(SUPPORTED_FEATURES.join(","), line);
+}

@@ -18,7 +18,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   manifests and a fake API server. It serves traffic: a Service per Gateway,
   HTTP/HTTPS listeners on container ports, HTTPRoute matching with the spec's
   precedence, weighted backends over EndpointSlices, the filters (header
-  modifiers, redirects, URL rewrites, CORS), Lease leader election, Helm
+  modifiers, redirects, URL rewrites, CORS), timeouts and retries, h2c and
+  WebSocket backends, Lease leader election, Helm
   values (`gatewayAPI.*`) and a CI job running the official conformance suite
   in kind.
 

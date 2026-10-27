@@ -26,7 +26,8 @@ env:
   GATEWAY_API_VERSION: v1.6.3
   KIND_VERSION: v0.33.0
   PROFILES: GATEWAY-HTTP
-  FEATURES: Gateway,HTTPRoute,ReferenceGrant
+  # Keep in step with gateway_api::translate::SUPPORTED_FEATURES.
+  FEATURES: Gateway,HTTPRoute,HTTPRoute303RedirectStatusCode,HTTPRoute307RedirectStatusCode,HTTPRoute308RedirectStatusCode,HTTPRouteBackendProtocolH2C,HTTPRouteBackendProtocolWebSocket,HTTPRouteBackendRequestHeaderModification,HTTPRouteBackendTimeout,HTTPRouteCORS,HTTPRouteHostRewrite,HTTPRouteMethodMatching,HTTPRouteNamedRouteRule,HTTPRouteParentRefPort,HTTPRoutePathRedirect,HTTPRoutePathRewrite,HTTPRoutePortRedirect,HTTPRouteQueryParamMatching,HTTPRouteRequestTimeout,HTTPRouteResponseHeaderModification,HTTPRouteSchemeRedirect,ReferenceGrant
 
 jobs:
   conformance:

@@ -19,6 +19,10 @@ With the `gateway-api` build feature and `RWS_CONFIG_GATEWAY_API_ENABLED=true`, 
 
 - **Timeouts and retries**: `timeouts.request` bounds the whole exchange, retries included, and `timeouts.backendRequest` each attempt; past either the client gets `504`, and `0s` turns a timeout off. `retry.attempts` is the number of retries (the first try isn't counted) on the listed `retry.codes`, on connection errors and on backend timeouts, `retry.backoff` apart (25 ms when unset).
 
+- **Backend protocols**: a Service port with `appProtocol: kubernetes.io/h2c` is reached over cleartext HTTP/2 (prior knowledge); WebSocket and other `Upgrade` requests are forwarded on a connection of their own, and a backend's `101` turns the client's connection into a byte relay with it. The suite's `retry` field is experimental-channel: rws honours it, but doesn't claim the feature yet.
+
+The GatewayClass's `status.supportedFeatures` lists what rws claims; the conformance job checks the same list.
+
 Mirroring, GRPCRoute, TLSRoute, TCPRoute and UDPRoute come in the following phases.
 
 ## Settings

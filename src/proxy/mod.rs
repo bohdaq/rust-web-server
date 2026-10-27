@@ -497,6 +497,7 @@ pub(crate) const REGENERATED_OR_HOP_BY_HOP: &[&str] = &[
 /// HTTP/2 clients reject outright. The upstream's `Content-Type` is moved
 /// onto the body instead; the status line is re-emitted as HTTP/1.1
 /// regardless of the backend's version.
+#[cfg_attr(not(feature = "http2"), allow(dead_code))]
 pub(crate) fn normalize_upstream_response(mut response: Response) -> Response {
     response.http_version.clear();
     response.http_version.push_str(crate::http::VERSION.http_1_1);
@@ -856,6 +857,7 @@ pub(crate) fn forward_pooled(
 
 /// [`forward_pooled`], sending `host_header` as the `Host` (the client's, for
 /// a gateway that must preserve it) instead of the backend's address.
+#[cfg(feature = "gateway-api")]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn forward_pooled_with_host(
     pool: &ConnPool,
@@ -1437,6 +1439,7 @@ impl crate::middleware::Middleware for H2ReverseProxy {
                 tls,
                 connect_timeout: self.inner.connect_timeout,
                 read_timeout: self.inner.read_timeout,
+                authority: None,
             };
             if let Ok(response) = h2_upstream::forward(request, &connection.client.ip, &target) {
                 return Ok(response);
@@ -1477,7 +1480,24 @@ pub(crate) fn forward_h2(
         Some(t) => t.h2_config(),
         None => h2_upstream::default_tls(),
     });
-    h2_upstream::forward(request, client_ip, &h2_upstream::Target { backend: &backend, tls, connect_timeout, read_timeout })
+    h2_upstream::forward(request, client_ip, &h2_upstream::Target { backend: &backend, tls, connect_timeout, read_timeout, authority: None })
+}
+
+/// Forward over cleartext HTTP/2 with prior knowledge (h2c) to `host:port`,
+/// sending `authority` as `:authority` — the Gateway API router's
+/// `kubernetes.io/h2c` backends.
+#[cfg(feature = "gateway-api")]
+pub(crate) fn forward_h2c_with_host(
+    request: &Request,
+    client_ip: &str,
+    host: &str,
+    port: u16,
+    authority: &str,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
+    let backend = Backend { host: host.to_string(), port, tls: false };
+    h2_upstream::forward(request, client_ip, &h2_upstream::Target { backend: &backend, tls: None, connect_timeout, read_timeout, authority: Some(authority) })
 }
 
 // ── gRPC proxy ────────────────────────────────────────────────────────────────

@@ -54,6 +54,9 @@ pub(crate) struct Target<'a> {
     pub(super) tls: Option<&'a Arc<rustls::ClientConfig>>,
     pub(super) connect_timeout: Duration,
     pub(super) read_timeout: Duration,
+    /// `:authority` to send instead of the backend's address (the Gateway
+    /// API router keeps the client's `Host`).
+    pub(super) authority: Option<&'a str>,
 }
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -103,7 +106,7 @@ pub(crate) fn with_h2_alpn(mut config: rustls::ClientConfig) -> rustls::ClientCo
 pub(crate) fn forward(request: &Request, client_ip: &str, target: &Target<'_>) -> Result<Response, String> {
     let backend = target.backend;
     let addr = format!("{}:{}", backend.host, backend.port);
-    let head = request_head(request, client_ip, &addr, target.tls.is_some())?;
+    let head = request_head(request, client_ip, target.authority.unwrap_or(&addr), target.tls.is_some())?;
     let key = pool_key(&addr, target.tls);
     let (head_tx, head_rx) = std::sync::mpsc::sync_channel(1);
     let exchange = Exchange {

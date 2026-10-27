@@ -103,8 +103,32 @@ pub struct ListenerConfig {
 }
 
 /// The features rws reports on its GatewayClasses (names as in the suite's
-/// `pkg/features` at Gateway API v1.6.3). Grows with each phase.
-pub const SUPPORTED_FEATURES: &[&str] = &["Gateway", "HTTPRoute", "ReferenceGrant"];
+/// `pkg/features` at Gateway API v1.6.3; sorted). Grows with each phase;
+/// `FEATURES` in `.github/workflows/gateway-api.yml` must match.
+pub const SUPPORTED_FEATURES: &[&str] = &[
+    "Gateway",
+    "HTTPRoute",
+    "HTTPRoute303RedirectStatusCode",
+    "HTTPRoute307RedirectStatusCode",
+    "HTTPRoute308RedirectStatusCode",
+    "HTTPRouteBackendProtocolH2C",
+    "HTTPRouteBackendProtocolWebSocket",
+    "HTTPRouteBackendRequestHeaderModification",
+    "HTTPRouteBackendTimeout",
+    "HTTPRouteCORS",
+    "HTTPRouteHostRewrite",
+    "HTTPRouteMethodMatching",
+    "HTTPRouteNamedRouteRule",
+    "HTTPRouteParentRefPort",
+    "HTTPRoutePathRedirect",
+    "HTTPRoutePathRewrite",
+    "HTTPRoutePortRedirect",
+    "HTTPRouteQueryParamMatching",
+    "HTTPRouteRequestTimeout",
+    "HTTPRouteResponseHeaderModification",
+    "HTTPRouteSchemeRedirect",
+    "ReferenceGrant",
+];
 
 pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (GatewayConfig, Desired) {
     let controller_name = settings.controller_name.as_str();

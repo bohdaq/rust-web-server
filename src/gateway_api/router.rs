@@ -259,16 +259,23 @@ impl PortRouter {
         };
         let host_header = request.header("host").map(|h| h.value.to_string()).unwrap_or_else(|| endpoint.clone());
         let started = std::time::Instant::now();
-        match crate::proxy::forward_pooled_with_host(
+        let forwarded = if super::upgrade::is_upgrade(request) {
+            super::upgrade::forward(request, &connection.client.ip, ip, port, &host_header, timeout)
+        } else if backend.app_protocol.as_deref() == Some("kubernetes.io/h2c") {
+            crate::proxy::forward_h2c_with_host(request, &connection.client.ip, ip, port, &host_header, timeout.min(Duration::from_secs(10)), timeout)
+        } else {
+            crate::proxy::forward_pooled_with_host(
             crate::proxy::shared_pool(),
             request,
             &connection.client.ip,
             ip,
             port,
             &host_header,
-            timeout.min(Duration::from_secs(10)),
-            timeout,
-        ) {
+                timeout.min(Duration::from_secs(10)),
+                timeout,
+            )
+        };
+        match forwarded {
             Ok(response) => Attempt::Response(response),
             Err(_) => Attempt::Failed { timed_out: started.elapsed() >= timeout },
         }
