@@ -523,12 +523,18 @@ impl rust_web_server::middleware::Middleware for GlobalRateLimit {
 /// Automatic HTTPS: when `RWS_CONFIG_ACME_DOMAINS` is set, obtain (or reuse)
 /// a certificate before the TLS listener starts, then keep it renewed.
 #[cfg(feature = "http2")]
-async fn start_acme() {
+async fn start_acme(listener: Option<&std::net::TcpListener>) {
     #[cfg(feature = "acme")]
     {
         use rust_web_server::acme::{AcmeConfig, AcmeManager};
         if let Some(cfg) = AcmeConfig::from_env() {
             cfg.install_as_tls_certificate();
+            // TLS-ALPN-01 before the server runs: answer on its own socket.
+            if rust_web_server::acme::tls_alpn::enabled() {
+                if let Some(socket) = listener.and_then(|l| l.try_clone().ok()) {
+                    rust_web_server::acme::tls_alpn::set_startup_listener(socket);
+                }
+            }
             let mgr = AcmeManager::new(cfg);
             mgr.provision_until_ready().await;
             tokio::spawn(mgr.run_renewal_loop());
@@ -536,6 +542,7 @@ async fn start_acme() {
     }
     #[cfg(not(feature = "acme"))]
     {
+        let _ = listener;
         let domains = std::env::var(rust_web_server::entry_point::Config::RWS_CONFIG_ACME_DOMAINS)
             .unwrap_or_default();
         if !domains.trim().is_empty() {
@@ -593,7 +600,7 @@ async fn serve() {
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
     rust_web_server::config_watch::start();
 
-    start_acme().await;
+    start_acme(Some(&listener)).await;
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
@@ -620,7 +627,7 @@ async fn serve() {
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
     rust_web_server::config_watch::start();
 
-    start_acme().await;
+    start_acme(Some(&listener)).await;
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();

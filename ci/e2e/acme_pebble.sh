@@ -14,12 +14,15 @@
 #      redirect listener (Pebble's authorization reuse is off, so a real
 #      challenge happens), and hot-swap to the new certificate without a
 #      restart.
+#   7. with challenge = "tls-alpn-01" (RFC 8737), on Pebble's TLS-ALPN port:
+#      get the first certificate through a temporary acceptor on the HTTPS
+#      socket, and renew through the live TLS listener — no port 80.
 #
 #   ci/e2e/acme_pebble.sh <path-to-rws> <path-to-pebble> <pebble-source-dir>
 #
 # rws must be built with the `acme` feature. Uses ports 8445 (HTTPS),
-# 5002 (redirect + HTTP-01; Pebble's validation port), 9099 (backend),
-# 14000/15000 (Pebble).
+# 5002 (redirect + HTTP-01; Pebble's validation port), 5001 (HTTPS with
+# TLS-ALPN-01; Pebble's), 9099 (backend), 14000/15000 (Pebble).
 set -euo pipefail
 
 RWS="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
@@ -182,5 +185,58 @@ after="$(serial)"
 [ -n "$after" ] && [ "$before" != "$after" ] || fail "served certificate did not change ($before -> $after)"
 ! grep -q "ordering without 'replaces'" rws.log || fail "the CA refused the order's 'replaces'"
 pass "renewed on the CA's renewal information via the redirect listener and hot-swapped ($before -> $after)"
+
+# ── 7. TLS-ALPN-01 ───────────────────────────────────────────────────────────
+set_ari_now() { # <cert.pem>: Pebble's renewal information says "renew now"
+  python3 -I - "$1" > "$WORK/ari.json" <<'PY'
+import json, sys, datetime
+pem = open(sys.argv[1]).read()
+first = pem[:pem.index("-----END CERTIFICATE-----") + len("-----END CERTIFICATE-----")] + "\n"
+now = datetime.datetime.now(datetime.timezone.utc)
+fmt = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+window = {"suggestedWindow": {"start": fmt(now - datetime.timedelta(hours=1)), "end": fmt(now - datetime.timedelta(minutes=30))}}
+print(json.dumps({"Certificate": first, "ARIResponse": json.dumps(window)}))
+PY
+  curl -sf --cacert "$MINICA" -X POST --data @"$WORK/ari.json" https://localhost:15000/set-renewal-info/ \
+    || fail "could not set Pebble's renewal information"
+}
+mkdir -p "$WORK/alpn" && cd "$WORK/alpn"
+echo "hello over tls-alpn" > index.html
+cat > rws.config.toml <<CFG
+port = 5001
+
+[acme]
+domains   = ["localhost"]
+email     = "ci@example.com"
+directory = "https://localhost:14000/dir"
+ca_file   = "$MINICA"
+challenge = "tls-alpn-01"
+profile   = "shortlived"
+CFG
+"$RWS" --check rws.config.toml > check.log || fail "rws --check (tls-alpn-01): $(cat check.log)"
+RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS=20 "$RWS" > rws.log 2>&1 &
+PIDS+=($!)
+alpn_fail() { cp rws.log "$WORK/site/rws.log"; fail "tls-alpn-01: $*"; }
+wait_for rws.log "Listening for TLS" 90 || alpn_fail "rws never started its TLS listener"
+grep -q "Answering TLS-ALPN-01 challenge for localhost on" rws.log || alpn_fail "no temporary acceptor at startup"
+grep -q "Certificate written" rws.log || alpn_fail "no certificate was issued"
+body="$(curl -sS --cacert "$WORK/root.pem" https://localhost:5001/)" || alpn_fail "HTTPS request failed"
+[ "$body" = "hello over tls-alpn" ] || alpn_fail "body $body"
+pass "TLS-ALPN-01: certificate issued on the HTTPS socket, served and verified"
+
+alpn_serial() { echo | openssl s_client -connect 127.0.0.1:5001 -servername localhost 2>/dev/null | openssl x509 -noout -serial; }
+before="$(alpn_serial)"
+set_ari_now "$WORK/alpn/.rws/acme/cert.pem"
+wait_for rws.log "Answering TLS-ALPN-01 challenge for localhost via the TLS listener" 60 \
+  || alpn_fail "renewal not answered by the TLS listener"
+for _ in $(seq 1 60); do
+  [ "$(grep -c 'Certificate written' rws.log)" -ge 2 ] && break
+  sleep 1
+done
+[ "$(grep -c 'Certificate written' rws.log)" -ge 2 ] || alpn_fail "renewed certificate never written"
+sleep 2
+after="$(alpn_serial)"
+[ -n "$after" ] && [ "$before" != "$after" ] || alpn_fail "served certificate did not change"
+pass "TLS-ALPN-01: renewed through the live TLS listener and hot-swapped ($before -> $after)"
 
 echo "all ACME end-to-end checks passed"

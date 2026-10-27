@@ -12,6 +12,17 @@ use crate::entry_point::command_line_args::{override_environment_variables_from_
 use crate::entry_point::config_file::override_environment_variables_from_config;
 use crate::entry_point::environment_variables::read_system_environment_variables;
 
+/// `value` as startup output may show it: secrets (a name with `SECRET`,
+/// `PASSWORD` or `TOKEN`) are replaced.
+pub fn shown<'a>(name: &str, value: &'a str) -> std::borrow::Cow<'a, str> {
+    let upper = name.to_ascii_uppercase();
+    if ["SECRET", "PASSWORD", "TOKEN"].iter().any(|word| upper.contains(word)) && !value.is_empty() {
+        std::borrow::Cow::Borrowed("(hidden)")
+    } else {
+        std::borrow::Cow::Borrowed(value)
+    }
+}
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Config {}
 
@@ -155,6 +166,27 @@ impl Config {
     /// After a failed renewal the next attempt comes after at most one hour.
     pub const RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS: &'static str = "RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS";
     pub const RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS_DEFAULT_VALUE: &'static str = "43200";
+
+    /// How to prove control of the domains: `http-01` (default),
+    /// `tls-alpn-01` (on the HTTPS port) or `dns-01` (needed for wildcards).
+    pub const RWS_CONFIG_ACME_CHALLENGE: &'static str = "RWS_CONFIG_ACME_CHALLENGE";
+    /// DNS-01: `rfc2136` (a DNS UPDATE to `RWS_CONFIG_ACME_DNS_SERVER`) or
+    /// `exec` (a program that adds and removes the record).
+    pub const RWS_CONFIG_ACME_DNS_PROVIDER: &'static str = "RWS_CONFIG_ACME_DNS_PROVIDER";
+    /// DNS-01 `rfc2136`: the primary server, `host[:port]` (port 53).
+    pub const RWS_CONFIG_ACME_DNS_SERVER: &'static str = "RWS_CONFIG_ACME_DNS_SERVER";
+    /// DNS-01: the zone holding the records; found by SOA lookup when empty.
+    pub const RWS_CONFIG_ACME_DNS_ZONE: &'static str = "RWS_CONFIG_ACME_DNS_ZONE";
+    /// DNS-01 `rfc2136`: the TSIG key name the server knows.
+    pub const RWS_CONFIG_ACME_DNS_TSIG_KEY: &'static str = "RWS_CONFIG_ACME_DNS_TSIG_KEY";
+    /// DNS-01 `rfc2136`: the TSIG secret, base64 — never printed.
+    pub const RWS_CONFIG_ACME_DNS_TSIG_SECRET: &'static str = "RWS_CONFIG_ACME_DNS_TSIG_SECRET";
+    /// DNS-01 `rfc2136`: `hmac-sha256` (default) or `hmac-sha512`.
+    pub const RWS_CONFIG_ACME_DNS_TSIG_ALGORITHM: &'static str = "RWS_CONFIG_ACME_DNS_TSIG_ALGORITHM";
+    /// DNS-01 `exec`: the program run as `<program> present|cleanup <fqdn> <value>`.
+    pub const RWS_CONFIG_ACME_DNS_EXEC: &'static str = "RWS_CONFIG_ACME_DNS_EXEC";
+    /// DNS-01: how long to wait for the record to be visible (default 120).
+    pub const RWS_CONFIG_ACME_DNS_PROPAGATION_SECS: &'static str = "RWS_CONFIG_ACME_DNS_PROPAGATION_SECS";
 
 
     pub const RWS_DEFAULT_IP: &'static str = "127.0.0.1";

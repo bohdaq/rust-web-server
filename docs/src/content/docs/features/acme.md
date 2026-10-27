@@ -37,8 +37,10 @@ plain HTTP.
 ## Requirements
 
 - **DNS** for every domain in `domains` points at this server.
-- **Port 80 is reachable from the internet.** Let's Encrypt proves you control
-  the domain with an HTTP-01 challenge to `http://<domain>/.well-known/acme-challenge/…`.
+- **One way for the CA to check you control the domains**: port 80 reachable
+  from the internet (HTTP-01, the default), or port 443 (TLS-ALPN-01), or
+  write access to the domain's DNS (DNS-01, also for wildcards) — see
+  [Challenge types](#challenge-types).
 - **Binding ports 80/443 on Linux** needs root or the capability:
   `sudo setcap cap_net_bind_service=+ep "$(which rws)"`.
 
@@ -113,6 +115,72 @@ directory = "https://ca.internal.example:9000/acme/acme/directory"
 ca_file   = "/etc/rws/internal-root.pem"
 ```
 
+## Challenge types
+
+`challenge` picks how the CA checks that you control the domains (since
+18.4.0; HTTP-01 before):
+
+| `challenge` | The CA checks | Needs | Wildcards |
+|---|---|---|---|
+| `http-01` (default) | `http://<domain>/.well-known/acme-challenge/…` | port 80 reachable | no |
+| `tls-alpn-01` | a TLS handshake on port 443 with ALPN `acme-tls/1` (RFC 8737) | port 443 reachable — nothing else | no |
+| `dns-01` | a TXT record `_acme-challenge.<domain>` | a way to change the domain's DNS | yes |
+
+### TLS-ALPN-01
+
+For a server that only listens on 443 — no port 80 at all:
+
+```toml
+port = 443
+
+[acme]
+domains   = ["example.com"]
+challenge = "tls-alpn-01"
+```
+
+rws answers on its HTTPS port: at startup, before it has a certificate, a
+temporary acceptor on the same socket serves the challenge; afterwards the
+TLS listener does, beside the normal traffic. A challenge handshake gets a
+special self-signed certificate and is then closed; other clients never
+see it. If a port mapping forwards 443 elsewhere, set `port` to where it
+lands.
+
+### DNS-01
+
+The CA looks up a TXT record, so nothing needs to reach the server — and it
+is the only way to get a wildcard certificate (`*.example.com`). rws adds
+the record, waits until the zone's server answers with it, lets the CA check,
+and removes it.
+
+```toml
+[acme]
+domains   = ["example.com", "*.example.com"]
+challenge = "dns-01"
+dns_provider        = "rfc2136"            # DNS UPDATE (RFC 2136) to the primary server
+dns_server          = "ns1.example.com"    # host[:port], port 53
+dns_tsig_key        = "rws-acme"           # TSIG key name the server knows
+dns_tsig_secret     = "base64secret=="     # better in RWS_CONFIG_ACME_DNS_TSIG_SECRET
+# dns_tsig_algorithm  = "hmac-sha256"      # or hmac-sha512
+# dns_zone            = "example.com"      # found by SOA lookup when not set
+# dns_propagation_secs = 120               # how long to wait for the record
+```
+
+| `dns_provider` | Adds and removes the record by |
+|---|---|
+| `rfc2136` | a DNS UPDATE to `dns_server`, signed with the TSIG key — BIND, Knot, PowerDNS, Windows DNS, and many DNS hosts' "dynamic DNS" endpoints |
+| `exec` | running `dns_exec` as `<program> present <fqdn> <value>` and `<program> cleanup <fqdn> <value>`: any DNS API, in a script (exit status 0 = done) |
+
+A BIND key and the zone permission it needs:
+
+```text
+key "rws-acme" { algorithm hmac-sha256; secret "base64secret=="; };
+zone "example.com" { type primary; file "example.com.zone";
+    update-policy { grant rws-acme name _acme-challenge.example.com. TXT; }; };
+```
+
+(`tsig-keygen rws-acme` prints a new key.) The secret is never printed in
+rws's startup log.
+
 ## Configuration reference
 
 Every setting can go in the `[acme]` section of `rws.config.toml`, on the
@@ -125,7 +193,16 @@ command line (`--acme-domains=...`; not the last three), or in the environment.
 | `staging` | `RWS_CONFIG_ACME_STAGING` | `false` | Use the Let's Encrypt staging CA |
 | `directory` | `RWS_CONFIG_ACME_DIRECTORY` | Let's Encrypt | ACME directory URL of another CA |
 | `ca_file` | `RWS_CONFIG_ACME_CA_FILE` | — | Extra root CA(s) to trust for the directory (private CAs) |
+| `challenge` | `RWS_CONFIG_ACME_CHALLENGE` | `http-01` | `http-01`, `tls-alpn-01` or `dns-01` — see [Challenge types](#challenge-types) |
 | `challenge_port` | `RWS_CONFIG_ACME_CHALLENGE_PORT` | `80` | Port the CA connects to for HTTP-01 |
+| `dns_provider` | `RWS_CONFIG_ACME_DNS_PROVIDER` | — | DNS-01: `rfc2136` or `exec` |
+| `dns_server` | `RWS_CONFIG_ACME_DNS_SERVER` | — | DNS-01 `rfc2136`: the zone's primary server, `host[:port]` |
+| `dns_zone` | `RWS_CONFIG_ACME_DNS_ZONE` | SOA lookup | DNS-01: the zone of the records |
+| `dns_tsig_key` | `RWS_CONFIG_ACME_DNS_TSIG_KEY` | — | DNS-01 `rfc2136`: TSIG key name |
+| `dns_tsig_secret` | `RWS_CONFIG_ACME_DNS_TSIG_SECRET` | — | DNS-01 `rfc2136`: TSIG secret, base64 (no command-line flag; never printed) |
+| `dns_tsig_algorithm` | `RWS_CONFIG_ACME_DNS_TSIG_ALGORITHM` | `hmac-sha256` | DNS-01 `rfc2136`: `hmac-sha256` or `hmac-sha512` |
+| `dns_exec` | `RWS_CONFIG_ACME_DNS_EXEC` | — | DNS-01 `exec`: the program |
+| `dns_propagation_secs` | `RWS_CONFIG_ACME_DNS_PROPAGATION_SECS` | `120` | DNS-01: how long to wait for the record to be visible |
 | `cert_path` | `RWS_CONFIG_ACME_CERT_PATH` | `tls_cert_file`, else `.rws/acme/cert.pem` | Where the certificate chain is stored |
 | `key_path` | `RWS_CONFIG_ACME_KEY_PATH` | `tls_key_file`, else `.rws/acme/key.pem` | Where the certificate key is stored (`0600`) |
 | `renew_before_days` | `RWS_CONFIG_ACME_RENEW_BEFORE_DAYS` | — | Renew this many days before expiry instead of at two-thirds of the lifetime (was `30` before 18.0.0) |

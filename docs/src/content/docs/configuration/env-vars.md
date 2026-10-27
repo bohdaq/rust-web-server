@@ -81,6 +81,15 @@ Continue the pattern (`_2_`, `_3_`, …) for as many domains as needed. The
 | `RWS_CONFIG_ACME_PROFILE` | `` (empty) | Certificate profile to order, e.g. `shortlived` (6-day certificates) or `tlsserver` at Let's Encrypt. Empty: the CA's default. A profile the CA doesn't offer stops provisioning with the list it offers. |
 | `RWS_CONFIG_ACME_ACCOUNT_KEY_PATH` | `.rws/acme/account.key` | Path to persist the ACME account key between restarts (written `0600`). |
 | `RWS_CONFIG_ACME_CA_FILE` | `` (empty) | PEM file of extra root CAs to trust for the ACME directory, on top of the public roots — for private ACME CAs (step-ca, Pebble). |
+| `RWS_CONFIG_ACME_CHALLENGE` | `http-01` | How the CA checks you control the domains: `http-01` (port 80), `tls-alpn-01` (on the HTTPS port, RFC 8737) or `dns-01` (a TXT record; needed for wildcards). Since 18.4.0. See [Challenge types](/features/acme/#challenge-types). |
+| `RWS_CONFIG_ACME_DNS_PROVIDER` | `` (empty) | DNS-01: `rfc2136` (a DNS UPDATE) or `exec` (a program). |
+| `RWS_CONFIG_ACME_DNS_SERVER` | `` (empty) | DNS-01 `rfc2136`: the zone's primary server, `host[:port]` (port 53). |
+| `RWS_CONFIG_ACME_DNS_ZONE` | `` (empty) | DNS-01: the zone holding `_acme-challenge` records; found by an SOA lookup when empty. |
+| `RWS_CONFIG_ACME_DNS_TSIG_KEY` | `` (empty) | DNS-01 `rfc2136`: the TSIG key name. |
+| `RWS_CONFIG_ACME_DNS_TSIG_SECRET` | `` (empty) | DNS-01 `rfc2136`: the TSIG secret, base64. Set it here or in `rws.config.toml` — there is no command-line flag — and it is never printed. |
+| `RWS_CONFIG_ACME_DNS_TSIG_ALGORITHM` | `hmac-sha256` | DNS-01 `rfc2136`: `hmac-sha256` or `hmac-sha512`. |
+| `RWS_CONFIG_ACME_DNS_EXEC` | `` (empty) | DNS-01 `exec`: run as `<program> present <fqdn> <value>` and `<program> cleanup <fqdn> <value>`. |
+| `RWS_CONFIG_ACME_DNS_PROPAGATION_SECS` | `120` | DNS-01: how long to wait for the record to be visible before the CA checks it. |
 | `RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS` | `43200` | Longest time between renewal checks (sooner when renewal is due earlier or the CA's renewal information asks). After a failed renewal the next attempt comes within an hour. |
 
 ## CORS

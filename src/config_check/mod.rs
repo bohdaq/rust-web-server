@@ -326,21 +326,78 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
         if get(Config::RWS_CONFIG_ACME_EMAIL).unwrap_or("").is_empty() {
             report.warn("[acme] has no email: the CA can't warn you about expiring or revoked certificates");
         }
+        let challenge = get(Config::RWS_CONFIG_ACME_CHALLENGE).map(str::trim).filter(|v| !v.is_empty()).unwrap_or("http-01").to_ascii_lowercase();
+        if !matches!(challenge.as_str(), "http-01" | "tls-alpn-01" | "dns-01") {
+            report.error(format!("[acme] challenge = {challenge:?}: expected http-01, tls-alpn-01 or dns-01"));
+        }
         for domain in acme_domains.split(',').map(str::trim) {
-            if domain.is_empty() || domain.contains('*') || domain.contains('/') || domain.contains(':') || !domain.contains('.') {
-                report.error(format!("[acme] domains: '{domain}' is not a domain name (wildcards need DNS-01, which rws doesn't do)"));
+            // A wildcard is one leading "*." label (RFC 8555 §7.1.3).
+            let (wildcard, name) = match domain.strip_prefix("*.") {
+                Some(rest) => (true, rest),
+                None => (false, domain),
+            };
+            if name.is_empty() || name.contains('*') || name.contains('/') || name.contains(':') || !name.contains('.') {
+                report.error(format!("[acme] domains: '{domain}' is not a domain name"));
+            } else if wildcard && challenge != "dns-01" {
+                report.error(format!("[acme] domains: the wildcard '{domain}' needs challenge = \"dns-01\""));
             }
         }
         let port = get(Config::RWS_CONFIG_PORT).unwrap_or("7878");
         let challenge_port = get(Config::RWS_CONFIG_ACME_CHALLENGE_PORT).unwrap_or("80");
         let redirect_port = get(Config::RWS_CONFIG_HTTP_REDIRECT_PORT).unwrap_or("");
-        if redirect_port.is_empty() {
+        if challenge == "http-01" && redirect_port.is_empty() {
             report.warn(format!(
                 "[acme] without http_redirect_port: nothing answers the HTTP-01 challenge on port {challenge_port}; set http_redirect_port = {challenge_port}"
             ));
         }
+        if challenge == "dns-01" {
+            check_acme_dns(&get, report);
+        }
         if port != "443" {
             report.warn(format!("[acme] with port = {port}: browsers expect HTTPS on 443 (fine if a port mapping forwards 443 here)"));
+        }
+    }
+}
+
+/// `[acme] challenge = "dns-01"`: a provider and what it needs.
+fn check_acme_dns<'a>(get: &dyn Fn(&str) -> Option<&'a str>, report: &mut ConfigReport) {
+    let set = |name: &str| get(name).map(str::trim).filter(|v| !v.is_empty());
+    match set(Config::RWS_CONFIG_ACME_DNS_PROVIDER).map(str::to_ascii_lowercase).as_deref() {
+        Some("rfc2136") => {
+            match set(Config::RWS_CONFIG_ACME_DNS_SERVER) {
+                None => report.error("[acme] dns_provider = \"rfc2136\" needs dns_server (the primary DNS server, host[:port])"),
+                Some(server) if server.contains('/') || server.is_empty() => report.error(format!("[acme] dns_server = {server:?}: expected host[:port]")),
+                Some(_) => {}
+            }
+            match (set(Config::RWS_CONFIG_ACME_DNS_TSIG_KEY), set(Config::RWS_CONFIG_ACME_DNS_TSIG_SECRET)) {
+                (Some(_), None) | (None, Some(_)) => report.error("[acme] dns_tsig_key and dns_tsig_secret go together"),
+                (None, None) => report.warn("[acme] rfc2136 without a TSIG key: the server must accept unsigned updates from this host"),
+                (Some(_), Some(secret)) => {
+                    #[cfg(feature = "acme")]
+                    if crate::acme::base64_secret(secret).is_none() {
+                        report.error("[acme] dns_tsig_secret is not base64");
+                    }
+                    #[cfg(not(feature = "acme"))]
+                    let _ = secret;
+                }
+            }
+            if let Some(algorithm) = set(Config::RWS_CONFIG_ACME_DNS_TSIG_ALGORITHM) {
+                if !matches!(algorithm.to_ascii_lowercase().as_str(), "hmac-sha256" | "hmac-sha512") {
+                    report.error(format!("[acme] dns_tsig_algorithm = {algorithm:?}: expected hmac-sha256 or hmac-sha512"));
+                }
+            }
+        }
+        Some("exec") => match set(Config::RWS_CONFIG_ACME_DNS_EXEC) {
+            None => report.error("[acme] dns_provider = \"exec\" needs dns_exec (the program)"),
+            Some(program) if !Path::new(program).is_file() => report.error(format!("[acme] dns_exec = {program:?}: file not found")),
+            Some(_) => {}
+        },
+        Some(other) => report.error(format!("[acme] dns_provider = {other:?}: expected rfc2136 or exec")),
+        None => report.error("[acme] challenge = \"dns-01\" needs dns_provider (rfc2136 or exec)"),
+    }
+    if let Some(secs) = set(Config::RWS_CONFIG_ACME_DNS_PROPAGATION_SECS) {
+        if secs.parse::<u64>().is_err() {
+            report.error(format!("[acme] dns_propagation_secs = {secs:?}: not a whole number"));
         }
     }
 }

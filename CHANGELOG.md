@@ -5,6 +5,29 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased (18.4.0)
+
+### Added
+
+- TLS-ALPN-01 (RFC 8737, #17): `[acme] challenge = "tls-alpn-01"` gets and
+  renews certificates on the HTTPS port alone — no port 80. At startup a
+  temporary acceptor answers on the HTTPS socket; afterwards the TLS
+  listener answers `acme-tls/1` handshakes with the challenge certificate
+  (and only those). Tested against Pebble, first issuance and renewal.
+- `[acme] challenge` (`RWS_CONFIG_ACME_CHALLENGE`: `http-01`, `tls-alpn-01`,
+  `dns-01`) and the DNS-01 settings (`dns_provider`, `dns_server`,
+  `dns_zone`, `dns_tsig_key`, `dns_tsig_secret`, `dns_tsig_algorithm`,
+  `dns_exec`, `dns_propagation_secs`); `rws --check` validates them and
+  accepts a wildcard domain with `dns-01`.
+
+### Changed
+
+- `acme::AcmeConfig` has new public fields (`challenge`, `dns`): code that
+  builds it as a struct literal adds them (`AcmeConfig::from_env` is
+  unaffected).
+- Startup output no longer prints the values of settings whose names
+  contain `SECRET`, `PASSWORD` or `TOKEN` ("(hidden)").
+
 ## 18.3.0 — 2026-10-27
 
 ### Added

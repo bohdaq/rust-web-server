@@ -202,6 +202,22 @@ impl CommandLineArgument {
                 "Where to store the certificate's private key (default: tls-key-file, else .rws/acme/key.pem)"),
             ("acme-profile", Config::RWS_CONFIG_ACME_PROFILE,
                 "Certificate profile to order, as the CA offers them (e.g. classic, tlsserver, shortlived)"),
+            ("acme-challenge", Config::RWS_CONFIG_ACME_CHALLENGE,
+                "How to prove control of the domains: http-01 (default), tls-alpn-01 or dns-01 (wildcards)"),
+            ("acme-dns-provider", Config::RWS_CONFIG_ACME_DNS_PROVIDER,
+                "DNS-01: rfc2136 (DNS UPDATE) or exec (a program)"),
+            ("acme-dns-server", Config::RWS_CONFIG_ACME_DNS_SERVER,
+                "DNS-01 rfc2136: the primary DNS server, host[:port]"),
+            ("acme-dns-zone", Config::RWS_CONFIG_ACME_DNS_ZONE,
+                "DNS-01: the zone of the records (found by SOA lookup when not set)"),
+            ("acme-dns-tsig-key", Config::RWS_CONFIG_ACME_DNS_TSIG_KEY,
+                "DNS-01 rfc2136: TSIG key name (the secret goes in RWS_CONFIG_ACME_DNS_TSIG_SECRET)"),
+            ("acme-dns-tsig-algorithm", Config::RWS_CONFIG_ACME_DNS_TSIG_ALGORITHM,
+                "DNS-01 rfc2136: hmac-sha256 (default) or hmac-sha512"),
+            ("acme-dns-exec", Config::RWS_CONFIG_ACME_DNS_EXEC,
+                "DNS-01 exec: program run as <program> present|cleanup <fqdn> <value>"),
+            ("acme-dns-propagation-secs", Config::RWS_CONFIG_ACME_DNS_PROPAGATION_SECS,
+                "DNS-01: seconds to wait for the record to be visible (default 120)"),
         ];
         for (long_form, environment_variable, hint) in long_only {
             argument_list.push(CommandLineArgument {
@@ -222,7 +238,7 @@ impl CommandLineArgument {
             if boxed_split.is_some() {
 
                 let (parameter, value) = boxed_split.unwrap();
-                println!("\n    {}={}", parameter, value);
+                println!("\n    {}={}", parameter, crate::entry_point::shown(parameter, value));
                 let boxed_predefined_argument =
                     argument_list
                         .iter()
@@ -254,6 +270,6 @@ impl CommandLineArgument {
         }
         env::set_var(&argument.environment_variable, &value);
         crate::server_config::invalidate();
-        println!("    Set env variable '{}' to value '{}'", argument.environment_variable, &value);
+        println!("    Set env variable '{}' to value '{}'", argument.environment_variable, crate::entry_point::shown(&argument.environment_variable, &value));
     }
 }

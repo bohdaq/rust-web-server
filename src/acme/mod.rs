@@ -41,6 +41,7 @@
 
 mod crypto;
 mod client;
+pub mod tls_alpn;
 
 #[cfg(test)]
 mod tests;
@@ -83,6 +84,127 @@ pub struct AcmeConfig {
     pub profile: Option<String>,
     /// Path to persist the ACME account key between restarts.
     pub account_key_path: String,
+    /// How control of the domains is proven (since 18.4.0; `Http01` before).
+    pub challenge: ChallengeType,
+    /// DNS-01 settings; `Some` exactly when `challenge` is `Dns01`.
+    pub dns: Option<DnsConfig>,
+}
+
+/// The ACME challenge rws answers (RFC 8555 §8, RFC 8737).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChallengeType {
+    /// A file at `http://<domain>/.well-known/acme-challenge/` (port 80).
+    Http01,
+    /// A special certificate on the HTTPS port, for the `acme-tls/1` ALPN
+    /// protocol (RFC 8737): no port 80 needed.
+    TlsAlpn01,
+    /// A TXT record at `_acme-challenge.<domain>`: the only way to get a
+    /// wildcard certificate; no inbound port needed.
+    Dns01,
+}
+
+impl ChallengeType {
+    /// `http-01`, `tls-alpn-01` or `dns-01` (any case).
+    pub fn parse(value: &str) -> Option<ChallengeType> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "http-01" => Some(ChallengeType::Http01),
+            "tls-alpn-01" => Some(ChallengeType::TlsAlpn01),
+            "dns-01" => Some(ChallengeType::Dns01),
+            _ => None,
+        }
+    }
+
+    /// The challenge's name in ACME (`"http-01"`, ...).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ChallengeType::Http01 => "http-01",
+            ChallengeType::TlsAlpn01 => "tls-alpn-01",
+            ChallengeType::Dns01 => "dns-01",
+        }
+    }
+
+    /// The configured challenge (`RWS_CONFIG_ACME_CHALLENGE`), `Http01` when
+    /// unset or unknown (`rws --check` reports an unknown one).
+    pub fn configured() -> ChallengeType {
+        non_empty_env(Config::RWS_CONFIG_ACME_CHALLENGE).and_then(|v| ChallengeType::parse(&v)).unwrap_or(ChallengeType::Http01)
+    }
+}
+
+/// DNS-01 settings.
+#[derive(Clone, Debug)]
+pub struct DnsConfig {
+    /// Who adds and removes the TXT records.
+    pub provider: DnsProvider,
+    /// The zone holding them; `None`: found by an SOA lookup.
+    pub zone: Option<String>,
+    /// How long to wait for a record to be visible before telling the CA.
+    pub propagation_secs: u64,
+}
+
+/// How DNS-01 records are published.
+#[derive(Clone, Debug)]
+pub enum DnsProvider {
+    /// A DNS UPDATE (RFC 2136) to the zone's primary server, signed with a
+    /// TSIG key (RFC 8945) when one is given — BIND, Knot, PowerDNS, ...
+    Rfc2136 { server: String, tsig: Option<Tsig> },
+    /// A program, run as `<program> present <fqdn> <value>` and
+    /// `<program> cleanup <fqdn> <value>`; exit status 0 = done.
+    Exec { program: String },
+}
+
+/// A TSIG key: its name, algorithm and secret.
+#[derive(Clone)]
+pub struct Tsig {
+    pub key_name: String,
+    /// `hmac-sha256` or `hmac-sha512`.
+    pub algorithm: String,
+    pub secret: Vec<u8>,
+}
+
+impl std::fmt::Debug for Tsig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tsig").field("key_name", &self.key_name).field("algorithm", &self.algorithm).field("secret", &"(hidden)").finish()
+    }
+}
+
+/// A base64 TSIG secret, decoded; `None` if it isn't base64 (or is empty).
+pub(crate) fn base64_secret(value: &str) -> Option<Vec<u8>> {
+    crypto::base64_decode_std(value.trim()).filter(|s| !s.is_empty())
+}
+
+impl DnsConfig {
+    /// From `RWS_CONFIG_ACME_DNS_*`; an error names what's missing or wrong.
+    pub fn from_env() -> Result<DnsConfig, String> {
+        let provider = match non_empty_env(Config::RWS_CONFIG_ACME_DNS_PROVIDER).map(|p| p.to_ascii_lowercase()).as_deref() {
+            Some("rfc2136") => {
+                let server = non_empty_env(Config::RWS_CONFIG_ACME_DNS_SERVER)
+                    .ok_or("DNS-01 with rfc2136 needs RWS_CONFIG_ACME_DNS_SERVER (the primary server, host[:port])")?;
+                let tsig = match (non_empty_env(Config::RWS_CONFIG_ACME_DNS_TSIG_KEY), non_empty_env(Config::RWS_CONFIG_ACME_DNS_TSIG_SECRET)) {
+                    (None, None) => None,
+                    (Some(key_name), Some(secret)) => {
+                        let secret = base64_secret(&secret).ok_or("RWS_CONFIG_ACME_DNS_TSIG_SECRET is not base64")?;
+                        let algorithm = non_empty_env(Config::RWS_CONFIG_ACME_DNS_TSIG_ALGORITHM)
+                            .unwrap_or_else(|| "hmac-sha256".to_string())
+                            .to_ascii_lowercase();
+                        if !matches!(algorithm.as_str(), "hmac-sha256" | "hmac-sha512") {
+                            return Err(format!("RWS_CONFIG_ACME_DNS_TSIG_ALGORITHM {algorithm:?}: expected hmac-sha256 or hmac-sha512"));
+                        }
+                        Some(Tsig { key_name, algorithm, secret })
+                    }
+                    _ => return Err("RWS_CONFIG_ACME_DNS_TSIG_KEY and RWS_CONFIG_ACME_DNS_TSIG_SECRET go together".to_string()),
+                };
+                DnsProvider::Rfc2136 { server, tsig }
+            }
+            Some("exec") => DnsProvider::Exec {
+                program: non_empty_env(Config::RWS_CONFIG_ACME_DNS_EXEC).ok_or("DNS-01 with exec needs RWS_CONFIG_ACME_DNS_EXEC (the program)")?,
+            },
+            Some(other) => return Err(format!("RWS_CONFIG_ACME_DNS_PROVIDER {other:?}: expected rfc2136 or exec")),
+            None => return Err("DNS-01 needs RWS_CONFIG_ACME_DNS_PROVIDER (rfc2136 or exec)".to_string()),
+        };
+        let zone = non_empty_env(Config::RWS_CONFIG_ACME_DNS_ZONE);
+        let propagation_secs = non_empty_env(Config::RWS_CONFIG_ACME_DNS_PROPAGATION_SECS).and_then(|v| v.parse().ok()).unwrap_or(120);
+        Ok(DnsConfig { provider, zone, propagation_secs })
+    }
 }
 
 impl AcmeConfig {
@@ -140,6 +262,19 @@ impl AcmeConfig {
         let account_key_path = non_empty_env(Config::RWS_CONFIG_ACME_ACCOUNT_KEY_PATH)
             .unwrap_or_else(|| DEFAULT_ACCOUNT_KEY_PATH.to_string());
 
+        let challenge = ChallengeType::configured();
+        let dns = if challenge == ChallengeType::Dns01 {
+            match DnsConfig::from_env() {
+                Ok(dns) => Some(dns),
+                Err(e) => {
+                    eprintln!("[ACME] {e}; certificates can't be issued until it's fixed.");
+                    return None;
+                }
+            }
+        } else {
+            None
+        };
+
         Some(AcmeConfig {
             domains,
             email,
@@ -150,6 +285,8 @@ impl AcmeConfig {
             renew_before_days,
             profile,
             account_key_path,
+            challenge,
+            dns,
         })
     }
 
@@ -551,36 +688,21 @@ impl AcmeManager {
             return Ok(nonce);
         }
 
+        let kind = self.config.challenge;
         let challenge = authz.challenges.iter()
-            .find(|c| c.challenge_type == "http-01")
-            .ok_or_else(|| format!("no HTTP-01 challenge in authorization {authz_url}"))?;
+            .find(|c| c.challenge_type == kind.as_str())
+            .ok_or_else(|| format!("no {} challenge in authorization {authz_url} (the CA offers: {})", kind.as_str(),
+                authz.challenges.iter().map(|c| c.challenge_type.as_str()).collect::<Vec<_>>().join(", ")))?;
 
         let key_auth = format!(
             "{}.{}",
             challenge.token,
             crypto::key_thumbprint(key)?
         );
+        // The authorization's name: a wildcard's base name, without "*.".
+        let domain = authz.identifier_value.clone();
 
-        challenges().lock().unwrap().insert(challenge.token.clone(), key_auth);
-
-        // The redirect listener answers challenges itself once it owns the
-        // port (renewals); otherwise (startup) run a temporary server.
-        let port = self.config.challenge_port;
-        let standalone = if REDIRECT_LISTENER_PORT.load(std::sync::atomic::Ordering::SeqCst) == port {
-            println!("[ACME] Answering HTTP-01 challenge via the redirect listener on port {port}.");
-            None
-        } else {
-            println!("[ACME] Starting HTTP-01 challenge server on port {port}...");
-            let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-            let handle = tokio::spawn(async move {
-                if let Err(e) = run_challenge_server(port, shutdown_rx).await {
-                    eprintln!("[ACME] Challenge server error: {e}");
-                }
-            });
-            // Small delay to let the server bind before signalling ACME.
-            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-            Some((shutdown_tx, handle))
-        };
+        let presented = self.present(kind, &challenge.token, &domain, &key_auth).await?;
 
         // Signal challenge ready, then poll for validation (up to 60 seconds).
         let poll_result = match signal_challenge(http, key, account_url, &challenge.url, &nonce).await {
@@ -589,16 +711,88 @@ impl AcmeManager {
         };
 
         // Stop serving the challenge regardless of the outcome.
-        challenges().lock().unwrap().remove(&challenge.token);
-        if let Some((shutdown_tx, handle)) = standalone {
-            let _ = shutdown_tx.send(());
-            let _ = handle.await;
-        }
+        presented.withdraw().await;
 
         let nonce = poll_result?;
 
         println!("[ACME] Authorization validated for '{}'.", authz.identifier_value);
         Ok(nonce)
+    }
+}
+
+impl AcmeManager {
+    /// Put the answer to a `kind` challenge where the CA will look.
+    async fn present(&self, kind: ChallengeType, token: &str, domain: &str, key_auth: &str) -> Result<Presented, String> {
+        match kind {
+            ChallengeType::Http01 => {
+                challenges().lock().unwrap().insert(token.to_string(), key_auth.to_string());
+                // The redirect listener answers challenges itself once it owns the
+                // port (renewals); otherwise (startup) run a temporary server.
+                let port = self.config.challenge_port;
+                let standalone = if REDIRECT_LISTENER_PORT.load(std::sync::atomic::Ordering::SeqCst) == port {
+                    println!("[ACME] Answering HTTP-01 challenge via the redirect listener on port {port}.");
+                    None
+                } else {
+                    println!("[ACME] Starting HTTP-01 challenge server on port {port}...");
+                    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+                    let handle = tokio::spawn(async move {
+                        if let Err(e) = run_challenge_server(port, shutdown_rx).await {
+                            eprintln!("[ACME] Challenge server error: {e}");
+                        }
+                    });
+                    // Small delay to let the server bind before signalling ACME.
+                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                    Some((shutdown_tx, handle))
+                };
+                Ok(Presented::Http { token: token.to_string(), standalone })
+            }
+            ChallengeType::TlsAlpn01 => {
+                tls_alpn::add(domain, key_auth)?;
+                let standalone = if tls_alpn::tls_listener_up() {
+                    println!("[ACME] Answering TLS-ALPN-01 challenge for {domain} via the TLS listener.");
+                    None
+                } else {
+                    let (ip, port, _) = crate::entry_point::get_ip_port_thread_count();
+                    let addr = if ip.contains(':') { format!("[{ip}]:{port}") } else { format!("{ip}:{port}") };
+                    println!("[ACME] Answering TLS-ALPN-01 challenge for {domain} on {addr}...");
+                    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+                    let handle = tokio::spawn(async move {
+                        if let Err(e) = tls_alpn::serve(addr, shutdown_rx).await {
+                            eprintln!("[ACME] TLS-ALPN-01 listener error: {e}");
+                        }
+                    });
+                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                    Some((shutdown_tx, handle))
+                };
+                Ok(Presented::TlsAlpn { domain: domain.to_string(), standalone })
+            }
+            ChallengeType::Dns01 => Err("DNS-01 isn't implemented yet".to_string()),
+        }
+    }
+}
+
+/// A challenge answer in place, withdrawn after validation.
+enum Presented {
+    Http { token: String, standalone: Option<(tokio::sync::oneshot::Sender<()>, tokio::task::JoinHandle<()>)> },
+    TlsAlpn { domain: String, standalone: Option<(tokio::sync::oneshot::Sender<()>, tokio::task::JoinHandle<()>)> },
+}
+
+impl Presented {
+    async fn withdraw(self) {
+        let standalone = match self {
+            Presented::Http { token, standalone } => {
+                challenges().lock().unwrap().remove(&token);
+                standalone
+            }
+            Presented::TlsAlpn { domain, standalone } => {
+                tls_alpn::remove(&domain);
+                standalone
+            }
+        };
+        if let Some((shutdown_tx, handle)) = standalone {
+            let _ = shutdown_tx.send(());
+            let _ = handle.await;
+        }
     }
 }
 

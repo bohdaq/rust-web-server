@@ -113,7 +113,7 @@ http_redirect_port = 80
 [acme]
 domains = ["example.com", "*.example.com", "localhost"]
 "#);
-    assert!(has(&report.errors, "'*.example.com' is not a domain name"), "{:?}", report.errors);
+    assert!(has(&report.errors, "the wildcard '*.example.com' needs challenge = \"dns-01\""), "{:?}", report.errors);
     assert!(has(&report.errors, "'localhost' is not a domain name"), "{:?}", report.errors);
     assert!(has(&report.warnings, "no email"), "{:?}", report.warnings);
     assert!(!has(&report.warnings, "http_redirect_port"), "{:?}", report.warnings);
@@ -301,4 +301,25 @@ fn render_json_escapes_quotes_and_stays_valid_looking() {
     assert!(json.contains(r#"\"nope\""#), "{json}");
     let ok = ConfigReport::default().render_json("p.toml");
     assert!(ok.contains(r#""ok":true"#) && ok.contains(r#""errors":[]"#), "{ok}");
+}
+
+#[cfg(feature = "acme")]
+#[test]
+fn acme_challenge_checks() {
+    let report = check_str("port = 443\n[acme]\ndomains = [\"example.com\"]\nemail = \"a@example.com\"\nchallenge = \"tls-alpn-01\"\n");
+    assert!(report.is_ok(), "{:?}", report);
+    assert!(!has(&report.warnings, "http_redirect_port"), "TLS-ALPN-01 doesn't need port 80: {:?}", report.warnings);
+
+    let report = check_str("[acme]\ndomains = [\"example.com\"]\nchallenge = \"dns-02\"\n");
+    assert!(has(&report.errors, "expected http-01, tls-alpn-01 or dns-01"), "{:?}", report.errors);
+
+    let dns = |extra: &str| check_str(&format!("port = 443\n[acme]\ndomains = [\"example.com\", \"*.example.com\"]\nemail = \"a@example.com\"\nchallenge = \"dns-01\"\n{extra}"));
+    assert!(has(&dns("").errors, "needs dns_provider"), "{:?}", dns("").errors);
+    assert!(has(&dns("dns_provider = \"rfc2136\"\n").errors, "needs dns_server"));
+    let report = dns("dns_provider = \"rfc2136\"\ndns_server = \"ns1.example.com\"\ndns_tsig_key = \"k\"\n");
+    assert!(has(&report.errors, "go together"), "{:?}", report.errors);
+    let report = dns("dns_provider = \"exec\"\ndns_exec = \"/nonexistent/hook\"\n");
+    assert!(has(&report.errors, "file not found"), "{:?}", report.errors);
+    let report = dns("dns_provider = \"rfc2136\"\ndns_server = \"ns1.example.com:5353\"\ndns_tsig_key = \"k\"\ndns_tsig_secret = \"c2VjcmV0\"\n");
+    assert!(report.errors.is_empty(), "a wildcard with DNS-01 is fine: {:?}", report.errors);
 }

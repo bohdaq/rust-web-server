@@ -51,6 +51,12 @@ impl SniCertResolver {
 
 impl ResolvesServerCert for SniCertResolver {
     fn resolve(&self, hello: ClientHello) -> Option<Arc<CertifiedKey>> {
+        // A TLS-ALPN-01 validation gets the challenge certificate or
+        // nothing — never the real one (RFC 8737 §3).
+        #[cfg(feature = "acme")]
+        if crate::acme::tls_alpn::is_challenge(&hello) {
+            return hello.server_name().and_then(crate::acme::tls_alpn::certificate);
+        }
         hello.server_name()
             .and_then(|sni| self.certs.get(sni).cloned())
             .or_else(|| self.default.clone())
@@ -88,6 +94,10 @@ pub fn create_tls_acceptor_from_vhosts(
     };
 
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    #[cfg(feature = "acme")]
+    if crate::acme::tls_alpn::enabled() {
+        config.alpn_protocols.push(crate::acme::tls_alpn::ALPN.to_vec());
+    }
 
     Ok(TlsAcceptor::from(Arc::new(config)))
 }

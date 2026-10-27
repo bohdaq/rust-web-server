@@ -22,6 +22,7 @@ pub const SETTINGS_WITHOUT_FLAG: &[&str] = &[
     "RWS_CONFIG_CIRCUIT_BREAKER_RECOVERY_SECS",
     "RWS_CONFIG_CLIENT_HINTS",
     "RWS_CONFIG_CSP",
+    "RWS_CONFIG_ACME_DNS_TSIG_SECRET",
     "RWS_CONFIG_ACCESS_LOG",
     "RWS_CONFIG_ACCESS_LOG_KEEP",
     "RWS_CONFIG_ACCESS_LOG_MAX_SIZE",
@@ -212,7 +213,7 @@ fn set_setting(name: &str, value: &str) {
     }
     env::set_var(name, value);
     crate::server_config::invalidate();
-    println!("    Set env variable '{}' to value '{}'", name, value);
+    println!("    Set env variable '{}' to value '{}'", name, crate::entry_point::shown(name, value));
 }
 
 fn qualified_key(table: &str, key: &str) -> String {

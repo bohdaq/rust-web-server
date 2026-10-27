@@ -886,6 +886,9 @@ async fn serve_tls_connection(
             let protocol = server_conn.alpn_protocol().map(|p| p.to_vec());
 
             match protocol.as_deref() {
+                // A TLS-ALPN-01 validation: the handshake was the answer.
+                #[cfg(feature = "acme")]
+                Some(crate::acme::tls_alpn::ALPN) => {}
                 Some(b"h2") => {
                     if let Err(e) = crate::h2_server::handle_connection(tls_stream, peer_addr, sni, app).await {
                         eprintln!("H2 connection error: {}", e);
@@ -1096,6 +1099,9 @@ impl Server {
                 return;
             }
         };
+        // From now on this listener answers TLS-ALPN-01 challenges itself.
+        #[cfg(feature = "acme")]
+        crate::acme::tls_alpn::note_tls_listener();
 
         #[cfg(unix)]
         if per_core::enabled() {
