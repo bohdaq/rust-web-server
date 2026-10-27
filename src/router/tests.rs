@@ -142,3 +142,37 @@ fn partial_path_does_not_match() {
     let router = Router::new().get("/users/:id/profile", |_req, _params, _conn| ok_response("ok"));
     assert!(router.handle(&get("/users/42"), &conn()).is_none());
 }
+
+fn body_of(router: &Router, uri: &str) -> Option<String> {
+    router.handle(&get(uri), &conn()).map(|r| String::from_utf8(r.content_range_list[0].body.clone()).unwrap())
+}
+
+#[test]
+fn brace_params_match_like_colon_params() {
+    let router = Router::new()
+        .get("/users/{id}/posts/{post}", |_req, params, _conn| {
+            ok_response(&format!("{}/{}", params.get("id").unwrap_or("-"), params.get("post").unwrap_or("-")))
+        })
+        .get("/files/{*path}", |_req, params, _conn| ok_response(params.get("path").unwrap_or("-")));
+    assert_eq!(Some("7/hello".to_string()), body_of(&router, "/users/7/posts/hello"));
+    assert_eq!(Some("a/b/c.txt".to_string()), body_of(&router, "/files/a/b/c.txt"));
+    assert_eq!(None, body_of(&router, "/users/7"));
+}
+
+#[test]
+fn double_braces_are_literal_and_partial_braces_are_not_params() {
+    let router = Router::new()
+        .get("/raw/{{id}}", |_req, _params, _conn| ok_response("literal"))
+        .get("/v/file.{ext}", |_req, _params, _conn| ok_response("not a param"));
+    assert_eq!(Some("literal".to_string()), body_of(&router, "/raw/{id}"));
+    assert_eq!(None, body_of(&router, "/raw/42"));
+    assert_eq!(Some("not a param".to_string()), body_of(&router, "/v/file.{ext}"));
+    assert_eq!(None, body_of(&router, "/v/file.txt"));
+}
+
+#[test]
+fn both_syntaxes_list_the_same_route_entry() {
+    let router = Router::new().get("/a/{id}", |_r, _p, _c| ok_response("")).get("/b/:id", |_r, _p, _c| ok_response(""));
+    let patterns: Vec<String> = router.route_entries().into_iter().map(|r| r.pattern).collect();
+    assert_eq!(vec!["/a/:id".to_string(), "/b/:id".to_string()], patterns);
+}

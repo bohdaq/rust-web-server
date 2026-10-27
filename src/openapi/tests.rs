@@ -169,3 +169,18 @@ fn describing_an_operation_twice_keeps_the_last() {
     assert!(spec.contains(r#""summary":"second""#) && !spec.contains("first"), "{spec}");
     assert!(spec.contains(r#""responses":{"200":{"description":"y"}}"#), "{spec}");
 }
+
+#[test]
+fn brace_and_colon_patterns_describe_the_same_operation() {
+    // The route registered as `/items/{sku}` is listed as `/items/:sku`; an
+    // operation described either way applies to it.
+    let config = OpenApiConfig::new("t", "1")
+        .operation("GET", "/items/{sku}", Operation::new("Look up").status(404, "Missing"))
+        .operation("GET", "/files/:rest", Operation::new("ignored, replaced"))
+        .operation("GET", "/files/{*rest}", Operation::new("Files"));
+    let spec = build_spec(&config, &[route("GET", "/items/:sku"), route("GET", "/files/*rest")]);
+    assert_eq!(1, spec.matches(r#""/items/{sku}""#).count(), "{spec}");
+    assert!(spec.contains(r#""summary":"Look up""#) && spec.contains(r#""404""#), "{spec}");
+    assert!(spec.contains(r#""/files/{rest}":{"get":{"summary":"Files""#) && !spec.contains("ignored"), "{spec}");
+    assert!(spec.contains(r#"{"name":"rest","in":"path""#), "{spec}");
+}

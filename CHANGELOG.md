@@ -26,6 +26,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   default build gets no new dependency. `examples/tower.rs` (tonic-health +
   tower-http); `ci/e2e/tower.sh` calls it with grpcurl over h2c.
 
+- `{param}` route syntax (#42): `/users/{id}` and `/files/{*path}` beside
+  `/users/:id` and `/files/*path` — what axum 0.8 and OpenAPI use — in
+  `Router`, `AppWithState`, `AsyncAppWithState` and WebSocket routes; `{{`
+  and `}}` are literal braces. OpenAPI operations match routes in either
+  spelling.
+
 ### Changed
 
 - `/openapi.json` is OpenAPI 3.1.0 (was 3.0.3): `JsonSchema` emits JSON Schema
@@ -33,6 +39,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `operations`; code that builds it with a struct literal must set it
   (`Vec::new()`), or use `OpenApiConfig::new`.
 - `examples/mcp_inventory.rs` needs the `openapi` feature too.
+- A route pattern segment written `{name}` is now a parameter; before 18.7.0
+  it matched the literal text `{name}`. Write `{{name}}` for literal braces.
 
 ## 18.6.0 — 2026-10-27
 

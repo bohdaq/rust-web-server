@@ -73,7 +73,7 @@ impl OpenApiConfig {
     /// still documented — for routes served outside the router.
     pub fn operation(mut self, method: &str, pattern: &str, operation: Operation) -> Self {
         let method = method.to_ascii_uppercase();
-        self.operations.retain(|(m, p, _)| !(*m == method && p == pattern));
+        self.operations.retain(|(m, p, _)| !(*m == method && to_openapi_path(p) == to_openapi_path(pattern)));
         self.operations.push((method, pattern.to_string(), operation));
         self
     }
@@ -207,9 +207,10 @@ fn object_properties(schema: &str) -> Vec<(String, String, bool)> {
 /// `parameters` entry — OpenAPI has no "rest of the path" parameter, so
 /// `*name` is represented like `:name`.
 pub fn build_spec(config: &OpenApiConfig, routes: &[RouteInfo]) -> String {
+    // Keyed by the OpenAPI path, so `/users/:id` and `/users/{id}` are the same route.
     let mut all: Vec<(String, String)> = routes.iter().map(|r| (r.method.to_ascii_uppercase(), r.pattern.clone())).collect();
     for (method, pattern, _) in &config.operations {
-        if !all.iter().any(|(m, p)| m == method && p == pattern) {
+        if !all.iter().any(|(m, p)| m == method && to_openapi_path(p) == to_openapi_path(pattern)) {
             all.push((method.clone(), pattern.clone()));
         }
     }
@@ -228,7 +229,7 @@ pub fn build_spec(config: &OpenApiConfig, routes: &[RouteInfo]) -> String {
             let operations: Vec<String> = methods
                 .iter()
                 .map(|(method, pattern)| {
-                    let described = config.operations.iter().find(|(m, p, _)| m == method && p == pattern).map(|(_, _, o)| o);
+                    let described = config.operations.iter().find(|(m, p, _)| m == method && to_openapi_path(p) == *path).map(|(_, _, o)| o);
                     build_operation_json(method, pattern, described)
                 })
                 .collect();
@@ -323,20 +324,27 @@ fn to_openapi_path(pattern: &str) -> String {
     pattern
         .split('/')
         .map(|seg| {
-            if let Some(name) = seg.strip_prefix(':').or_else(|| seg.strip_prefix('*')) {
-                format!("{{{}}}", name)
-            } else {
-                seg.to_string()
+            match param_name(seg) {
+                Some(name) => format!("{{{}}}", name),
+                None => seg.replace("{{", "{").replace("}}", "}"),
             }
         })
         .collect::<Vec<_>>()
         .join("/")
 }
 
+/// The parameter a pattern segment names: `:id`, `*rest`, `{id}`, `{*rest}`.
+fn param_name(segment: &str) -> Option<&str> {
+    segment
+        .strip_prefix(':')
+        .or_else(|| segment.strip_prefix('*'))
+        .or_else(|| crate::router::matcher::braced(segment).map(|inner| inner.trim_start_matches('*')))
+}
+
 fn path_param_names(pattern: &str) -> Vec<String> {
     pattern
         .split('/')
-        .filter_map(|seg| seg.strip_prefix(':').or_else(|| seg.strip_prefix('*')))
+        .filter_map(param_name)
         .map(|s| s.to_string())
         .collect()
 }

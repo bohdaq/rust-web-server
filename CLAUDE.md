@@ -234,7 +234,7 @@ Hot reload: `SIGHUP` (or `POST /admin/config/reload`) calls `config_reload::relo
 
 ### Dynamic router
 
-`src/router/mod.rs` provides `Router` — a fluent, path-based router with named parameters and wildcards. Register handlers with `.get()`, `.post()`, `.put()`, `.patch()`, `.delete()`, then call `router.handle(request, connection)` from inside `Application::execute`. Pattern syntax: `:name` for a named segment, `*name` for a trailing wildcard. `PathParams::get(name)` retrieves extracted values.
+`src/router/mod.rs` provides `Router` — a fluent, path-based router with named parameters and wildcards. Register handlers with `.get()`, `.post()`, `.put()`, `.patch()`, `.delete()`, then call `router.handle(request, connection)` from inside `Application::execute`. Pattern syntax: `:name` or `{name}` for a named segment, `*name` or `{*name}` for a trailing wildcard (`{{`/`}}` are literal braces; braces only as a whole segment) — both parsed by `router::matcher::parse_pattern`, shared by `Router`, `AppWithState`, `AsyncAppWithState` and WebSocket routes; `route_entries` always reports the `:`/`*` form, and `openapi` compares patterns by their OpenAPI path so either spelling matches. `PathParams::get(name)` retrieves extracted values.
 
 Call `.with_host("example.com")` before registering routes to restrict a `Router` to requests whose SNI hostname (TLS) or `Host` header (plain HTTP) matches that value — the foundation for virtual-host routing.
 

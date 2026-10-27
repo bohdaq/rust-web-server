@@ -2357,11 +2357,14 @@ let router = Router::new()
 | Syntax | Description | Example |
 |---|---|---|
 | `/literal` | Exact path segment | `/users` |
-| `/:name` | Named segment — captures one segment | `/users/:id` |
-| `/*name` | Wildcard — captures everything after the prefix | `/files/*path` |
+| `/:name` or `/{name}` | Named segment — captures one segment | `/users/:id`, `/users/{id}` |
+| `/*name` or `/{*name}` | Wildcard — captures everything after the prefix | `/files/*path`, `/files/{*path}` |
+| `/{{text}}` | Literal braces | `/raw/{{id}}` matches `/raw/{id}` |
+
+The braced forms (since 18.7.0) are what axum 0.8 and OpenAPI use; the two syntaxes mean the same thing and can be mixed. A brace parameter takes a whole segment — `/file.{ext}` is a literal, not a parameter.
 
 Rules:
-- A wildcard (`*name`) must be the **last** segment in a pattern.
+- A wildcard (`*name`, `{*name}`) must be the **last** segment in a pattern.
 - The query string is stripped before matching; only the path is used.
 - Patterns are matched segment-by-segment; `/users` does not match `/users/42`.
 

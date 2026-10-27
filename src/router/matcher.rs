@@ -15,6 +15,15 @@ pub(crate) enum Segment {
     Wildcard(String),
 }
 
+/// The name inside a whole-segment `{name}` (not `{{escaped}}`).
+pub(crate) fn braced(segment: &str) -> Option<&str> {
+    let inner = segment.strip_prefix('{')?.strip_suffix('}')?;
+    let valid = !inner.is_empty() && !inner.starts_with('{') && !inner.contains(['{', '}', '/']);
+    valid.then_some(inner)
+}
+
+/// A route pattern: `/users/:id` or `/users/{id}` for one segment,
+/// `/files/*path` or `/files/{*path}` for the rest of the path.
 pub(crate) fn parse_pattern(pattern: &str) -> Vec<Segment> {
     if pattern == "/" {
         return vec![];
@@ -27,8 +36,15 @@ pub(crate) fn parse_pattern(pattern: &str) -> Vec<Segment> {
                 Segment::Param(name.to_string())
             } else if let Some(name) = seg.strip_prefix('*') {
                 Segment::Wildcard(name.to_string())
+            } else if let Some(inner) = braced(seg) {
+                // `{name}` / `{*name}`, as in axum 0.8 and OpenAPI.
+                match inner.strip_prefix('*') {
+                    Some(name) => Segment::Wildcard(name.to_string()),
+                    None => Segment::Param(inner.to_string()),
+                }
             } else {
-                Segment::Literal(seg.to_string())
+                // `{{` and `}}` are literal braces.
+                Segment::Literal(seg.replace("{{", "{").replace("}}", "}"))
             }
         })
         .collect()

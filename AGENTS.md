@@ -27,7 +27,8 @@ Build the app in a function, serve it from `main`, test the function. See
 [`examples/hello.rs`](examples/hello.rs) — every example follows it.
 
 - `App::with_state(state)` → `.get/.post/.put/.patch/.delete(pattern, handler)`.
-  Patterns: `/items/:id` (one segment), `/files/*path` (the rest).
+  Patterns: `/items/:id` or `/items/{id}` (one segment), `/files/*path` or
+  `/files/{*path}` (the rest).
 - A handler is `Fn(&Request, &PathParams, &ConnectionInfo, &S) -> Response`
   (a closure or a `fn`). It is **synchronous** and runs on a blocking pool;
   for `async` handlers use `App::with_async_state` (docs: building-apps/async-handlers).
