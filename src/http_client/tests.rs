@@ -329,4 +329,27 @@ mod tests {
         let resp = Client::new().post(&base).form(&[]).send().unwrap();
         assert_eq!(200, resp.status());
     }
+
+    #[test]
+    fn inside_a_traced_request_the_trace_context_is_sent() {
+        crate::otel::setup(crate::otel::TracingConfig { exporter: crate::otel::ExporterConfig::Discard, ..Default::default() });
+        let (tx, rx) = std::sync::mpsc::channel();
+        let base = start_fake_server(move |req| {
+            tx.send(req).unwrap();
+            "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".to_string()
+        });
+        std::thread::spawn(move || {
+            let root = crate::otel::span("request");
+            crate::otel::set_baggage("tenant", "acme");
+            let resp = Client::new().get(&format!("{base}/x")).send().unwrap();
+            assert_eq!(200, resp.status());
+            let sent = rx.recv().unwrap();
+            let trace = root.trace_id().iter().map(|b| format!("{b:02x}")).collect::<String>();
+            assert!(sent.contains(&format!("traceparent: 00-{trace}-")), "{sent}");
+            assert!(!sent.contains(&root.span_id().iter().map(|b| format!("{b:02x}")).collect::<String>()), "a client span is the parent: {sent}");
+            assert!(sent.contains("baggage: tenant=acme\r\n"), "{sent}");
+        })
+        .join()
+        .unwrap();
+    }
 }

@@ -1349,3 +1349,27 @@ fn interim_classification() {
     assert!(!super::is_interim_response(b"HTTP/1.1 1\r\n\r\n"));
     assert!(!super::is_interim_response(b""));
 }
+
+#[test]
+fn inside_a_traced_request_the_upstream_gets_our_traceparent_and_baggage() {
+    crate::otel::setup(crate::otel::TracingConfig { exporter: crate::otel::ExporterConfig::Discard, ..Default::default() });
+    let req = crate::request::Request::parse(
+        b"GET / HTTP/1.1\r\nHost: a\r\ntraceparent: 00-11111111111111111111111111111111-2222222222222222-01\r\nbaggage: theirs=1\r\ntracestate: k=v\r\n\r\n",
+    )
+    .unwrap();
+    thread::spawn(move || {
+        let untraced = String::from_utf8(crate::proxy::build_request(&req, "b:9", "10.0.0.1", true)).unwrap();
+        assert!(untraced.contains("traceparent: 00-1111") && untraced.contains("baggage: theirs=1"), "passed through untouched: {untraced:?}");
+        let root = crate::otel::span("request");
+        crate::otel::set_baggage("tenant", "acme");
+        let traced = String::from_utf8(crate::proxy::build_request(&req, "b:9", "10.0.0.1", true)).unwrap();
+        let ours = crate::otel::propagation_headers().unwrap().0;
+        assert_eq!(1, traced.matches("traceparent").count(), "{traced:?}");
+        assert!(traced.contains(&format!("traceparent: {ours}\r\n")), "{traced:?}");
+        assert!(traced.contains("baggage: tenant=acme\r\n") && !traced.contains("theirs"), "{traced:?}");
+        assert!(traced.contains("tracestate: k=v\r\n"), "tracestate kept: {traced:?}");
+        drop(root);
+    })
+    .join()
+    .unwrap();
+}

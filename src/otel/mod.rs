@@ -54,7 +54,10 @@
 #[cfg(test)]
 mod tests;
 
+pub mod baggage;
 pub mod metrics;
+
+pub use baggage::Baggage;
 
 use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -70,33 +73,43 @@ use crate::server::ConnectionInfo;
 
 // ── ID generation ─────────────────────────────────────────────────────────────
 
+/// Drives the sampling decision (`GlobalTracer::should_sample`).
 static COUNTER: AtomicU64 = AtomicU64::new(1);
-static START_SECS: OnceLock<u64> = OnceLock::new();
 
-fn start_secs() -> u64 {
-    *START_SECS.get_or_init(|| {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs()
+/// 64 random bits: splitmix64 over a per-thread state seeded from the
+/// standard library's OS-random hash keys. Not for secrets — IDs only have to
+/// be unique across every service in a trace, which a counter wasn't (two rws
+/// instances minted the same span IDs).
+fn random_u64() -> u64 {
+    thread_local! {
+        static STATE: Cell<u64> = Cell::new({
+            use std::hash::{BuildHasher, Hasher};
+            let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+            hasher.write_u128(SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos());
+            hasher.finish()
+        });
+    }
+    STATE.with(|state| {
+        let x = state.get().wrapping_add(0x9E37_79B9_7F4A_7C15);
+        state.set(x);
+        let mut z = x;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
     })
 }
 
-/// Generate a new 128-bit trace ID. Not cryptographically random but unique
-/// enough for tracing purposes across service restarts.
+/// Generate a new random 128-bit trace ID (never all zeros).
 pub fn new_trace_id() -> [u8; 16] {
-    let start = start_secs();
-    let seq = COUNTER.fetch_add(2, Ordering::Relaxed);
     let mut id = [0u8; 16];
-    id[..8].copy_from_slice(&start.to_be_bytes());
-    id[8..].copy_from_slice(&seq.to_be_bytes());
+    id[..8].copy_from_slice(&random_u64().to_be_bytes());
+    id[8..].copy_from_slice(&(random_u64() | 1).to_be_bytes());
     id
 }
 
-/// Generate a new 64-bit span ID.
+/// Generate a new random 64-bit span ID (never all zeros).
 pub fn new_span_id() -> [u8; 8] {
-    let seq = COUNTER.fetch_add(2, Ordering::Relaxed) + 1;
-    seq.to_be_bytes()
+    (random_u64() | 1).to_be_bytes()
 }
 
 fn hex16(b: &[u8; 16]) -> String {
@@ -255,11 +268,13 @@ fn strip_query(uri: &str) -> &str {
 
 /// Compact span context stored on the thread-local stack for downstream
 /// propagation and parent/child nesting.
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 struct ActiveSpanCtx {
     trace_id: [u8; 16],
     span_id: [u8; 8],
     sampled: bool,
+    /// The request's W3C baggage, shared by its spans (children inherit it).
+    baggage: Option<std::sync::Arc<Baggage>>,
 }
 
 thread_local! {
@@ -334,6 +349,11 @@ pub struct Span {
 }
 
 fn new_span(name: &str, kind: SpanKind, incoming: Option<TraceContext>) -> Span {
+    new_span_with_baggage(name, kind, incoming, None)
+}
+
+fn new_span_with_baggage(name: &str, kind: SpanKind, incoming: Option<TraceContext>, incoming_baggage: Option<Baggage>) -> Span {
+    let mut baggage = incoming_baggage.filter(|b| !b.is_empty()).map(std::sync::Arc::new);
     let (trace_id, parent_span_id, sampled) = ACTIVE_STACK.with(|stack| {
         let stack = stack.borrow();
         if let Some(top) = stack.last() {
@@ -341,6 +361,9 @@ fn new_span(name: &str, kind: SpanKind, incoming: Option<TraceContext>) -> Span 
             // decision — resampling independently per child would produce
             // broken/partial traces whenever a child's own coin-flip
             // disagreed with its parent's.
+            if baggage.is_none() {
+                baggage = top.baggage.clone();
+            }
             (top.trace_id, Some(top.span_id), top.sampled)
         } else {
             // Root-ish: no active parent on this thread, so make a fresh
@@ -353,7 +376,7 @@ fn new_span(name: &str, kind: SpanKind, incoming: Option<TraceContext>) -> Span 
         }
     });
     let span_id = new_span_id();
-    ACTIVE_STACK.with(|stack| stack.borrow_mut().push(ActiveSpanCtx { trace_id, span_id, sampled }));
+    ACTIVE_STACK.with(|stack| stack.borrow_mut().push(ActiveSpanCtx { trace_id, span_id, sampled, baggage }));
 
     Span {
         trace_id,
@@ -381,8 +404,8 @@ impl Span {
 
     /// Used only by [`OtelLayer`] to start the request's root span, honoring
     /// an incoming W3C `traceparent` header if present.
-    pub(crate) fn start_root(name: &str, kind: SpanKind, incoming: Option<TraceContext>) -> Span {
-        new_span(name, kind, incoming)
+    pub(crate) fn start_root(name: &str, kind: SpanKind, incoming: Option<TraceContext>, baggage: Option<Baggage>) -> Span {
+        new_span_with_baggage(name, kind, incoming, baggage)
     }
 
     /// Attach a key/value attribute. Repeated keys are appended, not
@@ -489,6 +512,252 @@ pub fn span(name: &str) -> Span {
 /// another service (an HTTP request, a gRPC call, ...).
 pub fn client_span(name: &str) -> Span {
     Span::new(name, SpanKind::Client)
+}
+
+/// Whether a span is active on this thread (and a tracer is set up).
+pub fn is_tracing() -> bool {
+    tracer().is_some() && ACTIVE_STACK.with(|stack| !stack.borrow().is_empty())
+}
+
+/// A client span for an outbound call rws makes itself (HTTP client, proxy
+/// forward) — only inside a traced request: it never starts a trace of its own.
+pub(crate) fn outbound_span(name: &str) -> Option<Span> {
+    is_tracing().then(|| client_span(name))
+}
+
+/// Semantic-convention attributes of an HTTP client span for `method` and
+/// `url` (`url.full` without query or user info, `server.address`,
+/// `server.port`).
+pub(crate) fn http_client_attributes(method: &str, url: &str) -> Vec<(&'static str, AttributeValue)> {
+    let (scheme, rest) = url.split_once("://").unwrap_or(("http", url));
+    let rest = rest.split(['?', '#']).next().unwrap_or("");
+    let rest = match rest.find('@') {
+        Some(at) if rest.find('/').is_none_or(|slash| at < slash) => &rest[at + 1..],
+        _ => rest,
+    };
+    let authority = rest.split('/').next().unwrap_or("");
+    let default_port = if scheme.eq_ignore_ascii_case("https") { 443 } else { 80 };
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((host, port)) if !host.ends_with(']') || authority.starts_with('[') => match port.parse::<i64>() {
+            Ok(port) => (host, port),
+            Err(_) => (authority, default_port),
+        },
+        _ => (authority, default_port),
+    };
+    vec![
+        ("http.request.method", AttributeValue::from(method)),
+        ("url.full", AttributeValue::from(format!("{scheme}://{rest}"))),
+        ("server.address", AttributeValue::from(host.trim_start_matches('[').trim_end_matches(']'))),
+        ("server.port", AttributeValue::Int(port)),
+    ]
+}
+
+/// What an HTTP client span records about the outcome: the status, and an
+/// error for 4xx/5xx or no response (the client-span convention).
+pub(crate) fn http_client_outcome(status: Result<u16, &str>) -> (Option<i64>, Option<String>) {
+    match status {
+        Ok(status) => (Some(status as i64), (status >= 400).then(|| status.to_string())),
+        Err(message) => (None, Some(message.to_string())),
+    }
+}
+
+impl Span {
+    /// Record [`http_client_outcome`] on this span.
+    pub(crate) fn finish_http_client(&self, status: Result<u16, &str>) {
+        let (status, error) = http_client_outcome(status);
+        if let Some(status) = status {
+            self.set_attribute("http.response.status_code", status);
+        }
+        if let Some(error) = error {
+            self.set_attribute("error.type", error.as_str());
+            self.set_error();
+        }
+    }
+}
+
+// ── baggage and context ──────────────────────────────────────────────────────
+
+/// The current request's W3C baggage (empty outside a traced request).
+pub fn current_baggage() -> Baggage {
+    ACTIVE_STACK.with(|stack| stack.borrow().last().and_then(|top| top.baggage.as_deref().cloned()).unwrap_or_default())
+}
+
+/// Add `key=value` to the current request's baggage, so outbound calls made
+/// from here on carry it (and spans started from here on share it). Returns
+/// `false` outside a traced request or for a key that isn't a token.
+pub fn set_baggage(key: &str, value: &str) -> bool {
+    ACTIVE_STACK.with(|stack| {
+        let mut stack = stack.borrow_mut();
+        let Some(top) = stack.last_mut() else { return false };
+        let mut baggage = top.baggage.as_deref().cloned().unwrap_or_default();
+        if !baggage.set(key, value) {
+            return false;
+        }
+        top.baggage = Some(std::sync::Arc::new(baggage));
+        true
+    })
+}
+
+/// `traceparent` and `baggage` header values for an outbound request made
+/// under the current span; `None` outside a traced request.
+pub fn propagation_headers() -> Option<(String, Option<String>)> {
+    ACTIVE_STACK.with(|stack| {
+        let stack = stack.borrow();
+        let top = stack.last()?;
+        let traceparent = format!("00-{}-{}-{:02x}", hex16(&top.trace_id), hex8(&top.span_id), top.sampled as u8);
+        let baggage = top.baggage.as_deref().filter(|b| !b.is_empty()).map(Baggage::to_header);
+        Some((traceparent, baggage))
+    })
+}
+
+/// Add `traceparent` and `baggage` for the current span to `headers`, unless
+/// the caller set them already.
+pub(crate) fn inject(headers: &mut Vec<(String, String)>) {
+    let Some((traceparent, baggage)) = propagation_headers() else { return };
+    if !headers.iter().any(|(name, _)| name.eq_ignore_ascii_case("traceparent")) {
+        headers.push(("traceparent".to_string(), traceparent));
+    }
+    if let Some(baggage) = baggage {
+        if !headers.iter().any(|(name, _)| name.eq_ignore_ascii_case("baggage")) {
+            headers.push(("baggage".to_string(), baggage));
+        }
+    }
+}
+
+/// The current span context and baggage, captured to carry across threads:
+/// [`Context::attach`] it on another thread (or around an `async` block run
+/// elsewhere) and spans started there become children of the captured span.
+/// rws does this itself for `AsyncAppWithState` handlers.
+#[derive(Clone, Default)]
+pub struct Context {
+    active: Option<ActiveSpanCtx>,
+}
+
+impl Context {
+    /// The innermost active span on this thread (empty if none).
+    pub fn current() -> Context {
+        Context { active: ACTIVE_STACK.with(|stack| stack.borrow().last().cloned()) }
+    }
+
+    /// Whether there's a span in it.
+    pub fn is_empty(&self) -> bool {
+        self.active.is_none()
+    }
+
+    /// Make this context current on this thread until the guard drops.
+    pub fn attach(&self) -> ContextGuard {
+        let span_id = self.active.as_ref().map(|active| {
+            ACTIVE_STACK.with(|stack| stack.borrow_mut().push(active.clone()));
+            active.span_id
+        });
+        ContextGuard { span_id, _not_send: std::marker::PhantomData }
+    }
+}
+
+/// Returned by [`Context::attach`]; restores the previous context on drop.
+/// Must be dropped on the thread that attached it.
+pub struct ContextGuard {
+    span_id: Option<[u8; 8]>,
+    _not_send: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+
+impl Drop for ContextGuard {
+    fn drop(&mut self) {
+        let Some(span_id) = self.span_id else { return };
+        ACTIVE_STACK.with(|stack| {
+            let mut stack = stack.borrow_mut();
+            if let Some(pos) = stack.iter().rposition(|c| c.span_id == span_id) {
+                stack.truncate(pos);
+            }
+        });
+    }
+}
+
+// ── detached spans (async code) ──────────────────────────────────────────────
+
+/// A span for `async` work, which may resume on another thread: it's `Send`,
+/// takes its parent from the context current where it starts, and is never
+/// on the thread-local stack (so spans can't nest under it implicitly —
+/// use [`DetachedSpan::enter`] for synchronous work that should). rws uses
+/// it for database queries and the async HTTP client.
+pub struct DetachedSpan {
+    data: SpanData,
+    sampled: bool,
+    baggage: Option<std::sync::Arc<Baggage>>,
+}
+
+/// Start a [`DetachedSpan`] under the current span; `None` outside a traced
+/// request (it never starts a trace of its own).
+pub fn detached_span(name: &str, kind: SpanKind) -> Option<DetachedSpan> {
+    tracer()?;
+    let parent = ACTIVE_STACK.with(|stack| stack.borrow().last().cloned())?;
+    Some(DetachedSpan {
+        data: SpanData {
+            trace_id: parent.trace_id,
+            span_id: new_span_id(),
+            parent_span_id: Some(parent.span_id),
+            name: name.to_string(),
+            start_ns: now_ns(),
+            kind,
+            ..SpanData::default()
+        },
+        sampled: parent.sampled,
+        baggage: parent.baggage,
+    })
+}
+
+impl DetachedSpan {
+    pub fn set_attribute(&mut self, key: &str, value: impl Into<AttributeValue>) {
+        self.data.attributes.push((key.to_string(), value.into()));
+    }
+
+    /// Mark the span failed with an `error.message`.
+    pub fn record_error(&mut self, message: &str) {
+        self.data.status_code = 2;
+        self.set_attribute("error.message", message);
+    }
+
+    /// Run `work` with this span current on this thread (for header
+    /// propagation or synchronous children).
+    pub fn enter<T>(&self, work: impl FnOnce() -> T) -> T {
+        let context = Context {
+            active: Some(ActiveSpanCtx {
+                trace_id: self.data.trace_id,
+                span_id: self.data.span_id,
+                sampled: self.sampled,
+                baggage: self.baggage.clone(),
+            }),
+        };
+        let _guard = context.attach();
+        work()
+    }
+
+    /// Record [`http_client_outcome`] on this span.
+    pub(crate) fn finish_http_client(&mut self, status: Result<u16, &str>) {
+        let (status, error) = http_client_outcome(status);
+        if let Some(status) = status {
+            self.set_attribute("http.response.status_code", status);
+        }
+        if let Some(error) = error {
+            self.set_attribute("error.type", error.as_str());
+            self.data.status_code = 2;
+        }
+    }
+
+    pub fn end(self) {}
+}
+
+impl Drop for DetachedSpan {
+    fn drop(&mut self) {
+        if !self.sampled {
+            return;
+        }
+        if let Some(tracer) = tracer() {
+            let mut data = std::mem::take(&mut self.data);
+            data.end_ns = now_ns();
+            tracer.record(data);
+        }
+    }
 }
 
 // ── exporter ──────────────────────────────────────────────────────────────────
@@ -938,8 +1207,9 @@ impl Middleware for OtelLayer {
             .find(|h| h.name.eq_ignore_ascii_case("traceparent"))
             .and_then(|h| TraceContext::parse(&h.value));
 
+        let baggage = request.header("baggage").map(|h| Baggage::parse(&h.value));
         let path = strip_query(&request.request_uri).to_string();
-        let root = Span::start_root(&format!("{} {}", request.method, path), SpanKind::Server, incoming);
+        let root = Span::start_root(&format!("{} {}", request.method, path), SpanKind::Server, incoming, baggage);
         root.set_http(&request.method, &request.request_uri);
 
         let result = next.execute(request, connection);

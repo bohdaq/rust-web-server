@@ -37,6 +37,14 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   everything in `OtelLayer`) when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
   `OTEL_EXPORTER_OTLP_{METRICS,TRACES}_ENDPOINT` and `…_HEADERS` are honoured.
   `ci/e2e/otlp.sh` checks it against otelcol-contrib 0.162.
+- Automatic client spans and W3C Baggage (#25): inside a request traced by
+  `OtelLayer`, `http_client::Client`/`AsyncClient`, the HTTP/1.1 proxies and
+  `DbPool`/`DbTransaction` statements get client spans, and outbound calls carry
+  `traceparent` and `baggage` (`otel::Baggage`, `current_baggage`,
+  `set_baggage`). `otel::Context` carries a span across threads (used for
+  `AsyncAppWithState` handlers); `otel::detached_span` is a `Send` span for
+  async code. `ci/e2e/otlp.sh` follows a proxied request into the collector.
+  New fuzz target `otel_baggage`.
 - TLS metrics (#25): `rws_tls_handshakes_total{tls_protocol_version,tls_cipher,tls_group}`,
   `rws_tls_handshake_failures_total` and
   `rws_tls_certificate_expiry_timestamp_seconds{name}` (default certificate,
@@ -45,6 +53,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 ### Fixed
 
 - HTTP/2 over cleartext (h2c) no longer sends `Strict-Transport-Security`.
+- Trace and span IDs are random: they were a per-process counter (plus the
+  start second), so two rws instances in one trace minted the same span IDs.
 - OTLP span export no longer runs on the request thread when a batch fills
   (a background thread sends it; partial batches go out after 5 s), honours
   the endpoint's path and `https://`, and escapes span names and attribute

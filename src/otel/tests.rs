@@ -8,6 +8,7 @@ use crate::otel::{
 };
 use crate::test_client::TestClient;
 use super::ActiveSpanCtx;
+use super::{attr_value_json, current_baggage, detached_span, hex16, hex8, http_client_attributes, http_client_outcome, inject, outbound_span, propagation_headers, set_baggage, Context};
 
 // Initialize tracer once for all tests that go through OtelLayer.
 // We use Discard so tests don't pollute stdout.
@@ -428,7 +429,7 @@ fn child_span_inherits_parents_unsampled_state() {
         // Manually push a "parent" context with sampled=false — sidesteps
         // the global TRACER singleton entirely (see rationale above).
         super::ACTIVE_STACK.with(|stack| {
-            stack.borrow_mut().push(ActiveSpanCtx { trace_id: [1u8; 16], span_id: [2u8; 8], sampled: false });
+            stack.borrow_mut().push(ActiveSpanCtx { trace_id: [1u8; 16], span_id: [2u8; 8], sampled: false, baggage: None });
         });
         let child = span("child");
         assert!(!child.sampled, "child must inherit the parent's unsampled state, not resample independently");
@@ -441,7 +442,7 @@ fn child_span_inherits_parents_unsampled_state() {
 fn child_span_inherits_parents_sampled_state() {
     std::thread::spawn(|| {
         super::ACTIVE_STACK.with(|stack| {
-            stack.borrow_mut().push(ActiveSpanCtx { trace_id: [1u8; 16], span_id: [2u8; 8], sampled: true });
+            stack.borrow_mut().push(ActiveSpanCtx { trace_id: [1u8; 16], span_id: [2u8; 8], sampled: true, baggage: None });
         });
         let child = span("child");
         assert!(child.sampled);
@@ -636,4 +637,124 @@ fn span_json_escapes_names_and_attributes() {
     let body = exp.build_body(&[span]);
     assert!(body.contains(r#""name":"GET /a\"b""#), "{body}");
     assert!(body.contains(r#"{"key":"k\"","value":{"stringValue":"v\"\n"}}"#), "{body}");
+}
+
+// ── baggage, context, propagation ────────────────────────────────────────────
+
+/// Records what a handler sees of the trace context.
+#[derive(Clone)]
+struct Probe(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+impl crate::application::Application for Probe {
+    fn execute(&self, _request: &crate::request::Request, _connection: &crate::server::ConnectionInfo) -> Result<crate::response::Response, String> {
+        let mut seen = self.0.lock().unwrap();
+        seen.push(current_baggage().get("tenant").unwrap_or("-").to_string());
+        assert!(set_baggage("step", "2"));
+        let (traceparent, baggage) = propagation_headers().expect("inside the request's span");
+        seen.push(traceparent);
+        seen.push(baggage.unwrap_or_default());
+        Ok(crate::response::Response::new())
+    }
+}
+
+#[test]
+fn baggage_from_the_request_reaches_the_handler_and_goes_out() {
+    init_tracer();
+    let probe = Probe(Default::default());
+    let app = crate::middleware::WithMiddleware::new(probe.clone()).wrap(OtelLayer);
+    let client = TestClient::new(app);
+    client
+        .get("/x")
+        .header("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+        .header("baggage", "tenant=acme,region=eu")
+        .send();
+    let seen = probe.0.lock().unwrap().clone();
+    assert_eq!("acme", seen[0]);
+    assert!(seen[1].starts_with("00-4bf92f3577b34da6a3ce929d0e0e4736-"), "same trace: {}", seen[1]);
+    assert!(!seen[1].contains("00f067aa0ba902b7"), "our span is the parent now: {}", seen[1]);
+    assert_eq!("tenant=acme,region=eu,step=2", seen[2]);
+    // Outside the request nothing is left behind.
+    assert!(propagation_headers().is_none() || std::thread::spawn(propagation_headers).join().unwrap().is_none());
+}
+
+#[test]
+fn a_context_attached_on_another_thread_parents_its_spans() {
+    init_tracer();
+    std::thread::spawn(|| {
+        let root = span("root");
+        assert!(set_baggage("k", "v"));
+        let context = Context::current();
+        let root_id = root.span_id();
+        let (child_parent, child_trace, baggage) = std::thread::spawn(move || {
+            let guard = context.attach();
+            let child = span("child");
+            let result = (child.parent_span_id(), child.trace_id(), current_baggage().get("k").map(str::to_string));
+            drop(child);
+            drop(guard);
+            assert!(Context::current().is_empty(), "the guard restored the empty stack");
+            result
+        })
+        .join()
+        .unwrap();
+        assert_eq!(Some(root_id), child_parent);
+        assert_eq!(root.trace_id(), child_trace);
+        assert_eq!(Some("v".to_string()), baggage);
+    })
+    .join()
+    .unwrap();
+}
+
+#[test]
+fn detached_spans_take_the_current_parent_and_cross_threads() {
+    fn assert_send<T: Send>(_: &T) {}
+    init_tracer();
+    std::thread::spawn(|| {
+        assert!(detached_span("none", SpanKind::Client).is_none(), "no trace, no span");
+        let root = span("root");
+        let detached = detached_span("db", SpanKind::Client).unwrap();
+        assert_send(&detached);
+        let inner = detached.enter(|| propagation_headers().unwrap().0);
+        assert!(inner.contains(&hex16(&root.trace_id())), "{inner}");
+        assert!(!inner.contains(&hex8(&root.span_id())), "the detached span is the parent inside enter: {inner}");
+        assert!(propagation_headers().unwrap().0.contains(&hex8(&root.span_id())), "and the root again after");
+        std::thread::spawn(move || drop(detached)).join().unwrap();
+    })
+    .join()
+    .unwrap();
+}
+
+#[test]
+fn nothing_is_injected_outside_a_trace_and_caller_headers_win() {
+    init_tracer();
+    std::thread::spawn(|| {
+        let mut headers = vec![];
+        inject(&mut headers);
+        assert!(headers.is_empty());
+        assert!(outbound_span("GET").is_none());
+        let _root = span("root");
+        let mut headers = vec![("TraceParent".to_string(), "mine".to_string())];
+        inject(&mut headers);
+        assert_eq!(vec![("TraceParent".to_string(), "mine".to_string())], headers, "no baggage, caller's traceparent kept");
+        set_baggage("a", "1");
+        inject(&mut headers);
+        assert_eq!(("baggage".to_string(), "a=1".to_string()), headers[1]);
+    })
+    .join()
+    .unwrap();
+}
+
+#[test]
+fn http_client_attributes_follow_the_conventions() {
+    let attrs = http_client_attributes("GET", "https://user:pw@api.example.com:8443/v1/x?token=secret#frag");
+    let get = |k: &str| attrs.iter().find(|(key, _)| *key == k).map(|(_, v)| attr_value_json(v)).unwrap();
+    assert_eq!(r#"{"stringValue":"https://api.example.com:8443/v1/x"}"#, get("url.full"), "no query, no credentials");
+    assert_eq!(r#"{"stringValue":"api.example.com"}"#, get("server.address"));
+    assert_eq!(r#"{"intValue":"8443"}"#, get("server.port"));
+    let attrs = http_client_attributes("POST", "http://[::1]/a");
+    let get = |k: &str| attrs.iter().find(|(key, _)| *key == k).map(|(_, v)| attr_value_json(v)).unwrap();
+    assert_eq!(r#"{"stringValue":"::1"}"#, get("server.address"));
+    assert_eq!(r#"{"intValue":"80"}"#, get("server.port"));
+    assert_eq!((Some(404), Some("404".to_string())), http_client_outcome(Ok(404)));
+    assert_eq!((Some(200), None), http_client_outcome(Ok(200)));
+    assert_eq!((None, Some("refused".to_string())), http_client_outcome(Err("refused")));
 }

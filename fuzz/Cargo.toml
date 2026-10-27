@@ -178,6 +178,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "otel_baggage"
+path = "fuzz_targets/otel_baggage.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "accept_encoding"
 path = "fuzz_targets/accept_encoding.rs"
 test = false

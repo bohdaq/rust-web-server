@@ -30,6 +30,7 @@ cargo install cargo-fuzz
 | `dns_message` | the shared DNS message parser (`dns::parse`), TXT values, DNS UPDATE replies (ACME DNS-01) | DNS servers |
 | `redis_reply` | the RESP reply reader (`redis_protocol`) | Redis servers |
 | `cookie_header` | `CookieJar::parse` | any client |
+| `otel_baggage` | the W3C `baggage` header parser (`otel::Baggage::parse`) | any client, with tracing on |
 | `accept_encoding` | `Accept-Encoding` negotiation for gzip / br / zstd (via `fuzz_api`) | any client |
 | `proxy_protocol` | the PROXY protocol v1/v2 header parser (`server::proxy_protocol::parse`) | L4 load balancers, or anyone when it's enabled |
 | `mcp_gateway_reply` | what the MCP gateway reads from an upstream: JSON or event-stream replies, `tools/list` results (via `fuzz_api`) | upstream MCP servers |

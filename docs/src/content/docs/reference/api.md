@@ -256,6 +256,10 @@ This page is a quick-reference index — click through to docs.rs for the comple
 | `otel::shutdown` / `otel::flush` | `otel` | Flush buffered spans; call `shutdown()` before exit |
 | `otel::span` / `otel::client_span` | `otel` | Start an Internal / Client child span under the active span |
 | `otel::current_traceparent` | `otel` | `traceparent` of the innermost active span, for outbound calls |
+| `Baggage`, `otel::current_baggage` / `set_baggage` | `otel` | W3C Baggage: parse/format the header; read and extend the current request's. See [Baggage](/features/tracing/#baggage) |
+| `otel::propagation_headers`, `otel::is_tracing` | `otel` | `traceparent` + `baggage` for the current span; whether a traced request is current |
+| `Context`, `ContextGuard` | `otel` | Capture the current span and baggage; `attach()` it on another thread |
+| `DetachedSpan`, `otel::detached_span` | `otel` | A `Send` span for async work, parented where it starts; `.enter(f)` |
 | `Span` | `otel` | RAII child span: `.set_attribute`, `.set_error`, `.record_error`, ends on drop |
 | `SpanKind` | `otel` | `Internal`, `Server`, `Client` |
 | `AttributeValue` | `otel` | `String`, `Int`, `Float`, `Bool`, with `From` impls |

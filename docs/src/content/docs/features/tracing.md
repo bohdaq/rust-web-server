@@ -85,7 +85,43 @@ The `rws` binary does this by itself: with `OTEL_EXPORTER_OTLP_ENDPOINT` (or `OT
 - If present, the existing trace ID is continued and the incoming span ID becomes the parent.
 - If absent, a new trace ID is generated.
 
+Trace and span IDs are random (64 bits from a per-thread generator seeded by the OS), so services in one trace never mint the same ID.
+
 The active span context is stored in a **thread-local stack** for the duration of the request — not just a single slot — so nested [child spans](#child-spans) work correctly: starting a child span pushes it, and it's popped when the child ends, restoring its parent as "current."
+
+## Automatic client spans and propagation
+
+Inside a request traced by `OtelLayer`, rws starts a `Client` span for the outbound calls it makes and sends the trace on — no code needed:
+
+| Outbound call | Span | Headers sent |
+|---|---|---|
+| `http_client::Client` (`send`) | `GET`/`POST`/… with `http.request.method`, `url.full` (no query or credentials), `server.address`, `server.port`, `http.response.status_code`; an error for no response or a 4xx/5xx | `traceparent` naming the client span, `baggage`; a header the caller set is kept |
+| `http_client::AsyncClient` | the same, as a [detached span](#async-code) | the same |
+| `ReverseProxy`, config-file proxy routes, canary | the same, per forward (retries are separate spans) | `traceparent` and `baggage` replace the client's; `tracestate` passes through |
+| `DbPool` / `DbTransaction` statements (`model-*` features) | `SELECT`/`INSERT`/… with `db.system.name` and `db.operation.name` — not the query text, which can carry literals; an error when the statement fails | — |
+
+Outside a traced request none of this happens: no span is started (outbound calls never begin a trace of their own) and the proxies forward the client's trace headers untouched. The OTLP exporters' own requests run on their threads, outside any request, so they aren't traced. The HTTP/2 upstream (`H2ReverseProxy`, `GrpcProxy`, `grpc` routes) isn't covered yet.
+
+## Baggage
+
+[W3C Baggage](https://www.w3.org/TR/baggage/) — key/value pairs such as a tenant or a feature flag that travel with a request across services — comes in on the `baggage` header, is readable and extendable in a handler, and goes out on every outbound call above:
+
+```rust
+use rust_web_server::otel;
+
+// Inside a handler, under OtelLayer:
+let tenant = otel::current_baggage().get("tenant").map(str::to_string);
+otel::set_baggage("checkout.step", "payment"); // sent on from here on
+```
+
+`otel::Baggage` parses and formats the header (`Baggage::parse`, `.to_header()`, `.get`, `.set`, `.remove`, `.iter`). Values are percent-decoded; malformed members are skipped, and the specification's limits apply (64 members, 8192 bytes; the rest is dropped). Baggage isn't added to spans as attributes — it may hold what you wouldn't want in a tracing backend.
+
+## Async code
+
+A `Span` lives on a thread-local stack, but an `async` task can resume on another thread. Two tools cover that:
+
+- **`otel::detached_span(name, kind)`** — a `Send` span whose parent is the span current where it starts; it records when dropped, wherever that is. `span.enter(|| …)` makes it current for a synchronous block (to propagate headers from it, say). rws uses it for database statements and `AsyncClient`. Returns `None` outside a traced request.
+- **`otel::Context::current()` / `context.attach()`** — capture the current span and baggage, and make them current on another thread until the guard drops. rws does this for `AsyncAppWithState` handlers, which run on a thread of their own, so their DB queries and outbound calls nest under the request's span.
 
 ## `otel::current_traceparent()`
 
@@ -145,7 +181,7 @@ A span created while another is active becomes its **child**: it shares the encl
 | Function | `SpanKind` | Use for |
 |---|---|---|
 | `otel::span(name)` | `Internal` | Work with no remote counterpart — a DB query, a cache lookup, business logic |
-| `otel::client_span(name)` | `Client` | An outbound call to another service — pair with `otel::current_traceparent()` to propagate context into it |
+| `otel::client_span(name)` | `Client` | An outbound call to another service that rws doesn't [instrument itself](#automatic-client-spans-and-propagation) — pair with `otel::current_traceparent()` to propagate context into it |
 | `Span::new(name, kind)` | any `SpanKind` | Full control, if neither helper fits |
 
 `Span` mutation methods (all take `&self` — no `mut` binding needed):

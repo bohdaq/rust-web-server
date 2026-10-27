@@ -764,3 +764,33 @@ mod model_tests {
         assert!(page.items.iter().all(|u| u.age == Some(30)));
     }
 }
+
+#[test]
+fn sql_operations_name_db_spans() {
+    use crate::model::pool::sql_operation;
+    assert_eq!("SELECT", sql_operation("  select * from t"));
+    assert_eq!("INSERT", sql_operation("INSERT INTO t VALUES (1)"));
+    assert_eq!("WITH", sql_operation("with x as (select 1) select * from x"));
+    assert_eq!("query", sql_operation("EXPLAIN select 1"));
+    assert_eq!("query", sql_operation(""));
+}
+
+#[test]
+fn queries_inside_a_traced_request_get_db_spans() {
+    crate::otel::setup(crate::otel::TracingConfig { exporter: crate::otel::ExporterConfig::Discard, ..Default::default() });
+    std::thread::spawn(|| {
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        assert!(crate::model::pool::db_span_for_test("SELECT 1").is_none(), "no trace, no span");
+        let _root = crate::otel::span("request");
+        let span = crate::model::pool::db_span_for_test("SELECT 1").expect("a child span");
+        drop(span);
+        // The query itself still works with tracing on.
+        let rows = runtime.block_on(async {
+            let pool = crate::model::DbPool::memory().await.unwrap();
+            pool.query_rows("SELECT 1 AS one", &[]).await.unwrap()
+        });
+        assert_eq!(1, rows.len());
+    })
+    .join()
+    .unwrap();
+}

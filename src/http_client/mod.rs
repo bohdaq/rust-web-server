@@ -836,13 +836,41 @@ impl<'a> RequestBuilder<'a> {
     /// Automatically follows redirects up to the client's `max_redirects`
     /// limit.
     pub fn send(self) -> Result<Response, HttpClientError> {
-        let timeout = self.timeout_ms.unwrap_or(self.client.timeout_ms);
-        let max_redirects = self.client.max_redirects;
+        // Inside a traced request: a client span, and `traceparent`/`baggage`
+        // sent on (see `otel`).
+        #[cfg(not(target_arch = "wasm32"))]
+        let span = crate::otel::outbound_span(&self.method);
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(span) = &span {
+            for (key, value) in crate::otel::http_client_attributes(&self.method, &self.url) {
+                span.set_attribute(key, value);
+            }
+        }
+        let mut headers = self.headers;
+        #[cfg(not(target_arch = "wasm32"))]
+        crate::otel::inject(&mut headers);
+        let result = Self::send_following(self.client, self.method, self.url, headers, self.body, self.timeout_ms);
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(span) = &span {
+            span.finish_http_client(result.as_ref().map(|r| r.status()).map_err(|e| e.0.as_str()));
+        }
+        result
+    }
 
-        let mut method = self.method;
-        let mut url = self.url;
-        let headers = self.headers;
-        let mut body = self.body;
+    fn send_following(
+        client: &Client,
+        method: String,
+        url: String,
+        headers: Vec<(String, String)>,
+        body: Option<Vec<u8>>,
+        timeout_ms: Option<u64>,
+    ) -> Result<Response, HttpClientError> {
+        let timeout = timeout_ms.unwrap_or(client.timeout_ms);
+        let max_redirects = client.max_redirects;
+
+        let mut method = method;
+        let mut url = url;
+        let mut body = body;
         let mut redirects = 0u8;
 
         loop {
@@ -1175,13 +1203,36 @@ mod async_impl {
 
         /// Send the request asynchronously.
         pub async fn send(self) -> Result<Response, HttpClientError> {
-            let timeout = self.timeout_ms.unwrap_or(self.client.timeout_ms);
-            let max_redirects = self.client.max_redirects;
+            // A detached client span: this future may resume on another thread.
+            let mut span = crate::otel::detached_span(&self.method, crate::otel::SpanKind::Client);
+            let mut headers = self.headers;
+            if let Some(span) = &mut span {
+                for (key, value) in crate::otel::http_client_attributes(&self.method, &self.url) {
+                    span.set_attribute(key, value);
+                }
+                span.enter(|| crate::otel::inject(&mut headers));
+            }
+            let result = Self::send_following(self.client, self.method, self.url, headers, self.body, self.timeout_ms).await;
+            if let Some(span) = &mut span {
+                span.finish_http_client(result.as_ref().map(|r| r.status()).map_err(|e| e.0.as_str()));
+            }
+            result
+        }
 
-            let mut method = self.method;
-            let mut url = self.url;
-            let headers = self.headers;
-            let mut body = self.body;
+        async fn send_following(
+            client: &AsyncClient,
+            method: String,
+            url: String,
+            headers: Vec<(String, String)>,
+            body: Option<Vec<u8>>,
+            timeout_ms: Option<u64>,
+        ) -> Result<Response, HttpClientError> {
+            let timeout = timeout_ms.unwrap_or(client.timeout_ms);
+            let max_redirects = client.max_redirects;
+
+            let mut method = method;
+            let mut url = url;
+            let mut body = body;
             let mut redirects = 0u8;
 
             loop {

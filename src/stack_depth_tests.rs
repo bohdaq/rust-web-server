@@ -137,3 +137,13 @@ fn dns_message_with_tens_of_thousands_of_records() {
         assert_eq!(0xFFFF, crate::dns::parse(&ok).unwrap().answers.len());
     });
 }
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn baggage_header_with_thousands_of_members() {
+    on_small_stack(|| {
+        let header = vec!["k=v;p"; 50_000].join(",");
+        let baggage = crate::otel::Baggage::parse(&header);
+        assert_eq!(1, baggage.len(), "one key, set again and again");
+    });
+}

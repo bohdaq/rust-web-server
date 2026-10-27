@@ -151,6 +151,77 @@ kill -TERM "$RWS_PID"
 wait "$RWS_PID" 2>/dev/null || true
 echo "ok: server span continues the incoming traceparent ($found)"
 
+# ── propagation through a proxied request ────────────────────────────────────
+# A backend that answers with the trace headers it received.
+cat > backend.py <<'PY'
+import http.server
+class H(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    def do_GET(self):
+        body = ("%s|%s" % (self.headers.get("traceparent", ""), self.headers.get("baggage", ""))).encode()
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *a): pass
+http.server.ThreadingHTTPServer(("127.0.0.1", 9497), H).serve_forever()
+PY
+python3 backend.py &
+PIDS+=($!)
+cat > rws.config.toml <<'TOML'
+[[upstream]]
+name = "echo"
+backends = ["http://127.0.0.1:9497"]
+
+[[route]]
+  [route.match]
+  path = "/echo/*"
+  [route.action]
+  type = "proxy"
+  [route.action.proxy]
+  upstream = "echo"
+TOML
+start_rws rws-e2e-proxy 1000
+TRACE2=0af7651916cd43dd8448eb211c80319c
+seen=$(curl -s -H "traceparent: 00-$TRACE2-b7ad6b7169203331-01" -H "baggage: tenant=acme,plan=pro" http://127.0.0.1:8496/echo/x)
+upstream_parent=$(echo "$seen" | sed -nE "s/^00-$TRACE2-([0-9a-f]{16})-01\|.*/\1/p")
+[ -n "$upstream_parent" ] || fail "upstream didn't get the trace: '$seen'"
+[ "$upstream_parent" != b7ad6b7169203331 ] || fail "upstream got the client's span id, not ours: '$seen'"
+echo "$seen" | grep -q '|tenant=acme,plan=pro$' || fail "baggage not passed on: '$seen'"
+echo "ok: the upstream gets our traceparent (parent $upstream_parent) and the baggage"
+spans=""
+for _ in $(seq 1 40); do
+  spans=$(python3 - "$TRACE2" "$upstream_parent" <<'PY'
+import json, sys
+trace, upstream_parent = sys.argv[1], sys.argv[2]
+spans = {}
+for line in open("otlp.jsonl").read().splitlines():
+    try:
+        export = json.loads(line)
+    except ValueError:
+        continue
+    for rs in export.get("resourceSpans", []):
+        for ss in rs["scopeSpans"]:
+            for s in ss["spans"]:
+                if s["traceId"] == trace:
+                    spans[s["spanId"]] = s
+client = spans.get(upstream_parent)
+if client and client["kind"] in (3, "SPAN_KIND_CLIENT"):
+    server = spans.get(client.get("parentSpanId"))
+    attrs = {a["key"]: list(a["value"].values())[0] for a in client["attributes"]}
+    if server and server["kind"] in (2, "SPAN_KIND_SERVER") and server.get("parentSpanId") == "b7ad6b7169203331":
+        print(client["name"], attrs.get("server.port"), attrs.get("http.response.status_code"))
+PY
+)
+  [ -n "$spans" ] && break
+  sleep 0.5
+done
+[ "$spans" = "GET 9497 200" ] || fail "client span under the server span: '$spans'"
+echo "ok: client span ($spans) under the server span, exported"
+kill -TERM "$RWS_PID"
+wait "$RWS_PID" 2>/dev/null || true
+rm rws.config.toml
+
 # ── last export on shutdown ──────────────────────────────────────────────────
 start_rws rws-e2e-shutdown 600000
 for _ in $(seq 1 5); do curl -s -o /dev/null -X POST -d x http://127.0.0.1:8496/missing; done

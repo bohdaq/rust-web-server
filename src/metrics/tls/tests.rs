@@ -31,6 +31,7 @@ fn certificate_expiry_is_exported_per_name() {
 }
 
 #[test]
+#[cfg(feature = "http2")]
 fn record_rustls_names_what_a_real_handshake_negotiated() {
     use std::sync::Arc;
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();

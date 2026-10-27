@@ -36,7 +36,11 @@ where
 {
     match tokio::runtime::Handle::try_current() {
         Ok(_) => std::thread::scope(|s| {
-            s.spawn(|| {
+            // The caller's span (an `OtelLayer` request) stays the parent of
+            // spans started on the isolated thread.
+            let context = crate::otel::Context::current();
+            s.spawn(move || {
+                let _context = context.attach();
                 tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()

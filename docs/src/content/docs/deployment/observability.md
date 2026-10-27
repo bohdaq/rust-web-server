@@ -239,9 +239,7 @@ let response = Client::new()
     .send()?;
 ```
 
-:::caution[Coming Soon]
-Baggage propagation, and spans created automatically for database queries and outbound calls.
-:::
+Inside a traced request rws does this itself: the HTTP client, the proxies and database statements get client spans, and `traceparent` plus [`baggage`](/features/tracing/#baggage) are sent on — see [Automatic client spans and propagation](/features/tracing/#automatic-client-spans-and-propagation).
 
 ## Health endpoints
 

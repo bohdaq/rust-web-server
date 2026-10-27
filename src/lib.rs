@@ -381,6 +381,21 @@ pub mod fuzz_api {
         assert!(jar.cookies.iter().all(|c| !c.name.is_empty()));
     }
 
+    /// A W3C `baggage` header (#25): members survive a round trip through
+    /// the header. Must never panic.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn otel_baggage(data: &[u8]) {
+        let Ok(value) = std::str::from_utf8(data) else { return };
+        let baggage = crate::otel::Baggage::parse(value);
+        assert!(baggage.len() <= crate::otel::baggage::MAX_MEMBERS);
+        let again = crate::otel::Baggage::parse(&baggage.to_header());
+        for (key, value) in baggage.iter() {
+            if let Some(round_tripped) = again.get(key) {
+                assert_eq!(value, round_tripped);
+            }
+        }
+    }
+
     /// What ACME renewal parses from the CA (#1): certificate DER (validity,
     /// serial, Authority Key Identifier), renewalInfo windows (RFC 3339) and
     /// directory profile names. Must never panic.

@@ -306,6 +306,12 @@ pub(crate) fn build_request(
     // `X-Forwarded-For` is extended below, so the client's copies are dropped:
     // two `Content-Length` lines are a protocol error and a desync risk.
     let connection = request.header(crate::header::Header::_CONNECTION).map(|h| h.value.as_ref());
+    // Inside a traced request the current span's `traceparent` (and the
+    // request's `baggage`) replace the client's.
+    #[cfg(not(target_arch = "wasm32"))]
+    let trace = crate::otel::propagation_headers();
+    #[cfg(target_arch = "wasm32")]
+    let trace: Option<(String, Option<String>)> = None;
     let forwarded = |h: &&crate::header::Header| {
         // An empty name would be sent as a malformed ": value" line.
         !h.name.is_empty()
@@ -313,12 +319,14 @@ pub(crate) fn build_request(
             && !h.name.eq_ignore_ascii_case(crate::header::Header::_CONTENT_LENGTH)
             && !h.name.eq_ignore_ascii_case("X-Forwarded-For")
             && !connection.is_some_and(|c| connection_listed(c, &h.name))
+            && !(trace.is_some() && (h.name.eq_ignore_ascii_case("traceparent") || h.name.eq_ignore_ascii_case("baggage")))
     };
     let prior_xff = request.header("X-Forwarded-For").map(|h| h.value.as_ref()).filter(|v| !v.trim().is_empty());
     let body_len = Decimal::new(request.body.len() as u128);
     let capacity = request.method.len() + request.request_uri.len() + backend_host.len() + 25
         + request.headers.iter().filter(forwarded).map(|h| h.name.len() + h.value.len() + 4).sum::<usize>()
         + client_ip.len() + 19 + prior_xff.map_or(0, |v| v.len() + 2)
+        + trace.as_ref().map_or(0, |(t, b)| t.len() + 15 + b.as_ref().map_or(0, |b| b.len() + 11))
         + 13
         + 24
         + if request.body.is_empty() { 0 } else { body_len.as_str().len() + 18 }
@@ -340,6 +348,16 @@ pub(crate) fn build_request(
     }
     for part in [client_ip, "\r\n", "Via: 1.1 rws\r\n"] {
         out.extend_from_slice(part.as_bytes());
+    }
+    if let Some((traceparent, baggage)) = &trace {
+        for part in ["traceparent: ", traceparent, "\r\n"] {
+            out.extend_from_slice(part.as_bytes());
+        }
+        if let Some(baggage) = baggage {
+            for part in ["baggage: ", baggage, "\r\n"] {
+                out.extend_from_slice(part.as_bytes());
+            }
+        }
     }
     if keep_alive {
         out.extend_from_slice(b"Connection: keep-alive\r\n");
@@ -610,6 +628,38 @@ pub(crate) fn forward_upstream(
 /// replaces the WebPKI roots for TLS backends (a private CA).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn forward_upstream_trusting(
+    plain_pool: &ConnPool,
+    request: &Request,
+    client_ip: &str,
+    host: &str,
+    port: u16,
+    tls: bool,
+    trust: Option<&UpstreamTls>,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
+    // Inside a traced request: a client span per forward, current while the
+    // request is built, so the upstream's `traceparent` names it.
+    #[cfg(not(target_arch = "wasm32"))]
+    let span = crate::otel::outbound_span(&request.method);
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(span) = &span {
+        let scheme = if tls { "https" } else { "http" };
+        let path = request.request_uri.as_str();
+        for (key, value) in crate::otel::http_client_attributes(&request.method, &format!("{scheme}://{host}:{port}{path}")) {
+            span.set_attribute(key, value);
+        }
+    }
+    let result = forward_upstream_untraced(plain_pool, request, client_ip, host, port, tls, trust, connect_timeout, read_timeout);
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(span) = &span {
+        span.finish_http_client(result.as_ref().map(|r| r.status_code as u16).map_err(String::as_str));
+    }
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+fn forward_upstream_untraced(
     plain_pool: &ConnPool,
     request: &Request,
     client_ip: &str,

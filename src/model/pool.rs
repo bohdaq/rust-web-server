@@ -117,26 +117,32 @@ impl DbPool {
     ///
     /// Returns the number of rows affected.
     pub async fn execute(&self, sql: &str, params: &[Value]) -> Result<u64, DbError> {
-        match self {
+        let span = db_span(self.backend(), sql);
+        let result = match self {
             #[cfg(feature = "model-sqlite")]
             DbPool::Sqlite(pool) => sqlite_pool_execute(pool, sql, params).await,
             #[cfg(feature = "model-postgres")]
             DbPool::Postgres(pool) => pg_pool_execute(pool, sql, params).await,
             #[cfg(feature = "model-mysql")]
             DbPool::MySql(pool) => mysql_pool_execute(pool, sql, params).await,
-        }
+        };
+        finish_db_span(span, &result);
+        result
     }
 
     /// Execute a SQL query and return untyped rows.
     pub async fn query_rows(&self, sql: &str, params: &[Value]) -> Result<Vec<ModelRow>, DbError> {
-        match self {
+        let span = db_span(self.backend(), sql);
+        let result = match self {
             #[cfg(feature = "model-sqlite")]
             DbPool::Sqlite(pool) => sqlite_pool_query_rows(pool, sql, params).await,
             #[cfg(feature = "model-postgres")]
             DbPool::Postgres(pool) => pg_pool_query_rows(pool, sql, params).await,
             #[cfg(feature = "model-mysql")]
             DbPool::MySql(pool) => mysql_pool_query_rows(pool, sql, params).await,
-        }
+        };
+        finish_db_span(span, &result);
+        result
     }
 
     /// Execute a SQL query and deserialise results into `T: Model`.
@@ -159,14 +165,17 @@ impl DbPool {
         params: &[Value],
         _pk_col: &str,
     ) -> Result<i64, DbError> {
-        match self {
+        let span = db_span(self.backend(), insert_sql);
+        let result = match self {
             #[cfg(feature = "model-sqlite")]
             DbPool::Sqlite(pool) => sqlite_last_insert_id(pool, insert_sql, params).await,
             #[cfg(feature = "model-postgres")]
             DbPool::Postgres(pool) => pg_insert_returning(pool, insert_sql, params, _pk_col).await,
             #[cfg(feature = "model-mysql")]
             DbPool::MySql(pool) => mysql_last_insert_id(pool, insert_sql, params).await,
-        }
+        };
+        finish_db_span(span, &result);
+        result
     }
 
     // ── Transactions ──────────────────────────────────────────────────────────
@@ -278,28 +287,45 @@ pub enum DbTransaction {
 }
 
 impl DbTransaction {
+    fn backend(&self) -> Backend {
+        match self {
+            #[cfg(feature = "model-sqlite")]
+            DbTransaction::Sqlite(_) => Backend::Sqlite,
+            #[cfg(feature = "model-postgres")]
+            DbTransaction::Postgres(_) => Backend::Postgres,
+            #[cfg(feature = "model-mysql")]
+            DbTransaction::MySql(_) => Backend::MySql,
+        }
+    }
+
     /// Execute a SQL statement inside this transaction.
     pub async fn execute(&mut self, sql: &str, params: &[Value]) -> Result<u64, DbError> {
-        match self {
+        let span = db_span(self.backend(), sql);
+        let result = match self {
             #[cfg(feature = "model-sqlite")]
             DbTransaction::Sqlite(tx) => sqlite_tx_execute(tx, sql, params).await,
             #[cfg(feature = "model-postgres")]
             DbTransaction::Postgres(tx) => pg_tx_execute(tx, sql, params).await,
             #[cfg(feature = "model-mysql")]
             DbTransaction::MySql(tx) => mysql_tx_execute(tx, sql, params).await,
-        }
+        };
+        finish_db_span(span, &result);
+        result
     }
 
     /// Execute a SQL query inside this transaction, returning untyped rows.
     pub async fn query_rows(&mut self, sql: &str, params: &[Value]) -> Result<Vec<ModelRow>, DbError> {
-        match self {
+        let span = db_span(self.backend(), sql);
+        let result = match self {
             #[cfg(feature = "model-sqlite")]
             DbTransaction::Sqlite(tx) => sqlite_tx_query_rows(tx, sql, params).await,
             #[cfg(feature = "model-postgres")]
             DbTransaction::Postgres(tx) => pg_tx_query_rows(tx, sql, params).await,
             #[cfg(feature = "model-mysql")]
             DbTransaction::MySql(tx) => mysql_tx_query_rows(tx, sql, params).await,
-        }
+        };
+        finish_db_span(span, &result);
+        result
     }
 
     /// Execute a SQL query inside this transaction and deserialise into `T: Model`.
@@ -748,4 +774,45 @@ async fn mysql_last_insert_id(
         .await
         .map_err(|e| DbError::new(e.to_string()))?;
     Ok(r.last_insert_id() as i64)
+}
+
+// ── tracing ───────────────────────────────────────────────────────────────────
+
+/// A client span for one statement, inside a traced request: named after the
+/// operation (`SELECT`, `INSERT`, …) with `db.system.name` and
+/// `db.operation.name` — not the query text, which can carry literals.
+fn db_span(backend: Backend, sql: &str) -> Option<crate::otel::DetachedSpan> {
+    let operation = sql_operation(sql);
+    let mut span = crate::otel::detached_span(operation, crate::otel::SpanKind::Client)?;
+    let system = match backend {
+        #[cfg(feature = "model-sqlite")]
+        Backend::Sqlite => "sqlite",
+        #[cfg(feature = "model-postgres")]
+        Backend::Postgres => "postgresql",
+        #[cfg(feature = "model-mysql")]
+        Backend::MySql => "mysql",
+    };
+    span.set_attribute("db.system.name", system);
+    span.set_attribute("db.operation.name", operation);
+    Some(span)
+}
+
+#[cfg(all(test, feature = "model-sqlite"))]
+pub(crate) fn db_span_for_test(sql: &str) -> Option<crate::otel::DetachedSpan> {
+    db_span(Backend::Sqlite, sql)
+}
+
+fn finish_db_span<T>(span: Option<crate::otel::DetachedSpan>, result: &Result<T, DbError>) {
+    if let (Some(mut span), Err(e)) = (span, result) {
+        span.record_error(&e.to_string());
+    }
+}
+
+/// The statement's first keyword, upper-cased (`"query"` when there's none).
+pub(crate) fn sql_operation(sql: &str) -> &'static str {
+    const KNOWN: [&str; 14] = [
+        "SELECT", "INSERT", "UPDATE", "DELETE", "WITH", "CREATE", "ALTER", "DROP", "BEGIN", "COMMIT", "ROLLBACK", "PRAGMA", "REPLACE", "TRUNCATE",
+    ];
+    let word = sql.trim_start().split(|c: char| !c.is_ascii_alphabetic()).next().unwrap_or("");
+    KNOWN.iter().find(|k| k.eq_ignore_ascii_case(word)).copied().unwrap_or("query")
 }
