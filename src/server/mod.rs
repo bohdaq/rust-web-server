@@ -876,30 +876,29 @@ async fn serve_tls_connection(
 ) {
     let _ = tcp_stream.set_nodelay(true);
     let Some(peer_addr) = client_address(&mut tcp_stream, peer_addr).await else { return };
-    #[cfg(feature = "acme")]
+    let timed_out = || std::io::Error::from(std::io::ErrorKind::TimedOut);
     let handshake = async {
-        if !crate::acme::on_demand::enabled() {
-            return acceptor.accept(tcp_stream).await;
+        #[cfg(feature = "acme")]
+        if crate::acme::on_demand::enabled() {
+            // On-demand TLS: read the ClientHello, get a certificate for
+            // its name if it should have one (bounded by
+            // `on_demand::HANDSHAKE_WAIT`), then finish the handshake.
+            let lazy = tokio_rustls::LazyConfigAcceptor::new(rustls::server::Acceptor::default(), tcp_stream);
+            let start = tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, lazy).await.map_err(|_| timed_out())??;
+            let hello = start.client_hello();
+            let name = hello.server_name().filter(|_| !crate::acme::tls_alpn::is_challenge(&hello)).map(str::to_string);
+            if let Some(name) = name {
+                crate::acme::on_demand::ensure(&name).await;
+            }
+            let finish = start.into_stream(acceptor.config().clone());
+            return tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, finish).await.map_err(|_| timed_out())?;
         }
-        // On-demand TLS: read the ClientHello, get a certificate for its
-        // name if it should have one, then go on with the handshake.
-        let lazy = tokio_rustls::LazyConfigAcceptor::new(rustls::server::Acceptor::default(), tcp_stream);
-        let start = tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, lazy).await
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::TimedOut))??;
-        let hello = start.client_hello();
-        let name = hello.server_name().filter(|_| !crate::acme::tls_alpn::is_challenge(&hello)).map(str::to_string);
-        if let Some(name) = name {
-            crate::acme::on_demand::ensure(&name).await;
-        }
-        start.into_stream(acceptor.config().clone()).await
+        tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT, acceptor.accept(tcp_stream)).await.map_err(|_| timed_out())?
     };
-    #[cfg(not(feature = "acme"))]
-    let handshake = acceptor.accept(tcp_stream);
-    let handshake = tokio::time::timeout(http1_async::TLS_HANDSHAKE_TIMEOUT + on_demand_wait(), handshake);
     match handshake.await {
-        Err(_) => {} // client never finished the handshake
-        Ok(Err(e)) => eprintln!("TLS handshake failed: {}", e),
-        Ok(Ok(tls_stream)) => {
+        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {} // client never finished the handshake
+        Err(e) => eprintln!("TLS handshake failed: {}", e),
+        Ok(tls_stream) => {
             let server_conn = tls_stream.get_ref().1;
             let sni = server_conn.server_name().map(|s| s.to_string());
             let protocol = server_conn.alpn_protocol().map(|p| p.to_vec());
@@ -925,17 +924,6 @@ async fn serve_tls_connection(
             }
         }
     }
-}
-
-/// How much longer than `TLS_HANDSHAKE_TIMEOUT` a handshake may take: the
-/// wait for an on-demand certificate.
-#[cfg(feature = "http2")]
-fn on_demand_wait() -> std::time::Duration {
-    #[cfg(feature = "acme")]
-    if crate::acme::on_demand::enabled() {
-        return crate::acme::on_demand::HANDSHAKE_WAIT;
-    }
-    std::time::Duration::ZERO
 }
 
 /// One accepted plain-HTTP connection.

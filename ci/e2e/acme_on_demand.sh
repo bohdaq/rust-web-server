@@ -130,7 +130,7 @@ pass "an allowed name got its own certificate during its first handshake"
 [ "$(subject evil.example.test)" = "DNS:saas.example.test" ] || fail "evil.example.test got $(subject evil.example.test)"
 subject evil.example.test > /dev/null
 [ "$(grep -c "ask evil.example.test" "$WORK/ask.log")" = "1" ] || fail "evil.example.test was asked about $(grep -c "ask evil.example.test" "$WORK/ask.log") times"
-grep -q "ordering a certificate for 'evil" "$WORK/rws.log" && fail "a refused name was ordered"
+grep -q "getting a certificate for 'evil" "$WORK/rws.log" && fail "a refused name was ordered"
 [ ! -e .rws/acme/on-demand/evil.example.test ] || fail "files for a refused name"
 pass "a refused name gets the default certificate, is not ordered and not asked again at once"
 
@@ -144,7 +144,7 @@ for job in $(jobs -p); do
   wait "$job" || wait_ok=1
 done
 [ "$wait_ok" = 0 ] || fail "a simultaneous first handshake failed"
-[ "$(grep -c "ordering a certificate for 'multi.example.test'" "$WORK/rws.log")" = "1" ] || fail "multi.example.test was ordered $(grep -c "ordering a certificate for 'multi.example.test'" "$WORK/rws.log") times"
+[ "$(grep -c "getting a certificate for 'multi.example.test'" "$WORK/rws.log")" = "1" ] || fail "multi.example.test was ordered $(grep -c "getting a certificate for 'multi.example.test'" "$WORK/rws.log") times"
 pass "five simultaneous first handshakes, one order"
 
 # ── 4. restart: certificates from disk ───────────────────────────────────────
@@ -152,7 +152,7 @@ kill "${PIDS[-1]}"; wait "${PIDS[-1]}" 2>/dev/null || true
 start_rws "$WORK/rws2.log"
 grep -q "(2 loaded)" "$WORK/rws2.log" || fail "the on-demand certificates weren't loaded at startup: $(grep "On-demand TLS" "$WORK/rws2.log")"
 [ "$(subject shop.example.test)" = "DNS:shop.example.test" ] || fail "after a restart shop.example.test got $(subject shop.example.test)"
-grep -q "ordering a certificate" "$WORK/rws2.log" && fail "ordered again after a restart"
+grep -q "getting a certificate" "$WORK/rws2.log" && fail "ordered again after a restart"
 pass "after a restart the certificates come from disk"
 
 echo "all on-demand TLS checks passed"

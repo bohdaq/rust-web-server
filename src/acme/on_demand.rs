@@ -235,7 +235,7 @@ async fn obtain_locked(state: &OnDemand, name: &str) -> Result<(), String> {
         return Ok(());
     }
     let _permit = state.orders.acquire().await.map_err(|e| e.to_string())?;
-    println!("[ACME] On-demand: ordering a certificate for '{name}'.");
+    println!("[ACME] On-demand: getting a certificate for '{name}'.");
     // `check` installs a certificate another replica stored (`[acme]
     // redis`), keeps a current one from disk, or orders a new one.
     AcmeManager::new(state.config_for(name)).check().await?;
