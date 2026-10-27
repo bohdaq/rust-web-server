@@ -36,7 +36,7 @@ const METHODS: [&str; 9] = ["CONNECT", "DELETE", "GET", "HEAD", "OPTIONS", "PATC
 const OTHER: &str = "_OTHER";
 
 /// The series a request belongs to.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub(crate) struct Series {
     /// Index into `METHODS`, or `METHODS.len()` for `_OTHER`.
     method: u8,
@@ -56,6 +56,11 @@ impl Series {
             _ => 1,
         };
         Series { method, status, https, version }
+    }
+
+    /// All four fields in one number (what the store hashes).
+    fn key(&self) -> u32 {
+        (self.method as u32) << 24 | (self.status as u16 as u32) << 8 | (self.https as u32) << 4 | self.version as u32
     }
 
     pub(crate) fn method(&self) -> &'static str {
@@ -161,32 +166,69 @@ impl Histogram {
     }
 }
 
-/// The schema-3 bucket holding `secs` (> 0): `ceil(log2(secs) · 8)`, clamped.
+/// Upper bounds of the eight schema-3 buckets within one power of two:
+/// 2^(k/8) for k = 0..=8.
+const MANTISSA_BOUNDS: [f64; 9] = [
+    1.0,
+    1.0905077326652577,
+    1.189207115002721,
+    1.2968395546510096,
+    1.4142135623730951,
+    1.5422108254079407,
+    1.681792830507429,
+    1.8340080864093424,
+    2.0,
+];
+
+/// The schema-3 bucket holding `secs` (> 0): `ceil(log2(secs) · 8)`, clamped —
+/// from the float's exponent and a table lookup on its mantissa (no `log2`).
 pub(crate) fn native_index(secs: f64) -> i32 {
-    // frexp: secs = frac · 2^exp with frac in [0.5, 1); exact for powers of two.
     let bits = secs.to_bits();
     let raw_exp = ((bits >> 52) & 0x7ff) as i32;
     if raw_exp == 0 {
         return MIN_INDEX; // subnormal: far below anything a request takes
     }
-    let exp = raw_exp - 1022;
-    let frac = f64::from_bits((bits & !(0x7ff << 52)) | (1022u64 << 52));
-    // secs = frac · 2^exp → log2 = exp + log2(frac), log2(frac) in [-1, 0).
-    let index = if frac == 0.5 {
-        (exp - 1) << SCHEMA
-    } else {
-        (exp << SCHEMA) + ((frac.log2() * (1 << SCHEMA) as f64).ceil() as i32)
-    };
-    index.clamp(MIN_INDEX, MAX_INDEX)
+    // secs = mantissa · 2^exp, mantissa in [1, 2).
+    let exp = raw_exp - 1023;
+    let mantissa = f64::from_bits((bits & !(0x7ff << 52)) | (1023u64 << 52));
+    let within = MANTISSA_BOUNDS.iter().position(|bound| mantissa <= *bound).unwrap_or(8) as i32;
+    ((exp << SCHEMA) + within).clamp(MIN_INDEX, MAX_INDEX)
 }
 
 // ── store ─────────────────────────────────────────────────────────────────────
 
 const SHARDS: usize = 16;
 
-fn shards() -> &'static [Mutex<HashMap<Series, Histogram>>] {
-    static STORE: OnceLock<Vec<Mutex<HashMap<Series, Histogram>>>> = OnceLock::new();
-    STORE.get_or_init(|| (0..SHARDS).map(|_| Mutex::new(HashMap::new())).collect())
+impl std::hash::Hash for Series {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u32(self.key());
+    }
+}
+
+/// Hashes a [`Series`] key with one multiplication (SipHash cost more than
+/// the rest of an observation).
+#[derive(Default)]
+struct SeriesHasher(u64);
+
+impl std::hash::Hasher for SeriesHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for b in bytes {
+            self.0 = (self.0 << 8 | *b as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        }
+    }
+    fn write_u32(&mut self, n: u32) {
+        self.0 = (n as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    }
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+type Store = HashMap<Series, Histogram, std::hash::BuildHasherDefault<SeriesHasher>>;
+
+fn shards() -> &'static [Mutex<Store>] {
+    static STORE: OnceLock<Vec<Mutex<Store>>> = OnceLock::new();
+    STORE.get_or_init(|| (0..SHARDS).map(|_| Mutex::new(Store::default())).collect())
 }
 
 thread_local! {

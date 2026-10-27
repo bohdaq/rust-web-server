@@ -6,7 +6,12 @@ fn native_index_is_the_schema_3_bucket() {
     assert_eq!(8, native_index(2.0));
     assert_eq!(-8, native_index(0.5));
     assert_eq!(1, native_index(1.05));
-    assert_eq!(1, native_index(2f64.powf(0.125)), "an upper bound belongs to its bucket");
+    assert_eq!(1, native_index(MANTISSA_BOUNDS[1]), "an upper bound belongs to its bucket");
+    assert_eq!(2, native_index(f64::from_bits(MANTISSA_BOUNDS[1].to_bits() + 1)), "and just above it, the next");
+    assert_eq!(-73, native_index(0.0017), "matches ceil(log2 · 8)");
+    for secs in [1e-6f64, 3.3e-5, 0.0071, 0.25, 0.9, 1.7, 42.0, 1234.5] {
+        assert_eq!((secs.log2() * 8.0).ceil() as i32, native_index(secs), "{secs}");
+    }
     assert_eq!(-79, native_index(0.001));
     assert_eq!(MAX_INDEX, native_index(1e300));
     assert_eq!(MIN_INDEX, native_index(1e-300));
