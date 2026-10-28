@@ -10,6 +10,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use k8s_openapi::api::core::v1::{Service, ServicePort, ServiceSpec};
+use k8s_openapi::api::discovery::v1::{Endpoint, EndpointConditions, EndpointPort, EndpointSlice};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::ResourceExt;
@@ -23,6 +24,9 @@ use super::types::{GatewaySpecAddress, GATEWAY_GROUP};
 pub struct ServiceSettings {
     /// Labels of the pods that serve the traffic (the shared Deployment's).
     pub pod_selector: BTreeMap<String, String>,
+    /// Their namespace. A Service only selects pods in its own namespace, so
+    /// each Gateway's Service has no selector: rws writes its EndpointSlice.
+    pub pod_namespace: String,
     /// Container ports to allocate from (inclusive).
     pub port_range: (u16, u16),
     /// `LoadBalancer` (default), `NodePort` or `ClusterIP`.
@@ -33,6 +37,7 @@ impl Default for ServiceSettings {
     fn default() -> Self {
         ServiceSettings {
             pod_selector: BTreeMap::from([("app.kubernetes.io/name".to_string(), "rws".to_string())]),
+            pod_namespace: "default".to_string(),
             port_range: (10000, 10999),
             service_type: "LoadBalancer".to_string(),
         }
@@ -150,7 +155,7 @@ pub fn desired(snapshot: &Snapshot, gateways: &[&Gateway], settings: &ServiceSet
                 type_: Some(settings.service_type.clone()),
                 // The first static address (a load balancer takes one per Service).
                 load_balancer_ip: requested_addresses(gateway).first().map(|a| a.to_string()),
-                selector: Some(settings.pod_selector.clone()),
+                selector: None,
                 ports: Some(ports),
                 ..Default::default()
             }),
@@ -159,6 +164,103 @@ pub fn desired(snapshot: &Snapshot, gateways: &[&Gateway], settings: &ServiceSet
         out.insert((namespace, service_name(&gateway.name_any())), service);
     }
     out
+}
+
+/// `endpointslice.kubernetes.io/managed-by` on the EndpointSlices rws writes
+/// (not the EndpointSlice controller's value, so it leaves them alone).
+pub const ENDPOINTS_MANAGED_BY: &str = "rws8.tech/gateway-controller";
+
+/// The serving pods: in the pod namespace, matching the selector, with an
+/// IP, not being deleted; (IP, ready, node, name).
+pub fn serving_pods(snapshot: &Snapshot, settings: &ServiceSettings) -> Vec<(String, bool, Option<String>, String)> {
+    let mut pods: Vec<_> = snapshot
+        .pods
+        .iter()
+        .filter(|p| p.namespace().as_deref() == Some(settings.pod_namespace.as_str()))
+        .filter(|p| settings.pod_selector.iter().all(|(k, v)| p.labels().get(k) == Some(v)))
+        .filter(|p| p.metadata.deletion_timestamp.is_none())
+        .filter_map(|p| {
+            let status = p.status.as_ref()?;
+            let ip = status.pod_ip.clone().filter(|ip| !ip.is_empty())?;
+            let ready = status.conditions.iter().flatten().any(|c| c.type_ == "Ready" && c.status == "True");
+            Some((ip, ready, p.spec.as_ref().and_then(|s| s.node_name.clone()), p.name_any()))
+        })
+        .collect();
+    pods.sort();
+    pods
+}
+
+/// The EndpointSlice of each Gateway Service: the serving pods on the
+/// Service's container ports (one slice per address family in use).
+pub fn endpoint_slices(snapshot: &Snapshot, services: &BTreeMap<(String, String), Service>, settings: &ServiceSettings) -> BTreeMap<(String, String), EndpointSlice> {
+    let pods = serving_pods(snapshot, settings);
+    let mut out = BTreeMap::new();
+    for ((namespace, name), service) in services {
+        let ports: Vec<EndpointPort> = service
+            .spec
+            .iter()
+            .flat_map(|s| s.ports.iter().flatten())
+            .filter_map(|p| match p.target_port {
+                Some(IntOrString::Int(target)) => Some(EndpointPort { name: p.name.clone(), port: Some(target), protocol: p.protocol.clone(), app_protocol: None }),
+                _ => None,
+            })
+            .collect();
+        for (family, v6) in [("IPv4", false), ("IPv6", true)] {
+            let endpoints: Vec<Endpoint> = pods
+                .iter()
+                .filter(|(ip, ..)| ip.contains(':') == v6)
+                .map(|(ip, ready, node, pod)| Endpoint {
+                    addresses: vec![ip.clone()],
+                    conditions: Some(EndpointConditions { ready: Some(*ready), serving: Some(*ready), terminating: Some(false) }),
+                    node_name: node.clone(),
+                    target_ref: Some(k8s_openapi::api::core::v1::ObjectReference {
+                        kind: Some("Pod".to_string()),
+                        name: Some(pod.clone()),
+                        namespace: Some(settings.pod_namespace.clone()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })
+                .collect();
+            if endpoints.is_empty() && v6 {
+                continue;
+            }
+            let slice_name = format!("{name}-{}", family.to_ascii_lowercase());
+            let slice = EndpointSlice {
+                metadata: ObjectMeta {
+                    name: Some(slice_name.clone()),
+                    namespace: Some(namespace.clone()),
+                    labels: Some(BTreeMap::from([
+                        ("kubernetes.io/service-name".to_string(), name.clone()),
+                        ("endpointslice.kubernetes.io/managed-by".to_string(), ENDPOINTS_MANAGED_BY.to_string()),
+                        ("app.kubernetes.io/managed-by".to_string(), MANAGED_BY.to_string()),
+                    ])),
+                    owner_references: service.metadata.owner_references.clone(),
+                    ..Default::default()
+                },
+                address_type: family.to_string(),
+                endpoints,
+                ports: Some(ports.clone()),
+            };
+            out.insert((namespace.clone(), slice_name), slice);
+        }
+    }
+    out
+}
+
+/// Whether an EndpointSlice already has what `desired` asks for.
+pub fn same_slice(current: &EndpointSlice, desired: &EndpointSlice) -> bool {
+    let endpoints = |s: &EndpointSlice| {
+        let mut e: Vec<_> = s.endpoints.iter().map(|e| (e.addresses.clone(), e.conditions.as_ref().and_then(|c| c.ready))).collect();
+        e.sort();
+        e
+    };
+    let ports = |s: &EndpointSlice| {
+        let mut p: Vec<_> = s.ports.iter().flatten().map(|p| (p.name.clone(), p.port, p.protocol.clone())).collect();
+        p.sort();
+        p
+    };
+    current.address_type == desired.address_type && endpoints(current) == endpoints(desired) && ports(current) == ports(desired)
 }
 
 /// Whether `current` already is what `desired` asks for (the fields rws

@@ -79,3 +79,43 @@ fn service_names_fit_in_63_characters() {
     assert!(name.len() <= 63 && name.starts_with("rws-g"), "{name}");
     assert_ne!(name, service_name(&"g".repeat(81)), "different Gateways, different names");
 }
+
+#[test]
+fn each_gateway_service_gets_an_endpoint_slice_of_the_serving_pods() {
+    let pod = |name: &str, namespace: &str, app: &str, ip: &str, ready: bool| -> k8s_openapi::api::core::v1::Pod {
+        serde_json::from_value(serde_json::json!({
+            "metadata": {"name": name, "namespace": namespace, "labels": {"app.kubernetes.io/name": app}},
+            "spec": {"containers": [], "nodeName": "node-1"},
+            "status": {"podIP": ip, "conditions": [{"type": "Ready", "status": if ready { "True" } else { "False" }}]}
+        }))
+        .unwrap()
+    };
+    let settings = ServiceSettings { pod_namespace: "rws-system".to_string(), ..Default::default() };
+    let snapshot = Snapshot {
+        pods: vec![
+            pod("rws-a", "rws-system", "rws", "10.244.0.6", true),
+            pod("rws-b", "rws-system", "rws", "10.244.0.7", false),
+            pod("rws-c", "rws-system", "rws", "fd00::7", true),
+            pod("other", "rws-system", "nginx", "10.244.0.8", true),
+            pod("elsewhere", "default", "rws", "10.244.0.9", true),
+        ],
+        ..Default::default()
+    };
+    let service: Service = serde_json::from_value(serde_json::json!({
+        "metadata": {"name": "rws-gw", "namespace": "apps"},
+        "spec": {"ports": [{"name": "tcp-80", "port": 80, "protocol": "TCP", "targetPort": 10000}]}
+    }))
+    .unwrap();
+    let slices = endpoint_slices(&snapshot, &BTreeMap::from([(("apps".to_string(), "rws-gw".to_string()), service)]), &settings);
+    let v4 = &slices[&("apps".to_string(), "rws-gw-ipv4".to_string())];
+    assert_eq!(Some("rws-gw"), v4.labels().get("kubernetes.io/service-name").map(String::as_str));
+    assert_eq!(Some(ENDPOINTS_MANAGED_BY), v4.labels().get("endpointslice.kubernetes.io/managed-by").map(String::as_str));
+    let endpoints: Vec<(String, Option<bool>)> = v4.endpoints.iter().map(|e| (e.addresses[0].clone(), e.conditions.as_ref().and_then(|c| c.ready))).collect();
+    assert_eq!(vec![("10.244.0.6".to_string(), Some(true)), ("10.244.0.7".to_string(), Some(false))], endpoints, "only rws's pods, in its namespace");
+    assert_eq!(Some(10000), v4.ports.as_ref().unwrap()[0].port, "the container port");
+    assert_eq!(vec!["fd00::7".to_string()], slices[&("apps".to_string(), "rws-gw-ipv6".to_string())].endpoints[0].addresses);
+    assert!(same_slice(v4, v4));
+    let mut changed = v4.clone();
+    changed.endpoints.pop();
+    assert!(!same_slice(v4, &changed));
+}

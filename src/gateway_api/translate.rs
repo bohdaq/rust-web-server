@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use k8s_openapi::api::core::v1::{ConfigMap, Namespace, Secret, Service};
+use k8s_openapi::api::core::v1::{ConfigMap, Namespace, Pod, Secret, Service};
 use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{Condition, LabelSelector, Time};
 use kube::ResourceExt;
@@ -48,6 +48,8 @@ pub struct Snapshot {
     /// For client-certificate CAs (`spec.tls.frontend`).
     pub config_maps: Vec<ConfigMap>,
     pub endpoint_slices: Vec<EndpointSlice>,
+    /// rws's own serving pods (in the pod namespace, by the pod selector).
+    pub pods: Vec<Pod>,
 }
 
 /// The label rws puts on the Service it creates for a Gateway (the name the
@@ -95,6 +97,8 @@ pub struct Desired {
     pub backend_tls_policies: BTreeMap<(String, String), Vec<PolicyAncestorStatus>>,
     /// (namespace, name) → the Service each of our Gateways should have.
     pub services: BTreeMap<(String, String), Service>,
+    /// (namespace, name) → those Services' EndpointSlices (rws's pods).
+    pub endpoint_slices: BTreeMap<(String, String), EndpointSlice>,
 }
 
 /// What the data plane serves.
@@ -227,6 +231,7 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
     // (its ListenerSets' too).
     let our_gateways: Vec<&Gateway> = merged_gateways.iter().collect();
     desired.services = super::services::desired(snapshot, &our_gateways, &settings.services);
+    desired.endpoint_slices = super::services::endpoint_slices(snapshot, &desired.services, &settings.services);
 
     // Routes: attach to listeners, resolve backends.
     let routes = snapshot

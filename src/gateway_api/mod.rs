@@ -88,15 +88,21 @@ pub fn settings_from_env() -> translate::Settings {
     if let Some(kind) = setting(RWS_CONFIG_GATEWAY_API_SERVICE_TYPE) {
         settings.services.service_type = kind;
     }
+    settings.services.pod_namespace = pod_namespace();
     settings
 }
 
-/// The pod's namespace: the setting, `POD_NAMESPACE`, or the service account's.
-fn lease_namespace() -> String {
-    setting(RWS_CONFIG_GATEWAY_API_LEASE_NAMESPACE)
-        .or_else(|| setting("POD_NAMESPACE"))
+/// The pod's namespace, where the serving pods run: `POD_NAMESPACE`, or
+/// the service account's.
+fn pod_namespace() -> String {
+    setting("POD_NAMESPACE")
         .or_else(|| std::fs::read_to_string("/var/run/secrets/kubernetes.io/serviceaccount/namespace").ok().map(|n| n.trim().to_string()))
         .unwrap_or_else(|| "default".to_string())
+}
+
+/// Where the Lease lives: the setting, else the pod's namespace.
+fn lease_namespace() -> String {
+    setting(RWS_CONFIG_GATEWAY_API_LEASE_NAMESPACE).unwrap_or_else(pod_namespace)
 }
 
 /// When enabled, start the controller, leader election and data plane on

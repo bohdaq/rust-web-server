@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use k8s_openapi::api::core::v1::{ConfigMap, Namespace, Secret, Service};
+use k8s_openapi::api::core::v1::{ConfigMap, Namespace, Pod, Secret, Service};
 use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 use kube::api::{Api, Patch, PatchParams};
@@ -62,6 +62,7 @@ pub struct Stores {
     pub secrets: Store<Secret>,
     pub config_maps: Store<ConfigMap>,
     pub endpoint_slices: Store<EndpointSlice>,
+    pub pods: Store<Pod>,
 }
 
 impl Stores {
@@ -88,6 +89,7 @@ impl Stores {
             secrets: all(&self.secrets),
             config_maps: all(&self.config_maps),
             endpoint_slices: all(&self.endpoint_slices),
+            pods: all(&self.pods),
         }
     }
 }
@@ -98,9 +100,17 @@ where
     K: Resource + Clone + DeserializeOwned + std::fmt::Debug + Send + Sync + 'static,
     K::DynamicType: std::hash::Hash + Eq + Clone + Send + Sync,
 {
+    watch_with(api, dyntype, watcher::Config::default(), changed)
+}
+
+fn watch_with<K>(api: Api<K>, dyntype: K::DynamicType, config: watcher::Config, changed: Arc<Notify>) -> Store<K>
+where
+    K: Resource + Clone + DeserializeOwned + std::fmt::Debug + Send + Sync + 'static,
+    K::DynamicType: std::hash::Hash + Eq + Clone + Send + Sync,
+{
     let writer = Writer::new(dyntype);
     let reader = writer.as_reader();
-    let stream = reflector::reflector(writer, watcher(api, watcher::Config::default())).default_backoff().touched_objects();
+    let stream = reflector::reflector(writer, watcher(api, config)).default_backoff().touched_objects();
     tokio::spawn(async move {
         let mut stream = std::pin::pin!(stream);
         while let Some(event) = stream.next().await {
@@ -113,8 +123,10 @@ where
     reader
 }
 
-/// Start watching everything; returns the stores and the change signal.
-pub fn start_watches(client: &Client) -> (Stores, Arc<Notify>) {
+/// Start watching everything (rws's own pods by `services`' namespace and
+/// selector); returns the stores and the change signal.
+pub fn start_watches(client: &Client, services: &super::services::ServiceSettings) -> (Stores, Arc<Notify>) {
+    let pod_labels = services.pod_selector.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(",");
     let changed = Arc::new(Notify::new());
     let stores = Stores {
         classes: watch(Api::all_with(client.clone(), &resources::gateway_classes()), resources::gateway_classes(), Arc::clone(&changed)),
@@ -132,6 +144,7 @@ pub fn start_watches(client: &Client) -> (Stores, Arc<Notify>) {
         secrets: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         config_maps: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         endpoint_slices: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
+        pods: watch_with(Api::namespaced(client.clone(), &services.pod_namespace), (), watcher::Config::default().labels(&pod_labels), Arc::clone(&changed)),
     };
     (stores, changed)
 }
@@ -139,7 +152,7 @@ pub fn start_watches(client: &Client) -> (Stores, Arc<Notify>) {
 /// Reconcile on every change, when this replica becomes the leader, and
 /// every [`RESYNC`], forever.
 pub async fn run(client: Client, options: Options, became_leader: Arc<Notify>) {
-    let (stores, changed) = start_watches(&client);
+    let (stores, changed) = start_watches(&client, &options.settings.services);
     loop {
         tokio::select! {
             _ = changed.notified() => {}
@@ -183,6 +196,21 @@ pub async fn reconcile(client: &Client, stores: &Stores, options: &Options) -> R
         let body = serde_json::json!({"apiVersion": "v1", "kind": "Service", "metadata": applied.metadata, "spec": applied.spec});
         if let Err(e) = api.patch(name, &PatchParams::apply(super::FIELD_MANAGER).force(), &Patch::Apply(&body)).await {
             failures.push(format!("Service {namespace}/{name}: {e}"));
+        }
+    }
+
+    for ((namespace, name), slice) in &desired.endpoint_slices {
+        let current = snapshot.endpoint_slices.iter().find(|s| s.namespace().as_deref() == Some(namespace.as_str()) && s.name_any() == *name);
+        if current.is_some_and(|c| super::services::same_slice(c, slice)) {
+            continue;
+        }
+        let api: Api<EndpointSlice> = Api::namespaced(client.clone(), namespace);
+        let body = serde_json::json!({
+            "apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSlice",
+            "metadata": slice.metadata, "addressType": slice.address_type, "endpoints": slice.endpoints, "ports": slice.ports,
+        });
+        if let Err(e) = api.patch(name, &PatchParams::apply(super::FIELD_MANAGER).force(), &Patch::Apply(&body)).await {
+            failures.push(format!("EndpointSlice {namespace}/{name}: {e}"));
         }
     }
 

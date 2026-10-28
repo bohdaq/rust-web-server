@@ -119,7 +119,7 @@ async fn ready(stores: &Stores) {
 async fn a_reconcile_writes_class_gateway_and_route_status() {
     let fake = fake_with(&["httproute-simple-same-namespace"]);
     let client = fake.client();
-    let (stores, _changed) = start_watches(&client);
+    let (stores, _changed) = start_watches(&client, &Default::default());
     tokio::time::timeout(Duration::from_secs(10), ready(&stores)).await.expect("stores filled from the lists");
     let configs = Arc::new(Mutex::new(Vec::new()));
     reconcile(&client, &stores, &options(true, Arc::clone(&configs))).await.unwrap();
@@ -146,7 +146,7 @@ async fn a_reconcile_writes_class_gateway_and_route_status() {
 async fn a_follower_serves_without_writing_status() {
     let fake = fake_with(&["httproute-simple-same-namespace"]);
     let client = fake.client();
-    let (stores, _changed) = start_watches(&client);
+    let (stores, _changed) = start_watches(&client, &Default::default());
     tokio::time::timeout(Duration::from_secs(10), ready(&stores)).await.unwrap();
     let configs = Arc::new(Mutex::new(Vec::new()));
     reconcile(&client, &stores, &options(false, Arc::clone(&configs))).await.unwrap();
