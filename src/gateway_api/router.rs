@@ -214,6 +214,7 @@ impl PortRouter {
     /// exchange, `backendRequest` per attempt; `0s` disables — passing either
     /// is a `504`) and `retry` (`attempts` retries on the listed `codes`,
     /// connection errors and backend timeouts, `backoff` apart).
+    #[cfg(test)]
     fn forward(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo) -> Response {
         self.forward_with(rule, request, connection, None)
     }
