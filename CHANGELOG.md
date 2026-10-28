@@ -20,6 +20,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   client-certificate validation, static addresses; a Service and EndpointSlice
   per Gateway, Lease leader election, Helm values (`gatewayAPI.*`), and a CI
   job running the official suite in kind in both modes.
+  The Linux release binaries and the container image include it (off unless
+  enabled; it doubles the binary, so macOS and Windows builds don't).
 
 ### Fixed
 

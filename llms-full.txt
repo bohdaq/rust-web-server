@@ -18391,7 +18391,7 @@ rust-web-server = { version = "18", features = ["http-client"] }
 rws passes the Gateway API v1.6.3 conformance suite (standard channel) for the GATEWAY-HTTP, GATEWAY-GRPC, GATEWAY-TLS, GATEWAY-TCP and GATEWAY-UDP profiles with every standard-channel extended feature, in both deployment modes; CI runs the suite on every change (`.github/workflows/gateway-api.yml`). Experimental-channel features (HTTPRoute retries, destination-port matching, mixed TLS termination) aren't claimed yet. Design and history: [`spec/GATEWAY_API.md`](https://github.com/bohdaq/rust-web-server/blob/main/spec/GATEWAY_API.md).
 :::
 
-With the `gateway-api` build feature and `RWS_CONFIG_GATEWAY_API_ENABLED=true`, rws watches the cluster's Gateway API objects, serves the Gateways whose GatewayClass names its controller, and reports what it accepted in their status. Every replica serves traffic; one, holding the `rws-gateway-controller` Lease, writes status and manages Services.
+The Linux release binaries and the container image (`ghcr.io/bohdaq/rws`, `bohdaq/rws`) are built with the `gateway-api` feature; macOS and Windows binaries aren't (build those with `--features gateway-api`). With it and `RWS_CONFIG_GATEWAY_API_ENABLED=true`, rws watches the cluster's Gateway API objects, serves the Gateways whose GatewayClass names its controller, and reports what it accepted in their status. Every replica serves traffic; one, holding the `rws-gateway-controller` Lease, writes status and manages Services.
 
 ## What it serves
 

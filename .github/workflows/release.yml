@@ -124,13 +124,14 @@ jobs:
             gh release create "$TAG" --title "$TAG" --notes-file notes.md --verify-tag --latest="$NEWEST"
           fi
 
-      # CycloneDX SBOM of the binary's dependency tree (the release features).
+      # CycloneDX SBOM of the binary's dependency tree (the Linux release
+      # features, a superset of the others).
       - uses: taiki-e/install-action@cargo-cyclonedx
       - name: SBOM
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cargo cyclonedx -F "acme auth mimalloc" --format json --spec-version 1.5 --override-filename "rws-$TAG.cdx"
+          cargo cyclonedx -F "acme auth mimalloc gateway-api" --format json --spec-version 1.5 --override-filename "rws-$TAG.cdx"
           gh release upload "$TAG" "rws-$TAG.cdx.json" --clobber
 
   # crates.io: rws-macros first (rust-web-server depends on it), each skipped
@@ -166,11 +167,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: x86_64-unknown-linux-musl,  os: ubuntu-latest }
-          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm }
-          - { target: x86_64-apple-darwin,        os: macos-latest }
-          - { target: aarch64-apple-darwin,       os: macos-latest }
-          - { target: x86_64-pc-windows-msvc,     os: windows-latest }
+          # Linux builds (the binaries and the container image) also carry the
+          # Kubernetes Gateway API controller, off unless enabled (it doubles
+          # the binary, so not on macOS/Windows; user's call for 18.8.0).
+          - { target: x86_64-unknown-linux-musl,  os: ubuntu-latest,    features: "acme auth mimalloc gateway-api" }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm, features: "acme auth mimalloc gateway-api" }
+          - { target: x86_64-apple-darwin,        os: macos-latest,     features: "acme auth mimalloc" }
+          - { target: aarch64-apple-darwin,       os: macos-latest,     features: "acme auth mimalloc" }
+          - { target: x86_64-pc-windows-msvc,     os: windows-latest,   features: "acme auth mimalloc" }
     steps:
       - uses: actions/checkout@v4
         with:
@@ -191,9 +195,10 @@ jobs:
 
       - name: Build
         # acme: automatic HTTPS; auth: JWT / basic auth in config-driven routes;
-        # mimalloc: the allocator (musl's own is much slower than glibc's).
+        # mimalloc: the allocator (musl's own is much slower than glibc's);
+        # gateway-api on Linux (see the matrix).
         # cargo auditable embeds the dependency list (`cargo audit bin`).
-        run: cargo auditable build --release --bin rws --features "acme auth mimalloc" --target ${{ matrix.target }}
+        run: cargo auditable build --release --bin rws --features "${{ matrix.features }}" --target ${{ matrix.target }}
 
       - name: Package
         shell: bash

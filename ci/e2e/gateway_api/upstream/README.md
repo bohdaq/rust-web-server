@@ -35,8 +35,11 @@ steps below are what it does.
    ```sh
    git clone https://github.com/bohdaq/rust-web-server.git && cd rust-web-server
    git checkout tags/18.8.0
-   cargo build --bin rws --features gateway-api
+   cargo build --bin rws --features "acme auth mimalloc gateway-api"
    ```
+
+   (The workflow builds the static `x86_64-unknown-linux-musl` binary the Linux
+   release and container image ship; a glibc build behaves the same.)
 
 2. Fetch the Gateway API suite and its standard-channel CRDs:
 
