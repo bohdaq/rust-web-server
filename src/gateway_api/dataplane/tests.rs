@@ -62,6 +62,7 @@ fn config(container_port: u16, backend: u16, protocol: &str, tls: Option<(Vec<u8
             container_port,
             tls,
             client_ca: None,
+            backend_client_cert: None,
             http_routes: vec![CompiledHttpRoute { key: ("ns".to_string(), "r".to_string()), hostnames: vec![], created: String::new(), rules: vec![rule] }],
         }],
     }

@@ -25,6 +25,9 @@ pub struct BackendTls {
     pub config: Arc<rustls::ClientConfig>,
     /// SNI, and the name verified when the policy lists no SANs.
     pub server_name: String,
+    /// How the backend's certificate is checked (kept to add a client
+    /// certificate, [`BackendTls::with_client_cert`]).
+    verifier: Arc<dyn ServerCertVerifier>,
 }
 
 impl PartialEq for BackendTls {
@@ -165,9 +168,8 @@ pub fn build(ca_pem: Option<&[u8]>, validation: &BackendTlsValidation) -> Result
     }
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let webpki = rustls::client::WebPkiServerVerifier::builder(Arc::new(roots)).build().map_err(|e| e.to_string())?;
-    let builder = crate::tls_client_builder();
-    let config = if validation.subject_alt_names.is_empty() {
-        builder.with_webpki_verifier(webpki).with_no_client_auth()
+    let verifier: Arc<dyn ServerCertVerifier> = if validation.subject_alt_names.is_empty() {
+        webpki
     } else {
         let sans = validation
             .subject_alt_names
@@ -178,11 +180,37 @@ pub fn build(ca_pem: Option<&[u8]>, validation: &BackendTlsValidation) -> Result
                 _ => None,
             })
             .collect();
-        builder.dangerous().with_custom_certificate_verifier(Arc::new(SanVerifier { webpki, sans })).with_no_client_auth()
+        Arc::new(SanVerifier { webpki, sans })
     };
-    let tls = BackendTls { label: label.clone(), config: Arc::new(config), server_name: validation.hostname.clone() };
+    let config = crate::tls_client_builder().dangerous().with_custom_certificate_verifier(Arc::clone(&verifier)).with_no_client_auth();
+    let tls = BackendTls { label: label.clone(), config: Arc::new(config), server_name: validation.hostname.clone(), verifier };
     cache().lock().unwrap_or_else(|e| e.into_inner()).insert(label, tls.clone());
     Ok(tls)
+}
+
+impl BackendTls {
+    /// The same, presenting a client certificate (the Gateway's
+    /// `spec.tls.backend.clientCertificateRef`): PEM chain and key.
+    pub fn with_client_cert(&self, chain_pem: &[u8], key_pem: &[u8]) -> Result<BackendTls, String> {
+        use rustls::pki_types::pem::PemObject;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (chain_pem, key_pem).hash(&mut hasher);
+        let label = format!("{}+client:{:016x}", self.label, hasher.finish());
+        if let Some(found) = cache().lock().unwrap_or_else(|e| e.into_inner()).get(&label) {
+            return Ok(found.clone());
+        }
+        let chain = CertificateDer::pem_slice_iter(chain_pem).collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+        let key = rustls::pki_types::PrivateKeyDer::from_pem_slice(key_pem).map_err(|e| e.to_string())?;
+        let config = crate::tls_client_builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::clone(&self.verifier))
+            .with_client_auth_cert(chain, key)
+            .map_err(|e| e.to_string())?;
+        let tls = BackendTls { label: label.clone(), config: Arc::new(config), server_name: self.server_name.clone(), verifier: Arc::clone(&self.verifier) };
+        cache().lock().unwrap_or_else(|e| e.into_inner()).insert(label, tls.clone());
+        Ok(tls)
+    }
 }
 
 /// Verifies the chain with the trusted CAs, then that the certificate

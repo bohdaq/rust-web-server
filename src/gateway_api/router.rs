@@ -215,6 +215,12 @@ impl PortRouter {
     /// is a `504`) and `retry` (`attempts` retries on the listed `codes`,
     /// connection errors and backend timeouts, `backoff` apart).
     fn forward(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo) -> Response {
+        self.forward_with(rule, request, connection, None)
+    }
+
+    /// [`PortRouter::forward`], presenting `client_cert` (the Gateway's) to
+    /// TLS backends.
+    fn forward_with(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Response {
         let limit = |value: Option<&String>| value.and_then(|v| filters::duration(v)).filter(|d| !d.is_zero());
         let timeouts = rule.timeouts.as_ref();
         let deadline = limit(timeouts.and_then(|t| t.request.as_ref())).map(|d| std::time::Instant::now() + d);
@@ -229,7 +235,7 @@ impl PortRouter {
                 return status(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout);
             }
             let timeout = [per_attempt, left].into_iter().flatten().min().unwrap_or(DEFAULT_TIMEOUT);
-            let outcome = self.attempt(rule, request, connection, timeout);
+            let outcome = self.attempt(rule, request, connection, timeout, client_cert);
             let retry = attempt < retries
                 && match &outcome {
                     Attempt::Response(response) => retry_on(response.status_code),
@@ -249,7 +255,7 @@ impl PortRouter {
     }
 
     /// Pick a backend by weight, then an endpoint, and forward once.
-    fn attempt(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, timeout: Duration) -> Attempt {
+    fn attempt(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, timeout: Duration, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Attempt {
         let total: u32 = rule.backends.iter().map(|b| b.weight).sum();
         if total == 0 {
             // No backends, or all weighted 0: the spec's 500.
@@ -301,7 +307,17 @@ impl PortRouter {
             match tls {
                 // A policy covers the backend but can't be used: never send it in the clear.
                 Err(_) => return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
-                Ok(tls) => crate::proxy::forward_tls_with_host(
+                Ok(tls) => {
+                    let presenting;
+                    let tls = match client_cert.map(|(chain, key)| tls.with_client_cert(chain, key)) {
+                        None => tls,
+                        Some(Ok(with)) => {
+                            presenting = with;
+                            &presenting
+                        }
+                        Some(Err(_)) => return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
+                    };
+                    crate::proxy::forward_tls_with_host(
                     &tls.config,
                     &tls.label,
                     request,
@@ -312,7 +328,8 @@ impl PortRouter {
                     &host_header,
                     timeout.min(Duration::from_secs(10)),
                     timeout,
-                ),
+                    )
+                }
             }
         } else if super::upgrade::is_upgrade(request) {
             super::upgrade::forward(request, &connection.client.ip, ip, port, &host_header, timeout)
@@ -343,7 +360,7 @@ impl PortRouter {
     /// headers change the request or the response.
     fn route(&self, listener: &ListenerConfig, rule: &CompiledRule, matched: &HttpRouteMatch, request: &Request, host: &str, connection: &ConnectionInfo) -> Response {
         if rule.filters.is_empty() {
-            return self.forward(rule, request, connection);
+            return self.forward_with(rule, request, connection, listener.backend_client_cert.as_ref());
         }
         let mut request = request.clone();
         let mut response_filters: Vec<&HttpRouteFilter> = Vec::new();
@@ -398,7 +415,7 @@ impl PortRouter {
                 send_mirror(mirror, &request, &connection.client.ip);
             }
         }
-        let mut response = self.forward(rule, &request, connection);
+        let mut response = self.forward_with(rule, &request, connection, listener.backend_client_cert.as_ref());
         for filter in response_filters {
             if let Some(f) = &filter.response_header_modifier {
                 filters::modify_headers(&mut response.headers, f);

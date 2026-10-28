@@ -139,3 +139,44 @@ fn certificate_wildcards_cover_one_label() {
     assert!(!dns_matches("*.example.com", "example.com"));
     assert!(dns_matches("ABC.example.com", "abc.example.com"));
 }
+
+#[test]
+fn the_gateways_client_certificate_reaches_a_backend_that_requires_one() {
+    use std::io::{Read, Write};
+    let (ca, cert, key) = pki(&["abc.example.com"], "spiffe://x");
+    // The client side: a CA the backend trusts, and a certificate it signed.
+    let client_ca_key = rcgen::KeyPair::generate().unwrap();
+    let mut client_ca_params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    client_ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    let client_ca = client_ca_params.self_signed(&client_ca_key).unwrap();
+    let client_key = rcgen::KeyPair::generate().unwrap();
+    let client = rcgen::CertificateParams::new(vec!["gateway".to_string()]).unwrap().signed_by(&client_key, &rcgen::Issuer::from_params(&client_ca_params, &client_ca_key)).unwrap();
+
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(client_ca.der().clone()).unwrap();
+    let verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(roots)).build().unwrap();
+    let server_config = rustls::ServerConfig::builder()
+        .with_client_cert_verifier(verifier)
+        .with_single_cert(vec![cert.der().clone()], rustls::pki_types::PrivateKeyDer::try_from(key.serialize_der()).unwrap())
+        .unwrap();
+    let server_config = Arc::new(server_config);
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for tcp in listener.incoming().flatten() {
+            let config = Arc::clone(&server_config);
+            std::thread::spawn(move || {
+                let mut tls = rustls::StreamOwned::new(rustls::ServerConnection::new(config).unwrap(), tcp);
+                let mut buffer = [0u8; 4096];
+                if tls.read(&mut buffer).unwrap_or(0) > 0 {
+                    let _ = tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+                }
+            });
+        }
+    });
+    let tls = build(Some(ca.as_bytes()), &validation("abc.example.com", &[])).unwrap();
+    assert!(status(&tls, port).is_err(), "no client certificate");
+    let with = tls.with_client_cert(client.pem().as_bytes(), client_key.serialize_pem().as_bytes()).unwrap();
+    assert_eq!(Ok(200), status(&with, port));
+    assert_ne!(tls.label, with.label, "pooled apart");
+}

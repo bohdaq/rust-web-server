@@ -574,3 +574,21 @@ fn an_address_without_a_value_asks_for_any() {
     let g = &desired.gateways[&(INFRA.to_string(), "same-namespace".to_string())];
     assert_eq!("True", find(&g.conditions, "Programmed").status, "{:?}", g.conditions);
 }
+
+#[test]
+fn a_backend_client_certificate_must_resolve() {
+    let mut s = snapshot(&["gateway-invalid-tls-backend-configuration"]);
+    s.secrets.push(tls_secret("tls-validity-checks-certificate"));
+    let (_, desired) = run(&s);
+    for (gateway, reason) in [
+        ("gateway-client-certificate-nonexistent-secret", "InvalidClientCertificateRef"),
+        ("gateway-client-certificate-unsupported-group", "InvalidClientCertificateRef"),
+        ("gateway-client-certificate-unsupported-kind", "InvalidClientCertificateRef"),
+        ("gateway-client-certificate-malformed-secret", "InvalidClientCertificateRef"),
+        ("gateway-client-certificate-missing-reference-grant", "RefNotPermitted"),
+    ] {
+        let g = &desired.gateways[&(INFRA.to_string(), gateway.to_string())];
+        assert_eq!(("False", reason), (find(&g.conditions, "ResolvedRefs").status.as_str(), find(&g.conditions, "ResolvedRefs").reason.as_str()), "{gateway}");
+        assert_eq!("True", find(&g.conditions, "Accepted").status, "{gateway}");
+    }
+}

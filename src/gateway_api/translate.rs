@@ -128,6 +128,9 @@ pub struct ListenerConfig {
     pub tls: Option<(Vec<u8>, Vec<u8>)>,
     /// Client certificates to ask for (`spec.tls.frontend` for its port).
     pub client_ca: Option<ClientCa>,
+    /// The certificate (PEM chain, key) its Gateway presents to TLS
+    /// backends (`spec.tls.backend.clientCertificateRef`).
+    pub backend_client_cert: Option<(Vec<u8>, Vec<u8>)>,
     pub http_routes: Vec<CompiledHttpRoute>,
 }
 
@@ -150,6 +153,7 @@ pub const SUPPORTED_FEATURES: &[&str] = &[
     "GRPCRouteNamedRouteRule",
     "Gateway",
     "GatewayAddressEmpty",
+    "GatewayBackendClientCertificate",
     "GatewayFrontendClientCertificateValidation",
     "GatewayFrontendClientCertificateValidationInsecureFallback",
     "GatewayHTTPListenerIsolation",
@@ -369,6 +373,7 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
         let generation = gateway.metadata.generation;
         let previous = gateway.status.clone().unwrap_or_default();
         let container_ports = super::services::container_ports(super::services::current(snapshot, gateway));
+        let backend_client_cert = backend_client_certificate(gateway, snapshot);
         let mut listener_statuses = Vec::new();
         let mut set_statuses: BTreeMap<(String, String), Vec<ListenerStatus>> = BTreeMap::new();
         let mut any_valid = false;
@@ -401,6 +406,7 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
                     container_port: *container_port,
                     tls: view.tls.clone(),
                     client_ca: view.client_ca.clone(),
+                    backend_client_cert: backend_client_cert.as_ref().and_then(|c| c.as_ref().ok()).cloned(),
                     http_routes: view.http_routes.clone(),
                 });
             }
@@ -459,6 +465,12 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
             condition(&previous.conditions, "Accepted", gateway_accepted, accepted_reason, "", generation, now),
             condition(&previous.conditions, "Programmed", programmed, programmed_reason, &programmed_message, generation, now),
         ];
+        if let Some(certificate) = &backend_client_cert {
+            conditions.push(match certificate {
+                Ok(_) => condition(&previous.conditions, "ResolvedRefs", true, "ResolvedRefs", "", generation, now),
+                Err((reason, message)) => condition(&previous.conditions, "ResolvedRefs", false, reason, message, generation, now),
+            });
+        }
         if insecure_frontend(gateway) {
             let message = "Client certificate validation allows clients without a valid certificate (AllowInsecureFallback)";
             conditions.push(condition(&previous.conditions, "InsecureFrontendValidationMode", true, "ConfigurationChanged", message, generation, now));
@@ -742,6 +754,30 @@ fn frontend_validation(gateway: &Gateway, port: i32) -> Option<&FrontendTlsValid
         Some(per_port) => per_port.tls.validation.as_ref(),
         None => frontend.default.validation.as_ref(),
     }
+}
+
+/// The Gateway's backend client certificate, when it names one: a TLS
+/// Secret in its namespace, or one a ReferenceGrant opens.
+fn backend_client_certificate(gateway: &Gateway, snapshot: &Snapshot) -> Option<Result<TlsMaterial, (&'static str, String)>> {
+    let reference = gateway.spec.tls.as_ref()?.backend.as_ref()?.client_certificate_ref.as_ref()?;
+    let gateway_namespace = gateway.namespace().unwrap_or_default();
+    let group = reference.group.as_deref().unwrap_or("");
+    let kind = reference.kind.as_deref().unwrap_or("Secret");
+    if !group.is_empty() || kind != "Secret" {
+        return Some(Err(("InvalidClientCertificateRef", format!("{group}/{kind} isn't a supported client certificate reference"))));
+    }
+    let namespace = reference.namespace.clone().unwrap_or_else(|| gateway_namespace.clone());
+    if namespace != gateway_namespace && !granted(snapshot, GATEWAY_GROUP, "Gateway", &gateway_namespace, "", "Secret", &namespace, &reference.name) {
+        return Some(Err(("RefNotPermitted", format!("no ReferenceGrant in {namespace} lets Gateways in {gateway_namespace} use Secret {}", reference.name))));
+    }
+    let data = snapshot
+        .secrets
+        .iter()
+        .find(|s| s.namespace().as_deref() == Some(namespace.as_str()) && s.name_any() == reference.name)
+        .and_then(|s| s.data.as_ref());
+    let pair = data.and_then(|d| Some((d.get("tls.crt")?.0.clone(), d.get("tls.key")?.0.clone())));
+    let valid = pair.as_ref().filter(|(cert, key)| crate::tls::certified_key_from_pem(cert, key).is_ok());
+    Some(valid.cloned().ok_or(("InvalidClientCertificateRef", format!("Secret {namespace}/{} isn't a valid TLS Secret", reference.name))))
 }
 
 /// Whether any of the Gateway's validation settings is `AllowInsecureFallback`.
