@@ -25,6 +25,19 @@ fn echo_backend() -> u16 {
     port
 }
 
+/// Serve what `build` makes for a free port; another port if a parallel
+/// test took that one between finding it free and the bind.
+fn serve_on_free_port(plane: &DataPlane, build: impl Fn(u16) -> GatewayConfig) -> u16 {
+    for _ in 0..20 {
+        let port = free_port();
+        plane.apply(&build(port));
+        if plane.ports().contains(&port) {
+            return port;
+        }
+    }
+    panic!("no free port");
+}
+
 fn free_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
 }
@@ -66,9 +79,8 @@ fn get(port: u16, host: &str, path: &str) -> String {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_listener_port_forwards_keeping_the_host_and_closes_when_removed() {
     let backend = echo_backend();
-    let port = free_port();
     let plane = DataPlane::new("127.0.0.1");
-    plane.apply(&config(port, backend, "HTTP", None));
+    let port = serve_on_free_port(&plane, |port| config(port, backend, "HTTP", None));
     assert_eq!(vec![port], plane.ports());
     let response = tokio::task::spawn_blocking(move || get(port, "shop.example.com:80", "/cart?id=1")).await.unwrap();
     assert!(response.starts_with("HTTP/1.1 200"), "{response}");
@@ -83,11 +95,10 @@ async fn a_listener_port_forwards_keeping_the_host_and_closes_when_removed() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_https_listener_terminates_tls_with_the_secret_certificate() {
     let backend = echo_backend();
-    let port = free_port();
     let cert = rcgen::generate_simple_self_signed(vec!["secure.example.com".to_string()]).unwrap();
     let (cert_pem, key_pem) = (cert.cert.pem(), cert.signing_key.serialize_pem());
     let plane = DataPlane::new("127.0.0.1");
-    plane.apply(&config(port, backend, "HTTPS", Some((cert_pem.clone().into_bytes(), key_pem.into_bytes()))));
+    let port = serve_on_free_port(&plane, |port| config(port, backend, "HTTPS", Some((cert_pem.clone().into_bytes(), key_pem.clone().into_bytes()))));
     let body = tokio::task::spawn_blocking(move || {
         let mut roots = rustls::RootCertStore::empty();
         roots.add(rustls::pki_types::CertificateDer::from(cert.cert.der().to_vec())).unwrap();
@@ -132,9 +143,8 @@ fn l4_config(container_port: u16, backend: u16, protocol: &str, tls: Option<(Vec
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_tcp_listener_relays_bytes() {
     let backend = tcp_echo_backend();
-    let port = free_port();
     let plane = DataPlane::new("127.0.0.1");
-    plane.apply(&l4_config(port, backend, "TCP", None));
+    let port = serve_on_free_port(&plane, |port| l4_config(port, backend, "TCP", None));
     let echoed = tokio::task::spawn_blocking(move || {
         let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
         stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
@@ -167,10 +177,9 @@ fn tls_ping(port: u16, name: &str, cert: &rcgen::CertifiedKey<rcgen::KeyPair>) -
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_tls_terminate_listener_decrypts_and_relays() {
     let backend = tcp_echo_backend();
-    let port = free_port();
     let cert = rcgen::generate_simple_self_signed(vec!["term.example.com".to_string()]).unwrap();
     let plane = DataPlane::new("127.0.0.1");
-    plane.apply(&l4_config(port, backend, "TLS", Some((cert.cert.pem().into_bytes(), cert.signing_key.serialize_pem().into_bytes()))));
+    let port = serve_on_free_port(&plane, |port| l4_config(port, backend, "TLS", Some((cert.cert.pem().into_bytes(), cert.signing_key.serialize_pem().into_bytes()))));
     let echoed = tokio::task::spawn_blocking(move || tls_ping(port, "term.example.com", &cert)).await.unwrap();
     assert_eq!(b"ping".to_vec(), echoed, "plaintext reached the echo backend and came back encrypted");
 }
@@ -196,11 +205,12 @@ async fn a_tls_passthrough_listener_forwards_the_encrypted_stream() {
             let _ = tls.flush();
         }
     });
-    let port = free_port();
     let plane = DataPlane::new("127.0.0.1");
-    let mut config = l4_config(port, backend, "TLS", None);
-    config.listeners[0].http_routes[0].hostnames = vec!["pass.example.com".to_string()];
-    plane.apply(&config);
+    let port = serve_on_free_port(&plane, |port| {
+        let mut config = l4_config(port, backend, "TLS", None);
+        config.listeners[0].http_routes[0].hostnames = vec!["pass.example.com".to_string()];
+        config
+    });
     let echoed = tokio::task::spawn_blocking(move || tls_ping(port, "pass.example.com", &cert)).await.unwrap();
     assert_eq!(b"ping".to_vec(), echoed, "the backend's certificate, end to end");
 }
@@ -276,10 +286,11 @@ async fn client_certificates_are_required_or_let_through_by_the_mode() {
     let (_, other_cert, other_key) = client_pki();
     let plane = DataPlane::new("127.0.0.1");
     for insecure_fallback in [false, true] {
-        let port = free_port();
-        let mut config = config(port, backend, "HTTPS", Some((server.cert.pem().into_bytes(), server.signing_key.serialize_pem().into_bytes())));
-        config.listeners[0].client_ca = Some(crate::gateway_api::translate::ClientCa { pem: ca_pem.clone().into_bytes(), insecure_fallback });
-        plane.apply(&config);
+        let port = serve_on_free_port(&plane, |port| {
+            let mut config = config(port, backend, "HTTPS", Some((server.cert.pem().into_bytes(), server.signing_key.serialize_pem().into_bytes())));
+            config.listeners[0].client_ca = Some(crate::gateway_api::translate::ClientCa { pem: ca_pem.clone().into_bytes(), insecure_fallback });
+            config
+        });
         let server = rcgen::CertifiedKey { cert: server.cert.clone(), signing_key: rcgen::KeyPair::from_pem(&server.signing_key.serialize_pem()).unwrap() };
         let (valid, other, none) = (Some((client_cert.clone(), client_key.clone_key())), Some((other_cert.clone(), other_key.clone_key())), None);
         let results = tokio::task::spawn_blocking(move || {
