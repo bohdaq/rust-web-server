@@ -225,7 +225,9 @@ print(json.dumps({
     "mem_mib": round(mem / 2**20, 1),
     "restarts": restarted,
     "other_codes": {k: v for k, v in codes.items() if k != "200"},
-    "errors": sum((d.get("errorDistribution") or {}).values()),
+    # Requests in flight when the duration ends are "aborted due to
+    # deadline" (one per connection): not errors.
+    "errors": {k: v for k, v in (d.get("errorDistribution") or {}).items() if "deadline" not in k},
 }))
 EOF
     log "$name c=$c: $(tail -1 "$RESULTS")"
@@ -344,8 +346,7 @@ out, duration = sys.argv[2], sys.argv[3]
 json.dump(rows, open(f"{out}/results.json", "w"), indent=1)
 def other(r):
     parts = [f"{code}: {n}" for code, n in sorted(r.get("other_codes", {}).items())]
-    if r.get("errors"):
-        parts.append(f"connection errors: {r['errors']}")
+    parts += [f"{kind}: {n}" for kind, n in sorted((r.get("errors") or {}).items())]
     return ", ".join(parts) or "—"
 
 lines = [f"Gateway API data planes, HTTP/1.1 keep-alive GET of a 1 KiB file through each, {duration} per run, one kind node.", "",

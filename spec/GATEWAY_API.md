@@ -230,3 +230,5 @@ controller pod writes status.
 
 `bench/gateway/run.sh` / workflow `gateway-bench.yml`: rws against Envoy Gateway v1.9.2, NGINX Gateway Fabric 2.7.2, Traefik (chart 41.7.1), kgateway v2.4.6 and Istio 1.30.5 in one kind cluster (1 KiB GET, nginx backend, oha from the runner, gateway CPU from the kubelet's stats). Run 40672165781: rws first at 64 connections (37k req/s, p99 5.6 ms, 33 MiB) but 15k req/s / p99 119 ms / 0.74% non-200 at 256 — the router held a blocking thread per request with 64-idle pools; moved to the async forwarder. Run 1 was invalid for rws (the chart's 500m CPU limit; dropped for gateway mode).
 
+Run 40677985536 (after the move to the async forwarder): rws 52.7k req/s at 64 connections and 56.7k at 256 (p99 4.5 / 15 ms, 26 / 17 µs CPU per request, 14 / 24 MiB) — first on throughput, CPU and memory at both; next kgateway 38.5k / 39.4k, Istio 30.8k / 34.0k (lowest p99 at 256: 12 ms), Envoy Gateway 30.4k / 30.7k, Traefik 29.7k / 31.6k, NGINX Gateway Fabric 16.4k / 16.6k. 100% 200s everywhere (the "connection errors" in that run's table were oha's in-flight requests cut at the deadline; the harness leaves them out now).
+
