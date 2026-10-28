@@ -1,7 +1,6 @@
 # Gateway API conformance (#19, spec/GATEWAY_API.md): rws in a kind cluster
-# against the official suite at the pinned Gateway API release. Not required
-# yet — the claimed profiles and features grow phase by phase; it becomes a
-# required check once the core profiles pass.
+# against the official suite at the pinned Gateway API release, in both
+# deployment modes. Every profile and claimed feature must pass.
 name: Gateway API conformance
 
 on:
@@ -41,7 +40,6 @@ jobs:
         mode: [shared, provisioned]
     runs-on: ubuntu-latest
     timeout-minutes: 180
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
