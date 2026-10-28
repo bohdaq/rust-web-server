@@ -18410,7 +18410,10 @@ The GatewayClass's `status.supportedFeatures` lists what rws claims; the conform
 
 - **ListenerSet**: a Gateway whose `spec.allowedListeners` admits a ListenerSet's namespace (`Same`, `All`, `Selector`; the default admits none) serves its listeners after its own, older sets first, on the Gateway's Service. A set's listener that conflicts with an earlier one (same port and hostname, or another protocol on the port) isn't accepted; the set is accepted while any of its listeners is, and the Gateway counts the attached sets in `status.attachedListenerSets`. Routes reach a set's listeners only with a `ListenerSet` parentRef.
 
-BackendTLSPolicy, client certificates and the provisioned mode come in the following phases.
+- **Misdirected requests**: over HTTPS, a request whose `Host` belongs to a different listener than the one its SNI chose (and whose certificate it was given) is answered `421 Misdirected Request`.
+- **Client certificates** (`spec.tls.frontend`): the validation for a listener's port (`perPort`, else `default`) names ConfigMaps whose `ca.crt` holds the CA certificates (another namespace needs a ReferenceGrant). In `AllowValidOnly` mode (the default) the handshake requires a client certificate those CAs signed; `AllowInsecureFallback` asks for one but lets the connection through either way, and the Gateway reports `InsecureFrontendValidationMode`. A reference that doesn't resolve leaves the listener unaccepted (`NoValidCACertificate`) — rws never serves a port without the validation it was asked for. The controller also watches ConfigMaps for this.
+
+BackendTLSPolicy and the provisioned mode come in the following phases.
 
 ## Settings
 
@@ -18427,7 +18430,7 @@ Also as `[gateway_api]` in `rws.config.toml` ([Config file](/configuration/confi
 
 ## Permissions
 
-The controller needs to list and watch GatewayClasses, Gateways, HTTPRoutes, GRPCRoutes, TLSRoutes, TCPRoutes, UDPRoutes, ReferenceGrants, Services, EndpointSlices, Namespaces and Secrets; patch the status of GatewayClasses, Gateways and every route kind; create and patch Services; and get, create and update Leases in its namespace. The Gateway API CRDs (standard channel, v1.6) must be installed in the cluster first.
+The controller needs to list and watch GatewayClasses, Gateways, HTTPRoutes, GRPCRoutes, TLSRoutes, TCPRoutes, UDPRoutes, ReferenceGrants, Services, EndpointSlices, Namespaces, Secrets and ConfigMaps; patch the status of GatewayClasses, Gateways and every route kind; create and patch Services; and get, create and update Leases in its namespace. The Gateway API CRDs (standard channel, v1.6) must be installed in the cluster first.
 
 ---
 

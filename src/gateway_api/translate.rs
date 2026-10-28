@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use k8s_openapi::api::core::v1::{Namespace, Secret, Service};
+use k8s_openapi::api::core::v1::{ConfigMap, Namespace, Secret, Service};
 use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{Condition, LabelSelector, Time};
 use kube::ResourceExt;
@@ -44,6 +44,8 @@ pub struct Snapshot {
     pub services: Vec<Service>,
     pub namespaces: Vec<Namespace>,
     pub secrets: Vec<Secret>,
+    /// For client-certificate CAs (`spec.tls.frontend`).
+    pub config_maps: Vec<ConfigMap>,
     pub endpoint_slices: Vec<EndpointSlice>,
 }
 
@@ -111,7 +113,18 @@ pub struct ListenerConfig {
     pub container_port: u16,
     /// PEM certificate chain and key, for HTTPS.
     pub tls: Option<(Vec<u8>, Vec<u8>)>,
+    /// Client certificates to ask for (`spec.tls.frontend` for its port).
+    pub client_ca: Option<ClientCa>,
     pub http_routes: Vec<CompiledHttpRoute>,
+}
+
+/// The CAs a TLS-terminating listener verifies client certificates with.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClientCa {
+    /// PEM certificates, from the `ca.crt` of each referenced ConfigMap.
+    pub pem: Vec<u8>,
+    /// `AllowInsecureFallback`: ask, but let in clients without a valid one.
+    pub insecure_fallback: bool,
 }
 
 /// The features rws reports on its GatewayClasses (names as in the suite's
@@ -121,7 +134,10 @@ pub const SUPPORTED_FEATURES: &[&str] = &[
     "GRPCRoute",
     "GRPCRouteNamedRouteRule",
     "Gateway",
+    "GatewayFrontendClientCertificateValidation",
+    "GatewayFrontendClientCertificateValidationInsecureFallback",
     "GatewayHTTPListenerIsolation",
+    "GatewayHTTPSListenerDetectMisdirectedRequests",
     "GatewayInfrastructure",
     "GatewayPort8080",
     "HTTPRoute",
@@ -185,12 +201,12 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
             continue;
         }
         let key = (gateway.namespace().unwrap_or_default(), gateway.name_any());
-        let mut views = listener_views(&gateway.spec.listeners, &key, &key.0, None, snapshot);
+        let mut views = listener_views(gateway, &gateway.spec.listeners, &key.0, None, snapshot);
         let mut merged = gateway.clone();
         for (set, allowed) in attached_listener_sets(gateway, snapshot) {
             let set_key = (set.namespace().unwrap_or_default(), set.name_any());
             if allowed {
-                views.extend(listener_views(&set.spec.listeners, &key, &set_key.0, Some(set_key.clone()), snapshot));
+                views.extend(listener_views(gateway, &set.spec.listeners, &set_key.0, Some(set_key.clone()), snapshot));
                 merged.spec.listeners.extend(set.spec.listeners.iter().cloned());
             }
             listener_sets.push((set, key.clone(), allowed));
@@ -311,6 +327,7 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
                     hostname: view.hostname.clone(),
                     container_port: *container_port,
                     tls: view.tls.clone(),
+                    client_ca: view.client_ca.clone(),
                     http_routes: view.http_routes.clone(),
                 });
             }
@@ -351,10 +368,14 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
             ];
             desired.listener_sets.insert(set_key, ListenerSetStatus { conditions, listeners: statuses });
         }
-        let conditions = vec![
+        let mut conditions = vec![
             condition(&previous.conditions, "Accepted", gateway_accepted, accepted_reason, "", generation, now),
             condition(&previous.conditions, "Programmed", programmed, programmed_reason, programmed_message, generation, now),
         ];
+        if insecure_frontend(gateway) {
+            let message = "Client certificate validation allows clients without a valid certificate (AllowInsecureFallback)";
+            conditions.push(condition(&previous.conditions, "InsecureFrontendValidationMode", true, "ConfigurationChanged", message, generation, now));
+        }
         desired.gateways.insert(
             key,
             GatewayStatus { addresses, conditions, listeners: listener_statuses, attached_listener_sets: Some(attached_sets) },
@@ -387,6 +408,7 @@ struct ListenerView {
     conflicted: Option<&'static str>,
     message: String,
     tls: Option<(Vec<u8>, Vec<u8>)>,
+    client_ca: Option<ClientCa>,
     http_routes: Vec<CompiledHttpRoute>,
 }
 
@@ -414,7 +436,8 @@ fn kinds_for(protocol: &str) -> &'static [&'static str] {
 /// The views of `listeners`, of the Gateway `key` (from the ListenerSet
 /// `owner`, if any, in `namespace`); conflicts are marked later, over the
 /// Gateway's merged list ([`mark_conflicts`]).
-fn listener_views(listeners: &[Listener], key: &(String, String), namespace: &str, owner: Option<(String, String)>, snapshot: &Snapshot) -> Vec<ListenerView> {
+fn listener_views(gateway: &Gateway, listeners: &[Listener], namespace: &str, owner: Option<(String, String)>, snapshot: &Snapshot) -> Vec<ListenerView> {
+    let key = (gateway.namespace().unwrap_or_default(), gateway.name_any());
     listeners
         .iter()
         .map(|l| {
@@ -434,16 +457,26 @@ fn listener_views(listeners: &[Listener], key: &(String, String), namespace: &st
                     }
                 }
             }
-            let (accepted, accepted_reason, message) = if carried.is_empty() {
+            let (mut accepted, mut accepted_reason, message) = if carried.is_empty() {
                 (false, "UnsupportedProtocol", format!("protocol {} isn't supported", l.protocol))
             } else {
                 (true, "Accepted", String::new())
             };
-            let mut tls = None;
+            let (mut tls, mut client_ca) = (None, None);
             if accepted && terminates_tls(l) {
                 match certificates(l, namespace, snapshot) {
                     Ok(material) => tls = Some(material),
                     Err(e) => resolved_refs = Err(e),
+                }
+                if let Some(validation) = frontend_validation(gateway, l.port) {
+                    match client_cas(validation, &key.0, snapshot) {
+                        Ok(ca) => client_ca = Some(ca),
+                        Err(e) => {
+                            resolved_refs = Err(e);
+                            accepted = false;
+                            accepted_reason = "NoValidCACertificate";
+                        }
+                    }
                 }
             }
             // Invalid route kinds alone don't stop the listener serving the valid ones.
@@ -465,6 +498,7 @@ fn listener_views(listeners: &[Listener], key: &(String, String), namespace: &st
                 conflicted: None,
                 message,
                 tls,
+                client_ca,
                 http_routes: Vec::new(),
             }
         })
@@ -611,6 +645,56 @@ fn certificates(listener: &Listener, gateway_namespace: &str, snapshot: &Snapsho
         }
     }
     material.ok_or(("InvalidCertificateRef", "no certificate".to_string()))
+}
+
+/// The client-certificate validation for a listener port: the Gateway's
+/// `spec.tls.frontend.perPort` entry for it, else the default.
+fn frontend_validation(gateway: &Gateway, port: i32) -> Option<&FrontendTlsValidation> {
+    let frontend = gateway.spec.tls.as_ref()?.frontend.as_ref()?;
+    match frontend.per_port.iter().find(|p| p.port == port) {
+        Some(per_port) => per_port.tls.validation.as_ref(),
+        None => frontend.default.validation.as_ref(),
+    }
+}
+
+/// Whether any of the Gateway's validation settings is `AllowInsecureFallback`.
+fn insecure_frontend(gateway: &Gateway) -> bool {
+    let Some(frontend) = gateway.spec.tls.as_ref().and_then(|t| t.frontend.as_ref()) else { return false };
+    std::iter::once(&frontend.default)
+        .chain(frontend.per_port.iter().map(|p| &p.tls))
+        .filter_map(|t| t.validation.as_ref())
+        .any(|v| v.mode.as_deref() == Some("AllowInsecureFallback"))
+}
+
+/// The CA certificates a validation references: ConfigMaps with `ca.crt`,
+/// in the Gateway's namespace or one a ReferenceGrant opens.
+fn client_cas(validation: &FrontendTlsValidation, gateway_namespace: &str, snapshot: &Snapshot) -> Result<ClientCa, (&'static str, String)> {
+    let mut pem = Vec::new();
+    for reference in &validation.ca_certificate_refs {
+        if !reference.group.is_empty() || reference.kind != "ConfigMap" {
+            return Err(("InvalidCACertificateKind", format!("{} isn't a supported CA certificate reference", reference.kind)));
+        }
+        let namespace = reference.namespace.clone().unwrap_or_else(|| gateway_namespace.to_string());
+        if namespace != gateway_namespace && !granted(snapshot, GATEWAY_GROUP, "Gateway", gateway_namespace, "", "ConfigMap", &namespace, &reference.name) {
+            return Err(("RefNotPermitted", format!("no ReferenceGrant in {namespace} lets Gateways in {gateway_namespace} use ConfigMap {}", reference.name)));
+        }
+        let ca = snapshot
+            .config_maps
+            .iter()
+            .find(|c| c.namespace().as_deref() == Some(namespace.as_str()) && c.name_any() == reference.name)
+            .and_then(|c| c.data.as_ref())
+            .and_then(|d| d.get("ca.crt"))
+            .filter(|ca| crate::core::x509::cert_info_from_pem(ca.as_bytes()).is_some());
+        let Some(ca) = ca else {
+            return Err(("InvalidCACertificateRef", format!("ConfigMap {namespace}/{} has no valid ca.crt", reference.name)));
+        };
+        pem.extend_from_slice(ca.as_bytes());
+        pem.push(b'\n');
+    }
+    if pem.is_empty() {
+        return Err(("InvalidCACertificateRef", "no caCertificateRefs".to_string()));
+    }
+    Ok(ClientCa { pem, insecure_fallback: validation.mode.as_deref() == Some("AllowInsecureFallback") })
 }
 
 // ── routes ────────────────────────────────────────────────────────────────────

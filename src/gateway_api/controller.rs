@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use k8s_openapi::api::core::v1::{Namespace, Secret, Service};
+use k8s_openapi::api::core::v1::{ConfigMap, Namespace, Secret, Service};
 use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 use kube::api::{Api, Patch, PatchParams};
@@ -59,6 +59,7 @@ pub struct Stores {
     pub services: Store<Service>,
     pub namespaces: Store<Namespace>,
     pub secrets: Store<Secret>,
+    pub config_maps: Store<ConfigMap>,
     pub endpoint_slices: Store<EndpointSlice>,
 }
 
@@ -83,6 +84,7 @@ impl Stores {
             services: all(&self.services),
             namespaces: all(&self.namespaces),
             secrets: all(&self.secrets),
+            config_maps: all(&self.config_maps),
             endpoint_slices: all(&self.endpoint_slices),
         }
     }
@@ -125,6 +127,7 @@ pub fn start_watches(client: &Client) -> (Stores, Arc<Notify>) {
         services: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         namespaces: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         secrets: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
+        config_maps: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         endpoint_slices: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
     };
     (stores, changed)

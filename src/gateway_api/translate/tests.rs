@@ -486,3 +486,45 @@ fn routes_reach_listener_set_listeners_only_through_the_set() {
     let service = desired.services.values().find(|svc| svc.labels().get(GATEWAY_NAME_LABEL).map(String::as_str) == Some("gateway-with-listener-sets-http-routing")).unwrap();
     assert!(!service.spec.as_ref().unwrap().ports.as_ref().unwrap().is_empty());
 }
+
+fn ca_config_map(name: &str) -> k8s_openapi::api::core::v1::ConfigMap {
+    let ca = rcgen::generate_simple_self_signed(vec!["ca".to_string()]).unwrap();
+    serde_json::from_value(serde_json::json!({
+        "apiVersion": "v1", "kind": "ConfigMap",
+        "metadata": {"name": name, "namespace": INFRA},
+        "data": {"ca.crt": ca.cert.pem()}
+    }))
+    .unwrap()
+}
+
+#[test]
+fn client_certificate_cas_must_resolve() {
+    let mut s = snapshot(&["gateway-with-invalid-clientcertificate-validation"]);
+    s.secrets.push(tls_secret("tls-validity-checks-certificate"));
+    s.config_maps.push(ca_config_map("tls-validity-checks-ca-certificate"));
+    let (config, desired) = run(&s);
+    let gateway = "gateway-with-invalid-client-cert-validation";
+    let l = listener(&desired, gateway, "https");
+    assert_eq!(("True", "True"), (find(&l.conditions, "Accepted").status.as_str(), find(&l.conditions, "ResolvedRefs").status.as_str()));
+    for (name, reason) in [("https-unresolved", "InvalidCACertificateRef"), ("https-invalid-kind", "InvalidCACertificateKind"), ("https-grant-missing", "RefNotPermitted")] {
+        let l = listener(&desired, gateway, name);
+        assert_eq!(reason, find(&l.conditions, "ResolvedRefs").reason, "{name}");
+        assert_eq!(("False", "NoValidCACertificate"), (find(&l.conditions, "Accepted").status.as_str(), find(&l.conditions, "Accepted").reason.as_str()), "{name}");
+        assert_eq!("False", find(&l.conditions, "Programmed").status, "{name}");
+    }
+    let served = config.listeners.iter().find(|l| l.gateway.1 == gateway && l.name == "https").unwrap();
+    assert!(served.client_ca.as_ref().is_some_and(|ca| !ca.insecure_fallback && !ca.pem.is_empty()));
+}
+
+#[test]
+fn insecure_fallback_is_flagged_on_the_gateway() {
+    let mut s = snapshot(&["gateway-with-clientcertificate-validation-insecure-fallback"]);
+    s.secrets.push(tls_secret("tls-validity-checks-certificate"));
+    s.config_maps.push(ca_config_map("tls-validity-checks-ca-certificate"));
+    s.config_maps.push(ca_config_map("tls-validity-checks-per-port-ca-certificate"));
+    let (config, desired) = run(&s);
+    let gateway = desired.gateways.iter().find(|(k, _)| k.1.contains("insecure") || k.1.contains("fallback")).map(|(_, g)| g).expect("the fixture's Gateway");
+    let c = find(&gateway.conditions, "InsecureFrontendValidationMode");
+    assert_eq!(("True", "ConfigurationChanged"), (c.status.as_str(), c.reason.as_str()));
+    assert!(config.listeners.iter().filter_map(|l| l.client_ca.as_ref()).any(|ca| ca.insecure_fallback));
+}

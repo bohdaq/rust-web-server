@@ -20,7 +20,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   precedence, weighted backends over EndpointSlices, the filters (header
   modifiers, redirects, URL rewrites, CORS), timeouts and retries, h2c and
   WebSocket backends, request mirroring, GRPCRoute, TLSRoute (passthrough and
-  terminate), TCPRoute, UDPRoute, ListenerSet, Lease leader election, Helm
+  terminate), TCPRoute, UDPRoute, ListenerSet, 421 for misdirected requests,
+  client-certificate validation, Lease leader election, Helm
   values (`gatewayAPI.*`) and a CI job running the official conformance suite
   in kind.
 

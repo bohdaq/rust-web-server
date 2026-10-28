@@ -395,6 +395,13 @@ impl PortRouter {
     }
 }
 
+/// Over TLS, a request whose `Host` belongs to another listener than the
+/// one its SNI chose (and whose certificate it got) is misdirected: `421`.
+fn misdirected(listeners: &[ListenerConfig], by_host: &ListenerConfig, connection: &ConnectionInfo) -> bool {
+    let Some(sni) = connection.sni_hostname.as_deref() else { return false };
+    pick_listener(listeners, &sni.to_ascii_lowercase()).is_some_and(|by_sni| !std::ptr::eq(by_sni, by_host))
+}
+
 impl Application for PortRouter {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         let listeners = self.listeners.read().unwrap_or_else(|e| e.into_inner()).clone();
@@ -402,6 +409,9 @@ impl Application for PortRouter {
         let Some(listener) = pick_listener(&listeners, &host) else {
             return Ok(status(STATUS_CODE_REASON_PHRASE.n404_not_found));
         };
+        if misdirected(&listeners, listener, connection) {
+            return Ok(status(STATUS_CODE_REASON_PHRASE.n421_misdirected_request));
+        }
         match select(listener, request, &host) {
             Some((_, rule, matched)) => Ok(self.route(listener, rule, matched, request, &host, connection)),
             None => Ok(status(STATUS_CODE_REASON_PHRASE.n404_not_found)),

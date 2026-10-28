@@ -12,7 +12,7 @@ use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 
 use super::router::{host_score, PortListeners, PortRouter};
-use super::translate::{GatewayConfig, ListenerConfig};
+use super::translate::{ClientCa, GatewayConfig, ListenerConfig};
 
 /// How a port's connections are served.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -168,7 +168,9 @@ impl ResolvesServerCert for ListenerCerts {
 
 /// A TLS acceptor for the port's listeners that terminate TLS (HTTPS, or
 /// TLS in `Terminate` mode); `None` when none do. `http` offers h2 and
-/// http/1.1 by ALPN.
+/// http/1.1 by ALPN. With a client CA (per port, so the same for all of
+/// them) client certificates are asked for: required and verified, or under
+/// `AllowInsecureFallback` asked for and let through either way.
 fn tls_acceptor(listeners: &[ListenerConfig], http: bool) -> Option<tokio_rustls::TlsAcceptor> {
     let certs: Vec<(String, Arc<CertifiedKey>)> = listeners
         .iter()
@@ -188,11 +190,77 @@ fn tls_acceptor(listeners: &[ListenerConfig], http: bool) -> Option<tokio_rustls
         return None;
     }
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-    let mut config = rustls::ServerConfig::builder().with_no_client_auth().with_cert_resolver(Arc::new(ListenerCerts { certs }));
+    let builder = rustls::ServerConfig::builder();
+    let builder = match listeners.iter().find_map(|l| l.client_ca.as_ref()).map(client_verifier) {
+        Some(Ok(verifier)) => builder.with_client_cert_verifier(verifier),
+        Some(Err(e)) => {
+            eprintln!("[gateway-api] client CA: {e}");
+            return None; // fail closed: no connection without the asked-for validation
+        }
+        None => builder.with_no_client_auth(),
+    };
+    let mut config = builder.with_cert_resolver(Arc::new(ListenerCerts { certs }));
     if http {
         config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     }
     Some(tokio_rustls::TlsAcceptor::from(Arc::new(config)))
+}
+
+fn client_verifier(ca: &ClientCa) -> Result<Arc<dyn rustls::server::danger::ClientCertVerifier>, String> {
+    use rustls::pki_types::pem::PemObject;
+    let mut roots = rustls::RootCertStore::empty();
+    for cert in rustls::pki_types::CertificateDer::pem_slice_iter(&ca.pem) {
+        roots.add(cert.map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    }
+    let verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(roots)).build().map_err(|e| e.to_string())?;
+    Ok(if ca.insecure_fallback { Arc::new(InsecureFallback(verifier)) } else { verifier })
+}
+
+/// `AllowInsecureFallback`: asks for a client certificate (naming the CAs)
+/// but lets the connection through without one or with one that doesn't
+/// verify; handshake signatures are still checked.
+#[derive(Debug)]
+struct InsecureFallback(Arc<dyn rustls::server::danger::ClientCertVerifier>);
+
+impl rustls::server::danger::ClientCertVerifier for InsecureFallback {
+    fn root_hint_subjects(&self) -> &[rustls::DistinguishedName] {
+        self.0.root_hint_subjects()
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        false
+    }
+
+    fn verify_client_cert(
+        &self,
+        _end_entity: &rustls::pki_types::CertificateDer<'_>,
+        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::server::danger::ClientCertVerified, rustls::Error> {
+        Ok(rustls::server::danger::ClientCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        self.0.verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        self.0.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.0.supported_verify_schemes()
+    }
 }
 
 #[cfg(test)]

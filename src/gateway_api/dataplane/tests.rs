@@ -48,6 +48,7 @@ fn config(container_port: u16, backend: u16, protocol: &str, tls: Option<(Vec<u8
             hostname: None,
             container_port,
             tls,
+            client_ca: None,
             http_routes: vec![CompiledHttpRoute { key: ("ns".to_string(), "r".to_string()), hostnames: vec![], created: String::new(), rules: vec![rule] }],
         }],
     }
@@ -233,4 +234,60 @@ async fn a_udp_listener_relays_datagrams_both_ways() {
     .unwrap();
     assert_eq!(vec![b"one".to_vec(), b"two".to_vec()], replies);
     assert_eq!(vec![port], plane.ports());
+}
+
+/// A CA and a client certificate it signed.
+fn client_pki() -> (String, rustls::pki_types::CertificateDer<'static>, rustls::pki_types::PrivateKeyDer<'static>) {
+    let ca_key = rcgen::KeyPair::generate().unwrap();
+    let mut ca_params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    let ca = ca_params.self_signed(&ca_key).unwrap();
+    let issuer = rcgen::Issuer::from_params(&ca_params, &ca_key);
+    let client_key = rcgen::KeyPair::generate().unwrap();
+    let client = rcgen::CertificateParams::new(vec!["client".to_string()]).unwrap().signed_by(&client_key, &issuer).unwrap();
+    (ca.pem(), client.der().clone(), rustls::pki_types::PrivateKeyDer::try_from(client_key.serialize_der()).unwrap())
+}
+
+/// GET over TLS, with a client certificate or none; the response, or
+/// `None` when the handshake or exchange fails.
+fn get_with_client_cert(port: u16, server: &rcgen::CertifiedKey<rcgen::KeyPair>, client: Option<(rustls::pki_types::CertificateDer<'static>, rustls::pki_types::PrivateKeyDer<'static>)>) -> Option<String> {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(rustls::pki_types::CertificateDer::from(server.cert.der().to_vec())).unwrap();
+    let builder = crate::tls_client_builder().with_root_certificates(roots);
+    let config = match client {
+        Some((cert, key)) => builder.with_client_auth_cert(vec![cert], key).unwrap(),
+        None => builder.with_no_client_auth(),
+    };
+    let connection = rustls::ClientConnection::new(Arc::new(config), "secure.example.com".try_into().unwrap()).unwrap();
+    let tcp = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    tcp.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+    let mut tls = rustls::StreamOwned::new(connection, tcp);
+    write!(tls, "GET / HTTP/1.1\r\nHost: secure.example.com\r\nConnection: close\r\n\r\n").ok()?;
+    let mut response = String::new();
+    tls.read_to_string(&mut response).ok()?;
+    response.starts_with("HTTP/1.1").then_some(response)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn client_certificates_are_required_or_let_through_by_the_mode() {
+    let backend = echo_backend();
+    let server = rcgen::generate_simple_self_signed(vec!["secure.example.com".to_string()]).unwrap();
+    let (ca_pem, client_cert, client_key) = client_pki();
+    let (_, other_cert, other_key) = client_pki();
+    let plane = DataPlane::new("127.0.0.1");
+    for insecure_fallback in [false, true] {
+        let port = free_port();
+        let mut config = config(port, backend, "HTTPS", Some((server.cert.pem().into_bytes(), server.signing_key.serialize_pem().into_bytes())));
+        config.listeners[0].client_ca = Some(crate::gateway_api::translate::ClientCa { pem: ca_pem.clone().into_bytes(), insecure_fallback });
+        plane.apply(&config);
+        let server = rcgen::CertifiedKey { cert: server.cert.clone(), signing_key: rcgen::KeyPair::from_pem(&server.signing_key.serialize_pem()).unwrap() };
+        let (valid, other, none) = (Some((client_cert.clone(), client_key.clone_key())), Some((other_cert.clone(), other_key.clone_key())), None);
+        let results = tokio::task::spawn_blocking(move || {
+            [valid, other, none].into_iter().map(|client| get_with_client_cert(port, &server, client).is_some_and(|r| r.starts_with("HTTP/1.1 200"))).collect::<Vec<_>>()
+        })
+        .await
+        .unwrap();
+        let expected = if insecure_fallback { vec![true, true, true] } else { vec![true, false, false] };
+        assert_eq!(expected, results, "insecure_fallback = {insecure_fallback}: [signed by the CA, another CA, none]");
+    }
 }

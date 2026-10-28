@@ -42,6 +42,7 @@ fn listener(hostname: Option<&str>, routes: Vec<CompiledHttpRoute>) -> ListenerC
         hostname: hostname.map(str::to_string),
         container_port: 10000,
         tls: None,
+        client_ca: None,
         http_routes: routes,
     }
 }
@@ -342,4 +343,30 @@ fn grpc_method_matches_take_the_second_path_segment() {
     assert_eq!(None, picked(&l, &request("POST", "/any.Service/Other", &[])));
     let unsupported = listener(None, vec![route("r", "1", &[], vec![rule("re", vec![path("rws.Unsupported", "")], vec![])])]);
     assert_eq!(None, picked(&unsupported, &request("POST", "/a/b", &[])));
+}
+
+#[test]
+fn a_host_of_another_listener_than_the_sni_chose_is_misdirected() {
+    let listeners = vec![
+        listener(None, vec![]),
+        listener(Some("second-example.org"), vec![]),
+        listener(Some("*.wildcard.org"), vec![]),
+        listener(Some("fourth-example.wildcard.org"), vec![]),
+    ];
+    let over_tls = |sni: &str| ConnectionInfo { sni_hostname: Some(sni.to_string()), ..connection() };
+    let check = |sni: &str, host: &str| {
+        let by_host = pick_listener(&listeners, host).unwrap();
+        misdirected(&listeners, by_host, &over_tls(sni))
+    };
+    // The suite's cases (HTTPRouteHTTPSListenerDetectMisdirectedRequests).
+    assert!(!check("example.org", "example.org"));
+    assert!(check("example.org", "second-example.org"));
+    assert!(!check("example.org", "unknown-example.org"));
+    assert!(check("second-example.org", "example.org"));
+    assert!(check("second-example.org", "unknown-example.org"));
+    assert!(!check("third-example.wildcard.org", "fith-example.wildcard.org"));
+    assert!(check("third-example.wildcard.org", "fourth-example.wildcard.org"));
+    assert!(check("fourth-example.wildcard.org", "fith-example.wildcard.org"));
+    assert!(!check("unknown-example.org", "example.org"));
+    assert!(!misdirected(&listeners, &listeners[1], &connection()), "plain HTTP has no SNI");
 }
