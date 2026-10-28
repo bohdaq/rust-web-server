@@ -18448,6 +18448,40 @@ Also as `[gateway_api]` in `rws.config.toml` ([Config file](/configuration/confi
 
 The controller needs to list and watch GatewayClasses, Gateways, HTTPRoutes, GRPCRoutes, TLSRoutes, TCPRoutes, UDPRoutes, ReferenceGrants, BackendTLSPolicies, ListenerSets, Services, EndpointSlices, Namespaces, Secrets and ConfigMaps; patch the status of GatewayClasses, Gateways and every route kind; create and patch Services and EndpointSlices; read its own namespace's Pods; and get, create and update Leases in its namespace. The Gateway API CRDs (standard channel, v1.6) must be installed in the cluster first.
 
+## Benchmarks
+
+rws 18.8.1 against five other Gateway API implementations, each at its chart defaults with one data-plane replica, in one kind cluster on one GitHub Actions runner (run [40681376798](https://github.com/bohdaq/rust-web-server/actions/runs/40681376798)). The same HTTPRoute sends every request to the same nginx backend; [oha](https://github.com/hatoo/oha) loads it for 20 s per row with keep-alive and no compression, from the runner. CPU is what the gateway's pods (controller and data plane) used per request, from the kubelet. Runner hardware varies between runs, so compare rows of this run only. The harness is `bench/gateway/run.sh` (workflow `gateway-bench.yml`, manual).
+
+Versions: Envoy Gateway v1.9.2, NGINX Gateway Fabric 2.7.2, Traefik (chart 41.7.1), kgateway v2.4.6, Istio 1.30.5.
+
+Requests per second, and p99 latency in ms (64 connections unless noted):
+
+| Scenario | rws | kgateway | Istio | Traefik | Envoy Gateway | NGINX GF |
+|---|---:|---:|---:|---:|---:|---:|
+| HTTP/1.1, 1 KiB | **38 501** · 5.8 | 20 225 · 9.5 | 16 274 · 9.3 | 17 539 · 14 | 16 685 · 15 | 10 951 · 20 |
+| HTTP/1.1, 1 KiB, 256 conns | **39 230** · 23 | 21 103 · 36 | 17 795 · 23 | 18 484 · 45 | 17 757 · 67 | 10 814 · 86 |
+| HTTP/1.1, 1 MiB | **2 467** · 71 | 2 009 · 93 | 2 057 · 186 | 1 879 · 81 | 1 556 · 191 | 841 · 200 |
+| HTTPS, 1 KiB | **34 792** · 5.3 | 19 085 · 10 | 15 946 · 6.7 | 17 941 · 13 | 16 372 · 16 | 10 121 · 22 |
+| HTTP/2 + TLS, 1 KiB | **32 120** · 5.5 | 17 226 · 11 | 14 063 · 7.6 | 13 158 · 14 | 14 817 · 15 | 9 419 · 25 |
+| Header modifiers + rewrite, 1 KiB | **36 821** · 5.0 | 19 573 · 8.9 | 16 272 · 6.7 | 18 004 · 14 | 16 907 · 16 | —¹ |
+
+CPU µs per request:
+
+| Scenario | rws | kgateway | Istio | Traefik | Envoy Gateway | NGINX GF |
+|---|---:|---:|---:|---:|---:|---:|
+| HTTP/1.1, 1 KiB | **40** | 106 | 116 | 96 | 80 | 117 |
+| HTTP/1.1, 1 KiB, 256 conns | **19** | 82 | 66 | 175 | 171 | 191 |
+| HTTP/1.1, 1 MiB | 928 | 1182 | 1254 | **597** | 1098 | 1365 |
+| HTTPS, 1 KiB | **33** | 73 | 64 | 165 | 121 | 171 |
+| HTTP/2 + TLS, 1 KiB | **63** | 152 | 209 | 178 | 188 | 292 |
+| Header modifiers + rewrite, 1 KiB | **27** | 129 | 77 | 96 | 116 | —¹ |
+
+Every gateway answered every request with 200 except as noted. Memory (working set of the gateway's pods after the runs): rws 42–118 MiB (mimalloc keeps freed memory, so it stays at its peak after the 1 MiB run), NGINX Gateway Fabric 60–74, the others 70–200.
+
+¹ NGINX Gateway Fabric answered 404 through the rewriting route in this setup, so the row isn't comparable; it also had 160 cancelled requests over HTTP/2.
+
+What this doesn't measure: many routes or Gateways, configuration churn, connection setup (every scenario reuses connections), and real backends.
+
 ---
 
 # Observability
