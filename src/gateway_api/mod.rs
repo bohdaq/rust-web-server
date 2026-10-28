@@ -20,6 +20,7 @@ pub mod dataplane;
 pub mod filters;
 pub mod l4;
 pub mod lease;
+pub mod provision;
 pub mod resources;
 pub mod router;
 pub mod routes;
@@ -51,6 +52,17 @@ pub const RWS_CONFIG_GATEWAY_API_PORT_RANGE: &str = "RWS_CONFIG_GATEWAY_API_PORT
 pub const RWS_CONFIG_GATEWAY_API_SERVICE_TYPE: &str = "RWS_CONFIG_GATEWAY_API_SERVICE_TYPE";
 /// Where the leader-election Lease lives (default: the pod's namespace).
 pub const RWS_CONFIG_GATEWAY_API_LEASE_NAMESPACE: &str = "RWS_CONFIG_GATEWAY_API_LEASE_NAMESPACE";
+/// `shared` (default: the controller's pods serve every Gateway) or
+/// `provisioned` (a Deployment per Gateway, [`provision`]).
+pub const RWS_CONFIG_GATEWAY_API_MODE: &str = "RWS_CONFIG_GATEWAY_API_MODE";
+/// The image provisioned Deployments run.
+pub const RWS_CONFIG_GATEWAY_API_IMAGE: &str = "RWS_CONFIG_GATEWAY_API_IMAGE";
+/// The ServiceAccount provisioned pods run as (default: the pod's, from
+/// `POD_SERVICE_ACCOUNT`).
+pub const RWS_CONFIG_GATEWAY_API_SERVICE_ACCOUNT: &str = "RWS_CONFIG_GATEWAY_API_SERVICE_ACCOUNT";
+/// Set on provisioned pods: `namespace/name` of the one Gateway they serve;
+/// they don't take the Lease or write anything.
+pub const RWS_CONFIG_GATEWAY_API_GATEWAY: &str = "RWS_CONFIG_GATEWAY_API_GATEWAY";
 
 fn setting(key: &str) -> Option<String> {
     std::env::var(key).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
@@ -89,7 +101,23 @@ pub fn settings_from_env() -> translate::Settings {
         settings.services.service_type = kind;
     }
     settings.services.pod_namespace = pod_namespace();
+    if setting(RWS_CONFIG_GATEWAY_API_MODE).is_some_and(|m| m.eq_ignore_ascii_case("provisioned")) {
+        settings.services.provisioned = true;
+        settings.provision = Some(provision::ProvisionSettings {
+            image: setting(RWS_CONFIG_GATEWAY_API_IMAGE).unwrap_or_else(|| format!("ghcr.io/bohdaq/rws:{}", env!("CARGO_PKG_VERSION"))),
+            service_account: setting(RWS_CONFIG_GATEWAY_API_SERVICE_ACCOUNT).or_else(|| setting("POD_SERVICE_ACCOUNT")).unwrap_or_else(|| "default".to_string()),
+            ..Default::default()
+        });
+    }
     settings
+}
+
+/// `namespace/name` from [`RWS_CONFIG_GATEWAY_API_GATEWAY`]: this pod is a
+/// provisioned data plane for that Gateway only.
+pub fn own_gateway() -> Option<(String, String)> {
+    let value = setting(RWS_CONFIG_GATEWAY_API_GATEWAY)?;
+    let (namespace, name) = value.split_once('/')?;
+    (!namespace.is_empty() && !name.is_empty()).then(|| (namespace.to_string(), name.to_string()))
 }
 
 /// The pod's namespace, where the serving pods run: `POD_NAMESPACE`, or
@@ -121,14 +149,31 @@ pub fn start_from_env() {
             }
         };
         let settings = settings_from_env();
-        println!("[gateway-api] serving GatewayClasses with controllerName {}", settings.controller_name);
-        let identity = setting("POD_NAME").or_else(|| setting("HOSTNAME")).unwrap_or_else(|| format!("rws-{}", std::process::id()));
         let leader = Arc::new(AtomicBool::new(false));
         let became_leader = Arc::new(tokio::sync::Notify::new());
-        let lease = lease::LeaseSettings { namespace: lease_namespace(), name: "rws-gateway-controller".to_string(), identity };
-        tokio::spawn(lease::run(client.clone(), lease, Arc::clone(&leader), Arc::clone(&became_leader)));
+        let own = own_gateway();
+        match &own {
+            // A provisioned data plane: never the leader.
+            Some((namespace, name)) => println!("[gateway-api] serving Gateway {namespace}/{name}"),
+            None => {
+                println!("[gateway-api] serving GatewayClasses with controllerName {}", settings.controller_name);
+                let identity = setting("POD_NAME").or_else(|| setting("HOSTNAME")).unwrap_or_else(|| format!("rws-{}", std::process::id()));
+                let lease = lease::LeaseSettings { namespace: lease_namespace(), name: "rws-gateway-controller".to_string(), identity };
+                tokio::spawn(lease::run(client.clone(), lease, Arc::clone(&leader), Arc::clone(&became_leader)));
+            }
+        }
         let plane = Arc::new(dataplane::DataPlane::new("0.0.0.0"));
-        let options = controller::Options { settings, leader, on_config: Arc::new(move |config| plane.apply(&config)) };
+        let provisioned = settings.provision.is_some();
+        let on_config = move |mut config: translate::GatewayConfig| {
+            // Provisioned: each pod serves its own Gateway; the controller's serve none.
+            match &own {
+                Some(gateway) => config.listeners.retain(|l| &l.gateway == gateway),
+                None if provisioned => config.listeners.clear(),
+                None => {}
+            }
+            plane.apply(&config)
+        };
+        let options = controller::Options { settings, leader, on_config: Arc::new(on_config) };
         controller::run(client, options, became_leader).await;
     });
 }

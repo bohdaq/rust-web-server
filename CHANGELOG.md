@@ -22,7 +22,8 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   WebSocket backends, request mirroring, GRPCRoute, TLSRoute (passthrough and
   terminate), TCPRoute, UDPRoute, ListenerSet, 421 for misdirected requests,
   client-certificate validation, BackendTLSPolicy (with SAN checks), static
-  addresses, Lease leader election, Helm
+  addresses, shared and provisioned (a Deployment per Gateway) modes, Lease
+  leader election, Helm
   values (`gatewayAPI.*`) and a CI job running the official conformance suite
   in kind.
 

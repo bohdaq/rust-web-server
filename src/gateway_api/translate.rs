@@ -21,11 +21,13 @@ use super::types::*;
 pub struct Settings {
     pub controller_name: String,
     pub services: ServiceSettings,
+    /// Provisioned mode: a Deployment per Gateway.
+    pub provision: Option<super::provision::ProvisionSettings>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { controller_name: super::CONTROLLER_NAME.to_string(), services: ServiceSettings::default() }
+        Settings { controller_name: super::CONTROLLER_NAME.to_string(), services: ServiceSettings::default(), provision: None }
     }
 }
 
@@ -50,6 +52,8 @@ pub struct Snapshot {
     pub endpoint_slices: Vec<EndpointSlice>,
     /// rws's own serving pods (in the pod namespace, by the pod selector).
     pub pods: Vec<Pod>,
+    /// Provisioned Deployments, in the pod namespace.
+    pub deployments: Vec<k8s_openapi::api::apps::v1::Deployment>,
 }
 
 /// The label rws puts on the Service it creates for a Gateway (the name the
@@ -99,6 +103,8 @@ pub struct Desired {
     pub services: BTreeMap<(String, String), Service>,
     /// (namespace, name) → those Services' EndpointSlices (rws's pods).
     pub endpoint_slices: BTreeMap<(String, String), EndpointSlice>,
+    /// Provisioned mode: (Gateway namespace, name) → its Deployment.
+    pub deployments: BTreeMap<(String, String), k8s_openapi::api::apps::v1::Deployment>,
 }
 
 /// What the data plane serves.
@@ -232,6 +238,10 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
     let our_gateways: Vec<&Gateway> = merged_gateways.iter().collect();
     desired.services = super::services::desired(snapshot, &our_gateways, &settings.services);
     desired.endpoint_slices = super::services::endpoint_slices(snapshot, &desired.services, &settings.services);
+    if let Some(provision) = &settings.provision {
+        let gateways: Vec<&Gateway> = snapshot.gateways.iter().filter(|g| our_classes.contains(&g.spec.gateway_class_name)).collect();
+        desired.deployments = super::provision::desired(&gateways, &settings.services.pod_namespace, controller_name, settings.services.port_range, provision);
+    }
 
     // Routes: attach to listeners, resolve backends.
     let routes = snapshot

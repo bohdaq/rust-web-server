@@ -80,6 +80,14 @@ spec:
               value: {{ .Values.gatewayAPI.portRange | quote }}
             - name: RWS_CONFIG_GATEWAY_API_SERVICE_TYPE
               value: {{ .Values.gatewayAPI.serviceType | quote }}
+            - name: RWS_CONFIG_GATEWAY_API_MODE
+              value: {{ .Values.gatewayAPI.mode | quote }}
+            - name: RWS_CONFIG_GATEWAY_API_IMAGE
+              value: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+            - name: POD_SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
             - name: POD_NAME
               valueFrom:
                 fieldRef:

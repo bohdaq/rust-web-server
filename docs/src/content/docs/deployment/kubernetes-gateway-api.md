@@ -39,7 +39,13 @@ The GatewayClass's `status.supportedFeatures` lists what rws claims; the conform
 
 - **Static addresses** (`spec.addresses`): the first `IPAddress` is asked of the load balancer as the Service's `loadBalancerIP`; the Gateway is programmed once every requested address is the Service's (else `AddressNotUsable`). Another address type isn't accepted (`UnsupportedAddress`). An address with only a type asks for any address.
 
-The provisioned mode comes in the next phase.
+
+## Deployment modes
+
+- **shared** (`RWS_CONFIG_GATEWAY_API_MODE=shared`, the default): the pods of the rws Deployment that runs the controller serve every Gateway. One Deployment, scaled as one.
+- **provisioned** (`provisioned`; Helm `gatewayAPI.mode: provisioned`): each Gateway gets its own Deployment, `rws-gw-<namespace>-<name>`, in the controller's namespace, with the controller's image (`RWS_CONFIG_GATEWAY_API_IMAGE`) and ServiceAccount; the Gateway's `spec.infrastructure` labels and annotations go on its pods. Those pods (started with `RWS_CONFIG_GATEWAY_API_GATEWAY=<namespace>/<name>`) watch the cluster like the controller but serve only their Gateway and never write; the controller's own pods serve nothing. Gateways don't share pods, so one's load or failure doesn't reach another. A Gateway's Deployment is deleted with it (by the controller: an object can't own one in another namespace).
+
+Either way the Gateway's Service lists the serving pods in its EndpointSlice.
 
 ## Settings
 

@@ -108,6 +108,10 @@ gatewayAPI:
   portRange: "10000-10999"
   # Type of each Gateway's Service.
   serviceType: LoadBalancer
+  # shared: this release's pods serve every Gateway. provisioned: each
+  # Gateway gets its own Deployment of rws pods (in this namespace, this
+  # image and ServiceAccount); this release's pods only run the controller.
+  mode: shared
 
 service:
   type: ClusterIP

@@ -4,7 +4,7 @@
 # LoadBalancer Service gets an address the runner can reach, rws installed with
 # the Helm chart (gatewayAPI.enabled), then the suite's own `go test`.
 #
-#   ci/e2e/gateway_api.sh <rws-binary> <gateway-api-source> <report.yaml> <profiles> <supported-features>
+#   ci/e2e/gateway_api.sh <rws-binary> <gateway-api-source> <report.yaml> <profiles> <supported-features> [shared|provisioned]
 #
 # <gateway-api-source> is a checkout of kubernetes-sigs/gateway-api at the
 # pinned tag; kind, kubectl, helm, docker and go must be on PATH.
@@ -15,6 +15,7 @@ GWAPI="$(cd "$2" && pwd)"
 REPORT="$(cd "$(dirname "$3")" && pwd)/$(basename "$3")"
 PROFILES="$4"
 FEATURES="$5"
+MODE="${6:-shared}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CLUSTER=rws-gateway-api
 METALLB_VERSION=v0.16.0
@@ -61,6 +62,7 @@ kind load docker-image rws:e2e --name "$CLUSTER"
 helm install rws "$ROOT/helm/rws" --namespace rws-system --create-namespace \
   --set image.repository=rws --set image.tag=e2e --set image.pullPolicy=Never \
   --set gatewayAPI.enabled=true --set tls.enabled=false --set quic.enabled=false \
+  --set gatewayAPI.mode="$MODE" \
   --set replicaCount=2 --set podDisruptionBudget.enabled=false --wait --timeout 5m
 kubectl wait --for=condition=Accepted gatewayclass/rws --timeout=60s
 
@@ -72,5 +74,5 @@ go test -timeout 90m -run TestConformance . -args \
   --supported-features="$FEATURES" \
   --report-output="$REPORT" \
   --organization=bohdaq --project=rust-web-server --url=https://rws8.tech \
-  --version="$version" --usable-address="$prefix.255.240" --unusable-address=10.255.255.1 \
+  --version="$version" --mode="$MODE" --usable-address="$prefix.255.240" --unusable-address=10.255.255.1 \
   --contact=@bohdaq

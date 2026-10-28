@@ -27,6 +27,9 @@ pub struct ServiceSettings {
     /// Their namespace. A Service only selects pods in its own namespace, so
     /// each Gateway's Service has no selector: rws writes its EndpointSlice.
     pub pod_namespace: String,
+    /// Provisioned mode: each Gateway's own pods ([`super::provision`])
+    /// instead of `pod_selector`.
+    pub provisioned: bool,
     /// Container ports to allocate from (inclusive).
     pub port_range: (u16, u16),
     /// `LoadBalancer` (default), `NodePort` or `ClusterIP`.
@@ -38,6 +41,7 @@ impl Default for ServiceSettings {
         ServiceSettings {
             pod_selector: BTreeMap::from([("app.kubernetes.io/name".to_string(), "rws".to_string())]),
             pod_namespace: "default".to_string(),
+            provisioned: false,
             port_range: (10000, 10999),
             service_type: "LoadBalancer".to_string(),
         }
@@ -170,14 +174,25 @@ pub fn desired(snapshot: &Snapshot, gateways: &[&Gateway], settings: &ServiceSet
 /// (not the EndpointSlice controller's value, so it leaves them alone).
 pub const ENDPOINTS_MANAGED_BY: &str = "rws8.tech/gateway-controller";
 
-/// The serving pods: in the pod namespace, matching the selector, with an
-/// IP, not being deleted; (IP, ready, node, name).
-pub fn serving_pods(snapshot: &Snapshot, settings: &ServiceSettings) -> Vec<(String, bool, Option<String>, String)> {
+impl ServiceSettings {
+    /// The labels rws's serving pods are watched by.
+    pub fn pod_watch_labels(&self) -> BTreeMap<String, String> {
+        if self.provisioned {
+            BTreeMap::from([("app.kubernetes.io/name".to_string(), super::provision::APP_NAME.to_string())])
+        } else {
+            self.pod_selector.clone()
+        }
+    }
+}
+
+/// The serving pods: in the pod namespace, matching `selector`, with an IP,
+/// not being deleted; (IP, ready, node, name).
+pub fn serving_pods(snapshot: &Snapshot, settings: &ServiceSettings, selector: &BTreeMap<String, String>) -> Vec<(String, bool, Option<String>, String)> {
     let mut pods: Vec<_> = snapshot
         .pods
         .iter()
         .filter(|p| p.namespace().as_deref() == Some(settings.pod_namespace.as_str()))
-        .filter(|p| settings.pod_selector.iter().all(|(k, v)| p.labels().get(k) == Some(v)))
+        .filter(|p| selector.iter().all(|(k, v)| p.labels().get(k) == Some(v)))
         .filter(|p| p.metadata.deletion_timestamp.is_none())
         .filter_map(|p| {
             let status = p.status.as_ref()?;
@@ -193,9 +208,18 @@ pub fn serving_pods(snapshot: &Snapshot, settings: &ServiceSettings) -> Vec<(Str
 /// The EndpointSlice of each Gateway Service: the serving pods on the
 /// Service's container ports (one slice per address family in use).
 pub fn endpoint_slices(snapshot: &Snapshot, services: &BTreeMap<(String, String), Service>, settings: &ServiceSettings) -> BTreeMap<(String, String), EndpointSlice> {
-    let pods = serving_pods(snapshot, settings);
+    let shared = serving_pods(snapshot, settings, &settings.pod_selector);
     let mut out = BTreeMap::new();
     for ((namespace, name), service) in services {
+        // Provisioned: the Gateway's own pods.
+        let own;
+        let pods = if settings.provisioned {
+            let gateway = service.labels().get(GATEWAY_NAME_LABEL).cloned().unwrap_or_default();
+            own = serving_pods(snapshot, settings, &super::provision::pod_labels(namespace, &gateway));
+            &own
+        } else {
+            &shared
+        };
         let ports: Vec<EndpointPort> = service
             .spec
             .iter()

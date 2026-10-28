@@ -63,6 +63,7 @@ pub struct Stores {
     pub config_maps: Store<ConfigMap>,
     pub endpoint_slices: Store<EndpointSlice>,
     pub pods: Store<Pod>,
+    pub deployments: Store<k8s_openapi::api::apps::v1::Deployment>,
 }
 
 impl Stores {
@@ -90,6 +91,7 @@ impl Stores {
             config_maps: all(&self.config_maps),
             endpoint_slices: all(&self.endpoint_slices),
             pods: all(&self.pods),
+            deployments: all(&self.deployments),
         }
     }
 }
@@ -126,7 +128,8 @@ where
 /// Start watching everything (rws's own pods by `services`' namespace and
 /// selector); returns the stores and the change signal.
 pub fn start_watches(client: &Client, services: &super::services::ServiceSettings) -> (Stores, Arc<Notify>) {
-    let pod_labels = services.pod_selector.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(",");
+    let pod_labels = services.pod_watch_labels().iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(",");
+    let managed = format!("app.kubernetes.io/managed-by={}", super::translate::MANAGED_BY);
     let changed = Arc::new(Notify::new());
     let stores = Stores {
         classes: watch(Api::all_with(client.clone(), &resources::gateway_classes()), resources::gateway_classes(), Arc::clone(&changed)),
@@ -145,6 +148,7 @@ pub fn start_watches(client: &Client, services: &super::services::ServiceSetting
         config_maps: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         endpoint_slices: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         pods: watch_with(Api::namespaced(client.clone(), &services.pod_namespace), (), watcher::Config::default().labels(&pod_labels), Arc::clone(&changed)),
+        deployments: watch_with(Api::namespaced(client.clone(), &services.pod_namespace), (), watcher::Config::default().labels(&managed), Arc::clone(&changed)),
     };
     (stores, changed)
 }
@@ -196,6 +200,28 @@ pub async fn reconcile(client: &Client, stores: &Stores, options: &Options) -> R
         let body = serde_json::json!({"apiVersion": "v1", "kind": "Service", "metadata": applied.metadata, "spec": applied.spec});
         if let Err(e) = api.patch(name, &PatchParams::apply(super::FIELD_MANAGER).force(), &Patch::Apply(&body)).await {
             failures.push(format!("Service {namespace}/{name}: {e}"));
+        }
+    }
+
+    // Provisioned mode: each Gateway's Deployment; those of Gateways gone are deleted.
+    if options.settings.provision.is_some() {
+        for deployment in desired.deployments.values() {
+            let (namespace, name) = (deployment.namespace().unwrap_or_default(), deployment.name_any());
+            let current = snapshot.deployments.iter().find(|d| d.namespace().as_deref() == Some(namespace.as_str()) && d.name_any() == name);
+            if current.is_some_and(|c| super::provision::same(c, deployment)) {
+                continue;
+            }
+            let api: Api<k8s_openapi::api::apps::v1::Deployment> = Api::namespaced(client.clone(), &namespace);
+            let body = serde_json::json!({"apiVersion": "apps/v1", "kind": "Deployment", "metadata": deployment.metadata, "spec": deployment.spec});
+            if let Err(e) = api.patch(&name, &PatchParams::apply(super::FIELD_MANAGER).force(), &Patch::Apply(&body)).await {
+                failures.push(format!("Deployment {namespace}/{name}: {e}"));
+            }
+        }
+        for stale in super::provision::stale(&snapshot.deployments, &desired.deployments) {
+            let api: Api<k8s_openapi::api::apps::v1::Deployment> = Api::namespaced(client.clone(), &stale.namespace().unwrap_or_default());
+            if let Err(e) = api.delete(&stale.name_any(), &Default::default()).await {
+                failures.push(format!("deleting Deployment {}: {e}", stale.name_any()));
+            }
         }
     }
 

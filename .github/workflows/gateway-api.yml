@@ -31,6 +31,11 @@ env:
 
 jobs:
   conformance:
+    name: conformance (${{ matrix.mode }})
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [shared, provisioned]
     runs-on: ubuntu-latest
     timeout-minutes: 120
     continue-on-error: true
@@ -54,7 +59,7 @@ jobs:
           git clone --depth 1 --branch "$GATEWAY_API_VERSION" https://github.com/kubernetes-sigs/gateway-api "$RUNNER_TEMP/gateway-api"
           gh release download "$GATEWAY_API_VERSION" --repo kubernetes-sigs/gateway-api --pattern standard-install.yaml --dir "$RUNNER_TEMP/gateway-api"
       - name: Conformance suite
-        run: ci/e2e/gateway_api.sh target/debug/rws "$RUNNER_TEMP/gateway-api" "$RUNNER_TEMP/report.yaml" "$PROFILES" "$FEATURES"
+        run: ci/e2e/gateway_api.sh target/debug/rws "$RUNNER_TEMP/gateway-api" "$RUNNER_TEMP/report.yaml" "$PROFILES" "$FEATURES" "${{ matrix.mode }}"
       - name: Report
         if: always()
         run: |
@@ -64,6 +69,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gateway-api-conformance-report
+          name: gateway-api-conformance-report-${{ matrix.mode }}
           path: ${{ runner.temp }}/report.yaml
           if-no-files-found: ignore

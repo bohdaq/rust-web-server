@@ -119,3 +119,27 @@ fn each_gateway_service_gets_an_endpoint_slice_of_the_serving_pods() {
     changed.endpoints.pop();
     assert!(!same_slice(v4, &changed));
 }
+
+#[test]
+fn provisioned_gateways_list_only_their_own_pods() {
+    let pod = |name: &str, gateway: &str| -> k8s_openapi::api::core::v1::Pod {
+        let mut labels = super::super::provision::pod_labels("apps", gateway);
+        labels.insert("x".to_string(), "y".to_string());
+        serde_json::from_value(serde_json::json!({
+            "metadata": {"name": name, "namespace": "rws-system", "labels": labels},
+            "status": {"podIP": format!("10.244.1.{}", name.len()), "conditions": [{"type": "Ready", "status": "True"}]}
+        }))
+        .unwrap()
+    };
+    let settings = ServiceSettings { pod_namespace: "rws-system".to_string(), provisioned: true, ..Default::default() };
+    let snapshot = Snapshot { pods: vec![pod("web-a", "web"), pod("api-bb", "api")], ..Default::default() };
+    let service: Service = serde_json::from_value(serde_json::json!({
+        "metadata": {"name": "rws-web", "namespace": "apps", "labels": {GATEWAY_NAME_LABEL: "web"}},
+        "spec": {"ports": [{"name": "tcp-80", "port": 80, "protocol": "TCP", "targetPort": 10000}]}
+    }))
+    .unwrap();
+    let slices = endpoint_slices(&snapshot, &BTreeMap::from([(("apps".to_string(), "rws-web".to_string()), service)]), &settings);
+    let addresses: Vec<&str> = slices[&("apps".to_string(), "rws-web-ipv4".to_string())].endpoints.iter().map(|e| e.addresses[0].as_str()).collect();
+    assert_eq!(vec!["10.244.1.5"], addresses, "web's pod only");
+    assert_eq!(Some("rws-gateway"), settings.pod_watch_labels().get("app.kubernetes.io/name").map(String::as_str));
+}

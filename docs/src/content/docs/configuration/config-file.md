@@ -220,6 +220,8 @@ controller_name = "rws8.tech/gateway-controller"
 pod_selector    = "app.kubernetes.io/name=rws"
 port_range      = "10000-10999"
 service_type    = "LoadBalancer"
+mode            = "shared"           # or "provisioned": a Deployment per Gateway
+image           = "ghcr.io/bohdaq/rws:18.8.0"   # provisioned pods' image
 
 [circuit_breaker]                    # RWS_CONFIG_CIRCUIT_BREAKER_*: read by RedisCircuitBreaker::from_env()
 failure_threshold      = 5

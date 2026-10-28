@@ -162,10 +162,14 @@ The `gateway-api` build feature's controller (in progress, 18.8.0). Read at star
 |----------|---------|------|-------------|
 | `RWS_CONFIG_GATEWAY_API_ENABLED` | `false` | boolean | Watch the cluster's Gateway API objects, serve the Gateways of this controller's GatewayClasses and report their status |
 | `RWS_CONFIG_GATEWAY_API_CONTROLLER_NAME` | `rws8.tech/gateway-controller` | string | The `spec.controllerName` of the GatewayClasses this instance handles |
-| `RWS_CONFIG_GATEWAY_API_POD_SELECTOR` | `app.kubernetes.io/name=rws` | `key=value,…` | Labels of the rws pods; every Gateway's Service selects them |
+| `RWS_CONFIG_GATEWAY_API_POD_SELECTOR` | `app.kubernetes.io/name=rws` | `key=value,…` | Labels of the rws pods (in the controller's namespace) that serve Gateways in the shared mode; rws lists them in every Gateway Service's EndpointSlice |
 | `RWS_CONFIG_GATEWAY_API_PORT_RANGE` | `10000-10999` | `first-last` | Container ports Gateway listeners are served on (each Service maps a listener port to one) |
 | `RWS_CONFIG_GATEWAY_API_SERVICE_TYPE` | `LoadBalancer` | string | The type of the Service each Gateway gets |
 | `RWS_CONFIG_GATEWAY_API_LEASE_NAMESPACE` | the pod's namespace | string | Where the `rws-gateway-controller` leader-election Lease lives |
+| `RWS_CONFIG_GATEWAY_API_MODE` | `shared` | `shared` or `provisioned` | `shared`: the controller's pods serve every Gateway. `provisioned`: each Gateway gets its own Deployment of rws pods; the controller's pods serve none |
+| `RWS_CONFIG_GATEWAY_API_IMAGE` | `ghcr.io/bohdaq/rws:<this version>` | string | The image provisioned Deployments run |
+| `RWS_CONFIG_GATEWAY_API_SERVICE_ACCOUNT` | `POD_SERVICE_ACCOUNT`, else `default` | string | The ServiceAccount provisioned pods run as |
+| `RWS_CONFIG_GATEWAY_API_GATEWAY` | — | `namespace/name` | Set by the controller on provisioned pods: serve only this Gateway, and never write status or objects |
 
 ## Templates
 
