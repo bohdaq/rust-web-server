@@ -5,6 +5,16 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## 18.8.2 — 2026-10-28
+
+### Documentation
+
+- Gateway API benchmark results (docs/deployment/kubernetes-gateway-api):
+  rws against Envoy Gateway, NGINX Gateway Fabric, Traefik, kgateway and
+  Istio over HTTP/1.1, HTTPS, HTTP/2, 1 MiB bodies and a filter-heavy route;
+  the harness (`bench/gateway/run.sh`, workflow `gateway-bench.yml`) covers
+  those scenarios. No code changes.
+
 ## 18.8.1 — 2026-10-28
 
 ### Changed
