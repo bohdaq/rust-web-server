@@ -21,7 +21,7 @@ fn rule(name: &str, matches: Vec<HttpRouteMatch>, backends: Vec<Backend>) -> Com
 }
 
 fn backend(weight: u32, endpoints: Result<Vec<String>, String>) -> Backend {
-    Backend { weight, endpoints, app_protocol: None, filters: vec![] }
+    Backend { weight, endpoints, app_protocol: None, tls: None, filters: vec![] }
 }
 
 fn route(name: &str, created: &str, hostnames: &[&str], rules: Vec<CompiledRule>) -> CompiledHttpRoute {

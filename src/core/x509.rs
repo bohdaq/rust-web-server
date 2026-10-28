@@ -116,6 +116,63 @@ fn authority_key_identifier(explicit: &[u8]) -> Option<&[u8]> {
     None
 }
 
+/// A subjectAltName entry rws can match.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SubjectAltName {
+    Dns(String),
+    Uri(String),
+}
+
+/// The DNS and URI names of a DER certificate's subjectAltName extension
+/// (OID 2.5.29.17); `None` when the certificate can't be read. Backend
+/// certificates are untrusted input: loops only, every read bounded.
+pub fn subject_alt_names(cert_der: &[u8]) -> Option<Vec<SubjectAltName>> {
+    const SAN_OID: &[u8] = &[0x55, 0x1d, 0x11];
+    let (_, cert_body, _) = read_tlv(cert_der, 0)?;
+    let (_, tbs, _) = read_tlv(cert_body, 0)?;
+    let mut pos = 0;
+    let mut names = Vec::new();
+    while pos < tbs.len() {
+        let (tag, value, next) = read_tlv(tbs, pos)?;
+        pos = next;
+        if tag != 0xa3 {
+            continue;
+        }
+        let (_, extensions, _) = read_tlv(value, 0)?;
+        let mut at = 0;
+        while at < extensions.len() {
+            let (_, extension, next) = read_tlv(extensions, at)?;
+            at = next;
+            let (oid_tag, oid, mut inner) = read_tlv(extension, 0)?;
+            if oid_tag != 0x06 || oid != SAN_OID {
+                continue;
+            }
+            let (mut tag, mut value, after) = read_tlv(extension, inner)?;
+            if tag == 0x01 {
+                inner = after; // critical BOOLEAN
+                (tag, value, _) = read_tlv(extension, inner)?;
+            }
+            if tag != 0x04 {
+                return None;
+            }
+            // OCTET STRING → GeneralNames SEQUENCE → [2] dNSName / [6] URI (IMPLICIT IA5String)
+            let (_, general_names, _) = read_tlv(value, 0)?;
+            let mut n = 0;
+            while n < general_names.len() {
+                let (name_tag, name, next) = read_tlv(general_names, n)?;
+                n = next;
+                let text = || std::str::from_utf8(name).ok().map(str::to_string);
+                match name_tag {
+                    0x82 => names.extend(text().map(SubjectAltName::Dns)),
+                    0x86 => names.extend(text().map(SubjectAltName::Uri)),
+                    _ => {}
+                }
+            }
+        }
+    }
+    Some(names)
+}
+
 fn pem_to_first_cert_der(pem: &str) -> Option<Vec<u8>> {
     let start = pem.find("-----BEGIN CERTIFICATE-----")?;
     let after = &pem[start + 27..];
@@ -214,4 +271,27 @@ pub fn base64_decode_std(s: &str) -> Option<Vec<u8>> {
         if chunk.len() >= 4 { out.push(v as u8); }
     }
     Some(out)
+}
+
+#[cfg(test)]
+mod subject_alt_name_tests {
+    use super::*;
+
+    #[test]
+    fn dns_and_uri_names_are_read_others_skipped() {
+        let mut params = rcgen::CertificateParams::new(vec!["abc.example.com".to_string()]).unwrap();
+        params.subject_alt_names.push(rcgen::SanType::URI("spiffe://cluster.local/ns/x/sa/y".try_into().unwrap()));
+        params.subject_alt_names.push(rcgen::SanType::IpAddress("10.0.0.1".parse().unwrap()));
+        let cert = params.self_signed(&rcgen::KeyPair::generate().unwrap()).unwrap();
+        let der: &[u8] = cert.der();
+        assert_eq!(
+            Some(vec![SubjectAltName::Dns("abc.example.com".to_string()), SubjectAltName::Uri("spiffe://cluster.local/ns/x/sa/y".to_string())]),
+            subject_alt_names(der),
+            "the IP name is skipped"
+        );
+        for cut in [0, 1, 10, der.len() / 2, der.len() - 1] {
+            assert!(subject_alt_names(&der[..cut]).is_none_or(|n| n.len() <= 2), "a truncated certificate never panics");
+        }
+        assert_eq!(None, subject_alt_names(b"not DER"));
+    }
 }

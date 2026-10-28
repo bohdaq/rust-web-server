@@ -49,7 +49,7 @@ impl Mirror {
             (None, Some(percent)) => percent as f64 / 100.0,
             (None, None) => 1.0,
         };
-        Mirror { endpoints: resolve(&filter.backend_ref, namespace, "HTTPRoute", snapshot).0, share: share.clamp(0.0, 1.0) }
+        Mirror { endpoints: resolve(&filter.backend_ref, namespace, "HTTPRoute", snapshot).endpoints, share: share.clamp(0.0, 1.0) }
     }
 }
 
@@ -61,6 +61,9 @@ pub struct Backend {
     pub endpoints: Result<Vec<String>, String>,
     /// The Service port's `appProtocol` (`kubernetes.io/h2c`, `kubernetes.io/ws`).
     pub app_protocol: Option<String>,
+    /// TLS to the backend, when a BackendTLSPolicy covers its Service port;
+    /// `Err` for a policy that isn't usable (those requests get `500`).
+    pub tls: Option<Result<super::backend_tls::BackendTls, String>>,
     pub filters: Vec<HttpRouteFilter>,
 }
 
@@ -82,8 +85,8 @@ pub fn compile(route: &HttpRoute, snapshot: &Snapshot) -> CompiledHttpRoute {
                 .backend_refs
                 .iter()
                 .map(|b| {
-                    let (endpoints, app_protocol) = resolve(&b.backend_ref.object, &namespace, "HTTPRoute", snapshot);
-                    Backend { weight: b.backend_ref.weight.unwrap_or(1).max(0) as u32, endpoints, app_protocol, filters: b.filters.clone() }
+                    let resolved = resolve(&b.backend_ref.object, &namespace, "HTTPRoute", snapshot);
+                    Backend { weight: b.backend_ref.weight.unwrap_or(1).max(0) as u32, endpoints: resolved.endpoints, app_protocol: resolved.app_protocol, tls: resolved.tls, filters: b.filters.clone() }
                 })
                 .collect(),
             timeouts: rule.timeouts.clone(),
@@ -151,11 +154,12 @@ pub fn compile_grpc(route: &GrpcRoute, snapshot: &Snapshot) -> CompiledHttpRoute
                     .backend_refs
                     .iter()
                     .map(|b| {
-                        let (endpoints, _) = resolve(&b.backend_ref.object, &namespace, "GRPCRoute", snapshot);
+                        let resolved = resolve(&b.backend_ref.object, &namespace, "GRPCRoute", snapshot);
                         Backend {
                             weight: b.backend_ref.weight.unwrap_or(1).max(0) as u32,
-                            endpoints,
+                            endpoints: resolved.endpoints,
                             app_protocol: Some("kubernetes.io/h2c".to_string()),
+                            tls: resolved.tls,
                             filters: b.filters.clone(),
                         }
                     })
@@ -197,8 +201,8 @@ pub fn compile_l4(route: &kube::core::Object<L4RouteSpec, RouteStatus>, kind: &s
                 .backend_refs
                 .iter()
                 .map(|b| {
-                    let (endpoints, app_protocol) = resolve(&b.object, &namespace, kind, snapshot);
-                    Backend { weight: b.weight.unwrap_or(1).max(0) as u32, endpoints, app_protocol, filters: Vec::new() }
+                    let resolved = resolve(&b.object, &namespace, kind, snapshot);
+                    Backend { weight: b.weight.unwrap_or(1).max(0) as u32, endpoints: resolved.endpoints, app_protocol: resolved.app_protocol, tls: None, filters: Vec::new() }
                 })
                 .collect(),
             timeouts: None,
@@ -214,27 +218,41 @@ pub fn compile_l4(route: &kube::core::Object<L4RouteSpec, RouteStatus>, kind: &s
     }
 }
 
-/// A backendRef → its ready endpoints and `appProtocol`.
-pub fn resolve(reference: &BackendObjectReference, route_namespace: &str, route_kind: &str, snapshot: &Snapshot) -> (Result<Vec<String>, String>, Option<String>) {
+/// What a backendRef resolves to.
+pub struct Resolved {
+    /// Every ready `ip:port`; `Err` when the reference doesn't resolve.
+    pub endpoints: Result<Vec<String>, String>,
+    pub app_protocol: Option<String>,
+    pub tls: Option<Result<super::backend_tls::BackendTls, String>>,
+}
+
+/// A backendRef → its ready endpoints, `appProtocol` and BackendTLSPolicy.
+pub fn resolve(reference: &BackendObjectReference, route_namespace: &str, route_kind: &str, snapshot: &Snapshot) -> Resolved {
+    let failed = |e: String| Resolved { endpoints: Err(e), app_protocol: None, tls: None };
     if !reference.group().is_empty() || reference.kind() != "Service" {
-        return (Err(format!("unsupported backend kind {}", reference.kind())), None);
+        return failed(format!("unsupported backend kind {}", reference.kind()));
     }
     let namespace = reference.namespace.clone().unwrap_or_else(|| route_namespace.to_string());
     if namespace != route_namespace && !super::translate::granted(snapshot, GATEWAY_GROUP, route_kind, route_namespace, "", "Service", &namespace, &reference.name) {
-        return (Err("not permitted by a ReferenceGrant".to_string()), None);
+        return failed("not permitted by a ReferenceGrant".to_string());
     }
     let Some(service) = snapshot.services.iter().find(|s| s.namespace().as_deref() == Some(namespace.as_str()) && s.name_any() == reference.name) else {
-        return (Err(format!("Service {namespace}/{} not found", reference.name)), None);
+        return failed(format!("Service {namespace}/{} not found", reference.name));
     };
     let Some(port) = reference.port else {
-        return (Err("a Service backend needs a port".to_string()), None);
+        return failed("a Service backend needs a port".to_string());
     };
     let service_port = service.spec.as_ref().and_then(|s| s.ports.as_ref()).and_then(|ports| ports.iter().find(|p| p.port == port)).cloned();
     let Some(service_port) = service_port else {
-        return (Err(format!("Service {namespace}/{} has no port {port}", reference.name)), None);
+        return failed(format!("Service {namespace}/{} has no port {port}", reference.name));
     };
     let endpoints = endpoints(snapshot, &namespace, &service.name_any(), service_port.name.as_deref());
-    (Ok(endpoints), service_port.app_protocol.clone())
+    let tls = if snapshot.backend_tls_policies.is_empty() {
+        None
+    } else {
+        super::backend_tls::for_service(&super::backend_tls::evaluate(snapshot), snapshot, &namespace, &reference.name, service_port.name.as_deref())
+    };
+    Resolved { endpoints: Ok(endpoints), app_protocol: service_port.app_protocol.clone(), tls }
 }
 
 /// Ready endpoints of a Service port, from its EndpointSlices.

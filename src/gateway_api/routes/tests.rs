@@ -27,21 +27,21 @@ fn backends_resolve_to_ready_endpoints_through_named_ports() {
         ]))],
         ..Default::default()
     };
-    let (endpoints, app_protocol) = resolve(&reference("web", Some(80)), "ns", "HTTPRoute", &snapshot);
+    let crate::gateway_api::routes::Resolved { endpoints, app_protocol, .. } = resolve(&reference("web", Some(80)), "ns", "HTTPRoute", &snapshot);
     assert_eq!(Ok(vec!["10.1.0.2:8080".to_string(), "[fd00::4]:8080".to_string()]), endpoints, "not-ready left out, IPv6 bracketed");
     assert_eq!(Some("kubernetes.io/h2c".to_string()), app_protocol);
-    assert_eq!(Ok(vec!["10.1.0.2:9000".to_string(), "[fd00::4]:9000".to_string()]), resolve(&reference("web", Some(9000)), "ns", "HTTPRoute", &snapshot).0);
+    assert_eq!(Ok(vec!["10.1.0.2:9000".to_string(), "[fd00::4]:9000".to_string()]), resolve(&reference("web", Some(9000)), "ns", "HTTPRoute", &snapshot).endpoints);
 }
 
 #[test]
 fn unresolvable_backends_are_errors() {
     let snapshot = Snapshot { services: vec![service("ns", "web", serde_json::json!([{"port": 80}]))], ..Default::default() };
-    assert!(resolve(&reference("web", None), "ns", "HTTPRoute", &snapshot).0.is_err(), "a port is required");
-    assert!(resolve(&reference("web", Some(81)), "ns", "HTTPRoute", &snapshot).0.is_err());
-    assert!(resolve(&reference("nope", Some(80)), "ns", "HTTPRoute", &snapshot).0.is_err());
+    assert!(resolve(&reference("web", None), "ns", "HTTPRoute", &snapshot).endpoints.is_err(), "a port is required");
+    assert!(resolve(&reference("web", Some(81)), "ns", "HTTPRoute", &snapshot).endpoints.is_err());
+    assert!(resolve(&reference("nope", Some(80)), "ns", "HTTPRoute", &snapshot).endpoints.is_err());
     let other_ns = BackendObjectReference { namespace: Some("elsewhere".to_string()), ..reference("web", Some(80)) };
-    assert!(resolve(&other_ns, "ns", "HTTPRoute", &snapshot).0.is_err(), "no ReferenceGrant");
-    assert_eq!(Ok(Vec::<String>::new()), resolve(&reference("web", Some(80)), "ns", "HTTPRoute", &snapshot).0, "no endpoints yet: resolvable, empty");
+    assert!(resolve(&other_ns, "ns", "HTTPRoute", &snapshot).endpoints.is_err(), "no ReferenceGrant");
+    assert_eq!(Ok(Vec::<String>::new()), resolve(&reference("web", Some(80)), "ns", "HTTPRoute", &snapshot).endpoints, "no endpoints yet: resolvable, empty");
 }
 
 #[test]

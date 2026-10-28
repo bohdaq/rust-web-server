@@ -25,7 +25,7 @@ use kube::{Client, Resource, ResourceExt};
 use serde::de::DeserializeOwned;
 use tokio::sync::Notify;
 
-use super::resources::{self, Gateway, GatewayClass, GrpcRoute, HttpRoute, ListenerSet, ReferenceGrant, TcpRoute, TlsRoute, UdpRoute};
+use super::resources::{self, BackendTlsPolicy, Gateway, GatewayClass, GrpcRoute, HttpRoute, ListenerSet, ReferenceGrant, TcpRoute, TlsRoute, UdpRoute};
 use super::translate::{translate, GatewayConfig, Settings, Snapshot};
 use super::types::RouteParentStatus;
 
@@ -55,6 +55,7 @@ pub struct Stores {
     pub tcp_routes: Store<TcpRoute>,
     pub udp_routes: Store<UdpRoute>,
     pub listener_sets: Store<ListenerSet>,
+    pub backend_tls_policies: Store<BackendTlsPolicy>,
     pub reference_grants: Store<ReferenceGrant>,
     pub services: Store<Service>,
     pub namespaces: Store<Namespace>,
@@ -80,6 +81,7 @@ impl Stores {
             tcp_routes: all(&self.tcp_routes),
             udp_routes: all(&self.udp_routes),
             listener_sets: all(&self.listener_sets),
+            backend_tls_policies: all(&self.backend_tls_policies),
             reference_grants: all(&self.reference_grants),
             services: all(&self.services),
             namespaces: all(&self.namespaces),
@@ -123,6 +125,7 @@ pub fn start_watches(client: &Client) -> (Stores, Arc<Notify>) {
         tcp_routes: watch(Api::all_with(client.clone(), &resources::tcp_routes()), resources::tcp_routes(), Arc::clone(&changed)),
         udp_routes: watch(Api::all_with(client.clone(), &resources::udp_routes()), resources::udp_routes(), Arc::clone(&changed)),
         listener_sets: watch(Api::all_with(client.clone(), &resources::listener_sets()), resources::listener_sets(), Arc::clone(&changed)),
+        backend_tls_policies: watch(Api::all_with(client.clone(), &resources::backend_tls_policies()), resources::backend_tls_policies(), Arc::clone(&changed)),
         reference_grants: watch(Api::all_with(client.clone(), &resources::reference_grants()), resources::reference_grants(), Arc::clone(&changed)),
         services: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
         namespaces: watch(Api::all(client.clone()), (), Arc::clone(&changed)),
@@ -216,6 +219,21 @@ pub async fn reconcile(client: &Client, stores: &Stores, options: &Options) -> R
         }
     }
     let controller_name = options.settings.controller_name.as_str();
+    for policy in &snapshot.backend_tls_policies {
+        let namespace = policy.namespace().unwrap_or_default();
+        let Some(ours) = desired.backend_tls_policies.get(&(namespace.clone(), policy.name_any())) else { continue };
+        let current = policy.status.as_ref().map(|s| s.ancestors.clone()).unwrap_or_default();
+        let mut ancestors: Vec<super::types::PolicyAncestorStatus> = current.iter().filter(|a| a.controller_name != controller_name).cloned().collect();
+        ancestors.extend(ours.iter().cloned());
+        if ancestors == current {
+            continue;
+        }
+        let api: Api<BackendTlsPolicy> = Api::namespaced_with(client.clone(), &namespace, &resources::backend_tls_policies());
+        let status = super::types::PolicyStatus { ancestors };
+        if let Err(e) = patch_status(&api, &policy.name_any(), &status, policy.resource_version()).await {
+            failures.push(e);
+        }
+    }
     failures.extend(write_route_status(client, &snapshot.http_routes, &desired.http_routes, &resources::http_routes(), controller_name).await);
     failures.extend(write_route_status(client, &snapshot.grpc_routes, &desired.grpc_routes, &resources::grpc_routes(), controller_name).await);
     failures.extend(write_route_status(client, &snapshot.tls_routes, &desired.tls_routes, &resources::tls_routes(), controller_name).await);

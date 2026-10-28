@@ -11,7 +11,7 @@ fn route(name: &str, created: &str, hostnames: &[&str], backends: Vec<Backend>) 
 }
 
 fn backend(weight: u32, endpoints: &[&str]) -> Backend {
-    Backend { weight, endpoints: Ok(endpoints.iter().map(|e| e.to_string()).collect()), app_protocol: None, filters: vec![] }
+    Backend { weight, endpoints: Ok(endpoints.iter().map(|e| e.to_string()).collect()), app_protocol: None, tls: None, filters: vec![] }
 }
 
 #[test]

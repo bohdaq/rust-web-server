@@ -1483,6 +1483,33 @@ pub(crate) fn forward_h2(
     h2_upstream::forward(request, client_ip, &h2_upstream::Target { backend: &backend, tls, connect_timeout, read_timeout, authority: None })
 }
 
+/// Forward over TLS to `ip:port` with `config`, `server_name` as SNI (and
+/// the name `config`'s verifier checks), `host_header` as the `Host` — the
+/// Gateway API router's BackendTLSPolicy backends. Connections are pooled
+/// per `label` (one per distinct policy content).
+#[cfg(feature = "gateway-api")]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn forward_tls_with_host(
+    config: &Arc<rustls::ClientConfig>,
+    label: &str,
+    request: &Request,
+    client_ip: &str,
+    ip: &str,
+    port: u16,
+    server_name: &str,
+    host_header: &str,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
+    let pool = tls_pool_for_ca(label);
+    forward_via(pool, request, client_ip, ip, port, host_header, read_timeout, || {
+        let tcp = connect_tcp(ip, port, connect_timeout)?;
+        let name = rustls::pki_types::ServerName::try_from(server_name.to_string()).map_err(|e| format!("invalid TLS server name '{server_name}': {e}"))?;
+        let conn = rustls::ClientConnection::new(Arc::clone(config), name).map_err(|e| e.to_string())?;
+        Ok(rustls::StreamOwned::new(conn, tcp))
+    })
+}
+
 /// Forward over cleartext HTTP/2 with prior knowledge (h2c) to `host:port`,
 /// sending `authority` as `:authority` — the Gateway API router's
 /// `kubernetes.io/h2c` backends.

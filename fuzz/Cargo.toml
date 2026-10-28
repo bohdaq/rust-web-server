@@ -204,3 +204,10 @@ path = "fuzz_targets/dns_message.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "x509_subject_alt_names"
+path = "fuzz_targets/x509_subject_alt_names.rs"
+test = false
+doc = false
+bench = false

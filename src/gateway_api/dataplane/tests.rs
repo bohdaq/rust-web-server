@@ -34,7 +34,7 @@ fn config(container_port: u16, backend: u16, protocol: &str, tls: Option<(Vec<u8
         name: None,
         matches: vec![HttpRouteMatch { path: Some(HttpPathMatch { match_type: Some("PathPrefix".to_string()), value: Some("/".to_string()) }), ..Default::default() }],
         filters: vec![],
-        backends: vec![Backend { weight: 1, endpoints: Ok(vec![format!("127.0.0.1:{backend}")]), app_protocol: None, filters: vec![] }],
+        backends: vec![Backend { weight: 1, endpoints: Ok(vec![format!("127.0.0.1:{backend}")]), app_protocol: None, tls: None, filters: vec![] }],
         timeouts: None,
         retry: None,
         mirrors: vec![],

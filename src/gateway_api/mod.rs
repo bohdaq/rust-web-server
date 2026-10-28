@@ -14,6 +14,7 @@
 //!   finds its listener, rule, backend and endpoint.
 //! - [`controller`] — watches, the reconcile loop and status writes.
 
+pub mod backend_tls;
 pub mod controller;
 pub mod dataplane;
 pub mod filters;

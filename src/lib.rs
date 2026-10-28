@@ -362,6 +362,12 @@ pub mod fuzz_api {
 
     /// A DNS message: the shared parser (SRV discovery, ACME DNS-01), TXT
     /// values and, with `acme`, a DNS UPDATE reply. Must never panic.
+    /// A certificate's subjectAltNames, as a BackendTLSPolicy checks a
+    /// backend's (untrusted) certificate. Must never panic.
+    pub fn x509_subject_alt_names(data: &[u8]) {
+        let _ = crate::core::x509::subject_alt_names(data);
+    }
+
     pub fn dns_message(data: &[u8]) {
         if let Ok(message) = crate::dns::parse(data) {
             for record in message.answers.iter().chain(&message.authority).chain(&message.additional) {

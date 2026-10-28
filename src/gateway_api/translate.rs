@@ -11,7 +11,7 @@ use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{Condition, LabelSelector, Time};
 use kube::ResourceExt;
 
-use super::resources::{Gateway, GatewayClass, GrpcRoute, HttpRoute, ListenerSet, ReferenceGrant, TcpRoute, TlsRoute, UdpRoute};
+use super::resources::{BackendTlsPolicy, Gateway, GatewayClass, GrpcRoute, HttpRoute, ListenerSet, ReferenceGrant, TcpRoute, TlsRoute, UdpRoute};
 use super::routes::CompiledHttpRoute;
 use super::services::ServiceSettings;
 use super::types::*;
@@ -40,6 +40,7 @@ pub struct Snapshot {
     pub tcp_routes: Vec<TcpRoute>,
     pub udp_routes: Vec<UdpRoute>,
     pub listener_sets: Vec<ListenerSet>,
+    pub backend_tls_policies: Vec<BackendTlsPolicy>,
     pub reference_grants: Vec<ReferenceGrant>,
     pub services: Vec<Service>,
     pub namespaces: Vec<Namespace>,
@@ -90,6 +91,8 @@ pub struct Desired {
     pub udp_routes: BTreeMap<(String, String), Vec<RouteParentStatus>>,
     /// (namespace, name) → status of the ListenerSets attached to our Gateways.
     pub listener_sets: BTreeMap<(String, String), ListenerSetStatus>,
+    /// (namespace, name) → this controller's ancestor statuses of each BackendTLSPolicy.
+    pub backend_tls_policies: BTreeMap<(String, String), Vec<PolicyAncestorStatus>>,
     /// (namespace, name) → the Service each of our Gateways should have.
     pub services: BTreeMap<(String, String), Service>,
 }
@@ -131,6 +134,8 @@ pub struct ClientCa {
 /// `pkg/features` at Gateway API v1.6.3; sorted). Grows with each phase;
 /// `FEATURES` in `.github/workflows/gateway-api.yml` must match.
 pub const SUPPORTED_FEATURES: &[&str] = &[
+    "BackendTLSPolicy",
+    "BackendTLSPolicySANValidation",
     "GRPCRoute",
     "GRPCRouteNamedRouteRule",
     "Gateway",
@@ -231,6 +236,8 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
             routes.iter().map(move |r| RouteIn::new(kind, r, &r.spec.parent_refs, &r.spec.hostnames, l4_references(&r.spec.rules), super::routes::compile_l4(r, kind, snapshot)))
         }));
     let mut attached: BTreeMap<ListenerKey, i32> = BTreeMap::new();
+    // (Service namespace, name) → Gateways with an attached route to it.
+    let mut service_gateways: BTreeMap<(String, String), BTreeSet<(String, String)>> = BTreeMap::new();
     for route in routes {
         let namespace = route.namespace.clone();
         let resolved = resolve_references(route.kind, &namespace, &route.references, snapshot);
@@ -260,6 +267,12 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
                 .map(|p| p.conditions.as_slice())
                 .unwrap_or_default();
             let (accepted, reason, message, attached_to) = attach(route.kind, route.hostnames, parent_ref, &namespace, &candidates, snapshot);
+            if !attached_to.is_empty() {
+                for reference in &route.references {
+                    let service = (reference.namespace.clone().unwrap_or_else(|| namespace.clone()), reference.name.clone());
+                    service_gateways.entry(service).or_default().insert(gateway_key.clone());
+                }
+            }
             for listener in &attached_to {
                 *attached.entry((gateway_key.clone(), owner.clone(), listener.clone())).or_default() += 1;
                 if let Some(view) = listeners.iter_mut().find(|l| l.gateway == gateway_key && l.owner == owner && &l.name == listener) {
@@ -284,6 +297,49 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
                 _ => &mut desired.http_routes,
             };
             statuses.insert((namespace, route.name), parents);
+        }
+    }
+
+    // BackendTLSPolicies: status per Gateway whose routes reach a target.
+    for ((namespace, name), evaluated) in super::backend_tls::evaluate(snapshot) {
+        let Some(policy) = snapshot.backend_tls_policies.iter().find(|p| p.namespace().as_deref() == Some(namespace.as_str()) && p.name_any() == name) else { continue };
+        let generation = policy.metadata.generation;
+        let gateways: BTreeSet<(String, String)> = policy
+            .spec
+            .target_refs
+            .iter()
+            .filter_map(|t| service_gateways.get(&(namespace.clone(), t.name.clone())))
+            .flatten()
+            .cloned()
+            .collect();
+        let previous = policy.status.as_ref().map(|s| s.ancestors.as_slice()).unwrap_or_default();
+        let ancestors: Vec<PolicyAncestorStatus> = gateways
+            .into_iter()
+            .map(|(gateway_namespace, gateway_name)| {
+                let ancestor_ref = ParentReference {
+                    group: Some(GATEWAY_GROUP.to_string()),
+                    kind: Some("Gateway".to_string()),
+                    namespace: Some(gateway_namespace),
+                    name: gateway_name,
+                    section_name: None,
+                    port: None,
+                };
+                let old = previous.iter().find(|a| a.controller_name == controller_name && a.ancestor_ref == ancestor_ref).map(|a| a.conditions.as_slice()).unwrap_or_default();
+                let conditions = vec![
+                    match &evaluated.accepted {
+                        Ok(()) => condition(old, "Accepted", true, "Accepted", "", generation, now),
+                        Err((reason, message)) => condition(old, "Accepted", false, reason, message, generation, now),
+                    },
+                    match &evaluated.resolved {
+                        Ok(()) => condition(old, "ResolvedRefs", true, "ResolvedRefs", "", generation, now),
+                        Err((reason, message)) => condition(old, "ResolvedRefs", false, reason, message, generation, now),
+                    },
+                ];
+                PolicyAncestorStatus { ancestor_ref, controller_name: controller_name.to_string(), conditions }
+            })
+            .collect();
+        if !ancestors.is_empty() {
+            desired.backend_tls_policies.insert((namespace, name), ancestors);
         }
     }
 

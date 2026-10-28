@@ -297,7 +297,24 @@ impl PortRouter {
         };
         let host_header = request.header("host").map(|h| h.value.to_string()).unwrap_or_else(|| endpoint.clone());
         let started = std::time::Instant::now();
-        let forwarded = if super::upgrade::is_upgrade(request) {
+        let forwarded = if let Some(tls) = &backend.tls {
+            match tls {
+                // A policy covers the backend but can't be used: never send it in the clear.
+                Err(_) => return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
+                Ok(tls) => crate::proxy::forward_tls_with_host(
+                    &tls.config,
+                    &tls.label,
+                    request,
+                    &connection.client.ip,
+                    ip,
+                    port,
+                    &tls.server_name,
+                    &host_header,
+                    timeout.min(Duration::from_secs(10)),
+                    timeout,
+                ),
+            }
+        } else if super::upgrade::is_upgrade(request) {
             super::upgrade::forward(request, &connection.client.ip, ip, port, &host_header, timeout)
         } else if backend.app_protocol.as_deref() == Some("kubernetes.io/h2c") {
             crate::proxy::forward_h2c_with_host(request, &connection.client.ip, ip, port, &host_header, timeout.min(Duration::from_secs(10)), timeout)

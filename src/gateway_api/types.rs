@@ -625,6 +625,80 @@ pub struct ListenerSetStatus {
     pub listeners: Vec<ListenerStatus>,
 }
 
+// ── BackendTLSPolicy (v1) ─────────────────────────────────────────────────────
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackendTlsPolicySpec {
+    #[serde(default)]
+    pub target_refs: Vec<PolicyTargetReference>,
+    #[serde(default)]
+    pub validation: BackendTlsValidation,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub options: BTreeMap<String, String>,
+}
+
+/// A Service in the policy's namespace, optionally one port (by name).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyTargetReference {
+    #[serde(default)]
+    pub group: String,
+    pub kind: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section_name: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackendTlsValidation {
+    #[serde(default)]
+    pub ca_certificate_refs: Vec<TypedLocalReference>,
+    /// `System`: the platform's trusted roots.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub well_known_ca_certificates: Option<String>,
+    #[serde(default)]
+    pub hostname: String,
+    #[serde(default)]
+    pub subject_alt_names: Vec<PolicySubjectAltName>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct TypedLocalReference {
+    #[serde(default)]
+    pub group: String,
+    pub kind: String,
+    pub name: String,
+}
+
+/// `type` `Hostname` or `URI`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicySubjectAltName {
+    #[serde(rename = "type")]
+    pub san_type: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub hostname: String,
+    #[serde(default, rename = "uri", skip_serializing_if = "String::is_empty")]
+    pub uri: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PolicyStatus {
+    #[serde(default)]
+    pub ancestors: Vec<PolicyAncestorStatus>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyAncestorStatus {
+    pub ancestor_ref: ParentReference,
+    pub controller_name: String,
+    #[serde(default)]
+    pub conditions: Vec<Condition>,
+}
+
 /// The status every route kind has.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct RouteStatus {
