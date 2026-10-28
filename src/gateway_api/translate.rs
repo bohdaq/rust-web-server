@@ -648,6 +648,11 @@ fn mark_conflicts(views: &mut [ListenerView]) {
                 views[j].accepted = false;
                 views[j].accepted_reason = reason;
             }
+            // A listener that can't be served carries no route kinds (the suite
+            // expects none for the mixed TLS modes).
+            if mixed_tls {
+                views[j].supported_kinds.clear();
+            }
         }
     }
 }

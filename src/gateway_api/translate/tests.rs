@@ -637,6 +637,7 @@ fn mixed_tls_modes_on_a_port_and_parameters_refs_are_rejected() {
         let l = listener(&desired, "gateway-tlsroute-mixed-termination-not-supported", name);
         let c = find(&l.conditions, "Accepted");
         assert_eq!(("False", "ProtocolConflict"), (c.status.as_str(), c.reason.as_str()), "{name}");
+        assert!(l.supported_kinds.is_empty(), "{name}");
     }
     let g = &desired.gateways[&(INFRA.to_string(), "gateway-invalid-parameters-ref".to_string())];
     let c = find(&g.conditions, "Accepted");
