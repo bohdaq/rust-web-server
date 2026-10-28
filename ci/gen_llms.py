@@ -22,7 +22,7 @@ HEADER = """# rws — Rust Web Server
 > the same engine as a Rust library (routing, middleware, MCP server, async ORM).
 
 Source: https://github.com/bohdaq/rust-web-server · Website: https://rws8.tech/ ·
-API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.88 · Version: {version}
+API: https://docs.rs/rust-web-server · License: MIT · MSRV: {msrv} · Version: {version}
 
 HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS and JSON are implemented in
 the crate — no hyper, Tower or Axum; HTTP/2 and HTTP/3 use `h2` and `quinn`/`h3`, TLS uses
@@ -48,6 +48,11 @@ This file is every page of the documentation site in one document, generated fro
 def version():
     with open(os.path.join(ROOT, "Cargo.toml")) as f:
         return re.search(r'^version\s*=\s*"([^"]+)"', f.read(), re.M).group(1)
+
+
+def msrv():
+    with open(os.path.join(ROOT, "Cargo.toml")) as f:
+        return re.search(r'^rust-version\s*=\s*"([^"]+)"', f.read(), re.M).group(1)
 
 
 def sidebar():
@@ -94,8 +99,8 @@ def parse(path):
 def build():
     groups = sidebar()
     seen = set()
-    index = [HEADER.format(version=version())]
-    full = [HEADER.format(version=version()), FULL_NOTE]
+    index = [HEADER.format(version=version(), msrv=msrv())]
+    full = [HEADER.format(version=version(), msrv=msrv()), FULL_NOTE]
     for label, links in groups:
         entries = []
         for link, title in links:
