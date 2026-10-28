@@ -11,7 +11,9 @@
 #
 # Like for like: one kind node (the gateways and the backend share its CPUs
 # with the load generator, as a small production node would); every gateway
-# at its chart defaults with one data-plane replica, access logs as they ship;
+# at its chart defaults with one data-plane replica and no resource limits
+# (rws's chart sets limits by default; the others don't, so the run drops
+# them), access logs as they ship;
 # the same HTTPRoute (one rule, prefix /) to the same nginx backend (2 pods,
 # 1 KiB file, keep-alive, in its own namespace); MetalLB gives each Gateway a LoadBalancer address
 # on kind's Docker network; oha runs HTTP/1.1 keep-alive from the runner, no
@@ -158,8 +160,27 @@ YAML
   kubectl wait -n bench gateway/bench --for=condition=Programmed --timeout=300s
 }
 
+# The Gateway's address, once it has one (some report Programmed first).
 gateway_address() {
-  kubectl get -n bench gateway/bench -o jsonpath='{.status.addresses[0].value}'
+  local address=""
+  for _ in $(seq 1 90); do
+    address=$(kubectl get -n bench gateway/bench -o jsonpath='{.status.addresses[0].value}')
+    [ -n "$address" ] && break
+    sleep 2
+  done
+  [ -n "$address" ] || { echo "no Gateway address" >&2; return 1; }
+  echo "$address"
+}
+
+# Container restarts in <namespaces…> (a restart resets the CPU counters,
+# so a row with restarts isn't comparable).
+restarts() { # <namespaces…>
+  local total=0 n
+  for ns in "$@"; do
+    n=$(kubectl get pods -n "$ns" -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.restartCount}{"\n"}{end}{end}' 2>/dev/null | awk '{s+=$1} END {print s+0}')
+    total=$((total + n))
+  done
+  echo "$total"
 }
 
 # CPU nanoseconds the pods in <namespaces…> have used, and their working set.
@@ -182,13 +203,15 @@ measure() { # <name> <url> <namespaces…>
   for _ in $(seq 1 60); do curl -fsS -o /dev/null "$url" && break || sleep 2; done
   "$OHA" -z 5s -c 64 --no-tui --disable-compression "$url" > /dev/null 2>&1 || true   # warm-up
   for c in $CONNECTIONS; do
+    restarts_before=$(restarts "$@")
     read -r cpu_before _ < <(pod_usage "$@")
     "$OHA" -z "$DURATION" -c "$c" --no-tui --disable-compression --output-format json "$url" > "$WORK/oha.json"
     sleep 1
     read -r cpu_after mem_after < <(pod_usage "$@")
-    python3 -I - "$name" "$c" "$WORK/oha.json" "$((cpu_after - cpu_before))" "$mem_after" >> "$RESULTS" <<'EOF'
+    restarted=$(( $(restarts "$@") - restarts_before ))
+    python3 -I - "$name" "$c" "$WORK/oha.json" "$((cpu_after - cpu_before))" "$mem_after" "$restarted" >> "$RESULTS" <<'EOF'
 import json, sys
-name, conns, path, cpu_ns, mem = sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4]), int(sys.argv[5])
+name, conns, path, cpu_ns, mem, restarted = sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6])
 d = json.load(open(path))
 codes = d.get("statusCodeDistribution", {})
 total = sum(codes.values()) or 1
@@ -200,6 +223,7 @@ print(json.dumps({
     "ok_pct": round(100 * codes.get("200", 0) / total, 2),
     "cpu_us_per_req": round(cpu_ns / 1000 / total, 1),
     "mem_mib": round(mem / 2**20, 1),
+    "restarts": restarted,
 }))
 EOF
     log "$name c=$c: $(tail -1 "$RESULTS")"
@@ -221,6 +245,7 @@ bench_rws() {
     --set image.repository=rws --set image.tag=bench --set image.pullPolicy=Never \
     --set gatewayAPI.enabled=true --set tls.enabled=false --set quic.enabled=false \
     --set replicaCount=1 --set podDisruptionBudget.enabled=false \
+    --set resources.limits=null \
     --wait --timeout 5m
   kubectl wait gatewayclass/rws --for=condition=Accepted --timeout=120s
   gateway_and_route rws 80
@@ -316,13 +341,13 @@ rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
 out, duration = sys.argv[2], sys.argv[3]
 json.dump(rows, open(f"{out}/results.json", "w"), indent=1)
 lines = [f"Gateway API data planes, HTTP/1.1 keep-alive GET of a 1 KiB file through each, {duration} per run, one kind node.", "",
-         "| Gateway | Conns | req/s | p50 ms | p99 ms | 200s % | CPU µs/req | Memory MiB |",
-         "|---|---:|---:|---:|---:|---:|---:|---:|"]
+         "| Gateway | Conns | req/s | p50 ms | p99 ms | 200s % | CPU µs/req | Memory MiB | Restarts |",
+         "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
 for r in rows:
     if r.get("failed"):
-        lines.append(f"| {r['gateway']} | — | failed | | | | | |")
+        lines.append(f"| {r['gateway']} | — | failed | | | | | | |")
     else:
-        lines.append(f"| {r['gateway']} | {r['connections']} | {r['rps']} | {r['p50_ms']} | {r['p99_ms']} | {r['ok_pct']} | {r['cpu_us_per_req']} | {r['mem_mib']} |")
+        lines.append(f"| {r['gateway']} | {r['connections']} | {r['rps']} | {r['p50_ms']} | {r['p99_ms']} | {r['ok_pct']} | {r['cpu_us_per_req']} | {r['mem_mib']} | {r['restarts']} |")
 open(f"{out}/results.md", "w").write("\n".join(lines) + "\n")
 print("\n".join(lines))
 EOF
