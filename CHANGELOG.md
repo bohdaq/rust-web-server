@@ -9,6 +9,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Changed
 
+- Gateway API router: requests are forwarded on the connection's task
+  through the async upstream forwarder (plain and BackendTLSPolicy backends;
+  pools of up to 1024 idle connections per endpoint) instead of holding a
+  blocking-pool thread each. At 256 connections the blocking path fell to
+  15k req/s with 119 ms p99 and some failed requests in the gateway
+  benchmark. Upgrades and h2c backends keep the blocking path.
 - Helm chart: with `gatewayAPI.enabled` the pods get no CPU limit (the
   `resources.limits.cpu` default of `500m` is left out; memory and requests
   apply as set). A Gateway API data plane serves every Gateway's traffic, and

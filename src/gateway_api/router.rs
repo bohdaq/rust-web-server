@@ -8,6 +8,9 @@
 //! the most query-parameter matches; ties go to the oldest route, then the
 //! route's `namespace/name`, then rule and match order.
 
+// `Err(Response)` is the answer itself (a redirect, a 404, a 504), moved once.
+#![allow(clippy::result_large_err)]
+
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -209,58 +212,123 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 /// Wait between retries without `retry.backoff`.
 const DEFAULT_BACKOFF: Duration = Duration::from_millis(25);
 
+/// A rule's `timeouts` and `retry`, as the forwarding loop applies them:
+/// `request` bounds the whole exchange, `backendRequest` each attempt (`0s`
+/// disables; passing either is a `504`); `attempts` retries on the listed
+/// `codes`, connection errors and backend timeouts, `backoff` apart.
+struct Policy<'a> {
+    rule: &'a CompiledRule,
+    deadline: Option<std::time::Instant>,
+    per_attempt: Option<Duration>,
+    retries: u32,
+    backoff: Duration,
+    attempt: u32,
+}
+
+impl<'a> Policy<'a> {
+    fn new(rule: &'a CompiledRule) -> Policy<'a> {
+        let limit = |value: Option<&String>| value.and_then(|v| filters::duration(v)).filter(|d| !d.is_zero());
+        let timeouts = rule.timeouts.as_ref();
+        Policy {
+            rule,
+            deadline: limit(timeouts.and_then(|t| t.request.as_ref())).map(|d| std::time::Instant::now() + d),
+            per_attempt: limit(timeouts.and_then(|t| t.backend_request.as_ref())),
+            retries: rule.retry.as_ref().map(|r| r.attempts.unwrap_or(1).max(0) as u32).unwrap_or(0),
+            backoff: rule.retry.as_ref().and_then(|r| r.backoff.as_deref()).and_then(filters::duration).unwrap_or(DEFAULT_BACKOFF),
+            attempt: 0,
+        }
+    }
+
+    /// The next attempt's timeout, or the `504` when the request's time is up.
+    fn timeout(&self) -> Result<Duration, Response> {
+        let left = self.deadline.map(|d| d.saturating_duration_since(std::time::Instant::now()));
+        if left.is_some_and(|l| l.is_zero()) {
+            return Err(status(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout));
+        }
+        Ok([self.per_attempt, left].into_iter().flatten().min().unwrap_or(DEFAULT_TIMEOUT))
+    }
+
+    /// The response to send, or how long to wait before retrying.
+    fn settle(&mut self, outcome: Attempt) -> Result<Response, Duration> {
+        let retry_on = |code: i16| self.rule.retry.as_ref().is_some_and(|r| r.codes.contains(&(code as i32)));
+        let retry = self.attempt < self.retries
+            && match &outcome {
+                Attempt::Response(response) => retry_on(response.status_code),
+                Attempt::Failed { .. } => true,
+            };
+        if !retry {
+            return Ok(match outcome {
+                Attempt::Response(response) => response,
+                Attempt::Failed { timed_out: true } => status(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout),
+                Attempt::Failed { timed_out: false } => status(STATUS_CODE_REASON_PHRASE.n502_bad_gateway),
+            });
+        }
+        self.attempt += 1;
+        Err(self.deadline.map_or(self.backoff, |d| self.backoff.min(d.saturating_duration_since(std::time::Instant::now()))))
+    }
+}
+
+/// Where one attempt goes: the backend picked by weight, an endpoint of it,
+/// and the request as that backend's filters leave it.
+struct Target<'a> {
+    backend: &'a super::routes::Backend,
+    request: std::borrow::Cow<'a, Request>,
+    ip: String,
+    port: u16,
+    host_header: String,
+}
+
+/// The upstream timeouts of an attempt with `timeout` to go.
+fn connect_timeout(timeout: Duration) -> Duration {
+    timeout.min(Duration::from_secs(10))
+}
+
 impl PortRouter {
-    /// Forward within the rule's `timeouts` (`request` for the whole
-    /// exchange, `backendRequest` per attempt; `0s` disables — passing either
-    /// is a `504`) and `retry` (`attempts` retries on the listed `codes`,
-    /// connection errors and backend timeouts, `backoff` apart).
     #[cfg(test)]
     fn forward(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo) -> Response {
         self.forward_with(rule, request, connection, None)
     }
 
-    /// [`PortRouter::forward`], presenting `client_cert` (the Gateway's) to
-    /// TLS backends.
+    /// Forward within the rule's [`Policy`], presenting `client_cert` (the
+    /// Gateway's) to TLS backends; blocks for the whole exchange.
     fn forward_with(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Response {
-        let limit = |value: Option<&String>| value.and_then(|v| filters::duration(v)).filter(|d| !d.is_zero());
-        let timeouts = rule.timeouts.as_ref();
-        let deadline = limit(timeouts.and_then(|t| t.request.as_ref())).map(|d| std::time::Instant::now() + d);
-        let per_attempt = limit(timeouts.and_then(|t| t.backend_request.as_ref()));
-        let retries = rule.retry.as_ref().map(|r| r.attempts.unwrap_or(1).max(0) as u32).unwrap_or(0);
-        let backoff = rule.retry.as_ref().and_then(|r| r.backoff.as_deref()).and_then(filters::duration).unwrap_or(DEFAULT_BACKOFF);
-        let retry_on = |code: i16| rule.retry.as_ref().is_some_and(|r| r.codes.contains(&(code as i32)));
-        let mut attempt = 0;
+        let mut policy = Policy::new(rule);
         loop {
-            let left = deadline.map(|d| d.saturating_duration_since(std::time::Instant::now()));
-            if left.is_some_and(|l| l.is_zero()) {
-                return status(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout);
+            let timeout = match policy.timeout() {
+                Ok(timeout) => timeout,
+                Err(response) => return response,
+            };
+            match policy.settle(self.attempt(rule, request, connection, timeout, client_cert)) {
+                Ok(response) => return response,
+                Err(pause) => std::thread::sleep(pause),
             }
-            let timeout = [per_attempt, left].into_iter().flatten().min().unwrap_or(DEFAULT_TIMEOUT);
-            let outcome = self.attempt(rule, request, connection, timeout, client_cert);
-            let retry = attempt < retries
-                && match &outcome {
-                    Attempt::Response(response) => retry_on(response.status_code),
-                    Attempt::Failed { .. } => true,
-                };
-            if !retry {
-                return match outcome {
-                    Attempt::Response(response) => response,
-                    Attempt::Failed { timed_out: true } => status(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout),
-                    Attempt::Failed { timed_out: false } => status(STATUS_CODE_REASON_PHRASE.n502_bad_gateway),
-                };
-            }
-            attempt += 1;
-            let pause = deadline.map_or(backoff, |d| backoff.min(d.saturating_duration_since(std::time::Instant::now())));
-            std::thread::sleep(pause);
         }
     }
 
-    /// Pick a backend by weight, then an endpoint, and forward once.
-    fn attempt(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, timeout: Duration, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Attempt {
+    /// [`PortRouter::forward_with`] without blocking a thread: plain and
+    /// BackendTLSPolicy backends through the async forwarder, h2c ones on
+    /// the blocking pool.
+    async fn forward_async(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Response {
+        let mut policy = Policy::new(rule);
+        loop {
+            let timeout = match policy.timeout() {
+                Ok(timeout) => timeout,
+                Err(response) => return response,
+            };
+            match policy.settle(self.attempt_async(rule, request, connection, timeout, client_cert).await) {
+                Ok(response) => return response,
+                Err(pause) => tokio::time::sleep(pause).await,
+            }
+        }
+    }
+
+    /// Pick a backend by weight and an endpoint; `Err` is the response
+    /// when there is nothing to send to.
+    fn target<'a>(&self, rule: &'a CompiledRule, request: &'a Request) -> Result<Target<'a>, Response> {
         let total: u32 = rule.backends.iter().map(|b| b.weight).sum();
         if total == 0 {
             // No backends, or all weighted 0: the spec's 500.
-            return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error));
+            return Err(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error));
         }
         let roll = (self.counter.fetch_add(1, Ordering::Relaxed) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32;
         let mut pick = (roll % total as u64) as u32;
@@ -276,9 +344,8 @@ impl PortRouter {
                 }
             })
             .expect("weights sum to total");
-        let modified;
         let request = if backend.filters.is_empty() {
-            request
+            std::borrow::Cow::Borrowed(request)
         } else {
             let mut copy = request.clone();
             for filter in &backend.filters {
@@ -286,67 +353,84 @@ impl PortRouter {
                     filters::modify_headers(&mut copy.headers, f);
                 }
             }
-            modified = copy;
-            &modified
+            std::borrow::Cow::Owned(copy)
         };
         let endpoints = match &backend.endpoints {
-            Err(_) => return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
-            Ok(e) if e.is_empty() => return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n503_service_unavailable)),
+            Err(_) => return Err(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
+            Ok(e) if e.is_empty() => return Err(status(STATUS_CODE_REASON_PHRASE.n503_service_unavailable)),
             Ok(e) => e,
         };
         let endpoint = &endpoints[self.counter.fetch_add(1, Ordering::Relaxed) % endpoints.len()];
-        let Some((ip, port)) = endpoint.rsplit_once(':') else {
-            return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error));
-        };
-        let ip = ip.trim_start_matches('[').trim_end_matches(']');
-        let Ok(port) = port.parse::<u16>() else {
-            return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error));
-        };
+        let (ip, port) = endpoint
+            .rsplit_once(':')
+            .and_then(|(ip, port)| Some((ip.trim_start_matches('[').trim_end_matches(']').to_string(), port.parse::<u16>().ok()?)))
+            .ok_or_else(|| status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error))?;
         let host_header = request.header("host").map(|h| h.value.to_string()).unwrap_or_else(|| endpoint.clone());
+        Ok(Target { backend, request, ip, port, host_header })
+    }
+
+    /// The BackendTLSPolicy configuration for a target, with the Gateway's
+    /// client certificate when it has one; `None` for a plain backend.
+    fn backend_tls(target: &Target, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Result<Option<super::backend_tls::BackendTls>, Response> {
+        match &target.backend.tls {
+            None => Ok(None),
+            // A policy covers the backend but can't be used: never send it in the clear.
+            Some(Err(_)) => Err(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
+            Some(Ok(tls)) => match client_cert {
+                None => Ok(Some(tls.clone())),
+                Some((chain, key)) => tls.with_client_cert(chain, key).map(Some).map_err(|_| status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
+            },
+        }
+    }
+
+    /// Forward once, blocking.
+    fn attempt(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, timeout: Duration, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Attempt {
+        let target = match self.target(rule, request) {
+            Ok(target) => target,
+            Err(response) => return Attempt::Response(response),
+        };
+        let tls = match Self::backend_tls(&target, client_cert) {
+            Ok(tls) => tls,
+            Err(response) => return Attempt::Response(response),
+        };
+        let (request, ip, port, host_header) = (target.request.as_ref(), target.ip.as_str(), target.port, target.host_header.as_str());
         let started = std::time::Instant::now();
-        let forwarded = if let Some(tls) = &backend.tls {
-            match tls {
-                // A policy covers the backend but can't be used: never send it in the clear.
-                Err(_) => return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
-                Ok(tls) => {
-                    let presenting;
-                    let tls = match client_cert.map(|(chain, key)| tls.with_client_cert(chain, key)) {
-                        None => tls,
-                        Some(Ok(with)) => {
-                            presenting = with;
-                            &presenting
-                        }
-                        Some(Err(_)) => return Attempt::Response(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
-                    };
-                    crate::proxy::forward_tls_with_host(
-                    &tls.config,
-                    &tls.label,
-                    request,
-                    &connection.client.ip,
-                    ip,
-                    port,
-                    &tls.server_name,
-                    &host_header,
-                    timeout.min(Duration::from_secs(10)),
-                    timeout,
-                    )
-                }
-            }
+        let forwarded = if let Some(tls) = &tls {
+            crate::proxy::forward_tls_with_host(&tls.config, &tls.label, request, &connection.client.ip, ip, port, &tls.server_name, host_header, connect_timeout(timeout), timeout)
         } else if super::upgrade::is_upgrade(request) {
-            super::upgrade::forward(request, &connection.client.ip, ip, port, &host_header, timeout)
-        } else if backend.app_protocol.as_deref() == Some("kubernetes.io/h2c") {
-            crate::proxy::forward_h2c_with_host(request, &connection.client.ip, ip, port, &host_header, timeout.min(Duration::from_secs(10)), timeout)
+            super::upgrade::forward(request, &connection.client.ip, ip, port, host_header, timeout)
+        } else if target.backend.app_protocol.as_deref() == Some("kubernetes.io/h2c") {
+            crate::proxy::forward_h2c_with_host(request, &connection.client.ip, ip, port, host_header, connect_timeout(timeout), timeout)
         } else {
-            crate::proxy::forward_pooled_with_host(
-            crate::proxy::shared_pool(),
-            request,
-            &connection.client.ip,
-            ip,
-            port,
-            &host_header,
-                timeout.min(Duration::from_secs(10)),
-                timeout,
-            )
+            crate::proxy::forward_pooled_with_host(crate::proxy::shared_pool(), request, &connection.client.ip, ip, port, host_header, connect_timeout(timeout), timeout)
+        };
+        match forwarded {
+            Ok(response) => Attempt::Response(response),
+            Err(_) => Attempt::Failed { timed_out: started.elapsed() >= timeout },
+        }
+    }
+
+    /// Forward once without blocking (upgrades never get here: they take
+    /// the blocking path, [`Application::execute`]).
+    async fn attempt_async(&self, rule: &CompiledRule, request: &Request, connection: &ConnectionInfo, timeout: Duration, client_cert: Option<&(Vec<u8>, Vec<u8>)>) -> Attempt {
+        let target = match self.target(rule, request) {
+            Ok(target) => target,
+            Err(response) => return Attempt::Response(response),
+        };
+        let tls = match Self::backend_tls(&target, client_cert) {
+            Ok(tls) => tls,
+            Err(response) => return Attempt::Response(response),
+        };
+        let started = std::time::Instant::now();
+        let forwarded = if tls.is_none() && target.backend.app_protocol.as_deref() == Some("kubernetes.io/h2c") {
+            // HTTP/2 upstreams have their own runtime and a blocking API.
+            let (request, client_ip, ip, port, host) = (target.request.into_owned(), connection.client.ip.clone(), target.ip, target.port, target.host_header);
+            tokio::task::spawn_blocking(move || crate::proxy::forward_h2c_with_host(&request, &client_ip, &ip, port, &host, connect_timeout(timeout), timeout))
+                .await
+                .unwrap_or_else(|e| Err(e.to_string()))
+        } else {
+            let tls = tls.as_ref().map(|t| (t.server_name.as_str(), crate::proxy::async_upstream::AsyncTls { config: std::sync::Arc::clone(&t.config), pool: crate::proxy::async_upstream::gateway_tls_pool(&t.label) }));
+            crate::proxy::async_upstream::forward_gateway(&target.request, &connection.client.ip, &target.ip, target.port, &target.host_header, tls, connect_timeout(timeout), timeout).await
         };
         match forwarded {
             Ok(response) => Attempt::Response(response),
@@ -355,17 +439,25 @@ impl PortRouter {
     }
 }
 
+/// What the rule's filters made of a request, before it's forwarded.
+struct Prepared<'a> {
+    /// The request as the filters left it (`None`: unchanged).
+    request: Option<Request>,
+    response_filters: Vec<&'a HttpRouteFilter>,
+    cors_headers: Vec<crate::header::Header>,
+}
+
 impl PortRouter {
-    /// Run the rule's filters in order around forwarding: a redirect or a
-    /// CORS preflight answers here; header modifiers, rewrites and CORS
-    /// headers change the request or the response.
-    fn route(&self, listener: &ListenerConfig, rule: &CompiledRule, matched: &HttpRouteMatch, request: &Request, host: &str, connection: &ConnectionInfo) -> Response {
+    /// Run the rule's filters in order: a redirect or a CORS preflight is
+    /// the answer (`Err`); header modifiers, rewrites and mirrors act on the
+    /// request now; response modifiers and CORS headers wait for
+    /// [`PortRouter::finish`].
+    fn prepare<'a>(&self, listener: &ListenerConfig, rule: &'a CompiledRule, matched: &HttpRouteMatch, request: &Request, host: &str, connection: &ConnectionInfo) -> Result<Prepared<'a>, Response> {
+        let mut prepared = Prepared { request: None, response_filters: Vec::new(), cors_headers: Vec::new() };
         if rule.filters.is_empty() {
-            return self.forward_with(rule, request, connection, listener.backend_client_cert.as_ref());
+            return Ok(prepared);
         }
         let mut request = request.clone();
-        let mut response_filters: Vec<&HttpRouteFilter> = Vec::new();
-        let mut cors_headers = Vec::new();
         let mut mirrored = 0;
         for filter in &rule.filters {
             match filter.filter_type.as_str() {
@@ -374,10 +466,10 @@ impl PortRouter {
                         filters::modify_headers(&mut request.headers, f);
                     }
                 }
-                "ResponseHeaderModifier" => response_filters.push(filter),
+                "ResponseHeaderModifier" => prepared.response_filters.push(filter),
                 "RequestRedirect" => {
                     if let Some(f) = &filter.request_redirect {
-                        return filters::redirect(&request, host, listener.protocol == "HTTPS", listener.port as u16, matched, f);
+                        return Err(filters::redirect(&request, host, listener.protocol == "HTTPS", listener.port as u16, matched, f));
                     }
                 }
                 "URLRewrite" => {
@@ -399,15 +491,15 @@ impl PortRouter {
                             Cors::Preflight(headers) => {
                                 let mut response = status(STATUS_CODE_REASON_PHRASE.n204_no_content);
                                 response.headers.extend(headers);
-                                return response;
+                                return Err(response);
                             }
-                            Cors::Actual(headers) => cors_headers = headers,
+                            Cors::Actual(headers) => prepared.cors_headers = headers,
                         }
                     }
                 }
                 "RequestMirror" => mirrored += filter.request_mirror.is_some() as usize,
                 // ExtensionRef and anything unknown: the spec's 500.
-                _ => return status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error),
+                _ => return Err(status(STATUS_CODE_REASON_PHRASE.n500_internal_server_error)),
             }
         }
         // Mirrors get the request as the filters left it.
@@ -416,17 +508,33 @@ impl PortRouter {
                 send_mirror(mirror, &request, &connection.client.ip);
             }
         }
-        let mut response = self.forward_with(rule, &request, connection, listener.backend_client_cert.as_ref());
-        for filter in response_filters {
+        prepared.request = Some(request);
+        Ok(prepared)
+    }
+
+    /// The response modifiers and CORS headers, on the backend's response.
+    fn finish(prepared: Prepared, mut response: Response) -> Response {
+        for filter in prepared.response_filters {
             if let Some(f) = &filter.response_header_modifier {
                 filters::modify_headers(&mut response.headers, f);
             }
         }
-        for header in cors_headers {
+        for header in prepared.cors_headers {
             response.headers.retain(|h| !h.name.eq_ignore_ascii_case(&header.name));
             response.headers.push(header);
         }
         response
+    }
+
+    /// Filters, forwarding (blocking) and the response filters.
+    fn route(&self, listener: &ListenerConfig, rule: &CompiledRule, matched: &HttpRouteMatch, request: &Request, host: &str, connection: &ConnectionInfo) -> Response {
+        match self.prepare(listener, rule, matched, request, host, connection) {
+            Err(response) => response,
+            Ok(prepared) => {
+                let response = self.forward_with(rule, prepared.request.as_ref().unwrap_or(request), connection, listener.backend_client_cert.as_ref());
+                Self::finish(prepared, response)
+            }
+        }
     }
 }
 
@@ -437,20 +545,55 @@ fn misdirected(listeners: &[ListenerConfig], by_host: &ListenerConfig, connectio
     pick_listener(listeners, &sni.to_ascii_lowercase()).is_some_and(|by_sni| !std::ptr::eq(by_sni, by_host))
 }
 
+impl PortRouter {
+    /// The listener and rule a request goes to, or the answer when none
+    /// does (`404`, `421`).
+    fn resolve<'l>(listeners: &'l [ListenerConfig], request: &Request, host: &str, connection: &ConnectionInfo) -> Result<(&'l ListenerConfig, &'l CompiledRule, &'l HttpRouteMatch), Response> {
+        let Some(listener) = pick_listener(listeners, host) else {
+            return Err(status(STATUS_CODE_REASON_PHRASE.n404_not_found));
+        };
+        if misdirected(listeners, listener, connection) {
+            return Err(status(STATUS_CODE_REASON_PHRASE.n421_misdirected_request));
+        }
+        match select(listener, request, host) {
+            Some((_, rule, matched)) => Ok((listener, rule, matched)),
+            None => Err(status(STATUS_CODE_REASON_PHRASE.n404_not_found)),
+        }
+    }
+}
+
 impl Application for PortRouter {
     fn execute(&self, request: &Request, connection: &ConnectionInfo) -> Result<Response, String> {
         let listeners = self.listeners.read().unwrap_or_else(|e| e.into_inner()).clone();
         let host = request_host(request);
-        let Some(listener) = pick_listener(&listeners, &host) else {
-            return Ok(status(STATUS_CODE_REASON_PHRASE.n404_not_found));
-        };
-        if misdirected(&listeners, listener, connection) {
-            return Ok(status(STATUS_CODE_REASON_PHRASE.n421_misdirected_request));
+        Ok(match Self::resolve(&listeners, request, &host, connection) {
+            Ok((listener, rule, matched)) => self.route(listener, rule, matched, request, &host, connection),
+            Err(response) => response,
+        })
+    }
+
+    /// Everything but upgrades runs here, on the connection's task: the
+    /// forwarding loop waits on tokio sockets instead of holding a
+    /// blocking-pool thread per request in flight.
+    #[cfg(feature = "http2")]
+    fn execute_async<'a>(&'a self, request: &'a Request, connection: &'a ConnectionInfo) -> Option<crate::application::AsyncResponse<'a>> {
+        if super::upgrade::is_upgrade(request) {
+            return None;
         }
-        match select(listener, request, &host) {
-            Some((_, rule, matched)) => Ok(self.route(listener, rule, matched, request, &host, connection)),
-            None => Ok(status(STATUS_CODE_REASON_PHRASE.n404_not_found)),
-        }
+        Some(Box::pin(async move {
+            let listeners = self.listeners.read().unwrap_or_else(|e| e.into_inner()).clone();
+            let host = request_host(request);
+            let (listener, rule, matched) = match Self::resolve(&listeners, request, &host, connection) {
+                Ok(found) => found,
+                Err(response) => return Ok(response),
+            };
+            let prepared = match self.prepare(listener, rule, matched, request, &host, connection) {
+                Ok(prepared) => prepared,
+                Err(response) => return Ok(response),
+            };
+            let response = self.forward_async(rule, prepared.request.as_ref().unwrap_or(request), connection, listener.backend_client_cert.as_ref()).await;
+            Ok(Self::finish(prepared, response))
+        }))
     }
 }
 

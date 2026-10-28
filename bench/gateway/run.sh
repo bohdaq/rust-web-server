@@ -224,6 +224,8 @@ print(json.dumps({
     "cpu_us_per_req": round(cpu_ns / 1000 / total, 1),
     "mem_mib": round(mem / 2**20, 1),
     "restarts": restarted,
+    "other_codes": {k: v for k, v in codes.items() if k != "200"},
+    "errors": sum((d.get("errorDistribution") or {}).values()),
 }))
 EOF
     log "$name c=$c: $(tail -1 "$RESULTS")"
@@ -340,14 +342,20 @@ import json, sys
 rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
 out, duration = sys.argv[2], sys.argv[3]
 json.dump(rows, open(f"{out}/results.json", "w"), indent=1)
+def other(r):
+    parts = [f"{code}: {n}" for code, n in sorted(r.get("other_codes", {}).items())]
+    if r.get("errors"):
+        parts.append(f"connection errors: {r['errors']}")
+    return ", ".join(parts) or "—"
+
 lines = [f"Gateway API data planes, HTTP/1.1 keep-alive GET of a 1 KiB file through each, {duration} per run, one kind node.", "",
-         "| Gateway | Conns | req/s | p50 ms | p99 ms | 200s % | CPU µs/req | Memory MiB | Restarts |",
-         "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
+         "| Gateway | Conns | req/s | p50 ms | p99 ms | 200s % | CPU µs/req | Memory MiB | Restarts | Other answers |",
+         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|"]
 for r in rows:
     if r.get("failed"):
-        lines.append(f"| {r['gateway']} | — | failed | | | | | | |")
+        lines.append(f"| {r['gateway']} | — | failed | | | | | | | |")
     else:
-        lines.append(f"| {r['gateway']} | {r['connections']} | {r['rps']} | {r['p50_ms']} | {r['p99_ms']} | {r['ok_pct']} | {r['cpu_us_per_req']} | {r['mem_mib']} | {r['restarts']} |")
+        lines.append(f"| {r['gateway']} | {r['connections']} | {r['rps']} | {r['p50_ms']} | {r['p99_ms']} | {r['ok_pct']} | {r['cpu_us_per_req']} | {r['mem_mib']} | {r['restarts']} | {other(r)} |")
 open(f"{out}/results.md", "w").write("\n".join(lines) + "\n")
 print("\n".join(lines))
 EOF

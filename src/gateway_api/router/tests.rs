@@ -371,3 +371,27 @@ fn a_host_of_another_listener_than_the_sni_chose_is_misdirected() {
     assert!(!check("unknown-example.org", "example.org"));
     assert!(!misdirected(&listeners, &listeners[1], &connection()), "plain HTTP has no SNI");
 }
+
+/// A router whose one listener sends everything to `rule`.
+fn serving(rule: CompiledRule) -> PortRouter {
+    PortRouter::new(Arc::new(RwLock::new(Arc::new(vec![listener(None, vec![route("r", "1", &[], vec![rule])])]))))
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_async_path_retries_times_out_and_leaves_upgrades_alone() {
+    let r = request("GET", "/", &[("host", "example.org")]);
+    let (address, seen) = flaky_backend(2, 500, std::time::Duration::ZERO);
+    let router = serving(with_policy(&address, None, Some((3, vec![500]))));
+    let connection = connection();
+    let response = router.execute_async(&r, &connection).expect("not an upgrade").await.unwrap();
+    assert_eq!((200, 3), (response.status_code, seen.load(Ordering::SeqCst)), "two retries, without a blocking thread");
+
+    let (slow, _) = flaky_backend(0, 200, std::time::Duration::from_millis(400));
+    let router = serving(with_policy(&slow, Some(("100ms", "")), None));
+    assert_eq!(504, router.execute_async(&r, &connection).unwrap().await.unwrap().status_code);
+
+    let missing = serving(rule("x", vec![path("PathPrefix", "/")], vec![]));
+    assert_eq!(500, missing.execute_async(&r, &connection).unwrap().await.unwrap().status_code, "no backends");
+    let upgrade = request("GET", "/", &[("host", "example.org"), ("connection", "Upgrade"), ("upgrade", "websocket")]);
+    assert!(missing.execute_async(&upgrade, &connection).is_none(), "upgrades take the blocking path");
+}

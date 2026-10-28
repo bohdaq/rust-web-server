@@ -161,6 +161,62 @@ pub(crate) async fn forward(
     }
 }
 
+/// Idle connections the Gateway API router keeps per backend endpoint: a
+/// gateway carries many clients' requests to few endpoints, so its pools
+/// are larger than the config-file proxy's ([`POOL_MAX_IDLE`]).
+#[cfg(feature = "gateway-api")]
+const GATEWAY_POOL_MAX_IDLE: usize = 1024;
+
+#[cfg(feature = "gateway-api")]
+fn gateway_pool() -> &'static Pool<TcpStream> {
+    static POOL: std::sync::OnceLock<Pool<TcpStream>> = std::sync::OnceLock::new();
+    POOL.get_or_init(|| Pool::new(GATEWAY_POOL_MAX_IDLE, Duration::from_secs(60)))
+}
+
+/// The Gateway router's TLS pool for one BackendTLSPolicy configuration
+/// (its label).
+#[cfg(feature = "gateway-api")]
+pub(crate) fn gateway_tls_pool(label: &str) -> &'static Pool<AsyncTlsStream> {
+    static POOLS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, &'static Pool<AsyncTlsStream>>>> = std::sync::OnceLock::new();
+    let mut pools = POOLS.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    pools.entry(label.to_string()).or_insert_with(|| Box::leak(Box::new(Pool::new(GATEWAY_POOL_MAX_IDLE, Duration::from_secs(60)))))
+}
+
+/// Forward to an endpoint `ip:port` for the Gateway API router: `host_header`
+/// as the `Host` (the client's), and with `tls` = (server name, config) over
+/// TLS with that SNI.
+#[cfg(feature = "gateway-api")]
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn forward_gateway(
+    request: &Request,
+    client_ip: &str,
+    ip: &str,
+    port: u16,
+    host_header: &str,
+    tls: Option<(&str, AsyncTls)>,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, String> {
+    let key = if ip.contains(':') { format!("[{ip}]:{port}") } else { format!("{ip}:{port}") };
+    let pooled = crate::server::per_core::pool_key(&key);
+    match tls {
+        None => forward_on(gateway_pool(), &pooled, request, host_header, client_ip, read_timeout, || connect(&key, connect_timeout)).await,
+        Some((server_name, tls)) => {
+            let connect_tls = || async {
+                let tcp = connect(&key, connect_timeout).await?;
+                let name = rustls::pki_types::ServerName::try_from(server_name.to_string()).map_err(|e| format!("invalid TLS server name '{server_name}': {e}"))?;
+                let connector = tokio_rustls::TlsConnector::from(Arc::clone(&tls.config));
+                match tokio::time::timeout(connect_timeout, connector.connect(name, tcp)).await {
+                    Ok(Ok(stream)) => Ok(stream),
+                    Ok(Err(e)) => Err(format!("TLS handshake with {key} failed: {e}")),
+                    Err(_) => Err(format!("TLS handshake with {key} timed out")),
+                }
+            };
+            forward_on(tls.pool, &pooled, request, host_header, client_ip, read_timeout, connect_tls).await
+        }
+    }
+}
+
 /// The pooled request/response cycle for any connection type: a pooled
 /// connection that fails before any response byte is retried once on a
 /// fresh one, for idempotent methods only.
