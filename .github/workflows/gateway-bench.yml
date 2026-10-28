@@ -1,0 +1,70 @@
+# Gateway API data planes side by side (bench/gateway/run.sh): rws as
+# released for Linux against other implementations, in one kind cluster on
+# one runner, same backend and load. Runner hardware varies between runs, so
+# compare rows of one run, not runs.
+name: Gateway benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      gateways:
+        description: "Gateways to run (space-separated)"
+        default: "rws envoy-gateway nginx-gateway-fabric traefik kgateway istio"
+      duration:
+        description: "Load duration per run (oha -z)"
+        default: "20s"
+      connections:
+        description: "Connection counts (space-separated)"
+        default: "64 256"
+
+permissions:
+  contents: read
+
+env:
+  KIND_VERSION: v0.33.0
+  OHA_VERSION: v1.16.0
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - name: Install musl tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      # The Linux release build (release.yml): static musl, these features.
+      - name: Build rws as released for Linux
+        run: cargo build --release --bin rws --features "acme auth mimalloc gateway-api" --target x86_64-unknown-linux-musl
+      - name: kind and oha
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$KIND_VERSION" --repo kubernetes-sigs/kind --pattern 'kind-linux-amd64' --dir "$RUNNER_TEMP"
+          install -m 0755 "$RUNNER_TEMP/kind-linux-amd64" /usr/local/bin/kind
+          gh release download "$OHA_VERSION" --repo hatoo/oha --pattern 'oha-linux-amd64' --dir "$RUNNER_TEMP"
+          install -m 0755 "$RUNNER_TEMP/oha-linux-amd64" /usr/local/bin/oha
+          kind version; oha --version; helm version --short
+      - name: Benchmark
+        env:
+          RWS: target/x86_64-unknown-linux-musl/release/rws
+          GATEWAYS: ${{ inputs.gateways }}
+          DURATION: ${{ inputs.duration }}
+          CONNECTIONS: ${{ inputs.connections }}
+          OUT_DIR: ${{ runner.temp }}/bench-gateway
+        run: bench/gateway/run.sh
+      - name: Results
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/bench-gateway/results.md" ]; then
+            { nproc | sed 's/^/Runner CPUs: /'; echo; cat "$RUNNER_TEMP/bench-gateway/results.md"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gateway-benchmark
+          path: ${{ runner.temp }}/bench-gateway
+          if-no-files-found: ignore
