@@ -44,7 +44,9 @@ impl Kind {
 
 /// A port being served.
 struct Port {
-    kind: Kind,
+    /// How connections are served; a change between TCP kinds (say HTTP to
+    /// TLS passthrough when the port goes to another Gateway) keeps the socket.
+    kind: Arc<RwLock<Kind>>,
     listeners: PortListeners,
     tls: Arc<RwLock<Option<tokio_rustls::TlsAcceptor>>>,
     task: tokio::task::JoinHandle<()>,
@@ -52,22 +54,32 @@ struct Port {
 
 impl Drop for Port {
     fn drop(&mut self) {
-        self.task.abort(); // closes the listening socket
+        self.task.abort(); // closes the listening socket (once the task is dropped)
     }
 }
+
+/// What each port should serve, by (container port, UDP?).
+type Wanted = BTreeMap<(u16, bool), (Kind, Vec<ListenerConfig>)>;
 
 /// The ports being served, by container port and transport (a TCP and a
 /// UDP listener can share a number).
 #[derive(Default)]
 pub struct DataPlane {
-    ports: Mutex<BTreeMap<(u16, bool), Port>>,
+    ports: Arc<Mutex<BTreeMap<(u16, bool), Port>>>,
+    /// The last configuration applied, for the bind retries.
+    wanted: Arc<Mutex<Wanted>>,
     /// The address to bind (`0.0.0.0` in a pod).
     bind_ip: String,
 }
 
+/// How long a port whose bind failed (the socket of a port just given up,
+/// not closed yet) is retried, and how often.
+const BIND_RETRIES: usize = 100;
+const BIND_RETRY_EVERY: std::time::Duration = std::time::Duration::from_millis(100);
+
 impl DataPlane {
     pub fn new(bind_ip: &str) -> DataPlane {
-        DataPlane { ports: Mutex::new(BTreeMap::new()), bind_ip: bind_ip.to_string() }
+        DataPlane { bind_ip: bind_ip.to_string(), ..Default::default() }
     }
 
     /// The container ports currently served.
@@ -75,10 +87,10 @@ impl DataPlane {
         self.ports.lock().unwrap_or_else(|e| e.into_inner()).keys().map(|(port, _)| *port).collect()
     }
 
-    /// Serve `config`: bind new ports, update the routes and certificates of
-    /// running ones, stop the rest. Must run inside a tokio runtime.
+    /// Serve `config`: bind new ports, update the routes, certificates and
+    /// kind of running ones, stop the rest. Must run inside a tokio runtime.
     pub fn apply(&self, config: &GatewayConfig) {
-        let mut wanted: BTreeMap<(u16, bool), (Kind, Vec<ListenerConfig>)> = BTreeMap::new();
+        let mut wanted: Wanted = BTreeMap::new();
         for listener in &config.listeners {
             let Some(kind) = Kind::of(listener) else { continue };
             let entry = wanted.entry((listener.container_port, kind == Kind::Udp)).or_insert((kind, Vec::new()));
@@ -86,66 +98,108 @@ impl DataPlane {
             entry.0 = entry.0.min(kind);
             entry.1.push(listener.clone());
         }
+        *self.wanted.lock().unwrap_or_else(|e| e.into_inner()) = wanted.clone();
         let mut ports = self.ports.lock().unwrap_or_else(|e| e.into_inner());
-        ports.retain(|key, port| wanted.get(key).is_some_and(|(kind, _)| *kind == port.kind));
+        ports.retain(|key, _| wanted.contains_key(key));
         for (key, (kind, listeners)) in wanted {
-            let acceptor = match kind {
-                Kind::Http => tls_acceptor(&listeners, true),
-                Kind::TlsTerminate => tls_acceptor(&listeners, false),
-                _ => None,
-            };
             if let Some(running) = ports.get(&key) {
-                *running.listeners.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(listeners);
-                *running.tls.write().unwrap_or_else(|e| e.into_inner()) = acceptor;
+                update(running, kind, listeners);
                 continue;
             }
-            match self.serve(key.0, kind, listeners, acceptor) {
+            match serve(&self.bind_ip, key.0, kind, listeners) {
                 Ok(running) => {
                     ports.insert(key, running);
                 }
+                Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => self.retry(key),
                 Err(e) => eprintln!("[gateway-api] can't serve port {}: {e}", key.0),
             }
         }
     }
 
-    fn serve(&self, port: u16, kind: Kind, listeners: Vec<ListenerConfig>, acceptor: Option<tokio_rustls::TlsAcceptor>) -> Result<Port, String> {
-        let listeners: PortListeners = Arc::new(RwLock::new(Arc::new(listeners)));
-        let tls = Arc::new(RwLock::new(acceptor));
-        if kind == Kind::Udp {
-            let socket = std::net::UdpSocket::bind((self.bind_ip.as_str(), port)).map_err(|e| e.to_string())?;
-            socket.set_nonblocking(true).map_err(|e| e.to_string())?;
-            let socket = Arc::new(tokio::net::UdpSocket::from_std(socket).map_err(|e| e.to_string())?);
-            let task = tokio::spawn(super::l4::serve_udp(socket, Arc::clone(&listeners)));
-            return Ok(Port { kind, listeners, tls, task });
-        }
-        let socket = std::net::TcpListener::bind((self.bind_ip.as_str(), port)).map_err(|e| e.to_string())?;
-        socket.set_nonblocking(true).map_err(|e| e.to_string())?;
-        let socket = tokio::net::TcpListener::from_std(socket).map_err(|e| e.to_string())?;
-        let router = PortRouter::new(Arc::clone(&listeners));
-        let (listeners_for_loop, tls_for_loop) = (Arc::clone(&listeners), Arc::clone(&tls));
-        let counter = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let task = tokio::spawn(async move {
-            loop {
-                let Ok((stream, peer)) = socket.accept().await else {
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    continue;
-                };
-                let acceptor = tls_for_loop.read().unwrap_or_else(|e| e.into_inner()).clone();
-                let (router, listeners, counter) = (router.clone(), Arc::clone(&listeners_for_loop), Arc::clone(&counter));
-                tokio::spawn(async move {
-                    match (kind, acceptor) {
-                        (Kind::Http, Some(acceptor)) => crate::server::serve_tls_connection(stream, peer, acceptor, router).await,
-                        (Kind::Http, None) => crate::server::serve_plain_connection(stream, peer, router).await,
-                        (Kind::TlsTerminate, Some(acceptor)) => super::l4::serve_tls_terminate(stream, acceptor, listeners, counter).await,
-                        (Kind::TlsPassthrough, _) => super::l4::serve_tls_passthrough(stream, listeners, counter).await,
-                        (Kind::Tcp, _) => super::l4::serve_tcp(stream, listeners, counter).await,
-                        _ => {}
+    /// Bind `key` again shortly, while it's still wanted and not served.
+    fn retry(&self, key: (u16, bool)) {
+        let (ports, wanted, bind_ip) = (Arc::clone(&self.ports), Arc::clone(&self.wanted), self.bind_ip.clone());
+        tokio::spawn(async move {
+            for _ in 0..BIND_RETRIES {
+                tokio::time::sleep(BIND_RETRY_EVERY).await;
+                let Some((kind, listeners)) = wanted.lock().unwrap_or_else(|e| e.into_inner()).get(&key).cloned() else { return };
+                let mut ports = ports.lock().unwrap_or_else(|e| e.into_inner());
+                if ports.contains_key(&key) {
+                    return;
+                }
+                match serve(&bind_ip, key.0, kind, listeners) {
+                    Ok(running) => {
+                        ports.insert(key, running);
+                        return;
                     }
-                });
+                    Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => continue,
+                    Err(e) => {
+                        eprintln!("[gateway-api] can't serve port {}: {e}", key.0);
+                        return;
+                    }
+                }
             }
+            eprintln!("[gateway-api] can't serve port {}: still in use", key.0);
         });
-        Ok(Port { kind, listeners, tls, task })
     }
+}
+
+/// The TLS acceptor a kind of port needs.
+fn acceptor_for(kind: Kind, listeners: &[ListenerConfig]) -> Option<tokio_rustls::TlsAcceptor> {
+    match kind {
+        Kind::Http => tls_acceptor(listeners, true),
+        Kind::TlsTerminate => tls_acceptor(listeners, false),
+        _ => None,
+    }
+}
+
+/// A running port takes its new listeners, certificates and kind.
+fn update(running: &Port, kind: Kind, listeners: Vec<ListenerConfig>) {
+    let acceptor = acceptor_for(kind, &listeners);
+    *running.listeners.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(listeners);
+    *running.tls.write().unwrap_or_else(|e| e.into_inner()) = acceptor;
+    *running.kind.write().unwrap_or_else(|e| e.into_inner()) = kind;
+}
+
+fn serve(bind_ip: &str, port: u16, kind: Kind, listeners: Vec<ListenerConfig>) -> std::io::Result<Port> {
+    let tls = Arc::new(RwLock::new(acceptor_for(kind, &listeners)));
+    let listeners: PortListeners = Arc::new(RwLock::new(Arc::new(listeners)));
+    let kind_now = Arc::new(RwLock::new(kind));
+    if kind == Kind::Udp {
+        let socket = std::net::UdpSocket::bind((bind_ip, port))?;
+        socket.set_nonblocking(true)?;
+        let socket = Arc::new(tokio::net::UdpSocket::from_std(socket)?);
+        let task = tokio::spawn(super::l4::serve_udp(socket, Arc::clone(&listeners)));
+        return Ok(Port { kind: kind_now, listeners, tls, task });
+    }
+    let socket = std::net::TcpListener::bind((bind_ip, port))?;
+    socket.set_nonblocking(true)?;
+    let socket = tokio::net::TcpListener::from_std(socket)?;
+    let router = PortRouter::new(Arc::clone(&listeners));
+    let (listeners_for_loop, tls_for_loop, kind_for_loop) = (Arc::clone(&listeners), Arc::clone(&tls), Arc::clone(&kind_now));
+    let counter = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let task = tokio::spawn(async move {
+        loop {
+            let Ok((stream, peer)) = socket.accept().await else {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                continue;
+            };
+            let acceptor = tls_for_loop.read().unwrap_or_else(|e| e.into_inner()).clone();
+            let kind = *kind_for_loop.read().unwrap_or_else(|e| e.into_inner());
+            let (router, listeners, counter) = (router.clone(), Arc::clone(&listeners_for_loop), Arc::clone(&counter));
+            tokio::spawn(async move {
+                match (kind, acceptor) {
+                    (Kind::Http, Some(acceptor)) => crate::server::serve_tls_connection(stream, peer, acceptor, router).await,
+                    (Kind::Http, None) => crate::server::serve_plain_connection(stream, peer, router).await,
+                    (Kind::TlsTerminate, Some(acceptor)) => super::l4::serve_tls_terminate(stream, acceptor, listeners, counter).await,
+                    (Kind::TlsPassthrough, _) => super::l4::serve_tls_passthrough(stream, listeners, counter).await,
+                    (Kind::Tcp, _) => super::l4::serve_tcp(stream, listeners, counter).await,
+                    _ => {}
+                }
+            });
+        }
+    });
+    Ok(Port { kind: kind_now, listeners, tls, task })
 }
 
 /// Certificates by listener hostname, for SNI.

@@ -151,12 +151,17 @@ struct Session {
 
 /// A UDPRoute listener: each client address gets its own socket to a
 /// backend (picked once), replies go back from the listener's socket;
-/// sessions end after [`UDP_IDLE`] without traffic.
+/// sessions end after [`UDP_IDLE`] without traffic — or with the port:
+/// they're in a `JoinSet` this task owns, so dropping it (the port given up)
+/// aborts them and releases the socket at once.
 pub async fn serve_udp(socket: Arc<UdpSocket>, listeners: PortListeners) {
     let counter = Arc::new(AtomicUsize::new(0));
+    let mut session_tasks = tokio::task::JoinSet::new();
     let sessions: Arc<Mutex<HashMap<SocketAddr, Session>>> = Arc::default();
     let mut buffer = vec![0u8; 65_535];
     loop {
+        // Reap finished sessions so the set doesn't grow.
+        while session_tasks.try_join_next().is_some() {}
         let Ok((n, client)) = socket.recv_from(&mut buffer).await else {
             tokio::time::sleep(Duration::from_millis(50)).await;
             continue;
@@ -170,7 +175,7 @@ pub async fn serve_udp(socket: Arc<UdpSocket>, listeners: PortListeners) {
                 let backend = Arc::new(backend);
                 let seen = Arc::new(Mutex::new(Instant::now()));
                 sessions.lock().unwrap_or_else(|e| e.into_inner()).insert(client, Session { backend: Arc::clone(&backend), seen: Arc::clone(&seen) });
-                tokio::spawn(udp_replies(Arc::clone(&socket), Arc::clone(&backend), client, Arc::clone(&seen), Arc::clone(&sessions)));
+                session_tasks.spawn(udp_replies(Arc::clone(&socket), Arc::clone(&backend), client, Arc::clone(&seen), Arc::clone(&sessions)));
                 (backend, seen)
             }
         };

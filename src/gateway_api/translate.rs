@@ -430,8 +430,12 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
             ("Programmed", "Serving".to_string())
         };
         // Accepted unless no listener is; `ListenersNotValid` when any isn't.
-        let gateway_accepted = (gateway.spec.listeners.is_empty() || any_accepted) && unsupported_address.is_none();
-        let accepted_reason = if unsupported_address.is_some() {
+        // rws takes no parameters object: a reference can't be honoured.
+        let invalid_parameters = gateway.spec.infrastructure.as_ref().is_some_and(|i| i.parameters_ref.is_some());
+        let gateway_accepted = (gateway.spec.listeners.is_empty() || any_accepted) && unsupported_address.is_none() && !invalid_parameters;
+        let accepted_reason = if invalid_parameters {
+            "InvalidParameters"
+        } else if unsupported_address.is_some() {
             "UnsupportedAddress"
         } else if any_rejected {
             "ListenersNotValid"
@@ -508,6 +512,8 @@ struct ListenerView {
     message: String,
     tls: Option<(Vec<u8>, Vec<u8>)>,
     client_ca: Option<ClientCa>,
+    /// A TLS listener in `Passthrough` mode.
+    passthrough: bool,
     http_routes: Vec<CompiledHttpRoute>,
 }
 
@@ -598,6 +604,7 @@ fn listener_views(gateway: &Gateway, listeners: &[Listener], namespace: &str, ow
                 message,
                 tls,
                 client_ca,
+                passthrough: l.protocol == "TLS" && !terminates_tls(l),
                 http_routes: Vec::new(),
             }
         })
@@ -626,7 +633,9 @@ fn mark_conflicts(views: &mut [ListenerView]) {
             if views[j].owner.is_none() && views[i].owner.is_some() {
                 continue;
             }
-            let reason = if views[i].protocol != views[j].protocol {
+            // Terminate and Passthrough on one port would need TLSRouteModeMixed.
+            let mixed_tls = views[i].protocol == "TLS" && views[j].protocol == "TLS" && views[i].passthrough != views[j].passthrough;
+            let reason = if views[i].protocol != views[j].protocol || mixed_tls {
                 "ProtocolConflict"
             } else if views[i].hostname == views[j].hostname {
                 "HostnameConflict"
@@ -635,7 +644,7 @@ fn mark_conflicts(views: &mut [ListenerView]) {
             };
             views[j].conflicted = Some(reason);
             views[j].programmed = false;
-            if views[j].owner.is_some() {
+            if views[j].owner.is_some() || mixed_tls {
                 views[j].accepted = false;
                 views[j].accepted_reason = reason;
             }

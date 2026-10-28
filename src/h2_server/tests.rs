@@ -53,6 +53,7 @@ impl Application for TestApp {
             Response::text(STATUS_CODE_REASON_PHRASE.n200_ok, &format!("hello {}", request.request_uri))
         };
         response.headers.push(Header::new("X-Seen-Agent", request.header("user-agent").map(|h| h.value.to_string()).unwrap_or_default()));
+        response.headers.push(Header::new("X-Seen-Host", request.header("host").map(|h| h.value.to_string()).unwrap_or_default()));
         Ok(response)
     }
 
@@ -451,4 +452,17 @@ async fn trailers_follow_the_body_in_their_own_header_block() {
         let trailers = stream.trailers().await.unwrap().expect("trailers");
         assert_eq!(status, trailers["grpc-status"], "{path}");
     }
+}
+
+#[tokio::test]
+async fn the_authority_is_the_requests_host() {
+    let mut send = client(TestApp(None)).await;
+    let request = http::Request::get("https://shop.example:8443/p").body(()).unwrap();
+    let (response, _) = send.clone().ready().await.unwrap().send_request(request, true).unwrap();
+    let (parts, _) = read(response).await;
+    assert_eq!("shop.example:8443", parts.headers["x-seen-host"], "RFC 9113 §8.3.1: `:authority` stands for Host");
+    let request = http::Request::get("https://shop.example/p").header("host", "other.example").body(()).unwrap();
+    let (response, _) = send.ready().await.unwrap().send_request(request, true).unwrap();
+    let (parts, _) = read(response).await;
+    assert_eq!("other.example", parts.headers["x-seen-host"], "a host field is kept");
 }

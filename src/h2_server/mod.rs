@@ -1216,6 +1216,8 @@ struct Fields {
     scheme: bool,
     path: Option<String>,
     authority: bool,
+    /// Its value: the request's `Host` when no `host` field came (RFC 9113 §8.3.1).
+    authority_value: Option<String>,
     headers: Vec<Header>,
     content_length: Option<u64>,
     malformed: bool,
@@ -1241,7 +1243,10 @@ impl Fields {
                 b"method" => self.method.replace(text()).is_some(),
                 b"path" => self.path.replace(text()).is_some(),
                 b"scheme" => std::mem::replace(&mut self.scheme, true),
-                b"authority" => std::mem::replace(&mut self.authority, true),
+                b"authority" => {
+                    self.authority_value = Some(text());
+                    std::mem::replace(&mut self.authority, true)
+                }
                 _ => true,
             };
             self.malformed |= duplicate;
@@ -1300,7 +1305,13 @@ impl Fields {
             }
             path
         };
-        Some(Incoming { method, path, headers: self.headers, body: Default::default(), content_length: self.content_length })
+        let mut headers = self.headers;
+        if let Some(authority) = self.authority_value.filter(|a| !a.is_empty()) {
+            if !headers.iter().any(|h| h.name.eq_ignore_ascii_case("host")) {
+                headers.push(Header { name: Header::_HOST.into(), value: authority.into() });
+            }
+        }
+        Some(Incoming { method, path, headers, body: Default::default(), content_length: self.content_length })
     }
 }
 

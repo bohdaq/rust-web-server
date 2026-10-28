@@ -27,6 +27,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   values (`gatewayAPI.*`) and a CI job running the official conformance suite
   in kind.
 
+### Fixed
+
+- HTTP/2 requests carry their `:authority` as the `Host` header when the
+  client sent no `host` field (RFC 9113 §8.3.1): applications, routers with
+  `.with_host`, and the Gateway API router saw no host for HTTP/2 requests.
+
 ### Changed
 
 - The minimum supported Rust version is 1.99 (was 1.88): kube 4.2, under the

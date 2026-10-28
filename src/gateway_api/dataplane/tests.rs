@@ -303,3 +303,55 @@ async fn client_certificates_are_required_or_let_through_by_the_mode() {
         assert_eq!(expected, results, "insecure_fallback = {insecure_fallback}: [signed by the CA, another CA, none]");
     }
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_port_that_changes_kind_keeps_its_socket_and_serves_the_new_way() {
+    let http_backend = echo_backend();
+    let tcp_backend = tcp_echo_backend();
+    let plane = DataPlane::new("127.0.0.1");
+    let port = serve_on_free_port(&plane, |port| config(port, http_backend, "HTTP", None));
+    plane.apply(&l4_config(port, tcp_backend, "TCP", None));
+    assert_eq!(vec![port], plane.ports(), "no rebind needed");
+    let echoed = tokio::task::spawn_blocking(move || {
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+        stream.write_all(b"raw").unwrap();
+        let mut buffer = [0u8; 3];
+        stream.read_exact(&mut buffer).unwrap();
+        buffer.to_vec()
+    })
+    .await
+    .unwrap();
+    assert_eq!(b"raw".to_vec(), echoed, "relayed as TCP now, not parsed as HTTP");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_udp_port_given_up_with_live_sessions_can_be_served_again_at_once() {
+    let backend = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    let backend_port = backend.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        let mut buffer = [0u8; 1500];
+        while let Ok((n, from)) = backend.recv_from(&mut buffer) {
+            let _ = backend.send_to(&buffer[..n], from);
+        }
+    });
+    let ping = |port: u16| {
+        let client = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        client.set_read_timeout(Some(std::time::Duration::from_secs(3))).unwrap();
+        client.send_to(b"hi", ("127.0.0.1", port)).unwrap();
+        let mut buffer = [0u8; 16];
+        client.recv_from(&mut buffer).map(|(n, _)| buffer[..n].to_vec()).ok()
+    };
+    let port = std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let plane = DataPlane::new("127.0.0.1");
+    plane.apply(&l4_config(port, backend_port, "UDP", None));
+    assert_eq!(Some(b"hi".to_vec()), tokio::task::spawn_blocking(move || ping(port)).await.unwrap(), "a session is open now");
+    plane.apply(&GatewayConfig::default());
+    plane.apply(&l4_config(port, backend_port, "UDP", None));
+    let started = std::time::Instant::now();
+    while !plane.ports().contains(&port) {
+        assert!(started.elapsed() < std::time::Duration::from_secs(3), "the port is served again within the retries");
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(Some(b"hi".to_vec()), tokio::task::spawn_blocking(move || ping(port)).await.unwrap());
+}

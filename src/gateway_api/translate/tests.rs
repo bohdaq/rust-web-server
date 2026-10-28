@@ -610,8 +610,7 @@ fn every_label_rws_writes_is_one_the_api_server_accepts() {
         "metadata": {"name": "rws-a", "namespace": "default", "labels": {"app.kubernetes.io/name": "rws"}},
         "status": {"podIP": "10.244.0.6", "conditions": [{"type": "Ready", "status": "True"}]}
     })).unwrap());
-    let mut settings = Settings::default();
-    settings.provision = Some(Default::default());
+    let settings = Settings { provision: Some(Default::default()), ..Default::default() };
     let (_, desired) = translate(&s, &settings, &now());
     assert!(!desired.endpoint_slices.is_empty() && !desired.deployments.is_empty());
     let labels = desired
@@ -627,4 +626,19 @@ fn every_label_rws_writes_is_one_the_api_server_accepts() {
         }
     }
     assert!(!valid_label("a", "rws8.tech/gateway-controller"), "the check catches a `/` in a value");
+}
+
+#[test]
+fn mixed_tls_modes_on_a_port_and_parameters_refs_are_rejected() {
+    let mut s = snapshot(&["tlsroute-listener-mixed-termination-not-supported", "gateway-invalid-parameters-ref"]);
+    s.secrets.push(tls_secret("tls-terminate-checks-certificate"));
+    let (_, desired) = run(&s);
+    for name in ["tls-terminate", "tls-passthrough"] {
+        let l = listener(&desired, "gateway-tlsroute-mixed-termination-not-supported", name);
+        let c = find(&l.conditions, "Accepted");
+        assert_eq!(("False", "ProtocolConflict"), (c.status.as_str(), c.reason.as_str()), "{name}");
+    }
+    let g = &desired.gateways[&(INFRA.to_string(), "gateway-invalid-parameters-ref".to_string())];
+    let c = find(&g.conditions, "Accepted");
+    assert_eq!(("False", "InvalidParameters"), (c.status.as_str(), c.reason.as_str()));
 }
