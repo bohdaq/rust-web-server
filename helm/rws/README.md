@@ -70,7 +70,7 @@ CI (`.github/workflows/helm.yml`) runs both for several value sets and installs 
 | `gatewayAPI.mode` | `shared` | `shared`: this release's pods serve every Gateway. `provisioned`: each Gateway gets its own Deployment of rws pods (this image and ServiceAccount, in the release namespace) and this release's pods only run the controller. |
 | `ingress.className` / `annotations` / `hosts` / `tls` | `""` / `{}` / `rws.example.com` `/` / `[]` | Standard Ingress fields. |
 | `service.annotations` | `{}` | Service annotations (e.g. for a cloud load-balancer controller). |
-| `resources` | `100m`/`64Mi` requests, `500m`/`256Mi` limits | Container resource requests/limits. |
+| `resources` | `100m`/`64Mi` requests, `500m`/`256Mi` limits | Container resource requests/limits. With `gatewayAPI.enabled` the CPU limit is left out (a gateway shouldn't be throttled). |
 | `livenessProbe.*` | path `/healthz`, see `values.yaml` | Liveness probe settings. |
 | `readinessProbe.*` | path `/readyz`, see `values.yaml` | Readiness probe settings. |
 | `podDisruptionBudget.enabled` | `true` | Create a PodDisruptionBudget. |

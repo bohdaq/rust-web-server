@@ -5,6 +5,16 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Changed
+
+- Helm chart: with `gatewayAPI.enabled` the pods get no CPU limit (the
+  `resources.limits.cpu` default of `500m` is left out; memory and requests
+  apply as set). A Gateway API data plane serves every Gateway's traffic, and
+  half a CPU throttled it into high tail latency in the gateway benchmark.
+  Deployments without `gatewayAPI.enabled` are unchanged.
+
 ## 18.8.0 — 2026-10-28
 
 ### Added

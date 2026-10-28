@@ -128,8 +128,15 @@ spec:
             periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- /* A gateway's data plane takes the traffic of every Gateway it
+          serves: no CPU limit (throttling shows up as tail latency), the
+          other resources as configured. */}}
+          {{- $resources := deepCopy .Values.resources }}
+          {{- if and .Values.gatewayAPI.enabled $resources.limits }}
+          {{- $_ := unset $resources.limits "cpu" }}
+          {{- end }}
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml $resources | nindent 12 }}
       {{- if .Values.tls.enabled }}
       volumes:
         - name: tls

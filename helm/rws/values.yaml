@@ -121,6 +121,8 @@ service:
   quicPort: 443
   annotations: {}
 
+# With gatewayAPI.enabled the CPU limit is left out (a gateway serving every
+# Gateway's traffic shouldn't be throttled); the rest applies as set.
 resources:
   requests:
     cpu: 100m
