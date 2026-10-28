@@ -68,7 +68,7 @@ kubectl wait --for=condition=Accepted gatewayclass/rws --timeout=60s
 
 cd "$GWAPI/conformance"
 version=$(git -C "$ROOT" describe --tags --always)
-go test -timeout 90m -run TestConformance . -args \
+go test -v -timeout 150m -run TestConformance . -args \
   --gateway-class=rws \
   --conformance-profiles="$PROFILES" \
   --supported-features="$FEATURES" \

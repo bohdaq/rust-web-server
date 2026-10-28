@@ -592,3 +592,39 @@ fn a_backend_client_certificate_must_resolve() {
         assert_eq!("True", find(&g.conditions, "Accepted").status, "{gateway}");
     }
 }
+
+/// What the API server accepts as a label: an optional DNS-subdomain prefix
+/// and `/`, a name of ≤ 63 alphanumerics, `-`, `_`, `.`; values the same
+/// without a prefix (or empty).
+fn valid_label(key: &str, value: &str) -> bool {
+    let name_ok = |n: &str| n.len() <= 63 && n.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)) && n.chars().next().is_none_or(|c| c.is_ascii_alphanumeric()) && n.chars().last().is_none_or(|c| c.is_ascii_alphanumeric());
+    let (prefix, name) = key.rsplit_once('/').map_or((None, key), |(p, n)| (Some(p), n));
+    let prefix_ok = prefix.is_none_or(|p| p.len() <= 253 && p.split('.').all(|l| !l.is_empty() && l.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')));
+    !name.is_empty() && name_ok(name) && prefix_ok && name_ok(value)
+}
+
+#[test]
+fn every_label_rws_writes_is_one_the_api_server_accepts() {
+    let mut s = snapshot(&["httproute-simple-same-namespace"]);
+    s.pods.push(serde_json::from_value(serde_json::json!({
+        "metadata": {"name": "rws-a", "namespace": "default", "labels": {"app.kubernetes.io/name": "rws"}},
+        "status": {"podIP": "10.244.0.6", "conditions": [{"type": "Ready", "status": "True"}]}
+    })).unwrap());
+    let mut settings = Settings::default();
+    settings.provision = Some(Default::default());
+    let (_, desired) = translate(&s, &settings, &now());
+    assert!(!desired.endpoint_slices.is_empty() && !desired.deployments.is_empty());
+    let labels = desired
+        .services
+        .values()
+        .filter_map(|o| o.metadata.labels.clone())
+        .chain(desired.endpoint_slices.values().filter_map(|o| o.metadata.labels.clone()))
+        .chain(desired.deployments.values().filter_map(|o| o.metadata.labels.clone()))
+        .chain(desired.deployments.values().filter_map(|d| d.spec.as_ref()?.template.metadata.as_ref()?.labels.clone()));
+    for labels in labels {
+        for (key, value) in labels {
+            assert!(valid_label(&key, &value), "{key}={value}");
+        }
+    }
+    assert!(!valid_label("a", "rws8.tech/gateway-controller"), "the check catches a `/` in a value");
+}

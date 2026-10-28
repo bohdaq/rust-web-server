@@ -171,8 +171,9 @@ pub fn desired(snapshot: &Snapshot, gateways: &[&Gateway], settings: &ServiceSet
 }
 
 /// `endpointslice.kubernetes.io/managed-by` on the EndpointSlices rws writes
-/// (not the EndpointSlice controller's value, so it leaves them alone).
-pub const ENDPOINTS_MANAGED_BY: &str = "rws8.tech/gateway-controller";
+/// (not the EndpointSlice controller's value, so it leaves them alone; a
+/// label value, so no `/`).
+pub const ENDPOINTS_MANAGED_BY: &str = "gateway-controller.rws8.tech";
 
 impl ServiceSettings {
     /// The labels rws's serving pods are watched by.
