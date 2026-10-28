@@ -363,3 +363,11 @@ fn acme_dns_persist_checks() {
     let report = persist("on_demand = true\non_demand_ask = \"http://127.0.0.1:9000/\"\n");
     assert!(has(&report.errors, "not dns-persist-01"), "{:?}", report.errors);
 }
+
+#[test]
+fn gateway_api_mode_is_shared_or_provisioned() {
+    assert!(check_str("[gateway_api]\nmode = \"provisioned\"\n").errors.is_empty());
+    assert!(check_str("[gateway_api]\nmode = \"shared\"\n").errors.is_empty());
+    let report = check_str("[gateway_api]\nmode = \"dedicated\"\n");
+    assert!(has(&report.errors, "expected shared or provisioned"), "{:?}", report.errors);
+}
