@@ -16,7 +16,7 @@ use kube::ResourceExt;
 
 use super::resources::Gateway;
 use super::translate::{Snapshot, GATEWAY_NAME_LABEL, MANAGED_BY};
-use super::types::GATEWAY_GROUP;
+use super::types::{GatewaySpecAddress, GATEWAY_GROUP};
 
 /// How Gateways' Services are made.
 #[derive(Clone, Debug)]
@@ -80,6 +80,17 @@ pub fn container_ports(service: Option<&Service>) -> BTreeMap<(i32, String), u16
     ports
 }
 
+/// Address types rws can ask a load balancer for: `IPAddress` (the default).
+pub fn address_supported(address: &GatewaySpecAddress) -> bool {
+    address.address_type.as_deref().unwrap_or("IPAddress") == "IPAddress"
+}
+
+/// The static addresses a Gateway asks for (`spec.addresses` with a value;
+/// one with only a type asks for any address).
+pub fn requested_addresses(gateway: &Gateway) -> Vec<&str> {
+    gateway.spec.addresses.iter().filter(|a| address_supported(a) && !a.value.is_empty()).map(|a| a.value.as_str()).collect()
+}
+
 /// The Service every one of `gateways` should have, allocating container
 /// ports for new listener ports (keeping every existing allocation).
 pub fn desired(snapshot: &Snapshot, gateways: &[&Gateway], settings: &ServiceSettings) -> BTreeMap<(String, String), Service> {
@@ -137,6 +148,8 @@ pub fn desired(snapshot: &Snapshot, gateways: &[&Gateway], settings: &ServiceSet
             },
             spec: Some(ServiceSpec {
                 type_: Some(settings.service_type.clone()),
+                // The first static address (a load balancer takes one per Service).
+                load_balancer_ip: requested_addresses(gateway).first().map(|a| a.to_string()),
                 selector: Some(settings.pod_selector.clone()),
                 ports: Some(ports),
                 ..Default::default()
@@ -159,7 +172,7 @@ pub fn same(current: &Service, desired: &Service) -> bool {
         p.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
         p
     };
-    labels_ok && annotations_ok && c.type_ == d.type_ && c.selector == d.selector && ports(c) == ports(d)
+    labels_ok && annotations_ok && c.type_ == d.type_ && c.selector == d.selector && c.load_balancer_ip == d.load_balancer_ip && ports(c) == ports(d)
 }
 
 #[cfg(test)]

@@ -139,12 +139,14 @@ pub const SUPPORTED_FEATURES: &[&str] = &[
     "GRPCRoute",
     "GRPCRouteNamedRouteRule",
     "Gateway",
+    "GatewayAddressEmpty",
     "GatewayFrontendClientCertificateValidation",
     "GatewayFrontendClientCertificateValidationInsecureFallback",
     "GatewayHTTPListenerIsolation",
     "GatewayHTTPSListenerDetectMisdirectedRequests",
     "GatewayInfrastructure",
     "GatewayPort8080",
+    "GatewayStaticAddresses",
     "HTTPRoute",
     "HTTPRoute303RedirectStatusCode",
     "HTTPRoute307RedirectStatusCode",
@@ -390,17 +392,31 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
         }
         let addresses = gateway_addresses(snapshot, &key.0, &key.1);
         let addressed = !addresses.is_empty();
-        let programmed = any_valid && addressed;
-        let (programmed_reason, programmed_message) = if !addressed {
-            ("AddressNotAssigned", "Waiting for the Service's address")
+        let unsupported_address = gateway.spec.addresses.iter().find(|a| !super::services::address_supported(a));
+        // Static addresses must all be the Service's.
+        let requested = super::services::requested_addresses(gateway);
+        let missing = requested.iter().find(|r| !addresses.iter().any(|a| &a.value == *r));
+        let programmed = any_valid && addressed && missing.is_none() && unsupported_address.is_none();
+        let (programmed_reason, programmed_message) = if let Some(address) = missing {
+            ("AddressNotUsable", format!("The load balancer hasn't assigned {address}"))
+        } else if !addressed {
+            ("AddressNotAssigned", "Waiting for the Service's address".to_string())
+        } else if unsupported_address.is_some() {
+            ("Invalid", "An address type isn't supported".to_string())
         } else if !any_valid {
-            ("Invalid", "No valid listener")
+            ("Invalid", "No valid listener".to_string())
         } else {
-            ("Programmed", "Serving")
+            ("Programmed", "Serving".to_string())
         };
         // Accepted unless no listener is; `ListenersNotValid` when any isn't.
-        let gateway_accepted = gateway.spec.listeners.is_empty() || any_accepted;
-        let accepted_reason = if any_rejected { "ListenersNotValid" } else { "Accepted" };
+        let gateway_accepted = (gateway.spec.listeners.is_empty() || any_accepted) && unsupported_address.is_none();
+        let accepted_reason = if unsupported_address.is_some() {
+            "UnsupportedAddress"
+        } else if any_rejected {
+            "ListenersNotValid"
+        } else {
+            "Accepted"
+        };
 
         // Its ListenerSets: accepted with at least one valid listener.
         let mut attached_sets = 0;
@@ -426,7 +442,7 @@ pub fn translate(snapshot: &Snapshot, settings: &Settings, now: &Time) -> (Gatew
         }
         let mut conditions = vec![
             condition(&previous.conditions, "Accepted", gateway_accepted, accepted_reason, "", generation, now),
-            condition(&previous.conditions, "Programmed", programmed, programmed_reason, programmed_message, generation, now),
+            condition(&previous.conditions, "Programmed", programmed, programmed_reason, &programmed_message, generation, now),
         ];
         if insecure_frontend(gateway) {
             let message = "Client certificate validation allows clients without a valid certificate (AllowInsecureFallback)";

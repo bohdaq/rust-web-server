@@ -18415,6 +18415,8 @@ The GatewayClass's `status.supportedFeatures` lists what rws claims; the conform
 
 - **BackendTLSPolicy**: a Service (or one of its ports, by `sectionName`) a policy targets is reached over TLS, trusting the CA certificates in the referenced ConfigMaps' `ca.crt` (or the platform's roots with `wellKnownCACertificates: System`), with `hostname` as SNI and as the name checked — or, when `subjectAltNames` are listed, any of those (`Hostname` or `URI`) instead. Between two policies for the same target the older wins and the other is `Conflicted`; a port's own policy beats one for the whole Service. A policy that can't be used (a missing or wrong-kind CA reference) turns its backends' requests into `500`s rather than plaintext. Status is reported per Gateway whose routes reach a targeted Service.
 
+- **Static addresses** (`spec.addresses`): the first `IPAddress` is asked of the load balancer as the Service's `loadBalancerIP`; the Gateway is programmed once every requested address is the Service's (else `AddressNotUsable`). Another address type isn't accepted (`UnsupportedAddress`). An address with only a type asks for any address.
+
 The provisioned mode comes in the next phase.
 
 ## Settings

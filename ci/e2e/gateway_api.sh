@@ -72,4 +72,5 @@ go test -timeout 90m -run TestConformance . -args \
   --supported-features="$FEATURES" \
   --report-output="$REPORT" \
   --organization=bohdaq --project=rust-web-server --url=https://rws8.tech \
-  --version="$version" --contact=@bohdaq
+  --version="$version" --usable-address="$prefix.255.240" --unusable-address=10.255.255.1 \
+  --contact=@bohdaq

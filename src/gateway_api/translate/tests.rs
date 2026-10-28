@@ -528,3 +528,49 @@ fn insecure_fallback_is_flagged_on_the_gateway() {
     assert_eq!(("True", "ConfigurationChanged"), (c.status.as_str(), c.reason.as_str()));
     assert!(config.listeners.iter().filter_map(|l| l.client_ca.as_ref()).any(|ca| ca.insecure_fallback));
 }
+
+#[test]
+fn static_addresses_are_asked_for_and_must_be_assigned() {
+    let gateway_key = (INFRA.to_string(), "gateway-static-addresses".to_string());
+    let conditions = |s: &Snapshot| {
+        let (_, desired) = run(s);
+        let g = &desired.gateways[&gateway_key];
+        let pick = |kind: &str| (find(&g.conditions, kind).status.clone(), find(&g.conditions, kind).reason.clone());
+        (pick("Accepted"), pick("Programmed"), desired)
+    };
+    let pair = |status: &str, reason: &str| (status.to_string(), reason.to_string());
+    let mut s = snapshot(&["gateway-static-addresses"]);
+    let (accepted, _, _) = conditions(&s);
+    assert_eq!(pair("False", "UnsupportedAddress"), accepted, "the fake address type");
+
+    // Without it: the Service asks for the first address, which isn't the one assigned.
+    let gateway = s.gateways.iter_mut().find(|g| g.name_any() == gateway_key.1).unwrap();
+    gateway.spec.addresses.remove(0);
+    let (accepted, programmed, desired) = conditions(&s);
+    assert_eq!(pair("True", "Accepted"), accepted);
+    assert_eq!(pair("False", "AddressNotUsable"), programmed);
+    let service = desired.services.values().find(|svc| svc.labels().get(GATEWAY_NAME_LABEL) == Some(&gateway_key.1)).unwrap();
+    assert_eq!(Some("10.255.255.1"), service.spec.as_ref().unwrap().load_balancer_ip.as_deref());
+
+    // Only the usable one, and the load balancer assigned it.
+    let gateway = s.gateways.iter_mut().find(|g| g.name_any() == gateway_key.1).unwrap();
+    gateway.spec.addresses.remove(0);
+    let gateway = gateway.clone();
+    s.services.retain(|svc| svc.labels().get(GATEWAY_NAME_LABEL) != Some(&gateway_key.1));
+    let assigned = gateway_service(&s, &gateway, "10.0.0.200");
+    assert_eq!(Some("10.0.0.200"), assigned.spec.as_ref().unwrap().load_balancer_ip.as_deref());
+    s.services.push(assigned);
+    let (accepted, programmed, desired) = conditions(&s);
+    assert_eq!((pair("True", "Accepted"), pair("True", "Programmed")), (accepted, programmed));
+    assert_eq!(vec!["10.0.0.200"], desired.gateways[&gateway_key].addresses.iter().map(|a| a.value.as_str()).collect::<Vec<_>>());
+}
+
+#[test]
+fn an_address_without_a_value_asks_for_any() {
+    let mut s = snapshot(&[]);
+    let gateway = s.gateways.iter_mut().find(|g| g.name_any() == "same-namespace").unwrap();
+    gateway.spec.addresses = vec![GatewaySpecAddress { address_type: Some("IPAddress".to_string()), value: String::new() }];
+    let (_, desired) = run(&s);
+    let g = &desired.gateways[&(INFRA.to_string(), "same-namespace".to_string())];
+    assert_eq!("True", find(&g.conditions, "Programmed").status, "{:?}", g.conditions);
+}

@@ -1,0 +1,35 @@
+[
+ {
+  "apiVersion": "gateway.networking.k8s.io/v1",
+  "kind": "Gateway",
+  "metadata": {
+   "name": "gateway-static-addresses",
+   "namespace": "gateway-conformance-infra",
+   "annotations": {
+    "gateway-api/skip-this-for-readiness": "true"
+   }
+  },
+  "spec": {
+   "gatewayClassName": "rws",
+   "addresses": [
+    {
+     "type": "test/fake-invalid-type",
+     "value": "fake address teehee!"
+    },
+    {
+     "value": "10.255.255.1"
+    },
+    {
+     "value": "10.0.0.200"
+    }
+   ],
+   "listeners": [
+    {
+     "name": "http",
+     "port": 8080,
+     "protocol": "HTTP"
+    }
+   ]
+  }
+ }
+]
