@@ -1,15 +1,15 @@
 ---
 title: Kubernetes Gateway API
-description: rws as a Kubernetes Gateway API controller — work in progress for 18.8.0, what works today and how to try it.
+description: rws as a Kubernetes Gateway API controller — every route kind, the standard-channel extended features, shared and provisioned modes, and how to install it.
 ---
 
-:::caution[In progress]
-The Gateway API controller is being built for 18.8.0 (the plan, decisions and progress are in [`spec/GATEWAY_API.md`](https://github.com/bohdaq/rust-web-server/blob/main/spec/GATEWAY_API.md)). The target is conformance with Gateway API v1.6 for HTTPRoute, GRPCRoute, TLSRoute, TCPRoute and UDPRoute. This page describes what works today.
+:::note[Conformance]
+rws passes the Gateway API v1.6.3 conformance suite (standard channel) for the GATEWAY-HTTP, GATEWAY-GRPC, GATEWAY-TLS, GATEWAY-TCP and GATEWAY-UDP profiles with every standard-channel extended feature, in both deployment modes; CI runs the suite on every change (`.github/workflows/gateway-api.yml`). Experimental-channel features (HTTPRoute retries, destination-port matching, mixed TLS termination) aren't claimed yet. Design and history: [`spec/GATEWAY_API.md`](https://github.com/bohdaq/rust-web-server/blob/main/spec/GATEWAY_API.md).
 :::
 
 With the `gateway-api` build feature and `RWS_CONFIG_GATEWAY_API_ENABLED=true`, rws watches the cluster's Gateway API objects, serves the Gateways whose GatewayClass names its controller, and reports what it accepted in their status. Every replica serves traffic; one, holding the `rws-gateway-controller` Lease, writes status and manages Services.
 
-## What works today
+## What it serves
 
 - **GatewayClass, Gateway, HTTPRoute, ReferenceGrant** status: acceptance, listener conditions (protocol, route kinds, certificates, conflicts), attached-route counts, route parent conditions (listener allowance by namespace, hostname intersection, `sectionName`/`port`), backend resolution (Service kind, ReferenceGrants, existence), `observedGeneration`.
 - **A Service per Gateway** (`rws-<gateway>`, `LoadBalancer` by default), in the Gateway's namespace: one port per listener port, each mapped to a container port from `RWS_CONFIG_GATEWAY_API_PORT_RANGE`. A Service only selects pods in its own namespace, so it has no selector: rws writes its EndpointSlice (`rws-<gateway>-ipv4`, and `-ipv6` when pods have IPv6 addresses) with its own serving pods — those in its namespace matching `RWS_CONFIG_GATEWAY_API_POD_SELECTOR` — and their readiness. The Service's load-balancer address becomes the Gateway's `status.addresses`; `spec.infrastructure` labels and annotations are put on it.

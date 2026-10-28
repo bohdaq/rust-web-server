@@ -16,7 +16,8 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCS = os.path.join(ROOT, "docs", "src", "content", "docs")
-SKIP_DIRS = {"target", "node_modules", ".git", "archive", "dist", ".astro"}
+# `upstream`: files copied into other repositories, whose links resolve there.
+SKIP_DIRS = {"target", "node_modules", ".git", "archive", "dist", ".astro", "upstream"}
 
 errors = []
 

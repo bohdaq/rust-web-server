@@ -70,6 +70,10 @@ Load balancing (round-robin, least-connections, random, IP hash), active health 
 
 ---
 
+## Kubernetes Gateway API
+
+Built with the `gateway-api` feature, rws is a [Gateway API](https://gateway-api.sigs.k8s.io) controller and data plane in one binary: HTTPRoute, GRPCRoute, TLSRoute, TCPRoute and UDPRoute, conformant with Gateway API v1.6.3 (all five Gateway profiles, every standard-channel extended feature), installed with the Helm chart (`gatewayAPI.enabled=true`). See [Kubernetes Gateway API](https://rws8.tech/deployment/kubernetes-gateway-api/).
+
 ## Need custom logic? It's also a Rust library
 
 The server above is the `rust-web-server` crate. Use it directly when you need routes, middleware, or an MCP server in code:

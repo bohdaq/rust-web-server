@@ -9,23 +9,17 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
-- Kubernetes Gateway API controller, in progress (#19, `gateway-api`
-  feature; plan and status in `spec/GATEWAY_API.md`). So far: typed Gateway
-  API v1.6 objects, watches through kube-rs, and the translation from the
-  cluster's GatewayClasses, Gateways, HTTPRoutes and ReferenceGrants to the
-  status the Gateway API requires (acceptance, listener conditions, attached
-  routes, reference resolution), tested against the conformance suite's own
-  manifests and a fake API server. It serves traffic: a Service per Gateway,
-  HTTP/HTTPS listeners on container ports, HTTPRoute matching with the spec's
-  precedence, weighted backends over EndpointSlices, the filters (header
-  modifiers, redirects, URL rewrites, CORS), timeouts and retries, h2c and
-  WebSocket backends, request mirroring, GRPCRoute, TLSRoute (passthrough and
-  terminate), TCPRoute, UDPRoute, ListenerSet, 421 for misdirected requests,
-  client-certificate validation, BackendTLSPolicy (with SAN checks), static
-  addresses, shared and provisioned (a Deployment per Gateway) modes, Lease
-  leader election, Helm
-  values (`gatewayAPI.*`) and a CI job running the official conformance suite
-  in kind.
+- Kubernetes Gateway API controller (#19, `gateway-api` feature; see
+  docs/deployment/kubernetes-gateway-api): conformant with Gateway API v1.6.3
+  (standard channel) for the GATEWAY-HTTP, GATEWAY-GRPC, GATEWAY-TLS,
+  GATEWAY-TCP and GATEWAY-UDP profiles with every standard-channel extended
+  feature, in shared and provisioned (a Deployment per Gateway) modes. HTTPRoute
+  (matching, the filters, timeouts, mirroring, CORS, h2c and WebSocket
+  backends), GRPCRoute, TLSRoute (passthrough and terminate), TCPRoute,
+  UDPRoute, ListenerSet, ReferenceGrant, BackendTLSPolicy (with SAN checks),
+  client-certificate validation, static addresses; a Service and EndpointSlice
+  per Gateway, Lease leader election, Helm values (`gatewayAPI.*`), and a CI
+  job running the official suite in kind in both modes.
 
 ### Fixed
 

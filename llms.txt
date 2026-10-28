@@ -141,7 +141,7 @@ Use it as:
 - [Docker](https://rws8.tech/deployment/docker/): Build and run rust-web-server in a minimal Docker container using multi-stage builds.
 - [Kubernetes](https://rws8.tech/deployment/kubernetes/): Deploy rust-web-server on Kubernetes with health probes, metrics scraping, graceful shutdown, and autoscaling.
 - [Kubernetes Ingress](https://rws8.tech/deployment/kubernetes-ingress/): Use KubernetesIngressWatcher and IngressRouter to dynamically route traffic from Kubernetes Ingress rules.
-- [Kubernetes Gateway API](https://rws8.tech/deployment/kubernetes-gateway-api/): rws as a Kubernetes Gateway API controller — work in progress for 18.8.0, what works today and how to try it.
+- [Kubernetes Gateway API](https://rws8.tech/deployment/kubernetes-gateway-api/): rws as a Kubernetes Gateway API controller — every route kind, the standard-channel extended features, shared and provisioned modes, and how to install it.
 - [Observability](https://rws8.tech/deployment/observability/): Metrics, structured logs, distributed tracing, and health endpoints for rust-web-server.
 - [systemd](https://rws8.tech/deployment/systemd/): Run rws as a hardened systemd service — from the deb/rpm packages or by hand; unprivileged user, read-only system, ports below 1024, reload and log rotation by signal.
 - [Windows](https://rws8.tech/deployment/windows/): Run rws on Windows, in a terminal or as a Windows service started at boot and stopped gracefully by the Service Control Manager.
