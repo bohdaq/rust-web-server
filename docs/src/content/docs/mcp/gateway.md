@@ -72,6 +72,13 @@ nothing: use `require_bearer_tokens` or `require_oauth`.
   caller's `Authorization` is never passed on.
 - `.timeout_ms(ms)` — per request (default 30 s).
 
+`McpGateway::refresh_every(Some(duration))` (default 5 minutes; `None` lists
+once) re-reads every upstream's tools: new ones appear, removed ones go,
+changed ones are re-published, and the gateway's clients get
+`notifications/tools/list_changed`. Between refreshes `tools/list` is answered
+from the gateway's copy; an upstream that can't be reached keeps the tools it
+had (since 18.9.0).
+
 The gateway initializes a session with each upstream, sends the session id
 and negotiated `MCP-Protocol-Version` on later requests, reads JSON or
 event-stream replies, and starts a new session once if the upstream has
@@ -92,8 +99,7 @@ Clients of the gateway may use either version.
 
 ## Not yet
 
-This is the minimal gateway. Tools are listed once, at `build()` — restart
-the gateway to pick up an upstream's new tools. Upstream resources, prompts
-and notifications aren't federated, results aren't cached, there are no
+Upstream resources, prompts
+and notifications aren't federated, upstream `listChanged` notifications aren't followed (the refresh interval is), results aren't cached, there are no
 per-tool rate limits or audit log. The [roadmap](https://github.com/bohdaq/rust-web-server/blob/main/spec/ROADMAP.md)
 tracks the full gateway (#28).

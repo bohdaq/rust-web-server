@@ -13,6 +13,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   client connected) unless the client already sent one: the HTTP/1.1 and
   HTTP/2 upstream forwarders, config-file proxy routes, Gateway API routes,
   mirrors and upgrades.
+- MCP gateway: `McpGateway::refresh_every` (default 5 minutes) re-reads
+  upstream tool lists and applies the difference, with
+  `notifications/tools/list_changed` to clients; tools were listed only at
+  `build`.
 - MCP gateway: an upstream that only speaks MCP 2026-07-28 (it refuses
   `initialize`) is reached statelessly, after `server/discover`, with the
   version in `_meta` and the `Mcp-Method`/`Mcp-Name` headers; 2026-only

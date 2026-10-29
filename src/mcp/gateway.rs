@@ -11,8 +11,10 @@
 //! [`McpContext::auth_claims`](super::McpContext::auth_claims)) sees which tools, and nothing is allowed
 //! unless a rule says so.
 //!
-//! Minimal on purpose: tools are listed once, at `build`; upstream resources,
-//! prompts and notifications are not federated.
+//! Tools are listed at `build` and again every [`McpGateway::refresh_every`]
+//! (5 minutes by default): new upstream tools appear, removed ones go, and
+//! the gateway's clients get `notifications/tools/list_changed`. Between
+//! refreshes `tools/list` is answered from the gateway's own copy.
 //!
 //! Each upstream speaks the protocol it supports: the gateway opens a
 //! 2025-11-25 session, and when an upstream refuses `initialize` it talks to
@@ -76,12 +78,24 @@ pub struct McpGateway {
     version: String,
     upstreams: Vec<Upstream>,
     rules: Vec<(String, Vec<String>)>,
+    refresh: Option<std::time::Duration>,
 }
+
+/// How often upstream tool lists are re-read by default.
+pub const DEFAULT_REFRESH: std::time::Duration = std::time::Duration::from_secs(300);
 
 impl McpGateway {
     /// A gateway announcing itself as `name`/`version`.
     pub fn new(name: impl Into<String>, version: impl Into<String>) -> Self {
-        McpGateway { name: name.into(), version: version.into(), upstreams: Vec::new(), rules: Vec::new() }
+        McpGateway { name: name.into(), version: version.into(), upstreams: Vec::new(), rules: Vec::new(), refresh: Some(DEFAULT_REFRESH) }
+    }
+
+    /// Re-read every upstream's tools this often (default
+    /// [`DEFAULT_REFRESH`]); `None` lists them only at `build`. An upstream
+    /// that can't be reached keeps the tools it had.
+    pub fn refresh_every(mut self, every: Option<std::time::Duration>) -> Self {
+        self.refresh = every;
+        self
     }
 
     /// Federate `upstream`'s tools.
@@ -123,17 +137,72 @@ impl McpGateway {
             let identity = ctx.auth_claims.as_deref().and_then(|claims| top_level_str(claims, "sub"));
             identity.is_some_and(|identity| allowed(&rules, &identity, tool))
         });
+        let mut federated = Vec::new();
         for upstream in self.upstreams {
             let connection = Arc::new(Connection::new(upstream));
+            let mut known = std::collections::HashMap::new();
             for tool in connection.list_tools()? {
+                known.insert(tool.name.clone(), tool.fingerprint());
                 server = register(server, &connection, tool);
+            }
+            federated.push((connection, known));
+        }
+        if let Some(every) = self.refresh {
+            let live = server.clone();
+            let spawned = std::thread::Builder::new().name("rws-mcp-gateway-refresh".to_string()).spawn(move || loop {
+                std::thread::sleep(every);
+                for (connection, known) in federated.iter_mut() {
+                    refresh(&live, connection, known);
+                }
+            });
+            if let Err(e) = spawned {
+                eprintln!("mcp gateway: tool list refresh not started: {e}");
             }
         }
         Ok(server)
     }
 }
 
+/// Re-list `connection`'s tools and apply the difference to `server`:
+/// register new or changed tools, remove gone ones, then tell clients.
+fn refresh(server: &McpServer, connection: &Arc<Connection>, known: &mut std::collections::HashMap<String, String>) {
+    let tools = match connection.list_tools() {
+        Ok(tools) => tools,
+        Err(e) => {
+            eprintln!("mcp gateway: keeping {}'s tools: {e}", connection.name());
+            return;
+        }
+    };
+    let prefix = &connection.upstream.prefix;
+    let mut changed = false;
+    let mut seen = std::collections::HashSet::new();
+    for tool in tools {
+        seen.insert(tool.name.clone());
+        let fingerprint = tool.fingerprint();
+        if known.get(&tool.name) == Some(&fingerprint) {
+            continue;
+        }
+        let exposed = format!("{prefix}{SEPARATOR}{}", tool.name);
+        if known.contains_key(&tool.name) {
+            server.remove_tool(&exposed);
+        }
+        known.insert(tool.name.clone(), fingerprint);
+        let _ = register(server.clone(), connection, tool);
+        changed = true;
+    }
+    let gone: Vec<String> = known.keys().filter(|name| !seen.contains(*name)).cloned().collect();
+    for name in gone {
+        known.remove(&name);
+        server.remove_tool(&format!("{prefix}{SEPARATOR}{name}"));
+        changed = true;
+    }
+    if changed {
+        server.notify("notifications/tools/list_changed", None);
+    }
+}
+
 /// One upstream tool, as `tools/list` described it.
+#[derive(Clone)]
 struct UpstreamTool {
     name: String,
     description: String,
@@ -141,6 +210,13 @@ struct UpstreamTool {
     input_schema: String,
     output_schema: Option<String>,
     annotations: Option<ToolAnnotations>,
+}
+
+impl UpstreamTool {
+    /// Changes when anything the gateway republishes changes.
+    fn fingerprint(&self) -> String {
+        format!("{}\u{0}{}\u{0}{:?}\u{0}{}\u{0}{:?}\u{0}{:?}", self.name, self.description, self.title, self.input_schema, self.output_schema, self.annotations)
+    }
 }
 
 fn register(server: McpServer, connection: &Arc<Connection>, tool: UpstreamTool) -> McpServer {

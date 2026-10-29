@@ -502,3 +502,58 @@ fn modern_result_fields_are_dropped_and_input_requests_refused() {
     assert_eq!(without_modern_fields(plain), plain);
 }
 
+
+#[test]
+fn tools_added_and_removed_upstream_show_up_after_a_refresh() {
+    // The upstream's tool list is whatever `tools` holds when asked.
+    let tools = Arc::new(Mutex::new(vec!["echo"]));
+    let current = Arc::clone(&tools);
+    let fake = scripted(move |r| {
+        if r.method() == "tools/list" {
+            let list: Vec<String> = current.lock().unwrap().iter().map(|n| format!(r#"{{"name":"{n}","inputSchema":{{"type":"object"}}}}"#)).collect();
+            return Reply::json(format!(r#"{{"jsonrpc":"2.0","id":{},"result":{{"tools":[{}]}}}}"#, r.id(), list.join(",")));
+        }
+        Reply::json(format!(r#"{{"jsonrpc":"2.0","id":{},"result":{{"content":[{{"type":"text","text":"ok"}}]}}}}"#, r.id()))
+    });
+    let server = McpGateway::new("g", "1")
+        .upstream(Upstream::new("up", &fake.url))
+        .allow("me", ["*"])
+        .refresh_every(Some(std::time::Duration::from_millis(50)))
+        .build()
+        .unwrap();
+    let names = |server: &McpServer| {
+        let response = server.handle_request_with_context(r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#, ctx(Some("me")));
+        String::from_utf8(response.content_range_list[0].body.clone()).unwrap()
+    };
+    assert!(names(&server).contains("up__echo"));
+
+    *tools.lock().unwrap() = vec!["ping"];
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let list = names(&server);
+        if list.contains("up__ping") && !list.contains("up__echo") {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "refresh never applied: {list}");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(call_one_named(&server, "up__ping").contains("ok"));
+}
+
+#[test]
+fn an_unreachable_upstream_keeps_its_tools_on_refresh() {
+    let fake = scripted(|r| Reply::json(one_tool_list(r)));
+    let server = McpGateway::new("g", "1").upstream(Upstream::new("up", &fake.url)).allow("me", ["*"]).refresh_every(None).build().unwrap();
+    let connection = Arc::new(Connection::new(Upstream::new("up", "http://127.0.0.1:9/mcp").timeout_ms(200)));
+    let mut known: std::collections::HashMap<String, String> = [("echo".to_string(), "x".to_string())].into();
+    refresh(&server, &connection, &mut known);
+    assert!(known.contains_key("echo"), "nothing removed when the upstream is down");
+}
+
+fn call_one_named(server: &McpServer, tool: &str) -> String {
+    let response = server.handle_request_with_context(
+        &format!(r#"{{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{{"name":"{tool}","arguments":{{}}}}}}"#),
+        ctx(Some("me")),
+    );
+    String::from_utf8(response.content_range_list[0].body.clone()).unwrap()
+}
