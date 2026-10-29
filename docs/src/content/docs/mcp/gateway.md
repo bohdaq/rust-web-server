@@ -78,11 +78,22 @@ event-stream replies, and starts a new session once if the upstream has
 forgotten its own. `build()` fails, naming the upstream and its URL, if one
 can't be reached at startup.
 
+### Protocol versions
+
+The gateway opens a 2025-11-25 session with each upstream. An upstream that
+refuses `initialize` (one that speaks only 2026-07-28) is used statelessly
+instead (since 18.9.0): `server/discover` once, then every request carries
+the version and an empty client capabilities object in `params._meta` and
+the `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers, with no
+session. Its results lose the 2026-only fields (`resultType`, cache hints)
+on the way through, so 2025 clients of the gateway can use its tools; a
+tool that asks for more input (2026 multi round-trip) answers an error.
+Clients of the gateway may use either version.
+
 ## Not yet
 
 This is the minimal gateway. Tools are listed once, at `build()` — restart
 the gateway to pick up an upstream's new tools. Upstream resources, prompts
 and notifications aren't federated, results aren't cached, there are no
-per-tool rate limits or audit log, and each upstream speaks the protocol
-version it agreed with the gateway. The [roadmap](https://github.com/bohdaq/rust-web-server/blob/main/spec/ROADMAP.md)
+per-tool rate limits or audit log. The [roadmap](https://github.com/bohdaq/rust-web-server/blob/main/spec/ROADMAP.md)
 tracks the full gateway (#28).

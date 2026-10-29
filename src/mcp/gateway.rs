@@ -12,8 +12,14 @@
 //! unless a rule says so.
 //!
 //! Minimal on purpose: tools are listed once, at `build`; upstream resources,
-//! prompts and notifications are not federated; each upstream speaks the
-//! protocol version it negotiated with the gateway.
+//! prompts and notifications are not federated.
+//!
+//! Each upstream speaks the protocol it supports: the gateway opens a
+//! 2025-11-25 session, and when an upstream refuses `initialize` it talks to
+//! it the 2026-07-28 way instead, statelessly (`server/discover` first, then
+//! every request carrying its version and capabilities in `_meta` and the
+//! `Mcp-Method`/`Mcp-Name` headers). Clients of either era reach upstreams of
+//! either era.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -23,6 +29,9 @@ use crate::http_client::Client;
 
 /// The protocol version the gateway asks upstreams for.
 const PROTOCOL_VERSION: &str = "2025-11-25";
+
+/// The stateless protocol, for upstreams that refuse `initialize`.
+const MODERN_VERSION: &str = "2026-07-28";
 
 /// Separates an upstream's prefix from its tool names.
 pub const SEPARATOR: &str = "__";
@@ -196,6 +205,8 @@ struct Connection {
 struct Session {
     id: Option<String>,
     version: String,
+    /// 2026-07-28: no session; `_meta` and headers on every request.
+    modern: bool,
 }
 
 impl Connection {
@@ -233,7 +244,11 @@ impl Connection {
     /// Calls `name` upstream: the raw `tools/call` result, or why it failed.
     fn call_tool(&self, name: &str, arguments: &str) -> Result<String, String> {
         let params = format!(r#"{{"name":"{}","arguments":{arguments}}}"#, json_escape(name));
-        self.request("tools/call", &params).map_err(|e| format!("{}: {e}", self.upstream.prefix))
+        let result = self.request("tools/call", &params).map_err(|e| format!("{}: {e}", self.upstream.prefix))?;
+        if top_level_str(&result, "resultType").as_deref() == Some("input_required") {
+            return Err(format!("{}: the tool asked for more input (2026-07-28 multi round-trip), which the gateway doesn't relay", self.upstream.prefix));
+        }
+        Ok(without_modern_fields(&result))
     }
 
     /// Sends one request in the current session (initializing first if
@@ -271,28 +286,59 @@ impl Connection {
         }
     }
 
+    /// A 2025-11-25 session, or, when the upstream refuses that, the
+    /// stateless 2026-07-28 protocol after a `server/discover`.
     fn initialize(&self) -> Result<Session, String> {
+        match self.initialize_legacy() {
+            Ok(session) => Ok(session),
+            Err(legacy) => self.discover().map_err(|modern| format!("{legacy}; as {MODERN_VERSION}: {modern}")),
+        }
+    }
+
+    fn discover(&self) -> Result<Session, String> {
+        let session = Session { id: None, version: MODERN_VERSION.to_string(), modern: true };
+        match self.send(&session, "server/discover", "{}")? {
+            Reply::Result(result) if result.contains(MODERN_VERSION) => Ok(session),
+            Reply::Result(_) => Err(format!("server/discover doesn't list {MODERN_VERSION}")),
+            Reply::SessionGone => Err("server/discover answered 404".to_string()),
+        }
+    }
+
+    fn initialize_legacy(&self) -> Result<Session, String> {
         let params = format!(
             r#"{{"protocolVersion":"{PROTOCOL_VERSION}","capabilities":{{}},"clientInfo":{{"name":"rws-mcp-gateway","version":"{}"}}}}"#,
             env!("CARGO_PKG_VERSION"),
         );
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let response = self.post(None, PROTOCOL_VERSION, &envelope(id, "initialize", &params))?;
+        let response = self.post(None, PROTOCOL_VERSION, &[], &envelope(id, "initialize", &params))?;
         if !(200..300).contains(&response.status()) {
             return Err(format!("initialize answered HTTP {}", response.status()));
         }
         let session_id = response.header("mcp-session-id").map(str::to_string);
         let result = parse_reply(response.header("content-type").unwrap_or(""), response.bytes(), id)?;
         let version = top_level_str(&result, "protocolVersion").unwrap_or_else(|| PROTOCOL_VERSION.to_string());
-        let session = Session { id: session_id, version };
+        let session = Session { id: session_id, version, modern: false };
         let initialized = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
-        self.post(session.id.as_deref(), &session.version, initialized)?;
+        self.post(session.id.as_deref(), &session.version, &[], initialized)?;
         Ok(session)
     }
 
     fn send(&self, session: &Session, method: &str, params: &str) -> Result<Reply, String> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let response = self.post(session.id.as_deref(), &session.version, &envelope(id, method, params))?;
+        let response = if session.modern {
+            let mut headers = vec![("Mcp-Method", method.to_string())];
+            let named = match method {
+                "tools/call" | "prompts/get" => top_level_str(params, "name"),
+                "resources/read" => top_level_str(params, "uri"),
+                _ => None,
+            };
+            if let Some(name) = named {
+                headers.push(("Mcp-Name", name));
+            }
+            self.post(None, &session.version, &headers, &envelope(id, method, &with_modern_meta(params)))?
+        } else {
+            self.post(session.id.as_deref(), &session.version, &[], &envelope(id, method, params))?
+        };
         if response.status() == 404 && session.id.is_some() {
             return Ok(Reply::SessionGone);
         }
@@ -303,7 +349,7 @@ impl Connection {
     }
 
     /// One POST to the upstream, with its own headers only.
-    fn post(&self, session_id: Option<&str>, version: &str, body: &str) -> Result<crate::http_client::Response, String> {
+    fn post(&self, session_id: Option<&str>, version: &str, extra: &[(&str, String)], body: &str) -> Result<crate::http_client::Response, String> {
         let mut request = self
             .client
             .post(&self.upstream.url)
@@ -312,6 +358,9 @@ impl Connection {
             .header("MCP-Protocol-Version", version);
         if let Some(id) = session_id {
             request = request.header("Mcp-Session-Id", id);
+        }
+        for (name, value) in extra {
+            request = request.header(*name, value);
         }
         for (name, value) in &self.upstream.headers {
             request = request.header(name, value);
@@ -323,6 +372,35 @@ impl Connection {
 enum Reply {
     Result(String),
     SessionGone,
+}
+
+/// A 2026-07-28 result without the fields the gateway's own server adds for
+/// its client (`resultType`, cache hints): passed through, they would
+/// appear twice, or reach a 2025 client that doesn't know them.
+fn without_modern_fields(result: &str) -> String {
+    let Some(members) = json_rpc::object_members(result) else { return result.to_string() };
+    if !members.iter().any(|(k, _)| matches!(k.as_str(), "resultType" | "ttlMs" | "cacheScope")) {
+        return result.to_string();
+    }
+    let kept: Vec<String> = members
+        .into_iter()
+        .filter(|(k, _)| !matches!(k.as_str(), "resultType" | "ttlMs" | "cacheScope"))
+        .map(|(k, v)| format!(r#""{}":{v}"#, json_escape(&k)))
+        .collect();
+    format!("{{{}}}", kept.join(","))
+}
+
+/// `params` with the 2026-07-28 `_meta` (version, client info, no client
+/// capabilities: the gateway answers no server-to-client requests).
+fn with_modern_meta(params: &str) -> String {
+    let meta = format!(
+        r#""_meta":{{"io.modelcontextprotocol/protocolVersion":"{MODERN_VERSION}","io.modelcontextprotocol/clientInfo":{{"name":"rws-mcp-gateway","version":"{}"}},"io.modelcontextprotocol/clientCapabilities":{{}}}}"#,
+        env!("CARGO_PKG_VERSION"),
+    );
+    let inner = params.trim().strip_prefix('{').and_then(|p| p.strip_suffix('}')).unwrap_or("").trim();
+    // After the request's own members: some JSON readers take the first
+    // `name` at any depth, which would be clientInfo's.
+    if inner.is_empty() { format!("{{{meta}}}") } else { format!("{{{inner},{meta}}}") }
 }
 
 fn envelope(id: u64, method: &str, params: &str) -> String {

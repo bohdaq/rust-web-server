@@ -40,7 +40,8 @@ and `http1`-only test runs before pushing.
 | # | State |
 |---|---|
 | 1 | **done 2026-10-29**: `ConnectionInfo.tls` (set by HTTP/1.1, HTTP/2, HTTP/3 accept paths; false for the sync server, TestClient, adapters), `Default` + `ConnectionInfo::new`; `proxy::Peer { ip, tls }` replaces `client_ip: &str` through the forwarders (all `pub(crate)`); `X-Forwarded-Proto` in `build_request`, the h2 upstream, Gateway API upgrades and mirrors, kept when the client sent one. 117 literals updated. Tests: 2231 default, 1918 http1, 93 gateway-api |
-| 2a | in progress |
-| 2b–2g | — |
+| 2a | **done**: fallback to stateless 2026-07-28 when `initialize` is refused (`server/discover`, `_meta` after the params' own members, `Mcp-Method`/`Mcp-Name`), 2026-only result fields stripped, `input_required` refused; test with a 2026-only fake upstream |
+| 2b | in progress |
+| 2c–2g | — |
 | 3 | — |
 | 4 | — |

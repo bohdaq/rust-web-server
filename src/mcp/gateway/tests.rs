@@ -106,7 +106,11 @@ impl Fake {
 
     /// A fake that is a real `McpServer`.
     fn serving(server: McpServer) -> Fake {
-        Fake::start(move |recorded| {
+        Fake::start(Fake::serving_handler(server))
+    }
+
+    fn serving_handler(server: McpServer) -> impl Fn(&Recorded) -> Reply + Send + Sync + 'static {
+        move |recorded: &Recorded| {
             let request = Request {
                 method: "POST".to_string(),
                 request_uri: "/mcp".to_string(),
@@ -129,6 +133,23 @@ impl Fake {
                 headers: response.headers.iter().filter(|h| h.name.eq_ignore_ascii_case("mcp-session-id")).map(|h| (h.name.to_string(), h.value.to_string())).collect(),
                 body: part.map(|p| String::from_utf8(p.body.clone()).unwrap()).unwrap_or_default(),
             }
+        }
+    }
+
+    /// A real `McpServer` that only speaks 2026-07-28: `initialize` is
+    /// refused as a server without the earlier versions would.
+    fn modern_only(server: McpServer) -> Fake {
+        let inner = Fake::serving_handler(server);
+        Fake::start(move |recorded| {
+            if recorded.method() == "initialize" {
+                return Reply {
+                    status: 400,
+                    content_type: "application/json".into(),
+                    headers: Vec::new(),
+                    body: format!(r#"{{"jsonrpc":"2.0","id":{},"error":{{"code":-32022,"message":"Unsupported protocol version"}}}}"#, recorded.id()),
+                };
+            }
+            inner(recorded)
         })
     }
 
@@ -442,3 +463,42 @@ fn replies_are_parsed_by_id() {
     assert!(sse("data: {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"sampling/createMessage\"}\n\n").is_err());
     assert!(sse(": keep-alive\n\n").is_err());
 }
+
+#[test]
+fn an_upstream_that_only_speaks_2026_is_reached_statelessly() {
+    let modern = Fake::modern_only(jira_like());
+    let gateway = TestClient::new(
+        McpGateway::new("gateway", "1").upstream(Upstream::new("jira", &modern.url)).allow("alice", ["*"]).build().unwrap().require_bearer_tokens([("alice-token", "alice")]),
+    );
+    assert!(list(&gateway, "alice-token").contains("jira__search"));
+    let reply = call(&gateway, "alice-token", "jira__search", "{}");
+    assert!(reply.contains("PROJ-1"), "{reply}");
+    assert!(!reply.contains("resultType"), "2026 fields stripped for a 2025 client: {reply}");
+
+    let seen = modern.requests();
+    let methods: Vec<String> = seen.iter().map(Recorded::method).collect();
+    assert_eq!(methods[..3], ["initialize", "server/discover", "tools/list"], "{methods:?}");
+    let call = seen.iter().find(|r| r.method() == "tools/call").expect("a tools/call");
+    assert_eq!(call.header("MCP-Protocol-Version"), Some("2026-07-28"));
+    assert_eq!(call.header("Mcp-Method"), Some("tools/call"));
+    assert_eq!(call.header("Mcp-Name"), Some("search"));
+    assert!(call.header("Mcp-Session-Id").is_none());
+    assert!(call.body.contains("io.modelcontextprotocol/clientCapabilities"), "{}", call.body);
+}
+
+#[test]
+fn with_modern_meta_merges_into_params() {
+    let empty = with_modern_meta("{}");
+    assert!(empty.starts_with(r#"{"_meta":{"#) && empty.ends_with("}}"), "{empty}");
+    let named = with_modern_meta(r#"{"name":"x","arguments":{}}"#);
+    assert!(named.starts_with(r#"{"name":"x""#) && named.contains("protocolVersion"), "own members first: {named}");
+    assert!(json_rpc::object_members(&named).is_some(), "valid JSON object: {named}");
+}
+
+#[test]
+fn modern_result_fields_are_dropped_and_input_requests_refused() {
+    assert_eq!(without_modern_fields(r#"{"resultType":"complete","content":[],"ttlMs":5}"#), r#"{"content":[]}"#);
+    let plain = r#"{"content":[{"type":"text","text":"a"}]}"#;
+    assert_eq!(without_modern_fields(plain), plain);
+}
+
