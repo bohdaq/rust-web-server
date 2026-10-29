@@ -690,9 +690,12 @@ async fn serve() {
         );
     } else {
         SERVER_READY.store(true, Ordering::SeqCst);
+        // One app for both listeners (building it twice printed its
+        // startup notes twice).
+        let app = build_app();
         tokio::join!(
-            Server::run_tls(listener, pool, build_app()),
-            Server::run_quic(build_app()),
+            Server::run_tls(listener, pool, app.clone()),
+            Server::run_quic(app),
             Server::run_redirect(),
         );
     }

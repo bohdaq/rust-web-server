@@ -119,6 +119,9 @@ pub struct ServerConfig {
     /// `If-None-Match` / `If-Modified-Since` (a 304). An empty value keeps
     /// the `no-store` default for static files too.
     pub static_cache_control: String,
+    /// `RWS_CONFIG_DIRECTORY_LISTING` — list a directory that has no
+    /// `index.html`. Default `true`; `false` answers 404 instead (18.8.4).
+    pub directory_listing: bool,
 
     // ── Server internals ──────────────────────────────────────────────────────
     /// `RWS_CONFIG_LOG_FORMAT` — `"json"` or `"combined"`. Default: `"json"`.
@@ -145,6 +148,7 @@ impl Default for ServerConfig {
             nanos_headers: false,
             client_hints: false,
             static_cache_control: STATIC_CACHE_CONTROL_DEFAULT.to_string(),
+            directory_listing: true,
             log_format: Config::RWS_CONFIG_LOG_FORMAT_DEFAULT_VALUE.to_string(),
             request_allocation_size: *Config::RWS_DEFAULT_REQUEST_ALLOCATION_SIZE_IN_BYTES,
         }
@@ -180,6 +184,7 @@ impl ServerConfig {
             client_hints: read("RWS_CONFIG_CLIENT_HINTS").eq_ignore_ascii_case("true"),
             static_cache_control: std::env::var("RWS_CONFIG_STATIC_CACHE_CONTROL")
                 .unwrap_or_else(|_| STATIC_CACHE_CONTROL_DEFAULT.to_string()),
+            directory_listing: !read("RWS_CONFIG_DIRECTORY_LISTING").eq_ignore_ascii_case("false"),
             log_format: read(Config::RWS_CONFIG_LOG_FORMAT),
             request_allocation_size: std::env::var(
                 Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES,

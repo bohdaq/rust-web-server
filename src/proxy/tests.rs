@@ -1097,7 +1097,7 @@ fn proxied_request_drops_hop_by_hop_and_host_in_any_case() {
     let out = crate::proxy::build_request(&req, "b:9", "10.0.0.1", false);
     // The client's Content-Length is regenerated, not forwarded twice.
     let expected = "POST /a?b=1 HTTP/1.1\r\nHost: b:9\r\nX-Kept: v\r\n\
-        X-Forwarded-For: 10.0.0.1\r\nVia: 1.1 rws\r\nConnection: close\r\nContent-Length: 3\r\n\r\nabc";
+        X-Forwarded-For: 10.0.0.1\r\nVia: 1.1 rws\r\nX-Forwarded-Host: client\r\nConnection: close\r\nContent-Length: 3\r\n\r\nabc";
     assert_eq!(expected, String::from_utf8(out.clone()).unwrap());
     assert!(out.capacity() - out.len() < 16, "sized up front, not grown: {} of {}", out.len(), out.capacity());
 }
@@ -1373,3 +1373,23 @@ fn inside_a_traced_request_the_upstream_gets_our_traceparent_and_baggage() {
     .join()
     .unwrap();
 }
+
+#[test]
+fn proxied_request_says_which_host_the_client_asked_for() {
+    let req = crate::request::Request::parse(b"GET / HTTP/1.1\r\nHost: shop.example\r\n\r\n").unwrap();
+    let out = crate::proxy::build_request(&req, "10.0.0.9:8080", "10.0.0.1", true);
+    let text = String::from_utf8(out.clone()).unwrap();
+    assert!(text.contains("Host: 10.0.0.9:8080\r\n") && text.contains("X-Forwarded-Host: shop.example\r\n"), "{text:?}");
+    assert!(out.capacity() - out.len() < 16, "sized up front, not grown: {} of {}", out.len(), out.capacity());
+
+    // An outer proxy's X-Forwarded-Host is kept, not replaced or doubled.
+    let req = crate::request::Request::parse(b"GET / HTTP/1.1\r\nHost: inner\r\nX-Forwarded-Host: shop.example\r\n\r\n").unwrap();
+    let text = String::from_utf8(crate::proxy::build_request(&req, "b:9", "10.0.0.1", true)).unwrap();
+    assert_eq!(1, text.matches("X-Forwarded-Host").count(), "{text:?}");
+    assert!(text.contains("X-Forwarded-Host: shop.example\r\n"), "{text:?}");
+
+    // No Host (HTTP/1.0), no header.
+    let req = crate::request::Request::parse(b"GET / HTTP/1.0\r\n\r\n").unwrap();
+    assert!(!String::from_utf8(crate::proxy::build_request(&req, "b:9", "10.0.0.1", false)).unwrap().contains("X-Forwarded-Host"));
+}
+

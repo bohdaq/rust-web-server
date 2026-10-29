@@ -195,7 +195,9 @@ impl Application for App {
         if let Some(served) = StaticResourceController::serve_regular_file(request, &mut response, &config) {
             return Ok(served);
         }
-        if StaticResourceController::is_matching(request, connection) {
+        if StaticResourceController::is_matching(request, connection)
+            && (config.directory_listing || !StaticResourceController::is_directory_without_index(request))
+        {
             return Ok(StaticResourceController::process_general(request, response, &config));
         }
         if NotFoundController::is_matching(request, connection) {

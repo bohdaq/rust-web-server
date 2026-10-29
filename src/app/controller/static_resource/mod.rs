@@ -98,6 +98,15 @@ impl Controller for StaticResourceController {
 }
 
 impl StaticResourceController {
+    /// `true` for a request naming a directory with no `index.html`: what
+    /// [`ServerConfig::directory_listing`] = `false` answers with a 404.
+    pub(crate) fn is_directory_without_index(request: &Request) -> bool {
+        let Some(path) = URL::request_target_path(&request.request_uri) else { return false };
+        let Ok(fs_path) = static_fs_path(&os_specific_path(path)) else { return false };
+        let dir = std::path::Path::new(&fs_path);
+        dir.is_dir() && !dir.join("index.html").is_file()
+    }
+
     /// [`Controller::process`] minus the [`Self::serve_regular_file`] fast
     /// path: directories, `.html` resolution, ranges, OPTIONS, symlinks with
     /// an untyped name, the SPA fallback. For a caller that already tried it.

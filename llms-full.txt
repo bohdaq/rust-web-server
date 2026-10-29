@@ -1071,6 +1071,7 @@ order.
 | `RWS_CONFIG_OPEN_FILE_CACHE_STRICT` | `true` | boolean | `true`: every static request checks the cached file's size and modification time (one `fstat`), so an edit in place is served at once. `false`: that check is reused for `RWS_CONFIG_OPEN_FILE_CACHE_SECS`, like nginx's `open_file_cache_valid` — about 0.7 µs less per request, but a file edited in place can be served stale (old size or bytes) for up to that long. Read at startup. |
 | `RWS_CONFIG_RUNTIME` | `per-core` (`rws` binary; `shared` for library apps) | string | Async builds, Unix only. The `rws` binary runs `per-core` since 18.0.0 (`shared` before); an application built on the library stays `shared` unless it sets this. `shared`: one multi-threaded tokio runtime (`TOKIO_WORKER_THREADS` workers) takes every connection. `per-core`: one single-threaded runtime per worker, each accepting on its own `SO_REUSEPORT` socket on the same port, like nginx's worker processes — a connection stays on one thread, with no work stealing or cross-thread wake-ups. On fast CPUs that's more throughput (on the benchmark's fastest runners +12–16% requests per second, and 4% less CPU per proxied request); on slower ones it costs about 12% more CPU per small request for a few percent more throughput. HTTP/3, the redirect listener and ACME stay on the main runtime; SIGHUP and shutdown work as usual. Read at startup. |
 | `RWS_CONFIG_STATIC_CACHE_CONTROL` | `no-cache` | string | `Cache-Control` sent with static files (since 18.0.0; other responses keep `no-store, …`). The default lets browsers keep a file and revalidate it with `If-None-Match` / `If-Modified-Since`, which costs a `304` instead of the whole file. Set e.g. `public, max-age=3600` for assets with versioned names; an empty value sends the `no-store` default for static files too. |
+| `RWS_CONFIG_DIRECTORY_LISTING` | `true` | boolean | List a directory that has no `index.html` (since 18.8.4). `false` answers `404 Not Found` instead; directories with an `index.html` and files are unaffected. |
 | `RWS_CONFIG_CLIENT_HINTS` | `false` | boolean | Send `Accept-CH`, `Critical-CH` and the client hints in `Vary` on every response (always on before 18.0.0). Off by default: they add ~700 bytes to every response, and `Critical-CH` makes Chromium retry a request that arrived without the hints. |
 | `RWS_CONFIG_MAX_BODY_SIZE_IN_BYTES` | `0` | integer | Maximum accepted request body size in bytes. `0` means unlimited. When set, a request whose `Content-Length` exceeds this is rejected with `413 Payload Too Large` before any body bytes are read, and the connection is closed. Applies to HTTP/1.1, HTTP/2, and HTTP/3. |
 | `RWS_CONFIG_CSP` | unset | string | `Content-Security-Policy` header value, sent on every response. Unset: `default-src 'self'` with `RWS_CONFIG_SECURITY_HEADERS=true`, otherwise no header (18.0.0; was always `default-src 'self'`). An empty value suppresses the header. |
@@ -1488,6 +1489,7 @@ csp                     = "default-src 'self'"   # RWS_CONFIG_CSP: Content-Secur
 security_headers        = true       # RWS_CONFIG_SECURITY_HEADERS: X-Frame-Options, Referrer-Policy, Permissions-Policy, default CSP
 nanos_headers           = false      # RWS_CONFIG_NANOS_HEADERS: Date-/Last-Modified-Unix-Epoch-Nanos
 static_cache_control    = "no-cache" # RWS_CONFIG_STATIC_CACHE_CONTROL: Cache-Control for static files
+directory_listing       = false      # RWS_CONFIG_DIRECTORY_LISTING: 404 instead of listing a directory without index.html (default true)
 client_hints            = false      # RWS_CONFIG_CLIENT_HINTS: send Accept-CH / Critical-CH
 tls_client_ca_file      = "/etc/rws/clients-ca.pem"  # RWS_CONFIG_TLS_CLIENT_CA_FILE: require client certs (mTLS)
 template_dir            = "templates"            # RWS_CONFIG_TEMPLATE_DIR
@@ -5616,7 +5618,7 @@ curl http://localhost:7878/index.html # same file, explicit path
 
 ## Directory listing
 
-**Default, always-on behavior — not gated by a feature flag or config setting.** A requested directory that has no `index.html` renders a directory listing page (`200 OK`) instead of falling through to `404 Not Found`. A directory that *does* have an `index.html` is served exactly as before — this only changes what happens for the previously-404 case.
+**On by default.** A requested directory that has no `index.html` renders a directory listing page (`200 OK`) instead of falling through to `404 Not Found`. A directory that *does* have an `index.html` is served exactly as before — this only changes what happens for the previously-404 case.
 
 ```bash
 mkdir -p www/reports && touch www/reports/q1.pdf www/reports/q2.pdf
@@ -5641,6 +5643,15 @@ let client = TestClient::new(App::new());
 let response = client.get("/reports/").send();
 assert_eq!(200, response.status());
 ```
+
+
+### Turning it off
+
+```toml
+directory_listing = false   # RWS_CONFIG_DIRECTORY_LISTING
+```
+
+A directory without an `index.html` then answers `404 Not Found` (or the site's own `404.html`), so the folder's contents stay private. Directories with an `index.html` and plain files are served as before. Since 18.8.4.
 
 ## Why the listing's CSS/JS aren't inlined
 
@@ -12294,8 +12305,19 @@ The following headers are never forwarded to the upstream or back to the client,
 | `X-Forwarded-For` | Client IP from `ConnectionInfo`, appended to an incoming `X-Forwarded-For` (`203.0.113.7, 10.0.0.1`) — like nginx's `$proxy_add_x_forwarded_for`; only trust the entries your own proxies added |
 | `Via` | `1.1 rws` |
 | `Host` | Backend host (replaces the original `Host` header) |
+| `X-Forwarded-Host` | The `Host` the client sent, unless it already carries an `X-Forwarded-Host` (since 18.8.4) |
 | `Connection` | `keep-alive` (pooled path) or `close` (non-pooled callers) |
 | `Content-Length` | Length of the forwarded body (exactly one) |
+
+rws doesn't add `X-Forwarded-Proto` yet. Behind HTTPS, set it per route so the
+backend builds `https://` links:
+
+```toml
+[[route.middleware.rewrite.request]]
+type  = "header_set"
+name  = "X-Forwarded-Proto"
+value = "https"
+```
 
 ## Connection pooling
 

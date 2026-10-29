@@ -322,10 +322,17 @@ pub(crate) fn build_request(
             && !(trace.is_some() && (h.name.eq_ignore_ascii_case("traceparent") || h.name.eq_ignore_ascii_case("baggage")))
     };
     let prior_xff = request.header("X-Forwarded-For").map(|h| h.value.as_ref()).filter(|v| !v.trim().is_empty());
+    // The Host the client asked for, unless an outer proxy already said
+    // (its X-Forwarded-Host passes through like any header).
+    let forwarded_host = match request.header("X-Forwarded-Host") {
+        Some(_) => None,
+        None => request.header(crate::header::Header::_HOST).map(|h| h.value.as_ref()).filter(|v| !v.is_empty()),
+    };
     let body_len = Decimal::new(request.body.len() as u128);
     let capacity = request.method.len() + request.request_uri.len() + backend_host.len() + 25
         + request.headers.iter().filter(forwarded).map(|h| h.name.len() + h.value.len() + 4).sum::<usize>()
         + client_ip.len() + 19 + prior_xff.map_or(0, |v| v.len() + 2)
+        + forwarded_host.map_or(0, |v| v.len() + 20)
         + trace.as_ref().map_or(0, |(t, b)| t.len() + 15 + b.as_ref().map_or(0, |b| b.len() + 11))
         + 13
         + 24
@@ -348,6 +355,11 @@ pub(crate) fn build_request(
     }
     for part in [client_ip, "\r\n", "Via: 1.1 rws\r\n"] {
         out.extend_from_slice(part.as_bytes());
+    }
+    if let Some(host) = forwarded_host {
+        for part in ["X-Forwarded-Host: ", host, "\r\n"] {
+            out.extend_from_slice(part.as_bytes());
+        }
     }
     if let Some((traceparent, baggage)) = &trace {
         for part in ["traceparent: ", traceparent, "\r\n"] {

@@ -157,6 +157,11 @@ fn request_head(request: &Request, client_ip: &str, addr: &str, tls: bool) -> Re
         builder = builder.header(h.name.as_ref(), h.value.as_ref());
     }
     builder = builder.header("x-forwarded-for", client_ip).header("via", "2 rws");
+    if request.header("X-Forwarded-Host").is_none() {
+        if let Some(host) = request.header("host").filter(|h| !h.value.is_empty()) {
+            builder = builder.header("x-forwarded-host", host.value.as_ref());
+        }
+    }
     builder.body(()).map_err(|e| e.to_string())
 }
 

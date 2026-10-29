@@ -1165,3 +1165,23 @@ fn an_escaped_extensionless_name_finds_its_html_file() {
     assert_eq!(200, response.status_code);
     assert_eq!(b"<p>page</p>".to_vec(), response.content_range_list[0].body);
 }
+
+#[test]
+fn directory_listing_can_be_turned_off() {
+    use crate::server_config::ServerConfig;
+    let get = |uri: &str| Request {
+        method: METHOD.get.to_string(),
+        request_uri: uri.to_string(),
+        http_version: VERSION.http_1_1.to_string(),
+        headers: vec![],
+        body: Default::default(),
+    };
+    let listing = via_app(&get("/static/no_index/"), ServerConfig::default());
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n200_ok.status_code, listing.status_code, "listed by default");
+
+    let off = ServerConfig { directory_listing: false, ..ServerConfig::default() };
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n404_not_found.status_code, via_app(&get("/static/no_index/"), off.clone()).status_code);
+    // A directory with an index.html, and plain files, are unaffected.
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n200_ok.status_code, via_app(&get("/static/"), off.clone()).status_code);
+    assert_eq!(*STATUS_CODE_REASON_PHRASE.n200_ok.status_code, via_app(&get("/static/test.json"), off).status_code);
+}

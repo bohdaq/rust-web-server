@@ -92,7 +92,7 @@ curl http://localhost:7878/index.html # same file, explicit path
 
 ## Directory listing
 
-**Default, always-on behavior — not gated by a feature flag or config setting.** A requested directory that has no `index.html` renders a directory listing page (`200 OK`) instead of falling through to `404 Not Found`. A directory that *does* have an `index.html` is served exactly as before — this only changes what happens for the previously-404 case.
+**On by default.** A requested directory that has no `index.html` renders a directory listing page (`200 OK`) instead of falling through to `404 Not Found`. A directory that *does* have an `index.html` is served exactly as before — this only changes what happens for the previously-404 case.
 
 ```bash
 mkdir -p www/reports && touch www/reports/q1.pdf www/reports/q2.pdf
@@ -117,6 +117,15 @@ let client = TestClient::new(App::new());
 let response = client.get("/reports/").send();
 assert_eq!(200, response.status());
 ```
+
+
+### Turning it off
+
+```toml
+directory_listing = false   # RWS_CONFIG_DIRECTORY_LISTING
+```
+
+A directory without an `index.html` then answers `404 Not Found` (or the site's own `404.html`), so the folder's contents stay private. Directories with an `index.html` and plain files are served as before. Since 18.8.4.
 
 ## Why the listing's CSS/JS aren't inlined
 

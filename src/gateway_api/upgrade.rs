@@ -24,7 +24,8 @@ pub fn is_upgrade(request: &Request) -> bool {
 }
 
 /// The request head as sent to the backend: the client's headers (with
-/// `Host` = `host`) plus `X-Forwarded-For`.
+/// `Host` = `host`) plus `X-Forwarded-For` and, unless the client sent one,
+/// `X-Forwarded-Host` (the client's own `Host`).
 pub fn request_head(request: &Request, client_ip: &str, host: &str) -> Vec<u8> {
     let mut head = format!("{} {} HTTP/1.1\r\nHost: {host}\r\n", request.method, request.request_uri);
     for header in &request.headers {
@@ -34,6 +35,11 @@ pub fn request_head(request: &Request, client_ip: &str, host: &str) -> Vec<u8> {
         head.push_str(&format!("{}: {}\r\n", header.name, header.value));
     }
     head.push_str(&format!("X-Forwarded-For: {client_ip}\r\n"));
+    if request.header("X-Forwarded-Host").is_none() {
+        if let Some(original) = request.header("host").filter(|h| !h.value.is_empty()) {
+            head.push_str(&format!("X-Forwarded-Host: {}\r\n", original.value));
+        }
+    }
     if !request.body.is_empty() {
         head.push_str(&format!("Content-Length: {}\r\n", request.body.len()));
     }

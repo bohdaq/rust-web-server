@@ -9,6 +9,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- `directory_listing = false` (`RWS_CONFIG_DIRECTORY_LISTING`): a directory
+  without an `index.html` answers 404 instead of listing its files. Default
+  `true`, as before.
+- Proxied requests carry `X-Forwarded-Host` (the `Host` the client sent)
+  unless the client already sent one: the HTTP/1.1 and HTTP/2 upstream
+  forwarders and Gateway API upgrades.
+
 - `config_check::check_str_offline`: `rws --check`'s checks on configuration
   text without reading this machine's files or environment, for text from
   someone else.
@@ -17,6 +24,13 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   `check_config` and `changes` for every minor release of the current major,
   page resources and a `start_rws_app` prompt. Releases attach its binary;
   the site build writes its data (`/mcp/<minor>.json`).
+
+### Changed
+
+- Startup no longer prints the full usage text (about 150 lines) before
+  the lines that matter; `rws --help` still does. With HTTP/3 the app is
+  built once instead of once per listener, so its startup notes ("MCP tools
+  not mounted") print once.
 
 ## 18.8.3 — 2026-10-29
 

@@ -55,7 +55,7 @@ fn upgrade_requests_are_recognized() {
     let head = String::from_utf8(request_head(&upgrade_request(), "10.0.0.9", "example.org")).unwrap();
     assert!(head.starts_with("GET /ws?x=1 HTTP/1.1\r\nHost: example.org\r\n"), "{head}");
     assert!(head.contains("Upgrade: websocket\r\n") && head.contains("X-Forwarded-For: 10.0.0.9\r\n") && head.ends_with("\r\n\r\n"));
-    assert_eq!(1, head.matches("Host:").count());
+    assert_eq!(1, head.matches("\r\nHost:").count());
 }
 
 #[test]

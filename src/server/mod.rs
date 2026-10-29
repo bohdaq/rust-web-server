@@ -666,8 +666,9 @@ impl Server {
         let info = Log::info("Rust Web Server");
         println!("{}", info);
 
-        let usage_info = Log::usage_information();
-        println!("{}", usage_info);
+        // Not the whole usage text on every start (it was ~150 lines ahead
+        // of the lines that matter); `rws --help` prints it.
+        println!("Every setting: rws --help, or https://rws8.tech/docs/configuration/env-vars/\n");
 
 
         println!("RWS Configuration Start: \n");
