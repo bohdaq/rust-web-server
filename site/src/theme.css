@@ -1,0 +1,230 @@
+/*
+ * rws8.tech theme: lit-material's MD3 tokens rethemed to the rws brand and to
+ * the landing-page-design rules (spec/WEBSITE_REBUILD.md "Theme").
+ *
+ * Light = cream ground, near-black text. Dark = #131209 ground, cream text.
+ * Brand orange #D2551E is for graphics only: as a text or button colour it is
+ * under 4.5:1, so interactive orange is #B4461A (light) / #E2672D (dark).
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Brand */
+  --rws-cream: #f2ebe3;
+  --rws-ink: #16120f;
+  --rws-orange: #d2551e;
+  --rws-grey: #6b625c;
+
+  /* Spacing (skill B2): the only allowed values */
+  --space-25: 2px;
+  --space-50: 4px;
+  --space-75: 8px;
+  --space-100: 12px;
+  --space-200: 16px;
+  --space-300: 24px;
+  --space-400: 32px;
+  --space-500: 40px;
+  --space-600: 48px;
+  --space-700: 64px;
+  --space-800: 80px;
+  --space-900: 96px;
+
+  /* Type scale (Tailwind steps, skill B1): size / line height */
+  --text-xs: 0.75rem;   --leading-xs: 1rem;
+  --text-sm: 0.875rem;  --leading-sm: 1.25rem;
+  --text-base: 1rem;    --leading-base: 1.5rem;
+  --text-lg: 1.125rem;  --leading-lg: 1.75rem;
+  --text-xl: 1.25rem;   --leading-xl: 1.75rem;
+  --text-2xl: 1.5rem;   --leading-2xl: 2rem;
+  --text-3xl: 1.875rem; --leading-3xl: 2.25rem;
+  --text-4xl: 2.25rem;  --leading-4xl: 2.5rem;
+  --text-5xl: 3rem;     --leading-5xl: 1;
+  --text-6xl: 3.75rem;  --leading-6xl: 1;
+  --text-7xl: 4.5rem;   --leading-7xl: 1;
+
+  --font-sans: "Geist Variable", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+
+  /* Motion (skill B7) */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-layout: 500ms;
+  --duration-color: 300ms;
+
+  /* MD3 colour roles */
+  --md-sys-color-primary: light-dark(#b4461a, #e2672d);
+  --md-sys-color-on-primary: light-dark(#f2ebe3, #16120f);
+  --md-sys-color-primary-container: light-dark(#f6d9c8, #4a2413);
+  --md-sys-color-on-primary-container: light-dark(#3d1606, #f6d9c8);
+  --md-sys-color-secondary: light-dark(#6b625c, #9a918a);
+  --md-sys-color-on-secondary: light-dark(#f2ebe3, #16120f);
+  --md-sys-color-secondary-container: light-dark(#e4dbd1, #272727);
+  --md-sys-color-on-secondary-container: light-dark(#16120f, #f2ebe3);
+  --md-sys-color-tertiary: light-dark(#16120f, #f2ebe3);
+  --md-sys-color-on-tertiary: light-dark(#f2ebe3, #16120f);
+  --md-sys-color-tertiary-container: light-dark(#e4dbd1, #272727);
+  --md-sys-color-on-tertiary-container: light-dark(#16120f, #f2ebe3);
+  --md-sys-color-error: light-dark(#a3221b, #f2a29c);
+  --md-sys-color-on-error: light-dark(#ffffff, #3d0906);
+  --md-sys-color-error-container: light-dark(#f7d9d6, #5c1611);
+  --md-sys-color-on-error-container: light-dark(#3d0906, #f7d9d6);
+  --md-sys-color-background: light-dark(#f2ebe3, #131209);
+  --md-sys-color-on-background: light-dark(#16120f, #f2ebe3);
+  --md-sys-color-surface: light-dark(#f2ebe3, #131209);
+  --md-sys-color-on-surface: light-dark(#16120f, #f2ebe3);
+  --md-sys-color-surface-variant: light-dark(#e4dbd1, #272727);
+  --md-sys-color-on-surface-variant: light-dark(#4f4843, #c4bbb3);
+  --md-sys-color-surface-container-lowest: light-dark(#fbf7f2, #000000);
+  --md-sys-color-surface-container-low: light-dark(#ece4da, #181818);
+  --md-sys-color-surface-container: light-dark(#e8dfd4, #1f1f1f);
+  --md-sys-color-surface-container-high: light-dark(#e2d8cc, #272727);
+  --md-sys-color-surface-container-highest: light-dark(#dcd1c4, #313131);
+  --md-sys-color-inverse-surface: light-dark(#16120f, #f2ebe3);
+  --md-sys-color-inverse-on-surface: light-dark(#f2ebe3, #16120f);
+  --md-sys-color-inverse-primary: light-dark(#e2672d, #b4461a);
+  --md-sys-color-outline: light-dark(#8a817a, #6b625c);
+  --md-sys-color-outline-variant: light-dark(#d3c9bd, #313131);
+  --md-sys-color-shadow: #000000;
+  --md-sys-color-scrim: #000000;
+
+  /* MD3 type roles → Geist, Tailwind steps */
+  --md-sys-typescale-label-large-font: var(--font-sans);
+  --md-sys-typescale-label-large-weight: 600;
+  --md-sys-typescale-label-large-size: var(--text-base);
+  --md-sys-typescale-label-large-line-height: var(--leading-base);
+  --md-sys-typescale-label-large-tracking: 0;
+  --md-sys-typescale-label-medium-font: var(--font-sans);
+  --md-sys-typescale-label-medium-weight: 600;
+  --md-sys-typescale-label-medium-size: var(--text-sm);
+  --md-sys-typescale-label-medium-line-height: var(--leading-sm);
+  --md-sys-typescale-label-medium-tracking: 0;
+  --md-sys-typescale-body-large-font: var(--font-sans);
+  --md-sys-typescale-body-large-size: var(--text-base);
+  --md-sys-typescale-body-large-line-height: var(--leading-base);
+  --md-sys-typescale-body-medium-font: var(--font-sans);
+  --md-sys-typescale-body-medium-size: var(--text-sm);
+  --md-sys-typescale-body-medium-line-height: var(--leading-sm);
+  --md-sys-typescale-title-medium-font: var(--font-sans);
+  --md-sys-typescale-title-medium-weight: 600;
+  --md-sys-typescale-title-medium-size: var(--text-base);
+  --md-sys-typescale-title-medium-line-height: var(--leading-base);
+
+  /* MD3 shape → Tailwind radii */
+  --md-sys-shape-corner-none: 0px;
+  --md-sys-shape-corner-extra-small: 4px; /* rounded */
+  --md-sys-shape-corner-small: 6px;       /* rounded-md */
+  --md-sys-shape-corner-medium: 8px;      /* rounded-lg */
+  --md-sys-shape-corner-large: 12px;      /* rounded-xl */
+  --md-sys-shape-corner-extra-large: 16px;/* rounded-2xl */
+  --md-sys-shape-corner-full: 9999px;
+
+  /* MD3 motion → the skill's base curve */
+  --md-sys-motion-easing-standard: var(--ease);
+  --md-sys-motion-easing-emphasized: var(--ease);
+  --md-sys-motion-duration-short2: 300ms;
+  --md-sys-motion-duration-medium1: 500ms;
+
+  /* Flat: no elevation shadows anywhere */
+  --md-sys-elevation-level0: none;
+  --md-sys-elevation-level1: none;
+  --md-sys-elevation-level2: none;
+  --md-sys-elevation-level3: none;
+
+}
+
+/* lit-material-alert sets its own colours on :host; the element selector wins */
+lit-material-alert {
+  --lit-material-alert-info-color: var(--md-sys-color-primary);
+  --lit-material-alert-info-container: var(--md-sys-color-surface-container);
+  --lit-material-alert-on-info-container: var(--md-sys-color-on-surface);
+  --lit-material-alert-warning-color: var(--md-sys-color-primary);
+  --lit-material-alert-warning-container: var(--md-sys-color-primary-container);
+  --lit-material-alert-on-warning-container: var(--md-sys-color-on-primary-container);
+  --lit-material-alert-success-color: light-dark(#3f6b2a, #9fcf86);
+  --lit-material-alert-success-container: var(--md-sys-color-surface-container);
+  --lit-material-alert-on-success-container: var(--md-sys-color-on-surface);
+}
+
+/* Explicit theme choice (the toggle sets data-theme on <html>) */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+html {
+  background: var(--md-sys-color-background);
+  color: var(--md-sys-color-on-background);
+  font-family: var(--font-sans);
+  font-size: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--md-sys-color-background);
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+}
+
+h1, h2, h3 { text-wrap: balance; font-weight: 700; margin: 0; }
+p, li { text-wrap: pretty; }
+code, pre, kbd, samp { font-family: var(--font-mono); }
+em, i { font-style: normal; } /* skill B1: no italics */
+
+a { color: var(--md-sys-color-primary); text-underline-offset: 3px; }
+a:hover { text-decoration-thickness: 2px; }
+
+:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+}
+
+/* Components: values lit-material doesn't expose as tokens, via ::part */
+lit-material-button::part(button) {
+  height: auto;
+  padding: var(--space-75) var(--space-100);
+  transition:
+    background-color var(--duration-color) var(--ease),
+    transform var(--duration-color) var(--ease);
+}
+lit-material-button:active::part(button) { transform: scale(0.98); }
+
+lit-material-code-block::part(code-block) {
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-low);
+}
+lit-material-code-block::part(pre),
+lit-material-code-block::part(code) {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+lit-material-code-block::part(label) {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+[slot="icon"] { display: inline-flex; }
+[slot="icon"] svg { width: 100%; height: 100%; display: block; }
+
+lit-material-alert::part(alert) { border-radius: var(--md-sys-shape-corner-large); }
+
+.skip-link {
+  position: absolute;
+  left: var(--space-200);
+  top: var(--space-200);
+  transform: translateY(-200%);
+  padding: var(--space-75) var(--space-100);
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  border-radius: var(--md-sys-shape-corner-medium);
+  transition: transform var(--duration-color) var(--ease);
+  z-index: 10;
+}
+.skip-link:focus { transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-property: opacity !important;
+    animation: none !important;
+  }
+}
