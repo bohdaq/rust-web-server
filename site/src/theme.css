@@ -124,16 +124,7 @@
   --md-sys-motion-duration-short2: 300ms;
   --md-sys-motion-duration-medium1: 500ms;
 
-  /* Flat: no elevation shadows anywhere */
-  --md-sys-elevation-level0: none;
-  --md-sys-elevation-level1: none;
-  --md-sys-elevation-level2: none;
-  --md-sys-elevation-level3: none;
-
-}
-
-/* lit-material-alert sets its own colours on :host; the element selector wins */
-lit-material-alert {
+  /* Alert roles (@lit-material/alert reads them from any ancestor since 0.0.2) */
   --lit-material-alert-info-color: var(--md-sys-color-primary);
   --lit-material-alert-info-container: var(--md-sys-color-surface-container);
   --lit-material-alert-on-info-container: var(--md-sys-color-on-surface);
@@ -143,7 +134,15 @@ lit-material-alert {
   --lit-material-alert-success-color: light-dark(#3f6b2a, #9fcf86);
   --lit-material-alert-success-container: var(--md-sys-color-surface-container);
   --lit-material-alert-on-success-container: var(--md-sys-color-on-surface);
+
+  /* Flat: no elevation shadows anywhere */
+  --md-sys-elevation-level0: none;
+  --md-sys-elevation-level1: none;
+  --md-sys-elevation-level2: none;
+  --md-sys-elevation-level3: none;
+
 }
+
 
 /* Explicit theme choice (the toggle sets data-theme on <html>) */
 :root[data-theme="light"] { color-scheme: light; }

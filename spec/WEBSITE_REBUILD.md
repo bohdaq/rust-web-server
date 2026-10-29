@@ -190,7 +190,7 @@ review.
 Phase 1 findings:
 - Brand orange `#D2551E` is 4.15:1 under white text, so interactive orange is
   `#B4461A` light / `#E2672D` dark; `#D2551E` stays for graphics.
-- lit-material gaps handled in `theme.css`, worth fixing upstream:
+- lit-material gaps (fixed upstream 2026-10-29: alert 0.0.2, tabs 0.0.3, button 0.1.0 pending npm approval):
   `lit-material-alert` sets its colour roles on `:host` (only an element
   selector overrides them); button height/padding are fixed (overridden via
   `::part(button)`); alert's built-in icons are Material-style (Phosphor

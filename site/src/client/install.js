@@ -14,10 +14,14 @@ export function initInstall() {
   for (const button of document.querySelectorAll("[data-install-toggle]")) {
     const panel = document.getElementById(button.getAttribute("aria-controls"));
     if (!panel) continue;
-    // Clicking runs the tabs' own selection (indicator, tab state, change
-    // event); setting `selected` directly leaves the old tab highlighted.
-    const tab = [...panel.querySelectorAll("lit-material-tab")].find((t) => t.dataset.os === os);
-    if (tab) customElements.whenDefined("lit-material-tabs").then(() => tab.click());
+    const tabs = panel.querySelector("lit-material-tabs");
+    const index = [...panel.querySelectorAll("lit-material-tab")].findIndex((t) => t.dataset.os === os);
+    if (tabs && index > 0) {
+      customElements.whenDefined("lit-material-tabs").then(() => {
+        tabs.selected = index;
+        tabs.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
     button.addEventListener("click", () => {
       const open = button.getAttribute("aria-expanded") !== "true";
       button.setAttribute("aria-expanded", String(open));
