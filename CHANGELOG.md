@@ -5,6 +5,15 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## 18.9.1 — 2026-10-29
+
+### Fixed
+
+- rws8.tech: the site build failed when an older docs version's tag has
+  `docs/sidebar.json` but no `docs/astro.config.mjs` (18.8), so 18.9.0's
+  site was not published; the LLM proxy docs page's front matter didn't
+  parse. No changes to the library or the binary.
+
 ## 18.9.0 — 2026-10-29
 
 ### Added
