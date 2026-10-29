@@ -34,6 +34,7 @@ cargo install cargo-fuzz
 | `accept_encoding` | `Accept-Encoding` negotiation for gzip / br / zstd (via `fuzz_api`) | any client |
 | `proxy_protocol` | the PROXY protocol v1/v2 header parser (`server::proxy_protocol::parse`) | L4 load balancers, or anyone when it's enabled |
 | `mcp_gateway_reply` | what the MCP gateway reads from an upstream: JSON or event-stream replies, `tools/list` results (via `fuzz_api`) | upstream MCP servers |
+| `llm_usage` | what the LLM proxy reads from a provider: token usage in JSON bodies and event streams fed in pieces, chunked framing (via `fuzz_api`) | LLM providers |
 
 ## Running
 

@@ -43,6 +43,8 @@ use crate::server::ConnectionInfo;
 
 pub mod exposition;
 pub mod http;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod llm;
 pub mod tls;
 
 // ── server-wide atomics ───────────────────────────────────────────────────────
@@ -247,6 +249,15 @@ fn prometheus_text_without_http() -> String {
     if !upstream_text.is_empty() {
         out.push('\n');
         out.push_str(&upstream_text);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let llm_text = llm::prometheus_text();
+        if !llm_text.is_empty() {
+            out.push('\n');
+            out.push_str(&llm_text);
+        }
     }
 
     let tls_text = tls::prometheus_text();

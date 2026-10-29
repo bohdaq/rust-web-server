@@ -86,6 +86,11 @@ required-features = ["http2"]
 test = true
 
 [[example]]
+name = "llm_proxy"
+required-features = ["http2"]
+test = true
+
+[[example]]
 name = "mcp_conformance"
 required-features = ["http2"]
 test = true

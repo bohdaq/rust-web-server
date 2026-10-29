@@ -438,6 +438,40 @@ An [MCP gateway](/mcp/gateway/): one MCP endpoint in front of several upstream M
 
 The gateway lists its upstreams in the background at start: until it has, and while an upstream is down then, the route answers `503` and the build is retried every 10 s. `rws --check` reports unknown keys, bad prefixes and URLs, and unset token and header variables.
 
+### `[route.action]` — llm
+
+An [LLM proxy](/proxy/llm-proxy/) in front of OpenAI-compatible and Anthropic providers: virtual keys, fallback, token usage, budgets (since 18.9.0). Provider keys, virtual keys and the Redis password come from the environment variables named.
+
+```toml
+[[route]]
+  [route.match]
+  path = "/v1/*"
+
+  [route.action]
+  type = "llm"
+
+  [route.action.llm]
+  audit_log          = true
+  redis              = "127.0.0.1:6379"   # budgets shared between replicas (default: in memory)
+  redis_password_env = "REDIS_PASSWORD"
+  redis_prefix       = "rws:llm:"
+  connect_timeout_ms = 10000
+  read_timeout_ms    = 300000
+  allow_anonymous    = false
+
+  [[route.action.llm.provider]]           # tried in order, per API
+  name    = "openai"
+  api     = "openai"                      # or "anthropic"
+  url     = "https://api.openai.com"
+  key_env = "OPENAI_API_KEY"              # optional (local servers)
+
+  [[route.action.llm.key]]                # a virtual key clients send
+  identity      = "alice"
+  key_env       = "ALICE_LLM_KEY"
+  budget_tokens = 2000000                 # optional, with window_secs
+  window_secs   = 86400
+```
+
 ### `[route.middleware]`
 
 Per-route middleware applied before the action. All sub-sections are optional.

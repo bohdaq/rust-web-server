@@ -211,3 +211,10 @@ path = "fuzz_targets/x509_subject_alt_names.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "llm_usage"
+path = "fuzz_targets/llm_usage.rs"
+test = false
+doc = false
+bench = false

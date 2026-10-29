@@ -316,6 +316,10 @@
       {
         "label": "gRPC Proxy",
         "link": "/proxy/grpc-proxy/"
+      },
+      {
+        "label": "LLM Proxy",
+        "link": "/proxy/llm-proxy/"
       }
     ]
   },

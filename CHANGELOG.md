@@ -9,6 +9,17 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 
 ### Added
 
+- LLM proxy (`llm::LlmProxy`, and `[route.action] type = "llm"` in the
+  config file): one endpoint in front of OpenAI-compatible and Anthropic
+  providers. Virtual keys per caller (the provider's key is swapped in),
+  fallback to the next provider on no answer, `429` or `5xx` before the
+  first byte, token usage from JSON bodies and event streams (OpenAI
+  streams get `stream_options.include_usage`), token budgets per identity
+  in memory or shared through Redis, `rws_llm_*` metrics (requests, tokens
+  per identity, time to first token, fallbacks, budget rejections) and an
+  optional audit line per request. `llm::UsageParser` reads usage out of a
+  provider response on its own. Fuzz target `llm_usage`,
+  `ci/e2e/llm_proxy.sh`, `examples/llm_proxy.rs`.
 - Proxied requests carry `X-Forwarded-Proto` (`https` or `http`, as the
   client connected) unless the client already sent one: the HTTP/1.1 and
   HTTP/2 upstream forwarders, config-file proxy routes, Gateway API routes,

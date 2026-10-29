@@ -138,6 +138,8 @@ pub mod di;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod proxy_config;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod llm;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ingress;
 #[cfg(feature = "tera")]
 pub mod template;
@@ -325,6 +327,22 @@ pub mod fuzz_api {
                 assert!(!(refused && listed_once), "{value:?} refused {chosen:?}");
             }
         }
+    }
+
+    /// Provider responses as the LLM proxy reads them (#41): usage from a
+    /// JSON body or an event stream fed in pieces, and chunked framing.
+    /// Must never panic.
+    pub fn llm_usage(data: &[u8]) {
+        for content_type in ["application/json", "text/event-stream"] {
+            let mut parser = crate::llm::UsageParser::new(content_type);
+            for piece in data.chunks(7) {
+                parser.feed(piece);
+            }
+            let _ = parser.finish();
+        }
+        let mut decoder = crate::llm::usage::ChunkDecoder::default();
+        let mut out = Vec::new();
+        let _ = decoder.decode(data, &mut out);
     }
 
     /// An upstream MCP server's reply as the gateway reads it (#62): a JSON

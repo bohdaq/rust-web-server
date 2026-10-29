@@ -147,3 +147,21 @@ fn baggage_header_with_thousands_of_members() {
         assert_eq!(1, baggage.len(), "one key, set again and again");
     });
 }
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn llm_usage_with_deep_nesting_and_thousands_of_events() {
+    on_small_stack(|| {
+        let mut parser = crate::llm::UsageParser::new("text/event-stream");
+        let deep = format!("data: {{\"usage\":{}{}}}\n", "[".repeat(100_000), "]".repeat(100_000));
+        parser.feed(deep.as_bytes());
+        for _ in 0..20_000 {
+            parser.feed(b"data: {\"choices\":[{\"delta\":{}}],\"usage\":null}\n\n");
+        }
+        parser.feed(b"data: {\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2}}\n");
+        assert_eq!(parser.finish().map(|u| u.total()), Some(3));
+        let mut json = crate::llm::UsageParser::new("application/json");
+        json.feed(format!("{{\"usage\":{}{}}}", "{\"a\":".repeat(50_000), "}".repeat(50_000)).as_bytes());
+        let _ = json.finish();
+    });
+}

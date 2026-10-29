@@ -61,6 +61,9 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.action.mcp.caller" => super::mcp_gateway::CALLER_KEYS.to_vec(),
         "route.action.mcp.allow" => super::mcp_gateway::ALLOW_KEYS.to_vec(),
         "route.action.mcp.limit" => super::mcp_gateway::LIMIT_KEYS.to_vec(),
+        "route.action.llm" => super::llm::LLM_KEYS.to_vec(),
+        "route.action.llm.provider" => super::llm::PROVIDER_KEYS.to_vec(),
+        "route.action.llm.key" => super::llm::KEY_KEYS.to_vec(),
         "route.middleware" => vec!["timeout_ms", "max_body_size"],
         "route.middleware.rate_limit" => vec!["max_requests", "window_secs"],
         "route.middleware.cache" => vec!["ttl_secs", "vary_by"],
@@ -266,11 +269,14 @@ impl ProxyConfig {
                 ActionConfig::Mcp(gateway) => {
                     super::mcp_gateway::validate(gateway, route.match_.path.as_deref(), &label, report);
                 }
+                ActionConfig::Llm(llm) => {
+                    super::llm::validate(llm, &label, report);
+                }
                 ActionConfig::Unknown(kind) if kind.is_empty() => {
                     report.error(format!("{label}: [route.action] has no `type`"));
                 }
                 ActionConfig::Unknown(kind) => {
-                    report.error(format!("{label}: unknown action type '{kind}' (expected proxy, grpc, static, redirect, respond or mcp)"));
+                    report.error(format!("{label}: unknown action type '{kind}' (expected proxy, grpc, static, redirect, respond, mcp or llm)"));
                 }
             }
             validate_middleware(&label, &route.middleware, report);
