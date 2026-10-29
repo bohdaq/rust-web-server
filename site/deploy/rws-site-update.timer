@@ -1,0 +1,10 @@
+[Unit]
+Description=Check hourly for a new rws8.tech release
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

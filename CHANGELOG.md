@@ -23,6 +23,16 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   cover every configured name, so the new name kept the old certificate
   until renewal. A certificate missing a configured name is ordered again.
 
+### Website
+
+- rws8.tech is a new site built in `site/` (lit-material, prerendered with
+  Lit SSR) and served by rws itself: a landing page, benchmarks charts, a
+  config playground whose every output passes `rws --check`, and the docs
+  for every minor release of the current major under `/docs/<minor>/`. Old
+  doc URLs redirect to `/docs/…`. Starlight and the GitHub Pages deploy are
+  gone; each release attaches `rws8-site-<tag>.tar.gz`, which the server
+  installs.
+
 ### Documentation
 
 - Config file reference: the rewrite rule types are `header_set`,

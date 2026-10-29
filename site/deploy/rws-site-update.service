@@ -1,0 +1,8 @@
+[Unit]
+Description=Install rws8.tech from the newest rust-web-server release
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/rws-site-update

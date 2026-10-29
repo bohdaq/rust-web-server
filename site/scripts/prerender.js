@@ -18,6 +18,7 @@ import * as whyPage from "../src/pages/why.js";
 import * as changelogPage from "../src/pages/changelog.js";
 import * as notFoundPage from "../src/pages/not-found.js";
 import { copyFileSync, cpSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { buildDocs } from "../src/docs/build.js";
 import { docsVersions } from "./versions.js";
 
@@ -63,4 +64,20 @@ console.log("brand files written");
 // release workflow does today (per-release copies come with phase 7).
 const repo = join(site, "..");
 for (const f of ["llms.txt", "llms-full.txt"]) copyFileSync(join(repo, f), join(dist, f));
+// /<major.minor>/llms*.txt for agents pinned to a release: this tree for the
+// newest, each older minor from its newest patch tag (tags before llms.txt
+// existed have none).
+for (const v of versions) {
+  mkdirSync(join(dist, v.key), { recursive: true });
+  for (const f of ["llms.txt", "llms-full.txt"]) {
+    if (v.latest) copyFileSync(join(repo, f), join(dist, v.key, f));
+    else {
+      try {
+        writeFileSync(join(dist, v.key, f), execFileSync("git", ["-C", repo, "show", `${v.tag}:${f}`]));
+      } catch {
+        // not in this release
+      }
+    }
+  }
+}
 cpSync(join(repo, "agents"), join(dist, "agents"), { recursive: true });

@@ -178,7 +178,7 @@ itself a live example of rws's MCP support (#60–#62).
 
 ### Serving
 
-- One rws process (the release image) serves the built site (`docs/dist`) as
+- One rws process (the release image) serves the built site (`site/dist`) as
   static files and `/mcp` as an `McpServer` mounted in front of it
   (`app.mcp(...)`), on the same domain: `https://rws8.tech/mcp`.
 - Read-only and public: no token, every tool annotated `readOnlyHint`, a

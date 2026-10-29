@@ -141,6 +141,9 @@ jobs:
       - name: rws --check and SIGHUP route reload
         if: matrix.check == 'config-reload'
         run: ci/e2e/config_reload.sh target/debug/rws
+      - name: Every config the site's playground can build passes rws --check
+        if: matrix.check == 'config-reload'
+        run: node site/scripts/check-playground.js target/debug/rws
       - name: Access log to a file (SIGUSR1 reopen, size rotation)
         if: matrix.check == 'access-log'
         run: ci/e2e/access_log.sh target/debug/rws
@@ -260,18 +263,21 @@ jobs:
       - run: cargo deny check
 
   docs:
-    name: docs site
+    name: site (rws8.tech)
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: docs
+        working-directory: site
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Older docs versions are built from their release tags.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: docs/package-lock.json
+          cache-dependency-path: site/package-lock.json
       - run: npm ci
       - run: npm audit --audit-level=moderate
       - run: npm run build
