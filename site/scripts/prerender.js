@@ -10,6 +10,10 @@ import "../src/components.js";
 import { favicon, icon, mark } from "../src/brand/mark.js";
 import { documentHtml } from "../src/shell.js";
 import * as themePage from "../src/pages/theme.js";
+import * as homePage from "../src/pages/home.js";
+import * as privacyPage from "../src/pages/privacy.js";
+import * as notFoundPage from "../src/pages/not-found.js";
+import { copyFileSync, cpSync } from "node:fs";
 import { buildDocs } from "../src/docs/build.js";
 import { docsVersions } from "./versions.js";
 
@@ -33,17 +37,26 @@ for (const v of versions) {
   docs.push(...(await buildDocs({ contentRoot: v.contentRoot, sidebar: v.sidebar, base: v.base, version })));
   console.log("docs", v.key, v.latest ? "(latest, working tree)" : `(tag ${v.tag})`);
 }
-const pages = [themePage, ...docs];
+homePage.meta.jsonLd = homePage.structuredData(versions[0].tag);
+const pages = [homePage, privacyPage, notFoundPage, themePage, ...docs];
 for (const page of pages) {
-  const body = await collectResult(render(page.render()));
+  const body = await collectResult(render(await page.render()));
   const out = page.meta.path.endsWith("/") ? `${page.meta.path}index.html` : page.meta.path;
   write(out, documentHtml({ ...page.meta, body, assets }));
 }
 console.log(pages.length, "pages")
 
 write("favicon.svg", favicon());
+mkdirSync(join(dist, "brand"), { recursive: true });
+copyFileSync(join(site, "src", "brand", "og.png"), join(dist, "brand", "og.png"));
 write("brand/mark.svg", mark({ rack: "#16120F", dot: "#F2EBE3", slot: "#7A706A", accent: "#D2551E", accentDot: "#16120F" }));
 write("brand/mark-dark.svg", mark({ rack: "#F2EBE3", dot: "#16120F", slot: "#6B625C", accent: "#D2551E", accentDot: "#16120F" }));
 write("brand/icon-black.svg", icon("black"));
 write("brand/icon-orange.svg", icon("orange"));
 console.log("brand files written");
+
+// Generated agent files from the repo root, served at the site root as the
+// release workflow does today (per-release copies come with phase 7).
+const repo = join(site, "..");
+for (const f of ["llms.txt", "llms-full.txt"]) copyFileSync(join(repo, f), join(dist, f));
+cpSync(join(repo, "agents"), join(dist, "agents"), { recursive: true });

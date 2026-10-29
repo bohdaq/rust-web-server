@@ -12,8 +12,15 @@ import { initThemeToggle } from "./theme-toggle.js";
 import { initTabPanels } from "./tab-panels.js";
 import { initMenu } from "./menu.js";
 import { initSearch } from "./search.js";
+import { initInstall } from "./install.js";
+import { initTerminal } from "./terminal.js";
+import { initReveal } from "./reveal.js";
+import "../landing.css";
 
 initThemeToggle();
 initTabPanels();
 initMenu();
 initSearch();
+initInstall();
+initTerminal();
+initReveal();

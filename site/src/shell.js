@@ -60,9 +60,9 @@ export function footer() {
 
 // Applies a saved theme before first paint, so a dark-mode visitor never sees
 // a cream flash. Storage can throw (private windows), hence the try.
-const THEME_BOOT = `try{var t=localStorage.getItem("rws-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}`;
+const THEME_BOOT = `document.documentElement.classList.add("js");try{var t=localStorage.getItem("rws-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}`;
 
-export function documentHtml({ title, description, path, body, assets, noindex = false, canonical = path }) {
+export function documentHtml({ title, description, path, body, assets, noindex = false, canonical = path, jsonLd = [] }) {
   const css = assets.css.map((href) => `<link rel="stylesheet" href="${href}">`).join("");
   return `<!doctype html>
 <html lang="en">
@@ -79,6 +79,7 @@ ${noindex ? '<meta name="robots" content="noindex">' : ""}
 <meta property="og:image" content="https://rws8.tech/brand/og.png">
 <meta name="theme-color" content="#16120F">
 <script>${THEME_BOOT}</script>
+${jsonLd.map((d) => `<script type="application/ld+json">${JSON.stringify(d).replace(/</g, "\\u003c")}</script>`).join("")}
 ${css}
 <script type="module" src="${assets.js}"></script>
 </head>

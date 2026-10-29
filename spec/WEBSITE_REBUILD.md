@@ -180,7 +180,8 @@ review.
 | 1. Theme spike | **done 2026-10-29**, not committed: `site/` (Vite 8.3.4 + `@lit-labs/ssr` 4.1.0 prerender, plain JS modules), `src/theme.css`, `/theme/` page, SVG brand (`src/brand/mark.js` → `favicon.svg`, `brand/mark*.svg`, `brand/icon-{black,orange}.svg`), floating nav + mobile menu, theme toggle. Checked in headless Chromium: light, dark, 390px (no horizontal scroll), 20 declarative shadow roots hydrate, tabs/toggle/menu work, no console errors |
 | 2. Docs renderer | **done 2026-10-29**: `docs/sidebar.json` is the one sidebar (Starlight imports it, `ci/gen_llms.py` reads it — `llms.txt` byte-identical, Starlight still builds 107 pages); `site/src/docs/` renders all 106 sidebar pages + `/docs/` index under `/docs/…` (128 asides → `lit-material-alert`, 873 fences → `lit-material-code-block` with Shiki dual-theme highlighting at build time), sidebar/TOC/prev-next/edit link, Pagefind search (106 pages, `/` shortcut). Checks: page set equals the sidebar, 0 broken internal links or anchors, all 108 pages free of horizontal scroll and console errors at 390px, `ci/check_docs.py` green; full build 12 s |
 | 3. Versions | **done 2026-10-29**: `site/scripts/versions.js` builds the working tree as latest (`/docs/`) and the newest patch tag of every older minor of the current major (18.0–18.7, from `git archive` into the gitignored `site/.versions/`, 8 MB) under `/docs/<minor>/`; tags without `docs/sidebar.json` have their sidebar read from that tag's `astro.config.mjs`. Version switcher keeps the reader on the same page (else that version's index), older pages carry a "you are reading 18.x" notice, `noindex` and a canonical to the latest copy when it exists; search is filtered to the version being read (Pagefind filter `version`). Checks: 937 pages, 0 broken links or anchors across all versions, all 937 clean at 390px; build 47 s, 900 MB peak |
-| 4–8 | not started |
+| 4. Landing | **done 2026-10-29**: copy approved in [WEBSITE_LANDING.md](WEBSITE_LANDING.md) (headline C, named comparison in the strip), built in `site/src/pages/home.js` + `src/landing.css`: split hero with install panel (tab picked from the visitor's OS) and a terminal replaying real `rws` 18.8.2 output, three config tabs (the README's configs), tagline reveal word by word, six tiles, three steps, performance strip, proof list, library sample, 10 FAQs (`FAQPage` + `SoftwareApplication` JSON-LD), final CTA. Also `/privacy/`, branded `/404.html`, `og.png` (1200 × 630), and `llms*.txt` + `/agents/` copied into the build. Checks: light, dark, 390px; no-JS shows everything; 0 broken links (except `/why/`, `/benchmarks/`, `/playground/`, phase 5); all 939 pages clean at 390px |
+| 5–8 | not started |
 
 Phase 1 findings:
 - Brand orange `#D2551E` is 4.15:1 under white text, so interactive orange is
@@ -217,6 +218,17 @@ Phase 3 findings:
   or older versions can drop SSR of code blocks if it matters.
 - The release workflow must fetch tags (`fetch-depth: 0` or `git fetch
   --tags`) for the older versions to build.
+
+Phase 4 findings:
+- `rws` prints its full `--help` text on every start before the useful lines
+  ("No TLS certificate configured — serving plain HTTP/1.1.", "Started 8
+  per-core runtimes on 0.0.0.0:7878."), and "MCP tools not mounted" twice.
+  The terminal demo shows the real lines condensed; the startup output itself
+  is worth a separate look.
+- Setting `lit-material-tabs.selected` moves the indicator but leaves the old
+  tab highlighted; click the tab instead (upstream fix candidate).
+- The Gateway API proof links to the open upstream PR #5430; switch it to the
+  merged report once accepted.
 
 New work found:
 - `install.sh` for `curl -fsSL https://rws8.tech/install.sh | sh` does not exist

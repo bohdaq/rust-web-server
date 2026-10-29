@@ -13,25 +13,28 @@ export const meta = {
   noindex: true,
 };
 
-const STATIC = `[server]
-root = "./public"
-port = 8080`;
+// Real configs (the README's), so this page never shows keys rws rejects.
+const STATIC = `cd my-site && rws`;
 
-const HTTPS = `[server]
-root = "./public"
+const HTTPS = `port               = 443
+http_redirect_port = 80
 
 [acme]
 domains = ["example.com", "www.example.com"]
-email = "ops@example.com"`;
+email   = "you@example.com"`;
 
 const PROXY = `[[upstream]]
-name = "app"
-backends = ["http://10.0.0.11:3000", "http://10.0.0.12:3000"]
+name     = "app"
+backends = ["10.0.0.10:8080", "10.0.0.11:8080"]
 strategy = "least_connections"
 
 [[route]]
-match = { host = "example.com", path_prefix = "/" }
-action = { proxy = { upstream = "app" } }`;
+  [route.match]
+  host = "api.example.com"
+
+  [route.action]
+  type     = "proxy"
+  upstream = "app"`;
 
 const SIZES = ["xs", "sm", "base", "lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl"];
 const SPACES = [25, 50, 75, 100, 200, 300, 400, 500, 600, 700, 800, 900];
