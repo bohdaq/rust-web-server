@@ -54,7 +54,17 @@ All under `/admin/api/v1/`, JSON in and out.
 | `GET /upstreams` | The config file's `[[upstream]]`s: each backend's `url`, `weight`, `healthy` (passing its health checks), `breaker` (`closed`, `open`, `half_open`, or `null` without a circuit breaker) and `drained` |
 | `PUT /upstreams/<name>/drain` `{"backend":"http://10.0.0.5:8080","drained":true}` | Take a backend out of rotation, or put it back (`false`). New requests skip it, requests already on it finish, its health checks go on. With every backend drained the route answers `503`. Kept across reloads, not restarts. `404` for an unknown upstream or backend |
 | `GET /certificates` | Every certificate served (`default` for the main one, virtual hosts and on-demand names by name): `not_after`, `expires`, `days_left`, `source`; and `acme`: whether its renewal loop runs and its last check (`renewed`, `current`, or the error) |
+| `GET /logs?n=100` | The last access-log lines (up to 500 kept), oldest first, each as a string: in the `json` log format each is a JSON document |
+| `GET /logs/stream` | New access-log lines as they're written, as server-sent events (`data: <line>`), batched every 100 ms. A client that falls behind misses lines rather than slowing the server; at most 8 follow at once (`503` past that) |
 | `POST /certificates/renew` | Order a new ACME certificate now, through the renewal loop (`202`); it is hot-swapped when issued, as a scheduled renewal is. `404` without ACME |
+
+Follow the log from a terminal:
+
+```sh
+curl -N -H "Authorization: Bearer $RWS_ADMIN_TOKEN" http://127.0.0.1:9901/admin/api/v1/logs/stream
+```
+
+Lines are kept only while the admin API runs, and come from the access log (`log_format = "off"` leaves them empty). Lines over 8 KiB are cut.
 
 To reload certificates from files (after replacing them yourself), use `POST /reload`: it reloads them as `SIGHUP` does.
 

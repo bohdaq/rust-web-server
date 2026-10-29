@@ -7,6 +7,7 @@ use crate::response::Response;
 #[cfg(test)]
 mod tests;
 pub(crate) mod access_sink;
+pub mod tail;
 
 /// Logging helpers for access logs and server info.
 ///

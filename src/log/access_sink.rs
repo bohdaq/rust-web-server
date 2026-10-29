@@ -245,6 +245,7 @@ fn write_out(bytes: &[u8]) {
     if bytes.is_empty() {
         return;
     }
+    super::tail::record(bytes);
     match destination() {
         Destination::Stdout => write_stdout(bytes),
         Destination::File(file) => {

@@ -27,6 +27,9 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   inventory with expiry and the ACME renewal loop's last outcome; `POST
   /admin/api/v1/certificates/renew` orders a certificate now
   (`acme::request_renewal`, `acme::renewal_status`).
+- Admin API: `GET /admin/api/v1/logs` (the last access-log lines, up to
+  500) and `GET /admin/api/v1/logs/stream` (a live tail as server-sent
+  events), fed from the access-log sink's writes (`log::tail`).
 
 ## 18.9.1 — 2026-10-29
 

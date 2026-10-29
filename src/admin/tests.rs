@@ -275,3 +275,42 @@ fn upstreams_and_certificates_endpoints() {
     let (status, _) = call(&api, "POST", "/admin/api/v1/certificates/renew", "");
     assert!(status == 404 || status == 202, "{status}");
 }
+
+#[test]
+fn recent_log_lines_and_a_live_follower() {
+    let _g = crate::test_env::lock();
+    let api = AdminApi::new("t");
+    let marker = format!("tail-test-{}", std::process::id());
+    crate::log::tail::record(format!("{{\"path\":\"/{marker}-1\"}}\n{{\"path\":\"/{marker}-2\"}}\n").as_bytes());
+    let (status, text) = call(&api, "GET", "/admin/api/v1/logs?n=500", "");
+    assert_eq!(status, 200);
+    assert!(text.contains(&format!(r#""{{\"path\":\"/{marker}-1\"}}""#)), "lines as JSON strings: {text}");
+
+    let raw = "GET /admin/api/v1/logs/stream HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer t\r\n\r\n";
+    let mut response = api.execute(&Request::parse(raw.as_bytes()).unwrap(), &ConnectionInfo::default()).unwrap();
+    assert_eq!(response.status_code, 200);
+    let mut pipe = response.stream_pipe.take().expect("an event stream");
+    crate::log::tail::record(format!("live-{marker}\n").as_bytes());
+    let mut seen = String::new();
+    let mut buf = [0u8; 4096];
+    while !seen.contains(&format!("data: live-{marker}")) {
+        let n = pipe.read(&mut buf).unwrap();
+        assert!(n > 0, "stream ended: {seen}");
+        seen.push_str(&String::from_utf8_lossy(&buf[..n]));
+    }
+}
+
+#[test]
+fn long_lines_are_cut_and_the_buffer_is_bounded() {
+    let _g = crate::test_env::lock();
+    let _ = AdminApi::new("t");
+    let long = format!("cut-{}{}", std::process::id(), "é".repeat(crate::log::tail::MAX_LINE));
+    crate::log::tail::record(format!("{long}\n").as_bytes());
+    let kept = crate::log::tail::recent(crate::log::tail::CAPACITY);
+    let line = kept.iter().find(|l| l.starts_with(&format!("cut-{}", std::process::id()))).expect("kept");
+    assert!(line.len() <= crate::log::tail::MAX_LINE);
+    for i in 0..crate::log::tail::CAPACITY + 10 {
+        crate::log::tail::record(format!("fill-{i}\n").as_bytes());
+    }
+    assert_eq!(crate::log::tail::recent(usize::MAX).len(), crate::log::tail::CAPACITY);
+}

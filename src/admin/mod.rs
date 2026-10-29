@@ -105,6 +105,7 @@ impl AdminApi {
     /// The API accepting `token`.
     pub fn new(token: impl Into<String>) -> AdminApi {
         started();
+        crate::log::tail::enable();
         AdminApi {
             inner: Arc::new(Inner {
                 token: token.into(),
@@ -288,6 +289,20 @@ impl AdminApi {
             };
         }
         match (method, route) {
+            ("GET", "/logs") => {
+                let n = query(request, "n").and_then(|n| n.parse().ok()).unwrap_or(100);
+                ok(ops::logs_json(n))
+            }
+            (_, "/logs") => wrong_method("GET"),
+            ("GET", "/logs/stream") => {
+                let (sender, mut response) = crate::sse::SseStream::new().buffer(256).start();
+                if !crate::log::tail::follow(sender) {
+                    return error(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, "too many log followers");
+                }
+                response.headers.push(Header::new("Cache-Control", "no-store"));
+                response
+            }
+            (_, "/logs/stream") => wrong_method("GET"),
             ("GET", "/upstreams") => ok(ops::upstreams_json()),
             (_, "/upstreams") => wrong_method("GET"),
             ("GET", "/certificates") => ok(ops::certificates_json()),

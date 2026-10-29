@@ -159,4 +159,14 @@ api PUT /upstreams/web/drain '{"backend":"http://127.0.0.1:18461","drained":fals
 [ "$(code -X PUT -H "Authorization: Bearer $E2E_ADMIN_TOKEN" -d '{"backend":"http://nope:1","drained":true}' http://127.0.0.1:18452/admin/api/v1/upstreams/web/drain)" = 404 ] || fail "an unknown backend was accepted"
 pass "drain / undrain a backend; everything drained is 503"
 
+# ── logs: recent lines and a live tail ───────────────────────────────────────
+curl -s -N --max-time 4 -H "Authorization: Bearer $E2E_ADMIN_TOKEN" http://127.0.0.1:18452/admin/api/v1/logs/stream > stream.txt &
+TAIL=$!
+sleep 0.5
+curl -s -o /dev/null "http://127.0.0.1:18451/?tail-marker-$$"
+wait "$TAIL" 2>/dev/null || true
+grep -q "^data: .*tail-marker-$$" stream.txt || fail "the live tail didn't carry the request: $(head -c 400 stream.txt)"
+api GET '/logs?n=50' | grep -q "tail-marker-$$" || fail "recent lines don't have the request"
+pass "access log: recent lines and a live SSE tail"
+
 echo "all admin end-to-end checks passed"

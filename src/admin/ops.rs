@@ -271,3 +271,10 @@ pub fn request_renewal() -> bool {
     #[cfg(not(feature = "acme"))]
     false
 }
+
+/// The last `n` access-log lines (at most [`crate::log::tail::CAPACITY`]),
+/// oldest first, each as a string.
+pub fn logs_json(n: usize) -> String {
+    let lines: Vec<String> = crate::log::tail::recent(n).iter().map(|l| quoted(l)).collect();
+    format!("[{}]", lines.join(","))
+}
