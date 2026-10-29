@@ -308,6 +308,8 @@ jobs:
       - run: sh install.sh --dir "$RUNNER_TEMP/latest" && "$RUNNER_TEMP/latest/rws" --version
       - run: cat install.sh | sh -s -- --version 18.8.3 --dir "$RUNNER_TEMP/pinned" && "$RUNNER_TEMP/pinned/rws" --version | grep -q 18.8.3
       - run: "! sh install.sh --version 0.0.1 --dir \"$RUNNER_TEMP/none\""
+      # The copy the site serves, as users run it.
+      - run: curl -fsSL https://rws8.tech/install.sh | sh -s -- --dir "$RUNNER_TEMP/site" && "$RUNNER_TEMP/site/rws" --version
 
   docs-check:
     name: docs links, settings and llms.txt

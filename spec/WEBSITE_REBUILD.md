@@ -283,7 +283,7 @@ Phase 6 findings (rws bugs, fixed on main, need a release):
   etc.); fixed. rws also replaces `Host` with the backend's address and adds
   only `X-Forwarded-For` (Caddy sent the original Host and
   `X-Forwarded-Proto`); the demo didn't need them, the config sets both.
-- No way to turn off directory listings; worked around with respond routes.
+- No way to turn off directory listings; worked around with respond routes until 18.8.4 added `directory_listing = false` (now used on the VM).
 - **Adding a name to `[acme] domains` doesn't get a new certificate**: rws
   calls the existing one "current" without checking it covers the configured
   names. At cutover the old certificate had to be moved aside to force an
