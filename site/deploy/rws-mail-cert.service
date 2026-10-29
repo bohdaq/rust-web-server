@@ -1,0 +1,6 @@
+[Unit]
+Description=Reload postfix and dovecot with rws's certificate
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl reload postfix dovecot

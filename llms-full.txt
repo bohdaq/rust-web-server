@@ -1689,24 +1689,24 @@ A top-level `[middleware]` table (same keys and sub-tables as
 
 ```toml
 [[route.middleware.rewrite.request]]
-type  = "set_header"
+type  = "header_set"
 name  = "X-Forwarded-Proto"
 value = "https"
 
 [[route.middleware.rewrite.request]]
-type   = "strip_path_prefix"
+type   = "uri_strip_prefix"
 prefix = "/api"
 
 [[route.middleware.rewrite.request]]
-type   = "add_path_prefix"
+type   = "uri_add_prefix"
 prefix = "/v2"
 
 [[route.middleware.rewrite.request]]
-type  = "remove_header"
+type  = "header_remove"
 name  = "X-Internal-Secret"
 
 [[route.middleware.rewrite.request]]
-type  = "set_uri"
+type  = "uri_set"
 value = "/health"
 ```
 
@@ -1714,21 +1714,21 @@ value = "/health"
 
 ```toml
 [[route.middleware.rewrite.response]]
-type  = "set_header"
+type  = "header_set"
 name  = "X-Powered-By"
 value = "rws"
 
 [[route.middleware.rewrite.response]]
-type  = "remove_header"
+type  = "header_remove"
 name  = "Server"
 
 [[route.middleware.rewrite.response]]
-type   = "set_status"
+type   = "status"
 code   = 200
 reason = "OK"
 
 [[route.middleware.rewrite.response]]
-type = "replace_body"
+type = "body_replace"
 from = "old-domain.com"
 to   = "new-domain.com"
 ```

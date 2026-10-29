@@ -635,12 +635,15 @@ async fn serve() {
     rust_web_server::server::per_core::default_to_per_core();
     let (listener, pool) = Server::setup().expect("server setup failed");
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
-    rust_web_server::config_watch::start();
     telemetry();
     #[cfg(feature = "gateway-api")]
     rust_web_server::gateway_api::start_from_env();
 
     start_acme(Some(&listener)).await;
+    // After ACME, not before: provisioning writes the certificate and key the
+    // watcher watches, and its SIGHUP arrived before run_tls installs the
+    // handler, so the signal's default action ended the process.
+    rust_web_server::config_watch::start();
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();
@@ -666,12 +669,15 @@ async fn serve() {
     rust_web_server::server::per_core::default_to_per_core();
     let (listener, pool) = Server::setup().expect("server setup failed");
     rust_web_server::log::Log::reopen_access_log_on_sigusr1();
-    rust_web_server::config_watch::start();
     telemetry();
     #[cfg(feature = "gateway-api")]
     rust_web_server::gateway_api::start_from_env();
 
     start_acme(Some(&listener)).await;
+    // After ACME, not before: provisioning writes the certificate and key the
+    // watcher watches, and its SIGHUP arrived before run_tls installs the
+    // handler, so the signal's default action ended the process.
+    rust_web_server::config_watch::start();
 
     if rust_web_server::proxy_config::ProxyConfig::is_proxy_mode() {
         let (proxy_app, _handles) = rust_web_server::proxy_config::build_from_file();

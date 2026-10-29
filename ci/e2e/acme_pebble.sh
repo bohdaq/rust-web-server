@@ -101,13 +101,19 @@ backends = ["127.0.0.1:9099"]
   upstream = "app"
 EOF
 
-# Check every 20s so step 6 happens within the test.
-RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS=20 "$RWS" > rws.log 2>&1 &
-PIDS+=($!)
+# Check every 20s so step 6 happens within the test. With watch on, the
+# certificate written during the first issuance must not end the process
+# (the watcher's SIGHUP used to arrive before the handler existed).
+RWS_CONFIG_WATCH=true RWS_CONFIG_ACME_RENEW_CHECK_INTERVAL_SECS=20 "$RWS" > rws.log 2>&1 &
+RWS_PID=$!
+PIDS+=($RWS_PID)
 
 wait_for rws.log "Listening for TLS" 90 || fail "rws never started its TLS listener"
 grep -q "Certificate written" rws.log || fail "no certificate was issued"
 pass "certificate issued"
+sleep 3
+kill -0 "$RWS_PID" 2>/dev/null || fail "rws exited after the first issuance with watch = true"
+pass "still running with watch = true after issuance"
 
 curl -sf --cacert "$MINICA" https://localhost:15000/roots/0 > "$WORK/root.pem" \
   || fail "could not fetch Pebble's root"

@@ -62,6 +62,12 @@ pub(crate) fn add_extra_roots(store: &mut RootCertStore, path: &str) -> Result<(
 }
 
 impl AcmeHttpClient {
+    #[cfg(test)]
+    pub(crate) fn with_roots(root_store: RootCertStore) -> Self {
+        let config = crate::tls_client_builder().with_root_certificates(root_store).with_no_client_auth();
+        AcmeHttpClient { connector: TlsConnector::from(Arc::new(config)) }
+    }
+
     pub fn new() -> Result<Self, String> {
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         let mut root_store = RootCertStore {
@@ -101,7 +107,10 @@ impl AcmeHttpClient {
             "HEAD {path} HTTP/1.1\r\nHost: {authority}\r\nUser-Agent: {USER_AGENT}\r\nConnection: close\r\n\r\n"
         );
         stream.write_all(req.as_bytes()).await.map_err(|e| e.to_string())?;
-        let _ = stream.shutdown().await;
+        // No shutdown() before reading: Let's Encrypt's front end answers
+        // nothing to a HEAD whose client has already sent close_notify and a
+        // TCP FIN, so every newNonce failed against the real CA (Pebble
+        // tolerates it). `Connection: close` and the head-only read are enough.
         read_response_head_only(&mut stream).await
     }
 
@@ -240,4 +249,64 @@ fn parse_http_response(buf: &[u8]) -> Result<HttpResp, String> {
     }).collect();
 
     Ok(HttpResp { status, headers, body })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+
+    // A TLS server that behaves like Let's Encrypt's front end: it reads the
+    // request head, and if the client then closes its side (close_notify /
+    // FIN) before the reply, it drops the request without answering.
+    async fn nonce_server() -> (u16, RootCertStore) {
+        let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+        let der = CertificateDer::from(cert.cert.der().to_vec());
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der()));
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        let config = rustls::ServerConfig::builder().with_no_client_auth().with_single_cert(vec![der.clone()], key).unwrap();
+        let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let mut tls = acceptor.accept(tcp).await.unwrap();
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 1024];
+            while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                let n = tls.read(&mut tmp).await.unwrap();
+                if n == 0 { return; }
+                buf.extend_from_slice(&tmp[..n]);
+            }
+            // Did the client hang up already?
+            match tokio::time::timeout(std::time::Duration::from_millis(200), tls.read(&mut tmp)).await {
+                Ok(Ok(0)) | Ok(Err(_)) => return,
+                _ => {}
+            }
+            let _ = tls.write_all(b"HTTP/1.1 200 OK\r\nReplay-Nonce: test-nonce\r\nConnection: close\r\n\r\n").await;
+            let _ = tls.shutdown().await;
+        });
+        let mut roots = RootCertStore::empty();
+        roots.add(der).unwrap();
+        (port, roots)
+    }
+
+    #[tokio::test]
+    async fn head_reads_the_reply_before_closing() {
+        let (port, roots) = nonce_server().await;
+        let client = AcmeHttpClient::with_roots(roots);
+        let resp = client.head(&format!("https://localhost:{port}/acme/new-nonce")).await.unwrap();
+        assert_eq!(resp.status, 200);
+        assert_eq!(resp.nonce().as_deref(), Some("test-nonce"));
+    }
+
+    #[tokio::test]
+    async fn head_to_a_closed_port_is_an_error() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let client = AcmeHttpClient::with_roots(RootCertStore::empty());
+        assert!(client.head(&format!("https://localhost:{port}/acme/new-nonce")).await.is_err());
+    }
 }

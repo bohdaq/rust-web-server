@@ -1,0 +1,9 @@
+[Unit]
+Description=Reload postfix and dovecot when rws renews the certificate
+
+[Path]
+PathChanged=/var/lib/rws/cert.pem
+PathModified=/var/lib/rws/cert.pem
+
+[Install]
+WantedBy=multi-user.target

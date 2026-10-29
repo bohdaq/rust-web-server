@@ -1,0 +1,31 @@
+[Unit]
+Description=rws: rws8.tech, the PHP demo and the mail certificate
+Documentation=https://rws8.tech/docs/deployment/systemd/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rws
+Group=rws
+WorkingDirectory=/var/www/rws8
+Environment=RWS_CONFIG_FILE=/etc/rws/rws.config.toml
+Environment=RWS_CONFIG_ACME_CERT_PATH=/var/lib/rws/cert.pem
+Environment=RWS_CONFIG_ACME_KEY_PATH=/var/lib/rws/key.pem
+Environment=RWS_CONFIG_ACME_ACCOUNT_KEY_PATH=/var/lib/rws/acme_account.key
+ExecStart=/usr/local/bin/rws
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=2
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+StateDirectory=rws
+StateDirectoryMode=0750
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/var/www/rws8 /etc/rws
+
+[Install]
+WantedBy=multi-user.target

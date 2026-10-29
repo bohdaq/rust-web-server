@@ -1,0 +1,1048 @@
+# rws8.tech on bohdan-prod-donotdelete (spec/WEBSITE_REBUILD.md, phase 6).
+# One certificate covers every name here, including mail.rws8.tech, which
+# postfix and dovecot read from /var/lib/rws (rws-mail-cert.path reloads them).
+port               = 443
+http_redirect_port = 80
+log_format         = "json"
+
+[acme]
+domains = ["rws8.168-119-17-57.sslip.io", "php.168-119-17-57.sslip.io", "mail.rws8.tech"]
+
+[[upstream]]
+name     = "php-demo"
+backends = ["127.0.0.1:3200"]
+
+# Acme Cloud Portal PHP demo (acme-portal-php.service, FrankenPHP).
+[[route]]
+  name = "php-demo"
+
+  [route.match]
+  host = "php.168-119-17-57.sslip.io"
+  path = "/*"
+
+  [route.action]
+  type     = "proxy"
+  upstream = "php-demo"
+
+  [[route.middleware.rewrite.request]]
+  type  = "header_set"
+  name  = "X-Forwarded-Proto"
+  value = "https"
+
+  [[route.middleware.rewrite.request]]
+  type  = "header_set"
+  name  = "X-Forwarded-Host"
+  value = "php.168-119-17-57.sslip.io"
+
+# Docs moved under /docs/ (Starlight served them at the site root).
+
+[[route]]
+  name = "old-docs-building-apps"
+  [route.match]
+  path = "/building-apps/*"
+  [route.action]
+  type = "redirect"
+  [route.action.redirect]
+  location = "/docs$path"
+  status   = 301
+
+[[route]]
+  name = "old-docs-configuration"
+  [route.match]
+  path = "/configuration/*"
+  [route.action]
+  type = "redirect"
+  [route.action.redirect]
+  location = "/docs$path"
+  status   = 301
+
+[[route]]
+  name = "old-docs-database"
+  [route.match]
+  path = "/database/*"
+  [route.action]
+  type = "redirect"
+  [route.action.redirect]
+  location = "/docs$path"
+  status   = 301
+
+[[route]]
+  name = "old-docs-deployment"
+  [route.match]
+  path = "/deployment/*"
+  [route.action]
+  type = "redirect"
+  [route.action.redirect]
+  location = "/docs$path"
+  status   = 301
+
+[[route]]
+  name = "old-docs-features"
+  [route.match]
+  path = "/features/*"
+  [route.action]
+  type = "redirect"
+  [route.action.redirect]
+  location = "/docs$path"
+  status   = 301
+
+[[route]]
+  name = "old-docs-getting-started"
+  [route.match]
+  path = "/getting-started/*"
+  [route.action]
+  type = "redirect"
+  [route.action.redirect]
+  location = "/docs$path"
+  status   = 301
+
+[[route]]
+  name = "old-docs-mcp"
+  [route.match]
+  path = "/mcp/*"
+  [route.action]
+  type = "redirect"
+  [route.action.redirect]
+  location = "/docs$path"
+  status   = 301
+
+[[route]]
+  name = "old-docs-proxy"
+  [route.match]
+  path = "/proxy/*"
+  [route.action]
+  type = "redirect"
+  [route.action.redirect]
+  location = "/docs$path"
+  status   = 301
+
+[[route]]
+  name = "old-docs-reference"
+  [route.match]
+  path = "/reference/*"
+  [route.action]
+  type = "redirect"
+  [route.action.redirect]
+  location = "/docs$path"
+  status   = 301
+
+[[route]]
+  name = "old-docs-testing"
+  [route.match]
+  path = "/testing/*"
+  [route.action]
+  type = "redirect"
+  [route.action.redirect]
+  location = "/docs$path"
+  status   = 301
+
+# rws lists directories that have no index.html and has no setting to stop it.
+
+[[route]]
+  [route.match]
+  path = "/agents/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/agents/cursor/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/agents/skills/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/agents/skills/rws/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/assets/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/brand/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.0/building-apps/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.0/configuration/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.0/database/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.0/deployment/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.0/features/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.0/getting-started/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.0/mcp/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.0/proxy/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.0/reference/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.0/testing/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.1/building-apps/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.1/configuration/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.1/database/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.1/deployment/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.1/features/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.1/getting-started/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.1/mcp/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.1/proxy/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.1/reference/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.1/testing/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.2/building-apps/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.2/configuration/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.2/database/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.2/deployment/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.2/features/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.2/getting-started/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.2/mcp/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.2/proxy/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.2/reference/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.2/testing/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.3/building-apps/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.3/configuration/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.3/database/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.3/deployment/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.3/features/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.3/getting-started/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.3/mcp/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.3/proxy/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.3/reference/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.3/testing/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.4/building-apps/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.4/configuration/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.4/database/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.4/deployment/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.4/features/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.4/getting-started/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.4/mcp/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.4/proxy/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.4/reference/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.4/testing/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.5/building-apps/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.5/configuration/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.5/database/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.5/deployment/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.5/features/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.5/getting-started/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.5/mcp/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.5/proxy/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.5/reference/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.5/testing/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.6/building-apps/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.6/configuration/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.6/database/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.6/deployment/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.6/features/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.6/getting-started/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.6/mcp/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.6/proxy/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.6/reference/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.6/testing/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.7/building-apps/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.7/configuration/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.7/database/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.7/deployment/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.7/features/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.7/getting-started/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.7/mcp/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.7/proxy/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.7/reference/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/18.7/testing/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/building-apps/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/configuration/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/database/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/deployment/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/features/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/getting-started/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/mcp/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/proxy/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/reference/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/docs/testing/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/pagefind/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/pagefind/filter/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/pagefind/fragment/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/pagefind/index/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"
+
+[[route]]
+  [route.match]
+  path = "/.vite/"
+  [route.action]
+  type = "respond"
+  [route.action.respond]
+  status = 404
+  body   = "Not found"

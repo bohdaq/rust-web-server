@@ -5,6 +5,27 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Fixed
+
+- Automatic HTTPS against Let's Encrypt: the ACME client closed its side of
+  the connection before reading the newNonce reply, and Let's Encrypt's front
+  end answers nothing to such a HEAD, so every order failed with "Replay-Nonce
+  missing from newNonce response" (Pebble, which CI tests against, tolerated
+  it). The request is no longer half-closed.
+- `watch = true` with `[acme]`: the watcher started before the first
+  certificate was ordered, saw the certificate and key being written and sent
+  `SIGHUP` before the handler was installed, which ended the process. It now
+  starts once ACME has finished, before the servers run.
+
+### Documentation
+
+- Config file reference: the rewrite rule types are `header_set`,
+  `header_remove`, `uri_set`, `uri_strip_prefix`, `uri_add_prefix`, `status`
+  and `body_replace`; the page listed names (`set_header`, `set_status`, ...)
+  that `rws --check` rejects.
+
 ## 18.8.2 — 2026-10-28
 
 ### Documentation

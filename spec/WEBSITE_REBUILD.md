@@ -182,7 +182,8 @@ review.
 | 3. Versions | **done 2026-10-29**: `site/scripts/versions.js` builds the working tree as latest (`/docs/`) and the newest patch tag of every older minor of the current major (18.0–18.7, from `git archive` into the gitignored `site/.versions/`, 8 MB) under `/docs/<minor>/`; tags without `docs/sidebar.json` have their sidebar read from that tag's `astro.config.mjs`. Version switcher keeps the reader on the same page (else that version's index), older pages carry a "you are reading 18.x" notice, `noindex` and a canonical to the latest copy when it exists; search is filtered to the version being read (Pagefind filter `version`). Checks: 937 pages, 0 broken links or anchors across all versions, all 937 clean at 390px; build 47 s, 900 MB peak |
 | 4. Landing | **done 2026-10-29**: copy approved in [WEBSITE_LANDING.md](WEBSITE_LANDING.md) (headline C, named comparison in the strip), built in `site/src/pages/home.js` + `src/landing.css`: split hero with install panel (tab picked from the visitor's OS) and a terminal replaying real `rws` 18.8.2 output, three config tabs (the README's configs), tagline reveal word by word, six tiles, three steps, performance strip, proof list, library sample, 10 FAQs (`FAQPage` + `SoftwareApplication` JSON-LD), final CTA. Also `/privacy/`, branded `/404.html`, `og.png` (1200 × 630), and `llms*.txt` + `/agents/` copied into the build. Checks: light, dark, 390px; no-JS shows everything; 0 broken links (except `/why/`, `/benchmarks/`, `/playground/`, phase 5); all 939 pages clean at 390px |
 | 5. Other pages | **done 2026-10-29**: `/benchmarks/` (charts parsed from the tables in `reference/benchmarks.md` and the Gateway API page, so they can't drift: emphasis bars, rws accent and the rest grey, one direct label, hover/focus tooltips, full tables and method below; throughput, CPU and memory, where nginx wins, for web servers; throughput and CPU for six Gateway API implementations), `/playground/` (form → `rws.config.toml` + command, inline field errors; `site/scripts/check-playground.js` runs `rws --check --format=json` on all 768 combinations it can build: 0 rejected with 18.8.2), `/why/` (reasons, when rws fits, when to pick nginx, Caddy, Traefik or a mesh), `/changelog/` (CHANGELOG.md with a release list). Checks: 944 pages, 0 broken links or anchors sitewide, all pages clean at 390px |
-| 6–8 | not started |
+| 6. Hosting | **live on the VM 2026-10-29, staged**: rws (18.8.2 + the two fixes below, built from main) owns 80/443 on `bohdan-prod-donotdelete` as systemd `rws` (user `rws`, `/etc/rws/rws.config.toml`, site in `/var/www/rws8`, state in `/var/lib/rws`). One Let's Encrypt certificate (until 2027-01-27) for `rws8.168-119-17-57.sslip.io` (the site's test name), `php.168-119-17-57.sslip.io` (PHP demo, proxied to :3200) and `mail.rws8.tech`; postfix and dovecot read it, `rws-mail-cert.path` reloads them on renewal; certbot timer and Caddy disabled (Caddyfile kept, `/usr/local/sbin/rws-rollback` restores Caddy). Old root doc URLs 301 to `/docs/`; index-less folders answer 404. `/apt`, `/rpm`, `/18.7/` and `/18.8/` copied byte-exact from the Pages branch. Not yet: `rws8.tech` itself (added to `[acme] domains` after the user moves DNS; needs a restart), `watch = true` (off on the VM until a build with the fix below is deployed), the docs MCP server |
+| 7–8 | not started |
 
 Phase 1 findings:
 - Brand orange `#D2551E` is 4.15:1 under white text, so interactive orange is
@@ -246,6 +247,54 @@ New work found:
   repo, published by release.yml next to `llms.txt`.
 - `og:image` (`/brand/og.png`) is referenced by the shell but not drawn yet
   (phase 4).
+
+## Phase 6 host survey (2026-10-29, read-only)
+
+Host: stage VM `bohdan-prod-donotdelete` (shalb-dev, 168.119.17.57, Ubuntu
+24.04 x86_64, 37 GB free). Decision: rws takes 80/443; rws8.tech is staged
+first and the user switches DNS.
+
+- **Caddy 2.10.2 on 80/443** serves three sites: `shareaudio.us` → :3001
+  (nothing listening, answers 502), `168-119-17-57.sslip.io` → :3100 (the
+  retired JS demo, 502), `php.168-119-17-57.sslip.io` → :3200 (the live PHP
+  demo, FrankenPHP).
+- **Mail on the same host**: postfix (25/465/587) and dovecot (993) as
+  `mail.rws8.tech`, MX of rws8.tech. Both read
+  `/etc/letsencrypt/live/mail.rws8.tech/` from **certbot in standalone
+  mode**, which needs port 80 for itself. Caddy holds 80, so every renewal
+  fails: **the mail certificate expired on 2026-01-20** and mail TLS has
+  served an expired certificate since. Moving 80 to rws doesn't fix this on
+  its own; the mail name needs a certificate path that works with whatever
+  owns port 80.
+
+Phase 6 findings (rws bugs, fixed on main, need a release):
+- **ACME never worked against Let's Encrypt itself.** `AcmeHttpClient::head`
+  half-closed the connection before reading; Let's Encrypt's front end
+  answers nothing to a HEAD after the client's FIN, so newNonce always failed
+  ("Replay-Nonce missing"). Pebble tolerates it, so CI was green. Fixed with
+  a regression test (`acme::client::tests`).
+- **`watch = true` plus `[acme]` could kill the process on first start**: the
+  watcher saw the new certificate and sent SIGHUP before the handler
+  existed. Took the demo down ~4 min during the swap. The watcher now starts
+  after ACME; the Pebble e2e runs with `watch` on and checks rws survives.
+- The rewrite rule names in the config reference were wrong (`set_header`
+  etc.); fixed. rws also replaces `Host` with the backend's address and adds
+  only `X-Forwarded-For` (Caddy sent the original Host and
+  `X-Forwarded-Proto`); the demo didn't need them, the config sets both.
+- No way to turn off directory listings; worked around with respond routes.
+
+VM state found (not changed, worth fixing separately): port 465 runs
+`submissions` without `smtpd_tls_wrappermode=yes` (plain SMTP on the
+implicit TLS port), and opendkim's socket is missing, so mail goes out
+unsigned. `shareaudio.us` and the old sslip demo were dead and are dropped.
+
+DNS cutover: right after the user points `rws8.tech` at 168.119.17.57, add
+`rws8.tech` to `[acme] domains` and restart rws. Not before: Let's Encrypt
+can't validate it while DNS points at GitHub Pages, and one failed name fails
+the whole order. Until the restart (about a minute) HTTPS for rws8.tech shows
+the sslip certificate. Also before cutover, change release.yml (phase 7) to
+publish the site, `/apt` and `/rpm` to the VM; until then a release only
+updates GitHub Pages.
 
 ## Checks before cutover
 
