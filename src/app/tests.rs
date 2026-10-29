@@ -159,6 +159,7 @@ fn static_file_cors_off_options_preflight_request_client_hints() {
         server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 16000,
         sni_hostname: None,
+        tls: false,
     };
     let request = Request {
         method: METHOD.options.to_string(),
@@ -213,6 +214,7 @@ mod builder_tests {
             server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
             request_size: 16000,
         sni_hostname: None,
+        tls: false,
         }
     }
 
@@ -346,6 +348,7 @@ mod builder_tests {
             server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
             request_size: 16000,
             sni_hostname: None,
+            tls: false,
         };
         let resp = app.execute(&get("/healthz"), &conn).unwrap();
         assert_eq!(429, resp.status_code);
@@ -371,6 +374,7 @@ fn builtin_controllers_match_path_without_query_where_they_always_did() {
         server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 16000,
         sni_hostname: None,
+        tls: false,
     };
     let request = |method: &str, uri: &str| Request {
         method: method.to_string(),
@@ -410,6 +414,7 @@ fn static_files_after_builtins_fast_and_general_paths() {
         server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 16000,
         sni_hostname: None,
+        tls: false,
     };
 
     // Built-in routes still win.
@@ -451,6 +456,7 @@ fn static_gzip_matches_apply_gzip() {
         server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 16000,
         sni_hostname: None,
+        tls: false,
     };
     let plain = app.execute(&request(None), &conn).unwrap();
     if plain.content_range_list.first().map_or(0, |cr| cr.body.len()) < crate::compression::MIN_COMPRESS_SIZE {
@@ -490,6 +496,7 @@ fn static_files_negotiate_br_and_zstd_with_their_own_etags() {
         server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 16000,
         sni_hostname: None,
+        tls: false,
     };
     let plain = app.execute(&request(vec![]), &conn).unwrap();
     let plain_body = plain.content_range_list.first().map(|cr| cr.body.clone()).unwrap_or_default();
@@ -536,6 +543,7 @@ fn client_hints_are_opt_in() {
         server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 16000,
         sni_hostname: None,
+        tls: false,
     };
     let on = App::with_config(ServerConfig { client_hints: true, ..ServerConfig::default() })
         .execute(&request, &conn).unwrap();

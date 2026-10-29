@@ -12307,18 +12307,9 @@ The following headers are never forwarded to the upstream or back to the client,
 | `Via` | `1.1 rws` |
 | `Host` | Backend host (replaces the original `Host` header) |
 | `X-Forwarded-Host` | The `Host` the client sent, unless it already carries an `X-Forwarded-Host` (since 18.8.4) |
+| `X-Forwarded-Proto` | `https` when the client connected over TLS (HTTPS, HTTP/2 over TLS, HTTP/3), else `http`; an incoming `X-Forwarded-Proto` is kept, so rws behind another TLS terminator passes its answer on (since 18.9.0) |
 | `Connection` | `keep-alive` (pooled path) or `close` (non-pooled callers) |
 | `Content-Length` | Length of the forwarded body (exactly one) |
-
-rws doesn't add `X-Forwarded-Proto` yet. Behind HTTPS, set it per route so the
-backend builds `https://` links:
-
-```toml
-[[route.middleware.rewrite.request]]
-type  = "header_set"
-name  = "X-Forwarded-Proto"
-value = "https"
-```
 
 ## Connection pooling
 

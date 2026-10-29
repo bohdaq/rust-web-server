@@ -10,7 +10,7 @@ use crate::header::Header;
 use crate::server::Address;
 
 fn connection() -> ConnectionInfo {
-    ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None }
+    ConnectionInfo { client: Address { ip: "127.0.0.1".into(), port: 1 }, server: Address { ip: "127.0.0.1".into(), port: 2 }, request_size: 0, sni_hostname: None, tls: false }
 }
 
 fn request(method: &str, uri: &str, headers: &[(&str, &str)], body: &[u8]) -> Request {

@@ -59,7 +59,7 @@ fn body(response: &crate::response::Response) -> Vec<u8> {
 }
 
 async fn fwd(port: u16, request: &Request) -> Result<crate::response::Response, String> {
-    forward(request, "10.0.0.1", "127.0.0.1", port, None, Duration::from_secs(2), Duration::from_secs(2)).await
+    forward(request, crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, None, Duration::from_secs(2), Duration::from_secs(2)).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -125,6 +125,7 @@ fn conn() -> crate::server::ConnectionInfo {
         server: crate::server::Address { ip: "127.0.0.1".to_string(), port: 2 },
         request_size: 1024,
         sni_hostname: None,
+        tls: false,
     }
 }
 
@@ -198,7 +199,7 @@ async fn tls_connections_are_pooled() {
     let (port, config, accepted, _) = crate::proxy::tests::tls_backend_with_pem(OK, 100);
     let pool = fresh_tls_pool();
     for _ in 0..5 {
-        let response = forward(&get("/"), "10.0.0.1", "localhost", port, Some(tls_to(Arc::clone(&config), pool)), Duration::from_secs(2), Duration::from_secs(2))
+        let response = forward(&get("/"), crate::proxy::Peer::plain("10.0.0.1"), "localhost", port, Some(tls_to(Arc::clone(&config), pool)), Duration::from_secs(2), Duration::from_secs(2))
             .await
             .unwrap();
         assert_eq!(b"hello".to_vec(), body(&response));
@@ -210,7 +211,7 @@ async fn tls_connections_are_pooled() {
 async fn a_chunked_tls_response_is_streamed_through_the_channel() {
     const CHUNKED: &[u8] = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
     let (port, config, _, _) = crate::proxy::tests::tls_backend_with_pem(CHUNKED, 1);
-    let mut response = forward(&get("/"), "10.0.0.1", "localhost", port, Some(tls_to(config, fresh_tls_pool())), Duration::from_secs(2), Duration::from_secs(2))
+    let mut response = forward(&get("/"), crate::proxy::Peer::plain("10.0.0.1"), "localhost", port, Some(tls_to(config, fresh_tls_pool())), Duration::from_secs(2), Duration::from_secs(2))
         .await
         .unwrap();
     let mut pipe = response.stream_pipe.take().expect("streamed");
@@ -229,7 +230,7 @@ async fn an_untrusted_tls_backend_is_an_error() {
     // Self-signed, checked against the WebPKI roots.
     let (port, _, _, _) = crate::proxy::tests::tls_backend_with_pem(OK, 1);
     let webpki = tls_to(crate::proxy::tls_client_config(), fresh_tls_pool());
-    assert!(forward(&get("/"), "10.0.0.1", "localhost", port, Some(webpki), Duration::from_secs(2), Duration::from_secs(2)).await.is_err());
+    assert!(forward(&get("/"), crate::proxy::Peer::plain("10.0.0.1"), "localhost", port, Some(webpki), Duration::from_secs(2), Duration::from_secs(2)).await.is_err());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -262,7 +262,7 @@ impl ReverseProxy {
         forward_upstream_trusting(
             &self.pool,
             request,
-            &connection.client.ip,
+            crate::proxy::Peer::of(connection),
             &backend.host,
             backend.port,
             backend.tls,
@@ -294,10 +294,33 @@ impl Middleware for ReverseProxy {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+/// The client as the forwarders need it: its address for `X-Forwarded-For`
+/// and whether it connected over TLS, for `X-Forwarded-Proto`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Peer<'a> {
+    pub ip: &'a str,
+    pub tls: bool,
+}
+
+impl<'a> Peer<'a> {
+    pub(crate) fn of(connection: &'a ConnectionInfo) -> Self {
+        Peer { ip: &connection.client.ip, tls: connection.tls }
+    }
+
+    /// A plain-HTTP client at `ip` (tests and callers without a connection).
+    pub(crate) fn plain(ip: &'a str) -> Self {
+        Peer { ip, tls: false }
+    }
+
+    pub(crate) fn proto(&self) -> &'static str {
+        if self.tls { "https" } else { "http" }
+    }
+}
+
 pub(crate) fn build_request(
     request: &Request,
     backend_host: &str,
-    client_ip: &str,
+    client: Peer<'_>,
     keep_alive: bool,
 ) -> Vec<u8> {
     // One buffer, sized up front and filled with extend_from_slice — no
@@ -324,6 +347,8 @@ pub(crate) fn build_request(
     let prior_xff = request.header("X-Forwarded-For").map(|h| h.value.as_ref()).filter(|v| !v.trim().is_empty());
     // The Host the client asked for, unless an outer proxy already said
     // (its X-Forwarded-Host passes through like any header).
+    // http or https, as the client connected, unless an outer proxy said.
+    let forwarded_proto = request.header("X-Forwarded-Proto").is_none().then(|| client.proto());
     let forwarded_host = match request.header("X-Forwarded-Host") {
         Some(_) => None,
         None => request.header(crate::header::Header::_HOST).map(|h| h.value.as_ref()).filter(|v| !v.is_empty()),
@@ -331,8 +356,9 @@ pub(crate) fn build_request(
     let body_len = Decimal::new(request.body.len() as u128);
     let capacity = request.method.len() + request.request_uri.len() + backend_host.len() + 25
         + request.headers.iter().filter(forwarded).map(|h| h.name.len() + h.value.len() + 4).sum::<usize>()
-        + client_ip.len() + 19 + prior_xff.map_or(0, |v| v.len() + 2)
+        + client.ip.len() + 19 + prior_xff.map_or(0, |v| v.len() + 2)
         + forwarded_host.map_or(0, |v| v.len() + 20)
+        + forwarded_proto.map_or(0, |v| v.len() + 21)
         + trace.as_ref().map_or(0, |(t, b)| t.len() + 15 + b.as_ref().map_or(0, |b| b.len() + 11))
         + 13
         + 24
@@ -353,11 +379,16 @@ pub(crate) fn build_request(
         out.extend_from_slice(prior.as_bytes());
         out.extend_from_slice(b", ");
     }
-    for part in [client_ip, "\r\n", "Via: 1.1 rws\r\n"] {
+    for part in [client.ip, "\r\n", "Via: 1.1 rws\r\n"] {
         out.extend_from_slice(part.as_bytes());
     }
     if let Some(host) = forwarded_host {
         for part in ["X-Forwarded-Host: ", host, "\r\n"] {
+            out.extend_from_slice(part.as_bytes());
+        }
+    }
+    if let Some(proto) = forwarded_proto {
+        for part in ["X-Forwarded-Proto: ", proto, "\r\n"] {
             out.extend_from_slice(part.as_bytes());
         }
     }
@@ -627,14 +658,14 @@ impl UpstreamIo for TlsStream {
 pub(crate) fn forward_upstream(
     plain_pool: &ConnPool,
     request: &Request,
-    client_ip: &str,
+    client: Peer<'_>,
     host: &str,
     port: u16,
     tls: bool,
     connect_timeout: Duration,
     read_timeout: Duration,
 ) -> Result<Response, String> {
-    forward_upstream_trusting(plain_pool, request, client_ip, host, port, tls, None, connect_timeout, read_timeout)
+    forward_upstream_trusting(plain_pool, request, client, host, port, tls, None, connect_timeout, read_timeout)
 }
 
 /// [`forward_upstream`] with the trust settings of one upstream: `trust`
@@ -643,7 +674,7 @@ pub(crate) fn forward_upstream(
 pub(crate) fn forward_upstream_trusting(
     plain_pool: &ConnPool,
     request: &Request,
-    client_ip: &str,
+    client: Peer<'_>,
     host: &str,
     port: u16,
     tls: bool,
@@ -663,7 +694,7 @@ pub(crate) fn forward_upstream_trusting(
             span.set_attribute(key, value);
         }
     }
-    let result = forward_upstream_untraced(plain_pool, request, client_ip, host, port, tls, trust, connect_timeout, read_timeout);
+    let result = forward_upstream_untraced(plain_pool, request, client, host, port, tls, trust, connect_timeout, read_timeout);
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(span) = &span {
         span.finish_http_client(result.as_ref().map(|r| r.status_code as u16).map_err(String::as_str));
@@ -675,7 +706,7 @@ pub(crate) fn forward_upstream_trusting(
 fn forward_upstream_untraced(
     plain_pool: &ConnPool,
     request: &Request,
-    client_ip: &str,
+    client: Peer<'_>,
     host: &str,
     port: u16,
     tls: bool,
@@ -690,7 +721,7 @@ fn forward_upstream_untraced(
                 Some(t) => (t.pool, Arc::clone(&t.config)),
                 None => (shared_tls_pool(), tls_client_config()),
             };
-            return forward_via(pool, request, client_ip, host, port, host, read_timeout, || {
+            return forward_via(pool, request, client, host, port, host, read_timeout, || {
                 connect_tls_with(Arc::clone(&config), host, port, connect_timeout)
             });
         }
@@ -700,7 +731,7 @@ fn forward_upstream_untraced(
             return Err("HTTPS backends need the http2 or http-client feature, which this build doesn't include".to_string());
         }
     }
-    forward_pooled(plain_pool, request, client_ip, host, port, connect_timeout, read_timeout)
+    forward_pooled(plain_pool, request, client, host, port, connect_timeout, read_timeout)
 }
 
 /// Trust settings for one upstream's TLS backends: the certificates in a CA
@@ -858,13 +889,13 @@ fn tls_pool_for_ca(path: &str) -> &'static Pool<TlsStream> {
 pub(crate) fn forward_pooled(
     pool: &ConnPool,
     request: &Request,
-    client_ip: &str,
+    client: Peer<'_>,
     host: &str,
     port: u16,
     connect_timeout: Duration,
     read_timeout: Duration,
 ) -> Result<Response, String> {
-    forward_via(pool, request, client_ip, host, port, host, read_timeout, || connect_tcp(host, port, connect_timeout))
+    forward_via(pool, request, client, host, port, host, read_timeout, || connect_tcp(host, port, connect_timeout))
 }
 
 /// [`forward_pooled`], sending `host_header` as the `Host` (the client's, for
@@ -874,14 +905,14 @@ pub(crate) fn forward_pooled(
 pub(crate) fn forward_pooled_with_host(
     pool: &ConnPool,
     request: &Request,
-    client_ip: &str,
+    client: Peer<'_>,
     host: &str,
     port: u16,
     host_header: &str,
     connect_timeout: Duration,
     read_timeout: Duration,
 ) -> Result<Response, String> {
-    forward_via(pool, request, client_ip, host, port, host_header, read_timeout, || connect_tcp(host, port, connect_timeout))
+    forward_via(pool, request, client, host, port, host_header, read_timeout, || connect_tcp(host, port, connect_timeout))
 }
 
 /// The pooled request/response cycle, for any connection type.
@@ -894,7 +925,7 @@ pub(crate) fn forward_pooled_with_host(
 fn forward_via<S: UpstreamIo>(
     pool: &Pool<S>,
     request: &Request,
-    client_ip: &str,
+    client: Peer<'_>,
     host: &str,
     port: u16,
     host_header: &str,
@@ -903,14 +934,14 @@ fn forward_via<S: UpstreamIo>(
 ) -> Result<Response, String> {
     let key = format!("{}:{}", host, port);
     if let Some(stream) = pool.acquire(&key) {
-        match exchange(pool, &key, stream, request, host_header, client_ip, read_timeout) {
+        match exchange(pool, &key, stream, request, host_header, client, read_timeout) {
             Exchange::Done(response) => return Ok(response),
             Exchange::NoResponse(_) if is_idempotent(&request.method) => {} // stale: retry fresh
             Exchange::NoResponse(e) | Exchange::Failed(e) => return Err(e),
         }
     }
     let stream = connect()?;
-    match exchange(pool, &key, stream, request, host_header, client_ip, read_timeout) {
+    match exchange(pool, &key, stream, request, host_header, client, read_timeout) {
         Exchange::Done(response) => Ok(response),
         Exchange::NoResponse(e) | Exchange::Failed(e) => Err(e),
     }
@@ -985,14 +1016,14 @@ fn exchange<S: UpstreamIo>(
     mut stream: S,
     request: &Request,
     host: &str,
-    client_ip: &str,
+    client: Peer<'_>,
     read_timeout: Duration,
 ) -> Exchange {
     if let Err(e) = stream.set_io_timeouts(read_timeout, Duration::from_secs(10)) {
         return Exchange::Failed(e.to_string());
     }
     // keep_alive = true: ask the backend to hold the connection open.
-    let req_bytes = build_request(request, host, client_ip, true);
+    let req_bytes = build_request(request, host, client, true);
     if let Err(e) = stream.write_all(&req_bytes) {
         return Exchange::NoResponse(format!("write to backend failed: {}", e));
     }
@@ -1453,7 +1484,7 @@ impl crate::middleware::Middleware for H2ReverseProxy {
                 read_timeout: self.inner.read_timeout,
                 authority: None,
             };
-            if let Ok(response) = h2_upstream::forward(request, &connection.client.ip, &target) {
+            if let Ok(response) = h2_upstream::forward(request, Peer::of(connection), &target) {
                 return Ok(response);
             }
         }
@@ -1479,7 +1510,7 @@ impl crate::middleware::Middleware for H2ReverseProxy {
 #[cfg(feature = "http2")]
 pub(crate) fn forward_h2(
     request: &Request,
-    client_ip: &str,
+    client: Peer<'_>,
     url: &str,
     tls: bool,
     trust: Option<&UpstreamTls>,
@@ -1492,7 +1523,7 @@ pub(crate) fn forward_h2(
         Some(t) => t.h2_config(),
         None => h2_upstream::default_tls(),
     });
-    h2_upstream::forward(request, client_ip, &h2_upstream::Target { backend: &backend, tls, connect_timeout, read_timeout, authority: None })
+    h2_upstream::forward(request, client, &h2_upstream::Target { backend: &backend, tls, connect_timeout, read_timeout, authority: None })
 }
 
 /// Forward over TLS to `ip:port` with `config`, `server_name` as SNI (and
@@ -1505,7 +1536,7 @@ pub(crate) fn forward_tls_with_host(
     config: &Arc<rustls::ClientConfig>,
     label: &str,
     request: &Request,
-    client_ip: &str,
+    client: Peer<'_>,
     ip: &str,
     port: u16,
     server_name: &str,
@@ -1514,7 +1545,7 @@ pub(crate) fn forward_tls_with_host(
     read_timeout: Duration,
 ) -> Result<Response, String> {
     let pool = tls_pool_for_ca(label);
-    forward_via(pool, request, client_ip, ip, port, host_header, read_timeout, || {
+    forward_via(pool, request, client, ip, port, host_header, read_timeout, || {
         let tcp = connect_tcp(ip, port, connect_timeout)?;
         let name = rustls::pki_types::ServerName::try_from(server_name.to_string()).map_err(|e| format!("invalid TLS server name '{server_name}': {e}"))?;
         let conn = rustls::ClientConnection::new(Arc::clone(config), name).map_err(|e| e.to_string())?;
@@ -1528,7 +1559,7 @@ pub(crate) fn forward_tls_with_host(
 #[cfg(feature = "gateway-api")]
 pub(crate) fn forward_h2c_with_host(
     request: &Request,
-    client_ip: &str,
+    client: Peer<'_>,
     host: &str,
     port: u16,
     authority: &str,
@@ -1536,7 +1567,7 @@ pub(crate) fn forward_h2c_with_host(
     read_timeout: Duration,
 ) -> Result<Response, String> {
     let backend = Backend { host: host.to_string(), port, tls: false };
-    h2_upstream::forward(request, client_ip, &h2_upstream::Target { backend: &backend, tls: None, connect_timeout, read_timeout, authority: Some(authority) })
+    h2_upstream::forward(request, client, &h2_upstream::Target { backend: &backend, tls: None, connect_timeout, read_timeout, authority: Some(authority) })
 }
 
 // ── gRPC proxy ────────────────────────────────────────────────────────────────

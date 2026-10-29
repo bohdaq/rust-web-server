@@ -53,6 +53,8 @@ pub async fn handle_connection(
                     },
                     request_size: 0,
                     sni_hostname: sni_hostname.clone(),
+                    // QUIC is always TLS.
+                    tls: true,
                 };
                 let app = app.clone();
                 tokio::spawn(async move {

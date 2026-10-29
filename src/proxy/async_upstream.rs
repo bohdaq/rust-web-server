@@ -23,6 +23,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use super::{
+    Peer,
     build_request, is_idempotent, is_interim_response, parse_status_and_headers, HeadFacts, MAX_INTERIM_RESPONSES,
     ConcatReader, Pool, POOL_MAX_IDLE,
 };
@@ -126,7 +127,7 @@ enum Exchange {
 /// return the backend's response.
 pub(crate) async fn forward(
     request: &Request,
-    client_ip: &str,
+    client: Peer<'_>,
     host: &str,
     port: u16,
     tls: Option<AsyncTls>,
@@ -142,7 +143,7 @@ pub(crate) async fn forward(
     let pooled = crate::server::per_core::pool_key(&key);
     match tls {
         None => {
-            forward_on(pool(), &pooled, request, host, client_ip, read_timeout, || connect(&key, connect_timeout)).await
+            forward_on(pool(), &pooled, request, host, client, read_timeout, || connect(&key, connect_timeout)).await
         }
         Some(tls) => {
             let connect_tls = || async {
@@ -156,7 +157,7 @@ pub(crate) async fn forward(
                     Err(_) => Err(format!("TLS handshake with {} timed out", key)),
                 }
             };
-            forward_on(tls.pool, &pooled, request, host, client_ip, read_timeout, connect_tls).await
+            forward_on(tls.pool, &pooled, request, host, client, read_timeout, connect_tls).await
         }
     }
 }
@@ -189,7 +190,7 @@ pub(crate) fn gateway_tls_pool(label: &str) -> &'static Pool<AsyncTlsStream> {
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn forward_gateway(
     request: &Request,
-    client_ip: &str,
+    client: Peer<'_>,
     ip: &str,
     port: u16,
     host_header: &str,
@@ -200,7 +201,7 @@ pub(crate) async fn forward_gateway(
     let key = if ip.contains(':') { format!("[{ip}]:{port}") } else { format!("{ip}:{port}") };
     let pooled = crate::server::per_core::pool_key(&key);
     match tls {
-        None => forward_on(gateway_pool(), &pooled, request, host_header, client_ip, read_timeout, || connect(&key, connect_timeout)).await,
+        None => forward_on(gateway_pool(), &pooled, request, host_header, client, read_timeout, || connect(&key, connect_timeout)).await,
         Some((server_name, tls)) => {
             let connect_tls = || async {
                 let tcp = connect(&key, connect_timeout).await?;
@@ -212,7 +213,7 @@ pub(crate) async fn forward_gateway(
                     Err(_) => Err(format!("TLS handshake with {key} timed out")),
                 }
             };
-            forward_on(tls.pool, &pooled, request, host_header, client_ip, read_timeout, connect_tls).await
+            forward_on(tls.pool, &pooled, request, host_header, client, read_timeout, connect_tls).await
         }
     }
 }
@@ -225,7 +226,7 @@ async fn forward_on<S, F, Fut>(
     key: &str,
     request: &Request,
     host: &str,
-    client_ip: &str,
+    client: Peer<'_>,
     read_timeout: Duration,
     connect: F,
 ) -> Result<Response, String>
@@ -235,14 +236,14 @@ where
     Fut: std::future::Future<Output = Result<S, String>>,
 {
     if let Some(stream) = pool.acquire(key) {
-        match exchange(pool, key, stream, request, host, client_ip, read_timeout).await {
+        match exchange(pool, key, stream, request, host, client, read_timeout).await {
             Exchange::Done(response) => return Ok(response),
             Exchange::NoResponse(_) if is_idempotent(&request.method) => {} // stale: retry fresh
             Exchange::NoResponse(e) | Exchange::Failed(e) => return Err(e),
         }
     }
     let stream = connect().await?;
-    match exchange(pool, key, stream, request, host, client_ip, read_timeout).await {
+    match exchange(pool, key, stream, request, host, client, read_timeout).await {
         Exchange::Done(response) => Ok(response),
         Exchange::NoResponse(e) | Exchange::Failed(e) => Err(e),
     }
@@ -276,10 +277,10 @@ async fn exchange<S: UpstreamConn>(
     mut stream: S,
     request: &Request,
     host: &str,
-    client_ip: &str,
+    client: Peer<'_>,
     read_timeout: Duration,
 ) -> Exchange {
-    let request_bytes = build_request(request, host, client_ip, true);
+    let request_bytes = build_request(request, host, client, true);
     if let Err(e) = stream.write_all(&request_bytes).await {
         return Exchange::NoResponse(format!("write to backend failed: {}", e));
     }

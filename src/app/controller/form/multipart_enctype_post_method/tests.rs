@@ -11,6 +11,7 @@ fn is_matching_only_for_multipart_post_to_its_path() {
         server: Address { ip: "127.0.0.1".to_string(), port: 2 },
         request_size: 1,
         sni_hostname: None,
+        tls: false,
     };
     let req = |method: &str, uri: &str, content_type: Option<&str>| Request {
         method: method.to_string(),

@@ -96,7 +96,7 @@ fn status(tls: &BackendTls, port: u16) -> Result<i16, String> {
         headers: vec![crate::header::Header::new("Host", "client.example")],
         body: Default::default(),
     };
-    crate::proxy::forward_tls_with_host(&tls.config, &tls.label, &request, "10.0.0.9", "127.0.0.1", port, &tls.server_name, "client.example", std::time::Duration::from_secs(5), std::time::Duration::from_secs(5))
+    crate::proxy::forward_tls_with_host(&tls.config, &tls.label, &request, crate::proxy::Peer::plain("10.0.0.9"), "127.0.0.1", port, &tls.server_name, "client.example", std::time::Duration::from_secs(5), std::time::Duration::from_secs(5))
         .map(|r| r.status_code)
 }
 

@@ -103,10 +103,10 @@ pub(crate) fn with_h2_alpn(mut config: rustls::ClientConfig) -> rustls::ClientCo
 /// head arrives come back as `Err` (the caller answers 502 or tries another
 /// backend); errors after it end the body with an error, which the HTTP/2 and
 /// HTTP/3 writers turn into a stream reset.
-pub(crate) fn forward(request: &Request, client_ip: &str, target: &Target<'_>) -> Result<Response, String> {
+pub(crate) fn forward(request: &Request, client: crate::proxy::Peer<'_>, target: &Target<'_>) -> Result<Response, String> {
     let backend = target.backend;
     let addr = format!("{}:{}", backend.host, backend.port);
-    let head = request_head(request, client_ip, target.authority.unwrap_or(&addr), target.tls.is_some())?;
+    let head = request_head(request, client, target.authority.unwrap_or(&addr), target.tls.is_some())?;
     let key = pool_key(&addr, target.tls);
     let (head_tx, head_rx) = std::sync::mpsc::sync_channel(1);
     let exchange = Exchange {
@@ -141,7 +141,7 @@ fn pool_key(addr: &str, tls: Option<&Arc<rustls::ClientConfig>>) -> String {
     }
 }
 
-fn request_head(request: &Request, client_ip: &str, addr: &str, tls: bool) -> Result<http::Request<()>, String> {
+fn request_head(request: &Request, client: crate::proxy::Peer<'_>, addr: &str, tls: bool) -> Result<http::Request<()>, String> {
     let scheme = if tls { "https" } else { "http" };
     let uri: http::Uri = format!("{scheme}://{addr}{}", request.request_uri).parse().map_err(|e: http::uri::InvalidUri| e.to_string())?;
     let method = http::Method::from_bytes(request.method.as_bytes()).map_err(|e| e.to_string())?;
@@ -156,7 +156,10 @@ fn request_head(request: &Request, client_ip: &str, addr: &str, tls: bool) -> Re
         }
         builder = builder.header(h.name.as_ref(), h.value.as_ref());
     }
-    builder = builder.header("x-forwarded-for", client_ip).header("via", "2 rws");
+    builder = builder.header("x-forwarded-for", client.ip).header("via", "2 rws");
+    if request.header("X-Forwarded-Proto").is_none() {
+        builder = builder.header("x-forwarded-proto", client.proto());
+    }
     if request.header("X-Forwarded-Host").is_none() {
         if let Some(host) = request.header("host").filter(|h| !h.value.is_empty()) {
             builder = builder.header("x-forwarded-host", host.value.as_ref());

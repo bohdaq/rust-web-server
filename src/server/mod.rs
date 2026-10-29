@@ -823,6 +823,7 @@ impl Server {
             },
             request_size: get_request_allocation_size(),
             sni_hostname: None,
+            tls: false,
         };
 
         if let Err(e) = stream.set_read_timeout(Some(Duration::from_secs(30))) {
@@ -875,6 +876,18 @@ pub struct ConnectionInfo {
     /// SNI hostname sent by the client during the TLS handshake, if any.
     /// `None` for plain-HTTP connections or when the client omits SNI.
     pub sni_hostname: Option<String>,
+    /// The client connected over TLS (HTTPS, HTTP/2 over TLS, HTTP/3).
+    /// Proxies send it on as `X-Forwarded-Proto` (18.9.0).
+    pub tls: bool,
+}
+
+impl Default for ConnectionInfo {
+    /// Unknown addresses (`0.0.0.0:0`), no SNI, not TLS: for building one
+    /// with `..Default::default()` in tests and adapters.
+    fn default() -> Self {
+        let unknown = Address { ip: "0.0.0.0".to_string(), port: 0 };
+        ConnectionInfo { client: unknown.clone(), server: unknown, request_size: 0, sni_hostname: None, tls: false }
+    }
 }
 
 /// IP address and port pair.
@@ -885,6 +898,12 @@ pub struct Address {
 }
 
 impl ConnectionInfo {
+    /// A connection from `client` to `server`; plain (not TLS), no SNI, the
+    /// default request allocation size. Set `tls`/`sni_hostname` after.
+    pub fn new(client: Address, server: Address) -> Self {
+        ConnectionInfo { client, server, request_size: 0, sni_hostname: None, tls: false }
+    }
+
     /// Parse the client address into a [`std::net::SocketAddr`], if the stored
     /// IP and port are valid. Returns `None` if parsing fails.
     pub fn peer_addr(&self) -> Option<std::net::SocketAddr> {

@@ -76,6 +76,7 @@ where
         server: Address { ip: server_ip, port: server_port },
         request_size: request_allocation_size,
         sni_hostname,
+        tls: is_tls,
     };
 
     'session: loop {
@@ -1093,6 +1094,7 @@ mod tests {
             server: Address { ip: "127.0.0.1".to_string(), port: 2 },
             request_size: 1024,
             sni_hostname: None,
+            tls: false,
         }
     }
 

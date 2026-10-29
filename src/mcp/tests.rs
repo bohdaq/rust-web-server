@@ -3039,6 +3039,7 @@ fn progress_streams_on_the_call_s_own_response() {
             server: crate::server::Address { ip: "127.0.0.1".into(), port: 0 },
             request_size: 16000,
             sni_hostname: None,
+            tls: false,
         },
     ).unwrap();
     let mut events = String::new();

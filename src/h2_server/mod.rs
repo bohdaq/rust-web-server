@@ -228,6 +228,7 @@ where
         server: crate::server::Address { ip: server_ip, port: server_port },
         request_size: 0,
         sni_hostname,
+        tls: https,
     };
     let (credit_tx, mut credit_rx) = mpsc::unbounded_channel::<(u32, usize)>();
     let mut conn = Conn {

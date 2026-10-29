@@ -19,6 +19,7 @@ fn conn() -> ConnectionInfo {
         server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 16000,
     sni_hostname: None,
+    tls: false,
     }
 }
 
@@ -406,6 +407,7 @@ fn stream_body_marks_only_its_routes() {
         server: crate::server::Address { ip: "127.0.0.1".into(), port: 2 },
         request_size: 0,
         sni_hostname: None,
+        tls: false,
     };
     let request = |method: &str, uri: &str| Request {
         method: method.into(), request_uri: uri.into(), http_version: "HTTP/1.1".into(), headers: vec![], body: Default::default(),

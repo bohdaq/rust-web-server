@@ -79,6 +79,7 @@ mod tests {
             server: Address { ip: "127.0.0.1".into(), port: 0 },
             request_size: 16000,
             sni_hostname: None,
+            tls: false,
         };
         let mut response = app(Duration::from_millis(1), 3).execute(&request, &connection).unwrap();
         assert_eq!(Some("text/event-stream"), response.header("content-type").map(|h| &*h.value));

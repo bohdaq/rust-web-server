@@ -5,6 +5,23 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- Proxied requests carry `X-Forwarded-Proto` (`https` or `http`, as the
+  client connected) unless the client already sent one: the HTTP/1.1 and
+  HTTP/2 upstream forwarders, config-file proxy routes, Gateway API routes,
+  mirrors and upgrades.
+
+### API changes
+
+- `ConnectionInfo` has a new public field, `tls: bool` (the client connected
+  over TLS). Code that builds a `ConnectionInfo` with a struct literal must
+  add it; `ConnectionInfo::new(client, server)` and `Default` now exist, so
+  `ConnectionInfo { client, server, ..Default::default() }` keeps working
+  when fields are added later.
+
 ## 18.8.4 — 2026-10-29
 
 ### Added

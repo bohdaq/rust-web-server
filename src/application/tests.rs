@@ -15,6 +15,7 @@ fn conn() -> ConnectionInfo {
         server: Address { ip: "127.0.0.1".to_string(), port: 2 },
         request_size: 1024,
         sni_hostname: None,
+        tls: false,
     }
 }
 

@@ -26,7 +26,7 @@ pub fn is_upgrade(request: &Request) -> bool {
 /// The request head as sent to the backend: the client's headers (with
 /// `Host` = `host`) plus `X-Forwarded-For` and, unless the client sent one,
 /// `X-Forwarded-Host` (the client's own `Host`).
-pub fn request_head(request: &Request, client_ip: &str, host: &str) -> Vec<u8> {
+pub fn request_head(request: &Request, client: crate::proxy::Peer<'_>, host: &str) -> Vec<u8> {
     let mut head = format!("{} {} HTTP/1.1\r\nHost: {host}\r\n", request.method, request.request_uri);
     for header in &request.headers {
         if header.name.eq_ignore_ascii_case("host") || header.name.eq_ignore_ascii_case("content-length") {
@@ -34,7 +34,10 @@ pub fn request_head(request: &Request, client_ip: &str, host: &str) -> Vec<u8> {
         }
         head.push_str(&format!("{}: {}\r\n", header.name, header.value));
     }
-    head.push_str(&format!("X-Forwarded-For: {client_ip}\r\n"));
+    head.push_str(&format!("X-Forwarded-For: {}\r\n", client.ip));
+    if request.header("X-Forwarded-Proto").is_none() {
+        head.push_str(&format!("X-Forwarded-Proto: {}\r\n", client.proto()));
+    }
     if request.header("X-Forwarded-Host").is_none() {
         if let Some(original) = request.header("host").filter(|h| !h.value.is_empty()) {
             head.push_str(&format!("X-Forwarded-Host: {}\r\n", original.value));
@@ -48,11 +51,11 @@ pub fn request_head(request: &Request, client_ip: &str, host: &str) -> Vec<u8> {
 }
 
 /// Forward an upgrade request to `ip:port`.
-pub fn forward(request: &Request, client_ip: &str, ip: &str, port: u16, host: &str, timeout: Duration) -> Result<Response, String> {
+pub fn forward(request: &Request, client: crate::proxy::Peer<'_>, ip: &str, port: u16, host: &str, timeout: Duration) -> Result<Response, String> {
     let address = (ip, port).to_socket_addrs().map_err(|e| e.to_string())?.next().ok_or("no address")?;
     let mut backend = TcpStream::connect_timeout(&address, timeout.min(Duration::from_secs(10))).map_err(|e| e.to_string())?;
     backend.set_read_timeout(Some(timeout)).map_err(|e| e.to_string())?;
-    backend.write_all(&request_head(request, client_ip, host)).map_err(|e| e.to_string())?;
+    backend.write_all(&request_head(request, client, host)).map_err(|e| e.to_string())?;
     backend.write_all(&request.body).map_err(|e| e.to_string())?;
 
     let mut received = Vec::new();

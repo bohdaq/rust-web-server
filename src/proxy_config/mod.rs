@@ -1217,7 +1217,7 @@ impl Application for H2Forward<'_> {
         for attempt in 0..attempts {
             let url = &backends[(start + attempt) % backends.len()];
             let result = crate::proxy::forward_h2(
-                request, &conn.client.ip, url, route.tls, route.trust.as_deref(), route.connect_timeout, route.read_timeout,
+                request, crate::proxy::Peer::of(conn), url, route.tls, route.trust.as_deref(), route.connect_timeout, route.read_timeout,
             );
             match result {
                 Ok(response) => return Ok(response),
@@ -1559,7 +1559,7 @@ impl DynamicProxy {
             let started = std::time::Instant::now();
             let result = crate::proxy::async_upstream::forward(
                 &prepared.request,
-                &conn.client.ip,
+                crate::proxy::Peer::of(conn),
                 &prepared.host,
                 prepared.port,
                 tls,
@@ -1604,7 +1604,7 @@ impl Application for DynamicProxy {
             let result = crate::proxy::forward_upstream_trusting(
                 crate::proxy::shared_pool(),
                 &prepared.request,
-                &conn.client.ip,
+                crate::proxy::Peer::of(conn),
                 &prepared.host,
                 prepared.port,
                 self.tls,

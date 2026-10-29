@@ -183,17 +183,17 @@ fn sample(share: f64) -> bool {
 
 /// Send a copy of `request` to one of the mirror's endpoints on a thread
 /// of its own; the response is dropped.
-fn send_mirror(mirror: &Mirror, request: &Request, client_ip: &str) {
+fn send_mirror(mirror: &Mirror, request: &Request, client: crate::proxy::Peer<'_>) {
     let Ok(endpoints) = &mirror.endpoints else { return };
     let Some(endpoint) = endpoints.get(MIRROR_COUNTER.fetch_add(1, Ordering::Relaxed) % endpoints.len().max(1)).cloned() else { return };
     let request = request.clone();
-    let client_ip = client_ip.to_string();
+    let (client_ip, tls) = (client.ip.to_string(), client.tls);
     std::thread::spawn(move || {
         let Some((ip, port)) = endpoint.rsplit_once(':') else { return };
         let ip = ip.trim_start_matches('[').trim_end_matches(']');
         let Ok(port) = port.parse::<u16>() else { return };
         let host = request.header("host").map(|h| h.value.to_string()).unwrap_or_else(|| endpoint.clone());
-        let _ = crate::proxy::forward_pooled_with_host(crate::proxy::shared_pool(), &request, &client_ip, ip, port, &host, Duration::from_secs(2), Duration::from_secs(10));
+        let _ = crate::proxy::forward_pooled_with_host(crate::proxy::shared_pool(), &request, crate::proxy::Peer { ip: &client_ip, tls }, ip, port, &host, Duration::from_secs(2), Duration::from_secs(10));
     });
 }
 
@@ -396,13 +396,13 @@ impl PortRouter {
         let (request, ip, port, host_header) = (target.request.as_ref(), target.ip.as_str(), target.port, target.host_header.as_str());
         let started = std::time::Instant::now();
         let forwarded = if let Some(tls) = &tls {
-            crate::proxy::forward_tls_with_host(&tls.config, &tls.label, request, &connection.client.ip, ip, port, &tls.server_name, host_header, connect_timeout(timeout), timeout)
+            crate::proxy::forward_tls_with_host(&tls.config, &tls.label, request, crate::proxy::Peer::of(connection), ip, port, &tls.server_name, host_header, connect_timeout(timeout), timeout)
         } else if super::upgrade::is_upgrade(request) {
-            super::upgrade::forward(request, &connection.client.ip, ip, port, host_header, timeout)
+            super::upgrade::forward(request, crate::proxy::Peer::of(connection), ip, port, host_header, timeout)
         } else if target.backend.app_protocol.as_deref() == Some("kubernetes.io/h2c") {
-            crate::proxy::forward_h2c_with_host(request, &connection.client.ip, ip, port, host_header, connect_timeout(timeout), timeout)
+            crate::proxy::forward_h2c_with_host(request, crate::proxy::Peer::of(connection), ip, port, host_header, connect_timeout(timeout), timeout)
         } else {
-            crate::proxy::forward_pooled_with_host(crate::proxy::shared_pool(), request, &connection.client.ip, ip, port, host_header, connect_timeout(timeout), timeout)
+            crate::proxy::forward_pooled_with_host(crate::proxy::shared_pool(), request, crate::proxy::Peer::of(connection), ip, port, host_header, connect_timeout(timeout), timeout)
         };
         match forwarded {
             Ok(response) => Attempt::Response(response),
@@ -424,13 +424,13 @@ impl PortRouter {
         let started = std::time::Instant::now();
         let forwarded = if tls.is_none() && target.backend.app_protocol.as_deref() == Some("kubernetes.io/h2c") {
             // HTTP/2 upstreams have their own runtime and a blocking API.
-            let (request, client_ip, ip, port, host) = (target.request.into_owned(), connection.client.ip.clone(), target.ip, target.port, target.host_header);
-            tokio::task::spawn_blocking(move || crate::proxy::forward_h2c_with_host(&request, &client_ip, &ip, port, &host, connect_timeout(timeout), timeout))
+            let (request, client_ip, tls_client, ip, port, host) = (target.request.into_owned(), connection.client.ip.clone(), connection.tls, target.ip, target.port, target.host_header);
+            tokio::task::spawn_blocking(move || crate::proxy::forward_h2c_with_host(&request, crate::proxy::Peer { ip: &client_ip, tls: tls_client }, &ip, port, &host, connect_timeout(timeout), timeout))
                 .await
                 .unwrap_or_else(|e| Err(e.to_string()))
         } else {
             let tls = tls.as_ref().map(|t| (t.server_name.as_str(), crate::proxy::async_upstream::AsyncTls { config: std::sync::Arc::clone(&t.config), pool: crate::proxy::async_upstream::gateway_tls_pool(&t.label) }));
-            crate::proxy::async_upstream::forward_gateway(&target.request, &connection.client.ip, &target.ip, target.port, &target.host_header, tls, connect_timeout(timeout), timeout).await
+            crate::proxy::async_upstream::forward_gateway(&target.request, crate::proxy::Peer::of(connection), &target.ip, target.port, &target.host_header, tls, connect_timeout(timeout), timeout).await
         };
         match forwarded {
             Ok(response) => Attempt::Response(response),
@@ -505,7 +505,7 @@ impl PortRouter {
         // Mirrors get the request as the filters left it.
         for mirror in rule.mirrors.iter().take(mirrored) {
             if sample(mirror.share) {
-                send_mirror(mirror, &request, &connection.client.ip);
+                send_mirror(mirror, &request, crate::proxy::Peer::of(connection));
             }
         }
         prepared.request = Some(request);

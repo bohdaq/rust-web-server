@@ -71,6 +71,7 @@ fn guest_connection_info() -> ConnectionInfo {
         server: Address { ip: "0.0.0.0".to_string(), port: 0 },
         request_size: 0,
         sni_hostname: None,
+        tls: false,
     }
 }
 

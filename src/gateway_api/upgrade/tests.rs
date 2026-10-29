@@ -52,7 +52,7 @@ fn upgrade_requests_are_recognized() {
     assert!(is_upgrade(&upgrade_request()));
     assert!(!is_upgrade(&request(&[("Upgrade", "websocket")])), "needs Connection: upgrade");
     assert!(!is_upgrade(&request(&[("Connection", "upgrade")])), "needs Upgrade");
-    let head = String::from_utf8(request_head(&upgrade_request(), "10.0.0.9", "example.org")).unwrap();
+    let head = String::from_utf8(request_head(&upgrade_request(), crate::proxy::Peer::plain("10.0.0.9"), "example.org")).unwrap();
     assert!(head.starts_with("GET /ws?x=1 HTTP/1.1\r\nHost: example.org\r\n"), "{head}");
     assert!(head.contains("Upgrade: websocket\r\n") && head.contains("X-Forwarded-For: 10.0.0.9\r\n") && head.ends_with("\r\n\r\n"));
     assert_eq!(1, head.matches("\r\nHost:").count());
@@ -61,7 +61,7 @@ fn upgrade_requests_are_recognized() {
 #[test]
 fn a_101_hands_the_connection_to_a_relay() {
     let (port, backend) = backend("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\nearly");
-    let mut response = forward(&upgrade_request(), "10.0.0.9", "127.0.0.1", port, "example.org", Duration::from_secs(5)).unwrap();
+    let mut response = forward(&upgrade_request(), crate::proxy::Peer::plain("10.0.0.9"), "127.0.0.1", port, "example.org", Duration::from_secs(5)).unwrap();
     assert_eq!(101, response.status_code);
     assert!(response.headers.iter().any(|h| h.name == "Upgrade" && h.value == "websocket"));
     let upgrade = crate::websocket::take_upgrade(&mut response).expect("a relay is waiting");
@@ -74,8 +74,8 @@ fn a_101_hands_the_connection_to_a_relay() {
 #[test]
 fn a_refused_upgrade_is_an_ordinary_response() {
     let (port, _backend) = backend("HTTP/1.1 403 Forbidden\r\nContent-Length: 4\r\n\r\nnope");
-    let mut response = forward(&upgrade_request(), "10.0.0.9", "127.0.0.1", port, "example.org", Duration::from_secs(5)).unwrap();
+    let mut response = forward(&upgrade_request(), crate::proxy::Peer::plain("10.0.0.9"), "127.0.0.1", port, "example.org", Duration::from_secs(5)).unwrap();
     assert_eq!(403, response.status_code);
     assert!(crate::websocket::take_upgrade(&mut response).is_none(), "no relay registered");
-    assert!(forward(&upgrade_request(), "10.0.0.9", "127.0.0.1", 1, "example.org", Duration::from_millis(200)).is_err(), "nothing listening");
+    assert!(forward(&upgrade_request(), crate::proxy::Peer::plain("10.0.0.9"), "127.0.0.1", 1, "example.org", Duration::from_millis(200)).is_err(), "nothing listening");
 }

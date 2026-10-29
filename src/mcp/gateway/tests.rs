@@ -119,6 +119,7 @@ impl Fake {
                 server: Address { ip: "127.0.0.1".to_string(), port: 0 },
                 request_size: 16000,
                 sni_hostname: None,
+                tls: false,
             };
             let response = server.execute(&request, &connection).unwrap();
             let part = response.content_range_list.first();

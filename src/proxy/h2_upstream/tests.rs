@@ -373,6 +373,7 @@ async fn the_http1_reverse_proxy_presents_the_client_certificate_too() {
             server: crate::server::Address { ip: "127.0.0.1".into(), port: 0 },
             request_size: 16000,
             sni_hostname: None,
+            tls: false,
         };
         let backend = [format!("https://localhost:{port}")];
         let with_cert = crate::proxy::ReverseProxy::new(backend.clone()).tls_ca_file(&ca).unwrap().tls_client_cert(&cert, &key).unwrap();

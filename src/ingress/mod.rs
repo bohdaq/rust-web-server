@@ -755,7 +755,7 @@ impl Application for IngressRouter {
                 crate::proxy::forward_pooled(
                     crate::proxy::shared_pool(),
                     request,
-                    &connection.client.ip,
+                    crate::proxy::Peer::of(connection),
                     &upstream_host,
                     rule.service_port,
                     self.connect_timeout,

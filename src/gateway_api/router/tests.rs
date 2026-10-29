@@ -140,6 +140,7 @@ fn unresolvable_or_empty_backends_answer_500_and_503() {
         server: crate::server::Address { ip: "127.0.0.1".to_string(), port: 2 },
         request_size: 0,
         sni_hostname: None,
+        tls: false,
     };
     let r = request("GET", "/", &[]);
     let code = |backends: Vec<Backend>| router.forward(&rule("x", vec![], backends), &r, &connection).status_code;
@@ -164,6 +165,7 @@ fn rule_filters_answer_redirects_preflights_and_unknown_filters_here() {
         server: crate::server::Address { ip: "127.0.0.1".to_string(), port: 2 },
         request_size: 0,
         sni_hostname: None,
+        tls: false,
     };
     let run = |l: &ListenerConfig, r: &Request| {
         let (_, rule, matched) = select(l, r, "example.org").expect("a rule");
@@ -221,6 +223,7 @@ fn connection() -> ConnectionInfo {
         server: crate::server::Address { ip: "127.0.0.1".to_string(), port: 2 },
         request_size: 0,
         sni_hostname: None,
+        tls: false,
     }
 }
 

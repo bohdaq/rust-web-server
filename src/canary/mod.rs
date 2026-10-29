@@ -342,7 +342,7 @@ impl CanaryLayer {
             let result = crate::proxy::forward_upstream(
                 crate::proxy::shared_pool(),
                 request,
-                &connection.client.ip,
+                crate::proxy::Peer::of(connection),
                 host,
                 *port,
                 *tls,

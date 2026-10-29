@@ -1305,6 +1305,7 @@ fn make_connection() -> crate::server::ConnectionInfo {
         server: crate::server::Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 16000,
     sni_hostname: None,
+    tls: false,
     }
 }
 
@@ -1451,6 +1452,7 @@ fn connection_info_peer_addr_parses_ipv4() {
         server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 0,
     sni_hostname: None,
+    tls: false,
     };
     let addr = info.peer_addr().unwrap();
     assert_eq!("127.0.0.1:8080", addr.to_string());
@@ -1464,6 +1466,7 @@ fn connection_info_peer_addr_returns_none_for_bad_ip() {
         server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 0,
     sni_hostname: None,
+    tls: false,
     };
     assert!(info.peer_addr().is_none());
 }

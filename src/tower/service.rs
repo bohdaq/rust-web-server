@@ -35,7 +35,7 @@ impl<A> Clone for TowerService<A> {
 impl<A> TowerService<A> {
     pub fn new(app: A) -> TowerService<A> {
         let unknown = Address { ip: "0.0.0.0".to_string(), port: 0 };
-        TowerService { app: Arc::new(app), connection: ConnectionInfo { client: unknown.clone(), server: unknown, request_size: 0, sni_hostname: None } }
+        TowerService { app: Arc::new(app), connection: ConnectionInfo { client: unknown.clone(), server: unknown, request_size: 0, sni_hostname: None, tls: false } }
     }
 
     /// What handlers see as the connection.

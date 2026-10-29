@@ -228,6 +228,7 @@ impl App {
             server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
             request_size: 16000,
             sni_hostname: None,
+            tls: false,
         };
         let app = App::new();
         let response = app.execute(&request, &conn).unwrap_or_else(|_| {

@@ -22,6 +22,7 @@ fn conn() -> ConnectionInfo {
         server: Address { ip: "127.0.0.1".to_string(), port: 7878 },
         request_size: 16000,
         sni_hostname: None,
+        tls: false,
     }
 }
 
@@ -835,7 +836,7 @@ fn proxied_request_has_no_empty_header_line() {
     // Strict backends (nginx) answer 400 to a ": " header line.
     let req = crate::request::Request::parse(b"GET /api/1k.bin HTTP/1.1\r\nHost: a\r\nAccept: */*\r\n\r\n").unwrap();
     assert!(req.headers.iter().all(|h| !h.name.is_empty()), "request line parsed as a header");
-    let out = String::from_utf8(crate::proxy::build_request(&req, "127.0.0.1:9000", "10.0.0.1", true)).unwrap();
+    let out = String::from_utf8(crate::proxy::build_request(&req, "127.0.0.1:9000", crate::proxy::Peer::plain("10.0.0.1"), true)).unwrap();
     assert!(!out.contains("\r\n: "), "{out:?}");
     assert!(out.starts_with("GET /api/1k.bin HTTP/1.1\r\nHost: 127.0.0.1:9000\r\nAccept: */*\r\n"), "{out:?}");
 }
@@ -876,7 +877,7 @@ fn forward_pooled_reuses_one_backend_connection() {
     let (port, accepted) = keepalive_backend(KEEPALIVE_RESPONSE, 3);
     let pool = ConnPool::new(8, Duration::from_secs(60));
     for _ in 0..5 {
-        let resp = crate::proxy::forward_pooled(&pool, &get("/"), "10.0.0.1", "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2)).unwrap();
+        let resp = crate::proxy::forward_pooled(&pool, &get("/"), crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2)).unwrap();
         assert_eq!(200, resp.status_code);
     }
     assert_eq!(1, accepted.load(AtOrd::Relaxed), "5 sequential requests, 1 TCP connection");
@@ -886,7 +887,7 @@ fn forward_pooled_reuses_one_backend_connection() {
 fn forward_pooled_retries_a_stale_connection_for_get() {
     let (port, accepted) = closes_after_each_response_backend(4);
     let pool = ConnPool::new(8, Duration::from_secs(60));
-    let fwd = |r: &Request| crate::proxy::forward_pooled(&pool, r, "10.0.0.1", "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2));
+    let fwd = |r: &Request| crate::proxy::forward_pooled(&pool, r, crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2));
     assert_eq!(200, fwd(&get("/")).unwrap().status_code);
     thread::sleep(Duration::from_millis(50)); // let the close land
     // The pooled connection is dead; a GET is retried on a fresh one.
@@ -898,7 +899,7 @@ fn forward_pooled_retries_a_stale_connection_for_get() {
 fn forward_pooled_does_not_replay_a_post_on_a_stale_connection() {
     let (port, accepted) = closes_after_each_response_backend(4);
     let pool = ConnPool::new(8, Duration::from_secs(60));
-    let fwd = |r: &Request| crate::proxy::forward_pooled(&pool, r, "10.0.0.1", "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2));
+    let fwd = |r: &Request| crate::proxy::forward_pooled(&pool, r, crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2));
     assert_eq!(200, fwd(&get("/")).unwrap().status_code);
     thread::sleep(Duration::from_millis(50));
     // The backend might have received it: a non-idempotent request fails
@@ -977,7 +978,7 @@ pub(crate) fn tls_backend_with_pem(response: &'static [u8], responses_per_conn: 
 
 #[cfg(feature = "http2")]
 fn forward_tls(pool: &crate::proxy::Pool<super::TlsStream>, config: &Arc<rustls::ClientConfig>, port: u16, request: &Request) -> Result<crate::response::Response, String> {
-    super::forward_via(pool, request, "10.0.0.1", "localhost", port, "localhost", Duration::from_secs(5), || {
+    super::forward_via(pool, request, crate::proxy::Peer::plain("10.0.0.1"), "localhost", port, "localhost", Duration::from_secs(5), || {
         super::connect_tls_with(Arc::clone(config), "localhost", port, Duration::from_secs(2))
     })
 }
@@ -1050,11 +1051,11 @@ fn head_response_with_content_length_is_not_waited_on() {
     let mut head = get("/");
     head.method = METHOD.head.to_string();
     let started = std::time::Instant::now();
-    let response = crate::proxy::forward_pooled(&pool, &head, "10.0.0.1", "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2)).unwrap();
+    let response = crate::proxy::forward_pooled(&pool, &head, crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2)).unwrap();
     assert_eq!(200, response.status_code);
     assert!(started.elapsed() < Duration::from_secs(1), "waited {:?} for a body", started.elapsed());
     // The connection is still usable for the next request.
-    let again = crate::proxy::forward_pooled(&pool, &head, "10.0.0.1", "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2)).unwrap();
+    let again = crate::proxy::forward_pooled(&pool, &head, crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, Duration::from_secs(2), Duration::from_secs(2)).unwrap();
     assert_eq!(200, again.status_code);
     assert_eq!(1, accepted.load(AtOrd::Relaxed));
 }
@@ -1094,10 +1095,10 @@ fn proxied_request_drops_hop_by_hop_and_host_in_any_case() {
     let req = crate::request::Request::parse(
         b"POST /a?b=1 HTTP/1.1\r\nHOST: client\r\nConnection: x\r\nKEEP-ALIVE: 5\r\nTe: trailers\r\n\xe2\x84\xaaeep-Alive: 1\r\nX-Kept: v\r\nContent-Length: 3\r\n\r\nabc",
     ).unwrap();
-    let out = crate::proxy::build_request(&req, "b:9", "10.0.0.1", false);
+    let out = crate::proxy::build_request(&req, "b:9", crate::proxy::Peer::plain("10.0.0.1"), false);
     // The client's Content-Length is regenerated, not forwarded twice.
     let expected = "POST /a?b=1 HTTP/1.1\r\nHost: b:9\r\nX-Kept: v\r\n\
-        X-Forwarded-For: 10.0.0.1\r\nVia: 1.1 rws\r\nX-Forwarded-Host: client\r\nConnection: close\r\nContent-Length: 3\r\n\r\nabc";
+        X-Forwarded-For: 10.0.0.1\r\nVia: 1.1 rws\r\nX-Forwarded-Host: client\r\nX-Forwarded-Proto: http\r\nConnection: close\r\nContent-Length: 3\r\n\r\nabc";
     assert_eq!(expected, String::from_utf8(out.clone()).unwrap());
     assert!(out.capacity() - out.len() < 16, "sized up front, not grown: {} of {}", out.len(), out.capacity());
 }
@@ -1108,7 +1109,7 @@ fn proxied_request_has_one_content_length_and_drops_connection_listed_headers() 
         b"POST / HTTP/1.1\r\nHost: a\r\nconnection: X-Secret, keep-alive\r\nX-Secret: s\r\nTrailer: X-Sum\r\n\
           Proxy-Connection: keep-alive\r\ncontent-length: 2\r\nX-Kept: v\r\n\r\nhi",
     ).unwrap();
-    let out = String::from_utf8(crate::proxy::build_request(&req, "b:9", "10.0.0.1", true)).unwrap();
+    let out = String::from_utf8(crate::proxy::build_request(&req, "b:9", crate::proxy::Peer::plain("10.0.0.1"), true)).unwrap();
     assert_eq!(1, out.to_ascii_lowercase().matches("content-length:").count(), "{out:?}");
     assert!(out.contains("Content-Length: 2\r\n"), "{out:?}");
     for gone in ["X-Secret", "Trailer", "Proxy-Connection"] {
@@ -1122,7 +1123,7 @@ fn proxied_request_extends_an_incoming_x_forwarded_for() {
     let req = crate::request::Request::parse(
         b"GET / HTTP/1.1\r\nHost: a\r\nx-forwarded-for: 203.0.113.7, 198.51.100.2\r\n\r\n",
     ).unwrap();
-    let out = crate::proxy::build_request(&req, "b:9", "10.0.0.1", true);
+    let out = crate::proxy::build_request(&req, "b:9", crate::proxy::Peer::plain("10.0.0.1"), true);
     let text = String::from_utf8(out.clone()).unwrap();
     assert_eq!(1, text.to_ascii_lowercase().matches("x-forwarded-for:").count(), "{text:?}");
     assert!(text.contains("X-Forwarded-For: 203.0.113.7, 198.51.100.2, 10.0.0.1\r\n"), "{text:?}");
@@ -1308,12 +1309,12 @@ fn sync_forwarder_reads_past_interim_responses_and_keeps_the_pool_in_step() {
     let port = scripted_backend(vec![EARLY_HINTS_THEN_A, PLAIN_B]);
     let pool = ConnPool::new(4, Duration::from_secs(30));
     let t = Duration::from_secs(5);
-    let first = super::forward_upstream(&pool, &get("/a"), "10.0.0.1", "127.0.0.1", port, false, t, t).unwrap();
+    let first = super::forward_upstream(&pool, &get("/a"), crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, false, t, t).unwrap();
     assert_eq!(200, first.status_code);
     assert_eq!("body-A", body_of(&first));
     // The second request reuses the pooled connection: it must get B, not
     // the remainder of the first exchange.
-    let second = super::forward_upstream(&pool, &get("/b"), "10.0.0.1", "127.0.0.1", port, false, t, t).unwrap();
+    let second = super::forward_upstream(&pool, &get("/b"), crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, false, t, t).unwrap();
     assert_eq!(200, second.status_code);
     assert_eq!("body-B", body_of(&second));
 }
@@ -1323,10 +1324,10 @@ fn sync_forwarder_reads_past_interim_responses_and_keeps_the_pool_in_step() {
 async fn async_forwarder_reads_past_interim_responses_and_keeps_the_pool_in_step() {
     let port = scripted_backend(vec![EARLY_HINTS_THEN_A, PLAIN_B]);
     let t = Duration::from_secs(5);
-    let first = super::async_upstream::forward(&get("/a"), "10.0.0.1", "127.0.0.1", port, None, t, t).await.unwrap();
+    let first = super::async_upstream::forward(&get("/a"), crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, None, t, t).await.unwrap();
     assert_eq!(200, first.status_code);
     assert_eq!("body-A", body_of(&first));
-    let second = super::async_upstream::forward(&get("/b"), "10.0.0.1", "127.0.0.1", port, None, t, t).await.unwrap();
+    let second = super::async_upstream::forward(&get("/b"), crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, None, t, t).await.unwrap();
     assert_eq!(200, second.status_code);
     assert_eq!("body-B", body_of(&second));
 }
@@ -1337,7 +1338,7 @@ fn an_endless_stream_of_interim_responses_is_an_error() {
     let port = scripted_backend(vec![flood]);
     let pool = ConnPool::new(4, Duration::from_secs(30));
     let t = Duration::from_secs(2);
-    assert!(super::forward_upstream(&pool, &get("/"), "10.0.0.1", "127.0.0.1", port, false, t, t).is_err());
+    assert!(super::forward_upstream(&pool, &get("/"), crate::proxy::Peer::plain("10.0.0.1"), "127.0.0.1", port, false, t, t).is_err());
 }
 
 #[test]
@@ -1358,11 +1359,11 @@ fn inside_a_traced_request_the_upstream_gets_our_traceparent_and_baggage() {
     )
     .unwrap();
     thread::spawn(move || {
-        let untraced = String::from_utf8(crate::proxy::build_request(&req, "b:9", "10.0.0.1", true)).unwrap();
+        let untraced = String::from_utf8(crate::proxy::build_request(&req, "b:9", crate::proxy::Peer::plain("10.0.0.1"), true)).unwrap();
         assert!(untraced.contains("traceparent: 00-1111") && untraced.contains("baggage: theirs=1"), "passed through untouched: {untraced:?}");
         let root = crate::otel::span("request");
         crate::otel::set_baggage("tenant", "acme");
-        let traced = String::from_utf8(crate::proxy::build_request(&req, "b:9", "10.0.0.1", true)).unwrap();
+        let traced = String::from_utf8(crate::proxy::build_request(&req, "b:9", crate::proxy::Peer::plain("10.0.0.1"), true)).unwrap();
         let ours = crate::otel::propagation_headers().unwrap().0;
         assert_eq!(1, traced.matches("traceparent").count(), "{traced:?}");
         assert!(traced.contains(&format!("traceparent: {ours}\r\n")), "{traced:?}");
@@ -1377,19 +1378,37 @@ fn inside_a_traced_request_the_upstream_gets_our_traceparent_and_baggage() {
 #[test]
 fn proxied_request_says_which_host_the_client_asked_for() {
     let req = crate::request::Request::parse(b"GET / HTTP/1.1\r\nHost: shop.example\r\n\r\n").unwrap();
-    let out = crate::proxy::build_request(&req, "10.0.0.9:8080", "10.0.0.1", true);
+    let out = crate::proxy::build_request(&req, "10.0.0.9:8080", crate::proxy::Peer::plain("10.0.0.1"), true);
     let text = String::from_utf8(out.clone()).unwrap();
     assert!(text.contains("Host: 10.0.0.9:8080\r\n") && text.contains("X-Forwarded-Host: shop.example\r\n"), "{text:?}");
     assert!(out.capacity() - out.len() < 16, "sized up front, not grown: {} of {}", out.len(), out.capacity());
 
     // An outer proxy's X-Forwarded-Host is kept, not replaced or doubled.
     let req = crate::request::Request::parse(b"GET / HTTP/1.1\r\nHost: inner\r\nX-Forwarded-Host: shop.example\r\n\r\n").unwrap();
-    let text = String::from_utf8(crate::proxy::build_request(&req, "b:9", "10.0.0.1", true)).unwrap();
+    let text = String::from_utf8(crate::proxy::build_request(&req, "b:9", crate::proxy::Peer::plain("10.0.0.1"), true)).unwrap();
     assert_eq!(1, text.matches("X-Forwarded-Host").count(), "{text:?}");
     assert!(text.contains("X-Forwarded-Host: shop.example\r\n"), "{text:?}");
 
     // No Host (HTTP/1.0), no header.
     let req = crate::request::Request::parse(b"GET / HTTP/1.0\r\n\r\n").unwrap();
-    assert!(!String::from_utf8(crate::proxy::build_request(&req, "b:9", "10.0.0.1", false)).unwrap().contains("X-Forwarded-Host"));
+    assert!(!String::from_utf8(crate::proxy::build_request(&req, "b:9", crate::proxy::Peer::plain("10.0.0.1"), false)).unwrap().contains("X-Forwarded-Host"));
+}
+
+#[test]
+fn proxied_request_says_whether_the_client_used_tls() {
+    let req = crate::request::Request::parse(b"GET / HTTP/1.1\r\nHost: shop.example\r\n\r\n").unwrap();
+    let tls = crate::proxy::Peer { ip: "10.0.0.1", tls: true };
+    let out = crate::proxy::build_request(&req, "b:9", tls, true);
+    let text = String::from_utf8(out.clone()).unwrap();
+    assert!(text.contains("X-Forwarded-Proto: https\r\n"), "{text:?}");
+    assert!(out.capacity() - out.len() < 16, "sized up front, not grown: {} of {}", out.len(), out.capacity());
+    let plain = String::from_utf8(crate::proxy::build_request(&req, "b:9", crate::proxy::Peer::plain("10.0.0.1"), true)).unwrap();
+    assert!(plain.contains("X-Forwarded-Proto: http\r\n"), "{plain:?}");
+
+    // An outer proxy's answer is kept: rws may be behind a TLS terminator.
+    let req = crate::request::Request::parse(b"GET / HTTP/1.1\r\nHost: a\r\nX-Forwarded-Proto: https\r\n\r\n").unwrap();
+    let text = String::from_utf8(crate::proxy::build_request(&req, "b:9", crate::proxy::Peer::plain("10.0.0.1"), true)).unwrap();
+    assert_eq!(1, text.matches("X-Forwarded-Proto").count(), "{text:?}");
+    assert!(text.contains("X-Forwarded-Proto: https\r\n"), "{text:?}");
 }
 

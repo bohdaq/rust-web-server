@@ -62,6 +62,7 @@ mod tests {
             server: rust_web_server::server::Address { ip: "127.0.0.1".into(), port: 7878 },
             request_size: 0,
             sni_hostname: None,
+            tls: false,
         };
         let mut response = app().execute(&request, &connection).unwrap();
         let mut body = Vec::new();
