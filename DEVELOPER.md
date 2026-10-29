@@ -177,7 +177,7 @@ Each fact lives in one place:
 
 | What | Where |
 |---|---|
-| How to use a feature: guides, examples, configuration, deployment | a page under [`docs/src/content/docs/`](docs/src/content/docs/), shown on https://rws8.tech; new pages also go in the sidebar in `docs/astro.config.mjs` |
+| How to use a feature: guides, examples, configuration, deployment | a page under [`docs/src/content/docs/`](docs/src/content/docs/), shown on https://rws8.tech; new pages also go in the sidebar in `docs/sidebar.json` |
 | Public API (types, methods, parameters) | rustdoc: `///` on items, `//!` for module overviews; add new public types to [`reference/api.md`](docs/src/content/docs/reference/api.md) |
 | What changed in a release | [CHANGELOG.md](CHANGELOG.md) |
 | Architecture and internals | [CLAUDE.md](CLAUDE.md) and the [Architecture](docs/src/content/docs/reference/architecture.md) page |

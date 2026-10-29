@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build && node scripts/prerender.js",
+    "build": "vite build && node scripts/prerender.js && pagefind --site dist --output-subdir pagefind",
     "preview": "vite preview --outDir dist"
   },
   "dependencies": {
@@ -21,6 +21,20 @@
   "devDependencies": {
     "@lit-labs/ssr": "4.1.0",
     "@phosphor-icons/core": "^2.1.1",
-    "vite": "8.3.4"
+    "@shikijs/rehype": "4.5.0",
+    "hast-util-to-string": "3.0.1",
+    "pagefind": "1.5.2",
+    "rehype-autolink-headings": "7.1.0",
+    "rehype-slug": "6.0.0",
+    "rehype-stringify": "10.0.1",
+    "remark-directive": "4.0.0",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "remark-rehype": "11.1.2",
+    "shiki": "4.5.0",
+    "unified": "11.0.5",
+    "unist-util-visit": "5.0.0",
+    "vite": "8.3.4",
+    "yaml": "2.9.1"
   }
 }

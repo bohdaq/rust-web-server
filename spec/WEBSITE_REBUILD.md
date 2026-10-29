@@ -178,7 +178,8 @@ review.
 | Phase | State |
 |---|---|
 | 1. Theme spike | **done 2026-10-29**, not committed: `site/` (Vite 8.3.4 + `@lit-labs/ssr` 4.1.0 prerender, plain JS modules), `src/theme.css`, `/theme/` page, SVG brand (`src/brand/mark.js` → `favicon.svg`, `brand/mark*.svg`, `brand/icon-{black,orange}.svg`), floating nav + mobile menu, theme toggle. Checked in headless Chromium: light, dark, 390px (no horizontal scroll), 20 declarative shadow roots hydrate, tabs/toggle/menu work, no console errors |
-| 2–8 | not started |
+| 2. Docs renderer | **done 2026-10-29**: `docs/sidebar.json` is the one sidebar (Starlight imports it, `ci/gen_llms.py` reads it — `llms.txt` byte-identical, Starlight still builds 107 pages); `site/src/docs/` renders all 106 sidebar pages + `/docs/` index under `/docs/…` (128 asides → `lit-material-alert`, 873 fences → `lit-material-code-block` with Shiki dual-theme highlighting at build time), sidebar/TOC/prev-next/edit link, Pagefind search (106 pages, `/` shortcut). Checks: page set equals the sidebar, 0 broken internal links or anchors, all 108 pages free of horizontal scroll and console errors at 390px, `ci/check_docs.py` green; full build 12 s |
+| 3–8 | not started |
 
 Phase 1 findings:
 - Brand orange `#D2551E` is 4.15:1 under white text, so interactive orange is
@@ -189,6 +190,23 @@ Phase 1 findings:
   `::part(button)`); alert's built-in icons are Material-style (Phosphor
   passed in the `icon` slot instead).
 - Page styles beat `::slotted`, so slotted Phosphor icons need explicit sizes.
+
+Phase 2 findings:
+- Lit SSR renders lit-material elements inside `unsafeHTML` Markdown too, so
+  docs code blocks and asides arrive as declarative shadow DOM and read fine
+  with JS off; no fallback styles needed.
+- The docs sidebar and TOC are plain semantic `<nav>`/`<details>`, not
+  lit-material `navigation`: they work without JS, and a rail/drawer is for
+  a handful of app destinations, not 106 links.
+- Content fixes the renderer makes: `Arc<Mutex<T>>`-style text that parsed as
+  raw HTML (dropped by Starlight) is shown; links without a trailing slash get
+  one; `rust,no_run` → Rust, `promql` → plain text.
+- Vite's CSS minifier keeps only `-webkit-backdrop-filter` when both spellings
+  are written, which Chromium ignores: write only the standard property.
+- `color-mix()` over a `light-dark()` value resolves to transparent in
+  Chromium; spell translucent colours per scheme.
+- Pagefind's `debouncedSearch` drops the last query when several arrive while
+  the index loads; the client debounces itself and calls `search()`.
 
 New work found:
 - `install.sh` for `curl -fsSL https://rws8.tech/install.sh | sh` does not exist

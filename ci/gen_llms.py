@@ -7,6 +7,7 @@ page in one file) from docs/src/content/docs, in sidebar order.
 
 Edit the docs pages, not the generated files.
 """
+import json
 import os
 import re
 import sys
@@ -56,18 +57,10 @@ def msrv():
 
 
 def sidebar():
-    """[(group label, [(link, label)])] in astro.config.mjs order."""
-    with open(os.path.join(ROOT, "docs", "astro.config.mjs")) as f:
-        text = f.read()
-    groups, current = [], None
-    for m in re.finditer(r"label:\s*'([^']+)'(?:\s*,\s*link:\s*'([^']+)')?", text):
-        label, link = m.group(1), m.group(2)
-        if link is None:
-            current = (label, [])
-            groups.append(current)
-        elif current is not None:
-            current[1].append((link, label))
-    return groups
+    """[(group label, [(link, label)])] in docs/sidebar.json order."""
+    with open(os.path.join(ROOT, "docs", "sidebar.json")) as f:
+        groups = json.load(f)
+    return [(g["label"], [(i["link"], i["label"]) for i in g["items"]]) for g in groups]
 
 
 def page_file(link):
@@ -135,7 +128,7 @@ def main():
     llms, full, orphans = build()
     targets = {os.path.join(ROOT, "llms.txt"): llms, os.path.join(ROOT, "llms-full.txt"): full}
     if orphans:
-        print("pages missing from the sidebar (docs/astro.config.mjs):", *orphans, sep="\n  ")
+        print("pages missing from the sidebar (docs/sidebar.json):", *orphans, sep="\n  ")
     if "--check" in sys.argv:
         stale = []
         for path, content in targets.items():

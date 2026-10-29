@@ -10,8 +10,11 @@ import "../src/components.js";
 import { favicon, icon, mark } from "../src/brand/mark.js";
 import { documentHtml } from "../src/shell.js";
 import * as themePage from "../src/pages/theme.js";
+import { buildDocs } from "../src/docs/build.js";
 
-const dist = join(dirname(fileURLToPath(import.meta.url)), "..", "dist");
+const site = join(dirname(fileURLToPath(import.meta.url)), "..");
+const dist = join(site, "dist");
+const docsRoot = join(site, "..", "docs");
 const manifest = JSON.parse(readFileSync(join(dist, ".vite", "manifest.json"), "utf8"));
 const entry = manifest["src/client/main.js"];
 const assets = { js: `/${entry.file}`, css: (entry.css ?? []).map((f) => `/${f}`) };
@@ -22,13 +25,15 @@ function write(path, content) {
   writeFileSync(file, content);
 }
 
-const pages = [themePage];
+const sidebar = JSON.parse(readFileSync(join(docsRoot, "sidebar.json"), "utf8"));
+const docs = await buildDocs({ contentRoot: join(docsRoot, "src", "content", "docs"), sidebar });
+const pages = [themePage, ...docs];
 for (const page of pages) {
   const body = await collectResult(render(page.render()));
   const out = page.meta.path.endsWith("/") ? `${page.meta.path}index.html` : page.meta.path;
   write(out, documentHtml({ ...page.meta, body, assets }));
-  console.log("page", page.meta.path);
 }
+console.log(pages.length, "pages")
 
 write("favicon.svg", favicon());
 write("brand/mark.svg", mark({ rack: "#16120F", dot: "#F2EBE3", slot: "#7A706A", accent: "#D2551E", accentDot: "#16120F" }));

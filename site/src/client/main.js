@@ -11,7 +11,9 @@ import "../components.js";
 import { initThemeToggle } from "./theme-toggle.js";
 import { initTabPanels } from "./tab-panels.js";
 import { initMenu } from "./menu.js";
+import { initSearch } from "./search.js";
 
 initThemeToggle();
 initTabPanels();
 initMenu();
+initSearch();

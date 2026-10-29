@@ -125,7 +125,7 @@ fn my_cors_test() {
 
 ### 2. Docs — one home per fact
 
-- **Usage** goes on the matching page under `docs/src/content/docs/` (`building-apps/`, `features/`, `proxy/`, `database/`, `mcp/`, `deployment/`, `configuration/`, `reference/`). Extend the page that covers the feature (a new `##` section, updated example); a new topic gets a new page plus a sidebar entry in `docs/astro.config.mjs`. Examples live only there — no copies in README, DEVELOPER.md or elsewhere.
+- **Usage** goes on the matching page under `docs/src/content/docs/` (`building-apps/`, `features/`, `proxy/`, `database/`, `mcp/`, `deployment/`, `configuration/`, `reference/`). Extend the page that covers the feature (a new `##` section, updated example); a new topic gets a new page plus a sidebar entry in `docs/sidebar.json`. Examples live only there — no copies in README, DEVELOPER.md or elsewhere.
 - **API**: rustdoc on the item (`///`) and module (`//!`); a new public type also gets a row in `docs/src/content/docs/reference/api.md`.
 - **Settings**: a new `RWS_CONFIG_*` goes on `configuration/env-vars.md` (and `config-file.md` if it has a file key) — `ci/check_docs.py` fails otherwise.
 - **`CHANGELOG.md`**: an entry under "Unreleased" (breaking changes also on `reference/migrating-*.md`).
