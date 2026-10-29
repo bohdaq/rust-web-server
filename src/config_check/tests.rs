@@ -380,7 +380,7 @@ spa_fallback  = "nonexistent-index.html"
 
 [[upstream]]
 name        = "app"
-backends    = ["https://10.0.0.10:8443"]
+backends    = ["10.0.0.10:8080"]  # http1-only builds reject https:// backends
 tls_ca_file = "/nonexistent/ca.pem"
 
 [[route]]
