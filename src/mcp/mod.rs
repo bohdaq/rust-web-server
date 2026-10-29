@@ -213,6 +213,12 @@ impl McpContent {
         McpContent { kind: "result", text: json.into(), mime_type: Some("application/json".to_string()), uri: None }
     }
 
+    /// One content block (`{"type":…}`) sent as is — how the gateway passes
+    /// an upstream prompt's message content through.
+    pub(crate) fn raw_block(json: impl Into<String>) -> Self {
+        McpContent { kind: "raw_block", text: json.into(), mime_type: None, uri: None }
+    }
+
     /// Image content (screenshot, chart, generated art) — `data` is base64-encoded
     /// binary and `mime_type` is e.g. `"image/png"`.
     pub fn image(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
@@ -239,7 +245,7 @@ impl McpContent {
                 json_escape(self.mime()),
                 json_escape(&self.text),
             ),
-            "blocks" => self.text.clone(),
+            "blocks" | "raw_block" => self.text.clone(),
             "resource" => format!(
                 r#"{{"type":"resource","resource":{{"uri":"{}","mimeType":"{}","text":"{}"}}}}"#,
                 json_escape(self.uri.as_deref().unwrap_or("")),
@@ -881,6 +887,8 @@ type PromptFn   = Arc<dyn Fn(McpContext, &str) -> Result<PromptReply, String> + 
 /// `Fn(argument_name, partial_value) -> candidate completion strings`.
 type CompletionFn = Arc<dyn Fn(&str, &str) -> Result<Vec<String>, String> + Send + Sync>;
 type ToolFilter = Arc<dyn Fn(&McpContext, &str) -> bool + Send + Sync>;
+/// [`McpServer::resource_filter`] (on the URI template) and [`McpServer::prompt_filter`] (on the name).
+type NameFilter = Arc<dyn Fn(&McpContext, &str) -> bool + Send + Sync>;
 type ToolCallHook = Arc<dyn Fn(&McpContext, &str) -> Result<(), String> + Send + Sync>;
 type ToolCallObserver = Arc<dyn Fn(&McpContext, &ToolCallRecord<'_>) + Send + Sync>;
 
@@ -1069,6 +1077,9 @@ pub struct McpServer {
     bearer_tokens: Vec<(String, String)>,
     /// Which tools a caller may see and call ([`Self::tool_filter`]).
     tool_filter: Option<ToolFilter>,
+    /// Which resources and prompts a caller may see and use.
+    resource_filter: Option<NameFilter>,
+    prompt_filter: Option<NameFilter>,
     /// Runs before every tool call ([`Self::before_tool_call`]).
     before_call: Vec<ToolCallHook>,
     /// Told about every finished tool call ([`Self::after_tool_call`]).
@@ -1226,6 +1237,8 @@ impl McpServer {
             auth_token: None,
             bearer_tokens: Vec::new(),
             tool_filter: None,
+            resource_filter: None,
+            prompt_filter: None,
             before_call: Vec::new(),
             after_call: Vec::new(),
             allowed_origins: Vec::new(),
@@ -1842,6 +1855,35 @@ impl McpServer {
     {
         self.tool_filter = Some(Arc::new(allow));
         self
+    }
+
+    /// Which resources a caller may list and read, like
+    /// [`Self::tool_filter`] for tools: `allow(ctx, uri_template)`; a hidden
+    /// resource is left out of `resources/list` and
+    /// `resources/templates/list`, and reading it answers "not found".
+    pub fn resource_filter<F>(mut self, allow: F) -> Self
+    where
+        F: Fn(&McpContext, &str) -> bool + Send + Sync + 'static,
+    {
+        self.resource_filter = Some(Arc::new(allow));
+        self
+    }
+
+    /// Which prompts a caller may list and get: `allow(ctx, name)`.
+    pub fn prompt_filter<F>(mut self, allow: F) -> Self
+    where
+        F: Fn(&McpContext, &str) -> bool + Send + Sync + 'static,
+    {
+        self.prompt_filter = Some(Arc::new(allow));
+        self
+    }
+
+    fn resource_allowed(&self, ctx: &McpContext, uri_template: &str) -> bool {
+        self.resource_filter.as_ref().is_none_or(|allow| allow(ctx, uri_template))
+    }
+
+    fn prompt_allowed(&self, ctx: &McpContext, name: &str) -> bool {
+        self.prompt_filter.as_ref().is_none_or(|allow| allow(ctx, name))
     }
 
     /// Run `check` before every `tools/call` that [`Self::tool_filter`]
@@ -2496,12 +2538,12 @@ impl McpServer {
             "ping"           => Ok("{}".to_string()),
             "tools/list"     => self.do_tools_list(body, &ctx),
             "tools/call"     => self.do_tools_call(body, ctx),
-            "resources/list" => self.do_resources_list(body),
-            "resources/read" => self.do_resources_read(body),
-            "resources/templates/list" => self.do_resource_templates_list(body),
+            "resources/list" => self.do_resources_list(body, &ctx),
+            "resources/read" => self.do_resources_read(body, &ctx),
+            "resources/templates/list" => self.do_resource_templates_list(body, &ctx),
             "resources/subscribe"   => self.do_resource_subscribe(body, ctx.session_id),
             "resources/unsubscribe" => self.do_resource_unsubscribe(body, ctx.session_id),
-            "prompts/list"   => self.do_prompts_list(body),
+            "prompts/list"   => self.do_prompts_list(body, &ctx),
             "prompts/get"    => self.do_prompts_get(body, ctx),
             "logging/setLevel" => self.do_set_log_level(body),
             "completion/complete" => self.do_completion(body),
@@ -2880,8 +2922,8 @@ impl McpServer {
         }
     }
 
-    fn do_resources_list(&self, body: &str) -> Result<String, (i32, String)> {
-        let items: Vec<String> = self.resources.read().unwrap().iter().filter(|r| !r.uri_template.contains('{')).map(|r| {
+    fn do_resources_list(&self, body: &str, ctx: &McpContext) -> Result<String, (i32, String)> {
+        let items: Vec<String> = self.resources.read().unwrap().iter().filter(|r| !r.uri_template.contains('{') && self.resource_allowed(ctx, &r.uri_template)).map(|r| {
             format!(
                 r#"{{"uri":"{}","name":"{}","description":"{}","mimeType":"text/plain"}}"#,
                 json_escape(&r.uri_template),
@@ -2895,8 +2937,8 @@ impl McpServer {
 
     /// `resources/templates/list`: the resources registered with a URI
     /// template (`{...}` placeholders), which `resources/list` leaves out.
-    fn do_resource_templates_list(&self, body: &str) -> Result<String, (i32, String)> {
-        let items: Vec<String> = self.resources.read().unwrap().iter().filter(|r| r.uri_template.contains('{')).map(|r| {
+    fn do_resource_templates_list(&self, body: &str, ctx: &McpContext) -> Result<String, (i32, String)> {
+        let items: Vec<String> = self.resources.read().unwrap().iter().filter(|r| r.uri_template.contains('{') && self.resource_allowed(ctx, &r.uri_template)).map(|r| {
             format!(
                 r#"{{"uriTemplate":"{}","name":"{}","description":"{}","mimeType":"text/plain"}}"#,
                 json_escape(&r.uri_template),
@@ -2908,7 +2950,7 @@ impl McpServer {
         Ok(format!(r#"{{"resourceTemplates":[{}]{}}}"#, page.join(","), next_cursor_json(&next_cursor)))
     }
 
-    fn do_resources_read(&self, body: &str) -> Result<String, (i32, String)> {
+    fn do_resources_read(&self, body: &str, ctx: &McpContext) -> Result<String, (i32, String)> {
         let params = json_rpc::extract_raw(body, "params")
             .ok_or((json_rpc::INVALID_PARAMS, "Missing params".to_string()))?;
         let uri = json_rpc::extract_str(&params, "uri")
@@ -2916,10 +2958,12 @@ impl McpServer {
 
         let handler = {
             let resources = self.resources.read().unwrap();
-            resources.iter().find(|r| uri_matches(&r.uri_template, &uri)).map(|r| r.handler.clone())
+            resources.iter().find(|r| uri_matches(&r.uri_template, &uri) && self.resource_allowed(ctx, &r.uri_template)).map(|r| r.handler.clone())
         }.ok_or_else(|| (json_rpc::INVALID_PARAMS, format!("Resource not found: {uri}")))?;
 
         match handler(&uri) {
+            // A complete result from elsewhere (the gateway's upstreams).
+            Ok(c) if c.kind == "result" => Ok(c.text),
             Ok(c) => {
                 let text_esc = json_escape(&c.text);
                 let uri_esc  = json_escape(&uri);
@@ -2982,8 +3026,8 @@ impl McpServer {
         Ok("{}".to_string())
     }
 
-    fn do_prompts_list(&self, body: &str) -> Result<String, (i32, String)> {
-        let items: Vec<String> = self.prompts.read().unwrap().iter().map(|p| {
+    fn do_prompts_list(&self, body: &str, ctx: &McpContext) -> Result<String, (i32, String)> {
+        let items: Vec<String> = self.prompts.read().unwrap().iter().filter(|p| self.prompt_allowed(ctx, &p.name)).map(|p| {
             let arg_defs: Vec<String> = p.arguments.iter().map(|a| {
                 format!(
                     r#"{{"name":"{}","description":"{}","required":{}}}"#,
@@ -3058,7 +3102,7 @@ impl McpServer {
 
         let (description, handler) = {
             let prompts = self.prompts.read().unwrap();
-            prompts.iter().find(|p| p.name == name).map(|p| (p.description.clone(), p.handler.clone()))
+            prompts.iter().find(|p| p.name == name && self.prompt_allowed(&ctx, &p.name)).map(|p| (p.description.clone(), p.handler.clone()))
         }.ok_or_else(|| (json_rpc::INVALID_PARAMS, format!("Unknown prompt: {name}")))?;
 
         handler(ctx, &args).map(|reply| (description, reply)).map_err(|e| (json_rpc::INVALID_PARAMS, e))

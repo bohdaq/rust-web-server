@@ -771,9 +771,9 @@ impl McpServer {
                 Ok(content) if content.kind == "task" => Answer::Task(content.text),
                 other => complete(Self::format_tool_result(other), false),
             },
-            "resources/list" => complete(self.do_resources_list(body)?, true),
-            "resources/templates/list" => complete(self.do_resource_templates_list(body)?, true),
-            "resources/read" => match self.do_resources_read(body) {
+            "resources/list" => complete(self.do_resources_list(body, &ctx)?, true),
+            "resources/templates/list" => complete(self.do_resource_templates_list(body, &ctx)?, true),
+            "resources/read" => match self.do_resources_read(body, &ctx) {
                 Ok(result) => complete(result, true),
                 Err((code, message)) if message.starts_with("Resource not found") => {
                     let uri = json_rpc::extract_raw(body, "params").and_then(|p| json_rpc::extract_str(&p, "uri")).unwrap_or_default();
@@ -781,7 +781,7 @@ impl McpServer {
                 }
                 Err(error) => return Err(error.into()),
             },
-            "prompts/list" => complete(self.do_prompts_list(body)?, true),
+            "prompts/list" => complete(self.do_prompts_list(body, &ctx)?, true),
             "prompts/get" => match self.get_prompt(body, ctx)? {
                 (_, super::PromptReply::InputRequired(input)) => Answer::InputRequired(input.to_json()),
                 (description, super::PromptReply::Messages(messages)) => {

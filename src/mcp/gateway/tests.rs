@@ -595,3 +595,50 @@ fn audit_lines_name_the_caller_tool_upstream_and_outcome() {
     let escaped = audit_line("a\"b", "t", "", "denied", std::time::Duration::ZERO);
     assert!(escaped.contains(r#""sub":"a\"b""#), "{escaped}");
 }
+
+fn docs_like() -> McpServer {
+    McpServer::new("docs", "1")
+        .tool("search", "Search", r#"{"type":"object"}"#, |_| Ok(McpContent::text("hit")))
+        .resource("docs://readme", "README", "The readme", |_| Ok(McpContent::text("# Hello")))
+        .prompt_with_args("summarize", "Summarize a page", vec![crate::mcp::PromptArgDef::required("page", "Which page")], |args| {
+            let page = top_level_str(args, "page").unwrap_or_default();
+            Ok(vec![crate::mcp::PromptMessage::user(format!("Summarize {page}"))])
+        })
+}
+
+#[test]
+fn upstream_prompts_and_resources_are_federated_and_acld() {
+    let docs = Fake::serving(docs_like());
+    let gateway = TestClient::new(
+        McpGateway::new("gateway", "1")
+            .upstream(Upstream::new("docs", &docs.url))
+            .allow("alice", ["*"])
+            .allow("bob", ["docs__search"])
+            .refresh_every(None)
+            .build()
+            .unwrap()
+            .require_bearer_tokens([("alice-token", "alice"), ("bob-token", "bob")]),
+    );
+    let prompts = rpc(&gateway, "alice-token", r#"{"jsonrpc":"2.0","id":1,"method":"prompts/list","params":{}}"#);
+    assert!(prompts.contains("docs__summarize") && prompts.contains(r#""name":"page""#), "{prompts}");
+    let got = rpc(&gateway, "alice-token", r#"{"jsonrpc":"2.0","id":2,"method":"prompts/get","params":{"name":"docs__summarize","arguments":{"page":"intro"}}}"#);
+    assert!(got.contains("Summarize intro") && got.contains(r#""role":"user""#), "{got}");
+
+    let resources = rpc(&gateway, "alice-token", r#"{"jsonrpc":"2.0","id":3,"method":"resources/list","params":{}}"#);
+    assert!(resources.contains("docs://readme"), "{resources}");
+    let read = rpc(&gateway, "alice-token", r#"{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"docs://readme"}}"#);
+    assert!(read.contains("# Hello"), "{read}");
+
+    // bob may only call docs__search: no prompts, no resources.
+    assert!(!rpc(&gateway, "bob-token", r#"{"jsonrpc":"2.0","id":5,"method":"prompts/list","params":{}}"#).contains("docs__summarize"));
+    assert!(!rpc(&gateway, "bob-token", r#"{"jsonrpc":"2.0","id":6,"method":"resources/list","params":{}}"#).contains("docs://readme"));
+    let denied = rpc(&gateway, "bob-token", r#"{"jsonrpc":"2.0","id":7,"method":"resources/read","params":{"uri":"docs://readme"}}"#);
+    assert!(denied.contains("not found") && !denied.contains("# Hello"), "{denied}");
+}
+
+#[test]
+fn an_upstream_without_prompts_or_resources_still_federates_its_tools() {
+    let jira = Fake::serving(jira_like());
+    let server = McpGateway::new("g", "1").upstream(Upstream::new("jira", &jira.url)).allow("me", ["*"]).refresh_every(None).build();
+    assert!(server.is_ok(), "{:?}", server.err());
+}

@@ -44,7 +44,8 @@ and `http1`-only test runs before pushing.
 | 2b | **done**: `refresh_every` (default 5 min) re-lists, diffs by fingerprint, registers/removes on the live server, notifies `tools/list_changed`; unreachable upstreams keep their tools. Not done: following upstream `listChanged` pushes (the interval covers it) |
 | 2c | **done**: `McpServer::before_tool_call` (refusal = tool error), `McpGateway::limit(tools, max, window)` per `sub` + tool on `RateLimiter` |
 | 2d | **done**: `McpServer::after_tool_call` + `ToolCallOutcome` (ok/tool_error/refused/denied) + duration; `McpGateway::audit_log(true)` → JSON line per call via the access-log sink |
-| 2e | in progress |
-| 2f–2g | — |
+| 2e | **done**: prompts as `prefix__name` (args, `prompts/get` forwarded, content passed through), resources under their URIs (first upstream wins; `resources/read` forwarded raw), ACL via new `McpServer::resource_filter`/`prompt_filter` (resource = `prefix__<uri>`); best effort, listed at build |
+| 2f | in progress |
+| 2g | — |
 | 3 | — |
 | 4 | — |

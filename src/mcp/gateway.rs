@@ -11,6 +11,11 @@
 //! [`McpContext::auth_claims`](super::McpContext::auth_claims)) sees which tools, and nothing is allowed
 //! unless a rule says so.
 //!
+//! Upstream prompts are federated as `<prefix>__<name>` and resources under
+//! their own URIs (the first upstream to publish a URI keeps it), both
+//! listed at `build` and filtered by the same rules as tools (a resource
+//! counts as `<prefix>__<uri>`).
+//!
 //! Tools are listed at `build` and again every [`McpGateway::refresh_every`]
 //! (5 minutes by default): new upstream tools appear, removed ones go, and
 //! the gateway's clients get `notifications/tools/list_changed`. Between
@@ -162,9 +167,10 @@ impl McpGateway {
         }
 
         let rules = Arc::new(self.rules);
+        let tool_rules = Arc::clone(&rules);
         let mut server = McpServer::new(self.name, self.version).tool_filter(move |ctx, tool| {
             let identity = ctx.auth_claims.as_deref().and_then(|claims| top_level_str(claims, "sub"));
-            identity.is_some_and(|identity| allowed(&rules, &identity, tool))
+            identity.is_some_and(|identity| allowed(&tool_rules, &identity, tool))
         });
         if self.audit {
             server = server.after_tool_call(|ctx, call| {
@@ -193,6 +199,30 @@ impl McpGateway {
                 Ok(())
             });
         }
+        // Resources and prompts: listed at build, ACL'd like tools (a
+        // resource as "<prefix>__<uri>"). The first upstream to publish a
+        // URI keeps it.
+        let resource_owner: Arc<Mutex<std::collections::HashMap<String, String>>> = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        {
+            let rules = Arc::clone(&rules);
+            let owners = Arc::clone(&resource_owner);
+            server = server.resource_filter(move |ctx, uri| {
+                let identity = ctx.auth_claims.as_deref().and_then(|claims| top_level_str(claims, "sub"));
+                let owner = owners.lock().ok().and_then(|o| o.get(uri).cloned());
+                match (identity, owner) {
+                    (Some(identity), Some(prefix)) => allowed(&rules, &identity, &format!("{prefix}{SEPARATOR}{uri}")),
+                    (_, None) => true, // not federated: the gateway's own
+                    (None, Some(_)) => false,
+                }
+            });
+        }
+        {
+            let rules = Arc::clone(&rules);
+            server = server.prompt_filter(move |ctx, name| {
+                let identity = ctx.auth_claims.as_deref().and_then(|claims| top_level_str(claims, "sub"));
+                identity.is_some_and(|identity| allowed(&rules, &identity, name))
+            });
+        }
         let mut federated = Vec::new();
         for upstream in self.upstreams {
             let connection = Arc::new(Connection::new(upstream));
@@ -200,6 +230,31 @@ impl McpGateway {
             for tool in connection.list_tools()? {
                 known.insert(tool.name.clone(), tool.fingerprint());
                 server = register(server, &connection, tool);
+            }
+            // Best effort: an upstream's tools matter most, so a broken
+            // prompts or resources list is logged, not fatal.
+            let listed = |method: &str, field: &str| {
+                connection.list_all(method, field).unwrap_or_else(|e| {
+                    eprintln!("mcp gateway: not federating {field}: {e}");
+                    Vec::new()
+                })
+            };
+            for prompt in listed("prompts/list", "prompts") {
+                server = register_prompt(server, &connection, &prompt);
+            }
+            for (method, field, key) in [("resources/list", "resources", "uri"), ("resources/templates/list", "resourceTemplates", "uriTemplate")] {
+                for resource in listed(method, field) {
+                    let Some(uri) = top_level_str(&resource, key) else { continue };
+                    {
+                        let mut owners = resource_owner.lock().map_err(|_| "resource lock poisoned".to_string())?;
+                        if owners.contains_key(&uri) {
+                            eprintln!("mcp gateway: {} also publishes {uri}; keeping the first", connection.name());
+                            continue;
+                        }
+                        owners.insert(uri.clone(), connection.upstream.prefix.clone());
+                    }
+                    server = register_resource(server, &connection, &uri, &resource);
+                }
             }
             federated.push((connection, known));
         }
@@ -292,6 +347,49 @@ fn register(server: McpServer, connection: &Arc<Connection>, tool: UpstreamTool)
         server = server.tool_annotations(&exposed, annotations);
     }
     server
+}
+
+fn register_prompt(server: McpServer, connection: &Arc<Connection>, prompt: &str) -> McpServer {
+    let Some(name) = top_level_str(prompt, "name") else { return server };
+    let exposed = format!("{}{SEPARATOR}{name}", connection.upstream.prefix);
+    let description = top_level_str(prompt, "description").unwrap_or_default();
+    let args = top_level_raw(prompt, "arguments")
+        .map(|list| {
+            json_rpc::split_array_elements(&list)
+                .into_iter()
+                .filter_map(|arg| {
+                    let name = top_level_str(&arg, "name")?;
+                    let description = top_level_str(&arg, "description").unwrap_or_default();
+                    let required = top_level_raw(&arg, "required").as_deref() == Some("true");
+                    Some(if required { super::PromptArgDef::required(name, description) } else { super::PromptArgDef::optional(name, description) })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let forward = Arc::clone(connection);
+    server.prompt_with_args(&exposed, &description, args, move |arguments| {
+        let params = format!(r#"{{"name":"{}","arguments":{}}}"#, json_escape(&name), if arguments.trim().is_empty() { "{}" } else { arguments });
+        let result = forward.request("prompts/get", &params).map_err(|e| format!("{}: {e}", forward.upstream.prefix))?;
+        let messages = top_level_raw(&result, "messages").ok_or_else(|| format!("{}: prompts/get without messages", forward.upstream.prefix))?;
+        Ok(json_rpc::split_array_elements(&messages)
+            .into_iter()
+            .filter_map(|message| {
+                let role = if top_level_str(&message, "role").as_deref() == Some("assistant") { "assistant" } else { "user" };
+                let content = top_level_raw(&message, "content").filter(|c| c.starts_with('{'))?;
+                Some(super::PromptMessage { role, content: McpContent::raw_block(content) })
+            })
+            .collect())
+    })
+}
+
+fn register_resource(server: McpServer, connection: &Arc<Connection>, uri: &str, resource: &str) -> McpServer {
+    let name = top_level_str(resource, "name").unwrap_or_else(|| uri.to_string());
+    let description = top_level_str(resource, "description").unwrap_or_default();
+    let forward = Arc::clone(connection);
+    server.resource(uri, &name, &description, move |requested| {
+        let params = format!(r#"{{"uri":"{}"}}"#, json_escape(requested));
+        forward.request("resources/read", &params).map(McpContent::raw_result).map_err(|e| format!("{}: {e}", forward.upstream.prefix))
+    })
 }
 
 fn valid_prefix(prefix: &str) -> bool {
@@ -389,6 +487,32 @@ impl Connection {
             }
         }
         Err(format!("{}: more than {MAX_LIST_PAGES} pages of tools", self.name()))
+    }
+
+    /// Every item of a paginated list method (`prompts/list`, ...), as raw
+    /// JSON objects; `Ok(empty)` when the upstream doesn't have the method.
+    fn list_all(&self, method: &str, field: &str) -> Result<Vec<String>, String> {
+        let mut items = Vec::new();
+        let mut cursor: Option<String> = None;
+        for _ in 0..MAX_LIST_PAGES {
+            let params = match &cursor {
+                Some(cursor) => format!(r#"{{"cursor":"{}"}}"#, json_escape(cursor)),
+                None => "{}".to_string(),
+            };
+            let result = match self.request(method, &params) {
+                Ok(result) => result,
+                // No such capability: nothing to federate.
+                Err(e) if e.contains("not found") || e.contains("Unknown method") || e.contains("-32601") || e.contains("answered HTTP 404") => return Ok(items),
+                Err(e) => return Err(format!("{}: {method}: {e}", self.name())),
+            };
+            let Some(list) = top_level_raw(&result, field) else { return Ok(items) };
+            items.extend(json_rpc::split_array_elements(&list));
+            cursor = top_level_str(&result, "nextCursor");
+            if cursor.is_none() {
+                return Ok(items);
+            }
+        }
+        Err(format!("{}: more than {MAX_LIST_PAGES} pages of {field}", self.name()))
     }
 
     /// Calls `name` upstream: the raw `tools/call` result, or why it failed.

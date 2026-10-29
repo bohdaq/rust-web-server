@@ -76,6 +76,8 @@ let mcp = McpServer::new("team-tools", "1.0")
     });
 ```
 
+`resource_filter(|ctx, uri_template| …)` and `prompt_filter(|ctx, name| …)` do the same for resources and prompts: hidden ones are left out of the lists and answer "not found" (since 18.9.0).
+
 `tool_filter(|ctx, tool_name| -> bool)` decides per request which tools a
 caller sees in `tools/list`; calling any other answers `Unknown tool`, as
 for a tool that doesn't exist. It works with `require_oauth` too (decide

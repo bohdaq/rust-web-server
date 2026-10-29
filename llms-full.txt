@@ -17105,6 +17105,8 @@ let mcp = McpServer::new("team-tools", "1.0")
     });
 ```
 
+`resource_filter(|ctx, uri_template| …)` and `prompt_filter(|ctx, name| …)` do the same for resources and prompts: hidden ones are left out of the lists and answer "not found" (since 18.9.0).
+
 `tool_filter(|ctx, tool_name| -> bool)` decides per request which tools a
 caller sees in `tools/list`; calling any other answers `Unknown tool`, as
 for a tool that doesn't exist. It works with `require_oauth` too (decide
@@ -17552,6 +17554,12 @@ it didn't exist (`Unknown tool`) — nothing is forwarded. A plain
 `require_bearer` token carries no identity, so behind it the gateway allows
 nothing: use `require_bearer_tokens` or `require_oauth`.
 
+## Prompts and resources
+
+Upstream prompts appear as `<prefix>__<name>` with their arguments, and `prompts/get` is forwarded. Upstream resources and resource templates keep their own URIs (if two upstreams publish the same URI, the first keeps it) and `resources/read` is forwarded. Both are listed at `build()` — unlike tools, they aren't refreshed — and an upstream that has neither, or fails to list them, still federates its tools.
+
+The rules from [`allow`](#who-may-call-what) cover them too: a caller sees a prompt when a rule matches its `<prefix>__<name>`, and a resource when one matches `<prefix>__<uri>` (so `github__*` covers everything from `github`; listing only tool names covers no prompts or resources). Hidden ones are left out of the lists and answer "not found" (since 18.9.0).
+
 ## Rate limits
 
 `.limit(tools, max_calls, window_secs)` caps how often each caller (each `sub`) may call the tools matching `tools` — a full name, a prefix ending in `*`, or `*` — counted per tool:
@@ -17613,9 +17621,7 @@ Clients of the gateway may use either version.
 
 ## Not yet
 
-Upstream resources, prompts
-and notifications aren't federated, upstream `listChanged` notifications aren't followed (the refresh interval is), results aren't cached, The [roadmap](https://github.com/bohdaq/rust-web-server/blob/main/spec/ROADMAP.md)
-tracks the full gateway (#28).
+Upstream notifications (`listChanged`, resource updates, progress) aren't followed — tools are re-read on the [refresh interval](#upstreams) instead — and tool results aren't cached. The [roadmap](https://github.com/bohdaq/rust-web-server/blob/main/spec/ROADMAP.md) tracks the gateway (#28).
 
 ---
 

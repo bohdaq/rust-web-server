@@ -18,6 +18,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - `McpServer::after_tool_call(|ctx, call| …)`: every finished tool call with
   its outcome (`ToolCallOutcome`: ok, tool error, refused, denied) and
   duration.
+- `McpServer::resource_filter` and `prompt_filter`, like `tool_filter` for
+  resources and prompts.
+- MCP gateway: upstream prompts (`<prefix>__<name>`) and resources (their own
+  URIs) are federated and filtered by the same `allow` rules as tools.
 - MCP gateway: `McpGateway::audit_log(true)`, one JSON line per tool call in
   the access log (time, caller, tool, upstream, outcome, duration).
 - MCP gateway: `McpGateway::limit(tools, max_calls, window_secs)`, per caller
