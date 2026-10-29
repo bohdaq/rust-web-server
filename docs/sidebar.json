@@ -441,6 +441,10 @@
         "link": "/deployment/observability/"
       },
       {
+        "label": "Admin API",
+        "link": "/deployment/admin/"
+      },
+      {
         "label": "systemd",
         "link": "/deployment/systemd/"
       },

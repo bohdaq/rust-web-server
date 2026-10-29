@@ -140,6 +140,8 @@ pub mod proxy_config;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod llm;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod admin;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ingress;
 #[cfg(feature = "tera")]
 pub mod template;

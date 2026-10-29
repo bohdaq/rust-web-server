@@ -62,7 +62,7 @@ and `http1`-only test runs before pushing.
 
 | # | State |
 |---|---|
-| 1 | — |
+| 1 | **done 2026-10-30**: `admin` module: `AdminConfig::from_env` (`RWS_CONFIG_ADMIN_LISTEN`/`_TOKEN_ENV` (default `RWS_ADMIN_TOKEN`)/`_ALLOWED_ORIGINS`, `[admin]` in the file), `AdminApi` (`Application`: Origin check → 403, constant-time bearer → 401 + `WWW-Authenticate` on every path, `GET /admin/api/v1/status`, `no-store`), `start` (own std listener thread, thread per connection, max 32, `Server::process` — same code in async and `http1` builds), `start_from_env` in all three mains (missing token: logged, server keeps serving). `rws --check`: bad `listen`, non-loopback warning, unset token error (online), bad origins, settings without `listen`. Tests: 7 unit (incl. TCP) + `ci/e2e/admin.sh` (6 checks) in the CI matrix as `admin`; docs `deployment/admin.md`, config-file, env-vars, api.md. 2137 default / 1961 http1 |
 | 2 | — |
 | 3 | — |
 | 4 | — |

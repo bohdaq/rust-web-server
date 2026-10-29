@@ -142,6 +142,14 @@ don't use them.
 | `RWS_CONFIG_CIRCUIT_BREAKER_RECOVERY_SECS` | `30` | Seconds the circuit stays open before a half-open probe. |
 | `RWS_CONFIG_CIRCUIT_BREAKER_MAX_HALF_OPEN_PROBES` | `1` | Probe requests allowed while half-open. |
 
+## Admin API
+
+| Variable | Default | Options | Description |
+|----------|---------|---------|-------------|
+| `RWS_CONFIG_ADMIN_LISTEN` | (off) | `host:port` | Listen address of the [admin API](/deployment/admin/) (since 18.10.0). Read at startup. |
+| `RWS_CONFIG_ADMIN_TOKEN_ENV` | `RWS_ADMIN_TOKEN` | variable name | The environment variable holding the admin bearer token. Unset or empty: the admin listener doesn't start. |
+| `RWS_CONFIG_ADMIN_ALLOWED_ORIGINS` | (none) | comma list of origins | Browser origins allowed to call the admin API besides its own. |
+
 ## Logging
 
 | Variable | Default | Options | Description |

@@ -196,6 +196,17 @@ max_requests = 1000   # Requests allowed per window; 0 or unset = no global limi
 window_secs  = 60     # Sliding window length in seconds (default: 60)
 ```
 
+## `[admin]`
+
+The [admin API](/deployment/admin/) on a listener of its own (since 18.10.0). Off unless `listen` is set; the bearer token comes from the environment variable `token_env` names, and without it the admin listener doesn't start. Read at startup.
+
+```toml
+[admin]
+listen          = "127.0.0.1:9901"            # host:port (an IP address)
+token_env       = "RWS_ADMIN_TOKEN"           # default
+allowed_origins = ["https://ops.example.com"] # browser origins besides the listener's own
+```
+
 ## Other settings
 
 ```toml

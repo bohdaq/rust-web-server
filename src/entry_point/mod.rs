@@ -205,6 +205,14 @@ impl Config {
     pub const RWS_CONFIG_ACME_ON_DEMAND: &'static str = "RWS_CONFIG_ACME_ON_DEMAND";
     /// On-demand TLS: URL asked `?domain=<name>` before each order; 2xx allows it.
     pub const RWS_CONFIG_ACME_ON_DEMAND_ASK: &'static str = "RWS_CONFIG_ACME_ON_DEMAND_ASK";
+    /// `[admin] listen`: `host:port` of the admin API (since 18.10.0); unset = off.
+    pub const RWS_CONFIG_ADMIN_LISTEN: &'static str = "RWS_CONFIG_ADMIN_LISTEN";
+    /// `[admin] token_env`: the environment variable holding the admin bearer
+    /// token (default `RWS_ADMIN_TOKEN`).
+    pub const RWS_CONFIG_ADMIN_TOKEN_ENV: &'static str = "RWS_CONFIG_ADMIN_TOKEN_ENV";
+    /// `[admin] allowed_origins`: browser origins allowed besides the admin
+    /// listener's own (comma list).
+    pub const RWS_CONFIG_ADMIN_ALLOWED_ORIGINS: &'static str = "RWS_CONFIG_ADMIN_ALLOWED_ORIGINS";
 
 
     pub const RWS_DEFAULT_IP: &'static str = "127.0.0.1";

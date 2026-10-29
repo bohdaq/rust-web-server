@@ -290,6 +290,9 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    crate::admin::validate(&|name| get(name).map(str::to_string), report);
+
     // TLS: both files or neither; loadable unless ACME will create them.
     let acme_domains = get(Config::RWS_CONFIG_ACME_DOMAINS).unwrap_or("");
     let acme = !acme_domains.is_empty();

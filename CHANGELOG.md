@@ -5,6 +5,17 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- Admin API on a listener of its own (`[admin] listen`, off by default):
+  bearer token from the environment variable `token_env` names (required,
+  on loopback too; without it the listener doesn't start and `rws --check`
+  says so), browser origin checks, `GET /admin/api/v1/status`.
+  `admin::AdminApi` / `AdminConfig` / `start` for library users.
+  `ci/e2e/admin.sh`.
+
 ## 18.9.1 — 2026-10-29
 
 ### Fixed

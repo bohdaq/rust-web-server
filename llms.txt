@@ -144,6 +144,7 @@ Use it as:
 - [Kubernetes Ingress](https://rws8.tech/deployment/kubernetes-ingress/): Use KubernetesIngressWatcher and IngressRouter to dynamically route traffic from Kubernetes Ingress rules.
 - [Kubernetes Gateway API](https://rws8.tech/deployment/kubernetes-gateway-api/): rws as a Kubernetes Gateway API controller — every route kind, the standard-channel extended features, shared and provisioned modes, and how to install it.
 - [Observability](https://rws8.tech/deployment/observability/): Metrics, structured logs, distributed tracing, and health endpoints for rust-web-server.
+- [Admin API](https://rws8.tech/deployment/admin/): Inspect and change a running rws on a listener of its own, behind a bearer token, never on the public routes.
 - [systemd](https://rws8.tech/deployment/systemd/): Run rws as a hardened systemd service — from the deb/rpm packages or by hand; unprivileged user, read-only system, ports below 1024, reload and log rotation by signal.
 - [Windows](https://rws8.tech/deployment/windows/): Run rws on Windows, in a terminal or as a Windows service started at boot and stopped gracefully by the Service Control Manager.
 - [WASM Guest Component](https://rws8.tech/deployment/wasm/): Run rust-web-server's App/Router/middleware inside a WASM runtime (Wasmtime, Spin, Fastly Compute) via the wasi:http/proxy world.
