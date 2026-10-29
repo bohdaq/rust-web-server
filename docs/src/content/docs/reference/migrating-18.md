@@ -125,6 +125,21 @@ To keep 17.x behaviour, set `runtime = "shared"` in `rws.config.toml` or
 `RWS_CONFIG_RUNTIME=shared`. Applications built on the library are
 unchanged: they stay `shared` unless they set it.
 
+## 18.9: `ConnectionInfo.tls`
+
+`ConnectionInfo` has a new public field, `tls: bool` (the client connected
+over TLS), which proxies use for `X-Forwarded-Proto`. A struct literal that
+builds a `ConnectionInfo` must now set it. To stop field additions breaking
+your code, use the constructor or `Default`:
+
+```rust,ignore
+// 18.8
+let connection = ConnectionInfo { client, server, request_size: 10_000, sni_hostname: None };
+// 18.9
+let connection = ConnectionInfo { tls: false, ..ConnectionInfo::new(client, server) };
+let connection = ConnectionInfo::default(); // in tests
+```
+
 ## Coming from 17.113.0 or earlier
 
 18.0 carries the 17.113.1 security fixes and the 17.113.2 conformance fixes.

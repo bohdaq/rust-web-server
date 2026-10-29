@@ -5,7 +5,7 @@
 > the same engine as a Rust library (routing, middleware, MCP server, async ORM).
 
 Source: https://github.com/bohdaq/rust-web-server · Website: https://rws8.tech/ ·
-API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.99 · Version: 18.8.4
+API: https://docs.rs/rust-web-server · License: MIT · MSRV: 1.99 · Version: 18.9.0
 
 HTTP/1.1 parsing, routing, middleware, WebSocket, SSE, CORS and JSON are implemented in
 the crate — no hyper, Tower or Axum; HTTP/2 and HTTP/3 use `h2` and `quinn`/`h3`, TLS uses
@@ -20012,6 +20012,21 @@ requests per second; on slower ones it can cost more CPU per small request.
 To keep 17.x behaviour, set `runtime = "shared"` in `rws.config.toml` or
 `RWS_CONFIG_RUNTIME=shared`. Applications built on the library are
 unchanged: they stay `shared` unless they set it.
+
+## 18.9: `ConnectionInfo.tls`
+
+`ConnectionInfo` has a new public field, `tls: bool` (the client connected
+over TLS), which proxies use for `X-Forwarded-Proto`. A struct literal that
+builds a `ConnectionInfo` must now set it. To stop field additions breaking
+your code, use the constructor or `Default`:
+
+```rust,ignore
+// 18.8
+let connection = ConnectionInfo { client, server, request_size: 10_000, sni_hostname: None };
+// 18.9
+let connection = ConnectionInfo { tls: false, ..ConnectionInfo::new(client, server) };
+let connection = ConnectionInfo::default(); // in tests
+```
 
 ## Coming from 17.113.0 or earlier
 
