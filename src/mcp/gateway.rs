@@ -79,6 +79,15 @@ pub struct McpGateway {
     upstreams: Vec<Upstream>,
     rules: Vec<(String, Vec<String>)>,
     refresh: Option<std::time::Duration>,
+    limits: Vec<ToolLimit>,
+}
+
+/// [`McpGateway::limit`]: calls of the tools matching `pattern`, per caller.
+struct ToolLimit {
+    pattern: String,
+    max_calls: u32,
+    window_secs: u64,
+    limiter: crate::rate_limit::RateLimiter,
 }
 
 /// How often upstream tool lists are re-read by default.
@@ -87,7 +96,17 @@ pub const DEFAULT_REFRESH: std::time::Duration = std::time::Duration::from_secs(
 impl McpGateway {
     /// A gateway announcing itself as `name`/`version`.
     pub fn new(name: impl Into<String>, version: impl Into<String>) -> Self {
-        McpGateway { name: name.into(), version: version.into(), upstreams: Vec::new(), rules: Vec::new(), refresh: Some(DEFAULT_REFRESH) }
+        McpGateway { name: name.into(), version: version.into(), upstreams: Vec::new(), rules: Vec::new(), refresh: Some(DEFAULT_REFRESH), limits: Vec::new() }
+    }
+
+    /// Allow each caller (each `sub`) at most `max_calls` calls per
+    /// `window_secs` of the tools matching `tools` (a full name, a prefix
+    /// ending in `*`, or `*`), counted per tool. Over the limit a call
+    /// answers a tool error saying when to retry. Limits add up: a call
+    /// must pass every one that matches. Counted in this process.
+    pub fn limit(mut self, tools: impl Into<String>, max_calls: u32, window_secs: u64) -> Self {
+        self.limits.push(ToolLimit { pattern: tools.into(), max_calls, window_secs, limiter: crate::rate_limit::RateLimiter::new(max_calls, window_secs) });
+        self
     }
 
     /// Re-read every upstream's tools this often (default
@@ -137,6 +156,19 @@ impl McpGateway {
             let identity = ctx.auth_claims.as_deref().and_then(|claims| top_level_str(claims, "sub"));
             identity.is_some_and(|identity| allowed(&rules, &identity, tool))
         });
+        if !self.limits.is_empty() {
+            let limits = self.limits;
+            server = server.before_tool_call(move |ctx, tool| {
+                let identity = ctx.auth_claims.as_deref().and_then(|claims| top_level_str(claims, "sub")).unwrap_or_default();
+                for limit in limits.iter().filter(|l| matches_pattern(&l.pattern, tool)) {
+                    let key = format!("{identity}\u{0}{tool}");
+                    if !limit.limiter.check(&key) {
+                        return Err(format!("Rate limited: {tool} allows {} calls per {} s; retry in {} s", limit.max_calls, limit.window_secs, limit.limiter.retry_after(&key).max(1)));
+                    }
+                }
+                Ok(())
+            });
+        }
         let mut federated = Vec::new();
         for upstream in self.upstreams {
             let connection = Arc::new(Connection::new(upstream));
@@ -251,10 +283,15 @@ fn allowed(rules: &[(String, Vec<String>)], identity: &str, tool: &str) -> bool 
         .iter()
         .filter(|(who, _)| who == identity || who == "*")
         .flat_map(|(_, patterns)| patterns)
-        .any(|pattern| match pattern.strip_suffix('*') {
-            Some(prefix) => tool.starts_with(prefix),
-            None => pattern == tool,
-        })
+        .any(|pattern| matches_pattern(pattern, tool))
+}
+
+/// A full tool name, a prefix ending in `*`, or `*`.
+fn matches_pattern(pattern: &str, tool: &str) -> bool {
+    match pattern.strip_suffix('*') {
+        Some(prefix) => tool.starts_with(prefix),
+        None => pattern == tool,
+    }
 }
 
 /// The string member `key` of the top level of JSON object `json`.

@@ -456,6 +456,19 @@ or a list of them). A mismatch is returned as a tool result with
 Schema validator: formats, ranges, patterns and nested schemas are still the
 handler's to check.
 
+## Checking a call before it runs
+
+`before_tool_call` runs before every `tools/call` that [`tool_filter`](/mcp/auth/) allows, with the request context (`ctx.auth_claims` names the caller) and the tool's name. Returning `Err(message)` refuses the call: the client gets a tool error (`isError: true`) carrying `message`, so an agent can read why and act on it. Hooks run in the order added and the first refusal wins (since 18.9.0).
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("ops", "1.0")
+    .before_tool_call(|_ctx, tool| if tool == "deploy" { Err("deploys are frozen until Monday".into()) } else { Ok(()) });
+```
+
+The [MCP gateway](/mcp/gateway/)'s per-tool rate limits are built on it.
+
 ## Structured output, titles and icons
 
 A tool can declare the shape of its result and return it as structured data

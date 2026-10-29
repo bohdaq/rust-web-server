@@ -557,3 +557,31 @@ fn call_one_named(server: &McpServer, tool: &str) -> String {
     );
     String::from_utf8(response.content_range_list[0].body.clone()).unwrap()
 }
+
+#[test]
+fn calls_over_a_tool_limit_are_refused_per_caller() {
+    let fake = scripted(|r| {
+        if r.method() == "tools/list" {
+            return Reply::json(one_tool_list(r));
+        }
+        Reply::json(format!(r#"{{"jsonrpc":"2.0","id":{},"result":{{"content":[{{"type":"text","text":"ok"}}]}}}}"#, r.id()))
+    });
+    let server = McpGateway::new("g", "1")
+        .upstream(Upstream::new("up", &fake.url))
+        .allow("*", ["*"])
+        .limit("up__*", 2, 60)
+        .refresh_every(None)
+        .build()
+        .unwrap();
+    let call_as = |who: &str| {
+        let response = server.handle_request_with_context(r#"{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"up__echo","arguments":{}}}"#, ctx(Some(who)));
+        String::from_utf8(response.content_range_list[0].body.clone()).unwrap()
+    };
+    assert!(call_as("alice").contains(r#""text":"ok""#));
+    assert!(call_as("alice").contains(r#""text":"ok""#));
+    let third = call_as("alice");
+    assert!(third.contains("Rate limited") && third.contains(r#""isError":true"#), "{third}");
+    assert!(call_as("bob").contains(r#""text":"ok""#), "limits are per caller");
+    let upstream_calls = fake.requests().iter().filter(|r| r.method() == "tools/call").count();
+    assert_eq!(3, upstream_calls, "the refused call never reached the upstream");
+}

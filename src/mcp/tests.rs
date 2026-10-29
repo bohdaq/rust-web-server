@@ -3057,3 +3057,18 @@ fn progress_streams_on_the_call_s_own_response() {
     let json_only = client.post("/mcp").header("Content-Type", "application/json").header("Accept", "application/json").body_text(call).send();
     assert_eq!(Some("application/json"), json_only.header("content-type"));
 }
+
+#[test]
+fn before_tool_call_can_refuse_a_call_with_a_tool_error() {
+    let server = McpServer::new("t", "1")
+        .tool("deploy", "Deploy", r#"{"type":"object"}"#, |_| Ok(McpContent::text("deployed")))
+        .tool("status", "Status", r#"{"type":"object"}"#, |_| Ok(McpContent::text("green")))
+        .before_tool_call(|_ctx, tool| if tool == "deploy" { Err("deploys are frozen".into()) } else { Ok(()) });
+    let call = |tool: &str| {
+        let r = server.handle_request(&format!(r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"{tool}","arguments":{{}}}}}}"#));
+        String::from_utf8(r.content_range_list[0].body.clone()).unwrap()
+    };
+    let refused = call("deploy");
+    assert!(refused.contains("deploys are frozen") && refused.contains(r#""isError":true"#), "{refused}");
+    assert!(call("status").contains("green"));
+}

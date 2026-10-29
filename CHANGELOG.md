@@ -13,6 +13,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   client connected) unless the client already sent one: the HTTP/1.1 and
   HTTP/2 upstream forwarders, config-file proxy routes, Gateway API routes,
   mirrors and upgrades.
+- `McpServer::before_tool_call(|ctx, tool| …)`: refuse a call before it runs
+  with a message the client gets as a tool error.
+- MCP gateway: `McpGateway::limit(tools, max_calls, window_secs)`, per caller
+  and tool; a refused call doesn't reach the upstream.
 - MCP gateway: `McpGateway::refresh_every` (default 5 minutes) re-reads
   upstream tool lists and applies the difference, with
   `notifications/tools/list_changed` to clients; tools were listed only at

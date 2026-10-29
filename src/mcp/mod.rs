@@ -881,6 +881,7 @@ type PromptFn   = Arc<dyn Fn(McpContext, &str) -> Result<PromptReply, String> + 
 /// `Fn(argument_name, partial_value) -> candidate completion strings`.
 type CompletionFn = Arc<dyn Fn(&str, &str) -> Result<Vec<String>, String> + Send + Sync>;
 type ToolFilter = Arc<dyn Fn(&McpContext, &str) -> bool + Send + Sync>;
+type ToolCallHook = Arc<dyn Fn(&McpContext, &str) -> Result<(), String> + Send + Sync>;
 /// An async tool handler, boxed so `AsyncToolDef` can store handlers with
 /// different concrete `Future` types uniformly. The `Future` itself doesn't
 /// need `Send` for [`crate::async_bridge::block_on_isolated`] (which drives
@@ -1044,6 +1045,8 @@ pub struct McpServer {
     bearer_tokens: Vec<(String, String)>,
     /// Which tools a caller may see and call ([`Self::tool_filter`]).
     tool_filter: Option<ToolFilter>,
+    /// Runs before every tool call ([`Self::before_tool_call`]).
+    before_call: Vec<ToolCallHook>,
     /// Origins a browser may call the endpoint from (see
     /// [`Self::allowed_origins`]); a request with any other `Origin` is
     /// refused.
@@ -1197,6 +1200,7 @@ impl McpServer {
             auth_token: None,
             bearer_tokens: Vec::new(),
             tool_filter: None,
+            before_call: Vec::new(),
             allowed_origins: Vec::new(),
             #[cfg(feature = "sso")]
             oauth: None,
@@ -1810,6 +1814,26 @@ impl McpServer {
         F: Fn(&McpContext, &str) -> bool + Send + Sync + 'static,
     {
         self.tool_filter = Some(Arc::new(allow));
+        self
+    }
+
+    /// Run `check` before every `tools/call` that [`Self::tool_filter`]
+    /// allows, with the caller and the tool's name. `Err(message)` refuses
+    /// the call: the client gets a tool error (`isError: true`) with
+    /// `message`, which an agent can read and act on (e.g. "rate limited,
+    /// retry in 12 s"). Hooks run in the order added; the first refusal wins.
+    ///
+    /// ```rust
+    /// use rust_web_server::mcp::McpServer;
+    ///
+    /// let server = McpServer::new("my-server", "1.0")
+    ///     .before_tool_call(|_ctx, tool| if tool == "deploy" { Err("deploys are frozen today".into()) } else { Ok(()) });
+    /// ```
+    pub fn before_tool_call<F>(mut self, check: F) -> Self
+    where
+        F: Fn(&McpContext, &str) -> Result<(), String> + Send + Sync + 'static,
+    {
+        self.before_call.push(Arc::new(check));
         self
     }
 
@@ -2725,6 +2749,11 @@ impl McpServer {
             .unwrap_or_else(|| "{}".to_string());
         if !self.tool_allowed(&ctx, &name) {
             return Err((json_rpc::INVALID_PARAMS, format!("Unknown tool: {name}")));
+        }
+        for check in &self.before_call {
+            if let Err(refused) = check(&ctx, &name) {
+                return Ok(Err(refused));
+            }
         }
 
         // `_meta.progressToken` (string or number, per spec) — stored raw so

@@ -64,6 +64,22 @@ it didn't exist (`Unknown tool`) — nothing is forwarded. A plain
 `require_bearer` token carries no identity, so behind it the gateway allows
 nothing: use `require_bearer_tokens` or `require_oauth`.
 
+## Rate limits
+
+`.limit(tools, max_calls, window_secs)` caps how often each caller (each `sub`) may call the tools matching `tools` — a full name, a prefix ending in `*`, or `*` — counted per tool:
+
+```rust
+use rust_web_server::mcp::gateway::{McpGateway, Upstream};
+
+let gateway = McpGateway::new("gateway", "1.0")
+    .upstream(Upstream::new("github", "http://127.0.0.1:9001/mcp"))
+    .allow("*", ["*"])
+    .limit("github__*", 60, 60)            // each caller: 60 calls a minute per GitHub tool
+    .limit("github__create_issue", 5, 3600); // and 5 new issues an hour
+```
+
+Over a limit, the call answers a tool error saying when to retry, without reaching the upstream. A call must pass every limit that matches. Counts are kept in the gateway's process (since 18.9.0).
+
 ## Upstreams
 
 - `Upstream::new(prefix, url)` — `url` is the server's Streamable HTTP
@@ -100,6 +116,6 @@ Clients of the gateway may use either version.
 ## Not yet
 
 Upstream resources, prompts
-and notifications aren't federated, upstream `listChanged` notifications aren't followed (the refresh interval is), results aren't cached, there are no
-per-tool rate limits or audit log. The [roadmap](https://github.com/bohdaq/rust-web-server/blob/main/spec/ROADMAP.md)
+and notifications aren't federated, upstream `listChanged` notifications aren't followed (the refresh interval is), results aren't cached, there is no
+audit log. The [roadmap](https://github.com/bohdaq/rust-web-server/blob/main/spec/ROADMAP.md)
 tracks the full gateway (#28).
