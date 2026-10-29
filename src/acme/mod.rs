@@ -776,13 +776,25 @@ impl AcmeManager {
     /// renewal it sends SIGHUP to itself (Unix) so the running server reloads
     /// the TLS certificate — only then (it used to on every check).
     pub async fn run_renewal_loop(self) {
+        renewal().running.store(true, std::sync::atomic::Ordering::SeqCst);
         let interval = renew_check_interval_secs();
         let mut next = crypto::read_cert_info(&self.config.cert_path)
             .map(|info| ((renewal_time(&info, None, self.config.renew_before_days) - unix_now()).max(60) as u64).min(interval))
             .unwrap_or(interval);
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(next)).await;
-            match self.check().await {
+            let forced = tokio::select! {
+                _ = tokio::time::sleep(tokio::time::Duration::from_secs(next)) => false,
+                _ = renewal().now.notified() => true,
+            };
+            let result = if forced {
+                println!("[ACME] Renewal of '{}' requested through the admin API, renewing...", self.config.cert_path);
+                let cert_id = crypto::read_cert_info(&self.config.cert_path).and_then(|info| info.cert_id);
+                self.provision_coordinated(cert_id.as_deref()).await.map(|_| RenewalCheck::Renewed)
+            } else {
+                self.check().await
+            };
+            renewal().record(&result);
+            match result {
                 Ok(RenewalCheck::Current { recheck_in }) => next = recheck_in,
                 Ok(RenewalCheck::Renewed) => {
                     // Look at the new certificate's renewal information soon.
@@ -1309,6 +1321,51 @@ fn json_escape(value: &str) -> String {
         c if (c as u32) < 0x20 => format!("\\u{:04x}", c as u32).chars().collect(),
         c => vec![c],
     }).collect()
+}
+
+/// The renewal loop's state, for the admin API.
+pub(crate) struct Renewal {
+    running: std::sync::atomic::AtomicBool,
+    now: tokio::sync::Notify,
+    /// The last check's outcome: (Unix time, `renewed` / `current` / the error).
+    last: std::sync::Mutex<Option<(u64, String)>>,
+}
+
+impl Renewal {
+    fn record(&self, result: &Result<RenewalCheck, String>) {
+        let outcome = match result {
+            Ok(RenewalCheck::Renewed) => "renewed".to_string(),
+            Ok(RenewalCheck::Current { .. }) => "current".to_string(),
+            Err(e) => e.clone(),
+        };
+        *self.last.lock().unwrap_or_else(|e| e.into_inner()) = Some((unix_now().max(0) as u64, outcome));
+    }
+}
+
+pub(crate) fn renewal() -> &'static Renewal {
+    static RENEWAL: std::sync::OnceLock<Renewal> = std::sync::OnceLock::new();
+    RENEWAL.get_or_init(|| Renewal {
+        running: std::sync::atomic::AtomicBool::new(false),
+        now: tokio::sync::Notify::new(),
+        last: std::sync::Mutex::new(None),
+    })
+}
+
+/// Ask the running renewal loop to order a new certificate now; `false`
+/// when no loop runs (ACME isn't configured).
+pub fn request_renewal() -> bool {
+    let renewal = renewal();
+    if !renewal.running.load(std::sync::atomic::Ordering::SeqCst) {
+        return false;
+    }
+    renewal.now.notify_one();
+    true
+}
+
+/// Whether the renewal loop runs, and its last outcome `(time, outcome)`.
+pub fn renewal_status() -> (bool, Option<(u64, String)>) {
+    let renewal = renewal();
+    (renewal.running.load(std::sync::atomic::Ordering::SeqCst), renewal.last.lock().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
 /// Outcome of [`AcmeManager::check`].

@@ -51,6 +51,14 @@ All under `/admin/api/v1/`, JSON in and out.
 | `GET /cache`, `DELETE /cache` | Response-cache hits, misses and size; clear it. `404` when the server has no cache |
 | `GET /routes` | The application's routes (method and pattern) |
 | `GET /requests?n=20`, `GET /errors?n=20` | The last requests, or the last 4xx/5xx (at most 100) |
+| `GET /upstreams` | The config file's `[[upstream]]`s: each backend's `url`, `weight`, `healthy` (passing its health checks), `breaker` (`closed`, `open`, `half_open`, or `null` without a circuit breaker) and `drained` |
+| `PUT /upstreams/<name>/drain` `{"backend":"http://10.0.0.5:8080","drained":true}` | Take a backend out of rotation, or put it back (`false`). New requests skip it, requests already on it finish, its health checks go on. With every backend drained the route answers `503`. Kept across reloads, not restarts. `404` for an unknown upstream or backend |
+| `GET /certificates` | Every certificate served (`default` for the main one, virtual hosts and on-demand names by name): `not_after`, `expires`, `days_left`, `source`; and `acme`: whether its renewal loop runs and its last check (`renewed`, `current`, or the error) |
+| `POST /certificates/renew` | Order a new ACME certificate now, through the renewal loop (`202`); it is hot-swapped when issued, as a scheduled renewal is. `404` without ACME |
+
+To reload certificates from files (after replacing them yourself), use `POST /reload`: it reloads them as `SIGHUP` does.
+
+A typical backend rollout: drain it, wait for its in-flight requests (`rws_upstream_requests_total` stops moving), deploy, check `GET /upstreams` shows it `healthy`, undrain.
 
 Changes made here are in memory: they last until the process restarts (a reload doesn't undo them). The binary's [MCP tools](/mcp/operate/) run the same code, so both answer alike.
 

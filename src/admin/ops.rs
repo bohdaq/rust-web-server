@@ -192,3 +192,82 @@ pub fn routes_json(routes: &[(String, String)]) -> String {
 pub fn registered_routes_json() -> String {
     routes_json(&routes_slot().read().unwrap_or_else(|e| e.into_inner()))
 }
+
+/// The config file's upstreams: each backend's weight, health, breaker
+/// state and whether it is drained.
+pub fn upstreams_json() -> String {
+    let upstreams: Vec<String> = crate::proxy_config::upstream::snapshot()
+        .iter()
+        .map(|(name, backends)| {
+            let backends: Vec<String> = backends
+                .iter()
+                .map(|b| {
+                    format!(
+                        r#"{{"url":{},"weight":{},"healthy":{},"breaker":{},"drained":{}}}"#,
+                        quoted(&b.url),
+                        b.weight,
+                        b.healthy,
+                        b.breaker.map_or("null".to_string(), quoted),
+                        b.drained
+                    )
+                })
+                .collect();
+            format!(r#"{{"name":{},"backends":[{}]}}"#, quoted(name), backends.join(","))
+        })
+        .collect();
+    format!("[{}]", upstreams.join(","))
+}
+
+/// Drain or undrain `backend` of `upstream`; `Err` names what doesn't exist.
+pub fn set_drained(upstream: &str, backend: &str, drained: bool) -> Result<String, String> {
+    let snapshot = crate::proxy_config::upstream::snapshot();
+    let Some((_, backends)) = snapshot.iter().find(|(name, _)| name == upstream) else {
+        return Err(format!("no upstream {upstream:?}"));
+    };
+    if !backends.iter().any(|b| b.url == backend) {
+        return Err(format!("upstream {upstream:?} has no backend {backend:?}"));
+    }
+    crate::proxy_config::upstream::set_drained(upstream, backend, drained);
+    Ok(format!(r#"{{"upstream":{},"backend":{},"drained":{drained}}}"#, quoted(upstream), quoted(backend)))
+}
+
+/// The certificates served, soonest expiry first, and the ACME renewal
+/// loop's state.
+pub fn certificates_json() -> String {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+    let mut certificates = crate::metrics::tls::certificates();
+    certificates.sort_by_key(|(_, not_after, _)| *not_after);
+    let list: Vec<String> = certificates
+        .iter()
+        .map(|(name, not_after, source)| {
+            format!(
+                r#"{{"name":{},"not_after":{},"expires":{},"days_left":{},"source":"{source}"}}"#,
+                quoted(name),
+                not_after,
+                quoted(&crate::http::date::format((*not_after).max(0) as u64)),
+                (not_after - now).div_euclid(86_400)
+            )
+        })
+        .collect();
+    format!(r#"{{"certificates":[{}],"acme":{}}}"#, list.join(","), acme_json())
+}
+
+#[cfg(feature = "acme")]
+fn acme_json() -> String {
+    let (running, last) = crate::acme::renewal_status();
+    let last = last.map_or("null".to_string(), |(at, outcome)| format!(r#"{{"at":{at},"outcome":{}}}"#, quoted(&outcome)));
+    format!(r#"{{"running":{running},"last_check":{last}}}"#)
+}
+
+#[cfg(not(feature = "acme"))]
+fn acme_json() -> String {
+    r#"{"running":false,"last_check":null}"#.to_string()
+}
+
+/// Ask ACME to renew now; `false` when it isn't running.
+pub fn request_renewal() -> bool {
+    #[cfg(feature = "acme")]
+    return crate::acme::request_renewal();
+    #[cfg(not(feature = "acme"))]
+    false
+}

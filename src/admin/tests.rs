@@ -214,3 +214,64 @@ fn reload_waits_for_the_reload_and_reports_its_errors() {
     assert_eq!(call(&never, "POST", "/admin/api/v1/reload", "").0, 504);
     crate::metrics::SERVER_READY.store(ready, Ordering::SeqCst);
 }
+
+/// A backend answering every request with its own name.
+fn named_backend(name: &'static str) -> String {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut buf = [0u8; 4096];
+            let _ = stream.read(&mut buf);
+            let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{name}", name.len());
+        }
+    });
+    format!("http://{addr}")
+}
+
+#[test]
+fn a_drained_backend_gets_no_new_requests_and_draining_all_gives_503() {
+    let (a, b) = (named_backend("a"), named_backend("b"));
+    let upstream = format!("drain-test-{}", std::process::id());
+    let toml = format!(
+        "[[upstream]]\nname = \"{upstream}\"\nbackends = [\"{a}\", \"{b}\"]\n\n[[route]]\n[route.match]\npath = \"/\"\n[route.action]\ntype = \"proxy\"\nupstream = \"{upstream}\"\n"
+    );
+    let (app, _handles) = crate::proxy_config::builder::build(crate::proxy_config::ProxyConfig::from_str(&toml));
+    let fetch = || {
+        let raw = "GET / HTTP/1.1\r\nHost: x\r\n\r\n";
+        let response = app.execute(&Request::parse(raw.as_bytes()).unwrap(), &ConnectionInfo::default()).unwrap();
+        (response.status_code, body(&response))
+    };
+    let seen: std::collections::HashSet<String> = (0..6).map(|_| fetch().1).collect();
+    assert_eq!(seen.len(), 2, "both backends in rotation: {seen:?}");
+
+    crate::proxy_config::upstream::set_drained(&upstream, &a, true);
+    for _ in 0..6 {
+        assert_eq!(fetch(), (200, "b".to_string()));
+    }
+    crate::proxy_config::upstream::set_drained(&upstream, &b, true);
+    assert_eq!(fetch().0, 503, "everything drained");
+    crate::proxy_config::upstream::set_drained(&upstream, &a, false);
+    crate::proxy_config::upstream::set_drained(&upstream, &b, false);
+    assert!(!crate::proxy_config::upstream::is_drained(&upstream, &a));
+}
+
+#[test]
+fn upstreams_and_certificates_endpoints() {
+    let api = AdminApi::new("t");
+    let (status, text) = call(&api, "GET", "/admin/api/v1/upstreams", "");
+    assert_eq!(status, 200);
+    assert!(text.starts_with('['), "{text}");
+    let (status, text) = call(&api, "PUT", "/admin/api/v1/upstreams/no-such-upstream-x/drain", r#"{"backend":"http://h:1","drained":true}"#);
+    assert_eq!(status, 404, "{text}");
+    assert!(text.contains("no upstream"), "{text}");
+    assert_eq!(call(&api, "PUT", "/admin/api/v1/upstreams/u/drain", r#"{"drained":true}"#).0, 400);
+    assert_eq!(call(&api, "GET", "/admin/api/v1/upstreams/u/drain", "").0, 405);
+
+    let (status, text) = call(&api, "GET", "/admin/api/v1/certificates", "");
+    assert_eq!(status, 200);
+    assert!(text.starts_with(r#"{"certificates":["#) && text.contains(r#""acme":{"running":"#), "{text}");
+    let (status, _) = call(&api, "POST", "/admin/api/v1/certificates/renew", "");
+    assert!(status == 404 || status == 202, "{status}");
+}

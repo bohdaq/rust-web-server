@@ -1395,6 +1395,13 @@ impl DynamicProxy {
     /// holds the rest open; `Err(false)`: none at all.
     fn next_backend(&self, request: &Request, client_ip: &str, tried: &[String]) -> Result<String, bool> {
         let mut candidates: Vec<String> = self.live.read().unwrap().iter().filter(|b| !tried.contains(b)).cloned().collect();
+        if !candidates.is_empty() {
+            candidates.retain(|b| !upstream::is_drained(&self.upstream, b));
+            if candidates.is_empty() {
+                // Every live backend drained: 503, like an open breaker.
+                return Err(true);
+            }
+        }
         let Some(policy) = self.policy.as_deref() else {
             return if candidates.is_empty() { Err(false) } else { Ok(self.pick(&candidates, client_ip)) };
         };

@@ -107,4 +107,56 @@ grep -q 'reloaded.example' <<<"$(api GET /cors)" || fail "the reload didn't appl
 kill -0 "${PIDS[-1]}" || fail "the server died on reload"
 pass "reload through the SIGHUP path, applied and reported"
 
+# ── upstreams: drain a backend of a config-file proxy ───────────────────────
+kill "${PIDS[-1]}"; wait "${PIDS[-1]}" 2>/dev/null || true
+for port in 18461 18462; do
+  mkdir -p "b$port" && echo "backend-$port" > "b$port/index.html"
+  (cd "b$port" && exec python3 -I -m http.server "$port" --bind 127.0.0.1 >/dev/null 2>&1) & PIDS+=($!)
+done
+cat > proxy.toml <<'TOML'
+port = 18451
+[admin]
+listen = "127.0.0.1:18452"
+token_env = "E2E_ADMIN_TOKEN"
+
+[[upstream]]
+name = "web"
+backends = ["http://127.0.0.1:18461", "http://127.0.0.1:18462"]
+[upstream.health_check]
+path = "/"
+interval_secs = 1
+
+[[route]]
+[route.match]
+path = "/"
+[route.action]
+type = "proxy"
+upstream = "web"
+TOML
+(cd www && exec env RWS_CONFIG_FILE=../proxy.toml "$RWS" >../rws-proxy.log 2>&1) & PIDS+=($!)
+wait_for http://127.0.0.1:18452/ || fail "the proxy-mode admin listener didn't start"
+for _ in $(seq 1 50); do curl -s http://127.0.0.1:18451/ | grep -q backend && break; sleep 0.1; done
+
+ups=$(api GET /upstreams)
+python3 - "$ups" <<'PY' || fail "upstreams: $ups"
+import json, sys
+[web] = json.loads(sys.argv[1])
+assert web["name"] == "web", web
+assert [b["url"] for b in web["backends"]] == ["http://127.0.0.1:18461", "http://127.0.0.1:18462"], web
+assert all(b["healthy"] and not b["drained"] and b["weight"] == 1 for b in web["backends"]), web
+PY
+pass "upstreams: backends, health, weights"
+
+api PUT /upstreams/web/drain '{"backend":"http://127.0.0.1:18461","drained":true}' >/dev/null
+for _ in $(seq 1 10); do
+  [ "$(curl -s http://127.0.0.1:18451/)" = "backend-18462" ] || fail "a drained backend got a request"
+done
+grep -q '"url":"http://127.0.0.1:18461","weight":1,"healthy":true,"breaker":null,"drained":true' <<<"$(api GET /upstreams)" || fail "drain not shown"
+api PUT /upstreams/web/drain '{"backend":"http://127.0.0.1:18462","drained":true}' >/dev/null
+[ "$(code http://127.0.0.1:18451/)" = 503 ] || fail "everything drained should be 503"
+api PUT /upstreams/web/drain '{"backend":"http://127.0.0.1:18461","drained":false}' >/dev/null
+[ "$(curl -s http://127.0.0.1:18451/)" = "backend-18461" ] || fail "undrain didn't put the backend back"
+[ "$(code -X PUT -H "Authorization: Bearer $E2E_ADMIN_TOKEN" -d '{"backend":"http://nope:1","drained":true}' http://127.0.0.1:18452/admin/api/v1/upstreams/web/drain)" = 404 ] || fail "an unknown backend was accepted"
+pass "drain / undrain a backend; everything drained is 503"
+
 echo "all admin end-to-end checks passed"

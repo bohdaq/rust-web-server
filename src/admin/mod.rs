@@ -276,7 +276,27 @@ impl AdminApi {
                 _ => wrong_method("PUT"),
             };
         }
+        if let Some(name) = route.strip_prefix("/upstreams/").and_then(|r| r.strip_suffix("/drain")) {
+            let name = crate::url::URL::percent_decode(name);
+            return match (method, body_str(request, "backend"), body_bool(request, "drained")) {
+                ("PUT", Some(backend), Some(drained)) => match ops::set_drained(&name, &backend, drained) {
+                    Ok(body) => ok(body),
+                    Err(e) => error(STATUS_CODE_REASON_PHRASE.n404_not_found, &e),
+                },
+                ("PUT", _, _) => bad_request(r#"expected {"backend":"<url>","drained":true|false}"#),
+                _ => wrong_method("PUT"),
+            };
+        }
         match (method, route) {
+            ("GET", "/upstreams") => ok(ops::upstreams_json()),
+            (_, "/upstreams") => wrong_method("GET"),
+            ("GET", "/certificates") => ok(ops::certificates_json()),
+            (_, "/certificates") => wrong_method("GET"),
+            ("POST", "/certificates/renew") => match ops::request_renewal() {
+                true => json(STATUS_CODE_REASON_PHRASE.n202_accepted, r#"{"requested":true}"#.to_string()),
+                false => error(STATUS_CODE_REASON_PHRASE.n404_not_found, "ACME isn't configured: nothing to renew"),
+            },
+            (_, "/certificates/renew") => wrong_method("POST"),
             ("GET", "/status") => ok(status_json(connection)),
             (_, "/status") => wrong_method("GET"),
             ("GET", "/config") => ok(ops::config_json()),

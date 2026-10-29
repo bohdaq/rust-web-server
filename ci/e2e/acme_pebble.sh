@@ -76,9 +76,14 @@ PIDS+=($!)
 # ── rws ───────────────────────────────────────────────────────────────────────
 mkdir -p "$WORK/site" && cd "$WORK/site"
 echo "hello over acme" > index.html
+export ACME_ADMIN_TOKEN="acme-admin-$RANDOM"
 cat > rws.config.toml <<EOF
 port               = 8445
 http_redirect_port = 5002
+
+[admin]
+listen    = "127.0.0.1:15099"
+token_env = "ACME_ADMIN_TOKEN"
 
 [acme]
 domains        = ["localhost"]
@@ -191,6 +196,26 @@ after="$(serial)"
 [ -n "$after" ] && [ "$before" != "$after" ] || fail "served certificate did not change ($before -> $after)"
 ! grep -q "ordering without 'replaces'" rws.log || fail "the CA refused the order's 'replaces'"
 pass "renewed on the CA's renewal information via the redirect listener and hot-swapped ($before -> $after)"
+
+# ── 6b. the admin API: inventory and renew now ───────────────────────────────
+admin() { curl -s --max-time 10 -X "$1" -H "Authorization: Bearer $ACME_ADMIN_TOKEN" "http://127.0.0.1:15099/admin/api/v1$2"; }
+certs="$(admin GET /certificates)"
+grep -q '"name":"default"' <<<"$certs" && grep -q '"acme":{"running":true' <<<"$certs" || fail "admin certificates: $certs"
+before="$after"
+written="$(grep -c 'Certificate written' rws.log)"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $ACME_ADMIN_TOKEN" http://127.0.0.1:15099/admin/api/v1/certificates/renew)" = 202 ] \
+  || fail "the admin API didn't accept a renewal"
+wait_for rws.log "requested through the admin API" 30 || fail "the renewal loop didn't get the request"
+for _ in $(seq 1 60); do
+  [ "$(grep -c 'Certificate written' rws.log)" -gt "$written" ] && break
+  sleep 1
+done
+[ "$(grep -c 'Certificate written' rws.log)" -gt "$written" ] || fail "no certificate written after the admin renewal"
+sleep 2
+after="$(serial)"
+[ "$before" != "$after" ] || fail "the admin renewal didn't change the served certificate"
+grep -q '"outcome":"renewed"' <<<"$(admin GET /certificates)" || fail "the admin API didn't report the renewal"
+pass "admin API: certificate inventory, renew now, hot-swapped ($before -> $after)"
 
 # ── 7. TLS-ALPN-01 ───────────────────────────────────────────────────────────
 set_ari_now() { # <cert.pem>: Pebble's renewal information says "renew now"

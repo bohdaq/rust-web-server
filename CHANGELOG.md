@@ -21,6 +21,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   response cache, routes, recent requests and errors. `admin::ops` holds the
   shared code; the binary's MCP tools call it, so `server_config` now lists
   every `RWS_CONFIG_*` setting with secrets hidden.
+- Admin API: upstreams with each backend's weight, health, circuit-breaker
+  state and drain state; drain and undrain a backend (`PUT
+  /admin/api/v1/upstreams/<name>/drain`; all drained → `503`); certificate
+  inventory with expiry and the ACME renewal loop's last outcome; `POST
+  /admin/api/v1/certificates/renew` orders a certificate now
+  (`acme::request_renewal`, `acme::renewal_status`).
 
 ## 18.9.1 — 2026-10-29
 

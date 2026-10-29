@@ -81,6 +81,14 @@ pub fn set_on_demand_certificate(name: &str, der: &[u8]) {
     }
 }
 
+/// Every certificate rws serves: `(name, notAfter as Unix seconds, source)`,
+/// source `"configured"` (files, vhosts, ACME) or `"on_demand"`.
+pub(crate) fn certificates() -> Vec<(String, i64, &'static str)> {
+    let expiries = expiries().lock().unwrap_or_else(|e| e.into_inner());
+    let configured = expiries.configured.iter().map(|(n, t)| (n.clone(), *t, "configured"));
+    configured.chain(expiries.on_demand.iter().map(|(n, t)| (n.clone(), *t, "on_demand"))).collect()
+}
+
 pub(crate) fn prometheus_text() -> String {
     let mut out = String::new();
     let mut map: Vec<(Negotiated, u64)> = handshakes().lock().unwrap_or_else(|e| e.into_inner()).iter().map(|(k, v)| (*k, *v)).collect();

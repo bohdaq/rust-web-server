@@ -48,6 +48,8 @@ pub(crate) struct UpstreamPolicy {
     /// The health-checked backend list (for metrics).
     live: Arc<RwLock<Vec<String>>>,
     weights: HashMap<String, u32>,
+    /// The configured backends in file order (for listing).
+    order: Vec<String>,
     pub(crate) sticky: Option<StickyConfig>,
     breaker: Option<Mutex<CircuitBreaker>>,
     pub(crate) retry: Option<RetryConfig>,
@@ -70,6 +72,7 @@ impl UpstreamPolicy {
             live,
             // Every backend, weight 1 unless given (also the gauges' list).
             weights: backends.iter().enumerate().map(|(i, b)| (b.clone(), weights.get(i).copied().unwrap_or(1))).collect(),
+            order: backends.to_vec(),
             sticky,
             breaker: breaker.map(|b| Mutex::new(CircuitBreaker::new(b.failure_threshold.max(1), b.recovery_secs).max_half_open_probes(b.half_open_probes))),
             retry,
@@ -210,6 +213,78 @@ fn stats() -> &'static Mutex<Stats> {
 /// Make `policies` the ones `/metrics` reports gauges for (each compile).
 pub(crate) fn register(policies: Vec<Arc<UpstreamPolicy>>) {
     stats().lock().unwrap_or_else(|e| e.into_inner()).policies = policies;
+}
+
+// ── drain ─────────────────────────────────────────────────────────────────────
+
+/// Any backend drained: the per-request check is one load when none is.
+static ANY_DRAINED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn drained_set() -> &'static RwLock<std::collections::HashSet<(String, String)>> {
+    static SET: OnceLock<RwLock<std::collections::HashSet<(String, String)>>> = OnceLock::new();
+    SET.get_or_init(RwLock::default)
+}
+
+/// Take `backend` of `upstream` out of rotation (`true`) or put it back.
+/// New requests skip a drained backend; requests already on it finish; its
+/// health checks go on. Kept across reloads (by name), not across restarts.
+pub(crate) fn set_drained(upstream: &str, backend: &str, drained: bool) {
+    let mut set = drained_set().write().unwrap_or_else(|e| e.into_inner());
+    let key = (upstream.to_string(), backend.to_string());
+    if drained {
+        set.insert(key);
+    } else {
+        set.remove(&key);
+    }
+    ANY_DRAINED.store(!set.is_empty(), std::sync::atomic::Ordering::SeqCst);
+}
+
+pub(crate) fn is_drained(upstream: &str, backend: &str) -> bool {
+    if !ANY_DRAINED.load(std::sync::atomic::Ordering::Relaxed) {
+        return false;
+    }
+    let set = drained_set().read().unwrap_or_else(|e| e.into_inner());
+    set.iter().any(|(u, b)| u == upstream && b == backend)
+}
+
+/// One backend of an upstream as the admin API shows it.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct BackendView {
+    pub(crate) url: String,
+    pub(crate) weight: u32,
+    /// In the health-checked live list.
+    pub(crate) healthy: bool,
+    /// `closed`, `open`, `half_open`; `None` without a circuit breaker.
+    pub(crate) breaker: Option<&'static str>,
+    pub(crate) drained: bool,
+}
+
+/// The current configuration's upstreams and their backends, in order.
+pub(crate) fn snapshot() -> Vec<(String, Vec<BackendView>)> {
+    let policies = stats().lock().unwrap_or_else(|e| e.into_inner()).policies.clone();
+    policies
+        .iter()
+        .map(|p| {
+            let live = p.live.read().unwrap_or_else(|e| e.into_inner()).clone();
+            let mut backends: Vec<&String> = p.weights.keys().collect();
+            backends.sort_by_key(|b| p.order.iter().position(|o| o == *b).unwrap_or(usize::MAX));
+            let views = backends
+                .into_iter()
+                .map(|b| BackendView {
+                    url: b.clone(),
+                    weight: p.weight(b),
+                    healthy: live.contains(b),
+                    breaker: p.breaker_state(b).map(|s| match s {
+                        BreakerState::Closed => "closed",
+                        BreakerState::Open => "open",
+                        BreakerState::HalfOpen => "half_open",
+                    }),
+                    drained: is_drained(&p.name, b),
+                })
+                .collect();
+            (p.name.clone(), views)
+        })
+        .collect()
 }
 
 /// One request to `backend` of `upstream`: its status (`None`: no
