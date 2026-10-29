@@ -14,3 +14,7 @@ The site itself is `site/dist` (without `.vite/`) in `/var/www/rws8`, plus
 `/apt`, `/rpm` and the per-release `llms*.txt` directories the release
 workflow writes. Check a config change with
 `rws --check=/etc/rws/rws.config.toml` before `systemctl restart rws`.
+
+`rws-rollback.sh` also puts postfix and dovecot back on the old certbot
+certificate, which expired on 2026-01-20: after a rollback, mail TLS serves
+an expired certificate again until certbot can renew (it needs port 80).

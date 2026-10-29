@@ -282,14 +282,20 @@ Phase 6 findings (rws bugs, fixed on main, need a release):
   only `X-Forwarded-For` (Caddy sent the original Host and
   `X-Forwarded-Proto`); the demo didn't need them, the config sets both.
 - No way to turn off directory listings; worked around with respond routes.
+- The old-docs redirect `path = "/mcp/*"` is the prefix `/mcp/`, so it does
+  not catch `/mcp` itself, where the docs MCP server will mount; keep the MCP
+  endpoint at exactly `/mcp`.
+- Mail and web send the full chain (4 certificates, verifies).
 
 VM state found (not changed, worth fixing separately): port 465 runs
 `submissions` without `smtpd_tls_wrappermode=yes` (plain SMTP on the
 implicit TLS port), and opendkim's socket is missing, so mail goes out
 unsigned. `shareaudio.us` and the old sslip demo were dead and are dropped.
 
-DNS cutover: right after the user points `rws8.tech` at 168.119.17.57, add
-`rws8.tech` to `[acme] domains` and restart rws. Not before: Let's Encrypt
+DNS cutover: the user points `rws8.tech` (A 168.119.17.57, no AAAA) and
+`www.rws8.tech` (today a CNAME to `bohdaq.github.io`) at the VM. Right after,
+add both to `[acme] domains`, deploy the binary with the watch fix, turn
+`watch = true` back on and restart rws. Not before: Let's Encrypt
 can't validate it while DNS points at GitHub Pages, and one failed name fails
 the whole order. Until the restart (about a minute) HTTPS for rws8.tech shows
 the sslip certificate. Also before cutover, change release.yml (phase 7) to
