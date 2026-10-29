@@ -32,6 +32,7 @@ pub(crate) mod upstream;
 pub use upstream::{BreakerConfig, RetryConfig, StickyConfig};
 pub mod builder;
 pub mod validate;
+pub mod mcp_gateway;
 
 #[cfg(test)]
 mod tests;
@@ -142,7 +143,8 @@ pub enum ActionConfig {
         body: String,
         content_type: String,
     },
-    Mcp,
+    /// The MCP gateway ([`mcp_gateway`]).
+    Mcp(Box<mcp_gateway::McpGatewayConfig>),
     Unknown(String),
 }
 
@@ -441,7 +443,7 @@ impl ProxyConfig {
                         },
                     }
                 }
-                "mcp" => ActionConfig::Mcp,
+                "mcp" => ActionConfig::Mcp(Box::new(mcp_gateway::parse(&map, &a_sec))),
                 other => ActionConfig::Unknown(other.to_string()),
             };
 

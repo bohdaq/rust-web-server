@@ -46,6 +46,7 @@ and `http1`-only test runs before pushing.
 | 2d | **done**: `McpServer::after_tool_call` + `ToolCallOutcome` (ok/tool_error/refused/denied) + duration; `McpGateway::audit_log(true)` → JSON line per call via the access-log sink |
 | 2e | **done**: prompts as `prefix__name` (args, `prompts/get` forwarded, content passed through), resources under their URIs (first upstream wins; `resources/read` forwarded raw), ACL via new `McpServer::resource_filter`/`prompt_filter` (resource = `prefix__<uri>`); best effort, listed at build |
 | 2f | **done**: `Upstream::header_for(name, |claims| Option<String>)` on `tools/call` (shared session; listing/prompts/resources use static headers); `Debug` hides header values. One unreproduced flake seen once on the first http1 run after a clean build (22 clean reruns) |
-| 2g | in progress |
+| 2g | **done**: `[route.action] type = "mcp"` → `proxy_config::mcp_gateway` (parse, `rws --check` keys + semantics incl. offline, background build with 10 s retry + 503, stops on reload); tests incl. ConfigDrivenApp e2e; `ci/e2e/mcp_gateway.sh` (rws binary, Python upstreams: one 2025, one 2026-only; ACLs, limit, env credentials, 401, audit lines) in the CI matrix. MCP conformance suites against the gateway not run: they test server features (sampling, elicitation) a gateway doesn't originate |
+| 3 | in progress |
 | 3 | — |
 | 4 | — |

@@ -56,6 +56,11 @@ fn known_keys(section: &str) -> Option<Vec<&'static str>> {
         "route.action.static" => STATIC_ACTION_KEYS.to_vec(),
         "route.action.redirect" => REDIRECT_ACTION_KEYS.to_vec(),
         "route.action.respond" => RESPOND_ACTION_KEYS.to_vec(),
+        "route.action.mcp" => super::mcp_gateway::GATEWAY_KEYS.to_vec(),
+        "route.action.mcp.upstream" => super::mcp_gateway::UPSTREAM_KEYS.to_vec(),
+        "route.action.mcp.caller" => super::mcp_gateway::CALLER_KEYS.to_vec(),
+        "route.action.mcp.allow" => super::mcp_gateway::ALLOW_KEYS.to_vec(),
+        "route.action.mcp.limit" => super::mcp_gateway::LIMIT_KEYS.to_vec(),
         "route.middleware" => vec!["timeout_ms", "max_body_size"],
         "route.middleware.rate_limit" => vec!["max_requests", "window_secs"],
         "route.middleware.cache" => vec!["ttl_secs", "vary_by"],
@@ -96,6 +101,10 @@ pub fn check_unknown_keys(toml: &str, report: &mut ConfigReport) {
             continue;
         }
         let shape = strip_indices(section);
+        // Header names: any key.
+        if shape == "route.action.mcp.upstream.headers_env" {
+            continue;
+        }
         match known_keys(&shape) {
             None => report.error(format!("[{}]: unknown table — ignored", shape)),
             Some(keys) => {
@@ -254,14 +263,14 @@ impl ProxyConfig {
                         report.error(format!("{label}: respond status {status} is not an HTTP status code"));
                     }
                 }
-                ActionConfig::Mcp => {
-                    report.warn(format!("{label}: `mcp` actions are not served from the config file; requests fall through to the static files"));
+                ActionConfig::Mcp(gateway) => {
+                    super::mcp_gateway::validate(gateway, route.match_.path.as_deref(), &label, report);
                 }
                 ActionConfig::Unknown(kind) if kind.is_empty() => {
                     report.error(format!("{label}: [route.action] has no `type`"));
                 }
                 ActionConfig::Unknown(kind) => {
-                    report.error(format!("{label}: unknown action type '{kind}' (expected proxy, grpc, static, redirect or respond)"));
+                    report.error(format!("{label}: unknown action type '{kind}' (expected proxy, grpc, static, redirect, respond or mcp)"));
                 }
             }
             validate_middleware(&label, &route.middleware, report);

@@ -33,6 +33,10 @@ let (listener, pool) = Server::setup()?;
 Server::run_tls(listener, pool, gateway).await;
 ```
 
+## From the config file
+
+The `rws` binary runs a gateway from `rws.config.toml` with `[route.action] type = "mcp"` — upstreams, callers and their tokens (from environment variables), `allow` rules, limits and the audit log. See [the config reference](/configuration/config-file/#routeaction--mcp). The rest of this page is the Rust API it is built on.
+
 ## What callers see
 
 - Each upstream tool appears as `<prefix>__<tool>` (`github__search_issues`),

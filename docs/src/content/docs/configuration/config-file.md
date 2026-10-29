@@ -400,14 +400,43 @@ content_type = "application/json"   # (default: text/plain)
 
 ### `[route.action]` — mcp
 
-Accepted by the parser, but not served from the config file: `rws --check`
-warns, and matching requests fall through to the static files. Mount MCP in
-code instead (see [MCP](/mcp/overview/)).
+An [MCP gateway](/mcp/gateway/): one MCP endpoint in front of several upstream MCP servers, their tools prefixed, with per-caller access rules, rate limits and an audit log (since 18.9.0; before, `mcp` was accepted and not served). The route needs an exact `path`. Secrets stay out of the file: caller tokens and upstream header values come from the environment variables named.
 
 ```toml
-[route.action]
-type = "mcp"
+[[route]]
+  [route.match]
+  path = "/mcp"
+
+  [route.action]
+  type = "mcp"
+
+  [route.action.mcp]
+  name            = "gateway"             # announced to clients (default rws-mcp-gateway)
+  refresh_secs    = 300                   # re-read upstream tools; 0 = only at start
+  audit_log       = true                  # one JSON line per tool call in the access log
+  allowed_origins = ["https://app.example.com"]
+
+  [[route.action.mcp.upstream]]
+  prefix      = "github"                  # tools appear as github__<tool>
+  url         = "https://mcp.github.example/mcp"
+  timeout_ms  = 30000
+  headers_env = { Authorization = "GITHUB_MCP_AUTHORIZATION" }   # header = env var with its value
+
+  [[route.action.mcp.caller]]             # who may connect: their bearer token
+  identity  = "alice"
+  token_env = "ALICE_MCP_TOKEN"
+
+  [[route.action.mcp.allow]]              # what they may use
+  identity = "alice"
+  tools    = ["github__*"]                # full names, prefixes ending in *, or *
+
+  [[route.action.mcp.limit]]              # per caller and tool
+  tools       = "github__create_issue"
+  max_calls   = 5
+  window_secs = 3600
 ```
+
+The gateway lists its upstreams in the background at start: until it has, and while an upstream is down then, the route answers `503` and the build is retried every 10 s. `rws --check` reports unknown keys, bad prefixes and URLs, and unset token and header variables.
 
 ### `[route.middleware]`
 

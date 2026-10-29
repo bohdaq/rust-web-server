@@ -195,7 +195,11 @@ pub(crate) fn compile_routes(config: &ProxyConfig, health_stop: &Arc<AtomicBool>
                     }
                 }
 
-                ActionConfig::Mcp | ActionConfig::Unknown(_) => {
+                ActionConfig::Mcp(gateway) => arc_app(crate::proxy_config::mcp_gateway::GatewayAdapter::start(
+                    (**gateway).clone(),
+                    route.match_.path.clone().unwrap_or_else(|| "/mcp".to_string()),
+                )),
+                ActionConfig::Unknown(_) => {
                     // No-op: these fall through to fallback
                     arc_app(crate::proxy_config::NullApp)
                 }

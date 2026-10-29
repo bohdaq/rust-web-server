@@ -18,6 +18,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - `McpServer::after_tool_call(|ctx, call| …)`: every finished tool call with
   its outcome (`ToolCallOutcome`: ok, tool error, refused, denied) and
   duration.
+- MCP gateway from the config file: `[route.action] type = "mcp"` with
+  `[[route.action.mcp.upstream]]`, `caller`, `allow` and `limit` tables,
+  secrets from environment variables, checked by `rws --check`;
+  `ci/e2e/mcp_gateway.sh` runs it against two upstreams.
 - `McpServer::resource_filter` and `prompt_filter`, like `tool_filter` for
   resources and prompts.
 - MCP gateway: `Upstream::header_for(name, |claims| …)` sends a per-caller
