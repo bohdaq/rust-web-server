@@ -48,6 +48,7 @@ Every release ships prebuilt binaries, so no Rust toolchain is needed:
 
 | Method | Command | Platforms |
 |---|---|---|
+| Install script | `curl -fsSL https://rws8.tech/install.sh \| sh` (`sh -s -- --version 18.8.3 --dir ~/bin` to pin a release or a directory) — downloads the release archive, checks its `.sha256` and installs to `/usr/local/bin`, else `~/.local/bin` (since 18.8.4) | Linux (x86_64, arm64), macOS (Apple Silicon, Intel) |
 | Homebrew | `brew install bohdaq/tap/rws` | macOS (Apple Silicon, Intel), Linux (x86_64, arm64) |
 | cargo-binstall | `cargo binstall rust-web-server` | everything below, without compiling |
 | apt / dnf | `sudo apt install rws`, `sudo dnf install rws` after adding the repository — [systemd: install from a package](/deployment/systemd/#install-from-a-package); installs and starts the `rws` service (since 18.2.0) | Debian, Ubuntu, Fedora, RHEL and derivatives (x86_64, arm64) |

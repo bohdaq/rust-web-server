@@ -64,7 +64,7 @@ console.log("brand files written");
 // Generated agent files from the repo root, served at the site root as the
 // release workflow does today (per-release copies come with phase 7).
 const repo = join(site, "..");
-for (const f of ["llms.txt", "llms-full.txt"]) copyFileSync(join(repo, f), join(dist, f));
+for (const f of ["llms.txt", "llms-full.txt", "install.sh"]) copyFileSync(join(repo, f), join(dist, f));
 // /<major.minor>/llms*.txt for agents pinned to a release: this tree for the
 // newest, each older minor from its newest patch tag (tags before llms.txt
 // existed have none).

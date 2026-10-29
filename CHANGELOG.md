@@ -12,6 +12,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
 - `directory_listing = false` (`RWS_CONFIG_DIRECTORY_LISTING`): a directory
   without an `index.html` answers 404 instead of listing its files. Default
   `true`, as before.
+- `install.sh` (`curl -fsSL https://rws8.tech/install.sh | sh`): installs the
+  release binary for Linux or macOS after checking its `.sha256`, into
+  `/usr/local/bin` or `~/.local/bin`; `--version` and `--dir` pin a release
+  or a directory. The site's install panel offers it, and CI runs it on
+  Linux and macOS.
 - Proxied requests carry `X-Forwarded-Host` (the `Host` the client sent)
   unless the client already sent one: the HTTP/1.1 and HTTP/2 upstream
   forwarders and Gateway API upgrades.

@@ -174,5 +174,5 @@ rather than argues. The comparison story lives on `/why/` (layout D) and
 - Headline **C**: "The web server that gets its own / certificates and routes your apps"
 - Competitor names stay in the performance strip
 - The rest is approved as written
-- The script tab ships with `install.sh`; until then the install panel has no
-  script tab (a command that 404s is a dead link) and Homebrew is the default
+- The script tab shipped with `install.sh` (2026-10-29); it is the default on
+  Linux, Homebrew on macOS, Cargo on Windows

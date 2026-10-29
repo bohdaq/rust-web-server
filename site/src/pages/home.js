@@ -60,10 +60,11 @@ strategy = "least_connections"
 ];
 
 const INSTALL = [
+  { tab: "Script", os: "linux", code: "```bash\ncurl -fsSL https://rws8.tech/install.sh | sh\n```", note: "Linux and macOS. Checks the release checksum, installs to /usr/local/bin or ~/.local/bin.", link: ["https://github.com/bohdaq/rust-web-server/blob/main/install.sh", "Read the script"] },
   { tab: "Homebrew", os: "mac", code: "```bash\nbrew install bohdaq/tap/rws\n```", note: "macOS and Linux, x86_64 and arm64." },
   { tab: "Cargo", os: "windows", code: "```bash\ncargo binstall rust-web-server\n```", note: "Prebuilt binary through cargo binstall; works on Windows too." },
   { tab: "Docker", os: "", code: '```bash\ndocker run -p 7878:7878 -v "$PWD:/srv" bohdaq/rws\n```', note: "linux/amd64 and linux/arm64, also on ghcr.io/bohdaq/rws." },
-  { tab: "apt / dnf", os: "linux", code: "```bash\nsudo apt install rws    # or: sudo dnf install rws\n```", note: "After adding the repository; installs and starts the rws service.", link: ["/docs/deployment/systemd/#install-from-a-package", "Add the repository"] },
+  { tab: "apt / dnf", os: "", code: "```bash\nsudo apt install rws    # or: sudo dnf install rws\n```", note: "After adding the repository; installs and starts the rws service.", link: ["/docs/deployment/systemd/#install-from-a-package", "Add the repository"] },
 ];
 
 const TILES = [

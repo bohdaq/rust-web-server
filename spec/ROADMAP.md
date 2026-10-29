@@ -155,6 +155,7 @@ Give clusters leaving Ingress-NGINX a place to go.
 Put MCP servers and LLM providers behind rws with one policy point.
 
 - **#28** **MCP gateway mode** — the full gateway on #62's foundation: federate upstream MCP servers (`prefix__tool` names), per-identity tool ACLs, OAuth at the edge with upstream credential injection, per-tool rate limits on `Mcp-Name`, `tools/list` caching, audit log, bridging 2025 clients to 2026 servers. After #13, #15, #24.
+- **X-Forwarded-Proto** — proxied requests say whether the client connected over TLS. `ConnectionInfo` gains `tls: bool` and a constructor (code outside rws stops building it with a struct literal, which is the API change), and the forwarders send `X-Forwarded-Proto: https|http` unless the client sent one. Until then the proxy docs' per-route `header_set` recipe does it (user's call, 2026-10-29).
 - **#41** **LLM proxy middleware** — token accounting from `usage`, time-to-first-token metrics, token-based rate limits and budgets, provider fallback, virtual keys (Envoy AI Gateway, Kong, LiteLLM).
 
 **Done when:** Federation of two MCP servers with prefixed tools and per-identity ACLs in an e2e test; streaming LLM responses proxied with token usage recorded in metrics.

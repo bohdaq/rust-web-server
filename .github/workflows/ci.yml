@@ -296,6 +296,19 @@ jobs:
       - run: cargo test --locked --manifest-path site/mcp/Cargo.toml
       - run: cargo clippy --locked --manifest-path site/mcp/Cargo.toml --all-targets
 
+  install-script:
+    name: install.sh (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      # The latest release, as `curl … | sh` runs it, and a pinned one.
+      - run: sh install.sh --dir "$RUNNER_TEMP/latest" && "$RUNNER_TEMP/latest/rws" --version
+      - run: cat install.sh | sh -s -- --version 18.8.3 --dir "$RUNNER_TEMP/pinned" && "$RUNNER_TEMP/pinned/rws" --version | grep -q 18.8.3
+      - run: "! sh install.sh --version 0.0.1 --dir \"$RUNNER_TEMP/none\""
+
   docs-check:
     name: docs links, settings and llms.txt
     runs-on: ubuntu-latest
