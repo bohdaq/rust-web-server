@@ -135,6 +135,11 @@
   --lit-material-alert-success-container: var(--md-sys-color-surface-container);
   --lit-material-alert-on-success-container: var(--md-sys-color-on-surface);
 
+  /* Buttons (skill B2): 8px × 12px around 24px text = 40px */
+  --lit-material-button-height: 40px;
+  --lit-material-button-padding-inline: var(--space-100);
+  --lit-material-button-text-padding-inline: var(--space-100);
+
   /* Flat: no elevation shadows anywhere */
   --md-sys-elevation-level0: none;
   --md-sys-elevation-level1: none;
@@ -178,8 +183,6 @@ a:hover { text-decoration-thickness: 2px; }
 
 /* Components: values lit-material doesn't expose as tokens, via ::part */
 lit-material-button::part(button) {
-  height: auto;
-  padding: var(--space-75) var(--space-100);
   transition:
     background-color var(--duration-color) var(--ease),
     transform var(--duration-color) var(--ease);
