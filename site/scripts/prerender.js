@@ -21,6 +21,7 @@ import { copyFileSync, cpSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { buildDocs } from "../src/docs/build.js";
 import { docsVersions } from "./versions.js";
+import { changelog, versionIndex } from "./mcp-index.js";
 
 const site = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = join(site, "dist");
@@ -81,3 +82,15 @@ for (const v of versions) {
   }
 }
 cpSync(join(repo, "agents"), join(dist, "agents"), { recursive: true });
+
+// Data for the docs MCP server (site/mcp), one file per docs version.
+mkdirSync(join(dist, "mcp"), { recursive: true });
+for (const v of versions) writeFileSync(join(dist, "mcp", `${v.key}.json`), JSON.stringify(versionIndex({ version: v, repo })));
+writeFileSync(
+  join(dist, "mcp", "index.json"),
+  JSON.stringify({
+    latest: versions[0].key,
+    versions: versions.map((v) => ({ version: v.key, tag: v.tag })),
+    changelog: changelog(readFileSync(join(repo, "CHANGELOG.md"), "utf8")),
+  }),
+);

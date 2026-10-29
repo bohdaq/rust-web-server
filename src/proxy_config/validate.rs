@@ -159,8 +159,10 @@ impl ProxyConfig {
                 }
             };
             if upstream.tls_ca_file.is_some() || client.is_some() {
-                if let Err(e) = crate::proxy::UpstreamTls::new(upstream.tls_ca_file.as_deref(), client) {
-                    report.error(format!("{label}: {e}; its TLS backends would answer 502"));
+                if !crate::config_check::offline() {
+                    if let Err(e) = crate::proxy::UpstreamTls::new(upstream.tls_ca_file.as_deref(), client) {
+                        report.error(format!("{label}: {e}; its TLS backends would answer 502"));
+                    }
                 }
                 if !upstream.tls {
                     report.warn(format!("{label}: TLS settings are set but no backend is https://, h2s:// or grpcs://, so they aren't used"));
@@ -235,7 +237,7 @@ impl ProxyConfig {
                 ActionConfig::Static { root, .. } => {
                     if root.is_empty() {
                         report.error(format!("{label}: static action has no `root`"));
-                    } else if !std::path::Path::new(root).is_dir() {
+                    } else if !crate::config_check::offline() && !std::path::Path::new(root).is_dir() {
                         report.warn(format!("{label}: static root '{root}' is not a directory (yet)"));
                     }
                 }
@@ -297,14 +299,16 @@ fn validate_middleware(label: &str, mw: &MiddlewareConfig, report: &mut ConfigRe
         Some(AuthConfig::Bearer { token_env }) | Some(AuthConfig::Jwt { secret_env: token_env }) => {
             if token_env.is_empty() {
                 report.error(format!("{label}: auth has no `token_env` / `secret_env`; the route answers 503"));
-            } else if std::env::var(token_env).unwrap_or_default().is_empty() {
+            } else if !crate::config_check::offline() && std::env::var(token_env).unwrap_or_default().is_empty() {
                 report.error(format!("{label}: auth secret env var '{token_env}' is unset or empty; the route answers 503 until it is set"));
             }
         }
         Some(AuthConfig::Basic { htpasswd_file }) => {
             #[cfg(feature = "auth")]
-            if let Err(e) = crate::auth::BasicAuthLayer::from_htpasswd_file(htpasswd_file) {
-                report.error(format!("{label}: basic auth: {e}; the route answers 503"));
+            if !crate::config_check::offline() {
+                if let Err(e) = crate::auth::BasicAuthLayer::from_htpasswd_file(htpasswd_file) {
+                    report.error(format!("{label}: basic auth: {e}; the route answers 503"));
+                }
             }
             #[cfg(not(feature = "auth"))]
             let _ = htpasswd_file;

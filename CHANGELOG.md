@@ -5,6 +5,19 @@ a major version means a breaking change — see
 [Migrating to 18.0](https://rws8.tech/reference/migrating-18/) for the next one.
 Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-server/releases).
 
+## Unreleased
+
+### Added
+
+- `config_check::check_str_offline`: `rws --check`'s checks on configuration
+  text without reading this machine's files or environment, for text from
+  someone else.
+- The docs MCP server at `https://rws8.tech/mcp` (`site/mcp`): `versions`,
+  `search_docs`, `get_page`, `get_example`, `api_item`, `setting`,
+  `check_config` and `changes` for every minor release of the current major,
+  page resources and a `start_rws_app` prompt. Releases attach its binary;
+  the site build writes its data (`/mcp/<minor>.json`).
+
 ## 18.8.3 — 2026-10-29
 
 ### Fixed

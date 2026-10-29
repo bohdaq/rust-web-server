@@ -59,6 +59,12 @@ fn production_config_is_valid() {
 
 `report.render_json(path)` gives the `--format=json` output.
 
+For configuration text from someone else, `config_check::check_str_offline(text)`
+runs the same checks without looking at this machine: no file is opened or
+tested (certificates, htpasswd files, static roots) and no environment
+variable is read (auth secrets, DNS credentials). The docs MCP server's
+`check_config` tool uses it.
+
 ### How keys map to settings
 
 Every setting has an `RWS_CONFIG_*` environment variable. In the file, a key's

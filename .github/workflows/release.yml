@@ -454,6 +454,15 @@ jobs:
           printf '%s\n' "$KEY" | gpg --batch --import
           export GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')
           packaging/build-repos.sh "$RUNNER_TEMP/packages" site/dist https://rws8.tech
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Docs MCP server
+        # site/mcp, the server behind rws8.tech/mcp; built on this runner's
+        # Ubuntu (glibc), like the host it runs on.
+        run: |
+          cargo build --release --locked --manifest-path site/mcp/Cargo.toml
+          mcp="rws-docs-mcp-$TAG-x86_64-unknown-linux-gnu.tar.gz"
+          tar -C site/mcp/target/release -czf "$mcp" rws-docs-mcp
+          sha256sum "$mcp" > "$mcp.sha256"
       - name: Archive
         run: |
           tar -C site/dist --exclude=./.vite -czf "rws8-site-$TAG.tar.gz" .
@@ -461,11 +470,13 @@ jobs:
       - name: Attest
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: rws8-site-${{ env.TAG }}.tar.gz
+          subject-path: |
+            rws8-site-${{ env.TAG }}.tar.gz
+            rws-docs-mcp-${{ env.TAG }}-x86_64-unknown-linux-gnu.tar.gz
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" "rws8-site-$TAG.tar.gz" "rws8-site-$TAG.tar.gz.sha256" --clobber
+        run: gh release upload "$TAG" rws8-site-"$TAG".tar.gz* rws-docs-mcp-"$TAG"-*.tar.gz* --clobber
 
   chart:
     # The Helm chart, versioned with the release: oci://ghcr.io/<owner>/charts/rws.

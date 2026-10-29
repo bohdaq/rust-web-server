@@ -38,3 +38,14 @@ chown -R root:root "$root"
 chmod -R a+rX "$root"
 echo "$tag" > "$root/.release"
 echo "installed rws8.tech from $tag"
+
+# The docs MCP server: its binary from the same release when it has one,
+# and a restart either way, since it loads the new index only at start.
+mcp="rws-docs-mcp-$tag-x86_64-unknown-linux-gnu.tar.gz"
+if curl -fsSL -o "$work/mcp.tar.gz" "$base/$mcp" && curl -fsSL -o "$work/mcp.tar.gz.sha256" "$base/$mcp.sha256"; then
+  [ "$(cut -d' ' -f1 "$work/mcp.tar.gz.sha256")" = "$(sha256sum "$work/mcp.tar.gz" | cut -d' ' -f1)" ] || { echo "checksum mismatch for $mcp" >&2; exit 1; }
+  tar -xzf "$work/mcp.tar.gz" -C "$work" rws-docs-mcp
+  install -m 0755 "$work/rws-docs-mcp" /usr/local/bin/rws-docs-mcp
+  echo "installed rws-docs-mcp from $tag"
+fi
+systemctl try-restart rws-docs-mcp.service

@@ -35,6 +35,27 @@ backends = ["127.0.0.1:3200"]
   name  = "X-Forwarded-Host"
   value = "php.168-119-17-57.sslip.io"
 
+[[upstream]]
+name     = "docs-mcp"
+backends = ["127.0.0.1:7890"]
+
+# The docs MCP server (rws-docs-mcp.service): exactly /mcp, so the old-docs
+# redirect for /mcp/* never catches it. Rate limited per client IP here; the
+# server itself only sees 127.0.0.1.
+[[route]]
+  name = "docs-mcp"
+
+  [route.match]
+  host = "rws8.tech"
+  path = "/mcp"
+
+  [route.action]
+  type     = "proxy"
+  upstream = "docs-mcp"
+
+  [route.middleware]
+  rate_limit = { max_requests = 120, window_secs = 60 }
+
 # Docs moved under /docs/ (Starlight served them at the site root).
 
 [[route]]

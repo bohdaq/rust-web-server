@@ -1,0 +1,19 @@
+# The docs MCP server behind https://rws8.tech/mcp (spec/WEBSITE.md "Hosting
+# and the docs MCP server"): coding agents ask it about rws's docs, settings,
+# API and examples for the release their project uses. Built on the
+# rust-web-server crate from this checkout; reads the index the site build
+# writes to dist/mcp/. Its own crate (not in the rws workspace).
+[package]
+name = "rws-docs-mcp"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.99"
+publish = false
+
+[workspace]
+
+[dependencies]
+rust-web-server = { path = "../..", default-features = false, features = ["http2", "serde", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

@@ -22,6 +22,7 @@
     "@lit-labs/ssr": "4.1.0",
     "@phosphor-icons/core": "^2.1.1",
     "@shikijs/rehype": "4.5.0",
+    "github-slugger": "2.0.0",
     "hast-util-to-string": "3.0.1",
     "pagefind": "1.5.2",
     "rehype-autolink-headings": "7.1.0",

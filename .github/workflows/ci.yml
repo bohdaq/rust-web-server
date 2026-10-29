@@ -282,6 +282,20 @@ jobs:
       - run: npm audit --audit-level=moderate
       - run: npm run build
 
+  docs-mcp:
+    name: docs MCP server (site/mcp)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: site/mcp
+      - run: cargo test --locked --manifest-path site/mcp/Cargo.toml
+      - run: cargo clippy --locked --manifest-path site/mcp/Cargo.toml --all-targets
+
   docs-check:
     name: docs links, settings and llms.txt
     runs-on: ubuntu-latest

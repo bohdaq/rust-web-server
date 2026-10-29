@@ -348,6 +348,29 @@ cargo generate --git https://github.com/bohdaq/rust-web-server starters/mcp   # 
 | Cursor | `agents/cursor/rws.mdc` | `.cursor/rules/rws.mdc` |
 | GitHub Copilot | `agents/copilot-instructions.md` | `.github/copilot-instructions.md` |
 
+## Connect the docs MCP server
+
+`https://rws8.tech/mcp` is an MCP server that answers questions about rws for the release your project uses, so an agent looks things up instead of guessing from an older release or another framework. It is public and read-only (no token).
+
+```bash
+claude mcp add --transport http rws https://rws8.tech/mcp
+```
+
+Other clients take the same URL as a remote (Streamable HTTP) server, e.g. VS Code's `.vscode/mcp.json`: `{"servers": {"rws": {"type": "http", "url": "https://rws8.tech/mcp"}}}`.
+
+| Tool | Answers |
+|---|---|
+| `versions` | the releases it has docs for, and every page path |
+| `search_docs` | the best-matching sections, with page path and link |
+| `get_page` | one page as Markdown |
+| `get_example` | an `examples/*.rs` program and how to run it |
+| `api_item` | the API reference entry for a type or function, with a docs.rs link |
+| `setting` | an `RWS_CONFIG_*` setting or `rws.config.toml` key: meaning, default, type |
+| `check_config` | what `rws --check` says about a config file (offline: file paths and secrets aren't checked) |
+| `changes` | changelog entries between two versions, breaking changes first |
+
+Every tool takes an optional `version` (`"18.7"` or `"18.7.2"`; default: the newest), covering every minor release of the current major. Pages are also resources (`rws-docs://18.8/building-apps/routing`), and the `start_rws_app` prompt gives an agent the project shape for a release. Requests are rate limited per IP.
+
 ## Point it at the docs of your release
 
 Every docs page in one file, for pasting into a chat or a system prompt, or for an agent to fetch:
@@ -1310,6 +1333,12 @@ fn production_config_is_valid() {
 ```
 
 `report.render_json(path)` gives the `--format=json` output.
+
+For configuration text from someone else, `config_check::check_str_offline(text)`
+runs the same checks without looking at this machine: no file is opened or
+tested (certificates, htpasswd files, static roots) and no environment
+variable is read (auth secrets, DNS credentials). The docs MCP server's
+`check_config` tool uses it.
 
 ### How keys map to settings
 

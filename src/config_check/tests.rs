@@ -371,3 +371,51 @@ fn gateway_api_mode_is_shared_or_provisioned() {
     let report = check_str("[gateway_api]\nmode = \"dedicated\"\n");
     assert!(has(&report.errors, "expected shared or provisioned"), "{:?}", report.errors);
 }
+
+// Files and secrets that don't exist here: an error for check_str, nothing
+// for check_str_offline, which must not look at this machine.
+const MACHINE_DEPENDENT: &str = r#"tls_cert_file = "/nonexistent/cert.pem"
+tls_key_file  = "/nonexistent/key.pem"
+spa_fallback  = "nonexistent-index.html"
+
+[[upstream]]
+name        = "app"
+backends    = ["https://10.0.0.10:8443"]
+tls_ca_file = "/nonexistent/ca.pem"
+
+[[route]]
+  [route.match]
+  path = "/api/*"
+  [route.action]
+  type     = "proxy"
+  upstream = "app"
+  [route.middleware]
+  auth = { type = "bearer", token_env = "RWS_TEST_OFFLINE_TOKEN_UNSET" }
+
+[[route]]
+  [route.match]
+  path = "/files/*"
+  [route.action]
+  type = "static"
+  [route.action.static]
+  root = "/nonexistent/www"
+"#;
+
+#[test]
+fn offline_check_skips_files_and_secrets() {
+    let online = check_str(MACHINE_DEPENDENT);
+    assert!(!online.errors.is_empty(), "the online check reports the missing files and secret");
+    let report = check_str_offline(MACHINE_DEPENDENT);
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    assert!(report.warnings.iter().all(|w| !w.contains("nonexistent")), "{:?}", report.warnings);
+    assert!(!offline(), "the flag is reset afterwards");
+}
+
+#[test]
+fn offline_check_still_reports_mistakes_in_the_text() {
+    let report = check_str_offline(
+        "[[upstream]]\nname = \"app\"\nbackends = [\"10.0.0.1:80\"]\nstrategy = \"fastest\"\n\n[[route]]\n  [route.action]\n  type = \"proxy\"\n  upsteam = \"app\"\n",
+    );
+    assert!(has(&report.errors, "unknown key"), "{:?}", report.errors);
+    assert!(has(&report.errors, "unknown strategy"), "{:?}", report.errors);
+}

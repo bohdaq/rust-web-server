@@ -1,0 +1,26 @@
+[Unit]
+Description=rws-docs-mcp: the docs MCP server behind https://rws8.tech/mcp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+Environment=RWS_DOCS_MCP_INDEX=/var/www/rws8/mcp
+Environment=RWS_CONFIG_IP=127.0.0.1
+Environment=RWS_CONFIG_PORT=7890
+Environment=RWS_CONFIG_LOG_FORMAT=off
+WorkingDirectory=/var/www/rws8
+ExecStart=/usr/local/bin/rws-docs-mcp
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadOnlyPaths=/var/www/rws8
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

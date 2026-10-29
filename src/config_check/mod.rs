@@ -149,6 +149,34 @@ pub fn check_file(path: &str) -> ConfigReport {
     }
 }
 
+thread_local! {
+    static OFFLINE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// `true` inside [`check_str_offline`]: checks that would read this
+/// machine's files or environment are skipped.
+pub(crate) fn offline() -> bool {
+    OFFLINE.with(|o| o.get())
+}
+
+/// [`check_str`] without looking at this machine: no file is opened or
+/// tested for existence (certificates, keys, CA bundles, htpasswd files,
+/// static roots, programs) and no environment variable is read (auth
+/// secrets, DNS API credentials). For configuration text from someone else,
+/// e.g. the docs MCP server's `check_config` tool, where those answers would
+/// describe the server, not the caller's deployment.
+pub fn check_str_offline(content: &str) -> ConfigReport {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            OFFLINE.with(|o| o.set(false));
+        }
+    }
+    OFFLINE.with(|o| o.set(true));
+    let _reset = Reset;
+    check_str(content)
+}
+
 /// Check configuration text. Relative file paths in it (certificates,
 /// htpasswd files, static roots) are resolved against the working directory,
 /// as the server resolves them.
@@ -249,12 +277,12 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
                 }
             }
             "RWS_CONFIG_TLS_CLIENT_CA_FILE" | Config::RWS_CONFIG_ACME_CA_FILE => {
-                if !value.is_empty() && !Path::new(value).is_file() {
+                if !offline() && !value.is_empty() && !Path::new(value).is_file() {
                     report.error(format!("{key} = {value:?}: file not found"));
                 }
             }
             "RWS_CONFIG_TEMPLATE_DIR" => {
-                if !value.is_empty() && !Path::new(value).is_dir() {
+                if !offline() && !value.is_empty() && !Path::new(value).is_dir() {
                     report.warn(format!("{key} = {value:?}: directory not found"));
                 }
             }
@@ -276,7 +304,7 @@ fn check_settings(settings: &[(String, String)], report: &mut ConfigReport) {
     // spa_fallback names a file relative to the working directory; if it is
     // missing, every client-side route except / 404s.
     if let Some(fallback) = get(Config::RWS_CONFIG_SPA_FALLBACK).filter(|v| !v.is_empty()) {
-        if !std::path::Path::new(fallback).is_file() {
+        if !offline() && !std::path::Path::new(fallback).is_file() {
             report.warn(format!(
                 "spa_fallback = {fallback:?}: the file does not exist in the working directory, so every client-side route would 404"
             ));
@@ -419,19 +447,19 @@ fn check_acme_dns<'a>(get: &dyn Fn(&str) -> Option<&'a str>, report: &mut Config
         }
         Some("exec") => match set(Config::RWS_CONFIG_ACME_DNS_EXEC) {
             None => report.error("[acme] dns_provider = \"exec\" needs dns_exec (the program)"),
-            Some(program) if !Path::new(program).is_file() => report.error(format!("[acme] dns_exec = {program:?}: file not found")),
+            Some(program) if !offline() && !Path::new(program).is_file() => report.error(format!("[acme] dns_exec = {program:?}: file not found")),
             Some(_) => {}
         },
         Some("cloudflare") => {
             // Usually kept out of the file, in the environment.
-            let in_env = std::env::var(Config::RWS_CONFIG_ACME_DNS_API_TOKEN).is_ok_and(|v| !v.trim().is_empty());
+            let in_env = offline() || std::env::var(Config::RWS_CONFIG_ACME_DNS_API_TOKEN).is_ok_and(|v| !v.trim().is_empty());
             if set(Config::RWS_CONFIG_ACME_DNS_API_TOKEN).is_none() && !in_env {
                 report.error("[acme] dns_provider = \"cloudflare\" needs dns_api_token (an API token with DNS edit permission; or RWS_CONFIG_ACME_DNS_API_TOKEN)");
             }
             check_api_url(set(Config::RWS_CONFIG_ACME_DNS_API_URL), report);
         }
         Some("route53") => {
-            let aws = |name: &str| std::env::var(name).is_ok_and(|v| !v.trim().is_empty());
+            let aws = |name: &str| offline() || std::env::var(name).is_ok_and(|v| !v.trim().is_empty());
             if !(aws("AWS_ACCESS_KEY_ID") && aws("AWS_SECRET_ACCESS_KEY")) {
                 report.warn("[acme] dns_provider = \"route53\" reads AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from the environment, and they aren't set here");
             }
@@ -453,6 +481,9 @@ fn setting_key(env_name: &str) -> String {
 }
 
 fn check_tls_pair(label: &str, cert: &str, key: &str, report: &mut ConfigReport) {
+    if offline() {
+        return;
+    }
     let mut missing = false;
     for (what, path) in [("certificate", cert), ("key", key)] {
         if !Path::new(path).is_file() {
