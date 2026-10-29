@@ -1,0 +1,23 @@
+name: Docs MCP smoke test
+
+# Calls every tool of the hosted docs MCP server from outside, the way an
+# agent would (ci/e2e/docs_mcp_smoke.sh). Manual, and daily so a broken
+# deploy shows up.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: MCP endpoint
+        default: https://rws8.tech/mcp
+  schedule:
+    - cron: "17 6 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ci/e2e/docs_mcp_smoke.sh "${{ inputs.url || 'https://rws8.tech/mcp' }}"
