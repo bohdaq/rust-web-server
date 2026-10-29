@@ -181,7 +181,8 @@ review.
 | 2. Docs renderer | **done 2026-10-29**: `docs/sidebar.json` is the one sidebar (Starlight imports it, `ci/gen_llms.py` reads it — `llms.txt` byte-identical, Starlight still builds 107 pages); `site/src/docs/` renders all 106 sidebar pages + `/docs/` index under `/docs/…` (128 asides → `lit-material-alert`, 873 fences → `lit-material-code-block` with Shiki dual-theme highlighting at build time), sidebar/TOC/prev-next/edit link, Pagefind search (106 pages, `/` shortcut). Checks: page set equals the sidebar, 0 broken internal links or anchors, all 108 pages free of horizontal scroll and console errors at 390px, `ci/check_docs.py` green; full build 12 s |
 | 3. Versions | **done 2026-10-29**: `site/scripts/versions.js` builds the working tree as latest (`/docs/`) and the newest patch tag of every older minor of the current major (18.0–18.7, from `git archive` into the gitignored `site/.versions/`, 8 MB) under `/docs/<minor>/`; tags without `docs/sidebar.json` have their sidebar read from that tag's `astro.config.mjs`. Version switcher keeps the reader on the same page (else that version's index), older pages carry a "you are reading 18.x" notice, `noindex` and a canonical to the latest copy when it exists; search is filtered to the version being read (Pagefind filter `version`). Checks: 937 pages, 0 broken links or anchors across all versions, all 937 clean at 390px; build 47 s, 900 MB peak |
 | 4. Landing | **done 2026-10-29**: copy approved in [WEBSITE_LANDING.md](WEBSITE_LANDING.md) (headline C, named comparison in the strip), built in `site/src/pages/home.js` + `src/landing.css`: split hero with install panel (tab picked from the visitor's OS) and a terminal replaying real `rws` 18.8.2 output, three config tabs (the README's configs), tagline reveal word by word, six tiles, three steps, performance strip, proof list, library sample, 10 FAQs (`FAQPage` + `SoftwareApplication` JSON-LD), final CTA. Also `/privacy/`, branded `/404.html`, `og.png` (1200 × 630), and `llms*.txt` + `/agents/` copied into the build. Checks: light, dark, 390px; no-JS shows everything; 0 broken links (except `/why/`, `/benchmarks/`, `/playground/`, phase 5); all 939 pages clean at 390px |
-| 5–8 | not started |
+| 5. Other pages | **done 2026-10-29**: `/benchmarks/` (charts parsed from the tables in `reference/benchmarks.md` and the Gateway API page, so they can't drift: emphasis bars, rws accent and the rest grey, one direct label, hover/focus tooltips, full tables and method below; throughput, CPU and memory, where nginx wins, for web servers; throughput and CPU for six Gateway API implementations), `/playground/` (form → `rws.config.toml` + command, inline field errors; `site/scripts/check-playground.js` runs `rws --check --format=json` on all 768 combinations it can build: 0 rejected with 18.8.2), `/why/` (reasons, when rws fits, when to pick nginx, Caddy, Traefik or a mesh), `/changelog/` (CHANGELOG.md with a release list). Checks: 944 pages, 0 broken links or anchors sitewide, all pages clean at 390px |
+| 6–8 | not started |
 
 Phase 1 findings:
 - Brand orange `#D2551E` is 4.15:1 under white text, so interactive orange is
@@ -229,6 +230,14 @@ Phase 4 findings:
   tab highlighted; click the tab instead (upstream fix candidate).
 - The Gateway API proof links to the open upstream PR #5430; switch it to the
   merged report once accepted.
+
+Phase 5 findings:
+- CI (phase 7) should run `node site/scripts/check-playground.js target/debug/rws`
+  so a renamed or removed config key fails the build instead of the page.
+- The Gateway API benchmark table is labelled rws 18.8.1 in the docs; the
+  `/benchmarks/` names that version; rerun it on the next release.
+- CHANGELOG.md links to old root doc URLs (`rws8.tech/reference/…`); the
+  phase 6 redirects cover them.
 
 New work found:
 - `install.sh` for `curl -fsSL https://rws8.tech/install.sh | sh` does not exist

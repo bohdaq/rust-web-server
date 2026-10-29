@@ -16,6 +16,9 @@ import { initInstall } from "./install.js";
 import { initTerminal } from "./terminal.js";
 import { initReveal } from "./reveal.js";
 import "../landing.css";
+import "../charts.css";
+import { initChartTooltip } from "./chart-tooltip.js";
+import { initPlayground } from "./playground.js";
 
 initThemeToggle();
 initTabPanels();
@@ -24,3 +27,5 @@ initSearch();
 initInstall();
 initTerminal();
 initReveal();
+initChartTooltip();
+initPlayground();

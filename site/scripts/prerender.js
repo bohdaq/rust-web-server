@@ -12,6 +12,10 @@ import { documentHtml } from "../src/shell.js";
 import * as themePage from "../src/pages/theme.js";
 import * as homePage from "../src/pages/home.js";
 import * as privacyPage from "../src/pages/privacy.js";
+import * as benchmarksPage from "../src/pages/benchmarks.js";
+import * as playgroundPage from "../src/pages/playground.js";
+import * as whyPage from "../src/pages/why.js";
+import * as changelogPage from "../src/pages/changelog.js";
 import * as notFoundPage from "../src/pages/not-found.js";
 import { copyFileSync, cpSync } from "node:fs";
 import { buildDocs } from "../src/docs/build.js";
@@ -38,7 +42,7 @@ for (const v of versions) {
   console.log("docs", v.key, v.latest ? "(latest, working tree)" : `(tag ${v.tag})`);
 }
 homePage.meta.jsonLd = homePage.structuredData(versions[0].tag);
-const pages = [homePage, privacyPage, notFoundPage, themePage, ...docs];
+const pages = [homePage, whyPage, benchmarksPage, playgroundPage, changelogPage, privacyPage, notFoundPage, themePage, ...docs];
 for (const page of pages) {
   const body = await collectResult(render(await page.render()));
   const out = page.meta.path.endsWith("/") ? `${page.meta.path}index.html` : page.meta.path;

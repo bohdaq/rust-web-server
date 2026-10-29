@@ -50,6 +50,7 @@ export function footer() {
           <li><a href="https://github.com/bohdaq/rust-web-server">GitHub</a></li>
           <li><a href="https://crates.io/crates/rust-web-server">crates.io</a></li>
           <li><a href="https://hub.docker.com/r/bohdaq/rws">Docker Hub</a></li>
+          <li><a href="/changelog/">Changelog</a></li>
           <li><a href="/llms.txt">llms.txt</a></li>
           <li><a href="/privacy/">Privacy</a></li>
           <li><a href="https://github.com/bohdaq/rust-web-server/blob/main/LICENSE">MIT license</a></li>
