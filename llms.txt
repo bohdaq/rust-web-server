@@ -107,7 +107,7 @@ Use it as:
 - [UDP Proxy](https://rws8.tech/proxy/udp-proxy/): Forward UDP datagrams to backend servers with round-robin load balancing for DNS, syslog, and other request-reply UDP protocols.
 - [WebSocket Proxy](https://rws8.tech/proxy/websocket-proxy/): Proxy WebSocket upgrade requests to backend servers and relay all frames bidirectionally with round-robin load balancing.
 - [gRPC Proxy](https://rws8.tech/proxy/grpc-proxy/): Route gRPC traffic to HTTP/2 backends — every call type streaming, status trailers kept, pooled connections, private CAs and client certificates.
-- [LLM Proxy](https://rws8.tech/proxy/llm-proxy/): One endpoint in front of OpenAI-compatible and Anthropic providers: virtual keys, token usage from JSON and streams, budgets shared through Redis, provider fallback and rws_llm_* metrics.
+- [LLM Proxy](https://rws8.tech/proxy/llm-proxy/): One endpoint in front of OpenAI-compatible and Anthropic providers, with virtual keys, token usage from JSON and streams, budgets shared through Redis, provider fallback and rws_llm_* metrics.
 
 ## Database / ORM
 

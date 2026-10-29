@@ -1,6 +1,6 @@
 ---
 title: LLM Proxy
-description: One endpoint in front of OpenAI-compatible and Anthropic providers: virtual keys, token usage from JSON and streams, budgets shared through Redis, provider fallback and rws_llm_* metrics.
+description: One endpoint in front of OpenAI-compatible and Anthropic providers, with virtual keys, token usage from JSON and streams, budgets shared through Redis, provider fallback and rws_llm_* metrics.
 ---
 
 The LLM proxy (since 18.9.0) puts one endpoint in front of LLM providers. Applications keep their OpenAI or Anthropic SDK and point its base URL at rws; rws swaps the caller's virtual key for the provider's key, counts the tokens each response reports, enforces token budgets, and fails over to the next provider when one is down or rate limited.

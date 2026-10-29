@@ -1,0 +1,6 @@
+data: {"choices":[{"delta":{"content":"Hi"}}],"usage":null}
+
+data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":2}}
+
+data: [DONE]
+

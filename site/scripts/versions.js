@@ -51,7 +51,17 @@ export function docsVersions({ repo, cacheDir }) {
       const dir = join(cacheDir, tag);
       if (!existsSync(join(dir, "docs"))) {
         mkdirSync(dir, { recursive: true });
-        const archive = execFileSync("git", ["-C", repo, "archive", tag, "docs/src/content/docs", "docs/astro.config.mjs"]);
+        // The sidebar moved from astro.config.mjs to sidebar.json in 18.8;
+        // `git archive` fails on a path the tag doesn't have.
+        const paths = ["docs/src/content/docs", "docs/sidebar.json", "docs/astro.config.mjs"].filter((path) => {
+          try {
+            execFileSync("git", ["-C", repo, "cat-file", "-e", `${tag}:${path}`], { stdio: "ignore" });
+            return true;
+          } catch {
+            return false;
+          }
+        });
+        const archive = execFileSync("git", ["-C", repo, "archive", tag, ...paths]);
         execFileSync("tar", ["-x", "-C", dir], { input: archive });
       }
       const json = join(dir, "docs", "sidebar.json");
