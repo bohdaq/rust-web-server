@@ -3,10 +3,11 @@
 # postfix and dovecot read from /var/lib/rws (rws-mail-cert.path reloads them).
 port               = 443
 http_redirect_port = 80
+watch              = true
 log_format         = "json"
 
 [acme]
-domains = ["rws8.168-119-17-57.sslip.io", "php.168-119-17-57.sslip.io", "mail.rws8.tech"]
+domains = ["rws8.tech", "www.rws8.tech", "rws8.168-119-17-57.sslip.io", "php.168-119-17-57.sslip.io", "mail.rws8.tech"]
 
 [[upstream]]
 name     = "php-demo"

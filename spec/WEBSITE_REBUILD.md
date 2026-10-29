@@ -183,7 +183,8 @@ review.
 | 4. Landing | **done 2026-10-29**: copy approved in [WEBSITE_LANDING.md](WEBSITE_LANDING.md) (headline C, named comparison in the strip), built in `site/src/pages/home.js` + `src/landing.css`: split hero with install panel (tab picked from the visitor's OS) and a terminal replaying real `rws` 18.8.2 output, three config tabs (the README's configs), tagline reveal word by word, six tiles, three steps, performance strip, proof list, library sample, 10 FAQs (`FAQPage` + `SoftwareApplication` JSON-LD), final CTA. Also `/privacy/`, branded `/404.html`, `og.png` (1200 × 630), and `llms*.txt` + `/agents/` copied into the build. Checks: light, dark, 390px; no-JS shows everything; 0 broken links (except `/why/`, `/benchmarks/`, `/playground/`, phase 5); all 939 pages clean at 390px |
 | 5. Other pages | **done 2026-10-29**: `/benchmarks/` (charts parsed from the tables in `reference/benchmarks.md` and the Gateway API page, so they can't drift: emphasis bars, rws accent and the rest grey, one direct label, hover/focus tooltips, full tables and method below; throughput, CPU and memory, where nginx wins, for web servers; throughput and CPU for six Gateway API implementations), `/playground/` (form → `rws.config.toml` + command, inline field errors; `site/scripts/check-playground.js` runs `rws --check --format=json` on all 768 combinations it can build: 0 rejected with 18.8.2), `/why/` (reasons, when rws fits, when to pick nginx, Caddy, Traefik or a mesh), `/changelog/` (CHANGELOG.md with a release list). Checks: 944 pages, 0 broken links or anchors sitewide, all pages clean at 390px |
 | 6. Hosting | **live on the VM 2026-10-29, staged**: rws (18.8.2 + the two fixes below, built from main) owns 80/443 on `bohdan-prod-donotdelete` as systemd `rws` (user `rws`, `/etc/rws/rws.config.toml`, site in `/var/www/rws8`, state in `/var/lib/rws`). One Let's Encrypt certificate (until 2027-01-27) for `rws8.168-119-17-57.sslip.io` (the site's test name), `php.168-119-17-57.sslip.io` (PHP demo, proxied to :3200) and `mail.rws8.tech`; postfix and dovecot read it, `rws-mail-cert.path` reloads them on renewal; certbot timer and Caddy disabled (Caddyfile kept, `/usr/local/sbin/rws-rollback` restores Caddy). Old root doc URLs 301 to `/docs/`; index-less folders answer 404. `/apt`, `/rpm`, `/18.7/` and `/18.8/` copied byte-exact from the Pages branch. Not yet: `rws8.tech` itself (added to `[acme] domains` after the user moves DNS; needs a restart), `watch = true` (off on the VM until a build with the fix below is deployed), the docs MCP server |
-| 7–8 | not started |
+| DNS cutover | **done 2026-10-29**: the user pointed `rws8.tech` (A) and `www` (CNAME → rws8.tech) at 168.119.17.57; rws now runs main @ 201c8acb with `watch = true`, one certificate for rws8.tech, www, both sslip names and mail.rws8.tech. Verified: site, www, old-URL 301s, `/apt`, `/llms.txt`, HTTP→HTTPS, PHP demo, mail TLS; reachable from outside. GitHub Pages is now unused for rws8.tech |
+| 7. CI and release | not started: release.yml still publishes to the Pages branch; it must deploy to the VM instead |
 
 Phase 1 findings:
 - Brand orange `#D2551E` is 4.15:1 under white text, so interactive orange is
@@ -282,6 +283,10 @@ Phase 6 findings (rws bugs, fixed on main, need a release):
   only `X-Forwarded-For` (Caddy sent the original Host and
   `X-Forwarded-Proto`); the demo didn't need them, the config sets both.
 - No way to turn off directory listings; worked around with respond routes.
+- **Adding a name to `[acme] domains` doesn't get a new certificate**: rws
+  calls the existing one "current" without checking it covers the configured
+  names. At cutover the old certificate had to be moved aside to force an
+  order. Fix: treat a certificate whose SANs miss a configured domain as due.
 - The old-docs redirect `path = "/mcp/*"` is the prefix `/mcp/`, so it does
   not catch `/mcp` itself, where the docs MCP server will mount; keep the MCP
   endpoint at exactly `/mcp`.
