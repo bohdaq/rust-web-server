@@ -136,7 +136,7 @@ pub fn build_jws(
     ))
 }
 
-pub use crate::core::x509::{base64_decode_std, base64url, cert_info_from_pem, days_since_epoch, read_cert_info, CertInfo};
+pub use crate::core::x509::{base64_decode_std, base64url, cert_info_from_pem, days_since_epoch, read_cert_dns_names, read_cert_info, CertInfo};
 #[cfg(any(test, fuzzing))]
 pub use crate::core::x509::cert_info_from_der;
 

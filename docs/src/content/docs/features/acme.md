@@ -72,7 +72,11 @@ over IPv6, so the challenge and redirect listeners accept both IPv4 and IPv6.
    hour. After renewing it reloads the TLS certificate in place (on Unix, via
    the same `SIGHUP` reload used for config). `renew_before_days`, if set,
    replaces the two-thirds point (a CA window that opens earlier still wins).
-5. **Profiles.** `profile` orders a certificate profile the CA offers —
+5. **New names.** A name added to `domains` that the stored certificate
+   doesn't cover gets a new order at the next start or check, for all the
+   names (since 18.8.3); before that the old certificate was used until it
+   was due.
+6. **Profiles.** `profile` orders a certificate profile the CA offers —
    Let's Encrypt has `classic`, `tlsserver` and `shortlived` (6-day
    certificates). A name the CA doesn't list stops provisioning with the list
    it offers. Unset, the CA picks its default.

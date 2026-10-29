@@ -541,6 +541,16 @@ impl AcmeManager {
             self.provision().await?;
             return Ok(RenewalCheck::Renewed);
         };
+        // A name added to `domains` since the certificate was issued: order
+        // one that covers them all. Not as a renewal (`replaces`): the CA
+        // only accepts that for the same identifiers.
+        let missing = missing_names(&self.config.domains, crypto::read_cert_dns_names(&self.config.cert_path).as_deref());
+        if !missing.is_empty() {
+            println!("[ACME] Certificate at '{}' doesn't cover {:?}; ordering one for {:?}.",
+                self.config.cert_path, missing, self.config.domains);
+            self.provision_coordinated(None).await?;
+            return Ok(RenewalCheck::Renewed);
+        }
         let (window, retry_after) = match &info.cert_id {
             Some(cert_id) => match self.renewal_info(cert_id).await {
                 Ok(found) => found,
@@ -1326,6 +1336,18 @@ fn unix_now() -> i64 {
 /// earlier: a point in it, spread per certificate so a fleet doesn't renew
 /// at the same second, wins when it's sooner. A window that has passed
 /// means now.
+/// The configured domains a certificate with the DNS names `have` doesn't
+/// cover (DNS names compare case-insensitively; a wildcard only covers the
+/// same wildcard, as ordered). Unreadable names (`None`) cover nothing.
+pub(crate) fn missing_names(domains: &[String], have: Option<&[String]>) -> Vec<String> {
+    let have = have.unwrap_or(&[]);
+    domains
+        .iter()
+        .filter(|d| !have.iter().any(|h| h.eq_ignore_ascii_case(d.trim_end_matches('.'))))
+        .cloned()
+        .collect()
+}
+
 pub(crate) fn renewal_time(info: &crypto::CertInfo, window: Option<(i64, i64)>, renew_before_days: Option<i64>) -> i64 {
     let lifetime = (info.not_after - info.not_before).max(0);
     let fallback = match renew_before_days {

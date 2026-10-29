@@ -42,6 +42,14 @@ pub fn cert_info_from_pem(pem: &[u8]) -> Option<CertInfo> {
     cert_info_from_der(&pem_to_first_cert_der(std::str::from_utf8(pem).ok()?)?)
 }
 
+/// The DNS names in the subjectAltName of the first certificate in the PEM
+/// file at `cert_path`; `None` when it can't be read or parsed.
+pub fn read_cert_dns_names(cert_path: &str) -> Option<Vec<String>> {
+    let pem = std::fs::read_to_string(cert_path).ok()?;
+    let names = subject_alt_names(&pem_to_first_cert_der(&pem)?)?;
+    Some(names.into_iter().filter_map(|n| match n { SubjectAltName::Dns(d) => Some(d), SubjectAltName::Uri(_) => None }).collect())
+}
+
 pub fn read_cert_info(cert_path: &str) -> Option<CertInfo> {
     let pem = std::fs::read_to_string(cert_path).ok()?;
     cert_info_from_der(&pem_to_first_cert_der(&pem)?)

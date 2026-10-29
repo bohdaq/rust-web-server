@@ -18,6 +18,10 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   certificate was ordered, saw the certificate and key being written and sent
   `SIGHUP` before the handler was installed, which ended the process. It now
   starts once ACME has finished, before the servers run.
+- Adding a name to `[acme] domains` now gets a certificate for it: the stored
+  certificate counted as current while it was valid, even when it didn't
+  cover every configured name, so the new name kept the old certificate
+  until renewal. A certificate missing a configured name is ordered again.
 
 ### Documentation
 

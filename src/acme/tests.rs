@@ -659,3 +659,30 @@ fn legacy_files_move_out_of_the_web_root() {
     assert_eq!(b"old key", &std::fs::read(&current).unwrap()[..]);
     assert_eq!(0o600, std::fs::metadata(&current).unwrap().permissions().mode() & 0o777);
 }
+
+#[test]
+fn missing_names_lists_domains_the_certificate_lacks() {
+    let domains: Vec<String> = ["rws8.tech", "www.rws8.tech", "*.example.com"].iter().map(|s| s.to_string()).collect();
+    let have: Vec<String> = ["RWS8.tech", "*.example.com"].iter().map(|s| s.to_string()).collect();
+    assert_eq!(super::missing_names(&domains, Some(&have)), vec!["www.rws8.tech".to_string()]);
+    let all: Vec<String> = ["rws8.tech", "www.rws8.tech", "*.example.com"].iter().map(|s| s.to_string()).collect();
+    assert!(super::missing_names(&domains, Some(&all)).is_empty());
+    // A wildcard doesn't stand in for a name ordered on its own, nor the reverse.
+    let wild = vec!["*.rws8.tech".to_string()];
+    assert_eq!(super::missing_names(&["www.rws8.tech".to_string()], Some(&wild)), vec!["www.rws8.tech".to_string()]);
+    assert_eq!(super::missing_names(&domains, None), domains);
+}
+
+#[test]
+fn read_cert_dns_names_reads_the_san_list() {
+    let mut params = rcgen::CertificateParams::new(vec!["rws8.tech".to_string(), "mail.rws8.tech".to_string()]).unwrap();
+    params.distinguished_name = rcgen::DistinguishedName::new();
+    let key = rcgen::KeyPair::generate().unwrap();
+    let cert = params.self_signed(&key).unwrap();
+    let file = crate::test_env::TempPath::new("acme_san_names.pem");
+    std::fs::write(file.as_str(), cert.pem()).unwrap();
+    assert_eq!(crypto::read_cert_dns_names(file.as_str()), Some(vec!["rws8.tech".to_string(), "mail.rws8.tech".to_string()]));
+    let missing = crate::test_env::TempPath::new("acme_san_missing.pem");
+    assert_eq!(crypto::read_cert_dns_names(missing.as_str()), None);
+}
+
