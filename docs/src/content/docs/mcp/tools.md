@@ -469,6 +469,15 @@ let server = McpServer::new("ops", "1.0")
 
 The [MCP gateway](/mcp/gateway/)'s per-tool rate limits are built on it.
 
+`after_tool_call` is told about every finished call: the tool, its outcome (`ToolCallOutcome::Ok`, `ToolError`, `Refused` by a `before_tool_call` hook, `Denied` by `tool_filter` or an unknown name) and its duration — for audit logs and metrics. It runs on the request's thread, so keep it quick.
+
+```rust
+use rust_web_server::mcp::McpServer;
+
+let server = McpServer::new("ops", "1.0")
+    .after_tool_call(|ctx, call| eprintln!("{:?} {} {:?} in {:?}", ctx.auth_claims, call.tool, call.outcome, call.duration));
+```
+
 ## Structured output, titles and icons
 
 A tool can declare the shape of its result and return it as structured data

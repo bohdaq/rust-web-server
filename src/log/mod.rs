@@ -302,6 +302,12 @@ impl Log {
         [url, thread_count].join("")
     }
 }
+/// The current second as ISO 8601 (`2026-10-29T12:00:00Z`), cached per
+/// thread like the access log's.
+pub(crate) fn iso8601_now(use_it: impl FnOnce(&str)) {
+    with_timestamps(|iso, _| use_it(iso));
+}
+
 /// The current second's ISO 8601 and Combined Log Format timestamps,
 /// formatted at most once per second per thread.
 fn with_timestamps(use_them: impl FnOnce(&str, &str)) {

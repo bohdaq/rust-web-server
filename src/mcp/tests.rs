@@ -3072,3 +3072,33 @@ fn before_tool_call_can_refuse_a_call_with_a_tool_error() {
     assert!(refused.contains("deploys are frozen") && refused.contains(r#""isError":true"#), "{refused}");
     assert!(call("status").contains("green"));
 }
+
+#[test]
+fn after_tool_call_reports_every_outcome() {
+    use super::ToolCallOutcome;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    let seen: Arc<Mutex<Vec<(String, ToolCallOutcome)>>> = Arc::new(Mutex::new(Vec::new()));
+    let log = Arc::clone(&seen);
+    let server = McpServer::new("t", "1")
+        .tool("ok", "", r#"{"type":"object"}"#, |_| Ok(McpContent::text("fine")))
+        .tool("fails", "", r#"{"type":"object"}"#, |_| Err("broken".into()))
+        .tool("frozen", "", r#"{"type":"object"}"#, |_| Ok(McpContent::text("never")))
+        .tool("hidden", "", r#"{"type":"object"}"#, |_| Ok(McpContent::text("never")))
+        .tool_filter(|_, tool| tool != "hidden")
+        .before_tool_call(|_, tool| if tool == "frozen" { Err("no".into()) } else { Ok(()) })
+        .after_tool_call(move |_, call| log.lock().unwrap().push((call.tool.to_string(), call.outcome)));
+    for tool in ["ok", "fails", "frozen", "hidden"] {
+        server.handle_request(&format!(r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"{tool}","arguments":{{}}}}}}"#));
+    }
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(
+        seen,
+        vec![
+            ("ok".to_string(), ToolCallOutcome::Ok),
+            ("fails".to_string(), ToolCallOutcome::ToolError),
+            ("frozen".to_string(), ToolCallOutcome::Refused),
+            ("hidden".to_string(), ToolCallOutcome::Denied),
+        ]
+    );
+}

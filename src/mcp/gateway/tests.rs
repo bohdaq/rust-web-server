@@ -585,3 +585,13 @@ fn calls_over_a_tool_limit_are_refused_per_caller() {
     let upstream_calls = fake.requests().iter().filter(|r| r.method() == "tools/call").count();
     assert_eq!(3, upstream_calls, "the refused call never reached the upstream");
 }
+
+#[test]
+fn audit_lines_name_the_caller_tool_upstream_and_outcome() {
+    let line = audit_line("alice", "github__search", "github", "ok", std::time::Duration::from_micros(1500));
+    assert!(line.starts_with(r#"{"time":""#), "{line}");
+    assert!(line.contains(r#""event":"mcp_tool_call","sub":"alice","tool":"github__search","upstream":"github","outcome":"ok","duration_ms":1.500}"#), "{line}");
+    assert!(json_rpc::object_members(&line).is_some(), "one JSON object: {line}");
+    let escaped = audit_line("a\"b", "t", "", "denied", std::time::Duration::ZERO);
+    assert!(escaped.contains(r#""sub":"a\"b""#), "{escaped}");
+}

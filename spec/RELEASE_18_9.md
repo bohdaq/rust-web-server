@@ -43,7 +43,8 @@ and `http1`-only test runs before pushing.
 | 2a | **done**: fallback to stateless 2026-07-28 when `initialize` is refused (`server/discover`, `_meta` after the params' own members, `Mcp-Method`/`Mcp-Name`), 2026-only result fields stripped, `input_required` refused; test with a 2026-only fake upstream |
 | 2b | **done**: `refresh_every` (default 5 min) re-lists, diffs by fingerprint, registers/removes on the live server, notifies `tools/list_changed`; unreachable upstreams keep their tools. Not done: following upstream `listChanged` pushes (the interval covers it) |
 | 2c | **done**: `McpServer::before_tool_call` (refusal = tool error), `McpGateway::limit(tools, max, window)` per `sub` + tool on `RateLimiter` |
-| 2d | in progress |
-| 2e–2g | — |
+| 2d | **done**: `McpServer::after_tool_call` + `ToolCallOutcome` (ok/tool_error/refused/denied) + duration; `McpGateway::audit_log(true)` → JSON line per call via the access-log sink |
+| 2e | in progress |
+| 2f–2g | — |
 | 3 | — |
 | 4 | — |

@@ -80,6 +80,7 @@ pub struct McpGateway {
     rules: Vec<(String, Vec<String>)>,
     refresh: Option<std::time::Duration>,
     limits: Vec<ToolLimit>,
+    audit: bool,
 }
 
 /// [`McpGateway::limit`]: calls of the tools matching `pattern`, per caller.
@@ -96,7 +97,7 @@ pub const DEFAULT_REFRESH: std::time::Duration = std::time::Duration::from_secs(
 impl McpGateway {
     /// A gateway announcing itself as `name`/`version`.
     pub fn new(name: impl Into<String>, version: impl Into<String>) -> Self {
-        McpGateway { name: name.into(), version: version.into(), upstreams: Vec::new(), rules: Vec::new(), refresh: Some(DEFAULT_REFRESH), limits: Vec::new() }
+        McpGateway { name: name.into(), version: version.into(), upstreams: Vec::new(), rules: Vec::new(), refresh: Some(DEFAULT_REFRESH), limits: Vec::new(), audit: false }
     }
 
     /// Allow each caller (each `sub`) at most `max_calls` calls per
@@ -106,6 +107,15 @@ impl McpGateway {
     /// must pass every one that matches. Counted in this process.
     pub fn limit(mut self, tools: impl Into<String>, max_calls: u32, window_secs: u64) -> Self {
         self.limits.push(ToolLimit { pattern: tools.into(), max_calls, window_secs, limiter: crate::rate_limit::RateLimiter::new(max_calls, window_secs) });
+        self
+    }
+
+    /// Write one JSON line per `tools/call` to the access log (stdout, or
+    /// `RWS_CONFIG_ACCESS_LOG`): time, caller (`sub`), tool, upstream,
+    /// outcome (`ok`, `tool_error`, `refused` by a limit, `denied` by the
+    /// ACL) and duration. Arguments and results are not logged.
+    pub fn audit_log(mut self, on: bool) -> Self {
+        self.audit = on;
         self
     }
 
@@ -156,6 +166,20 @@ impl McpGateway {
             let identity = ctx.auth_claims.as_deref().and_then(|claims| top_level_str(claims, "sub"));
             identity.is_some_and(|identity| allowed(&rules, &identity, tool))
         });
+        if self.audit {
+            server = server.after_tool_call(|ctx, call| {
+                let sub = ctx.auth_claims.as_deref().and_then(|claims| top_level_str(claims, "sub")).unwrap_or_default();
+                let upstream = call.tool.split_once(SEPARATOR).map_or("", |(prefix, _)| prefix);
+                let outcome = match call.outcome {
+                    crate::mcp::ToolCallOutcome::Ok => "ok",
+                    crate::mcp::ToolCallOutcome::ToolError => "tool_error",
+                    crate::mcp::ToolCallOutcome::Refused => "refused",
+                    crate::mcp::ToolCallOutcome::Denied => "denied",
+                };
+                let line = audit_line(&sub, call.tool, upstream, outcome, call.duration);
+                crate::log::access_sink::write_line(|out| out.extend_from_slice(line.as_bytes()));
+            });
+        }
         if !self.limits.is_empty() {
             let limits = self.limits;
             server = server.before_tool_call(move |ctx, tool| {
@@ -284,6 +308,19 @@ fn allowed(rules: &[(String, Vec<String>)], identity: &str, tool: &str) -> bool 
         .filter(|(who, _)| who == identity || who == "*")
         .flat_map(|(_, patterns)| patterns)
         .any(|pattern| matches_pattern(pattern, tool))
+}
+
+/// One audit log line (without the newline).
+fn audit_line(sub: &str, tool: &str, upstream: &str, outcome: &str, duration: std::time::Duration) -> String {
+    let mut time = String::new();
+    crate::log::iso8601_now(|iso| time.push_str(iso));
+    format!(
+        r#"{{"time":"{time}","event":"mcp_tool_call","sub":"{}","tool":"{}","upstream":"{}","outcome":"{outcome}","duration_ms":{:.3}}}"#,
+        json_escape(sub),
+        json_escape(tool),
+        json_escape(upstream),
+        duration.as_secs_f64() * 1000.0
+    )
 }
 
 /// A full tool name, a prefix ending in `*`, or `*`.

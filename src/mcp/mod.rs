@@ -882,6 +882,30 @@ type PromptFn   = Arc<dyn Fn(McpContext, &str) -> Result<PromptReply, String> + 
 type CompletionFn = Arc<dyn Fn(&str, &str) -> Result<Vec<String>, String> + Send + Sync>;
 type ToolFilter = Arc<dyn Fn(&McpContext, &str) -> bool + Send + Sync>;
 type ToolCallHook = Arc<dyn Fn(&McpContext, &str) -> Result<(), String> + Send + Sync>;
+type ToolCallObserver = Arc<dyn Fn(&McpContext, &ToolCallRecord<'_>) + Send + Sync>;
+
+/// How a `tools/call` ended, for [`McpServer::after_tool_call`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolCallOutcome {
+    /// The tool ran and returned a result.
+    Ok,
+    /// The tool ran and returned an error (`isError: true`), or its
+    /// arguments didn't match its schema.
+    ToolError,
+    /// A [`McpServer::before_tool_call`] hook refused it.
+    Refused,
+    /// [`McpServer::tool_filter`] hides the tool from this caller, or no
+    /// such tool exists.
+    Denied,
+}
+
+/// One finished `tools/call`, for [`McpServer::after_tool_call`].
+#[derive(Debug, Clone)]
+pub struct ToolCallRecord<'a> {
+    pub tool: &'a str,
+    pub outcome: ToolCallOutcome,
+    pub duration: Duration,
+}
 /// An async tool handler, boxed so `AsyncToolDef` can store handlers with
 /// different concrete `Future` types uniformly. The `Future` itself doesn't
 /// need `Send` for [`crate::async_bridge::block_on_isolated`] (which drives
@@ -1047,6 +1071,8 @@ pub struct McpServer {
     tool_filter: Option<ToolFilter>,
     /// Runs before every tool call ([`Self::before_tool_call`]).
     before_call: Vec<ToolCallHook>,
+    /// Told about every finished tool call ([`Self::after_tool_call`]).
+    after_call: Vec<ToolCallObserver>,
     /// Origins a browser may call the endpoint from (see
     /// [`Self::allowed_origins`]); a request with any other `Origin` is
     /// refused.
@@ -1201,6 +1227,7 @@ impl McpServer {
             bearer_tokens: Vec::new(),
             tool_filter: None,
             before_call: Vec::new(),
+            after_call: Vec::new(),
             allowed_origins: Vec::new(),
             #[cfg(feature = "sso")]
             oauth: None,
@@ -1834,6 +1861,19 @@ impl McpServer {
         F: Fn(&McpContext, &str) -> Result<(), String> + Send + Sync + 'static,
     {
         self.before_call.push(Arc::new(check));
+        self
+    }
+
+    /// Call `observe` after every `tools/call` with the caller's context and
+    /// a [`ToolCallRecord`]: the tool, how it ended (including calls
+    /// [`Self::before_tool_call`] refused and tools [`Self::tool_filter`]
+    /// hides) and how long it took. For audit logs and metrics; it runs on
+    /// the request's thread, so keep it quick.
+    pub fn after_tool_call<F>(mut self, observe: F) -> Self
+    where
+        F: Fn(&McpContext, &ToolCallRecord<'_>) + Send + Sync + 'static,
+    {
+        self.after_call.push(Arc::new(observe));
         self
     }
 
@@ -2741,6 +2781,28 @@ impl McpServer {
     /// Run `tools/call`: the handler's result, unformatted; `Err` for a
     /// call that never reached a handler (unknown tool, no params).
     fn call_tool(&self, body: &str, ctx: McpContext) -> Result<Result<McpContent, String>, (i32, String)> {
+        if self.after_call.is_empty() {
+            return self.call_tool_inner(body, ctx, &mut ToolCallOutcome::Ok);
+        }
+        let started = std::time::Instant::now();
+        let observed_ctx = ctx.clone();
+        let mut outcome = ToolCallOutcome::Ok;
+        let result = self.call_tool_inner(body, ctx, &mut outcome);
+        if matches!(result, Ok(Err(_))) && outcome == ToolCallOutcome::Ok {
+            outcome = ToolCallOutcome::ToolError;
+        }
+        if result.is_err() && outcome == ToolCallOutcome::Ok {
+            outcome = ToolCallOutcome::Denied;
+        }
+        let name = json_rpc::extract_raw(body, "params").and_then(|p| json_rpc::extract_str(&p, "name")).unwrap_or_default();
+        let record = ToolCallRecord { tool: &name, outcome, duration: started.elapsed() };
+        for observe in &self.after_call {
+            observe(&observed_ctx, &record);
+        }
+        result
+    }
+
+    fn call_tool_inner(&self, body: &str, ctx: McpContext, outcome: &mut ToolCallOutcome) -> Result<Result<McpContent, String>, (i32, String)> {
         let params = json_rpc::extract_raw(body, "params")
             .ok_or((json_rpc::INVALID_PARAMS, "Missing params".to_string()))?;
         let name = json_rpc::extract_str(&params, "name")
@@ -2752,6 +2814,7 @@ impl McpServer {
         }
         for check in &self.before_call {
             if let Err(refused) = check(&ctx, &name) {
+                *outcome = ToolCallOutcome::Refused;
                 return Ok(Err(refused));
             }
         }

@@ -15,6 +15,11 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   mirrors and upgrades.
 - `McpServer::before_tool_call(|ctx, tool| …)`: refuse a call before it runs
   with a message the client gets as a tool error.
+- `McpServer::after_tool_call(|ctx, call| …)`: every finished tool call with
+  its outcome (`ToolCallOutcome`: ok, tool error, refused, denied) and
+  duration.
+- MCP gateway: `McpGateway::audit_log(true)`, one JSON line per tool call in
+  the access log (time, caller, tool, upstream, outcome, duration).
 - MCP gateway: `McpGateway::limit(tools, max_calls, window_secs)`, per caller
   and tool; a refused call doesn't reach the upstream.
 - MCP gateway: `McpGateway::refresh_every` (default 5 minutes) re-reads

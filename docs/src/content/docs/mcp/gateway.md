@@ -80,6 +80,16 @@ let gateway = McpGateway::new("gateway", "1.0")
 
 Over a limit, the call answers a tool error saying when to retry, without reaching the upstream. A call must pass every limit that matches. Counts are kept in the gateway's process (since 18.9.0).
 
+## Audit log
+
+`.audit_log(true)` writes one JSON line per `tools/call` to the access log (stdout, or the file `RWS_CONFIG_ACCESS_LOG` names):
+
+```json
+{"time":"2026-10-29T12:00:00Z","event":"mcp_tool_call","sub":"alice","tool":"github__create_issue","upstream":"github","outcome":"ok","duration_ms":182.411}
+```
+
+`outcome` is `ok`, `tool_error`, `refused` (over a [rate limit](#rate-limits)) or `denied` (the caller may not use the tool). Arguments and results are not logged (since 18.9.0).
+
 ## Upstreams
 
 - `Upstream::new(prefix, url)` — `url` is the server's Streamable HTTP
@@ -116,6 +126,5 @@ Clients of the gateway may use either version.
 ## Not yet
 
 Upstream resources, prompts
-and notifications aren't federated, upstream `listChanged` notifications aren't followed (the refresh interval is), results aren't cached, there is no
-audit log. The [roadmap](https://github.com/bohdaq/rust-web-server/blob/main/spec/ROADMAP.md)
+and notifications aren't federated, upstream `listChanged` notifications aren't followed (the refresh interval is), results aren't cached, The [roadmap](https://github.com/bohdaq/rust-web-server/blob/main/spec/ROADMAP.md)
 tracks the full gateway (#28).
