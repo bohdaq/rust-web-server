@@ -47,12 +47,31 @@ pub const SEPARATOR: &str = "__";
 const MAX_LIST_PAGES: usize = 100;
 
 /// An upstream MCP server (Streamable HTTP).
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Upstream {
     prefix: String,
     url: String,
     headers: Vec<(String, String)>,
+    /// Headers computed per tool call from the caller's claims.
+    caller_headers: Vec<(String, CallerHeader)>,
     timeout_ms: u64,
+}
+
+/// [`Upstream::header_for`]: the caller's verified claims (JSON, `None`
+/// without an identity) → a header value, or `None` to send none.
+type CallerHeader = Arc<dyn Fn(Option<&str>) -> Option<String> + Send + Sync>;
+
+impl std::fmt::Debug for Upstream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Header values are credentials: names only.
+        f.debug_struct("Upstream")
+            .field("prefix", &self.prefix)
+            .field("url", &self.url)
+            .field("headers", &self.headers.iter().map(|(k, _)| k).collect::<Vec<_>>())
+            .field("caller_headers", &self.caller_headers.iter().map(|(k, _)| k).collect::<Vec<_>>())
+            .field("timeout_ms", &self.timeout_ms)
+            .finish()
+    }
 }
 
 impl Upstream {
@@ -60,13 +79,28 @@ impl Upstream {
     /// whose tools appear as `<prefix>__<tool>`. `prefix` is letters, digits,
     /// `-` and single `_`s.
     pub fn new(prefix: impl Into<String>, url: impl Into<String>) -> Self {
-        Upstream { prefix: prefix.into(), url: url.into(), headers: Vec::new(), timeout_ms: 30_000 }
+        Upstream { prefix: prefix.into(), url: url.into(), headers: Vec::new(), caller_headers: Vec::new(), timeout_ms: 30_000 }
     }
 
     /// Send this header to the upstream on every request — its credentials,
     /// e.g. `.header("Authorization", "Bearer <upstream token>")`.
     pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.push((name.into(), value.into()));
+        self
+    }
+
+    /// Send header `name` on each tool call with a value computed from the
+    /// caller's verified claims (the JSON of
+    /// [`McpContext::auth_claims`](super::McpContext::auth_claims), `None`
+    /// for a caller without one) — e.g. each user's own upstream token,
+    /// looked up by `sub`, so the upstream acts as that user. `None` from
+    /// `value` sends no header. Only `tools/call` carries a caller; listing
+    /// and prompts/resources use the static [`Self::header`]s.
+    pub fn header_for<F>(mut self, name: impl Into<String>, value: F) -> Self
+    where
+        F: Fn(Option<&str>) -> Option<String> + Send + Sync + 'static,
+    {
+        self.caller_headers.push((name.into(), Arc::new(value)));
         self
     }
 
@@ -334,8 +368,8 @@ fn register(server: McpServer, connection: &Arc<Connection>, tool: UpstreamTool)
     let exposed = format!("{}{SEPARATOR}{}", connection.upstream.prefix, tool.name);
     let forward = Arc::clone(connection);
     let upstream_name = tool.name.clone();
-    let mut server = server.tool_with_context(&exposed, &tool.description, &tool.input_schema, move |_ctx, args| {
-        forward.call_tool(&upstream_name, args).map(McpContent::raw_result)
+    let mut server = server.tool_with_context(&exposed, &tool.description, &tool.input_schema, move |ctx, args| {
+        forward.call_tool(&upstream_name, args, ctx.auth_claims.as_deref()).map(McpContent::raw_result)
     });
     if let Some(title) = tool.title {
         server = server.tool_title(&exposed, title);
@@ -516,9 +550,15 @@ impl Connection {
     }
 
     /// Calls `name` upstream: the raw `tools/call` result, or why it failed.
-    fn call_tool(&self, name: &str, arguments: &str) -> Result<String, String> {
+    fn call_tool(&self, name: &str, arguments: &str, claims: Option<&str>) -> Result<String, String> {
         let params = format!(r#"{{"name":"{}","arguments":{arguments}}}"#, json_escape(name));
-        let result = self.request("tools/call", &params).map_err(|e| format!("{}: {e}", self.upstream.prefix))?;
+        let caller: Vec<(String, String)> = self
+            .upstream
+            .caller_headers
+            .iter()
+            .filter_map(|(header, value)| value(claims).map(|v| (header.clone(), v)))
+            .collect();
+        let result = self.request_as("tools/call", &params, &caller).map_err(|e| format!("{}: {e}", self.upstream.prefix))?;
         if top_level_str(&result, "resultType").as_deref() == Some("input_required") {
             return Err(format!("{}: the tool asked for more input (2026-07-28 multi round-trip), which the gateway doesn't relay", self.upstream.prefix));
         }
@@ -528,13 +568,18 @@ impl Connection {
     /// Sends one request in the current session (initializing first if
     /// needed, and once more if the upstream has forgotten the session).
     fn request(&self, method: &str, params: &str) -> Result<String, String> {
+        self.request_as(method, params, &[])
+    }
+
+    /// [`Self::request`] with headers for this one call (the caller's).
+    fn request_as(&self, method: &str, params: &str, caller: &[(String, String)]) -> Result<String, String> {
         let session = self.session()?;
-        match self.send(&session, method, params)? {
+        match self.send(&session, method, params, caller)? {
             Reply::Result(result) => Ok(result),
             Reply::SessionGone => {
                 self.forget(&session);
                 let session = self.session()?;
-                match self.send(&session, method, params)? {
+                match self.send(&session, method, params, caller)? {
                     Reply::Result(result) => Ok(result),
                     Reply::SessionGone => Err("session not found twice in a row".to_string()),
                 }
@@ -571,7 +616,7 @@ impl Connection {
 
     fn discover(&self) -> Result<Session, String> {
         let session = Session { id: None, version: MODERN_VERSION.to_string(), modern: true };
-        match self.send(&session, "server/discover", "{}")? {
+        match self.send(&session, "server/discover", "{}", &[])? {
             Reply::Result(result) if result.contains(MODERN_VERSION) => Ok(session),
             Reply::Result(_) => Err(format!("server/discover doesn't list {MODERN_VERSION}")),
             Reply::SessionGone => Err("server/discover answered 404".to_string()),
@@ -597,10 +642,10 @@ impl Connection {
         Ok(session)
     }
 
-    fn send(&self, session: &Session, method: &str, params: &str) -> Result<Reply, String> {
+    fn send(&self, session: &Session, method: &str, params: &str, caller: &[(String, String)]) -> Result<Reply, String> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let response = if session.modern {
-            let mut headers = vec![("Mcp-Method", method.to_string())];
+            let mut headers: Vec<(&str, String)> = vec![("Mcp-Method", method.to_string())];
             let named = match method {
                 "tools/call" | "prompts/get" => top_level_str(params, "name"),
                 "resources/read" => top_level_str(params, "uri"),
@@ -609,9 +654,11 @@ impl Connection {
             if let Some(name) = named {
                 headers.push(("Mcp-Name", name));
             }
+            headers.extend(caller.iter().map(|(k, v)| (k.as_str(), v.clone())));
             self.post(None, &session.version, &headers, &envelope(id, method, &with_modern_meta(params)))?
         } else {
-            self.post(session.id.as_deref(), &session.version, &[], &envelope(id, method, params))?
+            let headers: Vec<(&str, String)> = caller.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+            self.post(session.id.as_deref(), &session.version, &headers, &envelope(id, method, params))?
         };
         if response.status() == 404 && session.id.is_some() {
             return Ok(Reply::SessionGone);

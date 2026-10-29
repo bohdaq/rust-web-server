@@ -642,3 +642,33 @@ fn an_upstream_without_prompts_or_resources_still_federates_its_tools() {
     let server = McpGateway::new("g", "1").upstream(Upstream::new("jira", &jira.url)).allow("me", ["*"]).refresh_every(None).build();
     assert!(server.is_ok(), "{:?}", server.err());
 }
+
+#[test]
+fn each_caller_gets_their_own_upstream_credential() {
+    let fake = scripted(|r| {
+        if r.method() == "tools/list" {
+            return Reply::json(one_tool_list(r));
+        }
+        Reply::json(format!(r#"{{"jsonrpc":"2.0","id":{},"result":{{"content":[{{"type":"text","text":"ok"}}]}}}}"#, r.id()))
+    });
+    let server = McpGateway::new("g", "1")
+        .upstream(Upstream::new("up", &fake.url).header("X-Static", "s").header_for("Authorization", |claims| {
+            let sub = claims.and_then(|c| top_level_str(c, "sub"))?;
+            (sub == "alice").then(|| "Bearer alice-upstream-token".to_string())
+        }))
+        .allow("*", ["*"])
+        .refresh_every(None)
+        .build()
+        .unwrap();
+    let call_as = |who: &str| server.handle_request_with_context(r#"{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"up__echo","arguments":{}}}"#, ctx(Some(who)));
+    call_as("alice");
+    call_as("bob");
+    let calls: Vec<Recorded> = fake.requests().into_iter().filter(|r| r.method() == "tools/call").collect();
+    assert_eq!(calls[0].header("Authorization"), Some("Bearer alice-upstream-token"));
+    assert_eq!(calls[1].header("Authorization"), None, "no credential for bob");
+    assert!(calls.iter().all(|r| r.header("X-Static") == Some("s")));
+    let listing = fake.requests().into_iter().find(|r| r.method() == "tools/list").unwrap();
+    assert_eq!(listing.header("Authorization"), None, "listing has no caller");
+    let debug = format!("{:?}", Upstream::new("up", "http://x/mcp").header("Authorization", "Bearer secret"));
+    assert!(!debug.contains("secret"), "{debug}");
+}

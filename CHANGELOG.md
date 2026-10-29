@@ -20,6 +20,9 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   duration.
 - `McpServer::resource_filter` and `prompt_filter`, like `tool_filter` for
   resources and prompts.
+- MCP gateway: `Upstream::header_for(name, |claims| …)` sends a per-caller
+  header on tool calls (credentials injected server-side per user).
+  `Upstream`'s `Debug` no longer prints header values.
 - MCP gateway: upstream prompts (`<prefix>__<name>`) and resources (their own
   URIs) are federated and filtered by the same `allow` rules as tools.
 - MCP gateway: `McpGateway::audit_log(true)`, one JSON line per tool call in

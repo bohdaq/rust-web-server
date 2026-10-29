@@ -17592,6 +17592,11 @@ Over a limit, the call answers a tool error saying when to retry, without reachi
   endpoint. The prefix is letters, digits, `-` and single `_`.
 - `.header(name, value)` — sent on every request to that upstream; the
   caller's `Authorization` is never passed on.
+- `.header_for(name, |claims| …)` — a header computed for each tool call
+  from the caller's verified claims (the `auth_claims` JSON), e.g. that
+  user's own upstream token, so the upstream acts as them; `None` sends no
+  header. Only `tools/call` carries a caller: listing, prompts and resources
+  use the static headers (since 18.9.0).
 - `.timeout_ms(ms)` — per request (default 30 s).
 
 `McpGateway::refresh_every(Some(duration))` (default 5 minutes; `None` lists

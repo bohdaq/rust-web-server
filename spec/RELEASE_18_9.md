@@ -45,7 +45,7 @@ and `http1`-only test runs before pushing.
 | 2c | **done**: `McpServer::before_tool_call` (refusal = tool error), `McpGateway::limit(tools, max, window)` per `sub` + tool on `RateLimiter` |
 | 2d | **done**: `McpServer::after_tool_call` + `ToolCallOutcome` (ok/tool_error/refused/denied) + duration; `McpGateway::audit_log(true)` → JSON line per call via the access-log sink |
 | 2e | **done**: prompts as `prefix__name` (args, `prompts/get` forwarded, content passed through), resources under their URIs (first upstream wins; `resources/read` forwarded raw), ACL via new `McpServer::resource_filter`/`prompt_filter` (resource = `prefix__<uri>`); best effort, listed at build |
-| 2f | in progress |
-| 2g | — |
+| 2f | **done**: `Upstream::header_for(name, |claims| Option<String>)` on `tools/call` (shared session; listing/prompts/resources use static headers); `Debug` hides header values. One unreproduced flake seen once on the first http1 run after a clean build (22 clean reruns) |
+| 2g | in progress |
 | 3 | — |
 | 4 | — |
