@@ -42,7 +42,6 @@ mod tests;
 
 use std::sync::{OnceLock, RwLock};
 use std::sync::atomic::AtomicBool;
-#[cfg(all(unix, feature = "http1"))]
 use std::sync::atomic::Ordering;
 
 use crate::entry_point::Config;
@@ -54,6 +53,39 @@ use crate::rate_limit;
 /// The accept loop checks this between connections and calls [`reload`] when
 /// it is `true`, then resets it to `false`.
 pub static RELOAD_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Completed [`reload`]s since the process started.
+static RELOADS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn last_errors() -> &'static std::sync::Mutex<Vec<String>> {
+    static ERRORS: OnceLock<std::sync::Mutex<Vec<String>>> = OnceLock::new();
+    ERRORS.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// How many [`reload`]s have completed, and the errors the last one's hooks
+/// reported with [`report_error`] (empty: it applied cleanly). For the admin
+/// API, which requests a reload and waits for the count to move.
+pub fn last_reload() -> (u64, Vec<String>) {
+    let errors = last_errors().lock().unwrap_or_else(|e| e.into_inner()).clone();
+    (RELOADS.load(Ordering::SeqCst), errors)
+}
+
+/// A reload with one reported error, without re-reading anything: for the
+/// admin API's tests.
+#[cfg(test)]
+pub(crate) fn on_reload_test_error() {
+    let mut errors = last_errors().lock().unwrap_or_else(|e| e.into_inner());
+    errors.clear();
+    errors.push("test reload error".to_string());
+    drop(errors);
+    RELOADS.fetch_add(1, Ordering::SeqCst);
+}
+
+/// A reload hook couldn't apply its part (the old state stays): recorded for
+/// [`last_reload`] until the next reload.
+pub fn report_error(message: impl Into<String>) {
+    last_errors().lock().unwrap_or_else(|e| e.into_inner()).push(message.into());
+}
 
 /// Snapshot of all hot-reloadable configuration values at a point in time.
 ///
@@ -162,6 +194,7 @@ pub fn reload() {
     // Only one thread ever calls this (the signal handler or admin endpoint),
     // while workers only read env vars, so the single-writer / many-readers
     // pattern is safe in practice on all supported platforms.
+    last_errors().lock().unwrap_or_else(|e| e.into_inner()).clear();
     override_environment_variables_from_config(None);
     crate::server_config::invalidate();
 
@@ -184,6 +217,7 @@ pub fn reload() {
     for hook in hooks().lock().unwrap_or_else(|e| e.into_inner()).iter() {
         hook();
     }
+    RELOADS.fetch_add(1, Ordering::SeqCst);
 
     println!(
         "Config reloaded — cors_allow_all={} rate_limit={}/{} log_format={}",

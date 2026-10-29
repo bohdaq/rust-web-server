@@ -38,6 +38,23 @@ All under `/admin/api/v1/`, JSON in and out.
 | Method and path | What it does |
 |---|---|
 | `GET /status` | Version, process id, uptime, readiness, compile-time features, and the main, redirect and admin listeners |
+| `GET /config` | Every `RWS_CONFIG_*` setting in effect; values of names with `SECRET`, `PASSWORD` or `TOKEN` read `(hidden)` |
+| `POST /reload` | Reload the configuration and certificates, as `SIGHUP` does, and wait for it (up to 10 s): `{"reloaded":true,"applied":true,"reloads":3,"errors":[]}`. With errors (a config file that doesn't validate) `applied` is `false`, `errors` lists them and the running configuration stays. `503` while the server starts or stops, `504` when it didn't finish |
+| `GET /metrics` | Request, error and connection counters, thread-pool queue, readiness (`/metrics` on the main port has the full Prometheus set) |
+| `GET /build` | Compile-time features as `{"http3":true,…}` |
+| `GET /rate-limit` | The global limit: `configured`, `max_requests`, `window_secs` |
+| `GET /rate-limit/check?ip=…` | That address's remaining quota (counts as one request) |
+| `GET /cors` | The CORS settings in effect |
+| `GET /maintenance`, `PUT /maintenance` `{"active":true}` | Maintenance mode: `503` for everything but health checks |
+| `GET /blocklist`, `POST /blocklist` `{"ip":"…"}`, `DELETE /blocklist/<ip>` | The runtime IP blocklist (`403`). Addresses are checked; the admin listener isn't behind the blocklist |
+| `GET /flags`, `PUT /flags/<name>` `{"enabled":true}` | Runtime feature flags |
+| `GET /cache`, `DELETE /cache` | Response-cache hits, misses and size; clear it. `404` when the server has no cache |
+| `GET /routes` | The application's routes (method and pattern) |
+| `GET /requests?n=20`, `GET /errors?n=20` | The last requests, or the last 4xx/5xx (at most 100) |
+
+Changes made here are in memory: they last until the process restarts (a reload doesn't undo them). The binary's [MCP tools](/mcp/operate/) run the same code, so both answer alike.
+
+Library users: the admin API reports the cache and routes registered with `admin::ops::register_cache` and `register_routes`.
 
 Example `GET /status`:
 

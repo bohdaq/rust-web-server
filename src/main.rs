@@ -9,15 +9,14 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use rust_web_server::app::App;
-use rust_web_server::blocklist::{self, BlocklistLayer};
+use rust_web_server::blocklist::BlocklistLayer;
 use rust_web_server::cache::CacheLayer;
 use rust_web_server::core::New;
-use rust_web_server::feature;
-use rust_web_server::maintenance::{MaintenanceLayer, MAINTENANCE_MODE};
+use rust_web_server::maintenance::MaintenanceLayer;
 use rust_web_server::mcp::{McpContent, ToolAnnotations, extract_arg};
 use rust_web_server::metrics::SERVER_READY;
 use rust_web_server::request::Request;
-use rust_web_server::request_log::{self, LogLayer};
+use rust_web_server::request_log::LogLayer;
 use rust_web_server::response::{Response, STATUS_CODE_REASON_PHRASE};
 use rust_web_server::router::PathParams;
 use rust_web_server::routes;
@@ -89,6 +88,8 @@ fn build_app() -> impl rust_web_server::application::Application + Send + Clone 
     let cache = CacheLayer::memory(500).ttl(60);
     let cache2 = cache.clone(); // captured by cache_stats tool
     let cache3 = cache.clone(); // captured by cache_clear tool
+    rust_web_server::admin::ops::register_cache(cache.clone());
+    rust_web_server::admin::ops::register_routes(registered_routes.clone());
 
     // 3. Around the routes: maintenance mode and the response cache.
     //    Maintenance stays inside MCP: the `maintenance` tool is how an
@@ -205,89 +206,32 @@ fn rws_mcp_tools(
             "server_config",
             "Active RWS_CONFIG_* environment variables and their current values",
             r#"{"type":"object"}"#,
-            |_| {
-                use rust_web_server::entry_point::Config;
-                let keys = [
-                    Config::RWS_CONFIG_IP,
-                    Config::RWS_CONFIG_PORT,
-                    Config::RWS_CONFIG_THREAD_COUNT,
-                    Config::RWS_CONFIG_LOG_FORMAT,
-                    Config::RWS_CONFIG_REQUEST_ALLOCATION_SIZE_IN_BYTES,
-                    Config::RWS_CONFIG_TLS_CERT_FILE,
-                    Config::RWS_CONFIG_TLS_KEY_FILE,
-                    Config::RWS_CONFIG_HTTP_REDIRECT_PORT,
-                    Config::RWS_CONFIG_CORS_ALLOW_ALL,
-                    Config::RWS_CONFIG_CORS_ALLOW_ORIGINS,
-                    Config::RWS_CONFIG_CORS_ALLOW_METHODS,
-                    Config::RWS_CONFIG_CORS_ALLOW_HEADERS,
-                    Config::RWS_CONFIG_CORS_ALLOW_CREDENTIALS,
-                    Config::RWS_CONFIG_CORS_EXPOSE_HEADERS,
-                    Config::RWS_CONFIG_CORS_MAX_AGE,
-                ];
-                let pairs: Vec<String> = keys.iter().map(|k| {
-                    let v = std::env::var(k).unwrap_or_default();
-                    format!(r#""{}":"{}""#, k, v.replace('\\', "\\\\").replace('"', "\\\""))
-                }).collect();
-                Ok(McpContent::json(format!("{{{}}}", pairs.join(","))))
-            },
+            |_| Ok(McpContent::json(rust_web_server::admin::ops::config_json())),
         )
         .tool(
             "feature_flags",
             "Compile-time feature flags active in this binary",
             r#"{"type":"object"}"#,
-            |_| {
-                Ok(McpContent::json(format!(
-                    r#"{{"http1":{},"http2":{},"http3":{},"acme":{},"auth":{},"serde":{},"macros":{}}}"#,
-                    cfg!(feature = "http1"),
-                    cfg!(feature = "http2"),
-                    cfg!(feature = "http3"),
-                    cfg!(feature = "acme"),
-                    cfg!(feature = "auth"),
-                    cfg!(feature = "serde"),
-                    cfg!(feature = "macros"),
-                )))
-            },
+            |_| Ok(McpContent::json(rust_web_server::admin::ops::build_features_json())),
         )
         .tool(
             "server_metrics",
             "Live server counters: requests, errors, active connections, thread pool queue depth",
             r#"{"type":"object"}"#,
-            |_| {
-                use rust_web_server::metrics;
-                Ok(McpContent::json(format!(
-                    r#"{{"requests_total":{},"errors_total":{},"active_connections":{},"thread_pool_queued":{},"ready":{}}}"#,
-                    metrics::REQUESTS_TOTAL.load(Ordering::Relaxed),
-                    metrics::ERRORS_TOTAL.load(Ordering::Relaxed),
-                    metrics::ACTIVE_CONNECTIONS.load(Ordering::Relaxed),
-                    metrics::THREAD_POOL_QUEUED.load(Ordering::Relaxed),
-                    metrics::SERVER_READY.load(Ordering::Relaxed),
-                )))
-            },
+            |_| Ok(McpContent::json(rust_web_server::admin::ops::metrics_json())),
         )
         .tool(
             "list_routes",
             "All registered HTTP routes (method + pattern)",
             r#"{"type":"object"}"#,
-            move |_| {
-                let entries: Vec<String> = registered_routes.iter()
-                    .map(|(m, p)| format!(r#"{{"method":"{}","pattern":"{}"}}"#, m, p))
-                    .collect();
-                Ok(McpContent::json(format!("[{}]", entries.join(","))))
-            },
+            move |_| Ok(McpContent::json(rust_web_server::admin::ops::routes_json(&registered_routes))),
         )
         // ── cache ────────────────────────────────────────────────────────────
         .tool(
             "cache_stats",
             "Response cache hit/miss counts and current entry count",
             r#"{"type":"object"}"#,
-            move |_| {
-                Ok(McpContent::json(format!(
-                    r#"{{"hits":{},"misses":{},"size":{}}}"#,
-                    cache2.hits(),
-                    cache2.misses(),
-                    cache2.size(),
-                )))
-            },
+            move |_| Ok(McpContent::json(rust_web_server::admin::ops::cache_stats_json(&cache2))),
         )
         .tool(
             "cache_clear",
@@ -303,48 +247,20 @@ fn rws_mcp_tools(
             "rate_limit_config",
             "Current rate limit settings (max requests per window and window duration)",
             r#"{"type":"object"}"#,
-            |_| {
-                let cfg = rust_web_server::config_reload::current();
-                Ok(McpContent::json(format!(
-                    r#"{{"max_requests":{},"window_secs":{}}}"#,
-                    cfg.rate_limit_max_requests,
-                    cfg.rate_limit_window_secs,
-                )))
-            },
+            |_| Ok(McpContent::json(rust_web_server::admin::ops::rate_limit_json())),
         )
         .tool(
             "check_rate_limit",
             "Check remaining rate limit quota for a client IP address",
             r#"{"type":"object","properties":{"ip":{"type":"string","description":"Client IP address to check"}},"required":["ip"]}"#,
-            |args| {
-                let ip = extract_arg(args, "ip").unwrap_or_default();
-                let rl = rust_web_server::rate_limit::global();
-                let remaining = rl.remaining(&ip);
-                let allowed = rl.check(&ip);
-                Ok(McpContent::json(format!(
-                    r#"{{"ip":"{}","remaining":{},"allowed":{}}}"#,
-                    ip, remaining, allowed,
-                )))
-            },
+            |args| Ok(McpContent::json(rust_web_server::admin::ops::check_rate_limit_json(&extract_arg(args, "ip").unwrap_or_default()))),
         )
         // ── CORS / config ────────────────────────────────────────────────────
         .tool(
             "cors_config",
             "Current CORS configuration snapshot",
             r#"{"type":"object"}"#,
-            |_| {
-                let cfg = rust_web_server::config_reload::current();
-                Ok(McpContent::json(format!(
-                    r#"{{"allow_all":{},"origins":"{}","methods":"{}","headers":"{}","credentials":"{}","expose_headers":"{}","max_age":"{}"}}"#,
-                    cfg.cors_allow_all,
-                    cfg.cors_allow_origins,
-                    cfg.cors_allow_methods,
-                    cfg.cors_allow_headers,
-                    cfg.cors_allow_credentials,
-                    cfg.cors_expose_headers,
-                    cfg.cors_max_age,
-                )))
-            },
+            |_| Ok(McpContent::json(rust_web_server::admin::ops::cors_json())),
         )
         .tool(
             "list_static_files",
@@ -375,66 +291,37 @@ fn rws_mcp_tools(
             "maintenance_status",
             "Check whether maintenance mode is currently active",
             r#"{"type":"object"}"#,
-            |_| {
-                let active = MAINTENANCE_MODE.load(Ordering::Relaxed);
-                Ok(McpContent::json(format!(r#"{{"active":{}}}"#, active)))
-            },
+            |_| Ok(McpContent::json(rust_web_server::admin::ops::maintenance_json())),
         )
         .tool(
             "set_maintenance",
             "Enable or disable maintenance mode (returns 503 for all non-health paths when active)",
             r#"{"type":"object","properties":{"enabled":{"type":"boolean"}},"required":["enabled"]}"#,
-            |args| {
-                let enabled = extract_arg(args, "enabled")
-                    .map(|v| v == "true")
-                    .unwrap_or(false);
-                MAINTENANCE_MODE.store(enabled, Ordering::SeqCst);
-                Ok(McpContent::json(format!(r#"{{"active":{}}}"#, enabled)))
-            },
+            |args| Ok(McpContent::json(rust_web_server::admin::ops::set_maintenance(extract_arg(args, "enabled").is_some_and(|v| v == "true")))),
         )
         .tool(
             "block_ip",
             "Add an IP address to the runtime blocklist (returns 403 for future requests)",
             r#"{"type":"object","properties":{"ip":{"type":"string"}},"required":["ip"]}"#,
-            |args| {
-                let ip = extract_arg(args, "ip").unwrap_or_default();
-                blocklist::global().block(&ip);
-                Ok(McpContent::json(format!(r#"{{"blocked":"{}"}}"#, ip)))
-            },
+            |args| Ok(McpContent::json(rust_web_server::admin::ops::block(&extract_arg(args, "ip").unwrap_or_default()))),
         )
         .tool(
             "unblock_ip",
             "Remove an IP address from the runtime blocklist",
             r#"{"type":"object","properties":{"ip":{"type":"string"}},"required":["ip"]}"#,
-            |args| {
-                let ip = extract_arg(args, "ip").unwrap_or_default();
-                blocklist::global().unblock(&ip);
-                Ok(McpContent::json(format!(r#"{{"unblocked":"{}"}}"#, ip)))
-            },
+            |args| Ok(McpContent::json(rust_web_server::admin::ops::unblock(&extract_arg(args, "ip").unwrap_or_default()))),
         )
         .tool(
             "list_blocked_ips",
             "List all currently blocked IP addresses",
             r#"{"type":"object"}"#,
-            |_| {
-                let list: Vec<String> = blocklist::global().list()
-                    .into_iter()
-                    .map(|ip| format!(r#""{}""#, ip))
-                    .collect();
-                Ok(McpContent::json(format!("[{}]", list.join(","))))
-            },
+            |_| Ok(McpContent::json(rust_web_server::admin::ops::blocklist_json())),
         )
         .tool(
             "feature_list",
             "List all runtime feature flags and their current enabled state",
             r#"{"type":"object"}"#,
-            |_| {
-                let pairs: Vec<String> = feature::global().list()
-                    .into_iter()
-                    .map(|(k, v)| format!(r#"{{\"name\":\"{}\",\"enabled\":{}}}"#, k, v))
-                    .collect();
-                Ok(McpContent::json(format!("[{}]", pairs.join(","))))
-            },
+            |_| Ok(McpContent::json(rust_web_server::admin::ops::flags_json())),
         )
         .tool(
             "feature_set",
@@ -442,11 +329,7 @@ fn rws_mcp_tools(
             r#"{"type":"object","properties":{"name":{"type":"string"},"enabled":{"type":"boolean"}},"required":["name","enabled"]}"#,
             |args| {
                 let name = extract_arg(args, "name").unwrap_or_default();
-                let enabled = extract_arg(args, "enabled")
-                    .map(|v| v == "true")
-                    .unwrap_or(false);
-                feature::global().set(&name, enabled);
-                Ok(McpContent::json(format!(r#"{{"name":"{}","enabled":{}}}"#, name, enabled)))
+                Ok(McpContent::json(rust_web_server::admin::ops::set_flag(&name, extract_arg(args, "enabled").is_some_and(|v| v == "true"))))
             },
         )
         // ── request log ──────────────────────────────────────────────────────
@@ -455,18 +338,8 @@ fn rws_mcp_tools(
             "Last N requests recorded by the server (default 20, max 100)",
             r#"{"type":"object","properties":{"n":{"type":"integer","description":"Number of entries to return (default 20)"}}}"#,
             |args| {
-                let n = extract_arg(args, "n")
-                    .and_then(|v| v.parse::<usize>().ok())
-                    .unwrap_or(20)
-                    .min(100);
-                let entries: Vec<String> = request_log::global().recent(n)
-                    .into_iter()
-                    .map(|e| format!(
-                        r#"{{"ts":{},"method":"{}","path":"{}","status":{},"ip":"{}","latency_ms":{}}}"#,
-                        e.timestamp, e.method, e.path, e.status, e.client_ip, e.latency_ms,
-                    ))
-                    .collect();
-                Ok(McpContent::json(format!("[{}]", entries.join(","))))
+                let n = extract_arg(args, "n").and_then(|v| v.parse::<usize>().ok()).unwrap_or(20);
+                Ok(McpContent::json(rust_web_server::admin::ops::recent_json(n, false)))
             },
         )
         .tool(
@@ -474,18 +347,8 @@ fn rws_mcp_tools(
             "Last N requests with a 4xx or 5xx status code (default 20, max 100)",
             r#"{"type":"object","properties":{"n":{"type":"integer","description":"Number of error entries to return (default 20)"}}}"#,
             |args| {
-                let n = extract_arg(args, "n")
-                    .and_then(|v| v.parse::<usize>().ok())
-                    .unwrap_or(20)
-                    .min(100);
-                let entries: Vec<String> = request_log::global().recent_errors(n)
-                    .into_iter()
-                    .map(|e| format!(
-                        r#"{{"ts":{},"method":"{}","path":"{}","status":{},"ip":"{}","latency_ms":{}}}"#,
-                        e.timestamp, e.method, e.path, e.status, e.client_ip, e.latency_ms,
-                    ))
-                    .collect();
-                Ok(McpContent::json(format!("[{}]", entries.join(","))))
+                let n = extract_arg(args, "n").and_then(|v| v.parse::<usize>().ok()).unwrap_or(20);
+                Ok(McpContent::json(rust_web_server::admin::ops::recent_json(n, true)))
             },
         );
     // Behaviour hints, so an AI client can tell looking from changing — and

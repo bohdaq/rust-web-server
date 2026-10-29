@@ -75,4 +75,36 @@ pass "browser origins checked"
 [ "$(code http://127.0.0.1:18451/admin/api/v1/status)" = 404 ] || fail "the admin API leaked onto the public port"
 pass "the public port doesn't serve the admin API"
 
+api() { # <method> <path> [json body] → body
+  curl -s --max-time 15 -X "$1" -H "Authorization: Bearer $E2E_ADMIN_TOKEN" -H 'Content-Type: application/json' \
+    ${3:+-d "$3"} "http://127.0.0.1:18452/admin/api/v1$2"
+}
+
+cfg=$(api GET /config)
+grep -q '"RWS_CONFIG_ADMIN_TOKEN_ENV":"(hidden)"' <<<"$cfg" && grep -q '"RWS_CONFIG_PORT":"18451"' <<<"$cfg" || fail "config: $cfg"
+! grep -q "$E2E_ADMIN_TOKEN" <<<"$cfg" || fail "the token appears in /config"
+pass "effective config, secrets hidden"
+
+api PUT /maintenance '{"active":true}' >/dev/null
+[ "$(code http://127.0.0.1:18451/)" = 503 ] || fail "maintenance mode didn't reach the public port"
+api PUT /maintenance '{"active":false}' >/dev/null
+[ "$(code http://127.0.0.1:18451/)" = 200 ] || fail "maintenance mode didn't switch off"
+pass "maintenance mode on and off"
+
+api POST /blocklist '{"ip":"127.0.0.1"}' >/dev/null
+[ "$(code http://127.0.0.1:18451/)" = 403 ] || fail "the blocklist didn't apply"
+[ "$(code -H "Authorization: Bearer $E2E_ADMIN_TOKEN" http://127.0.0.1:18452/admin/api/v1/status)" = 200 ] || fail "the blocklist locked out the admin API"
+api DELETE /blocklist/127.0.0.1 >/dev/null
+[ "$(code http://127.0.0.1:18451/)" = 200 ] || fail "unblocking didn't apply"
+pass "blocklist (the admin listener isn't behind it)"
+
+out=$(api POST /reload)
+grep -q '"reloaded":true,"applied":true' <<<"$out" || fail "reload: $out"
+sed -i 's/^port = 18451$/port = 18451\n[cors]\nallow_all = false\nallow_origins = "https:\/\/reloaded.example"/' rws.config.toml
+out=$(api POST /reload)
+grep -q '"applied":true' <<<"$out" || fail "second reload: $out"
+grep -q 'reloaded.example' <<<"$(api GET /cors)" || fail "the reload didn't apply the new CORS origin: $(api GET /cors)"
+kill -0 "${PIDS[-1]}" || fail "the server died on reload"
+pass "reload through the SIGHUP path, applied and reported"
+
 echo "all admin end-to-end checks passed"

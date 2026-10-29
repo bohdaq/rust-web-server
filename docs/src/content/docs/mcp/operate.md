@@ -64,7 +64,7 @@ client that asks before acting asks for those.
 
 | Look | Change |
 |---|---|
-| `server_config` — active `RWS_CONFIG_*` values | `reload_config` — re-read config and certificates |
+| `server_config` — every active `RWS_CONFIG_*` value, secrets hidden | `reload_config` — re-read config and certificates |
 | `server_metrics` — request, error, connection counters | `set_maintenance` `{"enabled": true}` — `503` for everything but health checks |
 | `recent_requests` `{"n": 50}` — last requests (max 100) | `block_ip` / `unblock_ip` `{"ip": "…"}` — runtime blocklist (`403`) |
 | `recent_errors` `{"n": 50}` — last 4xx/5xx | `cache_clear` — empty the response cache |
@@ -72,6 +72,10 @@ client that asks before acting asks for those.
 | `cache_stats`, `rate_limit_config`, `check_rate_limit` `{"ip": "…"}` | |
 | `cors_config`, `list_routes`, `list_static_files` | |
 | `feature_flags`, `feature_list` | |
+
+The same operations are on the [admin API](/deployment/admin/) (since
+18.10.0), which runs the same code: a tool and its admin endpoint answer
+alike.
 
 A call with missing or mistyped arguments comes back as an error the model
 reads (`missing required property "ip"`), not a silent default.

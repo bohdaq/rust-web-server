@@ -15,6 +15,12 @@ Releases and binaries: [GitHub releases](https://github.com/bohdaq/rust-web-serv
   says so), browser origin checks, `GET /admin/api/v1/status`.
   `admin::AdminApi` / `AdminConfig` / `start` for library users.
   `ci/e2e/admin.sh`.
+- Admin API: effective config (secrets hidden), reload with its outcome
+  (`config_reload::last_reload`, `report_error`), counters, build
+  features, rate limits, CORS, maintenance, blocklist, feature flags,
+  response cache, routes, recent requests and errors. `admin::ops` holds the
+  shared code; the binary's MCP tools call it, so `server_config` now lists
+  every `RWS_CONFIG_*` setting with secrets hidden.
 
 ## 18.9.1 — 2026-10-29
 

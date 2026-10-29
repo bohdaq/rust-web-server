@@ -117,3 +117,100 @@ fn rws_check_reports_admin_mistakes() {
     assert!(check_str_offline(off).warnings.iter().any(|w| w.contains("no listen")));
     assert!(check_str_offline("[admin]\nlisten = \"127.0.0.1:1\"\ntypo = 1\n").errors.iter().any(|e| e.contains("typo")));
 }
+
+fn call(api: &AdminApi, method: &str, path: &str, body: &str) -> (u16, String) {
+    let raw = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:9901\r\nAuthorization: Bearer t\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+    let response = api.execute(&Request::parse(raw.as_bytes()).unwrap(), &ConnectionInfo::default()).unwrap();
+    (response.status_code as u16, body_of(&response))
+}
+
+fn body_of(response: &Response) -> String {
+    body(response)
+}
+
+#[test]
+fn config_hides_secrets() {
+    let _g = crate::test_env::lock();
+    std::env::set_var("RWS_CONFIG_TEST_ADMIN_DB_PASSWORD", "hunter2");
+    std::env::set_var("RWS_CONFIG_TEST_ADMIN_PLAIN", "visible \"quoted\"");
+    let (status, text) = call(&AdminApi::new("t"), "GET", "/admin/api/v1/config", "");
+    std::env::remove_var("RWS_CONFIG_TEST_ADMIN_DB_PASSWORD");
+    std::env::remove_var("RWS_CONFIG_TEST_ADMIN_PLAIN");
+    assert_eq!(status, 200);
+    assert!(text.contains(r#""RWS_CONFIG_TEST_ADMIN_DB_PASSWORD":"(hidden)""#) && !text.contains("hunter2"), "{text}");
+    assert!(text.contains(r#""RWS_CONFIG_TEST_ADMIN_PLAIN":"visible \"quoted\"""#), "{text}");
+    assert!(crate::mcp::json_rpc::object_members(&text).is_some());
+}
+
+#[test]
+fn maintenance_blocklist_and_flags_change_the_running_server() {
+    let _g = crate::test_env::lock();
+    let api = AdminApi::new("t");
+    assert_eq!(call(&api, "PUT", "/admin/api/v1/maintenance", r#"{"active":true}"#), (200, r#"{"active":true}"#.to_string()));
+    assert!(crate::maintenance::MAINTENANCE_MODE.load(Ordering::SeqCst));
+    assert_eq!(call(&api, "PUT", "/admin/api/v1/maintenance", r#"{"active":false}"#).1, r#"{"active":false}"#);
+    assert_eq!(call(&api, "PUT", "/admin/api/v1/maintenance", r#"{"active":"yes"}"#).0, 400);
+
+    assert_eq!(call(&api, "POST", "/admin/api/v1/blocklist", r#"{"ip":"203.0.113.77"}"#).0, 200);
+    assert!(crate::blocklist::global().is_blocked("203.0.113.77"));
+    assert!(call(&api, "GET", "/admin/api/v1/blocklist", "").1.contains("\"203.0.113.77\""));
+    assert_eq!(call(&api, "POST", "/admin/api/v1/blocklist", r#"{"ip":"not-an-ip"}"#).0, 400);
+    assert_eq!(call(&api, "DELETE", "/admin/api/v1/blocklist/2001:db8::7", "").0, 200);
+    assert_eq!(call(&api, "DELETE", "/admin/api/v1/blocklist/203.0.113.77", "").0, 200);
+    assert!(!crate::blocklist::global().is_blocked("203.0.113.77"));
+
+    assert_eq!(call(&api, "PUT", "/admin/api/v1/flags/admin-test-flag", r#"{"enabled":true}"#).0, 200);
+    assert!(crate::feature::global().is_enabled("admin-test-flag"));
+    assert!(call(&api, "GET", "/admin/api/v1/flags", "").1.contains(r#"{"name":"admin-test-flag","enabled":true}"#));
+    assert_eq!(call(&api, "PUT", "/admin/api/v1/flags/admin-test-flag", "{}").0, 400);
+    crate::feature::global().set("admin-test-flag", false);
+}
+
+#[test]
+fn reads_rate_limits_cors_metrics_requests_and_routes() {
+    let api = AdminApi::new("t");
+    for path in ["rate-limit", "cors", "metrics", "build", "requests?n=3", "errors", "routes", "maintenance"] {
+        let (status, text) = call(&api, "GET", &format!("/admin/api/v1/{path}"), "");
+        assert_eq!(status, 200, "{path}: {text}");
+        assert!(text.starts_with('{') || text.starts_with('['), "{path}: {text}");
+    }
+    assert!(call(&api, "GET", "/admin/api/v1/rate-limit/check?ip=198.51.100.9", "").1.contains(r#""ip":"198.51.100.9""#));
+    assert_eq!(call(&api, "GET", "/admin/api/v1/rate-limit/check", "").0, 400);
+    assert_eq!(call(&api, "POST", "/admin/api/v1/metrics", "").0, 405);
+}
+
+#[test]
+fn the_cache_and_routes_come_from_whoever_registered_them() {
+    let _g = crate::test_env::lock();
+    let api = AdminApi::new("t");
+    let cache = crate::cache::CacheLayer::memory(10).ttl(60);
+    ops::register_cache(cache.clone());
+    ops::register_routes(vec![("GET".into(), "/api/version".into())]);
+    assert_eq!(call(&api, "GET", "/admin/api/v1/cache", "").1, r#"{"hits":0,"misses":0,"size":0}"#);
+    assert_eq!(call(&api, "DELETE", "/admin/api/v1/cache", "").1, r#"{"cleared":true}"#);
+    assert_eq!(call(&api, "GET", "/admin/api/v1/routes", "").1, r#"[{"method":"GET","pattern":"/api/version"}]"#);
+}
+
+#[test]
+fn reload_waits_for_the_reload_and_reports_its_errors() {
+    let _g = crate::test_env::lock();
+    let ready = crate::metrics::SERVER_READY.load(Ordering::SeqCst);
+    let api = AdminApi::new("t").reloader(
+        || {
+            std::thread::spawn(|| {
+                crate::config_reload::on_reload_test_error();
+            });
+        },
+        Duration::from_secs(5),
+    );
+    crate::metrics::SERVER_READY.store(false, Ordering::SeqCst);
+    assert_eq!(call(&api, "POST", "/admin/api/v1/reload", "").0, 503, "not before the server runs");
+    crate::metrics::SERVER_READY.store(true, Ordering::SeqCst);
+    let (status, text) = call(&api, "POST", "/admin/api/v1/reload", "");
+    assert_eq!(status, 200, "{text}");
+    assert!(text.contains(r#""applied":false"#) && text.contains("test reload error"), "{text}");
+
+    let never = AdminApi::new("t").reloader(|| {}, Duration::from_millis(100));
+    assert_eq!(call(&never, "POST", "/admin/api/v1/reload", "").0, 504);
+    crate::metrics::SERVER_READY.store(ready, Ordering::SeqCst);
+}

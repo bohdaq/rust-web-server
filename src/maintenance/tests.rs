@@ -1,15 +1,14 @@
 use std::sync::atomic::Ordering;
-use std::sync::{Mutex, OnceLock};
 
 use super::*;
 use crate::app::App;
 use crate::core::New;
 use crate::test_client::TestClient;
 
-// Serialize all tests that touch the global MAINTENANCE_MODE static.
-static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+// Serialize all tests that touch the global MAINTENANCE_MODE static (the
+// admin API's tests switch it too).
 fn lock() -> std::sync::MutexGuard<'static, ()> {
-    LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    crate::test_env::lock()
 }
 
 #[test]

@@ -463,7 +463,7 @@ The `rws` binary serves `/mcp` with 20 built-in tools when `MCP_TOKEN` is set (r
 
 | Tool name             | Description                              |
 |-----------------------|------------------------------------------|
-| `server_config`       | Active `RWS_CONFIG_*` values             |
+| `server_config`       | Active `RWS_CONFIG_*` values, secrets hidden |
 | `feature_flags`       | List compiled feature flags              |
 | `server_metrics`      | Live request/error/connection counters   |
 | `list_routes`         | Registered HTTP routes                   |

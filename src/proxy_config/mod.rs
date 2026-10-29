@@ -982,6 +982,7 @@ impl ConfigDrivenApp {
             Ok(toml) => toml,
             Err(e) => {
                 eprintln!("[proxy_config] reload: cannot read {path}: {e} — keeping the running routes");
+                crate::config_reload::report_error(format!("cannot read {path}: {e}"));
                 return;
             }
         };
@@ -996,6 +997,7 @@ impl ConfigDrivenApp {
             Err(report) => {
                 for e in &report.errors {
                     eprintln!("[proxy_config] reload ERROR: {e}");
+                    crate::config_reload::report_error(e.clone());
                 }
                 eprintln!("[proxy_config] {path} has errors — keeping the running routes");
             }

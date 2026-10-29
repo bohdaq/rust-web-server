@@ -20,6 +20,8 @@
 //! [`MAX_CONNECTIONS`] at once), apart from the server's own workers, so a
 //! saturated server can still be administered.
 
+pub mod ops;
+
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
@@ -90,22 +92,77 @@ pub struct AdminApi {
     inner: Arc<Inner>,
 }
 
+type Reloader = Arc<dyn Fn() + Send + Sync>;
+
 struct Inner {
     token: String,
     allowed_origins: Vec<String>,
+    reloader: Reloader,
+    reload_wait: Duration,
 }
 
 impl AdminApi {
     /// The API accepting `token`.
     pub fn new(token: impl Into<String>) -> AdminApi {
         started();
-        AdminApi { inner: Arc::new(Inner { token: token.into(), allowed_origins: Vec::new() }) }
+        AdminApi {
+            inner: Arc::new(Inner {
+                token: token.into(),
+                allowed_origins: Vec::new(),
+                reloader: Arc::new(crate::config_reload::request_reload),
+                reload_wait: Duration::from_secs(10),
+            }),
+        }
+    }
+
+    fn edit(self, f: impl FnOnce(&mut Inner)) -> AdminApi {
+        let mut inner = Inner {
+            token: self.inner.token.clone(),
+            allowed_origins: self.inner.allowed_origins.clone(),
+            reloader: Arc::clone(&self.inner.reloader),
+            reload_wait: self.inner.reload_wait,
+        };
+        f(&mut inner);
+        AdminApi { inner: Arc::new(inner) }
     }
 
     /// Browser origins allowed besides the listener's own.
     pub fn allowed_origins(self, origins: Vec<String>) -> AdminApi {
-        let token = self.inner.token.clone();
-        AdminApi { inner: Arc::new(Inner { token, allowed_origins: origins }) }
+        self.edit(|i| i.allowed_origins = origins)
+    }
+
+    /// What `POST …/reload` runs (default: [`crate::config_reload::request_reload`],
+    /// the same path as `SIGHUP`, so TLS certificates are reloaded too), and
+    /// how long it waits for the reload to finish.
+    pub fn reloader(self, reload: impl Fn() + Send + Sync + 'static, wait: Duration) -> AdminApi {
+        self.edit(|i| {
+            i.reloader = Arc::new(reload);
+            i.reload_wait = wait;
+        })
+    }
+
+    /// Request a reload and wait for it: the reload count moving, then the
+    /// errors it reported.
+    fn reload(&self) -> Response {
+        if !crate::metrics::SERVER_READY.load(Ordering::SeqCst) {
+            // Before the servers run, SIGHUP has no handler yet.
+            return error(STATUS_CODE_REASON_PHRASE.n503_service_unavailable, "the server is starting or stopping");
+        }
+        let (before, _) = crate::config_reload::last_reload();
+        (self.inner.reloader)();
+        let deadline = Instant::now() + self.inner.reload_wait;
+        loop {
+            let (count, errors) = crate::config_reload::last_reload();
+            if count > before {
+                let errors: Vec<String> = errors.iter().map(|e| format!("\"{}\"", json_escape(e))).collect();
+                let applied = errors.is_empty();
+                return json(STATUS_CODE_REASON_PHRASE.n200_ok, format!(r#"{{"reloaded":true,"applied":{applied},"reloads":{count},"errors":[{}]}}"#, errors.join(",")));
+            }
+            if Instant::now() >= deadline {
+                return error(STATUS_CODE_REASON_PHRASE.n504_gateway_timeout, "the reload didn't finish in time; check the server log");
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
 
     fn authorized(&self, request: &Request) -> bool {
@@ -150,10 +207,126 @@ impl Application for AdminApi {
         let Some(route) = path.strip_prefix(API_PREFIX) else {
             return Ok(error(STATUS_CODE_REASON_PHRASE.n404_not_found, "not found"));
         };
-        match (request.method.as_str(), route.trim_end_matches('/')) {
-            ("GET", "/status") => Ok(json(STATUS_CODE_REASON_PHRASE.n200_ok, status_json(connection))),
-            (_, "/status") => Ok(error(STATUS_CODE_REASON_PHRASE.n405_method_not_allowed, "use GET")),
-            _ => Ok(error(STATUS_CODE_REASON_PHRASE.n404_not_found, "not found")),
+        Ok(self.route(request, connection, route.trim_end_matches('/')))
+    }
+}
+
+fn ok(body: String) -> Response {
+    json(STATUS_CODE_REASON_PHRASE.n200_ok, body)
+}
+
+fn bad_request(message: &str) -> Response {
+    error(STATUS_CODE_REASON_PHRASE.n400_bad_request, message)
+}
+
+/// The JSON body's top-level boolean `key`.
+fn body_bool(request: &Request, key: &str) -> Option<bool> {
+    let body = std::str::from_utf8(&request.body).ok()?;
+    let value = crate::mcp::json_rpc::object_members(body)?.into_iter().find(|(k, _)| k == key)?.1;
+    match value.as_str() {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    }
+}
+
+/// The JSON body's top-level string `key`.
+fn body_str(request: &Request, key: &str) -> Option<String> {
+    let body = std::str::from_utf8(&request.body).ok()?;
+    let value = crate::mcp::json_rpc::object_members(body)?.into_iter().find(|(k, _)| k == key)?.1;
+    value.starts_with('"').then(|| crate::mcp::json_rpc::extract_str(&format!(r#"{{"v":{value}}}"#), "v")).flatten()
+}
+
+/// Query parameter `key` of the request target.
+fn query(request: &Request, key: &str) -> Option<String> {
+    let (_, query) = request.request_uri.split_once('?')?;
+    query.split('&').find_map(|pair| {
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+        (k == key).then(|| v.to_string())
+    })
+}
+
+fn parse_ip(ip: &str) -> Option<String> {
+    let ip = crate::url::URL::percent_decode(ip.trim());
+    ip.parse::<std::net::IpAddr>().ok().map(|ip| ip.to_string())
+}
+
+impl AdminApi {
+    fn route(&self, request: &Request, connection: &ConnectionInfo, route: &str) -> Response {
+        let method = request.method.as_str();
+        let wrong_method = |allowed: &str| {
+            let mut response = error(STATUS_CODE_REASON_PHRASE.n405_method_not_allowed, &format!("use {allowed}"));
+            response.headers.push(Header::new("Allow", allowed.to_string()));
+            response
+        };
+        if let Some(ip) = route.strip_prefix("/blocklist/") {
+            return match (method, parse_ip(ip)) {
+                ("DELETE", Some(ip)) => ok(ops::unblock(&ip)),
+                ("DELETE", None) => bad_request("not an IP address"),
+                _ => wrong_method("DELETE"),
+            };
+        }
+        if let Some(name) = route.strip_prefix("/flags/") {
+            let name = crate::url::URL::percent_decode(name);
+            return match method {
+                "PUT" => match body_bool(request, "enabled") {
+                    Some(enabled) if !name.is_empty() => ok(ops::set_flag(&name, enabled)),
+                    _ => bad_request(r#"expected {"enabled":true|false}"#),
+                },
+                _ => wrong_method("PUT"),
+            };
+        }
+        match (method, route) {
+            ("GET", "/status") => ok(status_json(connection)),
+            (_, "/status") => wrong_method("GET"),
+            ("GET", "/config") => ok(ops::config_json()),
+            (_, "/config") => wrong_method("GET"),
+            ("POST", "/reload") => self.reload(),
+            (_, "/reload") => wrong_method("POST"),
+            ("GET", "/metrics") => ok(ops::metrics_json()),
+            (_, "/metrics") => wrong_method("GET"),
+            ("GET", "/build") => ok(ops::build_features_json()),
+            (_, "/build") => wrong_method("GET"),
+            ("GET", "/rate-limit") => ok(ops::rate_limit_json()),
+            (_, "/rate-limit") => wrong_method("GET"),
+            ("GET", "/rate-limit/check") => match query(request, "ip").as_deref().and_then(parse_ip) {
+                Some(ip) => ok(ops::check_rate_limit_json(&ip)),
+                None => bad_request("expected ?ip=<address>"),
+            },
+            (_, "/rate-limit/check") => wrong_method("GET"),
+            ("GET", "/cors") => ok(ops::cors_json()),
+            (_, "/cors") => wrong_method("GET"),
+            ("GET", "/maintenance") => ok(ops::maintenance_json()),
+            ("PUT", "/maintenance") => match body_bool(request, "active") {
+                Some(active) => ok(ops::set_maintenance(active)),
+                None => bad_request(r#"expected {"active":true|false}"#),
+            },
+            (_, "/maintenance") => wrong_method("GET, PUT"),
+            ("GET", "/blocklist") => ok(ops::blocklist_json()),
+            ("POST", "/blocklist") => match body_str(request, "ip").as_deref().and_then(parse_ip) {
+                Some(ip) => ok(ops::block(&ip)),
+                None => bad_request(r#"expected {"ip":"<address>"}"#),
+            },
+            (_, "/blocklist") => wrong_method("GET, POST"),
+            ("GET", "/flags") => ok(ops::flags_json()),
+            (_, "/flags") => wrong_method("GET"),
+            ("GET", "/cache") => match ops::registered_cache_json() {
+                Some(stats) => ok(stats),
+                None => error(STATUS_CODE_REASON_PHRASE.n404_not_found, "no response cache in this server"),
+            },
+            ("DELETE", "/cache") => match ops::clear_registered_cache() {
+                true => ok(r#"{"cleared":true}"#.to_string()),
+                false => error(STATUS_CODE_REASON_PHRASE.n404_not_found, "no response cache in this server"),
+            },
+            (_, "/cache") => wrong_method("GET, DELETE"),
+            ("GET", "/routes") => ok(ops::registered_routes_json()),
+            (_, "/routes") => wrong_method("GET"),
+            ("GET", "/requests" | "/errors") => {
+                let n = query(request, "n").and_then(|n| n.parse().ok()).unwrap_or(20);
+                ok(ops::recent_json(n, route == "/errors"))
+            }
+            (_, "/requests" | "/errors") => wrong_method("GET"),
+            _ => error(STATUS_CODE_REASON_PHRASE.n404_not_found, "not found"),
         }
     }
 }
